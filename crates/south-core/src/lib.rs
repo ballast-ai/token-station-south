@@ -37,8 +37,9 @@ impl fmt::Debug for ProviderBindingV1 {
 
 /// An owned credential value whose South-owned allocation is zeroized when dropped.
 ///
-/// This guarantee covers this value and a South-owned HTTP authorization owner. It cannot cover
-/// plaintext copies made by HTTP, TLS, operating-system, or provider infrastructure buffers.
+/// This guarantee covers only the allocation owned by this value. Each downstream transport
+/// implementation is responsible for its own credential copies; this type cannot cover plaintext
+/// copies made by transport, TLS, operating-system, or provider infrastructure buffers.
 pub struct SecretValue {
     value: Zeroizing<Vec<u8>>,
 }
