@@ -5,6 +5,7 @@
 use std::{collections::BTreeMap, fmt};
 
 use http::{HeaderName, HeaderValue, StatusCode};
+use serde::{Deserialize, de::IgnoredAny};
 use thiserror::Error;
 use url::Url;
 
@@ -313,7 +314,7 @@ impl RelativePathV1 {
             || input.starts_with('/')
             || input.contains(['?', '#'])
             || input.bytes().any(is_forbidden_path_byte)
-            || has_forbidden_percent_encoding(input)
+            || has_invalid_or_forbidden_percent_encoding(input)
             || !has_safe_segments(input)
             || has_scheme_like_first_segment(input)
         {
@@ -405,7 +406,7 @@ impl fmt::Debug for CredentialSlotV1 {
 }
 
 /// An exact, bounded UTF-8 representation of one complete JSON value.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 pub struct JsonBodyV1 {
     value: String,
 }
@@ -416,8 +417,9 @@ impl JsonBodyV1 {
         if input.len() > MAX_JSON_REQUEST_BODY_BYTES {
             return Err(ContractErrorV1::RequestBodyTooLarge);
         }
-        serde_json::from_str::<serde_json::Value>(input)
-            .map_err(|_| ContractErrorV1::InvalidJsonBody)?;
+        let mut deserializer = serde_json::Deserializer::from_str(input);
+        IgnoredAny::deserialize(&mut deserializer).map_err(|_| ContractErrorV1::InvalidJsonBody)?;
+        deserializer.end().map_err(|_| ContractErrorV1::InvalidJsonBody)?;
         Ok(Self { value: input.to_owned() })
     }
 
@@ -479,7 +481,7 @@ impl fmt::Debug for BearerAuthV1 {
 }
 
 /// A bounded provider request for one JSON POST operation.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 pub struct JsonPostRequestV1 {
     relative_path: RelativePathV1,
     headers: SafeHeaders,
@@ -537,7 +539,7 @@ impl fmt::Debug for JsonPostRequestV1 {
 }
 
 /// A bounded UTF-8 HTTP response with only explicitly reviewed metadata.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 pub struct BufferedHttpResponseV1 {
     status: StatusCode,
     body: String,
@@ -553,6 +555,9 @@ impl BufferedHttpResponseV1 {
         content_type: Option<String>,
         retry_after: Option<String>,
     ) -> Result<Self, TransportErrorV1> {
+        if status.is_redirection() {
+            return Err(TransportErrorV1::RedirectDenied);
+        }
         if body.len() > MAX_RESPONSE_BODY_BYTES {
             return Err(TransportErrorV1::ResponseBodyTooLarge);
         }
@@ -739,7 +744,7 @@ fn validate_endpoint_path(path: &str) -> Result<(), ContractErrorV1> {
         || !path.starts_with('/')
         || (path != "/" && path.contains("//"))
         || path.bytes().any(is_forbidden_path_byte)
-        || has_forbidden_percent_encoding(path)
+        || has_invalid_or_forbidden_percent_encoding(path)
     {
         return Err(ContractErrorV1::InvalidEndpoint);
     }
@@ -769,14 +774,36 @@ fn has_scheme_like_first_segment(path: &str) -> bool {
         && bytes.all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'-' | b'.'))
 }
 
-fn has_forbidden_percent_encoding(path: &str) -> bool {
-    path.as_bytes().windows(3).any(|window| {
-        window[0] == b'%'
-            && matches!(
-                (window[1].to_ascii_lowercase(), window[2].to_ascii_lowercase()),
-                (b'2', b'e' | b'f' | b'5') | (b'5', b'c')
-            )
-    })
+fn has_invalid_or_forbidden_percent_encoding(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] != b'%' {
+            index += 1;
+            continue;
+        }
+        let Some(high) = bytes.get(index + 1).and_then(|byte| hex_nibble(*byte)) else {
+            return true;
+        };
+        let Some(low) = bytes.get(index + 2).and_then(|byte| hex_nibble(*byte)) else {
+            return true;
+        };
+        let decoded = (high << 4) | low;
+        if matches!(decoded, b'.' | b'/' | b'\\' | b'%') {
+            return true;
+        }
+        index += 3;
+    }
+    false
+}
+
+const fn hex_nibble(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
 }
 
 const fn is_forbidden_path_byte(byte: u8) -> bool {

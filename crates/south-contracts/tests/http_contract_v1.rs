@@ -87,6 +87,10 @@ fn endpoint_rejects_unsafe_path_segments() {
         "https://example.com/a/%2f/b",
         "https://example.com/a/%5C/b",
         "https://example.com/a/%25/b",
+        "https://example.com/a/%",
+        "https://example.com/a/%2",
+        "https://example.com/a/%gg",
+        "https://example.com/a/%2g",
     ];
 
     for input in invalid {
@@ -133,6 +137,10 @@ fn relative_path_rejects_each_unsafe_path_class() {
         "v1/%2Fmodels",
         "v1/%5cmodels",
         "v1/%25models",
+        "v1/%",
+        "v1/%2",
+        "v1/%gg",
+        "v1/%2g",
         "\u{6a21}\u{578b}/v1",
     ];
 
@@ -215,6 +223,24 @@ fn json_body_enforces_its_size_boundary() {
 }
 
 #[test]
+fn json_body_accepts_a_node_dense_complete_value() {
+    let node_count = 250_000;
+    let mut input = String::with_capacity(node_count * 5 + 2);
+    input.push('[');
+    for index in 0..node_count {
+        if index != 0 {
+            input.push(',');
+        }
+        input.push_str("null");
+    }
+    input.push(']');
+
+    let body = JsonBodyV1::parse(&input).unwrap();
+
+    assert_eq!(body.as_str(), input);
+}
+
+#[test]
 fn request_exposes_only_explicit_read_only_contract_fields() {
     let path = RelativePathV1::parse("v1/responses").unwrap();
     let headers = SafeHeaders::try_from_iter([("content-type", "application/json")]).unwrap();
@@ -260,6 +286,38 @@ fn response_enforces_body_encoding_and_size_boundaries() {
         BufferedHttpResponseV1::try_from_parts(StatusCode::OK, vec![0xff], None, None),
         Err(TransportErrorV1::ResponseBodyNotUtf8)
     );
+}
+
+#[test]
+fn response_rejects_every_redirect_status_before_exposing_a_body() {
+    for status in 300..400 {
+        let status = StatusCode::from_u16(status).unwrap();
+        assert_eq!(
+            BufferedHttpResponseV1::try_from_parts(
+                status,
+                b"redirect-body".to_vec(),
+                Some("text/plain".to_owned()),
+                None,
+            ),
+            Err(TransportErrorV1::RedirectDenied)
+        );
+    }
+}
+
+#[test]
+fn response_preserves_client_and_server_error_outcomes() {
+    for status in [StatusCode::BAD_REQUEST, StatusCode::INTERNAL_SERVER_ERROR] {
+        let response = BufferedHttpResponseV1::try_from_parts(
+            status,
+            b"upstream-error".to_vec(),
+            Some("text/plain".to_owned()),
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(response.status(), status);
+        assert_eq!(response.body(), "upstream-error");
+    }
 }
 
 #[test]

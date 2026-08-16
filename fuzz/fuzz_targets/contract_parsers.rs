@@ -21,6 +21,23 @@ fuzz_target!(|data: &[u8]| {
         assert!(!path.as_str().is_empty());
         assert!(path.as_str().is_ascii());
         assert!(path.as_str().len() <= MAX_RELATIVE_PATH_BYTES);
+        for (binding, scheme, effective_port, base_path) in [
+            ("https://example.com/", "https", 443, "/"),
+            ("https://example.com/base/", "https", 443, "/base/"),
+            ("https://example.com/base%3Av1/", "https", 443, "/base%3Av1/"),
+            ("https://example.com:8443/base/", "https", 8443, "/base/"),
+        ] {
+            let Ok(endpoint) = ProviderEndpointV1::parse(binding) else {
+                panic!("static fuzz binding must be valid");
+            };
+            let Ok(resolved) = path.resolve_against(&endpoint) else {
+                panic!("accepted relative path must remain inside a valid binding");
+            };
+            assert_eq!(resolved.scheme(), scheme);
+            assert_eq!(resolved.host_str(), Some("example.com"));
+            assert_eq!(resolved.port_or_known_default(), Some(effective_port));
+            assert!(resolved.path().starts_with(base_path));
+        }
         assert_eq!(RelativePathV1::parse(path.as_str()), Ok(path));
     }
 

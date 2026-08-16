@@ -10,6 +10,7 @@ version.workspace = true
 
 [dependencies]
 http.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 url.workspace = true
@@ -17,6 +18,7 @@ url.workspace = true
 [dev-dependencies]
 proptest.workspace = true
 serde = { workspace = true, features = ["derive"] }
+static_assertions.workspace = true
 
 [lints]
 workspace = true

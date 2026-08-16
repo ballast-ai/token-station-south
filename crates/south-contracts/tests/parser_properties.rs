@@ -101,12 +101,25 @@ proptest! {
             prop_assert!(path.as_str().len() <= MAX_RELATIVE_PATH_BYTES);
             prop_assert_eq!(RelativePathV1::parse(path.as_str()), Ok(path.clone()));
 
-            let endpoint = ProviderEndpointV1::parse("https://example.com/base/")?;
-            let resolved = path.resolve_against(&endpoint)?;
-            prop_assert_eq!(resolved.scheme(), "https");
-            prop_assert_eq!(resolved.host_str(), Some("example.com"));
-            prop_assert_eq!(resolved.port_or_known_default(), Some(443));
-            prop_assert!(resolved.path().starts_with("/base/"));
+            let bindings = [
+                ("https://example.com/", "https", 443, "/"),
+                ("https://example.com/base/", "https", 443, "/base/"),
+                (
+                    "https://example.com/base%3Av1/",
+                    "https",
+                    443,
+                    "/base%3Av1/",
+                ),
+                ("https://example.com:8443/base/", "https", 8443, "/base/"),
+            ];
+            for (binding, scheme, effective_port, base_path) in bindings {
+                let endpoint = ProviderEndpointV1::parse(binding)?;
+                let resolved = path.resolve_against(&endpoint)?;
+                prop_assert_eq!(resolved.scheme(), scheme);
+                prop_assert_eq!(resolved.host_str(), Some("example.com"));
+                prop_assert_eq!(resolved.port_or_known_default(), Some(effective_port));
+                prop_assert!(resolved.path().starts_with(base_path));
+            }
         }
     }
 }

@@ -325,6 +325,7 @@ name = "south-contracts"
 version = "0.0.1"
 dependencies = [
  "http",
+ "serde",
  "serde_json",
  "thiserror",
  "url",
