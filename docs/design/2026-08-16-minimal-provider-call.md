@@ -45,9 +45,12 @@ wire format.
 ## Ownership and dependency direction
 
 ```text
-south-transport-reqwest ---> south-core ---> south-contracts
-south-provider-conformance ----------------> south-contracts
+south-core ----------------> south-contracts
+south-transport-reqwest ---> south-core
+south-transport-reqwest ---> south-contracts
+south-provider-conformance -> south-contracts
 south-testkit -------------> south-core
+south-testkit -------------> south-contracts
 south-testkit -------------> south-provider-conformance
 future hosts --------------> south-testkit
 ```
@@ -59,8 +62,8 @@ future hosts --------------> south-testkit
 - `south-transport-reqwest` owns reqwest configuration and error classification. No reqwest type
   crosses its public boundary.
 - `south-provider-conformance` owns versioned fixtures.
-- `south-testkit` depends on conformance and core and owns a public runner that future hosts call
-  against their assembled executor. Conformance never depends on testkit.
+- `south-testkit` depends on conformance, core, and contracts and owns a public runner that future
+  hosts call against their assembled executor. Conformance never depends on testkit.
 
 ## Versioned contract
 
@@ -307,8 +310,8 @@ evidence also contains `resolver_future_dropped_while_pending` and
 private-field `ProviderCallExpectedEvidenceV1`; its accessors return only the shared count enum and
 the two booleans.
 
-`south-testkit` depends on `south-core` and `south-provider-conformance`. It owns the object-safe
-assembled-executor boundary:
+`south-testkit` depends on `south-core`, `south-provider-conformance`, and `south-contracts`. It owns
+the object-safe assembled-executor boundary:
 
 ```rust
 pub type AssembledExecutionFutureV1<'a> = Pin<Box<
