@@ -10,6 +10,7 @@ check_metadata() {
   jq -e \
     --arg name_pattern "$FORBIDDEN_NAME_PATTERN" \
     --arg source_pattern "$FORBIDDEN_SOURCE_PATTERN" \
+    --argjson reqwest_features '["__rustls", "__rustls-ring", "__tls", "rustls-tls", "rustls-tls-webpki-roots", "rustls-tls-webpki-roots-no-provider", "stream"]' \
     '[
       (
         .packages[]
@@ -75,6 +76,46 @@ check_metadata() {
             or .uses_default_features != false
             or ((.features // []) | sort) != ["rustls-tls", "stream"]
           )
+      ),
+      (
+        . as $metadata
+        | if .resolve == null then
+            empty
+          else
+            (.workspace_members // []) as $workspace_members
+            | ([
+                .packages[]
+                | select(
+                    .name == "south-transport-reqwest"
+                    and (
+                      if ($workspace_members | length) > 0 then
+                        .id as $package_id | $workspace_members | index($package_id) != null
+                      else
+                        true
+                      end
+                    )
+                  )
+              ] | length) as $transport_count
+            | [.packages[] | select(.name == "reqwest")] as $reqwest_packages
+            | select(
+                if $transport_count == 0 then
+                  ($reqwest_packages | length) != 0
+                else
+                  $transport_count != 1
+                  or ($reqwest_packages | length) != 1
+                  or $reqwest_packages[0].version != "0.12.28"
+                  or ([
+                        $metadata.resolve.nodes[]
+                        | select(.id == $reqwest_packages[0].id)
+                      ] | length) != 1
+                  or ([
+                        $metadata.resolve.nodes[]
+                        | select(.id == $reqwest_packages[0].id)
+                        | .features[]
+                      ] | sort) != $reqwest_features
+                end
+              )
+          end
       )
     ] | length == 0' "$candidate_file" >/dev/null
 }

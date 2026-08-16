@@ -1,31 +1,15 @@
 {
   "packages": [
     {
-      "id": "path+file:///south-contracts#0.0.1",
-      "name": "south-contracts",
-      "version": "0.0.1",
-      "dependencies": [
-        {
-          "name": "http",
-          "rename": null,
-          "source": "registry+https://github.com/rust-lang/crates.io-index",
-          "path": null
-        }
-      ]
-    },
-    {
       "id": "path+file:///south-transport-reqwest#0.0.1",
       "name": "south-transport-reqwest",
       "version": "0.0.1",
       "dependencies": [
         {
           "name": "reqwest",
-          "rename": null,
-          "source": "registry+https://github.com/rust-lang/crates.io-index",
-          "path": null,
           "req": "=0.12.28",
           "uses_default_features": false,
-          "features": ["stream", "rustls-tls"]
+          "features": ["rustls-tls", "stream"]
         }
       ]
     },
@@ -36,10 +20,7 @@
       "dependencies": []
     }
   ],
-  "workspace_members": [
-    "path+file:///south-contracts#0.0.1",
-    "path+file:///south-transport-reqwest#0.0.1"
-  ],
+  "workspace_members": ["path+file:///south-transport-reqwest#0.0.1"],
   "resolve": {
     "nodes": [
       {
@@ -48,6 +29,7 @@
           "__rustls",
           "__rustls-ring",
           "__tls",
+          "json",
           "rustls-tls",
           "rustls-tls-webpki-roots",
           "rustls-tls-webpki-roots-no-provider",

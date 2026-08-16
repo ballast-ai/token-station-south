@@ -98,8 +98,8 @@ that it contains one complete JSON value within the byte limit. It does not norm
 numbers and does not implement serde in this slice. Its custom `Debug` prints only the byte count.
 
 The endpoint is not provider-facing. A trusted host creates `ProviderBindingV1` from a validated
-base endpoint and the one credential slot authorized for that endpoint. `south-core` joins the
-relative path to that base only after proving the requested slot matches the host binding.
+base endpoint and the one credential slot authorized for that endpoint. `south-core` first resolves
+the relative path inside that binding and then proves the requested slot matches the bound slot.
 
 Version-one limits:
 
@@ -140,6 +140,10 @@ is a read-only operation and its future must be cancellation-safe when dropped. 
 - has a redacted `Debug` implementation;
 - zeroizes its owned bytes on drop;
 - is exposed only to the prepared-request/transport boundary.
+
+The resolver is a trusted host capability. Version one does not add a second credential-value size
+contract or error code, so each host must bound the secret returned by its resolver. A future
+contract version may move that limit into South without changing the frozen version-one error set.
 
 This supersedes the earlier cross-repository draft that passed a resolved `(header, value)` pair
 into South. No plaintext header pair is a public provider-call contract.
@@ -216,6 +220,12 @@ tests, so no wall-clock sleep is required.
 - cookies disabled and automatic referer disabled;
 - explicit total, connect, and per-read timeouts;
 - per-request timeout bounded by the caller's explicit execution timeout.
+
+The dependency boundary checks both direct declarations and Cargo's resolved graph. When the
+reqwest transport is present, the graph must contain exactly one reqwest package at `0.12.28`, and
+its unified feature set must equal the features implied by `rustls-tls` plus `stream`. This prevents
+another dependency from silently adding a second reqwest version or enabling policy-changing
+features through Cargo feature unification.
 
 Response bodies are read incrementally to `MAX_RESPONSE_BODY_BYTES + 1`; exceeding the limit is an
 error rather than silent truncation. The transport never calls `error_for_status`, so 4xx and 5xx
