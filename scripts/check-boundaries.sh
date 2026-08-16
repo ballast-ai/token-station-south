@@ -23,6 +23,22 @@ check_metadata() {
           or ((.source // "") | gsub("_"; "-") | test($source_pattern; "i"))
           or ((.path // "") | gsub("_"; "-") | test("/(token-station|token-station-server)(/|$)"; "i"))
         )
+      ),
+      (
+        (.workspace_members // []) as $workspace_members
+        | .packages[]
+        | select(
+            (
+              if ($workspace_members | length) > 0 then
+                .id as $package_id | $workspace_members | index($package_id) != null
+              else
+                .name | startswith("south-")
+              end
+            )
+            and .name != "south-transport-reqwest"
+          )
+        | .dependencies[]
+        | select(.name == "reqwest")
       )
     ] | length == 0' "$candidate_file" >/dev/null
 }

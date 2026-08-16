@@ -8,5 +8,16 @@ repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
 
+[dependencies]
+http.workspace = true
+reqwest.workspace = true
+south-contracts = { path = "../south-contracts", version = "0.0.1" }
+south-core = { path = "../south-core", version = "0.0.1" }
+zeroize.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["io-util", "macros", "net", "rt", "sync", "test-util", "time"] }
+tokio-util = { workspace = true, features = ["rt"] }
+
 [lints]
 workspace = true
