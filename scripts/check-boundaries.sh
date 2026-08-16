@@ -6,12 +6,24 @@ readonly FORBIDDEN_SOURCE_PATTERN='GlimpseEngine/(token-station|token-station-se
 
 check_metadata() {
   local candidate_file="$1"
+  local require_resolved_graph="${2:-false}"
 
   jq -e \
     --arg name_pattern "$FORBIDDEN_NAME_PATTERN" \
     --arg source_pattern "$FORBIDDEN_SOURCE_PATTERN" \
     --argjson reqwest_features '["__rustls", "__rustls-ring", "__tls", "rustls-tls", "rustls-tls-webpki-roots", "rustls-tls-webpki-roots-no-provider", "stream"]' \
+    --argjson require_resolved_graph "$require_resolved_graph" \
     '[
+      (
+        select(
+          $require_resolved_graph
+          and (
+            (.workspace_members | type) != "array"
+            or .resolve == null
+            or (.resolve.nodes | type) != "array"
+          )
+        )
+      ),
       (
         .packages[]
         | select(.name | gsub("_"; "-") | test($name_pattern; "i"))
@@ -131,6 +143,10 @@ if [[ "${1:-}" == "--self-test" ]]; then
     echo "boundary self-test failed: allowed fixture was rejected" >&2
     exit 1
   fi
+  if check_metadata "tests/fixtures/boundary/incomplete-live-metadata.json" true; then
+    echo "boundary self-test failed: incomplete live metadata was accepted" >&2
+    exit 1
+  fi
   echo "boundary self-test passed"
   exit 0
 fi
@@ -141,7 +157,7 @@ trap 'rm -f "$generated_metadata_file"' EXIT
 
 for manifest in Cargo.toml fuzz/Cargo.toml; do
   cargo metadata --format-version 1 --all-features --manifest-path "$manifest" >"$generated_metadata_file"
-  if ! check_metadata "$generated_metadata_file"; then
+  if ! check_metadata "$generated_metadata_file" true; then
     echo "boundary check failed for $manifest: a host, database, or cache dependency is present" >&2
     exit 1
   fi

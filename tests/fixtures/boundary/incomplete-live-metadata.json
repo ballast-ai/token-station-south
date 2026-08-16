@@ -1,0 +1,25 @@
+{
+  "packages": [
+    {
+      "id": "path+file:///south-transport-reqwest#0.0.1",
+      "name": "south-transport-reqwest",
+      "version": "0.0.1",
+      "dependencies": [
+        {
+          "name": "reqwest",
+          "req": "=0.12.28",
+          "uses_default_features": false,
+          "features": ["rustls-tls", "stream"]
+        }
+      ]
+    },
+    {
+      "id": "registry+https://github.com/rust-lang/crates.io-index#reqwest@0.12.28",
+      "name": "reqwest",
+      "version": "0.12.28",
+      "dependencies": []
+    }
+  ],
+  "workspace_members": ["path+file:///south-transport-reqwest#0.0.1"],
+  "resolve": null
+}

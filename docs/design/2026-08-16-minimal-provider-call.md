@@ -225,7 +225,8 @@ The dependency boundary checks both direct declarations and Cargo's resolved gra
 reqwest transport is present, the graph must contain exactly one reqwest package at `0.12.28`, and
 its unified feature set must equal the features implied by `rustls-tls` plus `stream`. This prevents
 another dependency from silently adding a second reqwest version or enabling policy-changing
-features through Cargo feature unification.
+features through Cargo feature unification. Live Cargo metadata must include array-valued
+`workspace_members` and `resolve.nodes`; incomplete metadata fails closed.
 
 Response bodies are read incrementally to `MAX_RESPONSE_BODY_BYTES + 1`; exceeding the limit is an
 error rather than silent truncation. The transport never calls `error_for_status`, so 4xx and 5xx
