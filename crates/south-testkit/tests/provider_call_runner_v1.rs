@@ -129,6 +129,59 @@ async fn runner_collects_every_mismatch_category_without_failing_fast() {
     }
 }
 
+struct SingleMismatchExecutor {
+    case_id: ProviderCallCaseIdV1,
+    category: ProviderCallMismatchCategoryV1,
+}
+
+impl AssembledProviderCallExecutorV1 for SingleMismatchExecutor {
+    fn execute_case<'a>(
+        &'a self,
+        fixture: &'a ProviderCallFixtureV1,
+    ) -> AssembledExecutionFutureV1<'a> {
+        Box::pin(async move {
+            if fixture.case_id() == self.case_id {
+                observation_with_single_mismatch(fixture, self.category)
+            } else {
+                observation_matching(fixture)
+            }
+        })
+    }
+}
+
+#[tokio::test]
+async fn each_single_difference_reports_exactly_its_one_case_and_category() {
+    let isolated_mismatches = [
+        (ProviderCallCaseIdV1::Success, ProviderCallMismatchCategoryV1::Status),
+        (ProviderCallCaseIdV1::Success, ProviderCallMismatchCategoryV1::Body),
+        (ProviderCallCaseIdV1::Success, ProviderCallMismatchCategoryV1::ContentType),
+        (ProviderCallCaseIdV1::Success, ProviderCallMismatchCategoryV1::RetryAfter),
+        (ProviderCallCaseIdV1::InvalidRelativePath, ProviderCallMismatchCategoryV1::ErrorCode),
+        (ProviderCallCaseIdV1::CredentialSlotMismatch, ProviderCallMismatchCategoryV1::OutcomeKind),
+        (ProviderCallCaseIdV1::RedirectDenied, ProviderCallMismatchCategoryV1::ResolverCallCount),
+        (
+            ProviderCallCaseIdV1::ResponseBodyTooLarge,
+            ProviderCallMismatchCategoryV1::TransportCallCount,
+        ),
+        (ProviderCallCaseIdV1::Cancelled, ProviderCallMismatchCategoryV1::ResolverPendingDrop),
+        (
+            ProviderCallCaseIdV1::DeadlineExceeded,
+            ProviderCallMismatchCategoryV1::TransportPendingDrop,
+        ),
+    ];
+
+    for (case_id, category) in isolated_mismatches {
+        let failure =
+            run_provider_call_conformance_v1(&SingleMismatchExecutor { case_id, category })
+                .await
+                .expect_err("one deliberate difference must fail conformance");
+        assert_eq!(failure.mismatches().len(), 1);
+        let mismatch = &failure.mismatches()[0];
+        assert_eq!(mismatch.case_id(), case_id);
+        assert_eq!(mismatch.category(), category);
+    }
+}
+
 #[test]
 fn evidence_construction_saturates_large_counts() {
     let evidence = ProviderCallEvidenceV1::new(256, 257, false, true);
@@ -227,12 +280,88 @@ fn observation_matching(fixture: &ProviderCallFixtureV1) -> ProviderCallObservat
     }
 }
 
+fn observation_with_single_mismatch(
+    fixture: &ProviderCallFixtureV1,
+    category: ProviderCallMismatchCategoryV1,
+) -> ProviderCallObservationV1 {
+    let expected = fixture.expected();
+    let expected_evidence = expected.evidence();
+    let mut resolver_calls = count_value(expected_evidence.resolver_calls());
+    let mut transport_calls = count_value(expected_evidence.transport_calls());
+    let mut resolver_drop = expected_evidence.resolver_future_dropped_while_pending();
+    let mut transport_drop = expected_evidence.transport_future_dropped_while_pending();
+    match category {
+        ProviderCallMismatchCategoryV1::ResolverCallCount => {
+            resolver_calls = different_count(resolver_calls);
+        }
+        ProviderCallMismatchCategoryV1::TransportCallCount => {
+            transport_calls = different_count(transport_calls);
+        }
+        ProviderCallMismatchCategoryV1::ResolverPendingDrop => resolver_drop = !resolver_drop,
+        ProviderCallMismatchCategoryV1::TransportPendingDrop => transport_drop = !transport_drop,
+        _ => {}
+    }
+    let evidence =
+        ProviderCallEvidenceV1::new(resolver_calls, transport_calls, resolver_drop, transport_drop);
+
+    match expected.outcome() {
+        ProviderCallExpectedOutcomeV1::Response { status, body, content_type, retry_after } => {
+            let observed_status = if category == ProviderCallMismatchCategoryV1::Status {
+                StatusCode::OK
+            } else {
+                StatusCode::from_u16(*status).expect("expected status should be valid")
+            };
+            let observed_body = if category == ProviderCallMismatchCategoryV1::Body {
+                "isolated-wrong-body"
+            } else {
+                body
+            };
+            let observed_content_type = if category == ProviderCallMismatchCategoryV1::ContentType {
+                None
+            } else {
+                *content_type
+            };
+            let observed_retry_after = if category == ProviderCallMismatchCategoryV1::RetryAfter {
+                None
+            } else {
+                *retry_after
+            };
+            ProviderCallObservationV1::response(
+                BufferedHttpResponseV1::try_from_parts(
+                    observed_status,
+                    observed_body.as_bytes().to_vec(),
+                    observed_content_type.map(str::to_owned),
+                    observed_retry_after.map(str::to_owned),
+                )
+                .expect("isolated response must satisfy contract bounds"),
+                evidence,
+            )
+        }
+        ProviderCallExpectedOutcomeV1::Failure { code } => {
+            if category == ProviderCallMismatchCategoryV1::OutcomeKind {
+                ProviderCallObservationV1::response(valid_response(), evidence)
+            } else {
+                let observed_code = if category == ProviderCallMismatchCategoryV1::ErrorCode {
+                    ProviderCallFailureCodeV1::RequestFailed
+                } else {
+                    *code
+                };
+                ProviderCallObservationV1::failure(observed_code, evidence)
+            }
+        }
+    }
+}
+
 const fn count_value(count: south_provider_conformance::ProviderCallCountV1) -> usize {
     match count {
         south_provider_conformance::ProviderCallCountV1::Zero => 0,
         south_provider_conformance::ProviderCallCountV1::One => 1,
         south_provider_conformance::ProviderCallCountV1::MoreThanOne => 2,
     }
+}
+
+const fn different_count(count: usize) -> usize {
+    if count == 0 { 1 } else { 0 }
 }
 
 fn valid_response() -> BufferedHttpResponseV1 {

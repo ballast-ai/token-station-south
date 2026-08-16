@@ -367,10 +367,11 @@ pub async fn run_provider_call_conformance_v1(
     let mut mismatches = Vec::with_capacity(MAX_PROVIDER_CALL_MISMATCHES_V1);
 
     for fixture in fixtures {
+        let mismatch_count_before_case = mismatches.len();
         let observation = executor.execute_case(fixture).await;
         compare_outcome(fixture, &observation, &mut mismatches);
         compare_evidence(fixture, &observation, &mut mismatches);
-        if !mismatches.iter().any(|mismatch| mismatch.case_id == fixture.case_id()) {
+        if mismatches.len() == mismatch_count_before_case {
             passed_case_ids.push(fixture.case_id());
         }
     }
@@ -521,7 +522,7 @@ fn parse_reference_input(
     let relative_path = RelativePathV1::parse(input.relative_path()).map_err(map_contract_error)?;
     let body = JsonBodyV1::parse(input.json_body()).map_err(map_contract_error)?;
     let headers = SafeHeaders::try_from_iter(input.headers().iter().copied())
-        .map_err(map_fixture_header_error)?;
+        .map_err(map_canonical_fixture_header_invariant_failure)?;
     let binding = ProviderBindingV1::new(endpoint, bound_slot);
     let request =
         JsonPostRequestV1::new(relative_path, headers, body, BearerAuthV1::new(requested_slot));
@@ -539,7 +540,13 @@ impl CredentialResolver for ReferenceResolver {
     fn resolve<'a>(&'a self, _slot: &'a CredentialSlotV1) -> CredentialResolutionFuture<'a> {
         self.calls.fetch_add(1, Ordering::SeqCst);
         if self.pending {
-            let started = self.started.lock().ok().and_then(|mut sender| sender.take());
+            let started = {
+                let mut sender = match self.started.lock() {
+                    Ok(sender) => sender,
+                    Err(poisoned) => poisoned.into_inner(),
+                };
+                sender.take()
+            };
             let dropped = Arc::clone(&self.dropped);
             Box::pin(async move {
                 let _drop_flag = PendingDropFlag(dropped);
@@ -617,7 +624,13 @@ const fn map_contract_error(error: ContractErrorV1) -> ProviderCallFailureCodeV1
     }
 }
 
-const fn map_fixture_header_error(_error: HeaderPolicyError) -> ProviderCallFailureCodeV1 {
+// Canonical fixtures are immutable and their ordinary headers are production-parsed in the
+// conformance package's public table tests. The frozen 19-code provider-call set intentionally has
+// no header-policy code, so a failure here means that internal fixture invariant was violated. Use
+// the context-free request fallback rather than panicking or expanding the stable code contract.
+const fn map_canonical_fixture_header_invariant_failure(
+    _error: HeaderPolicyError,
+) -> ProviderCallFailureCodeV1 {
     ProviderCallFailureCodeV1::RequestFailed
 }
 
@@ -752,4 +765,51 @@ fn record(
     mismatches: &mut Vec<ProviderCallMismatchV1>,
 ) {
     mismatches.push(ProviderCallMismatchV1 { case_id: fixture.case_id(), category });
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        panic::{AssertUnwindSafe, catch_unwind},
+        sync::{Arc, Mutex, atomic::AtomicBool, atomic::AtomicUsize},
+        time::Duration,
+    };
+
+    use south_contracts::CredentialSlotV1;
+    use south_core::CredentialResolver;
+    use tokio::sync::oneshot;
+
+    use super::ReferenceResolver;
+
+    #[tokio::test(flavor = "current_thread", start_paused = true)]
+    async fn pending_resolver_recovers_its_start_sender_from_a_poisoned_mutex() {
+        let (started_sender, started_receiver) = oneshot::channel();
+        let started = Mutex::new(Some(started_sender));
+        let poisoned = catch_unwind(AssertUnwindSafe(|| {
+            let _guard = started.lock().expect("test mutex should initially be available");
+            panic!("poison the test mutex");
+        }));
+        assert!(poisoned.is_err());
+        let resolver = ReferenceResolver {
+            calls: Arc::new(AtomicUsize::new(0)),
+            pending: true,
+            started,
+            dropped: Arc::new(AtomicBool::new(false)),
+        };
+        let slot = CredentialSlotV1::parse("test-slot").expect("test slot should be valid");
+        let mut resolution = resolver.resolve(&slot);
+        let wait_for_start = async {
+            tokio::select! {
+                result = started_receiver => {
+                    result.expect("poison recovery must retain the start sender");
+                }
+                _ = &mut resolution => panic!("pending resolution unexpectedly completed"),
+            }
+        };
+
+        tokio::time::timeout(Duration::from_secs(1), wait_for_start)
+            .await
+            .expect("poison recovery start signal timed out");
+        drop(resolution);
+    }
 }
