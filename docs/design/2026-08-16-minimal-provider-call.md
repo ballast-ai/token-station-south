@@ -222,7 +222,8 @@ bodies remain available.
 
 This is a test API for checking an assembled provider-call path. It is not a production host
 adapter contract, does not expose reqwest, and does not make a host `verified`. A host becomes
-verified only in its separate adoption slice after its real adapter runs this suite.
+verified only in its separate adoption slice after its real adapter runs this suite and its wiring
+is reviewed.
 
 `south-provider-conformance` depends only on `south-contracts`. It exports the immutable fixture
 table and these stable identifiers:
@@ -230,6 +231,7 @@ table and these stable identifiers:
 ```text
 PROVIDER_CALL_CONFORMANCE_SUITE_VERSION: u32 = 1
 PROVIDER_CALL_CONFORMANCE_SUITE_ID: &str = "south.provider-call.v1"
+PROVIDER_CALL_CONFORMANCE_DEADLINE_OFFSET_V1: Duration = Duration::from_secs(1)
 ```
 
 The table contains exactly these `ProviderCallCaseIdV1` values:
@@ -245,8 +247,8 @@ DEADLINE_EXCEEDED
 ```
 
 `provider_call_fixtures_v1()` returns `&'static [ProviderCallFixtureV1]`. Fixtures and their nested
-values have private fields and read-only accessors; callers cannot mutate the canonical table.
-Each fixture contains:
+values have private fields and read-only accessors; callers cannot mutate or extend the canonical
+table. Each fixture contains:
 
 - `case_id: ProviderCallCaseIdV1`;
 - `input: ProviderCallInputV1`, with raw `&'static str` endpoint, bound credential slot, requested
@@ -255,23 +257,55 @@ Each fixture contains:
 - `control: ProviderCallControlV1`, one of `Complete`, `CancelWhileResolverPending`, or
   `ExpireWhileTransportPending`;
 - `upstream: ProviderCallUpstreamV1`, one of `Response(ProviderCallRawResponseV1)`,
-  `TransportFailure(TransportErrorV1)`, or `NotReached`;
-- `expected: ProviderCallExpectedV1`, containing the expected outcome, resolver and transport call
-  counts, and pending-future drop evidence.
+  `TransportFailure(TransportErrorV1)`, `Pending`, or `NotReached`;
+- `expected: ProviderCallExpectedV1`, containing an expected outcome and expected evidence.
+
+The canonical table freezes the only legal control/upstream combinations:
+
+| Case ID | Control | Upstream |
+| --- | --- | --- |
+| `SUCCESS` | `Complete` | `Response` |
+| `INVALID_RELATIVE_PATH` | `Complete` | `NotReached` |
+| `CREDENTIAL_SLOT_MISMATCH` | `Complete` | `NotReached` |
+| `REDIRECT_DENIED` | `Complete` | `TransportFailure(REDIRECT_DENIED)` |
+| `RESPONSE_BODY_TOO_LARGE` | `Complete` | `TransportFailure(RESPONSE_BODY_TOO_LARGE)` |
+| `CANCELLED` | `CancelWhileResolverPending` | `NotReached` |
+| `DEADLINE_EXCEEDED` | `ExpireWhileTransportPending` | `Pending` |
+
+`Response` and `TransportFailure` are legal only with `Complete`; `Pending` is legal only for the
+deadline case. Fixtures have no public constructor, and table tests assert that no other pairing is
+published. `ExpireWhileTransportPending` means the executor uses an absolute deadline exactly
+`PROVIDER_CALL_CONFORMANCE_DEADLINE_OFFSET_V1` after that case starts.
 
 `ProviderCallRawResponseV1` holds a `u16` status plus borrowed static body, `content-type`, and
-`retry-after` values, so raw upstream responses own no allocation. The success body and every raw
-input remain within the version-one contract limits. The oversized-response case is represented by
+`retry-after` values, so raw upstream responses own no allocation. Metadata fields are
+`Option<&'static str>`. The success body, present metadata, and every raw input remain within the
+version-one contract limits. The oversized-response case is represented by
 `TransportErrorV1::ResponseBodyTooLarge`; the fixture does not embed a 32 MiB allocation. The only
 Bearer value in the package is the documented literal `FAKE_BEARER_SECRET_V1`; it is synthetic test
 data, not configurable host data. A fixture never contains a resolved `SecretValue`, and neither
-the runner nor its report retains the fake value.
+the runner nor its report retains the fake value. Table tests parse and bound every canonical raw
+field through its production contract, except that the one deliberately invalid relative path must
+fail with `INVALID_RELATIVE_PATH` while remaining within the raw byte limit.
 
-`ProviderCallExpectedOutcomeV1` is either `Response { status, body }` or `Failure { code }`.
-Expected response bodies and stable failure codes are borrowed static strings. Expected execution
-evidence uses `u8` call counts plus `resolver_future_dropped_while_pending` and
-`transport_future_dropped_while_pending` booleans. Seven fixtures and counts no greater than one
-keep this representation deliberately bounded.
+`ProviderCallExpectedOutcomeV1` is either
+`Response { status, body, content_type, retry_after }` or `Failure { code }`. Body and present
+metadata values are borrowed static strings. The runner compares status, body bytes,
+`content-type`, and `retry-after` exactly, including `None` versus `Some`.
+
+Failure codes are not arbitrary strings. `ProviderCallFailureCodeV1` is a closed, fieldless enum
+with exactly one variant for every contract, preparation, and transport code frozen in the Errors
+table above. Its `as_str()` returns that stable `&'static str`; there is no `Unknown` or constructor
+from an unchecked string. Expected and observed failures both use this enum.
+
+Expected and observed call counts use the same closed `ProviderCallCountV1` enum: `Zero`, `One`, or
+`MoreThanOne`. `ProviderCallCountV1::from_usize` maps zero and one exactly and saturates every value
+of two or greater to `MoreThanOne`; it never narrows to an integer field. Boundary tests prove 256
+and 257 both remain `MoreThanOne` and therefore cannot wrap into an expected zero or one. Expected
+evidence also contains `resolver_future_dropped_while_pending` and
+`transport_future_dropped_while_pending` booleans. `ProviderCallExpectedV1` stores that data in a
+private-field `ProviderCallExpectedEvidenceV1`; its accessors return only the shared count enum and
+the two booleans.
 
 `south-testkit` depends on `south-core` and `south-provider-conformance`. It owns the object-safe
 assembled-executor boundary:
@@ -294,27 +328,58 @@ no associated types, generic return type, reqwest type, or raw-transport paramet
 as `dyn AssembledProviderCallExecutorV1`. A future host implements this test trait around its fully
 assembled call path; the runner never accepts `AsyncHttpTransport` directly.
 
-`ProviderCallObservationV1` owns one observed outcome and four evidence fields. Its outcome is
-either a bounded `BufferedHttpResponseV1` or a stable `&'static str` failure code. The evidence is
-resolver call count, transport call count, resolver-pending drop observed, and transport-pending
-drop observed. The runner compares response status and body bytes exactly, or compares the stable
-failure code exactly, then compares all four evidence fields. Observation, report, failure, and
-mismatch `Debug` implementations expose only suite version, case ID, mismatch category, counts,
-booleans, status, and body byte count; they never print bodies, headers, endpoints, paths,
-credential slots, or either Bearer value.
+External implementations construct observations only through these public functions:
+
+```rust
+ProviderCallEvidenceV1::new(
+    resolver_calls: usize,
+    transport_calls: usize,
+    resolver_future_dropped_while_pending: bool,
+    transport_future_dropped_while_pending: bool,
+) -> ProviderCallEvidenceV1
+
+ProviderCallObservationV1::response(
+    response: BufferedHttpResponseV1,
+    evidence: ProviderCallEvidenceV1,
+) -> ProviderCallObservationV1
+
+ProviderCallObservationV1::failure(
+    code: ProviderCallFailureCodeV1,
+    evidence: ProviderCallEvidenceV1,
+) -> ProviderCallObservationV1
+```
+
+`ProviderCallEvidenceV1::new` converts both `usize` values with the saturating
+`ProviderCallCountV1::from_usize`. The response constructor accepts only the already bounded
+contract response; the failure constructor accepts only the closed known-code enum. Observation
+and evidence fields stay private and have read-only accessors. The runner compares the response
+fields or failure code exactly, then compares both count categories and both pending-drop booleans.
+
+No data-bearing public conformance or testkit type derives `Debug` or implements `Display`.
+`ProviderCallInputV1` prints only byte lengths and header count. `ProviderCallRawResponseV1` and
+response-shaped expected or observed outcomes print status, body byte count, metadata presence,
+and metadata byte counts. `ProviderCallFixtureV1` prints case ID and control plus those redacted
+nested summaries. `ProviderCallUpstreamV1` prints only its fixed variant and, for a transport
+failure, the closed error code. Expected evidence, observed evidence, reports, and failures print
+only count categories and booleans. Closed case, control, failure-code, count, and mismatch enums
+use custom `Debug` that prints only their fixed variant names. No `Debug` output prints bodies,
+metadata text, headers, endpoints, paths, credential slots, or either Bearer value.
 
 `pub async fn run_provider_call_conformance_v1(&dyn AssembledProviderCallExecutorV1)` executes all
 seven cases sequentially in canonical table order and returns
 `Result<ProviderCallConformanceReportV1, ProviderCallConformanceFailureV1>`. It does not fail fast.
 `Ok` means every case matched and reports the suite ID, version, and seven passed cases. `Err` owns
 the complete bounded list of case ID and `ProviderCallMismatchCategoryV1` pairs, without copying
-expected or actual sensitive values. The exact mismatch categories are:
+expected or actual sensitive values. It emits each category at most once per case, so the failure
+contains at most 70 pairs. The exact mismatch categories are:
 
 ```text
 OUTCOME_KIND
 ERROR_CODE
 STATUS
 BODY
+CONTENT_TYPE
+RETRY_AFTER
 RESOLVER_CALL_COUNT
 TRANSPORT_CALL_COUNT
 RESOLVER_PENDING_DROP
@@ -327,10 +392,51 @@ invalid-path case returns `INVALID_RELATIVE_PATH` before core, resolution, or tr
 wrong-slot case reaches core and proves both call counts remain zero. Success uses an immediate fake
 resolver and recording transport. Redirect and oversize cases are returned by the fake transport
 as their frozen transport errors. Cancellation holds the resolver future pending, synchronizes its
-start, cancels the token, and records its drop; deadline uses an immediate resolver, holds transport
-pending under Tokio's paused clock, advances to the absolute deadline, and records transport-future
-drop. These tests use channels or barriers, never sleeps, public DNS, environment mutation, or a
-real credential.
+start, cancels the token, and records its drop. Deadline uses an immediate resolver and a `Pending`
+fake transport.
+
+Reference deadline tests use
+`#[tokio::test(flavor = "current_thread", start_paused = true)]`. The executor neither pauses nor
+advances Tokio time. The test waits on a channel or barrier proving the deadline-case transport has
+started, advances by `PROVIDER_CALL_CONFORMANCE_DEADLINE_OFFSET_V1`, and then observes transport
+future drop. This remains compatible with Tokio's current-thread runtime and uses no wall-clock
+sleep.
+
+Call counts and drop flags are adapter-reported evidence. An opaque executor cannot be independently
+instrumented by the runner, so a passing report alone is insufficient for host verification. The
+separate host-adoption review must inspect that these values are wired to the real adapter's
+resolver and transport boundaries and drop guards before changing that host to `verified`.
+
+An incorrect executor can return a permanently pending future. The runner deliberately adds no
+clock abstraction or internal watchdog; every caller must wrap the entire run and its deadline
+driver in an outer Tokio timeout. The reference invocation is:
+
+```rust
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn assembled_provider_call_conforms() {
+    let executor = Arc::new(reference_executor());
+    let deadline_transport_started = executor.deadline_transport_started();
+    let started = deadline_transport_started.notified();
+    let run = tokio::spawn({
+        let executor = Arc::clone(&executor);
+        async move { run_provider_call_conformance_v1(executor.as_ref()).await }
+    });
+
+    let driven_run = async {
+        started.await;
+        tokio::time::advance(PROVIDER_CALL_CONFORMANCE_DEADLINE_OFFSET_V1).await;
+        run.await.expect("conformance task must not panic")
+    };
+    let result = tokio::time::timeout(Duration::from_secs(5), driven_run)
+        .await
+        .expect("conformance watchdog expired");
+    assert!(result.is_ok());
+}
+```
+
+The watchdog covers failure to reach the transport-start signal as well as failure to finish after
+the deadline advance. Reference tests otherwise use channels or barriers, never sleeps, public
+DNS, environment mutation, or a real credential.
 
 Neither package adds serde, a wire format, WIT, a provider runtime, or a generic fixture framework.
 The dependency direction remains one-way: conformance to contracts, testkit to conformance and
