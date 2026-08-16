@@ -140,7 +140,7 @@ readonly generated_metadata_file
 trap 'rm -f "$generated_metadata_file"' EXIT
 
 for manifest in Cargo.toml fuzz/Cargo.toml; do
-  cargo metadata --format-version 1 --manifest-path "$manifest" >"$generated_metadata_file"
+  cargo metadata --format-version 1 --all-features --manifest-path "$manifest" >"$generated_metadata_file"
   if ! check_metadata "$generated_metadata_file"; then
     echo "boundary check failed for $manifest: a host, database, or cache dependency is present" >&2
     exit 1
