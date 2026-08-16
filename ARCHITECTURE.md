@@ -16,21 +16,33 @@ community policy      enterprise policy
 
 ## Crate ownership
 
-| Crate | Ownership |
+| Crate | Current status and ownership |
 | --- | --- |
-| `south-contracts` | Canonical provider-facing HTTP, auth, stream, and error contracts |
-| `south-core` | Host-neutral single-call orchestration |
-| `south-transport-ureq` | Synchronous native transport |
-| `south-transport-reqwest` | Asynchronous native transport |
-| `south-provider-api` | Provider WIT and manifest schemas |
-| `south-provider-runtime` | Sandboxed provider component execution |
-| `south-provider-conformance` | Fixtures and contract verification |
-| `south-testkit` | Public tests reusable by consumers |
-| `south-migration` | Offline fixture comparison; never production double-send |
+| `south-contracts` | Implemented version-one bounded HTTP, Bearer auth, and stable error contracts |
+| `south-core` | Implemented host-neutral buffered provider-call orchestration |
+| `south-transport-reqwest` | Implemented hardened buffered JSON POST transport |
+| `south-provider-conformance` | Implemented immutable `south.provider-call.v1` fixtures |
+| `south-testkit` | Implemented assembled-executor conformance runner and reference executor |
+| `south-transport-ureq` | Placeholder for a future synchronous native transport |
+| `south-provider-api` | Placeholder for future provider WIT and manifest schemas |
+| `south-provider-runtime` | Placeholder for future sandboxed component execution |
+| `south-migration` | Placeholder for future offline fixture comparison; never production double-send |
 
-Only `south-contracts` has a behavioral API in the bootstrap release. Other crates are unpublished
-ownership markers and must not gain behavior without an English design record and a failing public
-behavior test.
+The implemented crate dependency graph is:
+
+```text
+south-core -------------------------------> south-contracts
+south-transport-reqwest ------------------> south-core
+south-transport-reqwest ------------------> south-contracts
+south-provider-conformance ---------------> south-contracts
+south-testkit ----------------------------> south-contracts
+south-testkit ----------------------------> south-core
+south-testkit ----------------------------> south-provider-conformance
+```
+
+These edges are direct Cargo dependencies. They are one-way and acyclic. Only the reqwest transport
+crate owns a network-client dependency. No South crate owns a database, cache, migration directory,
+host repository dependency, or credential source.
 
 ## Host-owned concerns
 

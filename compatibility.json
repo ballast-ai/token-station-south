@@ -2,10 +2,14 @@
   "schema_version": 1,
   "release": {
     "version": "0.0.1",
-    "stability": "bootstrap"
+    "stability": "library_slice"
   },
   "contracts": {
     "reserved_header_policy": 1,
+    "http": 1,
+    "auth": 1,
+    "error": 1,
+    "stream": null,
     "canonical_ir": null,
     "header_limits": {
       "count": 64,
@@ -14,6 +18,10 @@
       "total_bytes": 65536
     }
   },
+  "conformance": {
+    "suite_id": "south.provider-call.v1",
+    "provider_call_suite": 1
+  },
   "provider_api": {
     "wit_version": null
   },
@@ -21,14 +29,14 @@
     "abi_version": null
   },
   "crates": {
-    "south-contracts": "bootstrap_contract",
-    "south-core": "placeholder",
+    "south-contracts": "http_auth_error_v1",
+    "south-core": "buffered_provider_call_v1",
     "south-migration": "placeholder",
     "south-provider-api": "placeholder",
-    "south-provider-conformance": "placeholder",
+    "south-provider-conformance": "provider_call_suite_v1",
     "south-provider-runtime": "placeholder",
-    "south-testkit": "placeholder",
-    "south-transport-reqwest": "placeholder",
+    "south-testkit": "provider_call_runner_v1",
+    "south-transport-reqwest": "buffered_json_post_v1",
     "south-transport-ureq": "placeholder"
   },
   "hosts": {

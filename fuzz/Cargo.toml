@@ -18,4 +18,10 @@ name = "safe_headers"
 path = "fuzz_targets/safe_headers.rs"
 test = false
 
+[[bin]]
+doc = false
+name = "contract_parsers"
+path = "fuzz_targets/contract_parsers.rs"
+test = false
+
 [workspace]

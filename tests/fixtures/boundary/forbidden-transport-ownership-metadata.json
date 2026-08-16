@@ -1,0 +1,15 @@
+{
+  "packages": [
+    {
+      "name": "south-core",
+      "dependencies": [
+        {
+          "name": "reqwest",
+          "rename": null,
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "path": null
+        }
+      ]
+    }
+  ]
+}

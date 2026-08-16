@@ -6,8 +6,9 @@ providers; routing, tenancy, billing, quotas, persistence, and user-facing behav
 host.
 
 > [!WARNING]
-> This repository is in bootstrap status. It establishes ownership, security boundaries, and
-> engineering gates. It is not production-ready and does not yet execute provider requests.
+> This repository contains a library slice, not a production integration. One host-bound,
+> buffered JSON POST path is implemented, but neither community nor enterprise host has adopted
+> or verified it.
 
 ## Repository boundaries
 
@@ -19,15 +20,25 @@ South does not read databases, environment variables, config files, keychains, o
 Hosts resolve credentials and inject capabilities explicitly. Provider components have no network,
 filesystem, or secret access by default.
 
-See [Architecture](ARCHITECTURE.md), [Compatibility](compatibility.json), and
-[Contributing](CONTRIBUTING.md).
+See [Architecture](ARCHITECTURE.md), [Compatibility](compatibility.json),
+[Security](SECURITY.md), [Contributing](CONTRIBUTING.md), the
+[repository bootstrap design](docs/design/2026-08-16-repository-bootstrap.md), and the
+[minimal provider call design](docs/design/2026-08-16-minimal-provider-call.md).
 
-## Current bootstrap contract
+## Implemented library slice
 
-`south-contracts::SafeHeaders` validates and bounds ordinary provider-supplied headers. It rejects
-versioned host-reserved authentication, framing, and hop-by-hop headers. The reserved list is a
-boundary policy, not an attempt to recognize every possible credential scheme. Authentication
-declarations and resolved credentials will use separate contracts.
+- `south-contracts` defines version-one bounded HTTP, Bearer authentication, and stable error
+  contracts, including reserved-header enforcement and redacted diagnostics.
+- `south-core` binds a validated endpoint to one credential slot, resolves the host-owned secret,
+  and applies cancellation and an absolute deadline around one prepared call.
+- `south-transport-reqwest` executes one hardened buffered JSON POST with redirects, retries,
+  compression, cookies, referer propagation, and implicit system proxies disabled.
+- `south-provider-conformance` publishes the immutable `south.provider-call.v1` fixtures, while
+  `south-testkit` runs them against an assembled executor.
+
+The slice does not include streaming, provider WIT or runtime loading, the ureq transport, retries,
+fallback, routing, persistence, database access, or host adapters. Passing the library conformance
+suite does not by itself verify a host integration.
 
 ## Local verification
 
@@ -40,6 +51,7 @@ cargo test --workspace --no-default-features
 cargo check --manifest-path fuzz/Cargo.toml --all-targets --locked
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features
 rustup run 1.96.0 cargo check --workspace --all-targets
+scripts/check-boundaries.sh --self-test
 scripts/check-boundaries.sh
 cargo deny check
 cargo deny --manifest-path fuzz/Cargo.toml --config deny.toml --locked check
