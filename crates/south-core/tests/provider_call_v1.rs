@@ -21,6 +21,7 @@ use south_core::{
 use static_assertions::{assert_impl_all, assert_not_impl_any};
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
+use url::Url;
 
 assert_impl_all!(ProviderBindingV1: Send, Sync);
 assert_impl_all!(SecretValue: Send, Sync);
@@ -60,6 +61,15 @@ fn response() -> BufferedHttpResponseV1 {
     )
     .expect("fixture response should be valid")
 }
+
+async fn wait_for_start(started: oneshot::Receiver<()>) {
+    tokio::time::timeout(Duration::from_secs(1), started)
+        .await
+        .expect("start handshake watchdog should not expire")
+        .expect("operation should send its start handshake");
+}
+
+const fn assert_send<T: Send>(_: &T) {}
 
 #[test]
 fn binding_debug_redacts_endpoint_and_slot() {
@@ -143,7 +153,7 @@ struct RecordingTransport {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Observation {
     method: Method,
-    url: String,
+    url: Url,
     header: String,
     body: String,
     secret: String,
@@ -160,7 +170,7 @@ impl AsyncHttpTransport for RecordingTransport {
         self.calls.fetch_add(1, Ordering::SeqCst);
         let observation = Observation {
             method: prepared.method().clone(),
-            url: prepared.url().to_owned(),
+            url: prepared.url().clone(),
             header: prepared
                 .headers()
                 .get("x-test")
@@ -301,7 +311,8 @@ async fn success_prepares_exactly_one_post_for_the_transport() {
         &observation,
         &Observation {
             method: Method::POST,
-            url: format!("https://{ENDPOINT_SENTINEL}/base/{PATH_SENTINEL}"),
+            url: Url::parse(&format!("https://{ENDPOINT_SENTINEL}/base/{PATH_SENTINEL}"))
+                .expect("expected prepared URL should be valid"),
             header: HEADER_SENTINEL.to_owned(),
             body: format!(r#"{{"value":"{BODY_SENTINEL}"}}"#),
             secret: SECRET_SENTINEL.to_owned(),
@@ -343,7 +354,7 @@ async fn resolver_time_is_subtracted_from_the_transport_budget() {
         &cancellation,
     );
     let advance_then_release = async {
-        started_rx.await.expect("resolver should start before time advances");
+        wait_for_start(started_rx).await;
         tokio::time::advance(Duration::from_secs(7)).await;
         release_tx.send(()).expect("resolver should still be waiting for release");
     };
@@ -362,6 +373,71 @@ async fn resolver_time_is_subtracted_from_the_transport_budget() {
             .remaining_timeout,
         Duration::from_secs(23)
     );
+}
+
+#[tokio::test]
+async fn dynamic_ports_produce_a_send_executor_future() {
+    let concrete_resolver = ImmediateResolver::default();
+    let concrete_transport = RecordingTransport::default();
+    let resolver: &dyn CredentialResolver = &concrete_resolver;
+    let transport: &dyn AsyncHttpTransport = &concrete_transport;
+    let call_binding = binding("https://provider.invalid/base", "bound-slot");
+    let call_request = request("v1/call", "bound-slot");
+    let cancellation = CancellationToken::new();
+
+    let future = execute_provider_call_v1(
+        &call_binding,
+        &call_request,
+        resolver,
+        transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &cancellation,
+    );
+    assert_send(&future);
+    let result = future.await.expect("dynamic resolver and transport ports should execute");
+
+    assert_eq!(result.status(), StatusCode::CREATED);
+    assert_eq!(concrete_resolver.calls.load(Ordering::SeqCst), 1);
+    assert_eq!(concrete_transport.calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test(start_paused = true)]
+async fn simultaneous_cancellation_completion_and_deadline_prefer_cancellation() {
+    let (started_tx, started_rx) = oneshot::channel();
+    let (release_tx, release_rx) = oneshot::channel();
+    let resolver = ControlledResolver {
+        calls: AtomicUsize::new(0),
+        started: Mutex::new(Some(started_tx)),
+        release: Mutex::new(Some(release_rx)),
+    };
+    let transport = RecordingTransport::default();
+    let call_binding = binding("https://provider.invalid/base", "bound-slot");
+    let call_request = request("v1/call", "bound-slot");
+    let cancellation = CancellationToken::new();
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+
+    let call = execute_provider_call_v1(
+        &call_binding,
+        &call_request,
+        &resolver,
+        &transport,
+        deadline,
+        &cancellation,
+    );
+    let make_every_branch_ready = async {
+        wait_for_start(started_rx).await;
+        tokio::time::sleep_until(deadline).await;
+        cancellation.cancel();
+        release_tx.send(()).expect("resolver should still be waiting for release");
+    };
+    let ((), result) = tokio::join!(biased; make_every_branch_ready, call);
+
+    assert_eq!(
+        result.expect_err("biased selection must prefer cancellation").code(),
+        PreparationErrorV1::Cancelled.code()
+    );
+    assert_eq!(resolver.calls.load(Ordering::SeqCst), 1);
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 0);
 }
 
 struct DropFlag(Arc<AtomicBool>);
@@ -407,7 +483,7 @@ fn pending_resolver() -> (PendingResolver, oneshot::Receiver<()>, Arc<AtomicBool
     )
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn cancellation_drops_a_pending_resolver_without_calling_transport() {
     let (resolver, started, dropped) = pending_resolver();
     let transport = RecordingTransport::default();
@@ -424,7 +500,7 @@ async fn cancellation_drops_a_pending_resolver_without_calling_transport() {
         &cancellation,
     );
     let cancel = async {
-        started.await.expect("resolver should start");
+        wait_for_start(started).await;
         cancellation.cancel();
     };
     let (result, ()) = tokio::join!(call, cancel);
@@ -455,7 +531,7 @@ async fn deadline_drops_a_pending_resolver_without_calling_transport() {
         &cancellation,
     );
     let expire = async {
-        started.await.expect("resolver should start");
+        wait_for_start(started).await;
         tokio::time::advance(Duration::from_secs(30)).await;
     };
     let (result, ()) = tokio::join!(call, expire);
@@ -508,7 +584,7 @@ fn pending_transport() -> (PendingTransport, oneshot::Receiver<()>, Arc<AtomicBo
     )
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn cancellation_drops_a_pending_transport() {
     let resolver = ImmediateResolver::default();
     let (transport, started, dropped) = pending_transport();
@@ -525,7 +601,7 @@ async fn cancellation_drops_a_pending_transport() {
         &cancellation,
     );
     let cancel = async {
-        started.await.expect("transport should start");
+        wait_for_start(started).await;
         cancellation.cancel();
     };
     let (result, ()) = tokio::join!(call, cancel);
@@ -556,7 +632,7 @@ async fn deadline_drops_a_pending_transport() {
         &cancellation,
     );
     let expire = async {
-        started.await.expect("transport should start");
+        wait_for_start(started).await;
         tokio::time::advance(Duration::from_secs(30)).await;
     };
     let (result, ()) = tokio::join!(call, expire);

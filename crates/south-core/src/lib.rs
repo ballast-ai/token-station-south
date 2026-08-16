@@ -12,6 +12,7 @@ use south_contracts::{
 use thiserror::Error;
 use tokio::time::{Instant, timeout_at};
 use tokio_util::sync::CancellationToken;
+use url::Url;
 use zeroize::Zeroizing;
 
 /// A trusted endpoint and its only authorized credential slot.
@@ -80,7 +81,7 @@ pub trait CredentialResolver: Send + Sync {
 /// receive the plaintext credential only through [`Self::bearer_secret`].
 pub struct PreparedHttpRequestV1<'request> {
     method: Method,
-    url: String,
+    url: Url,
     headers: &'request SafeHeaders,
     body: &'request JsonBodyV1,
     bearer_secret: SecretValue,
@@ -95,7 +96,7 @@ impl PreparedHttpRequestV1<'_> {
 
     /// Returns the destination proven to remain inside the trusted provider binding.
     #[must_use]
-    pub fn url(&self) -> &str {
+    pub const fn url(&self) -> &Url {
         &self.url
     }
 
@@ -169,6 +170,10 @@ impl ProviderCallErrorV1 {
 }
 
 /// Validates, authorizes, resolves, prepares, and executes one buffered JSON POST.
+///
+/// Cancellation has deterministic precedence. The scoped race uses biased selection, so when the
+/// cancellation signal and either call completion or the absolute deadline are observed ready in
+/// the same poll, this function returns `CANCELLED`.
 pub async fn execute_provider_call_v1<R, T>(
     binding: &ProviderBindingV1,
     request: &JsonPostRequestV1,
@@ -202,7 +207,7 @@ where
             .map_err(|_| PreparationErrorV1::CredentialResolutionFailed)?;
         let prepared = PreparedHttpRequestV1 {
             method: Method::POST,
-            url: destination.into(),
+            url: destination,
             headers: request.headers(),
             body: request.body(),
             bearer_secret: secret,
