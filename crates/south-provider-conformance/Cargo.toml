@@ -8,5 +8,12 @@ repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
 
+[dependencies]
+south-contracts = { path = "../south-contracts", version = "0.0.1" }
+
+[dev-dependencies]
+http.workspace = true
+static_assertions.workspace = true
+
 [lints]
 workspace = true
