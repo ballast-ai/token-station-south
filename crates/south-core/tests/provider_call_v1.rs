@@ -110,6 +110,30 @@ impl CredentialResolver for ImmediateResolver {
     }
 }
 
+struct ControlledResolver {
+    calls: AtomicUsize,
+    started: Mutex<Option<oneshot::Sender<()>>>,
+    release: Mutex<Option<oneshot::Receiver<()>>>,
+}
+
+impl CredentialResolver for ControlledResolver {
+    fn resolve<'a>(&'a self, _slot: &'a CredentialSlotV1) -> CredentialResolutionFuture<'a> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        let started = self.started.lock().expect("test start lock should be available").take();
+        let release = self.release.lock().expect("test release lock should be available").take();
+        Box::pin(async move {
+            if let Some(started) = started {
+                let _ = started.send(());
+            }
+            release
+                .expect("controlled resolver should have one release receiver")
+                .await
+                .expect("test should release the controlled resolver");
+            Ok(SecretValue::new(SECRET_SENTINEL.to_owned()))
+        })
+    }
+}
+
 #[derive(Default)]
 struct RecordingTransport {
     calls: AtomicUsize,
@@ -154,9 +178,11 @@ impl AsyncHttpTransport for RecordingTransport {
 }
 
 #[tokio::test]
-async fn wrong_slot_stops_before_resolver_and_transport() {
+async fn wrong_slot_precedes_an_already_cancelled_preflight() {
     let resolver = ImmediateResolver::default();
     let transport = RecordingTransport::default();
+    let cancellation = CancellationToken::new();
+    cancellation.cancel();
 
     let error = execute_provider_call_v1(
         &binding("https://provider.invalid/base", "bound-slot"),
@@ -164,7 +190,7 @@ async fn wrong_slot_stops_before_resolver_and_transport() {
         &resolver,
         &transport,
         tokio::time::Instant::now() + Duration::from_secs(30),
-        &CancellationToken::new(),
+        &cancellation,
     )
     .await
     .expect_err("a mismatched credential slot must fail");
@@ -291,6 +317,51 @@ async fn success_prepares_exactly_one_post_for_the_transport() {
     {
         assert!(!observation.prepared_debug.contains(sentinel));
     }
+}
+
+#[tokio::test(start_paused = true)]
+async fn resolver_time_is_subtracted_from_the_transport_budget() {
+    let (started_tx, started_rx) = oneshot::channel();
+    let (release_tx, release_rx) = oneshot::channel();
+    let resolver = ControlledResolver {
+        calls: AtomicUsize::new(0),
+        started: Mutex::new(Some(started_tx)),
+        release: Mutex::new(Some(release_rx)),
+    };
+    let transport = RecordingTransport::default();
+    let call_binding = binding("https://provider.invalid/base", "bound-slot");
+    let call_request = request("v1/call", "bound-slot");
+    let cancellation = CancellationToken::new();
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+
+    let call = execute_provider_call_v1(
+        &call_binding,
+        &call_request,
+        &resolver,
+        &transport,
+        deadline,
+        &cancellation,
+    );
+    let advance_then_release = async {
+        started_rx.await.expect("resolver should start before time advances");
+        tokio::time::advance(Duration::from_secs(7)).await;
+        release_tx.send(()).expect("resolver should still be waiting for release");
+    };
+    let (result, ()) = tokio::join!(call, advance_then_release);
+
+    result.expect("resolver should finish before the absolute deadline");
+    assert_eq!(resolver.calls.load(Ordering::SeqCst), 1);
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        transport
+            .observation
+            .lock()
+            .expect("test observation lock should be available")
+            .as_ref()
+            .expect("transport should record the prepared request")
+            .remaining_timeout,
+        Duration::from_secs(23)
+    );
 }
 
 struct DropFlag(Arc<AtomicBool>);
