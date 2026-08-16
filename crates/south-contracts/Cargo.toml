@@ -1,0 +1,21 @@
+[package]
+description = "Host-neutral provider execution contracts for Token Station"
+edition.workspace = true
+license.workspace = true
+name = "south-contracts"
+publish = false
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+http.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,12 @@
+[package]
+description = "Reusable public contract tests for south consumers."
+edition.workspace = true
+license.workspace = true
+name = "south-testkit"
+publish = false
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,12 @@
+[package]
+description = "Provider contract fixtures and conformance boundary."
+edition.workspace = true
+license.workspace = true
+name = "south-provider-conformance"
+publish = false
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true

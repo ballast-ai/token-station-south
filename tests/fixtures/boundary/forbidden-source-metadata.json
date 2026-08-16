@@ -1,0 +1,15 @@
+{
+  "packages": [
+    {
+      "name": "south-contracts",
+      "dependencies": [
+        {
+          "name": "host-contracts",
+          "rename": null,
+          "source": "git+https://github.com/GlimpseEngine/token-station?tag=v0.3.0",
+          "path": null
+        }
+      ]
+    }
+  ]
+}

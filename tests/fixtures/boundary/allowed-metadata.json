@@ -1,0 +1,15 @@
+{
+  "packages": [
+    {
+      "name": "south-contracts",
+      "dependencies": [
+        {
+          "name": "http",
+          "rename": null,
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "path": null
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+[package]
+description = "Provider component API and WIT ownership boundary."
+edition.workspace = true
+license.workspace = true
+name = "south-provider-api"
+publish = false
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true

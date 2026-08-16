@@ -1,0 +1,21 @@
+[package]
+edition = "2024"
+license = "Apache-2.0"
+name = "south-contracts-fuzz"
+publish = false
+version = "0.0.0"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4.10"
+south-contracts = { path = "../crates/south-contracts", version = "0.0.1" }
+
+[[bin]]
+doc = false
+name = "safe_headers"
+path = "fuzz_targets/safe_headers.rs"
+test = false
+
+[workspace]

@@ -1,0 +1,12 @@
+[package]
+description = "Synchronous provider transport boundary for ureq hosts."
+edition.workspace = true
+license.workspace = true
+name = "south-transport-ureq"
+publish = false
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true

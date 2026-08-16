@@ -1,0 +1,15 @@
+{
+  "packages": [
+    {
+      "name": "south-contracts",
+      "dependencies": [
+        {
+          "name": "host-contracts",
+          "rename": null,
+          "source": null,
+          "path": "/workspace/token-station/crates/protocol"
+        }
+      ]
+    }
+  ]
+}

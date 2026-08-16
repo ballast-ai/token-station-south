@@ -1,0 +1,12 @@
+[package]
+description = "Offline fixture comparison boundary for host migrations."
+edition.workspace = true
+license.workspace = true
+name = "south-migration"
+publish = false
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,15 @@
+{
+  "packages": [
+    {
+      "name": "south-contracts",
+      "dependencies": [
+        {
+          "name": "host-contracts",
+          "rename": "token_station_protocol",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "path": null
+        }
+      ]
+    }
+  ]
+}

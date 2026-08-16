@@ -1,0 +1,12 @@
+[package]
+description = "Host-neutral provider call orchestration boundaries."
+edition.workspace = true
+license.workspace = true
+name = "south-core"
+publish = false
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true

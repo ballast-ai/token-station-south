@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 3 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: 1.96.0
+          components: clippy, rustfmt
+      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2
+        with:
+          tool: cargo-nextest,cargo-deny,cargo-audit,cargo-machete
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - name: Test
+        run: cargo nextest run --workspace --all-features
+      - name: Doctest
+        run: cargo test --workspace --doc --all-features
+      - name: No default features
+        run: cargo test --workspace --no-default-features
+      - name: Fuzz target compile check
+        run: cargo check --manifest-path fuzz/Cargo.toml --all-targets --locked
+      - name: Documentation
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --workspace --no-deps --all-features
+      - name: MSRV
+        run: rustup run 1.96.0 cargo check --workspace --all-targets
+      - name: Dependency boundaries
+        run: |
+          scripts/check-boundaries.sh --self-test
+          scripts/check-boundaries.sh
+      - name: Licenses and sources
+        run: |
+          cargo deny check
+          cargo deny --manifest-path fuzz/Cargo.toml --config deny.toml --locked check
+      - name: Security advisories
+        run: |
+          cargo audit
+          cargo audit --file fuzz/Cargo.lock
+      - name: Unused dependencies
+        run: |
+          cargo machete
+          (cd fuzz && cargo machete)
+
+  fuzz:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: nightly-2026-08-15
+      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2
+        with:
+          tool: cargo-fuzz
+      - name: Fuzz untrusted headers
+        run: rustup run nightly-2026-08-15 cargo fuzz run safe_headers -- -max_total_time=600

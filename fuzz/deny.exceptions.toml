@@ -1,0 +1,3 @@
+exceptions = [
+  { allow = ["NCSA"], crate = "libfuzzer-sys@0.4.13" },
+]
