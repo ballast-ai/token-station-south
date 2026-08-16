@@ -70,3 +70,5 @@ jobs:
           tool: cargo-fuzz
       - name: Fuzz untrusted headers
         run: rustup run nightly-2026-08-15 cargo fuzz run safe_headers -- -max_total_time=600
+      - name: Fuzz untrusted contract parsers
+        run: rustup run nightly-2026-08-15 cargo fuzz run contract_parsers -- -max_total_time=600

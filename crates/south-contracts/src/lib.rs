@@ -17,6 +17,9 @@ pub const AUTH_CONTRACT_VERSION: u16 = 1;
 /// The version of the stable provider-call error contract.
 pub const ERROR_CONTRACT_VERSION: u16 = 1;
 
+/// Streaming is not part of the version-one buffered HTTP contract.
+pub const STREAM_CONTRACT_VERSION: Option<u16> = None;
+
 /// The maximum byte length of a trusted provider base endpoint.
 pub const MAX_ENDPOINT_BYTES: usize = 8 * 1024;
 
@@ -271,6 +274,9 @@ impl ProviderEndpointV1 {
             let mut normalized_path = url.path().to_owned();
             normalized_path.push('/');
             url.set_path(&normalized_path);
+        }
+        if url.as_str().len() > MAX_ENDPOINT_BYTES {
+            return Err(ContractErrorV1::InvalidEndpoint);
         }
 
         Ok(Self { url })
@@ -717,7 +723,8 @@ fn endpoint_raw_path(input: &str) -> Option<&str> {
     let scheme_end = input.find("://")?;
     let authority_and_path = input.get(scheme_end + 3..)?;
     let path_start = authority_and_path.find('/').unwrap_or(authority_and_path.len());
-    if path_start == 0 {
+    let authority = authority_and_path.get(..path_start)?;
+    if authority.is_empty() || authority.contains('@') {
         return None;
     }
     if path_start == authority_and_path.len() {
@@ -730,6 +737,7 @@ fn endpoint_raw_path(input: &str) -> Option<&str> {
 fn validate_endpoint_path(path: &str) -> Result<(), ContractErrorV1> {
     if !path.is_ascii()
         || !path.starts_with('/')
+        || (path != "/" && path.contains("//"))
         || path.bytes().any(is_forbidden_path_byte)
         || has_forbidden_percent_encoding(path)
     {

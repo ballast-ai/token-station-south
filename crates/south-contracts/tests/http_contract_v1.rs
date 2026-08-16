@@ -5,7 +5,7 @@ use south_contracts::{
     MAX_CREDENTIAL_SLOT_BYTES, MAX_ENDPOINT_BYTES, MAX_JSON_REQUEST_BODY_BYTES,
     MAX_RELATIVE_PATH_BYTES, MAX_RESPONSE_BODY_BYTES, MAX_RESPONSE_CONTENT_TYPE_BYTES,
     MAX_RESPONSE_RETRY_AFTER_BYTES, PreparationErrorV1, ProviderEndpointV1, RelativePathV1,
-    SafeHeaders, TransportErrorV1,
+    STREAM_CONTRACT_VERSION, SafeHeaders, TransportErrorV1,
 };
 
 const SENTINEL: &str = "must-not-appear-7f23a";
@@ -15,6 +15,7 @@ fn contract_versions_are_independently_versioned() {
     assert_eq!(HTTP_CONTRACT_VERSION, 1);
     assert_eq!(AUTH_CONTRACT_VERSION, 1);
     assert_eq!(ERROR_CONTRACT_VERSION, 1);
+    assert_eq!(STREAM_CONTRACT_VERSION, None);
 }
 
 #[test]
@@ -29,11 +30,24 @@ fn endpoint_accepts_http_and_https_and_normalizes_the_base_path() {
 #[test]
 fn endpoint_enforces_its_size_boundary() {
     let prefix = "https://example.com/";
-    let at_limit = format!("{prefix}{}", "a".repeat(MAX_ENDPOINT_BYTES - prefix.len()));
-    let over_limit = format!("{at_limit}a");
+    let normalized_at_limit =
+        format!("{prefix}{}", "a".repeat(MAX_ENDPOINT_BYTES - prefix.len() - 1));
+    let overflow_after_normalization = format!("{normalized_at_limit}a");
+    let already_normalized_at_limit =
+        format!("{prefix}{}/", "a".repeat(MAX_ENDPOINT_BYTES - prefix.len() - 1));
 
-    assert!(ProviderEndpointV1::parse(&at_limit).is_ok());
-    assert_eq!(ProviderEndpointV1::parse(&over_limit), Err(ContractErrorV1::InvalidEndpoint));
+    assert_eq!(
+        ProviderEndpointV1::parse(&normalized_at_limit).unwrap().as_str().len(),
+        MAX_ENDPOINT_BYTES
+    );
+    assert_eq!(
+        ProviderEndpointV1::parse(&overflow_after_normalization),
+        Err(ContractErrorV1::InvalidEndpoint)
+    );
+    assert_eq!(
+        ProviderEndpointV1::parse(&already_normalized_at_limit).unwrap().as_str().len(),
+        MAX_ENDPOINT_BYTES
+    );
 }
 
 #[test]
@@ -43,6 +57,8 @@ fn endpoint_rejects_non_http_or_ambiguous_authorities() {
         "mailto:user@example.com",
         "https:/base",
         "https:///base",
+        "https://@example.com/base",
+        "https://:@example.com/base",
         "https://user@example.com/base",
         "https://:password@example.com/base",
         "https://example.com/base?query=secret",
@@ -62,6 +78,7 @@ fn endpoint_rejects_non_http_or_ambiguous_authorities() {
 fn endpoint_rejects_unsafe_path_segments() {
     let invalid = [
         "https://example.com/a//b",
+        "https://example.com//",
         "https://example.com/a/./b",
         "https://example.com/a/../b",
         "https://example.com/a\\b",
