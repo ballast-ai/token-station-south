@@ -30,7 +30,7 @@ use south_provider_conformance::{
     ProviderCallExpectedOutcomeV1, ProviderCallFailureCodeV1, ProviderCallFixtureV1,
     ProviderCallUpstreamV1, provider_call_fixtures_v1,
 };
-use tokio::sync::{oneshot, watch};
+use tokio::sync::{Notify, oneshot};
 use tokio_util::sync::CancellationToken;
 
 macro_rules! fixed_debug {
@@ -354,6 +354,11 @@ impl fmt::Debug for ProviderCallConformanceFailureV1 {
 }
 
 /// Runs all canonical provider-call cases sequentially without failing fast.
+///
+/// Every caller must wrap the entire runner and any deadline driver in an outer watchdog. This
+/// function intentionally has no internal timeout, so a broken assembled executor may remain
+/// pending forever. The watchdog must own the complete structured future tree so timeout drops all
+/// in-progress executor work without leaving a detached task.
 pub async fn run_provider_call_conformance_v1(
     executor: &dyn AssembledProviderCallExecutorV1,
 ) -> Result<ProviderCallConformanceReportV1, ProviderCallConformanceFailureV1> {
@@ -379,26 +384,28 @@ pub async fn run_provider_call_conformance_v1(
 }
 
 /// A deterministic assembled executor built from real `south-core` orchestration and fake ports.
+///
+/// Cases must execute sequentially. A deadline transport start grants one consumable notification
+/// permit. If a caller aborts after that transport starts but before consuming the corresponding
+/// notification, it must discard this executor and construct a new one; reusing an executor with
+/// an abandoned permit could associate that stale permit with a later deadline case.
 pub struct ReferenceAssembledProviderCallExecutorV1 {
-    deadline_transport_started: watch::Sender<bool>,
+    deadline_transport_started: Arc<Notify>,
 }
 
 impl ReferenceAssembledProviderCallExecutorV1 {
     /// Creates an independent reference executor.
     #[must_use]
     pub fn new() -> Self {
-        let (deadline_transport_started, _) = watch::channel(false);
-        Self { deadline_transport_started }
+        Self { deadline_transport_started: Arc::new(Notify::new()) }
     }
 
-    /// Waits until the deadline fixture's pending transport has started.
+    /// Consumes one notification that the deadline fixture's pending transport has started.
+    ///
+    /// [`Notify`] retains at most one permit when no waiter exists, so callers may create or poll
+    /// this future before or after the transport reaches its pending boundary.
     pub async fn deadline_transport_started(&self) {
-        let mut receiver = self.deadline_transport_started.subscribe();
-        while !*receiver.borrow_and_update() {
-            if receiver.changed().await.is_err() {
-                return;
-            }
-        }
+        self.deadline_transport_started.notified().await;
     }
 }
 
@@ -550,7 +557,7 @@ impl CredentialResolver for ReferenceResolver {
 struct ReferenceTransport<'fixture> {
     calls: Arc<AtomicUsize>,
     upstream: &'fixture ProviderCallUpstreamV1,
-    deadline_started: watch::Sender<bool>,
+    deadline_started: Arc<Notify>,
     dropped: Arc<AtomicBool>,
 }
 
@@ -577,11 +584,11 @@ impl AsyncHttpTransport for ReferenceTransport<'_> {
                 Box::pin(async move { Err(error) })
             }
             ProviderCallUpstreamV1::Pending => {
-                let started = self.deadline_started.clone();
+                let started = Arc::clone(&self.deadline_started);
                 let dropped = Arc::clone(&self.dropped);
                 Box::pin(async move {
                     let _drop_flag = PendingDropFlag(dropped);
-                    started.send_replace(true);
+                    started.notify_one();
                     pending().await
                 })
             }

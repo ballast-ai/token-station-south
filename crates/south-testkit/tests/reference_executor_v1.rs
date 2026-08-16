@@ -16,11 +16,16 @@ assert_impl_all!(ReferenceAssembledProviderCallExecutorV1: Send, Sync);
 async fn reference_executor_uses_real_core_for_every_non_deadline_case() {
     let executor = ReferenceAssembledProviderCallExecutorV1::new();
     let dynamic: &dyn AssembledProviderCallExecutorV1 = &executor;
+    let structured_run = async {
+        for fixture in &provider_call_fixtures_v1()[..6] {
+            let observation = dynamic.execute_case(fixture).await;
+            assert_observation_matches(fixture, &observation);
+        }
+    };
 
-    for fixture in &provider_call_fixtures_v1()[..6] {
-        let observation = dynamic.execute_case(fixture).await;
-        assert_observation_matches(fixture, &observation);
-    }
+    tokio::time::timeout(Duration::from_secs(5), structured_run)
+        .await
+        .expect("non-deadline reference watchdog expired");
 }
 
 #[tokio::test(flavor = "current_thread", start_paused = true)]
@@ -31,14 +36,36 @@ async fn deadline_waits_for_transport_start_then_drops_the_pending_future() {
         .find(|fixture| fixture.case_id() == ProviderCallCaseIdV1::DeadlineExceeded)
         .expect("deadline fixture must exist");
 
-    let execute = executor.execute_case(fixture);
-    let deadline_driver = async {
-        executor.deadline_transport_started().await;
-        tokio::time::advance(PROVIDER_CALL_CONFORMANCE_DEADLINE_OFFSET_V1).await;
+    let structured_run = async {
+        let execute = executor.execute_case(fixture);
+        let deadline_driver = async {
+            executor.deadline_transport_started().await;
+            tokio::time::advance(PROVIDER_CALL_CONFORMANCE_DEADLINE_OFFSET_V1).await;
+        };
+        let (observation, ()) = tokio::join!(execute, deadline_driver);
+        observation
     };
-    let (observation, ()) = tokio::join!(execute, deadline_driver);
+    let observation = tokio::time::timeout(Duration::from_secs(5), structured_run)
+        .await
+        .expect("deadline reference watchdog expired");
 
     assert_observation_matches(fixture, &observation);
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn one_executor_consumes_a_fresh_transport_start_for_each_sequential_deadline_case() {
+    let executor = ReferenceAssembledProviderCallExecutorV1::new();
+    let fixture = provider_call_fixtures_v1()
+        .iter()
+        .find(|fixture| fixture.case_id() == ProviderCallCaseIdV1::DeadlineExceeded)
+        .expect("deadline fixture must exist");
+
+    run_deadline_case_with_watchdog(&executor, fixture, false).await;
+    assert!(
+        tokio::time::timeout(Duration::ZERO, executor.deadline_transport_started()).await.is_err(),
+        "the first transport-start notification must be consumed exactly once"
+    );
+    run_deadline_case_with_watchdog(&executor, fixture, true).await;
 }
 
 #[tokio::test(flavor = "current_thread", start_paused = true)]
@@ -92,4 +119,29 @@ fn assert_observation_matches(
         observed.transport_future_dropped_while_pending(),
         expected.transport_future_dropped_while_pending()
     );
+}
+
+async fn run_deadline_case_with_watchdog(
+    executor: &ReferenceAssembledProviderCallExecutorV1,
+    fixture: &south_provider_conformance::ProviderCallFixtureV1,
+    poll_driver_first: bool,
+) {
+    let structured_run = async {
+        let execute = executor.execute_case(fixture);
+        let deadline_driver = async {
+            executor.deadline_transport_started().await;
+            tokio::time::advance(PROVIDER_CALL_CONFORMANCE_DEADLINE_OFFSET_V1).await;
+        };
+        if poll_driver_first {
+            let ((), observation) = tokio::join!(deadline_driver, execute);
+            observation
+        } else {
+            let (observation, ()) = tokio::join!(execute, deadline_driver);
+            observation
+        }
+    };
+    let observation = tokio::time::timeout(Duration::from_secs(5), structured_run)
+        .await
+        .expect("sequential deadline watchdog expired");
+    assert_observation_matches(fixture, &observation);
 }
