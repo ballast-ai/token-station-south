@@ -218,6 +218,124 @@ Response bodies are read incrementally to `MAX_RESPONSE_BODY_BYTES + 1`; exceedi
 error rather than silent truncation. The transport never calls `error_for_status`, so 4xx and 5xx
 bodies remain available.
 
+## Conformance and testkit API version one
+
+This is a test API for checking an assembled provider-call path. It is not a production host
+adapter contract, does not expose reqwest, and does not make a host `verified`. A host becomes
+verified only in its separate adoption slice after its real adapter runs this suite.
+
+`south-provider-conformance` depends only on `south-contracts`. It exports the immutable fixture
+table and these stable identifiers:
+
+```text
+PROVIDER_CALL_CONFORMANCE_SUITE_VERSION: u32 = 1
+PROVIDER_CALL_CONFORMANCE_SUITE_ID: &str = "south.provider-call.v1"
+```
+
+The table contains exactly these `ProviderCallCaseIdV1` values:
+
+```text
+SUCCESS
+INVALID_RELATIVE_PATH
+CREDENTIAL_SLOT_MISMATCH
+REDIRECT_DENIED
+RESPONSE_BODY_TOO_LARGE
+CANCELLED
+DEADLINE_EXCEEDED
+```
+
+`provider_call_fixtures_v1()` returns `&'static [ProviderCallFixtureV1]`. Fixtures and their nested
+values have private fields and read-only accessors; callers cannot mutate the canonical table.
+Each fixture contains:
+
+- `case_id: ProviderCallCaseIdV1`;
+- `input: ProviderCallInputV1`, with raw `&'static str` endpoint, bound credential slot, requested
+  credential slot, relative path, JSON body, and a borrowed static slice of ordinary header-name
+  and header-value pairs;
+- `control: ProviderCallControlV1`, one of `Complete`, `CancelWhileResolverPending`, or
+  `ExpireWhileTransportPending`;
+- `upstream: ProviderCallUpstreamV1`, one of `Response(ProviderCallRawResponseV1)`,
+  `TransportFailure(TransportErrorV1)`, or `NotReached`;
+- `expected: ProviderCallExpectedV1`, containing the expected outcome, resolver and transport call
+  counts, and pending-future drop evidence.
+
+`ProviderCallRawResponseV1` holds a `u16` status plus borrowed static body, `content-type`, and
+`retry-after` values, so raw upstream responses own no allocation. The success body and every raw
+input remain within the version-one contract limits. The oversized-response case is represented by
+`TransportErrorV1::ResponseBodyTooLarge`; the fixture does not embed a 32 MiB allocation. The only
+Bearer value in the package is the documented literal `FAKE_BEARER_SECRET_V1`; it is synthetic test
+data, not configurable host data. A fixture never contains a resolved `SecretValue`, and neither
+the runner nor its report retains the fake value.
+
+`ProviderCallExpectedOutcomeV1` is either `Response { status, body }` or `Failure { code }`.
+Expected response bodies and stable failure codes are borrowed static strings. Expected execution
+evidence uses `u8` call counts plus `resolver_future_dropped_while_pending` and
+`transport_future_dropped_while_pending` booleans. Seven fixtures and counts no greater than one
+keep this representation deliberately bounded.
+
+`south-testkit` depends on `south-core` and `south-provider-conformance`. It owns the object-safe
+assembled-executor boundary:
+
+```rust
+pub type AssembledExecutionFutureV1<'a> = Pin<Box<
+    dyn Future<Output = ProviderCallObservationV1> + Send + 'a,
+>>;
+
+pub trait AssembledProviderCallExecutorV1: Send + Sync {
+    fn execute_case<'a>(
+        &'a self,
+        fixture: &'a ProviderCallFixtureV1,
+    ) -> AssembledExecutionFutureV1<'a>;
+}
+```
+
+The lifetime binds only the executor and fixture borrows to the boxed `Send` future. The trait has
+no associated types, generic return type, reqwest type, or raw-transport parameter and can be used
+as `dyn AssembledProviderCallExecutorV1`. A future host implements this test trait around its fully
+assembled call path; the runner never accepts `AsyncHttpTransport` directly.
+
+`ProviderCallObservationV1` owns one observed outcome and four evidence fields. Its outcome is
+either a bounded `BufferedHttpResponseV1` or a stable `&'static str` failure code. The evidence is
+resolver call count, transport call count, resolver-pending drop observed, and transport-pending
+drop observed. The runner compares response status and body bytes exactly, or compares the stable
+failure code exactly, then compares all four evidence fields. Observation, report, failure, and
+mismatch `Debug` implementations expose only suite version, case ID, mismatch category, counts,
+booleans, status, and body byte count; they never print bodies, headers, endpoints, paths,
+credential slots, or either Bearer value.
+
+`pub async fn run_provider_call_conformance_v1(&dyn AssembledProviderCallExecutorV1)` executes all
+seven cases sequentially in canonical table order and returns
+`Result<ProviderCallConformanceReportV1, ProviderCallConformanceFailureV1>`. It does not fail fast.
+`Ok` means every case matched and reports the suite ID, version, and seven passed cases. `Err` owns
+the complete bounded list of case ID and `ProviderCallMismatchCategoryV1` pairs, without copying
+expected or actual sensitive values. The exact mismatch categories are:
+
+```text
+OUTCOME_KIND
+ERROR_CODE
+STATUS
+BODY
+RESOLVER_CALL_COUNT
+TRANSPORT_CALL_COUNT
+RESOLVER_PENDING_DROP
+TRANSPORT_PENDING_DROP
+```
+
+The testkit includes a reference assembled executor that uses real `south-core` orchestration with
+fake resolver and transport capabilities. It parses raw fixture input before calling core, so the
+invalid-path case returns `INVALID_RELATIVE_PATH` before core, resolution, or transport. The valid
+wrong-slot case reaches core and proves both call counts remain zero. Success uses an immediate fake
+resolver and recording transport. Redirect and oversize cases are returned by the fake transport
+as their frozen transport errors. Cancellation holds the resolver future pending, synchronizes its
+start, cancels the token, and records its drop; deadline uses an immediate resolver, holds transport
+pending under Tokio's paused clock, advances to the absolute deadline, and records transport-future
+drop. These tests use channels or barriers, never sleeps, public DNS, environment mutation, or a
+real credential.
+
+Neither package adds serde, a wire format, WIT, a provider runtime, or a generic fixture framework.
+The dependency direction remains one-way: conformance to contracts, testkit to conformance and
+core, and future host test code to testkit.
+
 ## Public behavior tests
 
 Every behavior is introduced test-first and observed failing before production implementation.
