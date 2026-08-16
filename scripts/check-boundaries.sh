@@ -39,6 +39,27 @@ check_metadata() {
           )
         | .dependencies[]
         | select(.name == "reqwest")
+      ),
+      (
+        (.workspace_members // []) as $workspace_members
+        | .packages[]
+        | select(
+            (
+              if ($workspace_members | length) > 0 then
+                .id as $package_id | $workspace_members | index($package_id) != null
+              else
+                .name | startswith("south-")
+              end
+            )
+            and .name == "south-transport-reqwest"
+          )
+        | .dependencies[]
+        | select(.name == "reqwest")
+        | select(
+            .req != "=0.12.28"
+            or .uses_default_features != false
+            or ((.features // []) | sort) != ["rustls-tls", "stream"]
+          )
       )
     ] | length == 0' "$candidate_file" >/dev/null
 }

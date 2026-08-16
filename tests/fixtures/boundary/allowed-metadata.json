@@ -10,6 +10,20 @@
           "path": null
         }
       ]
+    },
+    {
+      "name": "south-transport-reqwest",
+      "dependencies": [
+        {
+          "name": "reqwest",
+          "rename": null,
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "path": null,
+          "req": "=0.12.28",
+          "uses_default_features": false,
+          "features": ["stream", "rustls-tls"]
+        }
+      ]
     }
   ]
 }

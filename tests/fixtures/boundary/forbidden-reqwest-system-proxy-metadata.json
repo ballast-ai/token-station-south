@@ -1,0 +1,15 @@
+{
+  "packages": [
+    {
+      "name": "south-transport-reqwest",
+      "dependencies": [
+        {
+          "name": "reqwest",
+          "req": "=0.12.28",
+          "uses_default_features": false,
+          "features": ["rustls-tls", "stream", "system-proxy"]
+        }
+      ]
+    }
+  ]
+}

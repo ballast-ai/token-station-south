@@ -129,7 +129,7 @@ impl ReqwestTransportV1 {
             .request(request.method().clone(), request.url().clone())
             .headers(headers)
             .body(request.body().as_str().to_owned())
-            .timeout(remaining_timeout.min(self.total_timeout))
+            .timeout(effective_timeout(remaining_timeout, self.total_timeout))
             .send()
             .await
             .map_err(|error| classify_send_error(&error))?;
@@ -153,6 +153,10 @@ impl ReqwestTransportV1 {
 
         BufferedHttpResponseV1::try_from_parts(status, body, content_type, retry_after)
     }
+}
+
+fn effective_timeout(remaining_timeout: Duration, total_timeout: Duration) -> Duration {
+    remaining_timeout.min(total_timeout)
 }
 
 fn assemble_headers(request: &PreparedHttpRequestV1<'_>) -> Result<HeaderMap, TransportErrorV1> {
@@ -232,7 +236,9 @@ fn classify_read_error(error: &reqwest::Error) -> TransportErrorV1 {
 
 #[cfg(test)]
 mod tests {
-    use super::authorization_header;
+    use std::time::Duration;
+
+    use super::{authorization_header, effective_timeout};
 
     #[test]
     fn bearer_header_is_sensitive_and_redacted() {
@@ -243,5 +249,21 @@ mod tests {
 
         assert!(header.is_sensitive());
         assert!(!format!("{header:?}").contains(SECRET_SENTINEL));
+    }
+
+    #[test]
+    fn effective_timeout_uses_the_smaller_explicit_budget() {
+        assert_eq!(
+            effective_timeout(Duration::from_secs(3), Duration::from_secs(8)),
+            Duration::from_secs(3)
+        );
+        assert_eq!(
+            effective_timeout(Duration::from_secs(8), Duration::from_secs(3)),
+            Duration::from_secs(3)
+        );
+        assert_eq!(
+            effective_timeout(Duration::from_secs(5), Duration::from_secs(5)),
+            Duration::from_secs(5)
+        );
     }
 }
