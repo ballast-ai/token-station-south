@@ -2,8 +2,9 @@
 
 //! Asynchronous provider transport boundary for reqwest hosts.
 
-use std::{fmt, time::Duration};
+use std::{fmt, sync::Arc, time::Duration};
 
+use bytes::Bytes;
 use http::{HeaderMap, HeaderName, HeaderValue, header};
 use south_contracts::{
     BufferedHttpResponseV1, MAX_RESPONSE_BODY_BYTES, MAX_RESPONSE_CONTENT_TYPE_BYTES,
@@ -128,7 +129,7 @@ impl ReqwestTransportV1 {
             .client
             .request(request.method().clone(), request.url().clone())
             .headers(headers)
-            .body(request.body().as_str().to_owned())
+            .body(request_body(request.body().shared_owner()))
             .timeout(effective_timeout(remaining_timeout, self.total_timeout))
             .send()
             .await
@@ -136,6 +137,12 @@ impl ReqwestTransportV1 {
 
         if response.status().is_redirection() {
             return Err(TransportErrorV1::RedirectDenied);
+        }
+        if response
+            .content_length()
+            .is_some_and(|declared| declared > MAX_RESPONSE_BODY_BYTES as u64)
+        {
+            return Err(TransportErrorV1::ResponseBodyTooLarge);
         }
 
         let status = response.status();
@@ -159,6 +166,18 @@ fn effective_timeout(remaining_timeout: Duration, total_timeout: Duration) -> Du
     remaining_timeout.min(total_timeout)
 }
 
+struct JsonBodyOwner(Arc<str>);
+
+impl AsRef<[u8]> for JsonBodyOwner {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
+}
+
+fn request_body(owner: Arc<str>) -> Bytes {
+    Bytes::from_owner(JsonBodyOwner(owner))
+}
+
 fn assemble_headers(request: &PreparedHttpRequestV1<'_>) -> Result<HeaderMap, TransportErrorV1> {
     let mut headers = HeaderMap::with_capacity(request.headers().len() + 1);
     for (name, value) in request.headers().iter() {
@@ -173,12 +192,62 @@ fn assemble_headers(request: &PreparedHttpRequestV1<'_>) -> Result<HeaderMap, Tr
     Ok(headers)
 }
 
-fn authorization_header(secret: &str) -> Result<HeaderValue, TransportErrorV1> {
-    let mut bearer = Zeroizing::new(String::with_capacity("Bearer ".len() + secret.len()));
-    bearer.push_str("Bearer ");
-    bearer.push_str(secret);
+/// A South-owned HTTP authorization allocation that zeroizes its plaintext bytes on drop.
+///
+/// Clones made by `Bytes` and `HeaderValue` share this owner. The guarantee ends at this
+/// allocation and does not cover plaintext copies inside HTTP, TLS, operating-system, or provider
+/// infrastructure buffers.
+struct BearerHeaderOwner {
+    value: Zeroizing<Vec<u8>>,
+    #[cfg(test)]
+    drop_probe: Option<Arc<std::sync::atomic::AtomicBool>>,
+}
+
+impl BearerHeaderOwner {
+    fn new(secret: &[u8]) -> Self {
+        let mut value = Zeroizing::new(Vec::with_capacity(b"Bearer ".len() + secret.len()));
+        value.extend_from_slice(b"Bearer ");
+        value.extend_from_slice(secret);
+        Self {
+            value,
+            #[cfg(test)]
+            drop_probe: None,
+        }
+    }
+
+    #[cfg(test)]
+    fn new_with_drop_probe(secret: &[u8], drop_probe: Arc<std::sync::atomic::AtomicBool>) -> Self {
+        let mut owner = Self::new(secret);
+        owner.drop_probe = Some(drop_probe);
+        owner
+    }
+}
+
+impl AsRef<[u8]> for BearerHeaderOwner {
+    fn as_ref(&self) -> &[u8] {
+        self.value.as_slice()
+    }
+}
+
+#[cfg(test)]
+impl Drop for BearerHeaderOwner {
+    fn drop(&mut self) {
+        if let Some(drop_probe) = &self.drop_probe {
+            drop_probe.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+}
+
+fn authorization_header(secret: &[u8]) -> Result<HeaderValue, TransportErrorV1> {
+    authorization_header_from_owner(BearerHeaderOwner::new(secret))
+}
+
+fn authorization_header_from_owner(
+    owner: BearerHeaderOwner,
+) -> Result<HeaderValue, TransportErrorV1> {
+    let bytes = Bytes::from_owner(owner);
     let mut authorization =
-        HeaderValue::from_str(&bearer).map_err(|_| TransportErrorV1::RequestFailed)?;
+        HeaderValue::from_maybe_shared(bytes).map_err(|_| TransportErrorV1::RequestFailed)?;
     authorization.set_sensitive(true);
     Ok(authorization)
 }
@@ -236,19 +305,51 @@ fn classify_read_error(error: &reqwest::Error) -> TransportErrorV1 {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
+    use std::{
+        sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        },
+        time::Duration,
+    };
 
-    use super::{authorization_header, effective_timeout};
+    use south_contracts::JsonBodyV1;
+
+    use super::{
+        BearerHeaderOwner, authorization_header, authorization_header_from_owner,
+        effective_timeout, request_body,
+    };
 
     #[test]
     fn bearer_header_is_sensitive_and_redacted() {
         const SECRET_SENTINEL: &str = "sensitive-header-secret-sentinel";
 
-        let header = authorization_header(SECRET_SENTINEL)
+        let header = authorization_header(SECRET_SENTINEL.as_bytes())
             .expect("valid credential fixture should produce an authorization header");
 
         assert!(header.is_sensitive());
         assert!(!format!("{header:?}").contains(SECRET_SENTINEL));
+    }
+
+    #[test]
+    fn bearer_header_shares_and_drops_its_zeroizing_owner() {
+        let dropped = Arc::new(AtomicBool::new(false));
+        let owner = BearerHeaderOwner::new_with_drop_probe(
+            b"owner-lifetime-secret-sentinel",
+            Arc::clone(&dropped),
+        );
+        let owner_pointer = owner.as_ref().as_ptr();
+
+        let header = authorization_header_from_owner(owner)
+            .expect("valid credential fixture should produce an authorization header");
+        let header_clone = header.clone();
+
+        assert_eq!(header.as_bytes().as_ptr(), owner_pointer);
+        assert!(!dropped.load(Ordering::SeqCst));
+        drop(header);
+        assert!(!dropped.load(Ordering::SeqCst));
+        drop(header_clone);
+        assert!(dropped.load(Ordering::SeqCst));
     }
 
     #[test]
@@ -265,5 +366,18 @@ mod tests {
             effective_timeout(Duration::from_secs(5), Duration::from_secs(5)),
             Duration::from_secs(5)
         );
+    }
+
+    #[test]
+    fn request_body_keeps_the_shared_contract_allocation() {
+        let contract_body = JsonBodyV1::parse(r#"{"body":"shared-owner-sentinel"}"#)
+            .expect("fixture body should be valid");
+        let original_pointer = contract_body.as_str().as_ptr();
+
+        let body = request_body(contract_body.shared_owner());
+
+        assert_eq!(body.as_ptr(), original_pointer);
+        drop(contract_body);
+        assert_eq!(body.as_ref(), br#"{"body":"shared-owner-sentinel"}"#);
     }
 }

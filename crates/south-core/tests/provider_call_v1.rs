@@ -156,7 +156,7 @@ struct Observation {
     url: Url,
     header: String,
     body: String,
-    secret: String,
+    secret: Vec<u8>,
     remaining_timeout: Duration,
     prepared_debug: String,
 }
@@ -168,6 +168,7 @@ impl AsyncHttpTransport for RecordingTransport {
         remaining_timeout: Duration,
     ) -> TransportFuture<'a> {
         self.calls.fetch_add(1, Ordering::SeqCst);
+        assert_eq!(prepared.bearer_secret(), SECRET_SENTINEL.as_bytes());
         let observation = Observation {
             method: prepared.method().clone(),
             url: prepared.url().clone(),
@@ -177,7 +178,7 @@ impl AsyncHttpTransport for RecordingTransport {
                 .expect("prepared fixture should retain its ordinary header")
                 .to_owned(),
             body: prepared.body().as_str().to_owned(),
-            secret: prepared.bearer_secret().to_owned(),
+            secret: prepared.bearer_secret().to_vec(),
             remaining_timeout,
             prepared_debug: format!("{prepared:?}"),
         };
@@ -315,7 +316,7 @@ async fn success_prepares_exactly_one_post_for_the_transport() {
                 .expect("expected prepared URL should be valid"),
             header: HEADER_SENTINEL.to_owned(),
             body: format!(r#"{{"value":"{BODY_SENTINEL}"}}"#),
-            secret: SECRET_SENTINEL.to_owned(),
+            secret: SECRET_SENTINEL.as_bytes().to_vec(),
             remaining_timeout: Duration::from_secs(30),
             prepared_debug: format!(
                 "PreparedHttpRequestV1 {{ method: POST, header_count: 1, body_byte_count: {}, .. }}",

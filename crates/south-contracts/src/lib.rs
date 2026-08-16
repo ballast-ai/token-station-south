@@ -2,7 +2,7 @@
 
 //! Host-neutral contracts for provider execution.
 
-use std::{collections::BTreeMap, fmt};
+use std::{collections::BTreeMap, fmt, sync::Arc};
 
 use http::{HeaderName, HeaderValue, StatusCode};
 use serde::{Deserialize, de::IgnoredAny};
@@ -408,7 +408,7 @@ impl fmt::Debug for CredentialSlotV1 {
 /// An exact, bounded UTF-8 representation of one complete JSON value.
 #[derive(PartialEq, Eq)]
 pub struct JsonBodyV1 {
-    value: String,
+    value: Arc<str>,
 }
 
 impl JsonBodyV1 {
@@ -420,7 +420,7 @@ impl JsonBodyV1 {
         let mut deserializer = serde_json::Deserializer::from_str(input);
         IgnoredAny::deserialize(&mut deserializer).map_err(|_| ContractErrorV1::InvalidJsonBody)?;
         deserializer.end().map_err(|_| ContractErrorV1::InvalidJsonBody)?;
-        Ok(Self { value: input.to_owned() })
+        Ok(Self { value: Arc::from(input) })
     }
 
     /// Returns the exact validated JSON text.
@@ -429,15 +429,24 @@ impl JsonBodyV1 {
         &self.value
     }
 
+    /// Shares the validated backing allocation with an asynchronous transport.
+    ///
+    /// This is the only ownership-sharing escape hatch. It avoids copying a body that may be at
+    /// the contract limit while keeping `JsonBodyV1` itself non-cloneable.
+    #[must_use]
+    pub fn shared_owner(&self) -> Arc<str> {
+        Arc::clone(&self.value)
+    }
+
     /// Returns the request body's byte length.
     #[must_use]
-    pub const fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.value.len()
     }
 
     /// Returns whether the request body is empty.
     #[must_use]
-    pub const fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.value.is_empty()
     }
 }

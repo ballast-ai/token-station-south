@@ -53,6 +53,21 @@ check_metadata() {
             )
             and .name == "south-transport-reqwest"
           )
+        | select(([.dependencies[] | select(.name == "reqwest")] | length) != 1)
+      ),
+      (
+        (.workspace_members // []) as $workspace_members
+        | .packages[]
+        | select(
+            (
+              if ($workspace_members | length) > 0 then
+                .id as $package_id | $workspace_members | index($package_id) != null
+              else
+                .name | startswith("south-")
+              end
+            )
+            and .name == "south-transport-reqwest"
+          )
         | .dependencies[]
         | select(.name == "reqwest")
         | select(

@@ -35,16 +35,19 @@ impl fmt::Debug for ProviderBindingV1 {
     }
 }
 
-/// An owned credential value whose allocation is zeroized when dropped.
+/// An owned credential value whose South-owned allocation is zeroized when dropped.
+///
+/// This guarantee covers this value and a South-owned HTTP authorization owner. It cannot cover
+/// plaintext copies made by HTTP, TLS, operating-system, or provider infrastructure buffers.
 pub struct SecretValue {
-    value: Zeroizing<String>,
+    value: Zeroizing<Vec<u8>>,
 }
 
 impl SecretValue {
     /// Takes ownership of a credential returned by an injected host resolver.
     #[must_use]
     pub fn new(value: String) -> Self {
-        Self { value: Zeroizing::new(value) }
+        Self { value: Zeroizing::new(value.into_bytes()) }
     }
 }
 
@@ -112,10 +115,10 @@ impl PreparedHttpRequestV1<'_> {
         self.body
     }
 
-    /// Returns the resolved Bearer credential at the transport assembly boundary.
+    /// Returns the resolved Bearer credential bytes at the transport assembly boundary.
     #[must_use]
-    pub fn bearer_secret(&self) -> &str {
-        self.bearer_secret.value.as_str()
+    pub fn bearer_secret(&self) -> &[u8] {
+        self.bearer_secret.value.as_slice()
     }
 }
 

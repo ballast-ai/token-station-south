@@ -97,6 +97,21 @@ async fn read_request(stream: &mut TcpStream) -> ReceivedRequest {
     }
 }
 
+async fn receive_without_advancing_time(
+    receiver: &mut oneshot::Receiver<ReceivedRequest>,
+) -> ReceivedRequest {
+    for _ in 0..100_000 {
+        match receiver.try_recv() {
+            Ok(request) => return request,
+            Err(oneshot::error::TryRecvError::Empty) => tokio::task::yield_now().await,
+            Err(oneshot::error::TryRecvError::Closed) => {
+                panic!("server should report the synchronized request")
+            }
+        }
+    }
+    panic!("server did not report the synchronized request within the yield budget")
+}
+
 #[derive(Default)]
 struct StaticResolver {
     calls: AtomicUsize,
@@ -461,10 +476,34 @@ async fn duplicate_single_value_metadata_is_rejected() {
 }
 
 #[tokio::test]
+async fn declared_response_body_above_the_limit_fails_before_streaming() {
+    let raw = format!(
+        "HTTP/1.1 200 OK\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+        MAX_RESPONSE_BODY_BYTES + 1
+    )
+    .into_bytes();
+    let loopback = loopback_once(raw).await;
+    let transport = ReqwestTransportV1::new(config()).expect("transport should build");
+
+    let error = call(
+        &loopback.endpoint,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect_err("an oversized declared body should fail before streaming");
+    loopback.request.await.expect("server should receive one request");
+    loopback.task.await.expect("server task should finish");
+
+    assert_eq!(error.code(), "RESPONSE_BODY_TOO_LARGE");
+}
+
+#[tokio::test(start_paused = true)]
 async fn transport_owned_timeout_precedes_the_later_caller_deadline_and_drops_io() {
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("loopback listener should bind");
     let address = listener.local_addr().expect("loopback address should exist");
-    let (request_tx, request_rx) = oneshot::channel();
+    let (request_tx, mut request_rx) = oneshot::channel();
     let server = tokio::spawn(async move {
         let (mut stream, _) = listener.accept().await.expect("one request should connect");
         let request = read_request(&mut stream).await;
@@ -487,26 +526,27 @@ async fn transport_owned_timeout_precedes_the_later_caller_deadline_and_drops_io
     let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
 
     let provider_call = call(&endpoint, &transport, deadline, &cancellation);
-    let (result, observed) = tokio::join!(provider_call, request_rx);
-    observed.expect("server should observe one request before the synchronized timeout");
+    let advance_after_request = async {
+        let request = receive_without_advancing_time(&mut request_rx).await;
+        tokio::time::advance(Duration::from_millis(600)).await;
+        request
+    };
+    let (result, observed) = tokio::join!(provider_call, advance_after_request);
     let remaining = server.await.expect("server task should finish after future drop");
 
     let error = result.expect_err("transport timeout should fail");
+    assert_eq!(observed.request_line, "POST /base/v1/call HTTP/1.1");
     assert_eq!(error.code(), "TRANSPORT_TIMEOUT");
     assert!(remaining.is_empty(), "dropped request must not leave detached writes");
 }
 
 #[tokio::test]
 async fn refused_loopback_connection_has_a_stable_connect_error() {
-    let listener = std::net::TcpListener::bind("127.0.0.1:0")
-        .expect("temporary loopback listener should bind");
-    let address = listener.local_addr().expect("temporary address should exist");
-    drop(listener);
-    let endpoint = format!("http://{address}/base");
     let transport = ReqwestTransportV1::new(config()).expect("transport should build");
 
+    // TCP port zero cannot be occupied by a listener, so this has no released-port race.
     let error = call(
-        &endpoint,
+        "http://127.0.0.1:0/base",
         &transport,
         tokio::time::Instant::now() + Duration::from_secs(30),
         &CancellationToken::new(),
