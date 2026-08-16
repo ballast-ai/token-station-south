@@ -414,20 +414,20 @@ driver in an outer Tokio timeout. The reference invocation is:
 ```rust
 #[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn assembled_provider_call_conforms() {
-    let executor = Arc::new(reference_executor());
-    let deadline_transport_started = executor.deadline_transport_started();
-    let started = deadline_transport_started.notified();
-    let run = tokio::spawn({
-        let executor = Arc::clone(&executor);
-        async move { run_provider_call_conformance_v1(executor.as_ref()).await }
-    });
-
-    let driven_run = async {
-        started.await;
+    let executor = reference_executor();
+    let deadline_driver = async {
+        executor.deadline_transport_started().await;
         tokio::time::advance(PROVIDER_CALL_CONFORMANCE_DEADLINE_OFFSET_V1).await;
-        run.await.expect("conformance task must not panic")
     };
-    let result = tokio::time::timeout(Duration::from_secs(5), driven_run)
+
+    let structured_run = async {
+        let (result, ()) = tokio::join!(
+            run_provider_call_conformance_v1(&executor),
+            deadline_driver,
+        );
+        result
+    };
+    let result = tokio::time::timeout(Duration::from_secs(5), structured_run)
         .await
         .expect("conformance watchdog expired");
     assert!(result.is_ok());
@@ -435,8 +435,11 @@ async fn assembled_provider_call_conforms() {
 ```
 
 The watchdog covers failure to reach the transport-start signal as well as failure to finish after
-the deadline advance. Reference tests otherwise use channels or barriers, never sleeps, public
-DNS, environment mutation, or a real credential.
+the deadline advance. `tokio::join!` keeps the runner and deadline driver in one structured future;
+there is no spawned task or `JoinHandle`. If the watchdog expires, dropping `structured_run` drops
+the entire future tree, including the assembled executor call, without detached work. Reference
+tests otherwise use channels or barriers, never sleeps, public DNS, environment mutation, or a real
+credential.
 
 Neither package adds serde, a wire format, WIT, a provider runtime, or a generic fixture framework.
 The dependency direction remains one-way: conformance to contracts, testkit to conformance and
