@@ -1,6 +1,6 @@
 # Minimal Provider Call Library Vertical Slice
 
-Status: approved for implementation after specification review
+Status: implemented locally; remote CI pending; hosts not verified
 
 Date: 2026-08-16
 
@@ -485,6 +485,22 @@ Tests use no public network, DNS, process environment mutation, shared state, or
    `south-testkit`; update compatibility metadata and repository documentation.
 5. Run all repository gates, independent specification review, independent code-quality review,
    and remote CI before changing either host compatibility status.
+
+## Implementation and verification result
+
+As of 2026-08-17, the contracts, core orchestration, hardened reqwest transport, immutable
+conformance fixtures, assembled-executor runner, parser fuzz target, and dependency-boundary
+self-tests described by this design are implemented on the feature branch.
+
+Local verification passed with 99 workspace tests. Formatting, clippy with warnings denied,
+all-feature and no-default-feature tests, rustdoc warnings, the Rust 1.96.0 MSRV check, locked fuzz
+target compilation, boundary live checks and self-tests, dependency policy checks, vulnerability
+audits, and unused-dependency checks also passed. Independent review found no open P0 or P1
+findings. Remote CI has not yet run for this feature branch, and both hosts remain `not_verified`.
+
+This result proves the library slice only. It does not prove enterprise migration or production
+host adoption. No desktop App was installed because this repository does not change Token Station
+desktop behavior.
 
 ## Acceptance and release status
 
