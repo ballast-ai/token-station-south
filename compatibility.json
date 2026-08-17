@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "release": {
-    "version": "0.0.1",
+    "version": "0.1.0",
     "stability": "library_slice"
   },
   "contracts": {
@@ -44,5 +44,15 @@
   "hosts": {
     "token-station": "not_verified",
     "token-station-server": "verified"
+  },
+  "host_capabilities": {
+    "token-station": {
+      "provider_call": "not_verified",
+      "provider_stream": "not_verified"
+    },
+    "token-station-server": {
+      "provider_call": "verified",
+      "provider_stream": "not_verified"
+    }
   }
 }
