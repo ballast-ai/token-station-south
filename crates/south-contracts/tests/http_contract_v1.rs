@@ -15,7 +15,7 @@ fn contract_versions_are_independently_versioned() {
     assert_eq!(HTTP_CONTRACT_VERSION, 1);
     assert_eq!(AUTH_CONTRACT_VERSION, 1);
     assert_eq!(ERROR_CONTRACT_VERSION, 1);
-    assert_eq!(STREAM_CONTRACT_VERSION, None);
+    assert_eq!(STREAM_CONTRACT_VERSION, Some(1));
 }
 
 #[test]

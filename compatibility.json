@@ -9,7 +9,7 @@
     "http": 1,
     "auth": 1,
     "error": 1,
-    "stream": null,
+    "stream": 1,
     "canonical_ir": null,
     "header_limits": {
       "count": 64,
@@ -20,7 +20,9 @@
   },
   "conformance": {
     "suite_id": "south.provider-call.v1",
-    "provider_call_suite": 1
+    "provider_call_suite": 1,
+    "provider_stream_suite_id": "south.provider-stream.v1",
+    "provider_stream_suite": 1
   },
   "provider_api": {
     "wit_version": null

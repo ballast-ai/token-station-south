@@ -2,8 +2,9 @@
 
 //! Host-neutral contracts for provider execution.
 
-use std::{collections::BTreeMap, fmt, sync::Arc};
+use std::{collections::BTreeMap, fmt, sync::Arc, time::Duration};
 
+use bytes::Bytes;
 use http::{HeaderName, HeaderValue, StatusCode};
 use serde::{Deserialize, de::IgnoredAny};
 use thiserror::Error;
@@ -18,8 +19,8 @@ pub const AUTH_CONTRACT_VERSION: u16 = 1;
 /// The version of the stable provider-call error contract.
 pub const ERROR_CONTRACT_VERSION: u16 = 1;
 
-/// Streaming is not part of the version-one buffered HTTP contract.
-pub const STREAM_CONTRACT_VERSION: Option<u16> = None;
+/// The version of the byte-level streaming provider call contract.
+pub const STREAM_CONTRACT_VERSION: Option<u16> = Some(1);
 
 /// The maximum byte length of a trusted provider base endpoint.
 pub const MAX_ENDPOINT_BYTES: usize = 8 * 1024;
@@ -41,6 +42,15 @@ pub const MAX_RESPONSE_CONTENT_TYPE_BYTES: usize = 256;
 
 /// The maximum byte length of the response `retry-after` value.
 pub const MAX_RESPONSE_RETRY_AFTER_BYTES: usize = 256;
+
+/// The maximum byte length of the buffered error body attached to a rejected stream.
+pub const MAX_STREAM_ERROR_BODY_BYTES: usize = 64 * 1024;
+
+/// The maximum byte length of one chunk yielded by a streaming transport.
+pub const MAX_STREAM_CHUNK_BYTES: usize = 64 * 1024;
+
+/// The largest transport-owned total timeout accepted by the provider call contracts.
+pub const MAX_TRANSPORT_TIMEOUT: Duration = Duration::from_hours(24);
 
 /// The version of the reserved-header policy enforced by [`SafeHeaders`].
 pub const RESERVED_HEADER_POLICY_VERSION: u16 = 1;
@@ -612,6 +622,266 @@ impl fmt::Debug for BufferedHttpResponseV1 {
             .field("has_content_type", &self.content_type.is_some())
             .field("has_retry_after", &self.retry_after.is_some())
             .finish_non_exhaustive()
+    }
+}
+
+/// The bounded, headers-ready metadata of one streaming HTTP exchange.
+///
+/// The head is handed to the host before any body byte is pulled, so the host can branch on
+/// status and the two explicitly allowed metadata fields without touching the stream.
+#[derive(Clone, PartialEq, Eq)]
+pub struct StreamingResponseHeadV1 {
+    status: StatusCode,
+    content_type: Option<String>,
+    retry_after: Option<String>,
+}
+
+impl StreamingResponseHeadV1 {
+    /// Validates a streaming response head and its two allowed metadata fields.
+    ///
+    /// Redirect statuses are refused because the streaming transport must never follow one.
+    pub fn try_from_parts(
+        status: StatusCode,
+        content_type: Option<String>,
+        retry_after: Option<String>,
+    ) -> Result<Self, TransportErrorV1> {
+        if status.is_redirection() {
+            return Err(TransportErrorV1::RedirectDenied);
+        }
+        validate_response_metadata(content_type.as_deref(), MAX_RESPONSE_CONTENT_TYPE_BYTES)?;
+        validate_response_metadata(retry_after.as_deref(), MAX_RESPONSE_RETRY_AFTER_BYTES)?;
+
+        Ok(Self { status, content_type, retry_after })
+    }
+
+    /// Returns the upstream HTTP status.
+    #[must_use]
+    pub const fn status(&self) -> StatusCode {
+        self.status
+    }
+
+    /// Returns the bounded `content-type` value when present.
+    #[must_use]
+    pub fn content_type(&self) -> Option<&str> {
+        self.content_type.as_deref()
+    }
+
+    /// Returns the bounded `retry-after` value when present.
+    #[must_use]
+    pub fn retry_after(&self) -> Option<&str> {
+        self.retry_after.as_deref()
+    }
+}
+
+impl fmt::Debug for StreamingResponseHeadV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("StreamingResponseHeadV1")
+            .field("stream_contract_version", &STREAM_CONTRACT_VERSION)
+            .field("status", &self.status)
+            .field("has_content_type", &self.content_type.is_some())
+            .field("has_retry_after", &self.retry_after.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
+/// A non-2xx streaming exchange collapsed into its head and a bounded error body.
+///
+/// A rejected exchange never yields a stream object. The error body feeds host-side failure
+/// classifiers, so an oversized upstream body is truncated at
+/// [`MAX_STREAM_ERROR_BODY_BYTES`] instead of failing the rejection.
+#[derive(PartialEq, Eq)]
+pub struct StreamRejectedV1 {
+    head: StreamingResponseHeadV1,
+    body: Vec<u8>,
+}
+
+impl StreamRejectedV1 {
+    /// Attaches a bounded error body to a rejected streaming head, truncating any excess bytes.
+    #[must_use]
+    pub fn new(head: StreamingResponseHeadV1, mut body: Vec<u8>) -> Self {
+        body.truncate(MAX_STREAM_ERROR_BODY_BYTES);
+        Self { head, body }
+    }
+
+    /// Returns the headers-ready metadata of the rejected exchange.
+    #[must_use]
+    pub const fn head(&self) -> &StreamingResponseHeadV1 {
+        &self.head
+    }
+
+    /// Returns the bounded, possibly truncated upstream error body.
+    #[must_use]
+    pub fn body(&self) -> &[u8] {
+        &self.body
+    }
+}
+
+impl fmt::Debug for StreamRejectedV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("StreamRejectedV1")
+            .field("head", &self.head)
+            .field("body_byte_count", &self.body.len())
+            .finish_non_exhaustive()
+    }
+}
+
+/// One bounded chunk of upstream response bytes yielded to the host.
+///
+/// The wrapped [`Bytes`] shares the transport allocation, so pulling a chunk never copies the
+/// streamed body. A transport must re-chunk larger network reads instead of exceeding
+/// [`MAX_STREAM_CHUNK_BYTES`].
+#[derive(Clone, PartialEq, Eq)]
+pub struct StreamChunkV1 {
+    bytes: Bytes,
+}
+
+impl StreamChunkV1 {
+    /// Wraps one delivery-bounded chunk of upstream bytes.
+    pub fn try_new(bytes: Bytes) -> Result<Self, StreamReadErrorV1> {
+        if bytes.len() > MAX_STREAM_CHUNK_BYTES {
+            return Err(StreamReadErrorV1::ChunkNotDeliverable);
+        }
+        Ok(Self { bytes })
+    }
+
+    /// Returns the chunk bytes without copying.
+    #[must_use]
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    /// Consumes the chunk and returns its shared backing bytes.
+    #[must_use]
+    pub fn into_bytes(self) -> Bytes {
+        self.bytes
+    }
+
+    /// Returns the chunk's byte length.
+    #[must_use]
+    pub const fn len(&self) -> usize {
+        self.bytes.len()
+    }
+
+    /// Returns whether the chunk carries no bytes.
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.bytes.is_empty()
+    }
+}
+
+impl fmt::Debug for StreamChunkV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("StreamChunkV1")
+            .field("byte_count", &self.bytes.len())
+            .finish_non_exhaustive()
+    }
+}
+
+/// A stable failure after a streaming exchange has already yielded its head.
+///
+/// Mid-stream codes are deliberately distinct from their pre-stream cousins so a host can tell
+/// "failed before any byte" from "failed after N bytes" by the code alone. The host counts the
+/// bytes it has already forwarded; this contract only makes the phase unambiguous.
+#[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
+pub enum StreamReadErrorV1 {
+    /// The upstream connection broke while the body was streaming.
+    #[error("stream read failed")]
+    StreamReadFailed,
+    /// The transport idle guard expired between chunks.
+    #[error("stream idle guard expired")]
+    StreamIdleTimeout,
+    /// The caller's absolute deadline expired while the stream was open.
+    #[error("stream deadline was exceeded")]
+    StreamDeadlineExceeded,
+    /// The caller's cancellation token fired while the stream was open.
+    #[error("stream was cancelled")]
+    StreamCancelled,
+    /// The transport produced a chunk that violates the delivery contract.
+    #[error("stream chunk is not deliverable")]
+    ChunkNotDeliverable,
+}
+
+impl StreamReadErrorV1 {
+    /// Returns the stable machine-readable error code.
+    #[must_use]
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::StreamReadFailed => "STREAM_READ_FAILED",
+            Self::StreamIdleTimeout => "STREAM_IDLE_TIMEOUT",
+            Self::StreamDeadlineExceeded => "STREAM_DEADLINE_EXCEEDED",
+            Self::StreamCancelled => "STREAM_CANCELLED",
+            Self::ChunkNotDeliverable => "STREAM_CHUNK_INVALID",
+        }
+    }
+}
+
+/// Explicit timeouts for one dedicated streaming transport.
+///
+/// A `None` total timeout is the production streaming shape: a long generation is legitimate
+/// wall-clock work. It is legal only because the idle guard is not optional — every silent
+/// upstream dies within `idle_timeout`, which also bounds the time to the first byte.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct StreamTransportConfigV1 {
+    total: Option<Duration>,
+    connect: Duration,
+    idle: Duration,
+}
+
+impl StreamTransportConfigV1 {
+    /// Validates the optional total bound and the mandatory connect and idle guards.
+    ///
+    /// A bounded total must obey [`MAX_TRANSPORT_TIMEOUT`] and be at least as large as both
+    /// mandatory guards.
+    pub fn try_new(
+        total_timeout: Option<Duration>,
+        connect_timeout: Duration,
+        idle_timeout: Duration,
+    ) -> Result<Self, TransportErrorV1> {
+        if connect_timeout.is_zero() || idle_timeout.is_zero() {
+            return Err(TransportErrorV1::ClientBuildFailed);
+        }
+        if let Some(total) = total_timeout
+            && (total.is_zero()
+                || total > MAX_TRANSPORT_TIMEOUT
+                || total < connect_timeout
+                || total < idle_timeout)
+        {
+            return Err(TransportErrorV1::ClientBuildFailed);
+        }
+
+        Ok(Self { total: total_timeout, connect: connect_timeout, idle: idle_timeout })
+    }
+
+    /// Returns the optional transport-wide wall-clock bound.
+    #[must_use]
+    pub const fn total_timeout(self) -> Option<Duration> {
+        self.total
+    }
+
+    /// Returns the TCP connect timeout.
+    #[must_use]
+    pub const fn connect_timeout(self) -> Duration {
+        self.connect
+    }
+
+    /// Returns the stall guard applied to each read await, which also caps time to first byte.
+    #[must_use]
+    pub const fn idle_timeout(self) -> Duration {
+        self.idle
+    }
+}
+
+impl fmt::Debug for StreamTransportConfigV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("StreamTransportConfigV1")
+            .field("total_timeout", &self.total)
+            .field("connect_timeout", &self.connect)
+            .field("idle_timeout", &self.idle)
+            .finish()
     }
 }
 

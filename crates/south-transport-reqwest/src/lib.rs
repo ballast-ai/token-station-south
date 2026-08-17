@@ -13,8 +13,7 @@ use south_contracts::{
 use south_core::{AsyncHttpTransport, PreparedHttpRequestV1, TransportFuture};
 use zeroize::Zeroizing;
 
-/// The largest transport-owned timeout accepted by the buffered call contract.
-pub const MAX_TRANSPORT_TIMEOUT: Duration = Duration::from_hours(24);
+pub use south_contracts::MAX_TRANSPORT_TIMEOUT;
 
 /// Explicit bounded timeouts for one dedicated reqwest transport.
 #[derive(Clone, Copy, PartialEq, Eq)]
