@@ -18,7 +18,15 @@ macro_rules! fixed_debug {
     };
 }
 
+mod quota;
 mod stream;
+
+pub use quota::{
+    PROVIDER_QUOTA_METADATA_CONFORMANCE_SUITE_ID,
+    PROVIDER_QUOTA_METADATA_CONFORMANCE_SUITE_VERSION, ProviderQuotaMetadataCaseIdV1,
+    ProviderQuotaMetadataExpectedEvidenceV1, ProviderQuotaMetadataFixtureV1,
+    ProviderQuotaMetadataRawV1, provider_quota_metadata_fixtures_v1,
+};
 
 pub use stream::{
     PROVIDER_STREAM_CONFORMANCE_DEADLINE_OFFSET_V1, PROVIDER_STREAM_CONFORMANCE_IDLE_TIMEOUT_V1,

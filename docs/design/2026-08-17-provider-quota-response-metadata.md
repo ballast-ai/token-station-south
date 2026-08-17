@@ -230,7 +230,6 @@ The exact mismatch categories are:
 
 ```text
 OUTCOME_KIND
-ERROR_CODE
 X_RATELIMIT_LIMIT_TOKENS
 X_RATELIMIT_REMAINING_TOKENS
 X_RATELIMIT_RESET_TOKENS
@@ -244,7 +243,7 @@ RESOLVER_CALL_COUNT
 TRANSPORT_CALL_COUNT
 ```
 
-Two cases multiplied by thirteen categories bound a complete failure report at 26 entries. Debug
+Two cases multiplied by twelve categories bound a complete failure report at 24 entries. Debug
 output for fixtures, expected outcomes, observations, mismatches, reports, and failures contains
 only fixed enum names, counts, and presence/byte-count summaries, never raw metadata.
 
