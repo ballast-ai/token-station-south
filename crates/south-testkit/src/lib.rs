@@ -45,9 +45,17 @@ macro_rules! fixed_debug {
     };
 }
 
+mod header_auth;
 mod quota;
 mod stream;
 
+pub use header_auth::{
+    AssembledHeaderAuthExecutionFutureV1, AssembledHeaderAuthExecutorV1,
+    HeaderAuthConformanceFailureV1, HeaderAuthConformanceReportV1, HeaderAuthEvidenceV1,
+    HeaderAuthMismatchCategoryV1, HeaderAuthMismatchV1, HeaderAuthObservationV1,
+    MAX_HEADER_AUTH_MISMATCHES_V1, ReferenceAssembledHeaderAuthExecutorV1,
+    run_header_auth_conformance_v1,
+};
 pub use quota::{
     AssembledProviderQuotaMetadataExecutionFutureV1, AssembledProviderQuotaMetadataExecutorV1,
     MAX_PROVIDER_QUOTA_METADATA_MISMATCHES_V1, ProviderQuotaMetadataConformanceFailureV1,
@@ -533,6 +541,13 @@ impl ReferenceAssembledProviderCallExecutorV1 {
 fn parse_reference_input(
     input: &south_provider_conformance::ProviderCallInputV1,
 ) -> Result<(ProviderBindingV1, JsonPostRequestV1), ProviderCallFailureCodeV1> {
+    parse_reference_input_with_auth(input, |slot| BearerAuthV1::new(slot).into())
+}
+
+fn parse_reference_input_with_auth(
+    input: &south_provider_conformance::ProviderCallInputV1,
+    auth: impl FnOnce(CredentialSlotV1) -> south_contracts::ProviderAuthV1,
+) -> Result<(ProviderBindingV1, JsonPostRequestV1), ProviderCallFailureCodeV1> {
     let endpoint = ProviderEndpointV1::parse(input.endpoint()).map_err(map_contract_error)?;
     let bound_slot =
         CredentialSlotV1::parse(input.bound_credential_slot()).map_err(map_contract_error)?;
@@ -543,8 +558,7 @@ fn parse_reference_input(
     let headers = SafeHeaders::try_from_iter(input.headers().iter().copied())
         .map_err(map_canonical_fixture_header_invariant_failure)?;
     let binding = ProviderBindingV1::new(endpoint, bound_slot);
-    let request =
-        JsonPostRequestV1::new(relative_path, headers, body, BearerAuthV1::new(requested_slot));
+    let request = JsonPostRequestV1::new(relative_path, headers, body, auth(requested_slot));
     Ok((binding, request))
 }
 

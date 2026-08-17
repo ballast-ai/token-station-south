@@ -44,6 +44,8 @@ struct Conformance {
     provider_call_suite: u32,
     provider_stream_suite_id: String,
     provider_stream_suite: u32,
+    header_auth_suite_id: String,
+    header_auth_suite: u32,
     provider_quota_metadata_suite_id: String,
     provider_quota_metadata_suite: u32,
 }
@@ -156,6 +158,8 @@ fn compatibility_manifest_describes_the_library_slice() {
     assert_eq!(manifest.conformance.provider_call_suite, 1);
     assert_eq!(manifest.conformance.provider_stream_suite_id, "south.provider-stream.v1");
     assert_eq!(manifest.conformance.provider_stream_suite, 1);
+    assert_eq!(manifest.conformance.header_auth_suite_id, "south.header-auth.v1");
+    assert_eq!(manifest.conformance.header_auth_suite, 1);
     assert_eq!(
         manifest.conformance.provider_quota_metadata_suite_id,
         "south.provider-quota-metadata.v1"
@@ -164,14 +168,14 @@ fn compatibility_manifest_describes_the_library_slice() {
     assert!(manifest.provider_api.wit_version.is_none());
     assert!(manifest.provider_runtime.abi_version.is_none());
     let expected_crates = BTreeMap::from([
-        ("south-contracts", "http_auth_error_stream_quota_metadata_v1"),
-        ("south-core", "buffered_streaming_provider_call_v1"),
+        ("south-contracts", "http_auth_error_stream_quota_metadata_header_auth_v1"),
+        ("south-core", "buffered_streaming_provider_call_header_auth_v1"),
         ("south-migration", "placeholder"),
         ("south-provider-api", "placeholder"),
-        ("south-provider-conformance", "provider_call_stream_quota_metadata_suites_v1"),
+        ("south-provider-conformance", "provider_call_stream_quota_metadata_header_auth_suites_v1"),
         ("south-provider-runtime", "placeholder"),
-        ("south-testkit", "provider_call_stream_quota_metadata_runners_v1"),
-        ("south-transport-reqwest", "buffered_streaming_json_post_quota_metadata_v1"),
+        ("south-testkit", "provider_call_stream_quota_metadata_header_auth_runners_v1"),
+        ("south-transport-reqwest", "buffered_streaming_json_post_quota_metadata_header_auth_v1"),
         ("south-transport-ureq", "placeholder"),
     ]);
     assert_eq!(manifest.crates.len(), expected_crates.len());

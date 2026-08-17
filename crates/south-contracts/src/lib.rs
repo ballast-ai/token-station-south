@@ -14,7 +14,10 @@ use url::Url;
 pub const HTTP_CONTRACT_VERSION: u16 = 1;
 
 /// The version of the provider authentication declaration contract.
-pub const AUTH_CONTRACT_VERSION: u16 = 1;
+///
+/// Version two is additive: a version-one request is exactly a version-two request using the
+/// [`ProviderAuthV1::Bearer`] arm. Version two adds the sanctioned header-secret scheme.
+pub const AUTH_CONTRACT_VERSION: u16 = 2;
 
 /// The version of the stable provider-call error contract.
 pub const ERROR_CONTRACT_VERSION: u16 = 1;
@@ -512,25 +515,123 @@ impl fmt::Debug for BearerAuthV1 {
     }
 }
 
+/// The frozen set of sanctioned secret-bearing headers.
+///
+/// This enum is fieldless and closed on purpose: every variant maps to a vetted provider family,
+/// and adding one is a deliberate contract bump with a conformance case, not a host-side
+/// configuration. Every name in this set must stay on the reserved-header blacklist so a
+/// provider can never smuggle the same header through the plain [`SafeHeaders`] channel.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SecretHeaderV1 {
+    /// `api-key` (Azure `OpenAI`, Azure AI Foundry, Ideogram).
+    ApiKey,
+    /// `x-api-key` (Anthropic).
+    XApiKey,
+    /// `x-goog-api-key` (Gemini).
+    XGoogApiKey,
+    /// `xi-api-key` (`ElevenLabs`).
+    XiApiKey,
+    /// `ocp-apim-subscription-key` (Azure Speech).
+    OcpApimSubscriptionKey,
+}
+
+impl SecretHeaderV1 {
+    /// Every sanctioned header, in declaration order.
+    ///
+    /// Tests that must cover the whole sanctioned set iterate this constant instead of writing
+    /// their own array: a new variant then reaches those tests automatically. The exhaustive match
+    /// in [`SecretHeaderV1::header_name`] makes adding a variant without a wire name a compile
+    /// error, and this constant makes adding one without test coverage impossible to miss.
+    pub const ALL: [Self; 5] = [
+        Self::ApiKey,
+        Self::XApiKey,
+        Self::XGoogApiKey,
+        Self::XiApiKey,
+        Self::OcpApimSubscriptionKey,
+    ];
+
+    /// Returns the lowercase wire name of the sanctioned header.
+    #[must_use]
+    pub const fn header_name(&self) -> &'static str {
+        match self {
+            Self::ApiKey => "api-key",
+            Self::XApiKey => "x-api-key",
+            Self::XGoogApiKey => "x-goog-api-key",
+            Self::XiApiKey => "xi-api-key",
+            Self::OcpApimSubscriptionKey => "ocp-apim-subscription-key",
+        }
+    }
+}
+
+/// A provider authentication declaration naming a scheme and a host-resolved credential slot.
+///
+/// Neither arm carries a credential value. The header-secret arm reuses [`BearerAuthV1`] as its
+/// credential-slot carrier: the type is really "a credential-slot declaration", and version one
+/// froze its name.
+#[derive(Clone, PartialEq, Eq)]
+pub enum ProviderAuthV1 {
+    /// The secret travels as `Authorization: Bearer …`.
+    Bearer(BearerAuthV1),
+    /// The secret travels verbatim in one sanctioned provider-specific header.
+    HeaderSecret {
+        /// The sanctioned secret-bearing header selected by the provider.
+        header: SecretHeaderV1,
+        /// The credential-slot declaration resolved by the host, exactly as in the Bearer arm.
+        slot: BearerAuthV1,
+    },
+}
+
+impl ProviderAuthV1 {
+    /// Returns the credential slot requested by the provider, regardless of scheme.
+    #[must_use]
+    pub const fn credential_slot(&self) -> &CredentialSlotV1 {
+        match self {
+            Self::Bearer(slot) | Self::HeaderSecret { slot, .. } => slot.credential_slot(),
+        }
+    }
+}
+
+impl From<BearerAuthV1> for ProviderAuthV1 {
+    fn from(auth: BearerAuthV1) -> Self {
+        Self::Bearer(auth)
+    }
+}
+
+impl fmt::Debug for ProviderAuthV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Bearer(slot) => formatter.debug_tuple("Bearer").field(slot).finish(),
+            Self::HeaderSecret { header, slot } => formatter
+                .debug_struct("HeaderSecret")
+                .field("header", header)
+                .field("slot", slot)
+                .finish(),
+        }
+    }
+}
+
 /// A bounded provider request for one JSON POST operation.
 #[derive(PartialEq, Eq)]
 pub struct JsonPostRequestV1 {
     relative_path: RelativePathV1,
     headers: SafeHeaders,
     body: JsonBodyV1,
-    auth: BearerAuthV1,
+    auth: ProviderAuthV1,
 }
 
 impl JsonPostRequestV1 {
     /// Creates a request from independently validated, bounded fields.
+    ///
+    /// The auth parameter accepts a bare [`BearerAuthV1`] unchanged, so auth-contract-version-one
+    /// call sites keep compiling, as well as any explicit [`ProviderAuthV1`] declaration.
     #[must_use]
-    pub const fn new(
+    pub fn new(
         relative_path: RelativePathV1,
         headers: SafeHeaders,
         body: JsonBodyV1,
-        auth: BearerAuthV1,
+        auth: impl Into<ProviderAuthV1>,
     ) -> Self {
-        Self { relative_path, headers, body, auth }
+        Self { relative_path, headers, body, auth: auth.into() }
     }
 
     /// Returns the provider-selected relative path.
@@ -551,9 +652,9 @@ impl JsonPostRequestV1 {
         &self.body
     }
 
-    /// Returns the Bearer credential declaration.
+    /// Returns the provider authentication declaration.
     #[must_use]
-    pub const fn auth(&self) -> &BearerAuthV1 {
+    pub const fn auth(&self) -> &ProviderAuthV1 {
         &self.auth
     }
 }

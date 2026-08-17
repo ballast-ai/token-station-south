@@ -11,8 +11,8 @@ use bytes::Bytes;
 use http::StatusCode;
 use south_contracts::{
     BearerAuthV1, CredentialSlotV1, JsonBodyV1, JsonPostRequestV1, PreparationErrorV1,
-    ProviderEndpointV1, RelativePathV1, SafeHeaders, StreamChunkV1, StreamReadErrorV1,
-    StreamRejectedV1, StreamingResponseHeadV1, TransportErrorV1,
+    ProviderAuthV1, ProviderEndpointV1, RelativePathV1, SafeHeaders, SecretHeaderV1, StreamChunkV1,
+    StreamReadErrorV1, StreamRejectedV1, StreamingResponseHeadV1, TransportErrorV1,
 };
 use south_core::{
     AsyncStreamingTransport, CredentialResolutionErrorV1, CredentialResolutionFuture,
@@ -53,6 +53,22 @@ fn request(slot: &str) -> JsonPostRequestV1 {
         JsonBodyV1::parse(&format!(r#"{{"value":"{BODY_SENTINEL}"}}"#))
             .expect("fixture body should be valid"),
         BearerAuthV1::new(CredentialSlotV1::parse(slot).expect("fixture slot should be valid")),
+    )
+}
+
+fn header_secret_request(slot: &str, header: SecretHeaderV1) -> JsonPostRequestV1 {
+    JsonPostRequestV1::new(
+        RelativePathV1::parse(PATH_SENTINEL).expect("fixture path should be valid"),
+        SafeHeaders::try_from_iter([("x-test", HEADER_SENTINEL)])
+            .expect("fixture header should be valid"),
+        JsonBodyV1::parse(&format!(r#"{{"value":"{BODY_SENTINEL}"}}"#))
+            .expect("fixture body should be valid"),
+        ProviderAuthV1::HeaderSecret {
+            header,
+            slot: BearerAuthV1::new(
+                CredentialSlotV1::parse(slot).expect("fixture slot should be valid"),
+            ),
+        },
     )
 }
 
@@ -164,6 +180,7 @@ struct ScriptedTransport {
     status: StatusCode,
     events: Vec<SourceEvent>,
     probes: SourceProbes,
+    observed_auth: Mutex<Option<(String, Vec<u8>)>>,
 }
 
 impl ScriptedTransport {
@@ -173,14 +190,25 @@ impl ScriptedTransport {
             status: StatusCode::OK,
             events,
             probes: SourceProbes::default(),
+            observed_auth: Mutex::new(None),
         }
+    }
+
+    fn observed_auth(&self) -> (String, Vec<u8>) {
+        self.observed_auth
+            .lock()
+            .expect("test auth lock should be available")
+            .clone()
+            .expect("transport should record the prepared auth header")
     }
 }
 
 impl AsyncStreamingTransport for ScriptedTransport {
     fn open<'a>(&'a self, request: &'a PreparedHttpRequestV1<'_>) -> StreamingOpenFutureV1<'a> {
         self.calls.fetch_add(1, Ordering::SeqCst);
-        assert_eq!(request.bearer_secret(), SECRET_SENTINEL.as_bytes());
+        let (auth_name, auth_value) = request.auth_header();
+        *self.observed_auth.lock().expect("test auth lock should be available") =
+            Some((auth_name.to_owned(), auth_value.to_vec()));
         let source = ScriptedSource {
             events: self.events.clone(),
             next_index: 0,
@@ -413,6 +441,57 @@ async fn successful_stream_yields_identical_chunks_then_clean_eof_with_no_deadli
     assert!(call.next_chunk().await.is_none(), "pulls after EOF must keep yielding None");
     assert_eq!(resolver.calls.load(Ordering::SeqCst), 1);
     assert_eq!(transport.calls.load(Ordering::SeqCst), 1);
+    let (auth_name, auth_value) = transport.observed_auth();
+    assert_eq!(auth_name, "authorization");
+    assert_eq!(auth_value, format!("Bearer {SECRET_SENTINEL}").into_bytes());
+}
+
+#[tokio::test]
+async fn header_secret_open_prepares_the_sanctioned_header_with_the_verbatim_secret() {
+    let resolver = ImmediateResolver::default();
+    let transport = ScriptedTransport::new(vec![SourceEvent::Chunk(CHUNK_ONE)]);
+
+    let mut call = open_streaming_provider_call_v1(
+        &binding(),
+        &header_secret_request(SLOT_SENTINEL, SecretHeaderV1::XGoogApiKey),
+        &resolver,
+        &transport,
+        None,
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("a valid header-secret streaming open should succeed");
+
+    let first = call
+        .next_chunk()
+        .await
+        .expect("first pull should yield a chunk")
+        .expect("first chunk should be delivered");
+    assert_eq!(first.as_bytes(), CHUNK_ONE);
+    let (auth_name, auth_value) = transport.observed_auth();
+    assert_eq!(auth_name, "x-goog-api-key");
+    assert_eq!(auth_value, SECRET_SENTINEL.as_bytes());
+}
+
+#[tokio::test]
+async fn header_secret_slot_mismatch_stops_before_resolver_and_transport() {
+    let resolver = ImmediateResolver::default();
+    let transport = ScriptedTransport::new(Vec::new());
+
+    let error = open_streaming_provider_call_v1(
+        &binding(),
+        &header_secret_request("other-slot", SecretHeaderV1::XApiKey),
+        &resolver,
+        &transport,
+        None,
+        &CancellationToken::new(),
+    )
+    .await
+    .expect_err("a mismatched header-secret slot must fail");
+
+    assert_eq!(error.code(), PreparationErrorV1::CredentialBindingMismatch.code());
+    assert_eq!(resolver.calls.load(Ordering::SeqCst), 0);
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 0);
 }
 
 #[tokio::test]

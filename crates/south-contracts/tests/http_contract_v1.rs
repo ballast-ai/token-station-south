@@ -4,18 +4,102 @@ use south_contracts::{
     ERROR_CONTRACT_VERSION, HTTP_CONTRACT_VERSION, JsonBodyV1, JsonPostRequestV1,
     MAX_CREDENTIAL_SLOT_BYTES, MAX_ENDPOINT_BYTES, MAX_JSON_REQUEST_BODY_BYTES,
     MAX_RELATIVE_PATH_BYTES, MAX_RESPONSE_BODY_BYTES, MAX_RESPONSE_CONTENT_TYPE_BYTES,
-    MAX_RESPONSE_RETRY_AFTER_BYTES, PreparationErrorV1, ProviderEndpointV1, RelativePathV1,
-    STREAM_CONTRACT_VERSION, SafeHeaders, TransportErrorV1,
+    MAX_RESPONSE_RETRY_AFTER_BYTES, PreparationErrorV1, ProviderAuthV1, ProviderEndpointV1,
+    RelativePathV1, STREAM_CONTRACT_VERSION, SafeHeaders, SecretHeaderV1, TransportErrorV1,
 };
 
 const SENTINEL: &str = "must-not-appear-7f23a";
 
+/// Every sanctioned secret-bearing header in canonical table order. The match below is
+/// deliberately exhaustive so adding a `SecretHeaderV1` variant fails compilation here until the
+/// list, the reserved-header pin, and the conformance surface are all updated together.
+/// The published set is the single source of truth for every suite that must cover all sanctioned
+/// headers; [`secret_header_all_covers_every_variant`] proves it is complete.
+const ALL_SECRET_HEADERS: [SecretHeaderV1; 5] = SecretHeaderV1::ALL;
+
+const fn assert_secret_header_listed(header: SecretHeaderV1) {
+    match header {
+        SecretHeaderV1::ApiKey
+        | SecretHeaderV1::XApiKey
+        | SecretHeaderV1::XGoogApiKey
+        | SecretHeaderV1::XiApiKey
+        | SecretHeaderV1::OcpApimSubscriptionKey => {}
+    }
+}
+
+#[test]
+fn secret_header_all_covers_every_variant() {
+    // Adding a variant without extending `SecretHeaderV1::ALL` would silently shrink the coverage
+    // of every suite that iterates it, so prove completeness two ways: the exhaustive match rejects
+    // an unlisted variant at compile time, and distinct wire names prove no slot is duplicated to
+    // pad the array to its declared length.
+    for header in SecretHeaderV1::ALL {
+        assert_secret_header_listed(header);
+    }
+    let mut names: Vec<&str> =
+        SecretHeaderV1::ALL.iter().map(SecretHeaderV1::header_name).collect();
+    names.sort_unstable();
+    let total = names.len();
+    names.dedup();
+    assert_eq!(names.len(), total, "SecretHeaderV1::ALL must not repeat a variant");
+}
+
 #[test]
 fn contract_versions_are_independently_versioned() {
     assert_eq!(HTTP_CONTRACT_VERSION, 1);
-    assert_eq!(AUTH_CONTRACT_VERSION, 1);
+    assert_eq!(AUTH_CONTRACT_VERSION, 2);
     assert_eq!(ERROR_CONTRACT_VERSION, 1);
     assert_eq!(STREAM_CONTRACT_VERSION, Some(1));
+}
+
+#[test]
+fn secret_header_names_are_frozen_and_stay_on_the_reserved_list() {
+    let expected_names =
+        ["api-key", "x-api-key", "x-goog-api-key", "xi-api-key", "ocp-apim-subscription-key"];
+
+    for (header, expected_name) in ALL_SECRET_HEADERS.into_iter().zip(expected_names) {
+        assert_secret_header_listed(header);
+        assert_eq!(header.header_name(), expected_name);
+
+        // The sanctioned set must never drift off the plain-header blacklist: a provider must not
+        // smuggle a secret-shaped header through the ordinary `SafeHeaders` channel.
+        let error = SafeHeaders::try_from_iter([(header.header_name(), "must-not-appear")])
+            .expect_err("every sanctioned secret header must stay reserved");
+        assert_eq!(error.code(), "RESERVED_HEADER_FORBIDDEN");
+    }
+}
+
+#[test]
+fn provider_auth_carries_a_slot_declaration_under_both_arms() {
+    let slot = CredentialSlotV1::parse("openai.primary").unwrap();
+    let bearer: ProviderAuthV1 = BearerAuthV1::new(slot.clone()).into();
+    let header_secret = ProviderAuthV1::HeaderSecret {
+        header: SecretHeaderV1::XApiKey,
+        slot: BearerAuthV1::new(slot.clone()),
+    };
+
+    assert!(matches!(bearer, ProviderAuthV1::Bearer(_)));
+    assert_eq!(bearer.credential_slot(), &slot);
+    assert_eq!(header_secret.credential_slot(), &slot);
+}
+
+#[test]
+fn request_accepts_both_auth_scheme_declarations_through_one_constructor() {
+    let request = JsonPostRequestV1::new(
+        RelativePathV1::parse("v1/messages").unwrap(),
+        SafeHeaders::try_from_iter([("content-type", "application/json")]).unwrap(),
+        JsonBodyV1::parse("{\"input\":\"hello\"}").unwrap(),
+        ProviderAuthV1::HeaderSecret {
+            header: SecretHeaderV1::XApiKey,
+            slot: BearerAuthV1::new(CredentialSlotV1::parse("anthropic.primary").unwrap()),
+        },
+    );
+
+    let ProviderAuthV1::HeaderSecret { header, .. } = request.auth() else {
+        panic!("the header-secret declaration must be preserved");
+    };
+    assert_eq!(header.header_name(), "x-api-key");
+    assert_eq!(request.auth().credential_slot().as_str(), "anthropic.primary");
 }
 
 #[test]
@@ -420,6 +504,10 @@ fn debug_and_error_output_redact_all_untrusted_contract_values() {
     let slot = CredentialSlotV1::parse(&format!("a.{SENTINEL}")).unwrap();
     let headers = SafeHeaders::try_from_iter([("x-sentinel", SENTINEL)]).unwrap();
     let body = JsonBodyV1::parse(&format!("\"{SENTINEL}\"")).unwrap();
+    let header_secret_auth = ProviderAuthV1::HeaderSecret {
+        header: SecretHeaderV1::XApiKey,
+        slot: BearerAuthV1::new(slot.clone()),
+    };
     let request = JsonPostRequestV1::new(path, headers, body, BearerAuthV1::new(slot));
     let response = BufferedHttpResponseV1::try_from_parts(
         StatusCode::OK,
@@ -434,6 +522,7 @@ fn debug_and_error_output_redact_all_untrusted_contract_values() {
         format!("{:?}", request.relative_path()),
         format!("{:?}", request.auth().credential_slot()),
         format!("{:?}", request.auth()),
+        format!("{header_secret_auth:?}"),
         format!("{:?}", request.body()),
         format!("{request:?}"),
         format!("{response:?}"),

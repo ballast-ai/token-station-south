@@ -1,13 +1,13 @@
 {
   "schema_version": 2,
   "release": {
-    "version": "0.2.0",
+    "version": "0.3.0",
     "stability": "library_slice"
   },
   "contracts": {
     "reserved_header_policy": 1,
     "http": 1,
-    "auth": 1,
+    "auth": 2,
     "error": 1,
     "stream": 1,
     "provider_quota_metadata": 1,
@@ -29,6 +29,8 @@
     "provider_call_suite": 1,
     "provider_stream_suite_id": "south.provider-stream.v1",
     "provider_stream_suite": 1,
+    "header_auth_suite_id": "south.header-auth.v1",
+    "header_auth_suite": 1,
     "provider_quota_metadata_suite_id": "south.provider-quota-metadata.v1",
     "provider_quota_metadata_suite": 1
   },
@@ -39,14 +41,14 @@
     "abi_version": null
   },
   "crates": {
-    "south-contracts": "http_auth_error_stream_quota_metadata_v1",
-    "south-core": "buffered_streaming_provider_call_v1",
+    "south-contracts": "http_auth_error_stream_quota_metadata_header_auth_v1",
+    "south-core": "buffered_streaming_provider_call_header_auth_v1",
     "south-migration": "placeholder",
     "south-provider-api": "placeholder",
-    "south-provider-conformance": "provider_call_stream_quota_metadata_suites_v1",
+    "south-provider-conformance": "provider_call_stream_quota_metadata_header_auth_suites_v1",
     "south-provider-runtime": "placeholder",
-    "south-testkit": "provider_call_stream_quota_metadata_runners_v1",
-    "south-transport-reqwest": "buffered_streaming_json_post_quota_metadata_v1",
+    "south-testkit": "provider_call_stream_quota_metadata_header_auth_runners_v1",
+    "south-transport-reqwest": "buffered_streaming_json_post_quota_metadata_header_auth_v1",
     "south-transport-ureq": "placeholder"
   },
   "hosts": {
