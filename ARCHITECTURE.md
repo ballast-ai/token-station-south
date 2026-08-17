@@ -53,3 +53,22 @@ permissions must be explicit capabilities at their operational boundaries.
 
 During migration, `token-station-protocol` may re-export South types under old Rust paths. It must
 not define duplicate nominal types, and South must never depend back on that compatibility layer.
+
+## Host-side dependency gate
+
+`scripts/check-boundaries.sh` enforces the strict reqwest gate (exactly one package, exact version,
+exact feature set) **inside this workspace only**. A host workspace that consumes
+`south-transport-reqwest` cannot satisfy that gate verbatim: hosts legitimately enable their own
+reqwest features (for example `json` or `multipart`) and may carry unrelated reqwest major versions
+elsewhere in their graph. The equivalent host-side gate, agreed during the first host adoption
+(token-station-server, 2026-08-17), is:
+
+1. `south-transport-reqwest` and the host's primary stack resolve to the **same** reqwest node at
+   the exact version this workspace pins.
+2. The unified feature set of that node includes `rustls-tls` and `stream`, and does **not** include
+   `default-tls`, `native-tls`, `cookies`, or `system-proxy`.
+3. Pre-existing unrelated reqwest versions in the host graph gain no new dependents.
+
+Hosts are expected to script these checks (`cargo tree` and lockfile inspection) into their own CI.
+This section records the agreed interpretation so a host failing the workspace-local script is not
+misread as a boundary violation.
