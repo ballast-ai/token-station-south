@@ -6,9 +6,9 @@ providers; routing, tenancy, billing, quotas, persistence, and user-facing behav
 host.
 
 > [!WARNING]
-> This repository contains a library slice, not a production integration. One host-bound,
-> buffered JSON POST path is implemented, but neither community nor enterprise host has adopted
-> or verified it.
+> This repository ships host-neutral libraries, not a complete host product. Both community and
+> enterprise hosts have verified provider-call v1 adapters in narrow scopes. Neither host is
+> verified for provider-stream v1, and most host production traffic remains outside South.
 
 ## Repository boundaries
 
@@ -23,22 +23,27 @@ filesystem, or secret access by default.
 See [Architecture](ARCHITECTURE.md), [Compatibility](compatibility.json),
 [Security](SECURITY.md), [Contributing](CONTRIBUTING.md), the
 [repository bootstrap design](docs/design/2026-08-16-repository-bootstrap.md), and the
-[minimal provider call design](docs/design/2026-08-16-minimal-provider-call.md).
+[minimal provider call design](docs/design/2026-08-16-minimal-provider-call.md), the
+[streaming provider call design](docs/design/2026-08-17-streaming-provider-call.md), and the
+[community compatibility release](docs/design/2026-08-17-community-host-compatibility-release.md).
 
 ## Implemented library slice
 
-- `south-contracts` defines version-one bounded HTTP, Bearer authentication, and stable error
-  contracts, including reserved-header enforcement and redacted diagnostics.
+- `south-contracts` defines version-one bounded HTTP, Bearer authentication, stable error, and
+  byte-streaming contracts, including reserved-header enforcement and redacted diagnostics.
 - `south-core` binds a validated endpoint to one credential slot, resolves the host-owned secret,
-  and applies cancellation and an absolute deadline around one prepared call.
-- `south-transport-reqwest` executes one hardened buffered JSON POST with redirects, retries,
-  compression, cookies, referer propagation, and implicit system proxies disabled.
-- `south-provider-conformance` publishes the immutable `south.provider-call.v1` fixtures, while
-  `south-testkit` runs them against an assembled executor.
+  and applies cancellation and caller deadlines around prepared buffered and streaming calls.
+- `south-transport-reqwest` executes hardened buffered and byte-streaming JSON POST requests with
+  redirects, retries, compression, cookies, referer propagation, and implicit system proxies
+  disabled.
+- `south-provider-conformance` publishes immutable `south.provider-call.v1` and
+  `south.provider-stream.v1` fixtures, while `south-testkit` runs them against assembled host
+  executors.
 
-The slice does not include streaming, provider WIT or runtime loading, the ureq transport, retries,
-fallback, routing, persistence, database access, or host adapters. Passing the library conformance
-suite does not by itself verify a host integration.
+The slice does not include SSE or eventstream parsing, provider WIT or runtime loading, the ureq
+transport, retries, fallback, routing, persistence, database access, or host adapters. Passing a
+library conformance suite does not by itself verify a host integration; each verified capability
+also requires review of the real host adapter wiring.
 
 ## Local verification
 

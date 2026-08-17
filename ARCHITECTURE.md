@@ -18,11 +18,11 @@ community policy      enterprise policy
 
 | Crate | Current status and ownership |
 | --- | --- |
-| `south-contracts` | Implemented version-one bounded HTTP, Bearer auth, and stable error contracts |
-| `south-core` | Implemented host-neutral buffered provider-call orchestration |
-| `south-transport-reqwest` | Implemented hardened buffered JSON POST transport |
-| `south-provider-conformance` | Implemented immutable `south.provider-call.v1` fixtures |
-| `south-testkit` | Implemented assembled-executor conformance runner and reference executor |
+| `south-contracts` | Implemented version-one bounded HTTP, Bearer auth, stable error, and byte-streaming contracts |
+| `south-core` | Implemented host-neutral buffered and streaming provider-call orchestration |
+| `south-transport-reqwest` | Implemented hardened buffered and byte-streaming JSON POST transport |
+| `south-provider-conformance` | Implemented immutable provider-call and provider-stream v1 fixtures |
+| `south-testkit` | Implemented assembled-executor conformance runners and reference executors |
 | `south-transport-ureq` | Placeholder for a future synchronous native transport |
 | `south-provider-api` | Placeholder for future provider WIT and manifest schemas |
 | `south-provider-runtime` | Placeholder for future sandboxed component execution |
