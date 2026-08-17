@@ -117,8 +117,9 @@ fn compatibility_manifest_describes_the_library_slice() {
         );
     }
     assert_eq!(manifest.hosts.get("token-station").map(String::as_str), Some("not_verified"));
-    assert_eq!(
-        manifest.hosts.get("token-station-server").map(String::as_str),
-        Some("not_verified")
-    );
+    // token-station-server verified 2026-08-17: real adapter at the embeddings
+    // Bearer JSON POST call site, assembled-executor conformance 7/7, and an
+    // adversarial wiring review of the reported evidence. See the enterprise
+    // repo's adoption record (product-review #34) for the evidence trail.
+    assert_eq!(manifest.hosts.get("token-station-server").map(String::as_str), Some("verified"));
 }

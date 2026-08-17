@@ -1,6 +1,7 @@
 # Minimal Provider Call Library Vertical Slice
 
-Status: implemented locally; remote CI pending; hosts not verified
+Status: merged to main (PR #1, remote CI green, tag v0.0.1); token-station-server verified
+2026-08-17 (embeddings adoption slice + adversarial wiring review); token-station not verified
 
 Date: 2026-08-16
 
@@ -510,7 +511,12 @@ Local verification passed with 99 workspace tests. Formatting, clippy with warni
 all-feature and no-default-feature tests, rustdoc warnings, the Rust 1.96.0 MSRV check, locked fuzz
 target compilation, boundary live checks and self-tests, dependency policy checks, vulnerability
 audits, and unused-dependency checks also passed. Independent review found no open P0 or P1
-findings. Remote CI has not yet run for this feature branch, and both hosts remain `not_verified`.
+findings. Remote CI ran green on PR #1 and the branch merged to main (tag `v0.0.1`).
+`token-station-server` became `verified` on 2026-08-17: its real adapter serves the embeddings
+Bearer JSON POST call site, its assembled executor passed this suite 7/7, and an adversarial
+wiring review confirmed the reported evidence is measured at the real resolver and transport
+boundaries (evidence trail: enterprise repo product-review #34). `token-station` remains
+`not_verified` pending its own adoption slice.
 
 This result proves the library slice only. It does not prove enterprise migration or production
 host adoption. No desktop App was installed because this repository does not change Token Station
