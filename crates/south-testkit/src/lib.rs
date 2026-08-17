@@ -45,6 +45,16 @@ macro_rules! fixed_debug {
     };
 }
 
+mod stream;
+
+pub use stream::{
+    AssembledProviderStreamExecutorV1, AssembledStreamExecutionFutureV1,
+    MAX_PROVIDER_STREAM_MISMATCHES_V1, ProviderStreamConformanceFailureV1,
+    ProviderStreamConformanceReportV1, ProviderStreamEvidenceV1, ProviderStreamMismatchCategoryV1,
+    ProviderStreamMismatchV1, ProviderStreamObservationV1,
+    ReferenceAssembledProviderStreamExecutorV1, run_provider_stream_conformance_v1,
+};
+
 /// Seven cases multiplied by the ten closed mismatch categories.
 pub const MAX_PROVIDER_CALL_MISMATCHES_V1: usize = 70;
 
@@ -435,7 +445,7 @@ impl ReferenceAssembledProviderCallExecutorV1 {
         let resolver_dropped = Arc::new(AtomicBool::new(false));
         let transport_dropped = Arc::new(AtomicBool::new(false));
 
-        let parsed = parse_reference_input(fixture);
+        let parsed = parse_reference_input(fixture.input());
         let (binding, request) = match parsed {
             Ok(parsed) => parsed,
             Err(code) => {
@@ -511,9 +521,8 @@ impl ReferenceAssembledProviderCallExecutorV1 {
 }
 
 fn parse_reference_input(
-    fixture: &ProviderCallFixtureV1,
+    input: &south_provider_conformance::ProviderCallInputV1,
 ) -> Result<(ProviderBindingV1, JsonPostRequestV1), ProviderCallFailureCodeV1> {
-    let input = fixture.input();
     let endpoint = ProviderEndpointV1::parse(input.endpoint()).map_err(map_contract_error)?;
     let bound_slot =
         CredentialSlotV1::parse(input.bound_credential_slot()).map_err(map_contract_error)?;
