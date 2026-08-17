@@ -285,6 +285,65 @@ async fn opens_exact_post_and_streams_chunks_to_clean_eof() {
 }
 
 #[tokio::test]
+async fn streaming_head_uses_the_same_closed_quota_metadata_contract() {
+    let mut first = chunked_headers(&[
+        ("x-ratelimit-limit-tokens", "1000"),
+        ("x-ratelimit-remaining-tokens", "900"),
+        ("x-ratelimit-reset-tokens", "10s"),
+        ("anthropic-ratelimit-tokens-limit", "2000"),
+        ("anthropic-ratelimit-tokens-remaining", "1500"),
+        ("anthropic-ratelimit-tokens-reset", "20s"),
+        ("anthropic-ratelimit-unified-limit", "3000"),
+        ("anthropic-ratelimit-unified-remaining", "2500"),
+        ("anthropic-ratelimit-unified-reset", "30s"),
+        ("x-unapproved-quota-sentinel", "must-not-be-retained"),
+    ]);
+    first.extend_from_slice(b"0\r\n\r\n");
+    let loopback = scripted_loopback(first, None, Vec::new(), false);
+    let transport =
+        ReqwestStreamingTransportV1::new(stream_config()).expect("transport should build");
+
+    let mut call = open(&loopback.endpoint, &transport, None, &CancellationToken::new())
+        .await
+        .expect("valid quota metadata must preserve the stream");
+    loopback.request.await.expect("server should receive one request");
+    let quota = call.head().provider_quota_metadata();
+    assert_eq!(quota.present_field_count(), 9);
+    assert_eq!(quota.x_ratelimit_limit_tokens(), Some("1000"));
+    assert_eq!(quota.anthropic_ratelimit_unified_reset(), Some("30s"));
+    assert!(!format!("{:?}", call.head()).contains("must-not-be-retained"));
+    assert!(call.next_chunk().await.is_none());
+    loopback.task.await.expect("server task should finish");
+}
+
+#[tokio::test]
+async fn streaming_head_omits_malformed_optional_quota_metadata() {
+    let oversized = "x".repeat(south_contracts::MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES + 1);
+    let mut duplicate =
+        chunked_headers(&[("x-ratelimit-limit-tokens", "1"), ("x-ratelimit-limit-tokens", "1")]);
+    duplicate.extend_from_slice(b"0\r\n\r\n");
+    let mut overlong = chunked_headers(&[("x-ratelimit-remaining-tokens", &oversized)]);
+    overlong.extend_from_slice(b"0\r\n\r\n");
+    let mut non_utf8 = b"HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\nconnection: close\r\nx-ratelimit-reset-tokens: ".to_vec();
+    non_utf8.push(0xff);
+    non_utf8.extend_from_slice(b"\r\n\r\n0\r\n\r\n");
+
+    for first in [duplicate, overlong, non_utf8] {
+        let loopback = scripted_loopback(first, None, Vec::new(), false);
+        let transport =
+            ReqwestStreamingTransportV1::new(stream_config()).expect("transport should build");
+
+        let mut call = open(&loopback.endpoint, &transport, None, &CancellationToken::new())
+            .await
+            .expect("malformed optional quota metadata must not fail a valid stream");
+        loopback.request.await.expect("server should receive one request");
+        assert_eq!(call.head().provider_quota_metadata().present_field_count(), 0);
+        assert!(call.next_chunk().await.is_none());
+        loopback.task.await.expect("server task should finish");
+    }
+}
+
+#[tokio::test]
 async fn dropping_an_in_flight_pull_future_loses_no_bytes() {
     let (release_tx, release_rx) = oneshot::channel();
     let mut first = chunked_headers(&[]);

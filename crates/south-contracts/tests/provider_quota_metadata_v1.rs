@@ -117,6 +117,22 @@ fn metadata_accepts_every_field_at_the_exact_combined_bound() {
 }
 
 #[test]
+fn metadata_clones_share_one_bounded_allocation_and_stay_pointer_sized() {
+    let metadata = all_metadata();
+    let cloned = metadata.clone();
+
+    assert!(
+        std::mem::size_of::<ProviderQuotaMetadataV1>() <= 2 * std::mem::size_of::<usize>(),
+        "quota metadata must not inline nine String slots into every response and error enum"
+    );
+    assert_eq!(
+        metadata.x_ratelimit_limit_tokens().expect("fixture field should exist").as_ptr(),
+        cloned.x_ratelimit_limit_tokens().expect("cloned fixture field should exist").as_ptr(),
+        "cloning a streaming head must share immutable quota metadata"
+    );
+}
+
+#[test]
 fn old_response_constructors_default_quota_metadata_to_empty() {
     let buffered =
         BufferedHttpResponseV1::try_from_parts(StatusCode::OK, b"{}".to_vec(), None, None)

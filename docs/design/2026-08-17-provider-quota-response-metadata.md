@@ -167,9 +167,11 @@ StreamingResponseHeadV1::try_from_parts_with_provider_quota_metadata(...)
 ```
 
 The new methods do not accept nine loose strings or a header map. Redirect, body, UTF-8,
-`content-type`, and `retry-after` behavior remains unchanged. Buffered responses remain non-Clone;
-the small bounded metadata object is Clone only because `StreamingResponseHeadV1` already has
-single-owner stream semantics with a cloned head.
+`content-type`, and `retry-after` behavior remains unchanged. Buffered responses remain non-Clone.
+Empty quota metadata performs no heap allocation. Present values live behind one immutable shared
+allocation, so cloning `StreamingResponseHeadV1` copies only a pointer rather than nine `String`
+slots or their values. A size/owner-sharing test prevents the metadata addition from inflating the
+public response and error enums.
 
 ## Reqwest transport policy
 

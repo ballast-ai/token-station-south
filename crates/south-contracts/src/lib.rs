@@ -644,7 +644,7 @@ impl fmt::Debug for ProviderQuotaMetadataFieldV1 {
 /// Exactly the approved, bounded provider quota response metadata values.
 #[derive(Clone, Default, PartialEq, Eq)]
 pub struct ProviderQuotaMetadataV1 {
-    values: [Option<String>; PROVIDER_QUOTA_METADATA_FIELD_COUNT],
+    values: Option<Arc<[Option<String>; PROVIDER_QUOTA_METADATA_FIELD_COUNT]>>,
 }
 
 impl ProviderQuotaMetadataV1 {
@@ -655,6 +655,7 @@ impl ProviderQuotaMetadataV1 {
     {
         let mut values: [Option<String>; PROVIDER_QUOTA_METADATA_FIELD_COUNT] = Default::default();
         let mut total_bytes = 0_usize;
+        let mut present_field_count = 0_usize;
 
         for (field, value) in fields {
             if value.len() > MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES
@@ -673,21 +674,22 @@ impl ProviderQuotaMetadataV1 {
                 return Err(TransportErrorV1::ResponseMetadataInvalid);
             }
             *slot = Some(value);
+            present_field_count += 1;
         }
 
-        Ok(Self { values })
+        Ok(Self { values: (present_field_count != 0).then(|| Arc::new(values)) })
     }
 
     /// Returns one approved field when present.
     #[must_use]
     pub fn value(&self, field: ProviderQuotaMetadataFieldV1) -> Option<&str> {
-        self.values[field.index()].as_deref()
+        self.values.as_ref().and_then(|values| values[field.index()].as_deref())
     }
 
     /// Returns the number of present approved fields.
     #[must_use]
     pub fn present_field_count(&self) -> usize {
-        self.values.iter().flatten().count()
+        self.values.as_ref().map_or(0, |values| values.iter().flatten().count())
     }
 
     /// Returns `x-ratelimit-limit-tokens` when present.
