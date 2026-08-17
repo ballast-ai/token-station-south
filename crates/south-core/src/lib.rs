@@ -347,6 +347,17 @@ impl StreamingCallV1 {
         if self.finished {
             return None;
         }
+        // Both signals are observed at every pull entry before the source is touched, so a
+        // continuously ready source cannot keep delivering past cancellation or the deadline.
+        // Cancellation is checked first to keep its documented precedence.
+        if self.cancellation.is_cancelled() {
+            self.finished = true;
+            return Some(Err(StreamReadErrorV1::StreamCancelled));
+        }
+        if self.deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+            self.finished = true;
+            return Some(Err(StreamReadErrorV1::StreamDeadlineExceeded));
+        }
 
         let deadline = self.deadline;
         let pull = self.source.next_chunk();

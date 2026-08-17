@@ -545,6 +545,39 @@ async fn deadline_mid_pull_drops_the_in_flight_source_future() {
     assert!(call.next_chunk().await.is_none(), "pulls after a terminal error must yield None");
 }
 
+#[tokio::test(start_paused = true)]
+async fn expired_deadline_fails_the_pull_even_when_a_chunk_is_ready() {
+    let resolver = ImmediateResolver::default();
+    let transport =
+        ScriptedTransport::new(vec![SourceEvent::Chunk(CHUNK_ONE), SourceEvent::Chunk(CHUNK_TWO)]);
+
+    let mut call = open_with(
+        &resolver,
+        &transport,
+        Some(tokio::time::Instant::now() + Duration::from_secs(30)),
+        &CancellationToken::new(),
+        SLOT_SENTINEL,
+    )
+    .await
+    .expect("a valid streaming open should succeed");
+    let first = call.next_chunk().await.expect("first pull should yield a chunk");
+    assert_eq!(first.expect("first chunk should be delivered").as_bytes(), CHUNK_ONE);
+    let polls_before_expiry = transport.probes.calls.load(Ordering::SeqCst);
+
+    tokio::time::advance(Duration::from_secs(30)).await;
+
+    assert_eq!(
+        call.next_chunk().await.expect("an expired pull must fail immediately"),
+        Err(StreamReadErrorV1::StreamDeadlineExceeded)
+    );
+    assert_eq!(
+        transport.probes.calls.load(Ordering::SeqCst),
+        polls_before_expiry,
+        "an expired deadline must be observed before the source is pulled again"
+    );
+    assert!(call.next_chunk().await.is_none(), "pulls after a terminal error must yield None");
+}
+
 #[tokio::test]
 async fn source_errors_are_terminal_and_the_source_is_never_polled_again() {
     let resolver = ImmediateResolver::default();
