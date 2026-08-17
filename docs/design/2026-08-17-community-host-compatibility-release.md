@@ -1,6 +1,6 @@
 # Community Host Compatibility Release
 
-Status: implemented locally; all repository gates green; independent review and release pending
+Status: implemented; South gates and fixed-candidate host CI green; final review and release pending
 
 Date: 2026-08-17
 
@@ -57,6 +57,24 @@ The community provider-call verification is based on these immutable or reviewab
 The CI run's pull-request-only root coverage job was skipped by the host workflow's existing event
 policy; Desktop coverage and all other required pull-request jobs succeeded. This release does not
 depend on the unrelated Windows/macOS post-merge workflow.
+
+The `0.1.1` release candidate was then verified independently of the earlier `0.0.1` adoption:
+
+- South candidate commit: `ef1ab0d2c5ec108835d083c5f6f5b7da510520e4`;
+- host validation commit: `323b85f795cdf03ea40aef4d3752395b3620af22`;
+- host validation pull request: `GlimpseEngine/token-station#92`, targeting `develop-v2` and kept
+  draft until the final South tag exists;
+- host validation CI run: `32004432516`, successful for supply-chain, release gates, frontend,
+  Rust 1.96, Desktop Rust, Desktop coverage, and root Rust;
+- the host pinned all five South crates to exact version `=0.1.1` and the candidate commit, ran the
+  seven-case public conformance suite through the real diagnostic adapter, and passed the real
+  reqwest loopback tests;
+- the host's pull-request-only root coverage job was skipped by existing workflow policy; no
+  Windows or macOS Platform workflow was required for this non-main pull request.
+
+After this evidence commit, the South candidate-to-final diff may contain only this design record.
+Rust sources, package manifests, compatibility data, tests, and lockfiles must remain byte-for-byte
+unchanged from the verified candidate. The final `v0.1.1` tag is valid only if that invariant holds.
 
 ## Goals
 
@@ -133,16 +151,21 @@ evidence without changing public Rust API or contract behavior.
 
 ## Release sequence
 
-1. Commit the design, failing-test evidence, compatibility change, version bump, and documentation
-   on the feature branch.
-2. Push the branch and open a pull request to South `main`.
-3. Require South CI and review to succeed before merge.
-4. Merge the pull request.
-5. Create immutable tag `v0.1.1` on the merged commit and push the tag.
-6. In a separate Token Station change, replace the bootstrap `0.0.1` revision dependency with
-   exact version `0.1.1` at the immutable release commit/tag, regenerate lockfiles, update the host
-   dependency policy, and rerun the host's Linux CI and South conformance gates.
-7. Keep the live provider-account probe as an explicit, separately authorized community
+1. Commit and push a fixed South `0.1.1` candidate containing the design, failing-test evidence,
+   compatibility change, version bump, and documentation.
+2. In a separate Token Station pull request to `develop-v2`, pin exact version `=0.1.1` and the
+   candidate commit, regenerate lockfiles, update the dependency policy, and require the host's
+   Linux CI and South conformance gates to pass.
+3. Record the immutable candidate, host commit, host pull request, and successful CI run here. From
+   this point until the release tag, permit only this South design record to differ from the
+   verified candidate.
+4. Open the South pull request to `main` and require South CI and review to succeed before merge.
+5. Merge the South pull request.
+6. Create immutable tag `v0.1.1` on the merged commit and push the tag.
+7. Update the existing Token Station validation pull request from the candidate commit to the final
+   tag commit, prove the five crate contents are unchanged, and rerun the same host gates before
+   merging it to `develop-v2`.
+8. Keep the live provider-account probe as an explicit, separately authorized community
    operational acceptance item.
 
 ## Acceptance
@@ -154,6 +177,10 @@ This South release is ready to merge when:
 - workspace, internal dependency, fuzz dependency, and compatibility versions all equal `0.1.1`;
 - README and design records describe both host adoptions without claiming production or streaming
   migration;
+- the exact `0.1.1` candidate passes the real Token Station host's required Linux CI and public
+  conformance gates, with immutable candidate, host-commit, pull-request, and run identifiers
+  recorded above;
+- the candidate-to-final diff outside this design record is empty;
 - every README verification command passes;
 - review finds no open P0 or P1 issue.
 
@@ -173,5 +200,11 @@ All 158 workspace tests passed. Formatting, Clippy with warnings denied, doctest
 no-default-feature tests, rustdoc warnings, Rust 1.96 MSRV, locked fuzz compilation, boundary
 self-tests and live checks, license/source policy, security audits, and unused-dependency checks
 passed. `cargo-deny` emitted only the repository's existing unmatched-license and duplicate-version
-warnings. No Token Station desktop App was installed because this repository change affects only
-South release metadata, tests, and documentation.
+warnings. No Token Station desktop App was installed as part of the South worktree validation
+because this repository change affects only South release metadata, tests, and documentation.
+
+The separate Token Station candidate-validation branch pinned all five crates to
+`ef1ab0d2c5ec108835d083c5f6f5b7da510520e4`. Its focused conformance and real-transport tests,
+root and Desktop suites, coverage gates, supply-chain checks, Rust 1.96 check, and remote Linux CI
+passed. The host validation also completed the required local Desktop App rebuild, audit,
+installation, signature check, and launch. Independent review found no open P0, P1, or P2 issue.
