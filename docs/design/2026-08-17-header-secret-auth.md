@@ -86,7 +86,7 @@ arm). `compatibility.json` mirrors it. `JsonPostRequestV1::new` keeps its signat
 value keeps its `Bearer ` prefix, for `HeaderSecret` the secret is the verbatim value. Everything
 else (redirect denial, decompression bans, bounds) is untouched.
 
-### 3.4 Migration note (breaking, ships as 0.2.0)
+### 3.4 Migration note (breaking, ships as 0.3.0)
 
 A host that implements its own `AsyncHttpTransport` / `AsyncStreamingTransport` must update:
 
@@ -99,7 +99,9 @@ A host that implements its own `AsyncHttpTransport` / `AsyncStreamingTransport` 
   `BearerAuthV1` still compiles unchanged.
 
 Hosts consuming only the crate-provided transports need no source changes. Because cargo treats
-`0.1.x → 0.1.y` as compatible, this slice must be released as **0.2.0**, never as a patch.
+`0.2.x → 0.2.y` as compatible, this slice must be released as **0.3.0**, never as a patch. The
+`0.2.0` slot was taken by the bounded provider quota response metadata release, which merged to
+`main` and was tagged before this branch integrated it.
 
 ## 4. Conformance (D4)
 

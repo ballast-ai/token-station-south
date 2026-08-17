@@ -19,6 +19,7 @@ macro_rules! fixed_debug {
 }
 
 mod header_auth;
+mod quota;
 mod stream;
 
 pub use header_auth::{
@@ -26,6 +27,13 @@ pub use header_auth::{
     HeaderAuthCaseIdV1, HeaderAuthExpectedEvidenceV1, HeaderAuthExpectedOutcomeV1,
     HeaderAuthExpectedV1, HeaderAuthFixtureV1, HeaderAuthUpstreamV1, header_auth_fixtures_v1,
 };
+pub use quota::{
+    PROVIDER_QUOTA_METADATA_CONFORMANCE_SUITE_ID,
+    PROVIDER_QUOTA_METADATA_CONFORMANCE_SUITE_VERSION, ProviderQuotaMetadataCaseIdV1,
+    ProviderQuotaMetadataExpectedEvidenceV1, ProviderQuotaMetadataFixtureV1,
+    ProviderQuotaMetadataRawV1, provider_quota_metadata_fixtures_v1,
+};
+
 pub use stream::{
     PROVIDER_STREAM_CONFORMANCE_DEADLINE_OFFSET_V1, PROVIDER_STREAM_CONFORMANCE_IDLE_TIMEOUT_V1,
     PROVIDER_STREAM_CONFORMANCE_SUITE_ID, PROVIDER_STREAM_CONFORMANCE_SUITE_VERSION,

@@ -80,16 +80,27 @@ async fn read_request(stream: &mut TcpStream) -> ReceivedRequest {
 }
 
 async fn receive_without_advancing_time<T>(receiver: &mut oneshot::Receiver<T>) -> T {
-    for _ in 0..100_000 {
+    let mut polls = 0_usize;
+    std::future::poll_fn(|context| {
+        polls += 1;
+        assert!(
+            polls <= 100_000,
+            "server did not report the synchronized event within the poll budget"
+        );
         match receiver.try_recv() {
-            Ok(value) => return value,
-            Err(oneshot::error::TryRecvError::Empty) => tokio::task::yield_now().await,
+            Ok(value) => std::task::Poll::Ready(value),
+            Err(oneshot::error::TryRecvError::Empty) => {
+                // Keep one task runnable so paused Tokio cannot jump to the transport timer while
+                // the real loopback socket is waiting for its readiness event.
+                context.waker().wake_by_ref();
+                std::task::Poll::Pending
+            }
             Err(oneshot::error::TryRecvError::Closed) => {
                 panic!("server should report the synchronized event")
             }
         }
-    }
-    panic!("server did not report the synchronized event within the yield budget")
+    })
+    .await
 }
 
 fn chunked_headers(extra_headers: &[(&str, &str)]) -> Vec<u8> {
@@ -328,6 +339,76 @@ async fn header_secret_open_injects_the_sanctioned_header_and_no_authorization()
 }
 
 #[tokio::test]
+async fn streaming_head_uses_the_same_closed_quota_metadata_contract() {
+    let mut first = chunked_headers(&[
+        ("x-ratelimit-limit-tokens", "1000"),
+        ("x-ratelimit-remaining-tokens", "900"),
+        ("x-ratelimit-reset-tokens", "10s"),
+        ("anthropic-ratelimit-tokens-limit", "2000"),
+        ("anthropic-ratelimit-tokens-remaining", "1500"),
+        ("anthropic-ratelimit-tokens-reset", "20s"),
+        ("anthropic-ratelimit-unified-limit", "3000"),
+        ("anthropic-ratelimit-unified-remaining", "2500"),
+        ("anthropic-ratelimit-unified-reset", "30s"),
+        ("x-unapproved-quota-sentinel", "must-not-be-retained"),
+    ]);
+    first.extend_from_slice(b"0\r\n\r\n");
+    let loopback = scripted_loopback(first, None, Vec::new(), false);
+    let transport =
+        ReqwestStreamingTransportV1::new(stream_config()).expect("transport should build");
+
+    let mut call = open(&loopback.endpoint, &transport, None, &CancellationToken::new())
+        .await
+        .expect("valid quota metadata must preserve the stream");
+    loopback.request.await.expect("server should receive one request");
+    let quota = call.head().provider_quota_metadata();
+    assert_eq!(quota.present_field_count(), 9);
+    assert_eq!(quota.x_ratelimit_limit_tokens(), Some("1000"));
+    assert_eq!(quota.anthropic_ratelimit_unified_reset(), Some("30s"));
+    assert!(!format!("{:?}", call.head()).contains("must-not-be-retained"));
+    assert!(call.next_chunk().await.is_none());
+    loopback.task.await.expect("server task should finish");
+}
+
+#[tokio::test]
+async fn streaming_head_omits_malformed_optional_quota_metadata() {
+    let oversized = "x".repeat(south_contracts::MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES + 1);
+    let mut duplicate = chunked_headers(&[
+        ("x-ratelimit-limit-tokens", "1"),
+        ("x-ratelimit-limit-tokens", "1"),
+        ("anthropic-ratelimit-unified-limit", "77"),
+    ]);
+    duplicate.extend_from_slice(b"0\r\n\r\n");
+    let mut overlong = chunked_headers(&[
+        ("x-ratelimit-remaining-tokens", &oversized),
+        ("anthropic-ratelimit-unified-limit", "77"),
+    ]);
+    overlong.extend_from_slice(b"0\r\n\r\n");
+    let mut non_utf8 = b"HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\nconnection: close\r\nx-ratelimit-reset-tokens: ".to_vec();
+    non_utf8.push(0xff);
+    non_utf8.extend_from_slice(b"\r\nanthropic-ratelimit-unified-limit: 77\r\n\r\n0\r\n\r\n");
+
+    for first in [duplicate, overlong, non_utf8] {
+        let loopback = scripted_loopback(first, None, Vec::new(), false);
+        let transport =
+            ReqwestStreamingTransportV1::new(stream_config()).expect("transport should build");
+
+        let mut call = open(&loopback.endpoint, &transport, None, &CancellationToken::new())
+            .await
+            .expect("malformed optional quota metadata must not fail a valid stream");
+        loopback.request.await.expect("server should receive one request");
+        let quota = call.head().provider_quota_metadata();
+        assert_eq!(quota.present_field_count(), 1);
+        assert_eq!(quota.x_ratelimit_limit_tokens(), None);
+        assert_eq!(quota.x_ratelimit_remaining_tokens(), None);
+        assert_eq!(quota.x_ratelimit_reset_tokens(), None);
+        assert_eq!(quota.anthropic_ratelimit_unified_limit(), Some("77"));
+        assert!(call.next_chunk().await.is_none());
+        loopback.task.await.expect("server task should finish");
+    }
+}
+
+#[tokio::test]
 async fn dropping_an_in_flight_pull_future_loses_no_bytes() {
     let (release_tx, release_rx) = oneshot::channel();
     let mut first = chunked_headers(&[]);
@@ -409,18 +490,16 @@ async fn oversized_network_reads_are_rechunked_to_the_delivery_bound() {
     loopback.task.await.expect("server task should finish");
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test(flavor = "current_thread")]
 async fn slow_drip_upstream_hits_the_idle_guard_mid_stream() {
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("loopback listener should bind");
     let address = listener.local_addr().expect("loopback address should exist");
-    let (written_tx, mut written_rx) = oneshot::channel();
     let server = tokio::spawn(async move {
         let (mut stream, _) = listener.accept().await.expect("one request should connect");
         read_request(&mut stream).await;
         let mut first = chunked_headers(&[]);
         first.extend_from_slice(&encoded_chunk(CHUNK_ONE));
         stream.write_all(&first).await.expect("headers and first chunk should write");
-        written_tx.send(()).expect("test should retain its write receiver");
         let mut remaining = Vec::new();
         stream.read_to_end(&mut remaining).await.expect("stalled connection should close");
         remaining
@@ -430,12 +509,12 @@ async fn slow_drip_upstream_hits_the_idle_guard_mid_stream() {
         ReqwestStreamingTransportV1::new(stream_config()).expect("transport should build");
     let cancellation = CancellationToken::new();
 
-    // The yield-loop keeps the paused runtime busy so no timer auto-advances before the
-    // upstream has written its headers and first chunk.
-    let opening = open(&endpoint, &transport, None, &cancellation);
-    let sync = receive_without_advancing_time(&mut written_rx);
-    let (opened, ()) = tokio::join!(opening, sync);
-    let mut call = opened.expect("a 2xx upstream should open a stream");
+    // Complete the real loopback handshake before pausing Tokio time. A paused clock must not be
+    // mixed with pending OS socket readiness: the runtime may otherwise auto-advance the read
+    // timer before the kernel delivers the readiness event.
+    let mut call = open(&endpoint, &transport, None, &cancellation)
+        .await
+        .expect("a 2xx upstream should open a stream");
     let first_chunk = call
         .next_chunk()
         .await
@@ -443,6 +522,7 @@ async fn slow_drip_upstream_hits_the_idle_guard_mid_stream() {
         .expect("the first pull should not fail");
     assert_eq!(first_chunk.as_bytes(), CHUNK_ONE);
 
+    tokio::time::pause();
     let pull = call.next_chunk();
     let advance = async {
         tokio::time::advance(Duration::from_secs(11)).await;

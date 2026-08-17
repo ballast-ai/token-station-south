@@ -31,8 +31,10 @@ struct Contracts {
     auth: u16,
     error: u16,
     stream: Option<u16>,
+    provider_quota_metadata: u16,
     canonical_ir: Option<String>,
     header_limits: HeaderLimits,
+    provider_quota_metadata_limits: ProviderQuotaMetadataLimits,
 }
 
 #[derive(Debug, Deserialize)]
@@ -44,6 +46,8 @@ struct Conformance {
     provider_stream_suite: u32,
     header_auth_suite_id: String,
     header_auth_suite: u32,
+    provider_quota_metadata_suite_id: String,
+    provider_quota_metadata_suite: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -51,6 +55,14 @@ struct Conformance {
 struct HeaderLimits {
     count: usize,
     name_bytes: usize,
+    value_bytes: usize,
+    total_bytes: usize,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProviderQuotaMetadataLimits {
+    field_count: usize,
     value_bytes: usize,
     total_bytes: usize,
 }
@@ -67,13 +79,41 @@ struct ProviderRuntime {
     abi_version: Option<String>,
 }
 
+fn expected_host_capabilities() -> BTreeMap<&'static str, [(&'static str, &'static str); 3]> {
+    BTreeMap::from([
+        (
+            "token-station",
+            [
+                ("provider_call", "verified"),
+                ("provider_stream", "not_verified"),
+                ("provider_quota_metadata", "verified"),
+            ],
+        ),
+        // token-station-server provider_stream verified 2026-08-17: the durable
+        // chat sender's real seam runs streams through
+        // open_streaming_provider_call_v1, the host's assembled executor passes
+        // south.provider-stream.v1 9/9 with six-field evidence at real
+        // boundaries, and an adversarial wiring review (one P1 — proxy-
+        // environment fallback — fixed on-branch) plus lv's sign-off closed the
+        // loop. Evidence trail: enterprise repo product-review #34 §6.
+        (
+            "token-station-server",
+            [
+                ("provider_call", "verified"),
+                ("provider_stream", "verified"),
+                ("provider_quota_metadata", "not_verified"),
+            ],
+        ),
+    ])
+}
+
 #[test]
 fn compatibility_manifest_describes_the_library_slice() {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../compatibility.json");
     let contents = fs::read_to_string(path).unwrap();
     let manifest: CompatibilityManifest = serde_json::from_str(&contents).unwrap();
 
-    assert_eq!(manifest.schema_version, 1);
+    assert_eq!(manifest.schema_version, 2);
     assert_eq!(manifest.release.version, env!("CARGO_PKG_VERSION"));
     assert_eq!(manifest.release.stability, "library_slice");
     assert_eq!(
@@ -84,6 +124,10 @@ fn compatibility_manifest_describes_the_library_slice() {
     assert_eq!(manifest.contracts.auth, south_contracts::AUTH_CONTRACT_VERSION);
     assert_eq!(manifest.contracts.error, south_contracts::ERROR_CONTRACT_VERSION);
     assert_eq!(manifest.contracts.stream, south_contracts::STREAM_CONTRACT_VERSION);
+    assert_eq!(
+        manifest.contracts.provider_quota_metadata,
+        south_contracts::PROVIDER_QUOTA_METADATA_CONTRACT_VERSION
+    );
     assert!(manifest.contracts.canonical_ir.is_none());
     assert_eq!(manifest.contracts.header_limits.count, south_contracts::MAX_PROVIDER_HEADER_COUNT);
     assert_eq!(
@@ -98,23 +142,40 @@ fn compatibility_manifest_describes_the_library_slice() {
         manifest.contracts.header_limits.total_bytes,
         south_contracts::MAX_PROVIDER_HEADER_TOTAL_BYTES
     );
+    assert_eq!(
+        manifest.contracts.provider_quota_metadata_limits.field_count,
+        south_contracts::PROVIDER_QUOTA_METADATA_FIELD_COUNT
+    );
+    assert_eq!(
+        manifest.contracts.provider_quota_metadata_limits.value_bytes,
+        south_contracts::MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES
+    );
+    assert_eq!(
+        manifest.contracts.provider_quota_metadata_limits.total_bytes,
+        south_contracts::MAX_PROVIDER_QUOTA_METADATA_TOTAL_BYTES
+    );
     assert_eq!(manifest.conformance.suite_id, "south.provider-call.v1");
     assert_eq!(manifest.conformance.provider_call_suite, 1);
     assert_eq!(manifest.conformance.provider_stream_suite_id, "south.provider-stream.v1");
     assert_eq!(manifest.conformance.provider_stream_suite, 1);
     assert_eq!(manifest.conformance.header_auth_suite_id, "south.header-auth.v1");
     assert_eq!(manifest.conformance.header_auth_suite, 1);
+    assert_eq!(
+        manifest.conformance.provider_quota_metadata_suite_id,
+        "south.provider-quota-metadata.v1"
+    );
+    assert_eq!(manifest.conformance.provider_quota_metadata_suite, 1);
     assert!(manifest.provider_api.wit_version.is_none());
     assert!(manifest.provider_runtime.abi_version.is_none());
     let expected_crates = BTreeMap::from([
-        ("south-contracts", "http_auth_error_v1"),
-        ("south-core", "buffered_provider_call_v1"),
+        ("south-contracts", "http_auth_error_stream_quota_metadata_header_auth_v1"),
+        ("south-core", "buffered_streaming_provider_call_header_auth_v1"),
         ("south-migration", "placeholder"),
         ("south-provider-api", "placeholder"),
-        ("south-provider-conformance", "provider_call_suite_v1"),
+        ("south-provider-conformance", "provider_call_stream_quota_metadata_header_auth_suites_v1"),
         ("south-provider-runtime", "placeholder"),
-        ("south-testkit", "provider_call_runner_v1"),
-        ("south-transport-reqwest", "buffered_json_post_v1"),
+        ("south-testkit", "provider_call_stream_quota_metadata_header_auth_runners_v1"),
+        ("south-transport-reqwest", "buffered_streaming_json_post_quota_metadata_header_auth_v1"),
         ("south-transport-ureq", "placeholder"),
     ]);
     assert_eq!(manifest.crates.len(), expected_crates.len());
@@ -138,20 +199,10 @@ fn compatibility_manifest_describes_the_library_slice() {
     assert_eq!(manifest.hosts.get("token-station-server").map(String::as_str), Some("verified"));
     // Per-capability annotations disambiguate the legacy per-host string: the
     // top-level `hosts` value mirrors `provider_call` (the first adopted
-    // capability); each newer capability starts `not_verified` until its own
-    // adoption slice lands. A capability listed here must have a conformance
-    // suite in this manifest.
-    let expected_capabilities: BTreeMap<&str, [(&str, &str); 2]> = BTreeMap::from([
-        ("token-station", [("provider_call", "verified"), ("provider_stream", "not_verified")]),
-        // token-station-server provider_stream verified 2026-08-17: the durable
-        // chat sender's real seam runs streams through
-        // open_streaming_provider_call_v1, the host's assembled executor passes
-        // south.provider-stream.v1 9/9 with six-field evidence at real
-        // boundaries, and an adversarial wiring review (one P1 — proxy-
-        // environment fallback — fixed on-branch) plus lv's sign-off closed the
-        // loop. Evidence trail: enterprise repo product-review #34 §6.
-        ("token-station-server", [("provider_call", "verified"), ("provider_stream", "verified")]),
-    ]);
+    // capability). Every newer capability is recorded independently and may
+    // become verified only through its own adoption evidence. A capability
+    // listed here must have a conformance suite in this manifest.
+    let expected_capabilities = expected_host_capabilities();
     assert_eq!(manifest.host_capabilities.len(), expected_capabilities.len());
     for (host, capabilities) in expected_capabilities {
         let annotated = manifest.host_capabilities.get(host).unwrap_or_else(|| {

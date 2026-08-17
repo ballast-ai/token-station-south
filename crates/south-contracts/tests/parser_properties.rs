@@ -4,8 +4,22 @@ use proptest::{
 };
 use south_contracts::{
     CredentialSlotV1, JsonBodyV1, MAX_CREDENTIAL_SLOT_BYTES, MAX_ENDPOINT_BYTES,
-    MAX_JSON_REQUEST_BODY_BYTES, MAX_RELATIVE_PATH_BYTES, ProviderEndpointV1, RelativePathV1,
+    MAX_JSON_REQUEST_BODY_BYTES, MAX_PROVIDER_QUOTA_METADATA_TOTAL_BYTES,
+    MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES, MAX_RELATIVE_PATH_BYTES, ProviderEndpointV1,
+    ProviderQuotaMetadataFieldV1, ProviderQuotaMetadataV1, RelativePathV1,
 };
+
+const QUOTA_FIELDS: [ProviderQuotaMetadataFieldV1; 9] = [
+    ProviderQuotaMetadataFieldV1::XRateLimitLimitTokens,
+    ProviderQuotaMetadataFieldV1::XRateLimitRemainingTokens,
+    ProviderQuotaMetadataFieldV1::XRateLimitResetTokens,
+    ProviderQuotaMetadataFieldV1::AnthropicRateLimitTokensLimit,
+    ProviderQuotaMetadataFieldV1::AnthropicRateLimitTokensRemaining,
+    ProviderQuotaMetadataFieldV1::AnthropicRateLimitTokensReset,
+    ProviderQuotaMetadataFieldV1::AnthropicRateLimitUnifiedLimit,
+    ProviderQuotaMetadataFieldV1::AnthropicRateLimitUnifiedRemaining,
+    ProviderQuotaMetadataFieldV1::AnthropicRateLimitUnifiedReset,
+];
 
 fn reproducible_config(seed: u64) -> Config {
     Config {
@@ -71,6 +85,19 @@ fn valid_json_inputs() -> impl Strategy<Value = String> {
     ]
 }
 
+fn quota_metadata_inputs() -> impl Strategy<Value = Vec<(ProviderQuotaMetadataFieldV1, String)>> {
+    proptest::collection::vec(
+        (
+            proptest::sample::select(QUOTA_FIELDS.to_vec()),
+            prop_oneof![
+                any::<String>(),
+                ascii_string(b"abcdefghijklmnopqrstuvwxyz0123456789.-_:", 0..257),
+            ],
+        ),
+        0..13,
+    )
+}
+
 proptest! {
     #![proptest_config(reproducible_config(0x45_4e_44_50_4f_49_4e_54))]
 
@@ -84,6 +111,38 @@ proptest! {
             prop_assert!(canonical.starts_with("http://") || canonical.starts_with("https://"));
             prop_assert!(canonical.ends_with('/'));
             prop_assert_eq!(ProviderEndpointV1::parse(canonical), Ok(endpoint));
+        }
+    }
+}
+
+proptest! {
+    #![proptest_config(reproducible_config(0x51_55_4f_54_41_4d_45_54))]
+
+    #[test]
+    fn accepted_quota_metadata_is_unique_bounded_and_idempotent(
+        input in quota_metadata_inputs(),
+    ) {
+        if let Ok(metadata) = ProviderQuotaMetadataV1::try_from_iter(input) {
+            let present = QUOTA_FIELDS
+                .into_iter()
+                .filter_map(|field| metadata.value(field).map(|value| (field, value)))
+                .collect::<Vec<_>>();
+            prop_assert_eq!(present.len(), metadata.present_field_count());
+            prop_assert!(present.len() <= QUOTA_FIELDS.len());
+            let every_value_is_valid = present.iter().all(|(_, value)| {
+                value.len() <= MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES
+                    && http::HeaderValue::from_str(value).is_ok()
+            });
+            prop_assert!(every_value_is_valid);
+            prop_assert!(
+                present.iter().map(|(_, value)| value.len()).sum::<usize>()
+                    <= MAX_PROVIDER_QUOTA_METADATA_TOTAL_BYTES
+            );
+
+            let rebuilt = ProviderQuotaMetadataV1::try_from_iter(
+                present.into_iter().map(|(field, value)| (field, value.to_owned())),
+            );
+            prop_assert_eq!(rebuilt, Ok(metadata));
         }
     }
 }

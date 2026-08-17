@@ -3,8 +3,22 @@
 use libfuzzer_sys::fuzz_target;
 use south_contracts::{
     CredentialSlotV1, JsonBodyV1, MAX_CREDENTIAL_SLOT_BYTES, MAX_ENDPOINT_BYTES,
-    MAX_JSON_REQUEST_BODY_BYTES, MAX_RELATIVE_PATH_BYTES, ProviderEndpointV1, RelativePathV1,
+    MAX_JSON_REQUEST_BODY_BYTES, MAX_PROVIDER_QUOTA_METADATA_TOTAL_BYTES,
+    MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES, MAX_RELATIVE_PATH_BYTES, ProviderEndpointV1,
+    ProviderQuotaMetadataFieldV1, ProviderQuotaMetadataV1, RelativePathV1,
 };
+
+const QUOTA_FIELDS: [ProviderQuotaMetadataFieldV1; 9] = [
+    ProviderQuotaMetadataFieldV1::XRateLimitLimitTokens,
+    ProviderQuotaMetadataFieldV1::XRateLimitRemainingTokens,
+    ProviderQuotaMetadataFieldV1::XRateLimitResetTokens,
+    ProviderQuotaMetadataFieldV1::AnthropicRateLimitTokensLimit,
+    ProviderQuotaMetadataFieldV1::AnthropicRateLimitTokensRemaining,
+    ProviderQuotaMetadataFieldV1::AnthropicRateLimitTokensReset,
+    ProviderQuotaMetadataFieldV1::AnthropicRateLimitUnifiedLimit,
+    ProviderQuotaMetadataFieldV1::AnthropicRateLimitUnifiedRemaining,
+    ProviderQuotaMetadataFieldV1::AnthropicRateLimitUnifiedReset,
+];
 
 fuzz_target!(|data: &[u8]| {
     let Ok(input) = std::str::from_utf8(data) else {
@@ -52,5 +66,32 @@ fuzz_target!(|data: &[u8]| {
         assert_eq!(body.as_str(), input);
         assert!(body.len() <= MAX_JSON_REQUEST_BODY_BYTES);
         assert_eq!(JsonBodyV1::parse(body.as_str()), Ok(body));
+    }
+
+    let fields = input
+        .split('\0')
+        .enumerate()
+        .map(|(index, value)| (QUOTA_FIELDS[index % QUOTA_FIELDS.len()], value.to_owned()))
+        .collect::<Vec<_>>();
+    if let Ok(metadata) = ProviderQuotaMetadataV1::try_from_iter(fields) {
+        let present = QUOTA_FIELDS
+            .into_iter()
+            .filter_map(|field| metadata.value(field).map(|value| (field, value)))
+            .collect::<Vec<_>>();
+        assert_eq!(present.len(), metadata.present_field_count());
+        assert!(present.len() <= QUOTA_FIELDS.len());
+        assert!(
+            present
+                .iter()
+                .all(|(_, value)| value.len() <= MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES)
+        );
+        assert!(
+            present.iter().map(|(_, value)| value.len()).sum::<usize>()
+                <= MAX_PROVIDER_QUOTA_METADATA_TOTAL_BYTES
+        );
+        let rebuilt = ProviderQuotaMetadataV1::try_from_iter(
+            present.into_iter().map(|(field, value)| (field, value.to_owned())),
+        );
+        assert_eq!(rebuilt, Ok(metadata));
     }
 });

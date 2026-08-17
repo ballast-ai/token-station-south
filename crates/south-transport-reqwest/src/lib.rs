@@ -7,8 +7,9 @@ use std::{fmt, sync::Arc, time::Duration};
 use bytes::Bytes;
 use http::{HeaderMap, HeaderName, HeaderValue, header};
 use south_contracts::{
-    BufferedHttpResponseV1, MAX_RESPONSE_BODY_BYTES, MAX_RESPONSE_CONTENT_TYPE_BYTES,
-    MAX_RESPONSE_RETRY_AFTER_BYTES, MAX_STREAM_CHUNK_BYTES, MAX_STREAM_ERROR_BODY_BYTES,
+    BufferedHttpResponseV1, MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES, MAX_RESPONSE_BODY_BYTES,
+    MAX_RESPONSE_CONTENT_TYPE_BYTES, MAX_RESPONSE_RETRY_AFTER_BYTES, MAX_STREAM_CHUNK_BYTES,
+    MAX_STREAM_ERROR_BODY_BYTES, ProviderQuotaMetadataFieldV1, ProviderQuotaMetadataV1,
     StreamChunkV1, StreamReadErrorV1, StreamRejectedV1, StreamTransportConfigV1,
     StreamingResponseHeadV1, TransportErrorV1,
 };
@@ -161,9 +162,16 @@ impl ReqwestTransportV1 {
             header::RETRY_AFTER,
             MAX_RESPONSE_RETRY_AFTER_BYTES,
         )?;
+        let provider_quota_metadata = provider_quota_metadata(response.headers())?;
         let body = read_bounded_body(response).await?;
 
-        BufferedHttpResponseV1::try_from_parts(status, body, content_type, retry_after)
+        BufferedHttpResponseV1::try_from_parts_with_provider_quota_metadata(
+            status,
+            body,
+            content_type,
+            retry_after,
+            provider_quota_metadata,
+        )
     }
 }
 
@@ -241,7 +249,13 @@ impl ReqwestStreamingTransportV1 {
             header::RETRY_AFTER,
             MAX_RESPONSE_RETRY_AFTER_BYTES,
         )?;
-        let head = StreamingResponseHeadV1::try_from_parts(status, content_type, retry_after)?;
+        let provider_quota_metadata = provider_quota_metadata(response.headers())?;
+        let head = StreamingResponseHeadV1::try_from_parts_with_provider_quota_metadata(
+            status,
+            content_type,
+            retry_after,
+            provider_quota_metadata,
+        )?;
 
         if status.is_success() {
             let source = ReqwestStreamSource { response, pending: Bytes::new() };
@@ -424,6 +438,41 @@ fn response_metadata(
         .map(str::to_owned)
         .map(Some)
         .map_err(|_| TransportErrorV1::ResponseMetadataInvalid)
+}
+
+const PROVIDER_QUOTA_METADATA_FIELDS: [ProviderQuotaMetadataFieldV1; 9] = [
+    ProviderQuotaMetadataFieldV1::XRateLimitLimitTokens,
+    ProviderQuotaMetadataFieldV1::XRateLimitRemainingTokens,
+    ProviderQuotaMetadataFieldV1::XRateLimitResetTokens,
+    ProviderQuotaMetadataFieldV1::AnthropicRateLimitTokensLimit,
+    ProviderQuotaMetadataFieldV1::AnthropicRateLimitTokensRemaining,
+    ProviderQuotaMetadataFieldV1::AnthropicRateLimitTokensReset,
+    ProviderQuotaMetadataFieldV1::AnthropicRateLimitUnifiedLimit,
+    ProviderQuotaMetadataFieldV1::AnthropicRateLimitUnifiedRemaining,
+    ProviderQuotaMetadataFieldV1::AnthropicRateLimitUnifiedReset,
+];
+
+fn provider_quota_metadata(
+    headers: &HeaderMap,
+) -> Result<ProviderQuotaMetadataV1, TransportErrorV1> {
+    ProviderQuotaMetadataV1::try_from_iter(
+        PROVIDER_QUOTA_METADATA_FIELDS.into_iter().filter_map(|field| {
+            optional_quota_metadata(headers, field).map(|value| (field, value))
+        }),
+    )
+}
+
+fn optional_quota_metadata(
+    headers: &HeaderMap,
+    field: ProviderQuotaMetadataFieldV1,
+) -> Option<String> {
+    let values = headers.get_all(field.as_header_name());
+    let mut values = values.iter();
+    let value = values.next()?;
+    if values.next().is_some() || value.as_bytes().len() > MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES {
+        return None;
+    }
+    value.to_str().ok().map(str::to_owned)
 }
 
 async fn read_bounded_body(mut response: reqwest::Response) -> Result<Vec<u8>, TransportErrorV1> {

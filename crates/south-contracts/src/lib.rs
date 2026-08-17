@@ -46,6 +46,19 @@ pub const MAX_RESPONSE_CONTENT_TYPE_BYTES: usize = 256;
 /// The maximum byte length of the response `retry-after` value.
 pub const MAX_RESPONSE_RETRY_AFTER_BYTES: usize = 256;
 
+/// The version of the closed provider quota response metadata contract.
+pub const PROVIDER_QUOTA_METADATA_CONTRACT_VERSION: u16 = 1;
+
+/// The exact number of approved provider quota response metadata fields.
+pub const PROVIDER_QUOTA_METADATA_FIELD_COUNT: usize = 9;
+
+/// The maximum byte length of one provider quota response metadata value.
+pub const MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES: usize = 256;
+
+/// The maximum combined byte length of all provider quota response metadata values.
+pub const MAX_PROVIDER_QUOTA_METADATA_TOTAL_BYTES: usize =
+    PROVIDER_QUOTA_METADATA_FIELD_COUNT * MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES;
+
 /// The maximum byte length of the buffered error body attached to a rejected stream.
 pub const MAX_STREAM_ERROR_BODY_BYTES: usize = 64 * 1024;
 
@@ -658,6 +671,193 @@ impl fmt::Debug for JsonPostRequestV1 {
     }
 }
 
+/// The closed set of provider quota response metadata fields.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ProviderQuotaMetadataFieldV1 {
+    /// `x-ratelimit-limit-tokens`.
+    XRateLimitLimitTokens,
+    /// `x-ratelimit-remaining-tokens`.
+    XRateLimitRemainingTokens,
+    /// `x-ratelimit-reset-tokens`.
+    XRateLimitResetTokens,
+    /// `anthropic-ratelimit-tokens-limit`.
+    AnthropicRateLimitTokensLimit,
+    /// `anthropic-ratelimit-tokens-remaining`.
+    AnthropicRateLimitTokensRemaining,
+    /// `anthropic-ratelimit-tokens-reset`.
+    AnthropicRateLimitTokensReset,
+    /// `anthropic-ratelimit-unified-limit`.
+    AnthropicRateLimitUnifiedLimit,
+    /// `anthropic-ratelimit-unified-remaining`.
+    AnthropicRateLimitUnifiedRemaining,
+    /// `anthropic-ratelimit-unified-reset`.
+    AnthropicRateLimitUnifiedReset,
+}
+
+impl ProviderQuotaMetadataFieldV1 {
+    /// Returns the canonical lowercase HTTP header name.
+    #[must_use]
+    pub const fn as_header_name(self) -> &'static str {
+        match self {
+            Self::XRateLimitLimitTokens => "x-ratelimit-limit-tokens",
+            Self::XRateLimitRemainingTokens => "x-ratelimit-remaining-tokens",
+            Self::XRateLimitResetTokens => "x-ratelimit-reset-tokens",
+            Self::AnthropicRateLimitTokensLimit => "anthropic-ratelimit-tokens-limit",
+            Self::AnthropicRateLimitTokensRemaining => "anthropic-ratelimit-tokens-remaining",
+            Self::AnthropicRateLimitTokensReset => "anthropic-ratelimit-tokens-reset",
+            Self::AnthropicRateLimitUnifiedLimit => "anthropic-ratelimit-unified-limit",
+            Self::AnthropicRateLimitUnifiedRemaining => "anthropic-ratelimit-unified-remaining",
+            Self::AnthropicRateLimitUnifiedReset => "anthropic-ratelimit-unified-reset",
+        }
+    }
+
+    const fn index(self) -> usize {
+        match self {
+            Self::XRateLimitLimitTokens => 0,
+            Self::XRateLimitRemainingTokens => 1,
+            Self::XRateLimitResetTokens => 2,
+            Self::AnthropicRateLimitTokensLimit => 3,
+            Self::AnthropicRateLimitTokensRemaining => 4,
+            Self::AnthropicRateLimitTokensReset => 5,
+            Self::AnthropicRateLimitUnifiedLimit => 6,
+            Self::AnthropicRateLimitUnifiedRemaining => 7,
+            Self::AnthropicRateLimitUnifiedReset => 8,
+        }
+    }
+}
+
+impl fmt::Debug for ProviderQuotaMetadataFieldV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::XRateLimitLimitTokens => "XRateLimitLimitTokens",
+            Self::XRateLimitRemainingTokens => "XRateLimitRemainingTokens",
+            Self::XRateLimitResetTokens => "XRateLimitResetTokens",
+            Self::AnthropicRateLimitTokensLimit => "AnthropicRateLimitTokensLimit",
+            Self::AnthropicRateLimitTokensRemaining => "AnthropicRateLimitTokensRemaining",
+            Self::AnthropicRateLimitTokensReset => "AnthropicRateLimitTokensReset",
+            Self::AnthropicRateLimitUnifiedLimit => "AnthropicRateLimitUnifiedLimit",
+            Self::AnthropicRateLimitUnifiedRemaining => "AnthropicRateLimitUnifiedRemaining",
+            Self::AnthropicRateLimitUnifiedReset => "AnthropicRateLimitUnifiedReset",
+        })
+    }
+}
+
+/// Exactly the approved, bounded provider quota response metadata values.
+#[derive(Clone, Default, PartialEq, Eq)]
+pub struct ProviderQuotaMetadataV1 {
+    values: Option<Arc<[Option<String>; PROVIDER_QUOTA_METADATA_FIELD_COUNT]>>,
+}
+
+impl ProviderQuotaMetadataV1 {
+    /// Validates a closed sequence of provider quota metadata fields.
+    pub fn try_from_iter<I>(fields: I) -> Result<Self, TransportErrorV1>
+    where
+        I: IntoIterator<Item = (ProviderQuotaMetadataFieldV1, String)>,
+    {
+        let mut values: [Option<String>; PROVIDER_QUOTA_METADATA_FIELD_COUNT] = Default::default();
+        let mut total_bytes = 0_usize;
+        let mut present_field_count = 0_usize;
+
+        for (field, value) in fields {
+            if value.len() > MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES
+                || HeaderValue::from_str(&value).is_err()
+            {
+                return Err(TransportErrorV1::ResponseMetadataInvalid);
+            }
+            total_bytes = total_bytes
+                .checked_add(value.len())
+                .ok_or(TransportErrorV1::ResponseMetadataInvalid)?;
+            if total_bytes > MAX_PROVIDER_QUOTA_METADATA_TOTAL_BYTES {
+                return Err(TransportErrorV1::ResponseMetadataInvalid);
+            }
+            let slot = &mut values[field.index()];
+            if slot.is_some() {
+                return Err(TransportErrorV1::ResponseMetadataInvalid);
+            }
+            *slot = Some(value);
+            present_field_count += 1;
+        }
+
+        Ok(Self { values: (present_field_count != 0).then(|| Arc::new(values)) })
+    }
+
+    /// Returns one approved field when present.
+    #[must_use]
+    pub fn value(&self, field: ProviderQuotaMetadataFieldV1) -> Option<&str> {
+        self.values.as_ref().and_then(|values| values[field.index()].as_deref())
+    }
+
+    /// Returns the number of present approved fields.
+    #[must_use]
+    pub fn present_field_count(&self) -> usize {
+        self.values.as_ref().map_or(0, |values| values.iter().flatten().count())
+    }
+
+    /// Returns `x-ratelimit-limit-tokens` when present.
+    #[must_use]
+    pub fn x_ratelimit_limit_tokens(&self) -> Option<&str> {
+        self.value(ProviderQuotaMetadataFieldV1::XRateLimitLimitTokens)
+    }
+
+    /// Returns `x-ratelimit-remaining-tokens` when present.
+    #[must_use]
+    pub fn x_ratelimit_remaining_tokens(&self) -> Option<&str> {
+        self.value(ProviderQuotaMetadataFieldV1::XRateLimitRemainingTokens)
+    }
+
+    /// Returns `x-ratelimit-reset-tokens` when present.
+    #[must_use]
+    pub fn x_ratelimit_reset_tokens(&self) -> Option<&str> {
+        self.value(ProviderQuotaMetadataFieldV1::XRateLimitResetTokens)
+    }
+
+    /// Returns `anthropic-ratelimit-tokens-limit` when present.
+    #[must_use]
+    pub fn anthropic_ratelimit_tokens_limit(&self) -> Option<&str> {
+        self.value(ProviderQuotaMetadataFieldV1::AnthropicRateLimitTokensLimit)
+    }
+
+    /// Returns `anthropic-ratelimit-tokens-remaining` when present.
+    #[must_use]
+    pub fn anthropic_ratelimit_tokens_remaining(&self) -> Option<&str> {
+        self.value(ProviderQuotaMetadataFieldV1::AnthropicRateLimitTokensRemaining)
+    }
+
+    /// Returns `anthropic-ratelimit-tokens-reset` when present.
+    #[must_use]
+    pub fn anthropic_ratelimit_tokens_reset(&self) -> Option<&str> {
+        self.value(ProviderQuotaMetadataFieldV1::AnthropicRateLimitTokensReset)
+    }
+
+    /// Returns `anthropic-ratelimit-unified-limit` when present.
+    #[must_use]
+    pub fn anthropic_ratelimit_unified_limit(&self) -> Option<&str> {
+        self.value(ProviderQuotaMetadataFieldV1::AnthropicRateLimitUnifiedLimit)
+    }
+
+    /// Returns `anthropic-ratelimit-unified-remaining` when present.
+    #[must_use]
+    pub fn anthropic_ratelimit_unified_remaining(&self) -> Option<&str> {
+        self.value(ProviderQuotaMetadataFieldV1::AnthropicRateLimitUnifiedRemaining)
+    }
+
+    /// Returns `anthropic-ratelimit-unified-reset` when present.
+    #[must_use]
+    pub fn anthropic_ratelimit_unified_reset(&self) -> Option<&str> {
+        self.value(ProviderQuotaMetadataFieldV1::AnthropicRateLimitUnifiedReset)
+    }
+}
+
+impl fmt::Debug for ProviderQuotaMetadataV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ProviderQuotaMetadataV1")
+            .field("contract_version", &PROVIDER_QUOTA_METADATA_CONTRACT_VERSION)
+            .field("present_field_count", &self.present_field_count())
+            .finish_non_exhaustive()
+    }
+}
+
 /// A bounded UTF-8 HTTP response with only explicitly reviewed metadata.
 #[derive(PartialEq, Eq)]
 pub struct BufferedHttpResponseV1 {
@@ -665,15 +865,33 @@ pub struct BufferedHttpResponseV1 {
     body: String,
     content_type: Option<String>,
     retry_after: Option<String>,
+    provider_quota_metadata: ProviderQuotaMetadataV1,
 }
 
 impl BufferedHttpResponseV1 {
-    /// Validates a buffered response and its two allowed metadata fields.
+    /// Validates a buffered response with the legacy empty quota metadata shape.
     pub fn try_from_parts(
         status: StatusCode,
         body: Vec<u8>,
         content_type: Option<String>,
         retry_after: Option<String>,
+    ) -> Result<Self, TransportErrorV1> {
+        Self::try_from_parts_with_provider_quota_metadata(
+            status,
+            body,
+            content_type,
+            retry_after,
+            ProviderQuotaMetadataV1::default(),
+        )
+    }
+
+    /// Validates a buffered response and all explicitly allowed metadata.
+    pub fn try_from_parts_with_provider_quota_metadata(
+        status: StatusCode,
+        body: Vec<u8>,
+        content_type: Option<String>,
+        retry_after: Option<String>,
+        provider_quota_metadata: ProviderQuotaMetadataV1,
     ) -> Result<Self, TransportErrorV1> {
         if status.is_redirection() {
             return Err(TransportErrorV1::RedirectDenied);
@@ -685,7 +903,7 @@ impl BufferedHttpResponseV1 {
         validate_response_metadata(retry_after.as_deref(), MAX_RESPONSE_RETRY_AFTER_BYTES)?;
         let body = String::from_utf8(body).map_err(|_| TransportErrorV1::ResponseBodyNotUtf8)?;
 
-        Ok(Self { status, body, content_type, retry_after })
+        Ok(Self { status, body, content_type, retry_after, provider_quota_metadata })
     }
 
     /// Returns the upstream HTTP status.
@@ -711,6 +929,12 @@ impl BufferedHttpResponseV1 {
     pub fn retry_after(&self) -> Option<&str> {
         self.retry_after.as_deref()
     }
+
+    /// Returns the bounded provider quota response metadata.
+    #[must_use]
+    pub const fn provider_quota_metadata(&self) -> &ProviderQuotaMetadataV1 {
+        &self.provider_quota_metadata
+    }
 }
 
 impl fmt::Debug for BufferedHttpResponseV1 {
@@ -722,6 +946,7 @@ impl fmt::Debug for BufferedHttpResponseV1 {
             .field("body_byte_count", &self.body.len())
             .field("has_content_type", &self.content_type.is_some())
             .field("has_retry_after", &self.retry_after.is_some())
+            .field("provider_quota_metadata", &self.provider_quota_metadata)
             .finish_non_exhaustive()
     }
 }
@@ -729,16 +954,17 @@ impl fmt::Debug for BufferedHttpResponseV1 {
 /// The bounded, headers-ready metadata of one streaming HTTP exchange.
 ///
 /// The head is handed to the host before any body byte is pulled, so the host can branch on
-/// status and the two explicitly allowed metadata fields without touching the stream.
+/// status and all explicitly allowed metadata without touching the stream.
 #[derive(Clone, PartialEq, Eq)]
 pub struct StreamingResponseHeadV1 {
     status: StatusCode,
     content_type: Option<String>,
     retry_after: Option<String>,
+    provider_quota_metadata: ProviderQuotaMetadataV1,
 }
 
 impl StreamingResponseHeadV1 {
-    /// Validates a streaming response head and its two allowed metadata fields.
+    /// Validates a streaming response head with the legacy empty quota metadata shape.
     ///
     /// Redirect statuses are refused because the streaming transport must never follow one.
     pub fn try_from_parts(
@@ -746,13 +972,28 @@ impl StreamingResponseHeadV1 {
         content_type: Option<String>,
         retry_after: Option<String>,
     ) -> Result<Self, TransportErrorV1> {
+        Self::try_from_parts_with_provider_quota_metadata(
+            status,
+            content_type,
+            retry_after,
+            ProviderQuotaMetadataV1::default(),
+        )
+    }
+
+    /// Validates a streaming response head and all explicitly allowed metadata.
+    pub fn try_from_parts_with_provider_quota_metadata(
+        status: StatusCode,
+        content_type: Option<String>,
+        retry_after: Option<String>,
+        provider_quota_metadata: ProviderQuotaMetadataV1,
+    ) -> Result<Self, TransportErrorV1> {
         if status.is_redirection() {
             return Err(TransportErrorV1::RedirectDenied);
         }
         validate_response_metadata(content_type.as_deref(), MAX_RESPONSE_CONTENT_TYPE_BYTES)?;
         validate_response_metadata(retry_after.as_deref(), MAX_RESPONSE_RETRY_AFTER_BYTES)?;
 
-        Ok(Self { status, content_type, retry_after })
+        Ok(Self { status, content_type, retry_after, provider_quota_metadata })
     }
 
     /// Returns the upstream HTTP status.
@@ -772,6 +1013,12 @@ impl StreamingResponseHeadV1 {
     pub fn retry_after(&self) -> Option<&str> {
         self.retry_after.as_deref()
     }
+
+    /// Returns the bounded provider quota response metadata.
+    #[must_use]
+    pub const fn provider_quota_metadata(&self) -> &ProviderQuotaMetadataV1 {
+        &self.provider_quota_metadata
+    }
 }
 
 impl fmt::Debug for StreamingResponseHeadV1 {
@@ -782,6 +1029,7 @@ impl fmt::Debug for StreamingResponseHeadV1 {
             .field("status", &self.status)
             .field("has_content_type", &self.content_type.is_some())
             .field("has_retry_after", &self.retry_after.is_some())
+            .field("provider_quota_metadata", &self.provider_quota_metadata)
             .finish_non_exhaustive()
     }
 }

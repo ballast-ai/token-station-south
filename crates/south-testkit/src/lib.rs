@@ -46,6 +46,7 @@ macro_rules! fixed_debug {
 }
 
 mod header_auth;
+mod quota;
 mod stream;
 
 pub use header_auth::{
@@ -55,6 +56,15 @@ pub use header_auth::{
     MAX_HEADER_AUTH_MISMATCHES_V1, ReferenceAssembledHeaderAuthExecutorV1,
     run_header_auth_conformance_v1,
 };
+pub use quota::{
+    AssembledProviderQuotaMetadataExecutionFutureV1, AssembledProviderQuotaMetadataExecutorV1,
+    MAX_PROVIDER_QUOTA_METADATA_MISMATCHES_V1, ProviderQuotaMetadataConformanceFailureV1,
+    ProviderQuotaMetadataConformanceReportV1, ProviderQuotaMetadataEvidenceV1,
+    ProviderQuotaMetadataMismatchCategoryV1, ProviderQuotaMetadataMismatchV1,
+    ProviderQuotaMetadataObservationV1, ReferenceAssembledProviderQuotaMetadataExecutorV1,
+    run_provider_quota_metadata_conformance_v1,
+};
+
 pub use stream::{
     AssembledProviderStreamExecutorV1, AssembledStreamExecutionFutureV1,
     MAX_PROVIDER_STREAM_MISMATCHES_V1, ProviderStreamConformanceFailureV1,
