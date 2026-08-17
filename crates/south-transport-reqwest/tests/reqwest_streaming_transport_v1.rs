@@ -7,8 +7,8 @@ use std::{
 
 use south_contracts::{
     BearerAuthV1, CredentialSlotV1, JsonBodyV1, JsonPostRequestV1, MAX_STREAM_CHUNK_BYTES,
-    MAX_STREAM_ERROR_BODY_BYTES, ProviderEndpointV1, RelativePathV1, SafeHeaders,
-    StreamReadErrorV1, StreamTransportConfigV1, TransportErrorV1,
+    MAX_STREAM_ERROR_BODY_BYTES, ProviderAuthV1, ProviderEndpointV1, RelativePathV1, SafeHeaders,
+    SecretHeaderV1, StreamReadErrorV1, StreamTransportConfigV1, TransportErrorV1,
 };
 use south_core::{
     CredentialResolutionFuture, CredentialResolver, ProviderBindingV1, ProviderCallErrorV1,
@@ -270,6 +270,60 @@ async fn opens_exact_post_and_streams_chunks_to_clean_eof() {
     let mut expected = CHUNK_ONE.to_vec();
     expected.extend_from_slice(CHUNK_TWO);
     assert_eq!(delivered, expected);
+    loopback.task.await.expect("server task should finish");
+}
+
+#[tokio::test]
+async fn header_secret_open_injects_the_sanctioned_header_and_no_authorization() {
+    let mut first = chunked_headers(&[("content-type", "text/event-stream")]);
+    first.extend_from_slice(&encoded_chunk(CHUNK_ONE));
+    first.extend_from_slice(b"0\r\n\r\n");
+    let loopback = scripted_loopback(first, None, Vec::new(), false);
+    let transport =
+        ReqwestStreamingTransportV1::new(stream_config()).expect("transport should build");
+    let resolver = StaticResolver::default();
+    let binding = ProviderBindingV1::new(
+        ProviderEndpointV1::parse(&loopback.endpoint).expect("loopback endpoint should be valid"),
+        CredentialSlotV1::parse("primary").expect("fixture slot should be valid"),
+    );
+    let request = JsonPostRequestV1::new(
+        RelativePathV1::parse("v1/stream").expect("fixture path should be valid"),
+        SafeHeaders::try_from_iter([("accept", "text/event-stream"), ("x-test", HEADER_SENTINEL)])
+            .expect("fixture headers should be valid"),
+        JsonBodyV1::parse(&format!(r#"{{"value":"{BODY_SENTINEL}"}}"#))
+            .expect("fixture body should be valid"),
+        ProviderAuthV1::HeaderSecret {
+            header: SecretHeaderV1::XApiKey,
+            slot: BearerAuthV1::new(
+                CredentialSlotV1::parse("primary").expect("fixture slot should be valid"),
+            ),
+        },
+    );
+
+    let mut call = open_streaming_provider_call_v1(
+        &binding,
+        &request,
+        &resolver,
+        &transport,
+        None,
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("a header-secret streaming open should succeed");
+    let received = loopback.request.await.expect("server should report the request");
+
+    // The sanctioned header carries the resolved secret verbatim, byte for byte.
+    assert_eq!(received.headers.get("x-api-key").map(String::as_str), Some(SECRET_SENTINEL));
+    // No Authorization header may exist on the wire for a header-secret exchange.
+    assert!(!received.headers.contains_key("authorization"));
+    assert_eq!(call.head().status().as_u16(), 200);
+
+    let mut delivered = Vec::new();
+    while let Some(result) = call.next_chunk().await {
+        let chunk = result.expect("streamed pulls should not fail");
+        delivered.extend_from_slice(chunk.as_bytes());
+    }
+    assert_eq!(delivered, CHUNK_ONE);
     loopback.task.await.expect("server task should finish");
 }
 

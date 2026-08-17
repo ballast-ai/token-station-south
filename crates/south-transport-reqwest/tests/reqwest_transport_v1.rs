@@ -8,7 +8,8 @@ use std::{
 use south_contracts::{
     BearerAuthV1, BufferedHttpResponseV1, CredentialSlotV1, JsonBodyV1, JsonPostRequestV1,
     MAX_RESPONSE_BODY_BYTES, MAX_RESPONSE_CONTENT_TYPE_BYTES, MAX_RESPONSE_RETRY_AFTER_BYTES,
-    ProviderEndpointV1, RelativePathV1, SafeHeaders, TransportErrorV1,
+    ProviderAuthV1, ProviderEndpointV1, RelativePathV1, SafeHeaders, SecretHeaderV1,
+    TransportErrorV1,
 };
 use south_core::{
     CredentialResolutionFuture, CredentialResolver, ProviderBindingV1, ProviderCallErrorV1,
@@ -272,6 +273,71 @@ async fn sends_exact_post_and_preserves_created_response() {
     assert_eq!(result.body(), r#"{"ok":true}"#);
     assert_eq!(result.content_type(), Some("application/json"));
     assert_eq!(result.retry_after(), Some("7"));
+}
+
+#[tokio::test]
+async fn header_secret_call_injects_the_sanctioned_header_and_no_authorization() {
+    for header in [
+        SecretHeaderV1::ApiKey,
+        SecretHeaderV1::XApiKey,
+        SecretHeaderV1::XGoogApiKey,
+        SecretHeaderV1::XiApiKey,
+        SecretHeaderV1::OcpApimSubscriptionKey,
+    ] {
+        let loopback = loopback_once(response(
+            "200 OK",
+            &[("content-type", "application/json")],
+            br#"{"ok":true}"#,
+        ))
+        .await;
+        let transport = ReqwestTransportV1::new(config()).expect("transport should build");
+        let resolver = StaticResolver::default();
+        let binding = ProviderBindingV1::new(
+            ProviderEndpointV1::parse(&loopback.endpoint)
+                .expect("loopback endpoint should be valid"),
+            CredentialSlotV1::parse("primary").expect("fixture slot should be valid"),
+        );
+        let request = JsonPostRequestV1::new(
+            RelativePathV1::parse("v1/call").expect("fixture path should be valid"),
+            SafeHeaders::try_from_iter([("x-test", HEADER_SENTINEL)])
+                .expect("fixture headers should be valid"),
+            JsonBodyV1::parse(&format!(r#"{{"value":"{BODY_SENTINEL}"}}"#))
+                .expect("fixture body should be valid"),
+            ProviderAuthV1::HeaderSecret {
+                header,
+                slot: BearerAuthV1::new(
+                    CredentialSlotV1::parse("primary").expect("fixture slot should be valid"),
+                ),
+            },
+        );
+
+        let result = execute_provider_call_v1(
+            &binding,
+            &request,
+            &resolver,
+            &transport,
+            tokio::time::Instant::now() + Duration::from_secs(30),
+            &CancellationToken::new(),
+        )
+        .await
+        .expect("a header-secret call should succeed");
+        let received = loopback.request.await.expect("server should report the request");
+        loopback.task.await.expect("server task should finish");
+
+        // The sanctioned header carries the resolved secret verbatim, byte for byte.
+        assert_eq!(
+            received.headers.get(header.header_name()).map(String::as_str),
+            Some(SECRET_SENTINEL)
+        );
+        // No Authorization header may exist on the wire for a header-secret exchange.
+        assert!(!received.headers.contains_key("authorization"));
+        assert_eq!(result.status().as_u16(), 200);
+
+        // The plain-header channel still rejects the sanctioned name outright.
+        let error = SafeHeaders::try_from_iter([(header.header_name(), "plain-channel-secret")])
+            .expect_err("the plain header channel must keep rejecting sanctioned names");
+        assert_eq!(error.code(), "RESERVED_HEADER_FORBIDDEN");
+    }
 }
 
 #[tokio::test]

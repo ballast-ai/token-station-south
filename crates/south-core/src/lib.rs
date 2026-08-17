@@ -7,8 +7,8 @@ use std::{fmt, future::Future, pin::Pin, time::Duration};
 use http::Method;
 use south_contracts::{
     BufferedHttpResponseV1, CredentialSlotV1, JsonBodyV1, JsonPostRequestV1, PreparationErrorV1,
-    ProviderEndpointV1, SafeHeaders, StreamChunkV1, StreamReadErrorV1, StreamRejectedV1,
-    StreamingResponseHeadV1, TransportErrorV1,
+    ProviderAuthV1, ProviderEndpointV1, SafeHeaders, StreamChunkV1, StreamReadErrorV1,
+    StreamRejectedV1, StreamingResponseHeadV1, TransportErrorV1,
 };
 use thiserror::Error;
 use tokio::time::{Instant, timeout_at};
@@ -83,13 +83,49 @@ pub trait CredentialResolver: Send + Sync {
 /// A request that has passed the host endpoint and credential binding checks.
 ///
 /// Its fields are private and this crate exposes no public constructor. Transport implementations
-/// receive the plaintext credential only through [`Self::bearer_secret`].
+/// receive the plaintext credential only through [`Self::auth_header`].
 pub struct PreparedHttpRequestV1<'request> {
     method: Method,
     url: Url,
     headers: &'request SafeHeaders,
     body: &'request JsonBodyV1,
-    bearer_secret: SecretValue,
+    auth_header_name: &'static str,
+    auth_header_value: Zeroizing<Vec<u8>>,
+}
+
+impl<'request> PreparedHttpRequestV1<'request> {
+    /// Binds the resolved secret to the one auth header declared by the request.
+    ///
+    /// The Bearer arm produces `authorization` with a `Bearer `-prefixed value; the header-secret
+    /// arm produces the sanctioned header name with the verbatim secret bytes. The value lives in
+    /// a South-owned allocation that zeroizes on drop, and the original resolver allocation is
+    /// dropped (and therefore zeroized) here when a prefixed copy replaces it.
+    fn assemble(
+        request: &'request JsonPostRequestV1,
+        destination: Url,
+        secret: SecretValue,
+    ) -> Self {
+        let (auth_header_name, auth_header_value) = match request.auth() {
+            ProviderAuthV1::Bearer(_) => {
+                const BEARER_PREFIX: &[u8] = b"Bearer ";
+                let mut value =
+                    Zeroizing::new(Vec::with_capacity(BEARER_PREFIX.len() + secret.value.len()));
+                value.extend_from_slice(BEARER_PREFIX);
+                value.extend_from_slice(&secret.value);
+                ("authorization", value)
+            }
+            ProviderAuthV1::HeaderSecret { header, .. } => (header.header_name(), secret.value),
+        };
+
+        Self {
+            method: Method::POST,
+            url: destination,
+            headers: request.headers(),
+            body: request.body(),
+            auth_header_name,
+            auth_header_value,
+        }
+    }
 }
 
 impl PreparedHttpRequestV1<'_> {
@@ -117,10 +153,14 @@ impl PreparedHttpRequestV1<'_> {
         self.body
     }
 
-    /// Returns the resolved Bearer credential bytes at the transport assembly boundary.
+    /// Returns the one auth header as its name and complete value bytes.
+    ///
+    /// For the Bearer arm the value carries its `Bearer ` prefix; for the header-secret arm the
+    /// value is the verbatim resolved secret. The name is never a plain-channel header: every
+    /// sanctioned name, and `authorization` itself, stays on the reserved-header blacklist.
     #[must_use]
-    pub fn bearer_secret(&self) -> &[u8] {
-        self.bearer_secret.value.as_slice()
+    pub fn auth_header(&self) -> (&'static str, &[u8]) {
+        (self.auth_header_name, self.auth_header_value.as_slice())
     }
 }
 
@@ -217,13 +257,7 @@ where
             .resolve(requested_slot)
             .await
             .map_err(|_| PreparationErrorV1::CredentialResolutionFailed)?;
-        let prepared = PreparedHttpRequestV1 {
-            method: Method::POST,
-            url: destination,
-            headers: request.headers(),
-            body: request.body(),
-            bearer_secret: secret,
-        };
+        let prepared = PreparedHttpRequestV1::assemble(request, destination, secret);
         let remaining_timeout = deadline
             .checked_duration_since(Instant::now())
             .filter(|remaining| !remaining.is_zero())
@@ -434,13 +468,7 @@ where
             .resolve(requested_slot)
             .await
             .map_err(|_| PreparationErrorV1::CredentialResolutionFailed)?;
-        let prepared = PreparedHttpRequestV1 {
-            method: Method::POST,
-            url: destination,
-            headers: request.headers(),
-            body: request.body(),
-            bearer_secret: secret,
-        };
+        let prepared = PreparedHttpRequestV1::assemble(request, destination, secret);
         transport.open(&prepared).await.map_err(|error| match error {
             StreamOpenErrorV1::Rejected(rejected) => ProviderCallErrorV1::Rejected(rejected),
             StreamOpenErrorV1::Transport(error) => error.into(),

@@ -11,7 +11,8 @@ use std::{
 use http::{Method, StatusCode};
 use south_contracts::{
     BearerAuthV1, BufferedHttpResponseV1, CredentialSlotV1, JsonBodyV1, JsonPostRequestV1,
-    PreparationErrorV1, ProviderEndpointV1, RelativePathV1, SafeHeaders, TransportErrorV1,
+    PreparationErrorV1, ProviderAuthV1, ProviderEndpointV1, RelativePathV1, SafeHeaders,
+    SecretHeaderV1, TransportErrorV1,
 };
 use south_core::{
     AsyncHttpTransport, CredentialResolutionErrorV1, CredentialResolutionFuture,
@@ -49,6 +50,22 @@ fn request(path: &str, slot: &str) -> JsonPostRequestV1 {
         JsonBodyV1::parse(&format!(r#"{{"value":"{BODY_SENTINEL}"}}"#))
             .expect("fixture body should be valid"),
         BearerAuthV1::new(CredentialSlotV1::parse(slot).expect("fixture slot should be valid")),
+    )
+}
+
+fn header_secret_request(path: &str, slot: &str, header: SecretHeaderV1) -> JsonPostRequestV1 {
+    JsonPostRequestV1::new(
+        RelativePathV1::parse(path).expect("fixture path should be valid"),
+        SafeHeaders::try_from_iter([("x-test", HEADER_SENTINEL)])
+            .expect("fixture header should be valid"),
+        JsonBodyV1::parse(&format!(r#"{{"value":"{BODY_SENTINEL}"}}"#))
+            .expect("fixture body should be valid"),
+        ProviderAuthV1::HeaderSecret {
+            header,
+            slot: BearerAuthV1::new(
+                CredentialSlotV1::parse(slot).expect("fixture slot should be valid"),
+            ),
+        },
     )
 }
 
@@ -156,7 +173,8 @@ struct Observation {
     url: Url,
     header: String,
     body: String,
-    secret: Vec<u8>,
+    auth_header_name: String,
+    auth_header_value: Vec<u8>,
     remaining_timeout: Duration,
     prepared_debug: String,
 }
@@ -168,7 +186,7 @@ impl AsyncHttpTransport for RecordingTransport {
         remaining_timeout: Duration,
     ) -> TransportFuture<'a> {
         self.calls.fetch_add(1, Ordering::SeqCst);
-        assert_eq!(prepared.bearer_secret(), SECRET_SENTINEL.as_bytes());
+        let (auth_header_name, auth_header_value) = prepared.auth_header();
         let observation = Observation {
             method: prepared.method().clone(),
             url: prepared.url().clone(),
@@ -178,7 +196,8 @@ impl AsyncHttpTransport for RecordingTransport {
                 .expect("prepared fixture should retain its ordinary header")
                 .to_owned(),
             body: prepared.body().as_str().to_owned(),
-            secret: prepared.bearer_secret().to_vec(),
+            auth_header_name: auth_header_name.to_owned(),
+            auth_header_value: auth_header_value.to_vec(),
             remaining_timeout,
             prepared_debug: format!("{prepared:?}"),
         };
@@ -316,7 +335,8 @@ async fn success_prepares_exactly_one_post_for_the_transport() {
                 .expect("expected prepared URL should be valid"),
             header: HEADER_SENTINEL.to_owned(),
             body: format!(r#"{{"value":"{BODY_SENTINEL}"}}"#),
-            secret: SECRET_SENTINEL.as_bytes().to_vec(),
+            auth_header_name: "authorization".to_owned(),
+            auth_header_value: format!("Bearer {SECRET_SENTINEL}").into_bytes(),
             remaining_timeout: Duration::from_secs(30),
             prepared_debug: format!(
                 "PreparedHttpRequestV1 {{ method: POST, header_count: 1, body_byte_count: {}, .. }}",
@@ -329,6 +349,63 @@ async fn success_prepares_exactly_one_post_for_the_transport() {
     {
         assert!(!observation.prepared_debug.contains(sentinel));
     }
+}
+
+#[tokio::test(start_paused = true)]
+async fn header_secret_prepares_the_sanctioned_header_with_the_verbatim_secret() {
+    for header in [
+        SecretHeaderV1::ApiKey,
+        SecretHeaderV1::XApiKey,
+        SecretHeaderV1::XGoogApiKey,
+        SecretHeaderV1::XiApiKey,
+        SecretHeaderV1::OcpApimSubscriptionKey,
+    ] {
+        let resolver = ImmediateResolver::default();
+        let transport = RecordingTransport::default();
+
+        execute_provider_call_v1(
+            &binding(&format!("https://{ENDPOINT_SENTINEL}/base"), SLOT_SENTINEL),
+            &header_secret_request(PATH_SENTINEL, SLOT_SENTINEL, header),
+            &resolver,
+            &transport,
+            tokio::time::Instant::now() + Duration::from_secs(30),
+            &CancellationToken::new(),
+        )
+        .await
+        .expect("a valid header-secret call should succeed");
+
+        let observation = transport
+            .observation
+            .lock()
+            .expect("test observation lock should be available")
+            .as_ref()
+            .expect("transport should record the prepared request")
+            .clone();
+        assert_eq!(observation.auth_header_name, header.header_name());
+        assert_eq!(observation.auth_header_value, SECRET_SENTINEL.as_bytes());
+        assert_ne!(observation.auth_header_name, "authorization");
+    }
+}
+
+#[tokio::test]
+async fn header_secret_slot_mismatch_stops_before_resolver_and_transport() {
+    let resolver = ImmediateResolver::default();
+    let transport = RecordingTransport::default();
+
+    let error = execute_provider_call_v1(
+        &binding("https://provider.invalid/base", "bound-slot"),
+        &header_secret_request("v1/call", "other-slot", SecretHeaderV1::XApiKey),
+        &resolver,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect_err("a mismatched header-secret slot must fail");
+
+    assert_eq!(error.code(), PreparationErrorV1::CredentialBindingMismatch.code());
+    assert_eq!(resolver.calls.load(Ordering::SeqCst), 0);
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 0);
 }
 
 #[tokio::test(start_paused = true)]

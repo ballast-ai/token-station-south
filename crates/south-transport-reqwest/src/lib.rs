@@ -183,7 +183,8 @@ impl ReqwestTransportV1 {
 /// mid-stream — the idle guard, or the optional total bound — surfaces as `STREAM_IDLE_TIMEOUT`;
 /// only the caller's own deadline maps to `STREAM_DEADLINE_EXCEEDED`.
 ///
-/// The `Authorization` value shares one South-owned allocation that zeroizes its plaintext bytes
+/// The auth header value — `Authorization` for the Bearer arm, one sanctioned secret header for
+/// the header-secret arm — shares one South-owned allocation that zeroizes its plaintext bytes
 /// when the exchange releases its last clone, with the same coverage caveats as the buffered
 /// transport.
 pub struct ReqwestStreamingTransportV1 {
@@ -340,50 +341,52 @@ fn assemble_headers(request: &PreparedHttpRequestV1<'_>) -> Result<HeaderMap, Tr
         headers.insert(name, value);
     }
 
-    let authorization = authorization_header(request.bearer_secret())?;
-    headers.insert(header::AUTHORIZATION, authorization);
+    // The prepared request carries exactly one auth header: `authorization` with its `Bearer `
+    // prefix, or one sanctioned secret header with the verbatim secret. Injecting only that pair
+    // keeps `Authorization` off the wire for header-secret exchanges.
+    let (auth_name, auth_value) = request.auth_header();
+    let auth_name = HeaderName::from_bytes(auth_name.as_bytes())
+        .map_err(|_| TransportErrorV1::RequestFailed)?;
+    headers.insert(auth_name, auth_header_value(auth_value)?);
     Ok(headers)
 }
 
-/// A South-owned HTTP authorization allocation that zeroizes its plaintext bytes on drop.
+/// A South-owned auth header allocation that zeroizes its plaintext bytes on drop.
 ///
 /// Clones made by `Bytes` and `HeaderValue` share this owner. The guarantee ends at this
 /// allocation and does not cover plaintext copies inside HTTP, TLS, operating-system, or provider
 /// infrastructure buffers.
-struct BearerHeaderOwner {
+struct AuthHeaderOwner {
     value: Zeroizing<Vec<u8>>,
     #[cfg(test)]
     drop_probe: Option<Arc<std::sync::atomic::AtomicBool>>,
 }
 
-impl BearerHeaderOwner {
-    fn new(secret: &[u8]) -> Self {
-        let mut value = Zeroizing::new(Vec::with_capacity(b"Bearer ".len() + secret.len()));
-        value.extend_from_slice(b"Bearer ");
-        value.extend_from_slice(secret);
+impl AuthHeaderOwner {
+    fn new(value: &[u8]) -> Self {
         Self {
-            value,
+            value: Zeroizing::new(value.to_vec()),
             #[cfg(test)]
             drop_probe: None,
         }
     }
 
     #[cfg(test)]
-    fn new_with_drop_probe(secret: &[u8], drop_probe: Arc<std::sync::atomic::AtomicBool>) -> Self {
-        let mut owner = Self::new(secret);
+    fn new_with_drop_probe(value: &[u8], drop_probe: Arc<std::sync::atomic::AtomicBool>) -> Self {
+        let mut owner = Self::new(value);
         owner.drop_probe = Some(drop_probe);
         owner
     }
 }
 
-impl AsRef<[u8]> for BearerHeaderOwner {
+impl AsRef<[u8]> for AuthHeaderOwner {
     fn as_ref(&self) -> &[u8] {
         self.value.as_slice()
     }
 }
 
 #[cfg(test)]
-impl Drop for BearerHeaderOwner {
+impl Drop for AuthHeaderOwner {
     fn drop(&mut self) {
         if let Some(drop_probe) = &self.drop_probe {
             drop_probe.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -391,18 +394,16 @@ impl Drop for BearerHeaderOwner {
     }
 }
 
-fn authorization_header(secret: &[u8]) -> Result<HeaderValue, TransportErrorV1> {
-    authorization_header_from_owner(BearerHeaderOwner::new(secret))
+fn auth_header_value(value: &[u8]) -> Result<HeaderValue, TransportErrorV1> {
+    auth_header_value_from_owner(AuthHeaderOwner::new(value))
 }
 
-fn authorization_header_from_owner(
-    owner: BearerHeaderOwner,
-) -> Result<HeaderValue, TransportErrorV1> {
+fn auth_header_value_from_owner(owner: AuthHeaderOwner) -> Result<HeaderValue, TransportErrorV1> {
     let bytes = Bytes::from_owner(owner);
-    let mut authorization =
+    let mut value =
         HeaderValue::from_maybe_shared(bytes).map_err(|_| TransportErrorV1::RequestFailed)?;
-    authorization.set_sensitive(true);
-    Ok(authorization)
+    value.set_sensitive(true);
+    Ok(value)
 }
 
 fn response_metadata(
@@ -469,32 +470,32 @@ mod tests {
     use south_contracts::JsonBodyV1;
 
     use super::{
-        BearerHeaderOwner, authorization_header, authorization_header_from_owner,
-        effective_timeout, request_body,
+        AuthHeaderOwner, auth_header_value, auth_header_value_from_owner, effective_timeout,
+        request_body,
     };
 
     #[test]
-    fn bearer_header_is_sensitive_and_redacted() {
+    fn auth_header_value_is_sensitive_and_redacted() {
         const SECRET_SENTINEL: &str = "sensitive-header-secret-sentinel";
 
-        let header = authorization_header(SECRET_SENTINEL.as_bytes())
-            .expect("valid credential fixture should produce an authorization header");
+        let header = auth_header_value(SECRET_SENTINEL.as_bytes())
+            .expect("valid credential fixture should produce an auth header value");
 
         assert!(header.is_sensitive());
         assert!(!format!("{header:?}").contains(SECRET_SENTINEL));
     }
 
     #[test]
-    fn bearer_header_shares_and_drops_its_zeroizing_owner() {
+    fn auth_header_value_shares_and_drops_its_zeroizing_owner() {
         let dropped = Arc::new(AtomicBool::new(false));
-        let owner = BearerHeaderOwner::new_with_drop_probe(
+        let owner = AuthHeaderOwner::new_with_drop_probe(
             b"owner-lifetime-secret-sentinel",
             Arc::clone(&dropped),
         );
         let owner_pointer = owner.as_ref().as_ptr();
 
-        let header = authorization_header_from_owner(owner)
-            .expect("valid credential fixture should produce an authorization header");
+        let header = auth_header_value_from_owner(owner)
+            .expect("valid credential fixture should produce an auth header value");
         let header_clone = header.clone();
 
         assert_eq!(header.as_bytes().as_ptr(), owner_pointer);
