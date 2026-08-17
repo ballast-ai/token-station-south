@@ -45,7 +45,17 @@ macro_rules! fixed_debug {
     };
 }
 
+mod quota;
 mod stream;
+
+pub use quota::{
+    AssembledProviderQuotaMetadataExecutionFutureV1, AssembledProviderQuotaMetadataExecutorV1,
+    MAX_PROVIDER_QUOTA_METADATA_MISMATCHES_V1, ProviderQuotaMetadataConformanceFailureV1,
+    ProviderQuotaMetadataConformanceReportV1, ProviderQuotaMetadataEvidenceV1,
+    ProviderQuotaMetadataMismatchCategoryV1, ProviderQuotaMetadataMismatchV1,
+    ProviderQuotaMetadataObservationV1, ReferenceAssembledProviderQuotaMetadataExecutorV1,
+    run_provider_quota_metadata_conformance_v1,
+};
 
 pub use stream::{
     AssembledProviderStreamExecutorV1, AssembledStreamExecutionFutureV1,

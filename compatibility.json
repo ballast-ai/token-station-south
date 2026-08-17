@@ -1,7 +1,7 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "release": {
-    "version": "0.1.1",
+    "version": "0.2.0",
     "stability": "library_slice"
   },
   "contracts": {
@@ -10,19 +10,27 @@
     "auth": 1,
     "error": 1,
     "stream": 1,
+    "provider_quota_metadata": 1,
     "canonical_ir": null,
     "header_limits": {
       "count": 64,
       "name_bytes": 256,
       "value_bytes": 16384,
       "total_bytes": 65536
+    },
+    "provider_quota_metadata_limits": {
+      "field_count": 9,
+      "value_bytes": 256,
+      "total_bytes": 2304
     }
   },
   "conformance": {
     "suite_id": "south.provider-call.v1",
     "provider_call_suite": 1,
     "provider_stream_suite_id": "south.provider-stream.v1",
-    "provider_stream_suite": 1
+    "provider_stream_suite": 1,
+    "provider_quota_metadata_suite_id": "south.provider-quota-metadata.v1",
+    "provider_quota_metadata_suite": 1
   },
   "provider_api": {
     "wit_version": null
@@ -31,14 +39,14 @@
     "abi_version": null
   },
   "crates": {
-    "south-contracts": "http_auth_error_v1",
-    "south-core": "buffered_provider_call_v1",
+    "south-contracts": "http_auth_error_stream_quota_metadata_v1",
+    "south-core": "buffered_streaming_provider_call_v1",
     "south-migration": "placeholder",
     "south-provider-api": "placeholder",
-    "south-provider-conformance": "provider_call_suite_v1",
+    "south-provider-conformance": "provider_call_stream_quota_metadata_suites_v1",
     "south-provider-runtime": "placeholder",
-    "south-testkit": "provider_call_runner_v1",
-    "south-transport-reqwest": "buffered_json_post_v1",
+    "south-testkit": "provider_call_stream_quota_metadata_runners_v1",
+    "south-transport-reqwest": "buffered_streaming_json_post_quota_metadata_v1",
     "south-transport-ureq": "placeholder"
   },
   "hosts": {
@@ -48,11 +56,13 @@
   "host_capabilities": {
     "token-station": {
       "provider_call": "verified",
-      "provider_stream": "not_verified"
+      "provider_stream": "not_verified",
+      "provider_quota_metadata": "verified"
     },
     "token-station-server": {
       "provider_call": "verified",
-      "provider_stream": "verified"
+      "provider_stream": "verified",
+      "provider_quota_metadata": "not_verified"
     }
   }
 }

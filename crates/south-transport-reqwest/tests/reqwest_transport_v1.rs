@@ -5,10 +5,12 @@ use std::{
     time::Duration,
 };
 
+use http::StatusCode;
 use south_contracts::{
     BearerAuthV1, BufferedHttpResponseV1, CredentialSlotV1, JsonBodyV1, JsonPostRequestV1,
-    MAX_RESPONSE_BODY_BYTES, MAX_RESPONSE_CONTENT_TYPE_BYTES, MAX_RESPONSE_RETRY_AFTER_BYTES,
-    ProviderEndpointV1, RelativePathV1, SafeHeaders, TransportErrorV1,
+    MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES, MAX_RESPONSE_BODY_BYTES,
+    MAX_RESPONSE_CONTENT_TYPE_BYTES, MAX_RESPONSE_RETRY_AFTER_BYTES, ProviderEndpointV1,
+    RelativePathV1, SafeHeaders, TransportErrorV1,
 };
 use south_core::{
     CredentialResolutionFuture, CredentialResolver, ProviderBindingV1, ProviderCallErrorV1,
@@ -398,6 +400,106 @@ async fn invalid_utf8_response_has_a_stable_context_free_error() {
     let rendered = format!("{error:?} {error}");
     for sentinel in [SECRET_SENTINEL, BODY_SENTINEL, HEADER_SENTINEL] {
         assert!(!rendered.contains(sentinel));
+    }
+}
+
+#[tokio::test]
+async fn captures_exactly_the_nine_approved_quota_metadata_fields() {
+    let loopback = loopback_once(response(
+        "200 OK",
+        &[
+            ("X-RateLimit-Limit-Tokens", "1000"),
+            ("x-ratelimit-remaining-tokens", "900"),
+            ("x-ratelimit-reset-tokens", "10s"),
+            ("anthropic-ratelimit-tokens-limit", "2000"),
+            ("anthropic-ratelimit-tokens-remaining", "1500"),
+            ("anthropic-ratelimit-tokens-reset", "20s"),
+            ("anthropic-ratelimit-unified-limit", "3000"),
+            ("anthropic-ratelimit-unified-remaining", "2500"),
+            ("anthropic-ratelimit-unified-reset", "30s"),
+            ("x-unapproved-quota-sentinel", "must-not-be-retained"),
+        ],
+        b"safe",
+    ))
+    .await;
+    let transport = ReqwestTransportV1::new(config()).expect("transport should build");
+
+    let response = call(
+        &loopback.endpoint,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("valid quota metadata must preserve the response");
+    loopback.request.await.expect("server should receive one request");
+    loopback.task.await.expect("server task should finish");
+
+    let quota = response.provider_quota_metadata();
+    assert_eq!(quota.present_field_count(), 9);
+    assert_eq!(quota.x_ratelimit_limit_tokens(), Some("1000"));
+    assert_eq!(quota.x_ratelimit_remaining_tokens(), Some("900"));
+    assert_eq!(quota.x_ratelimit_reset_tokens(), Some("10s"));
+    assert_eq!(quota.anthropic_ratelimit_tokens_limit(), Some("2000"));
+    assert_eq!(quota.anthropic_ratelimit_tokens_remaining(), Some("1500"));
+    assert_eq!(quota.anthropic_ratelimit_tokens_reset(), Some("20s"));
+    assert_eq!(quota.anthropic_ratelimit_unified_limit(), Some("3000"));
+    assert_eq!(quota.anthropic_ratelimit_unified_remaining(), Some("2500"));
+    assert_eq!(quota.anthropic_ratelimit_unified_reset(), Some("30s"));
+    assert!(!format!("{response:?}").contains("must-not-be-retained"));
+}
+
+#[tokio::test]
+async fn malformed_optional_quota_metadata_is_omitted_without_failing_the_response() {
+    let oversized = "x".repeat(MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES + 1);
+    let mut non_utf8 = b"HTTP/1.1 200 OK\r\nx-ratelimit-reset-tokens: ".to_vec();
+    non_utf8.push(0xff);
+    non_utf8.extend_from_slice(
+        b"\r\nanthropic-ratelimit-unified-limit: 77\r\ncontent-length: 4\r\nconnection: close\r\n\r\nsafe",
+    );
+    let fixtures = [
+        response(
+            "200 OK",
+            &[
+                ("x-ratelimit-limit-tokens", "1"),
+                ("x-ratelimit-limit-tokens", "1"),
+                ("anthropic-ratelimit-unified-limit", "77"),
+            ],
+            b"safe",
+        ),
+        response(
+            "200 OK",
+            &[
+                ("x-ratelimit-remaining-tokens", &oversized),
+                ("anthropic-ratelimit-unified-limit", "77"),
+            ],
+            b"safe",
+        ),
+        non_utf8,
+    ];
+
+    for raw in fixtures {
+        let loopback = loopback_once(raw).await;
+        let transport = ReqwestTransportV1::new(config()).expect("transport should build");
+        let response = call(
+            &loopback.endpoint,
+            &transport,
+            tokio::time::Instant::now() + Duration::from_secs(30),
+            &CancellationToken::new(),
+        )
+        .await
+        .expect("malformed optional quota metadata must not fail a valid response");
+        loopback.request.await.expect("server should receive one request");
+        loopback.task.await.expect("server task should finish");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.body(), "safe");
+        let quota = response.provider_quota_metadata();
+        assert_eq!(quota.present_field_count(), 1);
+        assert_eq!(quota.x_ratelimit_limit_tokens(), None);
+        assert_eq!(quota.x_ratelimit_remaining_tokens(), None);
+        assert_eq!(quota.x_ratelimit_reset_tokens(), None);
+        assert_eq!(quota.anthropic_ratelimit_unified_limit(), Some("77"));
     }
 }
 

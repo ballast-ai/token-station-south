@@ -12,8 +12,8 @@ version.workspace = true
 bytes.workspace = true
 http.workspace = true
 reqwest.workspace = true
-south-contracts = { path = "../south-contracts", version = "0.1.1" }
-south-core = { path = "../south-core", version = "0.1.1" }
+south-contracts = { path = "../south-contracts", version = "0.2.0" }
+south-core = { path = "../south-core", version = "0.2.0" }
 zeroize.workspace = true
 
 [dev-dependencies]
