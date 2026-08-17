@@ -80,16 +80,27 @@ async fn read_request(stream: &mut TcpStream) -> ReceivedRequest {
 }
 
 async fn receive_without_advancing_time<T>(receiver: &mut oneshot::Receiver<T>) -> T {
-    for _ in 0..100_000 {
+    let mut polls = 0_usize;
+    std::future::poll_fn(|context| {
+        polls += 1;
+        assert!(
+            polls <= 100_000,
+            "server did not report the synchronized event within the poll budget"
+        );
         match receiver.try_recv() {
-            Ok(value) => return value,
-            Err(oneshot::error::TryRecvError::Empty) => tokio::task::yield_now().await,
+            Ok(value) => std::task::Poll::Ready(value),
+            Err(oneshot::error::TryRecvError::Empty) => {
+                // Keep one task runnable so paused Tokio cannot jump to the transport timer while
+                // the real loopback socket is waiting for its readiness event.
+                context.waker().wake_by_ref();
+                std::task::Poll::Pending
+            }
             Err(oneshot::error::TryRecvError::Closed) => {
                 panic!("server should report the synchronized event")
             }
         }
-    }
-    panic!("server did not report the synchronized event within the yield budget")
+    })
+    .await
 }
 
 fn chunked_headers(extra_headers: &[(&str, &str)]) -> Vec<u8> {
