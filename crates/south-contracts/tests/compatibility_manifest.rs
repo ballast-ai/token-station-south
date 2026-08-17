@@ -121,11 +121,11 @@ fn compatibility_manifest_describes_the_library_slice() {
             "unexpected status for {name}"
         );
     }
-    // token-station verified 2026-08-17 for provider_call only: the real
-    // CommunitySouthAdapterV1 passed south.provider-call.v1 7/7, real
-    // resolver/transport wiring received adversarial review, and the final
-    // host PR CI passed at 63a3ceb. See the community-host compatibility
-    // release design for the immutable evidence trail and narrow scope.
+    // token-station verified 2026-08-17 for provider_call only: its production
+    // adapter functions, wrapped by CommunityConformanceExecutorV1, passed
+    // south.provider-call.v1 7/7; real resolver/transport wiring received
+    // adversarial review; and the final host PR CI passed at 63a3ceb. See the
+    // community-host compatibility release design for the evidence and scope.
     assert_eq!(manifest.hosts.get("token-station").map(String::as_str), Some("verified"));
     // token-station-server verified 2026-08-17: real adapter at the embeddings
     // Bearer JSON POST call site, assembled-executor conformance 7/7, and an
