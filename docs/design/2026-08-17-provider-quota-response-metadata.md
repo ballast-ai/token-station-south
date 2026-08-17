@@ -1,6 +1,6 @@
 # Provider Quota Response Metadata
 
-Status: proposed
+Status: implemented; fixed-candidate host CI green; final review and release pending
 
 Date: 2026-08-17
 
@@ -371,3 +371,34 @@ The release is complete only when:
 Even then, community production traffic remains disabled. The next slice is an explicit
 non-streaming canary that preserves routing, fallback, health, quota, receipt, cancellation, and
 user-visible error semantics under host ownership.
+
+## Fixed-candidate host evidence
+
+The immutable South `0.2.0` candidate and its community-host validation are:
+
+- South candidate commit: `b1f7aa21362a5332fd6f2c5b9de8f6407ff39e4e`;
+- Token Station validation commit: `923cb386939ce0ff2f67b86894918fabe5f021f6`;
+- Token Station pull request: [GlimpseEngine/token-station#93](https://github.com/GlimpseEngine/token-station/pull/93),
+  targeting `develop-v2` and kept draft until the final South tag exists;
+- Token Station CI run: [32021500390](https://github.com/GlimpseEngine/token-station/actions/runs/32021500390),
+  successful for root Rust, Desktop Rust, Desktop coverage, frontend, Rust 1.96, supply-chain, and
+  release gates; root coverage was skipped by the host workflow's existing pull-request policy;
+- South candidate CI run: [32016637890](https://github.com/ballast-ai/token-station-south/actions/runs/32016637890),
+  successful for the required quality job.
+
+The host pinned all five South packages to exact `=0.2.0` and the candidate revision. Its real
+community adapter passed the seven-case base provider-call suite and the two-case quota-metadata
+suite. Independent loopback executions produced the same three ordered host `WindowSnapshot`
+values through the legacy and South paths with exactly one request per execution. Additional real
+reqwest loopbacks proved that absent, duplicate, oversized, and non-UTF-8 approved fields remain
+fail-soft, valid siblings survive, partial families do not create windows, and unknown headers are
+not projected. The host's full root and Desktop gates, supply-chain checks, frontend tests and
+build, local Desktop App build, artifact audit, signature check, installation, and launch passed.
+Independent host review reported zero P0, P1, or P2 findings.
+
+This evidence changes only this design record and the one
+`host_capabilities.token-station.provider_quota_metadata` value in `compatibility.json`. From the
+host-tested candidate to the final South merge, every Rust source, Cargo manifest, lockfile,
+fixture, test, contract version, limit, suite identifier, and package artifact must remain
+byte-for-byte unchanged. `token-station-server/provider_quota_metadata` remains `not_verified`, and
+community production traffic remains disabled.

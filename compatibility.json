@@ -57,7 +57,7 @@
     "token-station": {
       "provider_call": "verified",
       "provider_stream": "not_verified",
-      "provider_quota_metadata": "not_verified"
+      "provider_quota_metadata": "verified"
     },
     "token-station-server": {
       "provider_call": "verified",
