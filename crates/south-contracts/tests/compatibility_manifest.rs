@@ -13,6 +13,7 @@ struct CompatibilityManifest {
     provider_runtime: ProviderRuntime,
     crates: BTreeMap<String, String>,
     hosts: BTreeMap<String, String>,
+    host_capabilities: BTreeMap<String, BTreeMap<String, String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -126,4 +127,36 @@ fn compatibility_manifest_describes_the_library_slice() {
     // adversarial wiring review of the reported evidence. See the enterprise
     // repo's adoption record (product-review #34) for the evidence trail.
     assert_eq!(manifest.hosts.get("token-station-server").map(String::as_str), Some("verified"));
+    // Per-capability annotations disambiguate the legacy per-host string: the
+    // top-level `hosts` value mirrors `provider_call` (the first adopted
+    // capability); each newer capability starts `not_verified` until its own
+    // adoption slice lands. A capability listed here must have a conformance
+    // suite in this manifest.
+    let expected_capabilities: BTreeMap<&str, [(&str, &str); 2]> = BTreeMap::from([
+        ("token-station", [("provider_call", "not_verified"), ("provider_stream", "not_verified")]),
+        (
+            "token-station-server",
+            [("provider_call", "verified"), ("provider_stream", "not_verified")],
+        ),
+    ]);
+    assert_eq!(manifest.host_capabilities.len(), expected_capabilities.len());
+    for (host, capabilities) in expected_capabilities {
+        let annotated = manifest.host_capabilities.get(host).unwrap_or_else(|| {
+            panic!("missing host_capabilities entry for {host}");
+        });
+        assert_eq!(annotated.len(), capabilities.len(), "unexpected capability set for {host}");
+        for (capability, expected_status) in capabilities {
+            assert_eq!(
+                annotated.get(capability).map(String::as_str),
+                Some(expected_status),
+                "unexpected status for {host}/{capability}"
+            );
+        }
+        // The legacy summary string must stay consistent with provider_call.
+        assert_eq!(
+            manifest.hosts.get(host),
+            annotated.get("provider_call"),
+            "legacy host summary diverged from provider_call for {host}"
+        );
+    }
 }
