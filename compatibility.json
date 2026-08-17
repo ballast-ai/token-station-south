@@ -41,6 +41,6 @@
   },
   "hosts": {
     "token-station": "not_verified",
-    "token-station-server": "not_verified"
+    "token-station-server": "verified"
   }
 }
