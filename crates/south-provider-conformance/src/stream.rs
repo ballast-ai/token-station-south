@@ -82,6 +82,15 @@ pub struct ProviderStreamRawHeadV1 {
 }
 
 impl ProviderStreamRawHeadV1 {
+    /// Assembles one canonical raw head for a fixture table in this crate.
+    pub(crate) const fn assemble(
+        status: u16,
+        content_type: Option<&'static str>,
+        retry_after: Option<&'static str>,
+    ) -> Self {
+        Self { status, content_type, retry_after }
+    }
+
     /// Returns the raw HTTP status.
     #[must_use]
     pub const fn status(&self) -> u16 {
@@ -141,6 +150,15 @@ pub struct ProviderStreamRawStreamV1 {
 }
 
 impl ProviderStreamRawStreamV1 {
+    /// Assembles one canonical raw stream for a fixture table in this crate.
+    pub(crate) const fn assemble(
+        head: ProviderStreamRawHeadV1,
+        chunks: &'static [&'static [u8]],
+        terminal: ProviderStreamTerminalV1,
+    ) -> Self {
+        Self { head, chunks, terminal }
+    }
+
     /// Returns the raw headers-ready values.
     #[must_use]
     pub const fn head(&self) -> &ProviderStreamRawHeadV1 {

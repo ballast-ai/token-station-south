@@ -18,8 +18,14 @@ macro_rules! fixed_debug {
     };
 }
 
+mod header_auth;
 mod stream;
 
+pub use header_auth::{
+    FAKE_HEADER_SECRET_V1, HEADER_AUTH_CONFORMANCE_SUITE_ID, HEADER_AUTH_CONFORMANCE_SUITE_VERSION,
+    HeaderAuthCaseIdV1, HeaderAuthExpectedEvidenceV1, HeaderAuthExpectedOutcomeV1,
+    HeaderAuthExpectedV1, HeaderAuthFixtureV1, HeaderAuthUpstreamV1, header_auth_fixtures_v1,
+};
 pub use stream::{
     PROVIDER_STREAM_CONFORMANCE_DEADLINE_OFFSET_V1, PROVIDER_STREAM_CONFORMANCE_IDLE_TIMEOUT_V1,
     PROVIDER_STREAM_CONFORMANCE_SUITE_ID, PROVIDER_STREAM_CONFORMANCE_SUITE_VERSION,
