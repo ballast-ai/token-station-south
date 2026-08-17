@@ -45,6 +45,16 @@ macro_rules! fixed_debug {
     };
 }
 
+mod stream;
+
+pub use stream::{
+    AssembledProviderStreamExecutorV1, AssembledStreamExecutionFutureV1,
+    MAX_PROVIDER_STREAM_MISMATCHES_V1, ProviderStreamConformanceFailureV1,
+    ProviderStreamConformanceReportV1, ProviderStreamEvidenceV1, ProviderStreamMismatchCategoryV1,
+    ProviderStreamMismatchV1, ProviderStreamObservationV1,
+    ReferenceAssembledProviderStreamExecutorV1, run_provider_stream_conformance_v1,
+};
+
 /// Seven cases multiplied by the ten closed mismatch categories.
 pub const MAX_PROVIDER_CALL_MISMATCHES_V1: usize = 70;
 
@@ -435,7 +445,7 @@ impl ReferenceAssembledProviderCallExecutorV1 {
         let resolver_dropped = Arc::new(AtomicBool::new(false));
         let transport_dropped = Arc::new(AtomicBool::new(false));
 
-        let parsed = parse_reference_input(fixture);
+        let parsed = parse_reference_input(fixture.input());
         let (binding, request) = match parsed {
             Ok(parsed) => parsed,
             Err(code) => {
@@ -504,16 +514,15 @@ impl ReferenceAssembledProviderCallExecutorV1 {
         match result {
             Ok(response) => ProviderCallObservationV1::response(response, evidence),
             Err(error) => {
-                ProviderCallObservationV1::failure(map_provider_call_error(error), evidence)
+                ProviderCallObservationV1::failure(map_provider_call_error(&error), evidence)
             }
         }
     }
 }
 
 fn parse_reference_input(
-    fixture: &ProviderCallFixtureV1,
+    input: &south_provider_conformance::ProviderCallInputV1,
 ) -> Result<(ProviderBindingV1, JsonPostRequestV1), ProviderCallFailureCodeV1> {
-    let input = fixture.input();
     let endpoint = ProviderEndpointV1::parse(input.endpoint()).map_err(map_contract_error)?;
     let bound_slot =
         CredentialSlotV1::parse(input.bound_credential_slot()).map_err(map_contract_error)?;
@@ -634,7 +643,7 @@ const fn map_canonical_fixture_header_invariant_failure(
     ProviderCallFailureCodeV1::RequestFailed
 }
 
-const fn map_provider_call_error(error: ProviderCallErrorV1) -> ProviderCallFailureCodeV1 {
+const fn map_provider_call_error(error: &ProviderCallErrorV1) -> ProviderCallFailureCodeV1 {
     match error {
         ProviderCallErrorV1::Preparation(error) => match error {
             PreparationErrorV1::UrlOutsideBinding => ProviderCallFailureCodeV1::UrlOutsideBinding,
@@ -662,6 +671,10 @@ const fn map_provider_call_error(error: ProviderCallErrorV1) -> ProviderCallFail
             }
             TransportErrorV1::RedirectDenied => ProviderCallFailureCodeV1::RedirectDenied,
         },
+        // The buffered entry point can never produce the streaming-only rejection variant, so a
+        // rejection reaching this buffered mapping is an executor wiring error. Use the
+        // context-free request fallback rather than expanding the frozen buffered code set.
+        ProviderCallErrorV1::Rejected(_) => ProviderCallFailureCodeV1::RequestFailed,
     }
 }
 

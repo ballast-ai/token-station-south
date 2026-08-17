@@ -18,6 +18,17 @@ macro_rules! fixed_debug {
     };
 }
 
+mod stream;
+
+pub use stream::{
+    PROVIDER_STREAM_CONFORMANCE_DEADLINE_OFFSET_V1, PROVIDER_STREAM_CONFORMANCE_IDLE_TIMEOUT_V1,
+    PROVIDER_STREAM_CONFORMANCE_SUITE_ID, PROVIDER_STREAM_CONFORMANCE_SUITE_VERSION,
+    ProviderStreamCaseIdV1, ProviderStreamControlV1, ProviderStreamExpectedEvidenceV1,
+    ProviderStreamExpectedOutcomeV1, ProviderStreamExpectedV1, ProviderStreamFixtureV1,
+    ProviderStreamRawHeadV1, ProviderStreamRawRejectionV1, ProviderStreamRawStreamV1,
+    ProviderStreamTerminalV1, ProviderStreamUpstreamV1, provider_stream_fixtures_v1,
+};
+
 /// The provider-call conformance suite version.
 pub const PROVIDER_CALL_CONFORMANCE_SUITE_VERSION: u32 = 1;
 

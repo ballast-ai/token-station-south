@@ -8,13 +8,18 @@ use bytes::Bytes;
 use http::{HeaderMap, HeaderName, HeaderValue, header};
 use south_contracts::{
     BufferedHttpResponseV1, MAX_RESPONSE_BODY_BYTES, MAX_RESPONSE_CONTENT_TYPE_BYTES,
-    MAX_RESPONSE_RETRY_AFTER_BYTES, TransportErrorV1,
+    MAX_RESPONSE_RETRY_AFTER_BYTES, MAX_STREAM_CHUNK_BYTES, MAX_STREAM_ERROR_BODY_BYTES,
+    StreamChunkV1, StreamReadErrorV1, StreamRejectedV1, StreamTransportConfigV1,
+    StreamingResponseHeadV1, TransportErrorV1,
 };
-use south_core::{AsyncHttpTransport, PreparedHttpRequestV1, TransportFuture};
+use south_core::{
+    AsyncHttpTransport, AsyncStreamingTransport, OpenedByteStreamV1, PreparedHttpRequestV1,
+    StreamByteSourceV1, StreamChunkFutureV1, StreamOpenErrorV1, StreamingOpenFutureV1,
+    TransportFuture,
+};
 use zeroize::Zeroizing;
 
-/// The largest transport-owned timeout accepted by the buffered call contract.
-pub const MAX_TRANSPORT_TIMEOUT: Duration = Duration::from_hours(24);
+pub use south_contracts::MAX_TRANSPORT_TIMEOUT;
 
 /// Explicit bounded timeouts for one dedicated reqwest transport.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -159,6 +164,154 @@ impl ReqwestTransportV1 {
         let body = read_bounded_body(response).await?;
 
         BufferedHttpResponseV1::try_from_parts(status, body, content_type, retry_after)
+    }
+}
+
+/// A dedicated asynchronous streaming client with provider-call policy fixed at construction.
+///
+/// Hardening matches the buffered transport: no proxy, no redirects, no retries, no referer, and
+/// **all decompression disabled** — byte transparency is part of the streaming contract, because
+/// host-side frame decoding (for example eventstream CRC checks) would break under transparent
+/// decompression. The `accept` header is a host obligation through the normal `SafeHeaders`
+/// path; this transport does not guess it.
+///
+/// Timeout wiring: the connect guard lives on the client builder; the idle guard is reqwest's
+/// per-read timeout, which covers every body read await and doubles as the time-to-first-byte
+/// bound during the header wait; the optional total is an outer per-request bound. A transport
+/// timer that fires before headers-ready keeps the pre-stream `TRANSPORT_TIMEOUT` code. The
+/// frozen mid-stream taxonomy owns no transport-timeout code, so any transport timer expiring
+/// mid-stream — the idle guard, or the optional total bound — surfaces as `STREAM_IDLE_TIMEOUT`;
+/// only the caller's own deadline maps to `STREAM_DEADLINE_EXCEEDED`.
+///
+/// The `Authorization` value shares one South-owned allocation that zeroizes its plaintext bytes
+/// when the exchange releases its last clone, with the same coverage caveats as the buffered
+/// transport.
+pub struct ReqwestStreamingTransportV1 {
+    client: reqwest::Client,
+    total_timeout: Option<Duration>,
+}
+
+impl ReqwestStreamingTransportV1 {
+    /// Builds one streaming transport from validated stream timeouts.
+    pub fn new(config: StreamTransportConfigV1) -> Result<Self, TransportErrorV1> {
+        let client = reqwest::Client::builder()
+            .no_proxy()
+            .redirect(reqwest::redirect::Policy::none())
+            .retry(reqwest::retry::never())
+            .referer(false)
+            .no_gzip()
+            .no_brotli()
+            .no_deflate()
+            .no_zstd()
+            .connect_timeout(config.connect_timeout())
+            .read_timeout(config.idle_timeout())
+            .build()
+            .map_err(|_| TransportErrorV1::ClientBuildFailed)?;
+
+        Ok(Self { client, total_timeout: config.total_timeout() })
+    }
+
+    async fn open_one(
+        &self,
+        request: &PreparedHttpRequestV1<'_>,
+    ) -> Result<OpenedByteStreamV1, StreamOpenErrorV1> {
+        let headers = assemble_headers(request)?;
+        let mut builder = self
+            .client
+            .request(request.method().clone(), request.url().clone())
+            .headers(headers)
+            .body(request_body(request.body().shared_owner()));
+        if let Some(total) = self.total_timeout {
+            builder = builder.timeout(total);
+        }
+        let response = builder.send().await.map_err(|error| classify_send_error(&error))?;
+
+        if response.status().is_redirection() {
+            return Err(TransportErrorV1::RedirectDenied.into());
+        }
+        let status = response.status();
+        let content_type = response_metadata(
+            response.headers(),
+            header::CONTENT_TYPE,
+            MAX_RESPONSE_CONTENT_TYPE_BYTES,
+        )?;
+        let retry_after = response_metadata(
+            response.headers(),
+            header::RETRY_AFTER,
+            MAX_RESPONSE_RETRY_AFTER_BYTES,
+        )?;
+        let head = StreamingResponseHeadV1::try_from_parts(status, content_type, retry_after)?;
+
+        if status.is_success() {
+            let source = ReqwestStreamSource { response, pending: Bytes::new() };
+            Ok(OpenedByteStreamV1::try_new(head, Box::new(source))?)
+        } else {
+            let body = read_bounded_error_body(response).await;
+            Err(StreamOpenErrorV1::Rejected(StreamRejectedV1::new(head, body)))
+        }
+    }
+}
+
+impl fmt::Debug for ReqwestStreamingTransportV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.debug_struct("ReqwestStreamingTransportV1").finish_non_exhaustive()
+    }
+}
+
+impl AsyncStreamingTransport for ReqwestStreamingTransportV1 {
+    fn open<'a>(&'a self, request: &'a PreparedHttpRequestV1<'_>) -> StreamingOpenFutureV1<'a> {
+        Box::pin(async move { self.open_one(request).await })
+    }
+}
+
+/// A live reqwest body wrapped as a delivery-bounded pull source.
+///
+/// Oversized network reads are split at [`MAX_STREAM_CHUNK_BYTES`]; the remainder stays buffered
+/// in `pending`, so dropping a pull future between chunks loses nothing. Dropping the source
+/// drops the reqwest response and aborts the connection.
+struct ReqwestStreamSource {
+    response: reqwest::Response,
+    pending: Bytes,
+}
+
+impl StreamByteSourceV1 for ReqwestStreamSource {
+    fn next_chunk(&mut self) -> StreamChunkFutureV1<'_> {
+        Box::pin(async move {
+            while self.pending.is_empty() {
+                match self.response.chunk().await {
+                    Ok(Some(bytes)) => self.pending = bytes,
+                    Ok(None) => return None,
+                    Err(error) => return Some(Err(classify_stream_read_error(&error))),
+                }
+            }
+            let bounded = self.pending.split_to(self.pending.len().min(MAX_STREAM_CHUNK_BYTES));
+            Some(StreamChunkV1::try_new(bounded))
+        })
+    }
+}
+
+/// Buffers a rejected exchange's error body up to [`MAX_STREAM_ERROR_BODY_BYTES`].
+///
+/// The body is best-effort classifier input: the head already carries the load-bearing status,
+/// so a read failure or stall while draining the error body returns the bytes collected so far
+/// instead of discarding the rejection.
+async fn read_bounded_error_body(mut response: reqwest::Response) -> Vec<u8> {
+    let mut body = Vec::new();
+    while body.len() <= MAX_STREAM_ERROR_BODY_BYTES {
+        match response.chunk().await {
+            Ok(Some(chunk)) => body.extend_from_slice(&chunk),
+            Ok(None) | Err(_) => break,
+        }
+    }
+    body.truncate(MAX_STREAM_ERROR_BODY_BYTES);
+    body
+}
+
+fn classify_stream_read_error(error: &reqwest::Error) -> StreamReadErrorV1 {
+    if error.is_timeout() {
+        StreamReadErrorV1::StreamIdleTimeout
+    } else {
+        StreamReadErrorV1::StreamReadFailed
     }
 }
 
