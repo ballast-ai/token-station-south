@@ -425,18 +425,16 @@ async fn oversized_network_reads_are_rechunked_to_the_delivery_bound() {
     loopback.task.await.expect("server task should finish");
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test(flavor = "current_thread")]
 async fn slow_drip_upstream_hits_the_idle_guard_mid_stream() {
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("loopback listener should bind");
     let address = listener.local_addr().expect("loopback address should exist");
-    let (written_tx, mut written_rx) = oneshot::channel();
     let server = tokio::spawn(async move {
         let (mut stream, _) = listener.accept().await.expect("one request should connect");
         read_request(&mut stream).await;
         let mut first = chunked_headers(&[]);
         first.extend_from_slice(&encoded_chunk(CHUNK_ONE));
         stream.write_all(&first).await.expect("headers and first chunk should write");
-        written_tx.send(()).expect("test should retain its write receiver");
         let mut remaining = Vec::new();
         stream.read_to_end(&mut remaining).await.expect("stalled connection should close");
         remaining
@@ -446,12 +444,12 @@ async fn slow_drip_upstream_hits_the_idle_guard_mid_stream() {
         ReqwestStreamingTransportV1::new(stream_config()).expect("transport should build");
     let cancellation = CancellationToken::new();
 
-    // The yield-loop keeps the paused runtime busy so no timer auto-advances before the
-    // upstream has written its headers and first chunk.
-    let opening = open(&endpoint, &transport, None, &cancellation);
-    let sync = receive_without_advancing_time(&mut written_rx);
-    let (opened, ()) = tokio::join!(opening, sync);
-    let mut call = opened.expect("a 2xx upstream should open a stream");
+    // Complete the real loopback handshake before pausing Tokio time. A paused clock must not be
+    // mixed with pending OS socket readiness: the runtime may otherwise auto-advance the read
+    // timer before the kernel delivers the readiness event.
+    let mut call = open(&endpoint, &transport, None, &cancellation)
+        .await
+        .expect("a 2xx upstream should open a stream");
     let first_chunk = call
         .next_chunk()
         .await
@@ -459,6 +457,7 @@ async fn slow_drip_upstream_hits_the_idle_guard_mid_stream() {
         .expect("the first pull should not fail");
     assert_eq!(first_chunk.as_bytes(), CHUNK_ONE);
 
+    tokio::time::pause();
     let pull = call.next_chunk();
     let advance = async {
         tokio::time::advance(Duration::from_secs(11)).await;
