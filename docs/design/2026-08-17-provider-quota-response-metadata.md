@@ -339,12 +339,14 @@ that schema change a `0.1.2` patch would understate compatibility risk for stric
     `token-station/provider_quota_metadata=not_verified` to `verified`. The compatibility test must
     validate allowed status vocabulary and summary relationships generically rather than require a
     second Rust-source edit for that evidence transition.
-15. From the host-tested candidate to the final South merge, permit changes only to this evidence
-    design and `compatibility.json`. Rust library sources, Cargo manifests, lockfiles, conformance
-    fixtures, runtime tests, and compatibility schema/limits/suite identifiers must be byte-for-byte
-    unchanged. Merge South to `main`, require post-merge South CI success, create immutable `v0.2.0`,
-    update the host dependency from candidate to final merge SHA, rerun host CI, and merge the host
-    PR to `develop-v2`.
+15. From the host-tested candidate to the final South merge, permit branch-owned changes only to
+    this evidence design and `compatibility.json`. Rust library sources, Cargo manifests,
+    lockfiles, conformance fixtures, runtime tests, and compatibility schema/limits/suite
+    identifiers must be byte-for-byte unchanged. The exact integration-base exception recorded
+    below is limited to the already-merged `main` change for an independent host capability. Merge
+    South to `main`, require post-merge South CI success, create immutable `v0.2.0`, update the host
+    dependency from candidate to final merge SHA, rerun host CI, and merge the host PR to
+    `develop-v2`.
 
 ## Acceptance
 
@@ -396,9 +398,19 @@ not projected. The host's full root and Desktop gates, supply-chain checks, fron
 build, local Desktop App build, artifact audit, signature check, installation, and launch passed.
 Independent host review reported zero P0, P1, or P2 findings.
 
-This evidence changes only this design record and the one
-`host_capabilities.token-station.provider_quota_metadata` value in `compatibility.json`. From the
-host-tested candidate to the final South merge, every Rust source, Cargo manifest, lockfile,
-fixture, test, contract version, limit, suite identifier, and package artifact must remain
-byte-for-byte unchanged. `token-station-server/provider_quota_metadata` remains `not_verified`, and
-community production traffic remains disabled.
+This evidence commit changes only this design record and the one
+`host_capabilities.token-station.provider_quota_metadata` value in `compatibility.json`.
+`token-station-server/provider_quota_metadata` remains `not_verified`, and community production
+traffic remains disabled.
+
+After the candidate froze, South PR #9 independently merged to `main` at
+`b5251f4e37ebce73b40a5e1872933851e1634c76`. Its exact delta changes only
+`token-station-server.provider_stream` in `compatibility.json` and the compatibility-manifest test
+that freezes that status; it changes no library source, Cargo manifest, lockfile, fixture,
+contract, limit, suite identifier, or package artifact. PR #8 therefore integrates that exact
+two-file base delta. The conflict resolution retains schema two and all three capability keys,
+sets only the separately evidenced statuses to `verified`, and strengthens the combined test to
+assert the complete two-host status matrix. This base advancement does not alter any code consumed
+by the host candidate. Apart from this exact already-merged base delta, every Rust source, Cargo
+manifest, lockfile, fixture, test, contract version, limit, suite identifier, and package artifact
+must remain byte-for-byte unchanged through the final merge.

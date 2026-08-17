@@ -77,6 +77,34 @@ struct ProviderRuntime {
     abi_version: Option<String>,
 }
 
+fn expected_host_capabilities() -> BTreeMap<&'static str, [(&'static str, &'static str); 3]> {
+    BTreeMap::from([
+        (
+            "token-station",
+            [
+                ("provider_call", "verified"),
+                ("provider_stream", "not_verified"),
+                ("provider_quota_metadata", "verified"),
+            ],
+        ),
+        // token-station-server provider_stream verified 2026-08-17: the durable
+        // chat sender's real seam runs streams through
+        // open_streaming_provider_call_v1, the host's assembled executor passes
+        // south.provider-stream.v1 9/9 with six-field evidence at real
+        // boundaries, and an adversarial wiring review (one P1 — proxy-
+        // environment fallback — fixed on-branch) plus lv's sign-off closed the
+        // loop. Evidence trail: enterprise repo product-review #34 §6.
+        (
+            "token-station-server",
+            [
+                ("provider_call", "verified"),
+                ("provider_stream", "verified"),
+                ("provider_quota_metadata", "not_verified"),
+            ],
+        ),
+    ])
+}
+
 #[test]
 fn compatibility_manifest_describes_the_library_slice() {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../compatibility.json");
@@ -170,21 +198,18 @@ fn compatibility_manifest_describes_the_library_slice() {
     // capability). Every newer capability is recorded independently and may
     // become verified only through its own adoption evidence. A capability
     // listed here must have a conformance suite in this manifest.
-    let expected_capabilities: BTreeMap<&str, [&str; 3]> = BTreeMap::from([
-        ("token-station", ["provider_call", "provider_stream", "provider_quota_metadata"]),
-        ("token-station-server", ["provider_call", "provider_stream", "provider_quota_metadata"]),
-    ]);
+    let expected_capabilities = expected_host_capabilities();
     assert_eq!(manifest.host_capabilities.len(), expected_capabilities.len());
     for (host, capabilities) in expected_capabilities {
         let annotated = manifest.host_capabilities.get(host).unwrap_or_else(|| {
             panic!("missing host_capabilities entry for {host}");
         });
         assert_eq!(annotated.len(), capabilities.len(), "unexpected capability set for {host}");
-        for capability in capabilities {
-            let actual_status = annotated.get(capability).map(String::as_str);
-            assert!(
-                matches!(actual_status, Some("verified" | "not_verified")),
-                "invalid status for {host}/{capability}"
+        for (capability, expected_status) in capabilities {
+            assert_eq!(
+                annotated.get(capability).map(String::as_str),
+                Some(expected_status),
+                "unexpected status for {host}/{capability}"
             );
         }
         // The legacy summary string must stay consistent with provider_call.
