@@ -791,6 +791,11 @@ pub enum StreamReadErrorV1 {
     #[error("stream read failed")]
     StreamReadFailed,
     /// The transport idle guard expired between chunks.
+    ///
+    /// When a transport is configured with a bounded total timeout, its mid-stream expiry is
+    /// indistinguishable from the idle guard on reqwest's stable error surface and reports this
+    /// same code. A host that needs precise attribution should bound the stream with the caller
+    /// deadline instead, which maps to `STREAM_DEADLINE_EXCEEDED`.
     #[error("stream idle guard expired")]
     StreamIdleTimeout,
     /// The caller's absolute deadline expired while the stream was open.
