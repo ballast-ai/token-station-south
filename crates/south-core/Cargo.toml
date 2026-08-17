@@ -18,6 +18,7 @@ url.workspace = true
 zeroize.workspace = true
 
 [dev-dependencies]
+bytes.workspace = true
 serde.workspace = true
 static_assertions.workspace = true
 tokio = { workspace = true, features = ["macros", "rt", "sync", "test-util"] }

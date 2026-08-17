@@ -504,7 +504,7 @@ impl ReferenceAssembledProviderCallExecutorV1 {
         match result {
             Ok(response) => ProviderCallObservationV1::response(response, evidence),
             Err(error) => {
-                ProviderCallObservationV1::failure(map_provider_call_error(error), evidence)
+                ProviderCallObservationV1::failure(map_provider_call_error(&error), evidence)
             }
         }
     }
@@ -634,7 +634,7 @@ const fn map_canonical_fixture_header_invariant_failure(
     ProviderCallFailureCodeV1::RequestFailed
 }
 
-const fn map_provider_call_error(error: ProviderCallErrorV1) -> ProviderCallFailureCodeV1 {
+const fn map_provider_call_error(error: &ProviderCallErrorV1) -> ProviderCallFailureCodeV1 {
     match error {
         ProviderCallErrorV1::Preparation(error) => match error {
             PreparationErrorV1::UrlOutsideBinding => ProviderCallFailureCodeV1::UrlOutsideBinding,
@@ -662,6 +662,10 @@ const fn map_provider_call_error(error: ProviderCallErrorV1) -> ProviderCallFail
             }
             TransportErrorV1::RedirectDenied => ProviderCallFailureCodeV1::RedirectDenied,
         },
+        // The buffered entry point can never produce the streaming-only rejection variant, so a
+        // rejection reaching this buffered mapping is an executor wiring error. Use the
+        // context-free request fallback rather than expanding the frozen buffered code set.
+        ProviderCallErrorV1::Rejected(_) => ProviderCallFailureCodeV1::RequestFailed,
     }
 }
 
