@@ -94,8 +94,9 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [(&'static str, &'stat
         // open_streaming_provider_call_v1, the host's assembled executor passes
         // south.provider-stream.v1 9/9 with six-field evidence at real
         // boundaries, and an adversarial wiring review (one P1 — proxy-
-        // environment fallback — fixed on-branch) plus lv's sign-off closed the
-        // loop. Evidence trail: enterprise repo product-review #34 §6.
+        // environment fallback — fixed on-branch) plus a maintainer sign-off
+        // closed the loop. The adoption record is held by that host's own
+        // repository; this manifest records only the resulting status.
         (
             "token-station-server",
             [
@@ -194,8 +195,8 @@ fn compatibility_manifest_describes_the_library_slice() {
     assert_eq!(manifest.hosts.get("token-station").map(String::as_str), Some("verified"));
     // token-station-server verified 2026-08-17: real adapter at the embeddings
     // Bearer JSON POST call site, assembled-executor conformance 7/7, and an
-    // adversarial wiring review of the reported evidence. See the enterprise
-    // repo's adoption record (product-review #34) for the evidence trail.
+    // adversarial wiring review of the reported evidence. The adoption record is
+    // held by that host's own repository; this manifest records only the status.
     assert_eq!(manifest.hosts.get("token-station-server").map(String::as_str), Some("verified"));
     // Per-capability annotations disambiguate the legacy per-host string: the
     // top-level `hosts` value mirrors `provider_call` (the first adopted

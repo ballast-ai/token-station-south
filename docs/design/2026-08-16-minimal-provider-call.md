@@ -516,7 +516,7 @@ findings. Remote CI ran green on PR #1 and the branch merged to main (tag `v0.0.
 `token-station-server` became `verified` on 2026-08-17: its real adapter serves the embeddings
 Bearer JSON POST call site, its assembled executor passed this suite 7/7, and an adversarial
 wiring review confirmed the reported evidence is measured at the real resolver and transport
-boundaries (evidence trail: enterprise repo product-review #34). `token-station` became verified
+boundaries (evidence trail held in that host's own repository). `token-station` became verified
 for provider-call v1 on 2026-08-17 after its real diagnostic adapter passed the suite 7/7, real
 reqwest loopback behavior and no-replay paths passed, host CI succeeded at `63a3ceb`, and wiring
 review closed all findings. See `2026-08-17-community-host-compatibility-release.md` for the exact

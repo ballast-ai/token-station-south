@@ -10,7 +10,7 @@ Predecessors: `2026-08-16-minimal-provider-call.md` (auth contract v1),
 ## 1. Problem
 
 Auth contract v1 knows exactly one scheme: a bearer secret delivered as `Authorization: Bearer …`.
-The enterprise host's provider inventory (its adoption record, product-review #34) splits real
+The enterprise host's provider inventory (recorded in that host's own adoption record) splits real
 authentication into five families; the second-largest — **header injection**, where the secret
 travels in a provider-specific header — is entirely locked out today:
 

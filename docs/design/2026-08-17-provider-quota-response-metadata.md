@@ -385,8 +385,7 @@ The immutable South `0.2.0` candidate and its community-host validation are:
 - Token Station CI run: [32021500390](https://github.com/GlimpseEngine/token-station/actions/runs/32021500390),
   successful for root Rust, Desktop Rust, Desktop coverage, frontend, Rust 1.96, supply-chain, and
   release gates; root coverage was skipped by the host workflow's existing pull-request policy;
-- South candidate CI run: [32016637890](https://github.com/ballast-ai/token-station-south/actions/runs/32016637890),
-  successful for the required quality job.
+- South candidate CI run `32016637890`, successful for the required quality job.
 
 The host pinned all five South packages to exact `=0.2.0` and the candidate revision. Its real
 community adapter passed the seven-case base provider-call suite and the two-case quota-metadata
