@@ -45,8 +45,8 @@ The community provider-call verification is based on these immutable or reviewab
 - merge commit: `53c2f9fb851b6b41a5e3a26cb602c52e036c29d7`;
 - final pull-request CI run: `31996921604`, successful for Rust 1.96, root Rust, Desktop Rust,
   Desktop coverage, frontend, supply-chain, and release gates;
-- the host's production adapter functions, wrapped by its `CommunityConformanceExecutorV1`, passed
-  all seven `south.provider-call.v1` cases;
+- the host's non-test diagnostic-path adapter functions, wrapped by its
+  `CommunityConformanceExecutorV1`, passed all seven `south.provider-call.v1` cases;
 - deterministic loopback tests used the official OpenAI-compatible provider component and the real
   South core and reqwest transport for success, provider error, redirect denial, response-size,
   UTF-8, timeout, socket-close, and no-replay behavior;

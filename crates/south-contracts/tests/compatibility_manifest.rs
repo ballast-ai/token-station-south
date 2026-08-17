@@ -121,8 +121,8 @@ fn compatibility_manifest_describes_the_library_slice() {
             "unexpected status for {name}"
         );
     }
-    // token-station verified 2026-08-17 for provider_call only: its production
-    // adapter functions, wrapped by CommunityConformanceExecutorV1, passed
+    // token-station verified 2026-08-17 for provider_call only: its non-test
+    // diagnostic adapter functions, wrapped by CommunityConformanceExecutorV1, passed
     // south.provider-call.v1 7/7; real resolver/transport wiring received
     // adversarial review; and the final host PR CI passed at 63a3ceb. See the
     // community-host compatibility release design for the evidence and scope.
