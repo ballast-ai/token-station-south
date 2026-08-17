@@ -119,20 +119,24 @@ struct ScriptedSource {
 
 impl StreamByteSourceV1 for ScriptedSource {
     fn next_chunk(&mut self) -> StreamChunkFutureV1<'_> {
-        self.probes.calls.fetch_add(1, Ordering::SeqCst);
-        let event = self.events.get(self.next_index).copied();
-        self.next_index += 1;
-        let probes = self.probes.clone();
+        // All script-state advancement stays inside the returned future: a pull future that is
+        // dropped before completing must not consume its scripted event.
         Box::pin(async move {
-            match event {
+            self.probes.calls.fetch_add(1, Ordering::SeqCst);
+            match self.events.get(self.next_index).copied() {
                 Some(SourceEvent::Chunk(bytes)) => {
+                    self.next_index += 1;
                     Some(StreamChunkV1::try_new(Bytes::from_static(bytes)))
                 }
-                Some(SourceEvent::Error(error)) => Some(Err(error)),
+                Some(SourceEvent::Error(error)) => {
+                    self.next_index += 1;
+                    Some(Err(error))
+                }
                 Some(SourceEvent::Pending) => {
-                    let _drop_flag = DropFlag(Arc::clone(&probes.pending_future_dropped));
+                    let _drop_flag = DropFlag(Arc::clone(&self.probes.pending_future_dropped));
                     let started = {
-                        let mut sender = probes
+                        let mut sender = self
+                            .probes
                             .pending_started
                             .lock()
                             .expect("test start lock should be available");
@@ -605,6 +609,54 @@ async fn source_errors_are_terminal_and_the_source_is_never_polled_again() {
         polls_before,
         "a terminal stream must never poll its source again"
     );
+}
+
+#[tokio::test]
+async fn scripted_source_advances_its_script_only_inside_the_pull_future() {
+    let mut source = ScriptedSource {
+        events: vec![SourceEvent::Chunk(CHUNK_ONE), SourceEvent::Chunk(CHUNK_TWO)],
+        next_index: 0,
+        probes: SourceProbes::default(),
+    };
+
+    // The StreamByteSourceV1 contract: dropping an unpolled pull future must not consume the
+    // script position, so the next pull still delivers the same bytes.
+    drop(source.next_chunk());
+    let first = source
+        .next_chunk()
+        .await
+        .expect("the re-pull should yield the first chunk")
+        .expect("first chunk should be delivered");
+    assert_eq!(first.as_bytes(), CHUNK_ONE);
+    drop(source.next_chunk());
+    let second = source
+        .next_chunk()
+        .await
+        .expect("the re-pull should yield the second chunk")
+        .expect("second chunk should be delivered");
+    assert_eq!(second.as_bytes(), CHUNK_TWO);
+    assert!(source.next_chunk().await.is_none(), "the exhausted script must yield a clean EOF");
+}
+
+#[tokio::test]
+async fn dropping_an_unfinished_pull_future_loses_no_bytes() {
+    let resolver = ImmediateResolver::default();
+    let transport =
+        ScriptedTransport::new(vec![SourceEvent::Chunk(CHUNK_ONE), SourceEvent::Chunk(CHUNK_TWO)]);
+
+    let mut call = open_with(&resolver, &transport, None, &CancellationToken::new(), SLOT_SENTINEL)
+        .await
+        .expect("a valid streaming open should succeed");
+
+    // The heartbeat leg of a host select loop can win a poll and drop the pull future before it
+    // ever runs; the source must not have advanced, so a re-pull delivers the same bytes.
+    drop(call.next_chunk());
+    let first = call.next_chunk().await.expect("the re-pull should yield the first chunk");
+    assert_eq!(first.expect("first chunk should be delivered").as_bytes(), CHUNK_ONE);
+    drop(call.next_chunk());
+    let second = call.next_chunk().await.expect("the re-pull should yield the second chunk");
+    assert_eq!(second.expect("second chunk should be delivered").as_bytes(), CHUNK_TWO);
+    assert!(call.next_chunk().await.is_none(), "clean upstream EOF must yield None");
 }
 
 #[tokio::test]

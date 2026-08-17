@@ -274,6 +274,57 @@ async fn opens_exact_post_and_streams_chunks_to_clean_eof() {
 }
 
 #[tokio::test]
+async fn dropping_an_in_flight_pull_future_loses_no_bytes() {
+    let (release_tx, release_rx) = oneshot::channel();
+    let mut first = chunked_headers(&[]);
+    first.extend_from_slice(&encoded_chunk(CHUNK_ONE));
+    let mut second = encoded_chunk(CHUNK_TWO);
+    second.extend_from_slice(b"0\r\n\r\n");
+    let loopback = scripted_loopback(first, Some(release_rx), second, false);
+    let transport =
+        ReqwestStreamingTransportV1::new(stream_config()).expect("transport should build");
+
+    let mut call = open(&loopback.endpoint, &transport, None, &CancellationToken::new())
+        .await
+        .expect("a 2xx upstream should open a stream");
+    let mut delivered = Vec::new();
+    while delivered.len() < CHUNK_ONE.len() {
+        let chunk = call
+            .next_chunk()
+            .await
+            .expect("the first scripted chunk should yield bytes")
+            .expect("the first scripted chunk should not fail");
+        delivered.extend_from_slice(chunk.as_bytes());
+    }
+    assert_eq!(delivered, CHUNK_ONE);
+
+    // A host heartbeat leg can win the select and drop an in-flight pull. Poll the pull once so
+    // real read interest exists, drop it, and prove the resumed stream loses nothing.
+    {
+        let pull = call.next_chunk();
+        tokio::pin!(pull);
+        tokio::select! {
+            biased;
+            outcome = &mut pull => {
+                panic!("no bytes should be in flight before the release: {outcome:?}")
+            }
+            () = std::future::ready(()) => {}
+        }
+    }
+
+    release_tx.send(()).expect("server should await its release signal");
+    let mut resumed = Vec::new();
+    while let Some(result) = call.next_chunk().await {
+        let chunk = result.expect("resumed pulls should not fail");
+        resumed.extend_from_slice(chunk.as_bytes());
+    }
+
+    assert_eq!(resumed, CHUNK_TWO, "a dropped in-flight pull must not lose or repeat bytes");
+    assert!(call.next_chunk().await.is_none(), "pulls after EOF must keep yielding None");
+    loopback.task.await.expect("server task should finish");
+}
+
+#[tokio::test]
 async fn oversized_network_reads_are_rechunked_to_the_delivery_bound() {
     let body = vec![b'x'; MAX_STREAM_CHUNK_BYTES + 40_000];
     let loopback = scripted_loopback(

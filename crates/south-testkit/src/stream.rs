@@ -827,29 +827,27 @@ struct ReferenceStreamSource {
 
 impl StreamByteSourceV1 for ReferenceStreamSource {
     fn next_chunk(&mut self) -> StreamChunkFutureV1<'_> {
-        if let Some(chunk) = self.chunks.get(self.next_index).copied() {
-            self.next_index += 1;
-            return Box::pin(
-                async move { Some(StreamChunkV1::try_new(Bytes::from_static(chunk))) },
-            );
-        }
-        let terminal = self.terminal;
-        let stall_started = Arc::clone(&self.stall_started);
-        let pending_dropped = Arc::clone(&self.pending_dropped);
+        // All script-state advancement stays inside the returned future: a pull future that is
+        // dropped before completing must not consume its scripted chunk, mirroring the
+        // cancellation-safety contract real transports must honor.
         Box::pin(async move {
-            match terminal {
+            if let Some(chunk) = self.chunks.get(self.next_index).copied() {
+                self.next_index += 1;
+                return Some(StreamChunkV1::try_new(Bytes::from_static(chunk)));
+            }
+            match self.terminal {
                 ProviderStreamTerminalV1::CleanEof => None,
                 ProviderStreamTerminalV1::BreakWithReadFailure => {
                     Some(Err(StreamReadErrorV1::StreamReadFailed))
                 }
                 ProviderStreamTerminalV1::IdleStall => {
-                    stall_started.notify_one();
+                    self.stall_started.notify_one();
                     tokio::time::sleep(PROVIDER_STREAM_CONFORMANCE_IDLE_TIMEOUT_V1).await;
                     Some(Err(StreamReadErrorV1::StreamIdleTimeout))
                 }
                 ProviderStreamTerminalV1::PendingForever => {
-                    let _drop_flag = PendingDropFlag(pending_dropped);
-                    stall_started.notify_one();
+                    let _drop_flag = PendingDropFlag(Arc::clone(&self.pending_dropped));
+                    self.stall_started.notify_one();
                     pending().await
                 }
             }
