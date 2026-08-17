@@ -42,6 +42,8 @@ struct Conformance {
     provider_call_suite: u32,
     provider_stream_suite_id: String,
     provider_stream_suite: u32,
+    header_auth_suite_id: String,
+    header_auth_suite: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -100,6 +102,8 @@ fn compatibility_manifest_describes_the_library_slice() {
     assert_eq!(manifest.conformance.provider_call_suite, 1);
     assert_eq!(manifest.conformance.provider_stream_suite_id, "south.provider-stream.v1");
     assert_eq!(manifest.conformance.provider_stream_suite, 1);
+    assert_eq!(manifest.conformance.header_auth_suite_id, "south.header-auth.v1");
+    assert_eq!(manifest.conformance.header_auth_suite, 1);
     assert!(manifest.provider_api.wit_version.is_none());
     assert!(manifest.provider_runtime.abi_version.is_none());
     let expected_crates = BTreeMap::from([
