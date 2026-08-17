@@ -7,7 +7,7 @@
   "contracts": {
     "reserved_header_policy": 1,
     "http": 1,
-    "auth": 1,
+    "auth": 2,
     "error": 1,
     "stream": 1,
     "canonical_ir": null,
