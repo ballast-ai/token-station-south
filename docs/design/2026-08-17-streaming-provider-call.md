@@ -1,6 +1,6 @@
 # Streaming Provider Call Vertical Slice
 
-Status: design draft; awaiting lv's ruling on D1–D4 before implementation
+Status: D1–D4 all ruled as recommended by lv (2026-08-17); implementation authorized
 
 Date: 2026-08-17
 
@@ -226,7 +226,7 @@ auth (SigV4 stays host-side; those legs keep their existing transport until the 
 lands). `compatibility.json` grows a per-capability annotation rather than flipping the single
 host status (exact shape decided at implementation time).
 
-## 9. Open decisions for lv
+## 9. Decisions (ruled 2026-08-17, all as recommended)
 
 - **D1 — layering ruling (§2).** Recommended as written; the alternative (SSE-aware primitive)
   locks out Bedrock and is not recommended.
