@@ -1,6 +1,9 @@
 # Streaming Provider Call Vertical Slice
 
-Status: D1–D4 all ruled as recommended by lv (2026-08-17); implementation authorized
+Status: implemented on this branch (158 workspace tests, all gates green); independently
+reviewed — APPROVED with two P1 findings, both fixed (per-pull deadline observation; source
+script state moved inside the pull future + cancel-safety pinning tests at three layers).
+Remaining P2 notes live in the review record. Host adoption for streaming is separate future work.
 
 Date: 2026-08-17
 
