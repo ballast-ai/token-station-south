@@ -1,7 +1,8 @@
 # Minimal Provider Call Library Vertical Slice
 
 Status: merged to main (PR #1, remote CI green, tag v0.0.1); token-station-server verified
-2026-08-17 (embeddings adoption slice + adversarial wiring review); token-station not verified
+2026-08-17 for embeddings and token-station verified 2026-08-17 for its explicit diagnostic path;
+both capability annotations are limited to provider-call v1
 
 Date: 2026-08-16
 
@@ -515,8 +516,11 @@ findings. Remote CI ran green on PR #1 and the branch merged to main (tag `v0.0.
 `token-station-server` became `verified` on 2026-08-17: its real adapter serves the embeddings
 Bearer JSON POST call site, its assembled executor passed this suite 7/7, and an adversarial
 wiring review confirmed the reported evidence is measured at the real resolver and transport
-boundaries (evidence trail: enterprise repo product-review #34). `token-station` remains
-`not_verified` pending its own adoption slice.
+boundaries (evidence trail: enterprise repo product-review #34). `token-station` became verified
+for provider-call v1 on 2026-08-17 after its real diagnostic adapter passed the suite 7/7, real
+reqwest loopback behavior and no-replay paths passed, host CI succeeded at `63a3ceb`, and wiring
+review closed all findings. See `2026-08-17-community-host-compatibility-release.md` for the exact
+scope and evidence. Both hosts remain `not_verified` for provider-stream v1.
 
 This result proves the library slice only. It does not prove enterprise migration or production
 host adoption. No desktop App was installed because this repository does not change Token Station
@@ -524,16 +528,16 @@ desktop behavior.
 
 ## Acceptance and release status
 
-The library slice is complete only when all local gates and remote CI pass and the final reviews have no
-open critical or important findings. `compatibility.json` may report HTTP/Auth/Error contract
-version one and the reqwest transport as implemented. Streaming, WIT, provider runtime, ureq, and
-both real hosts remain null, placeholder, or `not_verified` until their own public acceptance gates
+The library slice is complete only when all local gates and remote CI pass and the final reviews
+have no open critical or important findings. `compatibility.json` reports HTTP/Auth/Error contract
+version one, the reqwest transport, and per-capability host status. Provider WIT, provider runtime,
+and ureq remain null or placeholder. Streaming has its own versioned contract and conformance
+suite, but both real hosts remain `not_verified` for streaming until their separate adoption gates
 pass.
 
-The next separate host-adoption slice must select one real enterprise Bearer JSON POST call site,
-compile its adapter against South, and run this assembled-executor conformance suite. Until that
-happens, this work is described as reqwest-aligned library infrastructure, not enterprise migration
-readiness.
+Each additional host capability still requires a separate adoption slice: compile the real adapter,
+run the matching assembled-executor conformance suite, and review evidence at the real resolver and
+transport boundaries before changing that capability to `verified`.
 
 This slice changes no Token Station desktop behavior. It does not require a local desktop App
 reinstall.

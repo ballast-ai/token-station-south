@@ -1,8 +1,8 @@
 # Streaming Provider Call Vertical Slice
 
-Status: implemented on this branch (158 workspace tests, all gates green); independently
-reviewed — APPROVED with two P1 findings, both fixed (per-pull deadline observation; source
-script state moved inside the pull future + cancel-safety pinning tests at three layers).
+Status: implemented on main and released as v0.1.0 (158 workspace tests, all gates green);
+independently reviewed — APPROVED with two P1 findings, both fixed (per-pull deadline observation;
+source script state moved inside the pull future + cancel-safety pinning tests at three layers).
 Remaining P2 notes live in the review record. Host adoption for streaming is separate future work.
 
 Date: 2026-08-17
@@ -22,10 +22,10 @@ the design from two sides:
   16 MiB frame bound. SSE framing, cross-frame translation state, exact usage evidence, terminal-
   frame withholding ("persist terminal before client visibility"), and settlement are all
   host-owned money paths.
-- **token-station** (community host, not yet adopted): its acceptance checklist (§1.8) sketches a
-  South-driven loop that feeds an SSE frame decoder and a plugin `parse_stream_chunk`, returning
-  `StreamEvent`s through a callback. That loop depends on the provider WIT runtime, which is still
-  a placeholder crate in this workspace.
+- **token-station** (community host, provider-call adopted but streaming not adopted): its
+  acceptance checklist (§1.8) sketches a South-driven loop that feeds an SSE frame decoder and a
+  plugin `parse_stream_chunk`, returning `StreamEvent`s through a callback. That loop depends on
+  the provider WIT runtime, which is still a placeholder crate in this workspace.
 
 A single primitive cannot serve both altitudes at once without either baking SSE into the
 transport contract (which locks Bedrock out) or shipping a plugin runtime prematurely.
@@ -226,8 +226,8 @@ wiring review confirms the evidence, and (d) the settlement invariants (marker b
 refund after marker, terminal-frame withholding) are shown unchanged by the host's own test legs.
 Bedrock's eventstream legs are in scope *as consumers of the byte stream* but out of scope for
 auth (SigV4 stays host-side; those legs keep their existing transport until the Auth roadmap
-lands). `compatibility.json` grows a per-capability annotation rather than flipping the single
-host status (exact shape decided at implementation time).
+lands). `compatibility.json` uses `host_capabilities.<host>.provider_stream` for this status while
+the legacy top-level host summary continues to mirror provider-call status.
 
 ## 9. Decisions (ruled 2026-08-17, all as recommended)
 

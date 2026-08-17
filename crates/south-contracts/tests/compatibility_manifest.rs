@@ -121,7 +121,12 @@ fn compatibility_manifest_describes_the_library_slice() {
             "unexpected status for {name}"
         );
     }
-    assert_eq!(manifest.hosts.get("token-station").map(String::as_str), Some("not_verified"));
+    // token-station verified 2026-08-17 for provider_call only: its non-test
+    // diagnostic adapter functions, wrapped by CommunityConformanceExecutorV1, passed
+    // south.provider-call.v1 7/7; real resolver/transport wiring received
+    // adversarial review; and the final host PR CI passed at 63a3ceb. See the
+    // community-host compatibility release design for the evidence and scope.
+    assert_eq!(manifest.hosts.get("token-station").map(String::as_str), Some("verified"));
     // token-station-server verified 2026-08-17: real adapter at the embeddings
     // Bearer JSON POST call site, assembled-executor conformance 7/7, and an
     // adversarial wiring review of the reported evidence. See the enterprise
@@ -133,7 +138,7 @@ fn compatibility_manifest_describes_the_library_slice() {
     // adoption slice lands. A capability listed here must have a conformance
     // suite in this manifest.
     let expected_capabilities: BTreeMap<&str, [(&str, &str); 2]> = BTreeMap::from([
-        ("token-station", [("provider_call", "not_verified"), ("provider_stream", "not_verified")]),
+        ("token-station", [("provider_call", "verified"), ("provider_stream", "not_verified")]),
         (
             "token-station-server",
             [("provider_call", "verified"), ("provider_stream", "not_verified")],
