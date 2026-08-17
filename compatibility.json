@@ -52,7 +52,7 @@
     },
     "token-station-server": {
       "provider_call": "verified",
-      "provider_stream": "not_verified"
+      "provider_stream": "verified"
     }
   }
 }

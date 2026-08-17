@@ -139,10 +139,14 @@ fn compatibility_manifest_describes_the_library_slice() {
     // suite in this manifest.
     let expected_capabilities: BTreeMap<&str, [(&str, &str); 2]> = BTreeMap::from([
         ("token-station", [("provider_call", "verified"), ("provider_stream", "not_verified")]),
-        (
-            "token-station-server",
-            [("provider_call", "verified"), ("provider_stream", "not_verified")],
-        ),
+        // token-station-server provider_stream verified 2026-08-17: the durable
+        // chat sender's real seam runs streams through
+        // open_streaming_provider_call_v1, the host's assembled executor passes
+        // south.provider-stream.v1 9/9 with six-field evidence at real
+        // boundaries, and an adversarial wiring review (one P1 — proxy-
+        // environment fallback — fixed on-branch) plus lv's sign-off closed the
+        // loop. Evidence trail: enterprise repo product-review #34 §6.
+        ("token-station-server", [("provider_call", "verified"), ("provider_stream", "verified")]),
     ]);
     assert_eq!(manifest.host_capabilities.len(), expected_capabilities.len());
     for (host, capabilities) in expected_capabilities {
