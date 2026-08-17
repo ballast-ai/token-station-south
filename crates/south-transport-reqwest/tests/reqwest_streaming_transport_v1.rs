@@ -319,14 +319,20 @@ async fn streaming_head_uses_the_same_closed_quota_metadata_contract() {
 #[tokio::test]
 async fn streaming_head_omits_malformed_optional_quota_metadata() {
     let oversized = "x".repeat(south_contracts::MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES + 1);
-    let mut duplicate =
-        chunked_headers(&[("x-ratelimit-limit-tokens", "1"), ("x-ratelimit-limit-tokens", "1")]);
+    let mut duplicate = chunked_headers(&[
+        ("x-ratelimit-limit-tokens", "1"),
+        ("x-ratelimit-limit-tokens", "1"),
+        ("anthropic-ratelimit-unified-limit", "77"),
+    ]);
     duplicate.extend_from_slice(b"0\r\n\r\n");
-    let mut overlong = chunked_headers(&[("x-ratelimit-remaining-tokens", &oversized)]);
+    let mut overlong = chunked_headers(&[
+        ("x-ratelimit-remaining-tokens", &oversized),
+        ("anthropic-ratelimit-unified-limit", "77"),
+    ]);
     overlong.extend_from_slice(b"0\r\n\r\n");
     let mut non_utf8 = b"HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\nconnection: close\r\nx-ratelimit-reset-tokens: ".to_vec();
     non_utf8.push(0xff);
-    non_utf8.extend_from_slice(b"\r\n\r\n0\r\n\r\n");
+    non_utf8.extend_from_slice(b"\r\nanthropic-ratelimit-unified-limit: 77\r\n\r\n0\r\n\r\n");
 
     for first in [duplicate, overlong, non_utf8] {
         let loopback = scripted_loopback(first, None, Vec::new(), false);
@@ -337,7 +343,12 @@ async fn streaming_head_omits_malformed_optional_quota_metadata() {
             .await
             .expect("malformed optional quota metadata must not fail a valid stream");
         loopback.request.await.expect("server should receive one request");
-        assert_eq!(call.head().provider_quota_metadata().present_field_count(), 0);
+        let quota = call.head().provider_quota_metadata();
+        assert_eq!(quota.present_field_count(), 1);
+        assert_eq!(quota.x_ratelimit_limit_tokens(), None);
+        assert_eq!(quota.x_ratelimit_remaining_tokens(), None);
+        assert_eq!(quota.x_ratelimit_reset_tokens(), None);
+        assert_eq!(quota.anthropic_ratelimit_unified_limit(), Some("77"));
         assert!(call.next_chunk().await.is_none());
         loopback.task.await.expect("server task should finish");
     }

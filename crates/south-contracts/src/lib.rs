@@ -768,7 +768,7 @@ pub struct BufferedHttpResponseV1 {
 }
 
 impl BufferedHttpResponseV1 {
-    /// Validates a buffered response and its two allowed metadata fields.
+    /// Validates a buffered response with the legacy empty quota metadata shape.
     pub fn try_from_parts(
         status: StatusCode,
         body: Vec<u8>,
@@ -853,7 +853,7 @@ impl fmt::Debug for BufferedHttpResponseV1 {
 /// The bounded, headers-ready metadata of one streaming HTTP exchange.
 ///
 /// The head is handed to the host before any body byte is pulled, so the host can branch on
-/// status and the two explicitly allowed metadata fields without touching the stream.
+/// status and all explicitly allowed metadata without touching the stream.
 #[derive(Clone, PartialEq, Eq)]
 pub struct StreamingResponseHeadV1 {
     status: StatusCode,
@@ -863,7 +863,7 @@ pub struct StreamingResponseHeadV1 {
 }
 
 impl StreamingResponseHeadV1 {
-    /// Validates a streaming response head and its two allowed metadata fields.
+    /// Validates a streaming response head with the legacy empty quota metadata shape.
     ///
     /// Redirect statuses are refused because the streaming transport must never follow one.
     pub fn try_from_parts(

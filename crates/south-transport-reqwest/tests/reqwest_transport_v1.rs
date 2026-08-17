@@ -454,14 +454,27 @@ async fn malformed_optional_quota_metadata_is_omitted_without_failing_the_respon
     let oversized = "x".repeat(MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES + 1);
     let mut non_utf8 = b"HTTP/1.1 200 OK\r\nx-ratelimit-reset-tokens: ".to_vec();
     non_utf8.push(0xff);
-    non_utf8.extend_from_slice(b"\r\ncontent-length: 4\r\nconnection: close\r\n\r\nsafe");
+    non_utf8.extend_from_slice(
+        b"\r\nanthropic-ratelimit-unified-limit: 77\r\ncontent-length: 4\r\nconnection: close\r\n\r\nsafe",
+    );
     let fixtures = [
         response(
             "200 OK",
-            &[("x-ratelimit-limit-tokens", "1"), ("x-ratelimit-limit-tokens", "1")],
+            &[
+                ("x-ratelimit-limit-tokens", "1"),
+                ("x-ratelimit-limit-tokens", "1"),
+                ("anthropic-ratelimit-unified-limit", "77"),
+            ],
             b"safe",
         ),
-        response("200 OK", &[("x-ratelimit-remaining-tokens", &oversized)], b"safe"),
+        response(
+            "200 OK",
+            &[
+                ("x-ratelimit-remaining-tokens", &oversized),
+                ("anthropic-ratelimit-unified-limit", "77"),
+            ],
+            b"safe",
+        ),
         non_utf8,
     ];
 
@@ -481,7 +494,12 @@ async fn malformed_optional_quota_metadata_is_omitted_without_failing_the_respon
 
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(response.body(), "safe");
-        assert_eq!(response.provider_quota_metadata().present_field_count(), 0);
+        let quota = response.provider_quota_metadata();
+        assert_eq!(quota.present_field_count(), 1);
+        assert_eq!(quota.x_ratelimit_limit_tokens(), None);
+        assert_eq!(quota.x_ratelimit_remaining_tokens(), None);
+        assert_eq!(quota.x_ratelimit_reset_tokens(), None);
+        assert_eq!(quota.anthropic_ratelimit_unified_limit(), Some("77"));
     }
 }
 
