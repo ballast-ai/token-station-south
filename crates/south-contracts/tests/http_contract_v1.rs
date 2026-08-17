@@ -13,13 +13,9 @@ const SENTINEL: &str = "must-not-appear-7f23a";
 /// Every sanctioned secret-bearing header in canonical table order. The match below is
 /// deliberately exhaustive so adding a `SecretHeaderV1` variant fails compilation here until the
 /// list, the reserved-header pin, and the conformance surface are all updated together.
-const ALL_SECRET_HEADERS: [SecretHeaderV1; 5] = [
-    SecretHeaderV1::ApiKey,
-    SecretHeaderV1::XApiKey,
-    SecretHeaderV1::XGoogApiKey,
-    SecretHeaderV1::XiApiKey,
-    SecretHeaderV1::OcpApimSubscriptionKey,
-];
+/// The published set is the single source of truth for every suite that must cover all sanctioned
+/// headers; [`secret_header_all_covers_every_variant`] proves it is complete.
+const ALL_SECRET_HEADERS: [SecretHeaderV1; 5] = SecretHeaderV1::ALL;
 
 const fn assert_secret_header_listed(header: SecretHeaderV1) {
     match header {
@@ -29,6 +25,23 @@ const fn assert_secret_header_listed(header: SecretHeaderV1) {
         | SecretHeaderV1::XiApiKey
         | SecretHeaderV1::OcpApimSubscriptionKey => {}
     }
+}
+
+#[test]
+fn secret_header_all_covers_every_variant() {
+    // Adding a variant without extending `SecretHeaderV1::ALL` would silently shrink the coverage
+    // of every suite that iterates it, so prove completeness two ways: the exhaustive match rejects
+    // an unlisted variant at compile time, and distinct wire names prove no slot is duplicated to
+    // pad the array to its declared length.
+    for header in SecretHeaderV1::ALL {
+        assert_secret_header_listed(header);
+    }
+    let mut names: Vec<&str> =
+        SecretHeaderV1::ALL.iter().map(SecretHeaderV1::header_name).collect();
+    names.sort_unstable();
+    let total = names.len();
+    names.dedup();
+    assert_eq!(names.len(), total, "SecretHeaderV1::ALL must not repeat a variant");
 }
 
 #[test]

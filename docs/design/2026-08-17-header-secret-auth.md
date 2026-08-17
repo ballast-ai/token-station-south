@@ -86,6 +86,21 @@ arm). `compatibility.json` mirrors it. `JsonPostRequestV1::new` keeps its signat
 value keeps its `Bearer ` prefix, for `HeaderSecret` the secret is the verbatim value. Everything
 else (redirect denial, decompression bans, bounds) is untouched.
 
+### 3.4 Migration note (breaking, ships as 0.2.0)
+
+A host that implements its own `AsyncHttpTransport` / `AsyncStreamingTransport` must update:
+
+- `PreparedHttpRequestV1::bearer_secret()` is **removed**; use `auth_header()`, which returns the
+  header name alongside the value.
+- **The `Bearer ` prefix is now assembled by core.** A transport that keeps prefixing the value
+  itself produces `Bearer Bearer …` and fails every upstream. Inject the returned bytes verbatim.
+- `JsonPostRequestV1::auth()` returns `&ProviderAuthV1` (was `&BearerAuthV1`), and
+  `JsonPostRequestV1::new` is no longer `const` (it takes `impl Into<ProviderAuthV1>`); passing a
+  `BearerAuthV1` still compiles unchanged.
+
+Hosts consuming only the crate-provided transports need no source changes. Because cargo treats
+`0.1.x → 0.1.y` as compatible, this slice must be released as **0.2.0**, never as a patch.
+
 ## 4. Conformance (D4)
 
 The `south.provider-call.v1` and `south.provider-stream.v1` fixture tables are frozen. Options:
@@ -100,6 +115,14 @@ Recommendation: **(b)**. The existing suites' IDs are burned into two hosts' ver
 their evidence records; a version bump would force both hosts to re-run adoption paperwork for a
 purely additive scheme. A dedicated suite keeps capability provenance clean —
 `host_capabilities` gains `header_auth` per host when its adoption slice lands.
+
+Implemented as **three** frozen cases rather than the two sketched above: a negative
+`HeaderSecretSlotMismatch` case was added so the suite also anchors the zero-call evidence
+(binding mismatch must reach neither resolver nor transport) for the new auth arm. The frozen
+table is the authority; this paragraph records the deliberate delta from the approved sketch.
+Coverage split noted for host adoption reviews: the mismatch case runs the buffered entry point,
+while the streaming arm's mismatch behavior is pinned by core tests (both arms share the binding
+check and auth assembly code paths).
 
 ## 5. Scope
 

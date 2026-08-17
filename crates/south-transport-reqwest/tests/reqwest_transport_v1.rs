@@ -277,13 +277,7 @@ async fn sends_exact_post_and_preserves_created_response() {
 
 #[tokio::test]
 async fn header_secret_call_injects_the_sanctioned_header_and_no_authorization() {
-    for header in [
-        SecretHeaderV1::ApiKey,
-        SecretHeaderV1::XApiKey,
-        SecretHeaderV1::XGoogApiKey,
-        SecretHeaderV1::XiApiKey,
-        SecretHeaderV1::OcpApimSubscriptionKey,
-    ] {
+    for header in SecretHeaderV1::ALL {
         let loopback = loopback_once(response(
             "200 OK",
             &[("content-type", "application/json")],

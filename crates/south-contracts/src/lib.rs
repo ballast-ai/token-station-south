@@ -523,6 +523,20 @@ pub enum SecretHeaderV1 {
 }
 
 impl SecretHeaderV1 {
+    /// Every sanctioned header, in declaration order.
+    ///
+    /// Tests that must cover the whole sanctioned set iterate this constant instead of writing
+    /// their own array: a new variant then reaches those tests automatically. The exhaustive match
+    /// in [`SecretHeaderV1::header_name`] makes adding a variant without a wire name a compile
+    /// error, and this constant makes adding one without test coverage impossible to miss.
+    pub const ALL: [Self; 5] = [
+        Self::ApiKey,
+        Self::XApiKey,
+        Self::XGoogApiKey,
+        Self::XiApiKey,
+        Self::OcpApimSubscriptionKey,
+    ];
+
     /// Returns the lowercase wire name of the sanctioned header.
     #[must_use]
     pub const fn header_name(&self) -> &'static str {

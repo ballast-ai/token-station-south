@@ -353,13 +353,7 @@ async fn success_prepares_exactly_one_post_for_the_transport() {
 
 #[tokio::test(start_paused = true)]
 async fn header_secret_prepares_the_sanctioned_header_with_the_verbatim_secret() {
-    for header in [
-        SecretHeaderV1::ApiKey,
-        SecretHeaderV1::XApiKey,
-        SecretHeaderV1::XGoogApiKey,
-        SecretHeaderV1::XiApiKey,
-        SecretHeaderV1::OcpApimSubscriptionKey,
-    ] {
+    for header in SecretHeaderV1::ALL {
         let resolver = ImmediateResolver::default();
         let transport = RecordingTransport::default();
 
