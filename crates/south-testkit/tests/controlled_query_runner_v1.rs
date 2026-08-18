@@ -162,7 +162,7 @@ async fn each_single_difference_reports_exactly_its_one_case_and_category() {
                 .expect_err("one deliberate difference must fail conformance");
         assert_eq!(failure.suite_id(), CONTROLLED_QUERY_CONFORMANCE_SUITE_ID);
         assert_eq!(failure.suite_version(), CONTROLLED_QUERY_CONFORMANCE_SUITE_VERSION);
-        assert_eq!(failure.evaluated_case_count(), 3);
+        assert_eq!(failure.evaluated_case_count(), controlled_query_fixtures_v1().len());
         assert!(failure.mismatches().len() <= MAX_CONTROLLED_QUERY_MISMATCHES_V1);
         assert_eq!(failure.mismatches().len(), 1, "category {category:?} must isolate");
         let mismatch = &failure.mismatches()[0];
@@ -202,7 +202,7 @@ async fn a_fully_wrong_executor_reports_every_case_without_failing_fast() {
     let failure = run_controlled_query_conformance_v1(&WrongExecutor)
         .await
         .expect_err("deliberate mismatches must fail");
-    assert_eq!(failure.evaluated_case_count(), 3);
+    assert_eq!(failure.evaluated_case_count(), controlled_query_fixtures_v1().len());
 
     let categories: BTreeSet<_> = failure
         .mismatches()

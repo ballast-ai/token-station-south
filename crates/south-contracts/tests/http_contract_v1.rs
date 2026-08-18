@@ -600,7 +600,11 @@ fn api_version_grammar_accepts_real_values_and_rejects_separators() {
             "{accepted} is a real Azure api-version"
         );
     }
-    for rejected in ["", "a b", "a&b=c", "a%2Fb", "a#b", "a?b", "a/b", "a=b"] {
+    // Separator-only values pass the character class but are meaningless as versions and read as
+    // dot segments to anything that re-joins the URL.
+    for rejected in
+        ["", "a b", "a&b=c", "a%2Fb", "a#b", "a?b", "a/b", "a=b", ".", "..", "--", "._-"]
+    {
         assert_eq!(
             QueryStringV1::try_from_iter([(QueryParameterV1::ApiVersion, rejected)]),
             Err(ContractErrorV1::InvalidQueryValue),
@@ -683,4 +687,52 @@ fn a_query_with_no_parameters_is_a_contract_error() {
     // one the caller meant — so it is rejected at construction rather than normalized away.
     let empty: [(QueryParameterV1, &str); 0] = [];
     assert_eq!(QueryStringV1::try_from_iter(empty), Err(ContractErrorV1::EmptyQuery));
+}
+
+#[test]
+fn set_query_is_an_identity_map_on_every_accepted_value() {
+    // `resolve_against_with_query` proves the wire query equals the declaration byte for byte.
+    // That check is only meaningful while the grammar admits solely query-safe bytes: the `url`
+    // crate percent-encodes `#`, space, and NUL, and silently *deletes* CR and LF. No accepted
+    // value hits any of those today, which is exactly why no positive test can falsify the check
+    // — so pin the property the check depends on instead. Relaxing a grammar to admit `%`, `+`,
+    // `:`, or whitespace (plausible when `GroupId`/`task_id` land) breaks this test first.
+    let endpoint = ProviderEndpointV1::parse("https://example.com/base/").unwrap();
+    let path = RelativePathV1::parse("v1/resource").unwrap();
+    let accepted_values: [(QueryParameterV1, &[&str]); 2] = [
+        (
+            QueryParameterV1::ApiVersion,
+            &["2024-10-21", "2025-04-01-preview", "v1", "1.0", "a_b", "A-Z.0_9"],
+        ),
+        (QueryParameterV1::Alt, &["sse", "json"]),
+    ];
+
+    for (parameter, values) in accepted_values {
+        for value in values {
+            let query = QueryStringV1::try_from_iter([(parameter, *value)])
+                .expect("fixture value must match the grammar");
+            let resolved = path
+                .resolve_against_with_query(&endpoint, Some(&query))
+                .expect("an accepted query must resolve inside the binding");
+            assert_eq!(
+                resolved.query(),
+                Some(query.as_str()),
+                "{parameter:?}={value} must survive set_query unchanged"
+            );
+            // The query must never move the path, whatever the value.
+            assert_eq!(resolved.path(), "/base/v1/resource");
+            assert!(resolved.fragment().is_none());
+        }
+    }
+}
+
+#[test]
+fn a_query_free_request_must_reach_the_wire_without_a_query() {
+    // The `None` arm of the intactness check is the version-one regression guard: a path alone
+    // must never acquire a query through the join.
+    let endpoint = ProviderEndpointV1::parse("https://example.com/base/").unwrap();
+    let path = RelativePathV1::parse("v1/resource").unwrap();
+    let resolved = path.resolve_against(&endpoint).expect("a bare path must resolve");
+    assert_eq!(resolved.query(), None);
+    assert_eq!(resolved.as_str(), "https://example.com/base/v1/resource");
 }

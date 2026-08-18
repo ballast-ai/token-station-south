@@ -33,8 +33,8 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{map_contract_error, map_provider_call_error, parse_reference_input};
 
-/// Three cases multiplied by the ten closed controlled-query mismatch categories.
-pub const MAX_CONTROLLED_QUERY_MISMATCHES_V1: usize = 30;
+/// Four cases multiplied by the ten closed controlled-query mismatch categories.
+pub const MAX_CONTROLLED_QUERY_MISMATCHES_V1: usize = 40;
 
 /// A boxed, cancellation-safe assembled controlled-query executor future.
 pub type AssembledControlledQueryExecutionFutureV1<'a> =

@@ -650,6 +650,12 @@ impl QueryParameterV1 {
                     && value.bytes().all(|byte| {
                         byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-')
                     })
+                    // A value made only of separators (`..`, `.`, `--`) is meaningless as a
+                    // version and is the one accepted shape that reads as a dot segment to an
+                    // intermediary that re-joins the URL. It cannot move this library's path —
+                    // `url` does not normalize dot segments across the `?` boundary — but the
+                    // grammar is frozen contract, and narrowing it later is harder than now.
+                    && value.bytes().any(|byte| byte.is_ascii_alphanumeric())
             }
             // A closed value set: the upstream accepts nothing else.
             Self::Alt => matches!(value, "sse" | "json"),
@@ -692,6 +698,7 @@ impl QueryStringV1 {
         }
 
         let mut serialized = String::new();
+        let mut emitted = 0_usize;
         for parameter in QueryParameterV1::ALL {
             let Some((_, value)) = declared.iter().find(|(seen, _)| *seen == parameter) else {
                 continue;
@@ -702,6 +709,15 @@ impl QueryStringV1 {
             serialized.push_str(parameter.wire_name());
             serialized.push('=');
             serialized.push_str(value);
+            emitted += 1;
+        }
+        // Serialization iterates `ALL` while validation iterates the caller's input, so a variant
+        // missing from `ALL` would validate and then contribute nothing — silently dropping a
+        // parameter, or producing a bare trailing `?` when it was the only one. Unlike
+        // `wire_name`'s exhaustive match, `ALL` membership is not compiler-enforced, so compare
+        // the two counts and fail loudly instead of emitting a URL the caller did not ask for.
+        if emitted != declared.len() || serialized.is_empty() {
+            return Err(ContractErrorV1::EmptyQuery);
         }
         if serialized.len() > MAX_QUERY_TOTAL_BYTES {
             return Err(ContractErrorV1::QueryTooLarge);
@@ -1655,4 +1671,105 @@ fn validate_response_metadata(
         return Err(TransportErrorV1::ResponseMetadataInvalid);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod query_serialization_completeness_tests {
+    use super::{ContractErrorV1, QueryParameterV1, QueryStringV1};
+
+    #[test]
+    fn every_variant_is_serializable_so_no_declaration_can_be_silently_dropped() {
+        // Serialization iterates `ALL` while validation iterates the caller's input. `ALL`
+        // membership is not compiler-enforced (unlike `wire_name`'s exhaustive match), so a
+        // variant missing from `ALL` would validate and then contribute nothing — dropping a
+        // parameter, or emitting a bare `?` when it was the only one. Proving every constructible
+        // variant round-trips is what makes that drift impossible to ship silently.
+        for parameter in QueryParameterV1::ALL {
+            let value = match parameter {
+                QueryParameterV1::ApiVersion => "v1",
+                QueryParameterV1::Alt => "sse",
+            };
+            let query = QueryStringV1::try_from_iter([(parameter, value)])
+                .expect("a sanctioned parameter with a valid value must construct");
+            assert_eq!(query.as_str(), format!("{}={value}", parameter.wire_name()));
+        }
+    }
+
+    #[test]
+    fn an_empty_serialization_is_never_returned_as_success() {
+        // The guard is on the serialized value, not the declaration count, so it holds even if
+        // `ALL` drifts away from the enum.
+        let empty: [(QueryParameterV1, &str); 0] = [];
+        assert_eq!(QueryStringV1::try_from_iter(empty), Err(ContractErrorV1::EmptyQuery));
+    }
+}
+
+#[cfg(test)]
+mod query_intactness_tests {
+    use super::{ProviderEndpointV1, QueryStringV1, RelativePathV1};
+
+    /// Constructs a query that the public grammar would never produce.
+    ///
+    /// The intactness check in [`RelativePathV1::resolve_against_with_query`] compares the wire
+    /// query against the declaration byte for byte. No value the grammar accepts can falsify it —
+    /// `url` treats every accepted byte as an identity map — so a purely public test can only
+    /// confirm it vacuously, and deleting the check leaves the whole suite green. These tests
+    /// reach past the grammar so the check has a real tripwire: they fail the moment it is
+    /// weakened, which is what protects a future grammar relaxation from shipping unnoticed.
+    fn unchecked_query(serialized: &str) -> QueryStringV1 {
+        QueryStringV1 { serialized: serialized.to_owned() }
+    }
+
+    #[test]
+    fn a_value_url_would_re_encode_is_refused_rather_than_silently_rewritten() {
+        let endpoint = ProviderEndpointV1::parse("https://example.com/base/").unwrap();
+        let path = RelativePathV1::parse("v1/resource").unwrap();
+
+        // `url` percent-encodes each of these inside a query, so the wire would carry different
+        // bytes than were declared. Preparation must fail instead of sending the rewritten form.
+        for rewritten in ["api-version=a b", "api-version=a\"b", "api-version=a<b", "alt=a\u{0}b"] {
+            let query = unchecked_query(rewritten);
+            assert!(
+                path.resolve_against_with_query(&endpoint, Some(&query)).is_err(),
+                "{rewritten:?} is re-encoded by url and must not survive the intactness check"
+            );
+        }
+    }
+
+    #[test]
+    fn a_value_url_would_delete_is_refused() {
+        let endpoint = ProviderEndpointV1::parse("https://example.com/base/").unwrap();
+        let path = RelativePathV1::parse("v1/resource").unwrap();
+
+        // `url` silently *deletes* CR and LF from a query. Byte-for-byte comparison is the only
+        // thing standing between that deletion and a URL nobody declared.
+        for deleted in ["api-version=a\nb", "api-version=a\rb"] {
+            let query = unchecked_query(deleted);
+            assert!(
+                path.resolve_against_with_query(&endpoint, Some(&query)).is_err(),
+                "{deleted:?} loses bytes in url and must not survive the intactness check"
+            );
+        }
+    }
+
+    #[test]
+    fn a_fragment_in_a_value_cannot_reach_the_wire() {
+        let endpoint = ProviderEndpointV1::parse("https://example.com/base/").unwrap();
+        let path = RelativePathV1::parse("v1/resource").unwrap();
+
+        // A `#` would terminate the query and open a fragment. The check rejects it because the
+        // surviving query no longer equals the declaration.
+        let query = unchecked_query("api-version=v1#frag");
+        assert!(path.resolve_against_with_query(&endpoint, Some(&query)).is_err());
+    }
+
+    #[test]
+    fn a_declared_query_free_request_cannot_acquire_a_query() {
+        // The `None` arm is the version-one regression guard: a bare path must never gain a query
+        // through the join. It is deleted by the same mutation that deletes the positive arm.
+        let endpoint = ProviderEndpointV1::parse("https://example.com/base/").unwrap();
+        let path = RelativePathV1::parse("v1/resource").unwrap();
+        let resolved = path.resolve_against_with_query(&endpoint, None).unwrap();
+        assert!(resolved.query().is_none());
+    }
 }

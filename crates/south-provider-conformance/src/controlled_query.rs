@@ -25,12 +25,19 @@ pub enum ControlledQueryCaseIdV1 {
     StreamingQuerySuccess,
     /// A declared value violating its parameter's grammar, refused before any boundary.
     InvalidQueryValueRejected,
+    /// Two parameters declared in reverse canonical order, proving the wire order is canonical.
+    ///
+    /// Every other case declares a single parameter, which makes ordering unobservable. Without
+    /// this case an adapter could serialize in host-declaration order, pass the suite, and still
+    /// disagree with another host on the wire bytes for the same declaration.
+    ReversedDeclarationOrderIsCanonicalized,
 }
 
 fixed_debug!(ControlledQueryCaseIdV1 {
     BufferedQuerySuccess => "BufferedQuerySuccess",
     StreamingQuerySuccess => "StreamingQuerySuccess",
     InvalidQueryValueRejected => "InvalidQueryValueRejected",
+    ReversedDeclarationOrderIsCanonicalized => "ReversedDeclarationOrderIsCanonicalized",
 });
 
 /// A raw upstream exchange or fake-transport behavior for a canonical controlled-query case.
@@ -274,6 +281,12 @@ const STREAMING_QUERY: &[(QueryParameterV1, &str)] =
     &[(QueryParameterV1::Alt, CONTROLLED_QUERY_ALT)];
 const INVALID_QUERY: &[(QueryParameterV1, &str)] =
     &[(QueryParameterV1::ApiVersion, CONTROLLED_QUERY_INVALID_API_VERSION)];
+/// Declared `alt` first, `api-version` second — the reverse of canonical order. The wire must
+/// still carry `api-version=…&alt=sse`.
+const REVERSED_ORDER_QUERY: &[(QueryParameterV1, &str)] = &[
+    (QueryParameterV1::Alt, CONTROLLED_QUERY_ALT),
+    (QueryParameterV1::ApiVersion, CONTROLLED_QUERY_API_VERSION),
+];
 
 const fn query_evidence(
     resolver_calls: ProviderCallCountV1,
@@ -337,6 +350,28 @@ const CONTROLLED_QUERY_FIXTURES: &[ControlledQueryFixtureV1] = &[
                 code: ProviderCallFailureCodeV1::InvalidRelativePath,
             },
             evidence: query_evidence(ProviderCallCountV1::Zero, ProviderCallCountV1::Zero, false),
+        },
+    },
+    ControlledQueryFixtureV1 {
+        case_id: ControlledQueryCaseIdV1::ReversedDeclarationOrderIsCanonicalized,
+        input: input(CONTROLLED_QUERY_PATH, CONTROLLED_QUERY_BOUND_SLOT),
+        declared_query: REVERSED_ORDER_QUERY,
+        upstream: ControlledQueryUpstreamV1::Response(ProviderCallRawResponseV1 {
+            status: 200,
+            body: CONTROLLED_QUERY_RESPONSE_BODY,
+            content_type: Some(CONTROLLED_QUERY_CONTENT_TYPE),
+            retry_after: None,
+        }),
+        expected: ControlledQueryExpectedV1 {
+            outcome: ControlledQueryExpectedOutcomeV1::Response {
+                status: 200,
+                body: CONTROLLED_QUERY_RESPONSE_BODY,
+                content_type: Some(CONTROLLED_QUERY_CONTENT_TYPE),
+                retry_after: None,
+            },
+            // `wire_query_exact` compares the wire against the canonical serialization, so this
+            // case fails for an adapter that emits parameters in host-declaration order.
+            evidence: query_evidence(ProviderCallCountV1::One, ProviderCallCountV1::One, true),
         },
     },
 ];

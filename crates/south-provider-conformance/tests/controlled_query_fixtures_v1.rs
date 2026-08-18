@@ -47,6 +47,7 @@ fn suite_identity_and_canonical_case_order_are_frozen() {
             ControlledQueryCaseIdV1::BufferedQuerySuccess,
             ControlledQueryCaseIdV1::StreamingQuerySuccess,
             ControlledQueryCaseIdV1::InvalidQueryValueRejected,
+            ControlledQueryCaseIdV1::ReversedDeclarationOrderIsCanonicalized,
         ]
     );
 }
@@ -54,7 +55,7 @@ fn suite_identity_and_canonical_case_order_are_frozen() {
 #[test]
 fn canonical_table_freezes_queries_upstreams_outcomes_and_evidence() {
     let fixtures = controlled_query_fixtures_v1();
-    assert_eq!(fixtures.len(), 3);
+    assert_eq!(fixtures.len(), 4);
 
     // 1. BufferedQuerySuccess: one buffered exchange carrying a sanctioned `api-version`.
     let declared = fixtures[0].declared_query();
@@ -102,6 +103,20 @@ fn canonical_table_freezes_queries_upstreams_outcomes_and_evidence() {
             code: ProviderCallFailureCodeV1::InvalidRelativePath
         }
     ));
+
+    // 4. ReversedDeclarationOrderIsCanonicalized: the only case declaring two parameters, and the
+    //    only one where serialization order is observable at all. It declares them in reverse
+    //    canonical order so an adapter emitting host-declaration order fails the suite.
+    let declared = fixtures[3].declared_query();
+    assert_eq!(declared.len(), 2);
+    assert_eq!(declared[0].0, QueryParameterV1::Alt);
+    assert_eq!(declared[1].0, QueryParameterV1::ApiVersion);
+    let canonical = QueryStringV1::try_from_iter(declared.iter().copied())
+        .expect("the reversed-order case must construct");
+    assert!(
+        canonical.as_str().starts_with(QueryParameterV1::ApiVersion.wire_name()),
+        "canonical order must lead with api-version regardless of declaration order"
+    );
 }
 
 #[test]
@@ -112,7 +127,11 @@ fn canonical_table_freezes_the_expected_wire_query_evidence() {
         (ProviderCallCountV1::One, ProviderCallCountV1::One, true),
         (ProviderCallCountV1::One, ProviderCallCountV1::One, true),
         (ProviderCallCountV1::Zero, ProviderCallCountV1::Zero, false),
+        (ProviderCallCountV1::One, ProviderCallCountV1::One, true),
     ];
+    // `zip` truncates silently, so a fixture added without extending the table above would go
+    // unchecked rather than failing here.
+    assert_eq!(fixtures.len(), expected_evidence.len());
     for (fixture, expected) in fixtures.iter().zip(expected_evidence) {
         let evidence = fixture.expected().evidence();
         assert_eq!(evidence.resolver_calls(), expected.0);
@@ -179,10 +198,22 @@ fn success_queries_construct_and_the_negative_query_is_refused_by_the_contract()
             constructed.expect_err("the negative case value must violate its grammar");
         } else {
             let query = constructed.expect("a success case query must construct");
-            // Canonical serialization is exactly `name=value` for the single declared parameter,
-            // which is what the wire-query evidence compares against.
-            let (parameter, value) = fixture.declared_query()[0];
-            assert_eq!(query.as_str(), format!("{}={value}", parameter.wire_name()));
+            // Canonical order is the `QueryParameterV1::ALL` order, not the declaration order —
+            // which is exactly what the reversed-order case exists to prove, and what the
+            // wire-query evidence compares against.
+            let mut canonical: Vec<(QueryParameterV1, &str)> = fixture.declared_query().to_vec();
+            canonical.sort_by_key(|(parameter, _)| {
+                QueryParameterV1::ALL
+                    .iter()
+                    .position(|candidate| candidate == parameter)
+                    .expect("every declared parameter must be in the sanctioned set")
+            });
+            let expected = canonical
+                .iter()
+                .map(|(parameter, value)| format!("{}={value}", parameter.wire_name()))
+                .collect::<Vec<_>>()
+                .join("&");
+            assert_eq!(query.as_str(), expected);
         }
     }
 }
