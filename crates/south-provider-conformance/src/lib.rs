@@ -37,8 +37,9 @@ pub use header_auth::{
 pub use quota::{
     PROVIDER_QUOTA_METADATA_CONFORMANCE_SUITE_ID,
     PROVIDER_QUOTA_METADATA_CONFORMANCE_SUITE_VERSION, ProviderQuotaMetadataCaseIdV1,
-    ProviderQuotaMetadataExpectedEvidenceV1, ProviderQuotaMetadataFixtureV1,
-    ProviderQuotaMetadataRawV1, provider_quota_metadata_fixtures_v1,
+    ProviderQuotaMetadataExpectedEvidenceV1, ProviderQuotaMetadataExpectedOutcomeV1,
+    ProviderQuotaMetadataFixtureV1, ProviderQuotaMetadataRawV1, ProviderQuotaMetadataUpstreamV1,
+    provider_quota_metadata_fixtures_v1,
 };
 
 pub use stream::{

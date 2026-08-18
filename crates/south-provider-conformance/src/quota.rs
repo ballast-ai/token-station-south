@@ -2,7 +2,7 @@ use std::fmt;
 
 use south_contracts::{PROVIDER_QUOTA_METADATA_FIELD_COUNT, ProviderQuotaMetadataFieldV1};
 
-use crate::{ProviderCallCountV1, ProviderCallInputV1};
+use crate::{ProviderCallCountV1, ProviderCallFailureCodeV1, ProviderCallInputV1};
 
 /// The stable identifier for provider quota metadata conformance version one.
 pub const PROVIDER_QUOTA_METADATA_CONFORMANCE_SUITE_ID: &str = "south.provider-quota-metadata.v1";
@@ -17,6 +17,23 @@ pub enum ProviderQuotaMetadataCaseIdV1 {
     AllFields,
     /// No approved field is present.
     NoFields,
+    /// A valid requested credential slot that differs from the binding, refused before any
+    /// boundary.
+    ///
+    /// This case exists to close a blind spot measured on a real host adapter during the
+    /// enterprise adoption (2026-08-18). Before it, both canonical cases were success paths
+    /// expecting `resolver_calls: One, transport_calls: One`, so no cell in the table could
+    /// separate correct wiring from a plausible shortcut. Two mutations survived the full suite:
+    /// an adapter reporting the literal `(1, 1)` instead of reading its real atomic counters, and
+    /// an adapter whose evidence never distinguished a call that was never made.
+    ///
+    /// This is the first case that expects a failure and zero calls at both boundaries, which is
+    /// the combination the table was missing. `south-core` refuses the mismatched slot in its
+    /// binding check before resolving any credential, so a correct adapter reports
+    /// [`ProviderCallFailureCodeV1::CredentialBindingMismatch`] with `(Zero, Zero)`. An adapter
+    /// hardcoding `(1, 1)` fails here with `ResolverCallCount` and `TransportCallCount`
+    /// mismatches.
+    CredentialSlotMismatch,
 }
 
 impl fmt::Debug for ProviderQuotaMetadataCaseIdV1 {
@@ -24,6 +41,7 @@ impl fmt::Debug for ProviderQuotaMetadataCaseIdV1 {
         formatter.write_str(match self {
             Self::AllFields => "AllFields",
             Self::NoFields => "NoFields",
+            Self::CredentialSlotMismatch => "CredentialSlotMismatch",
         })
     }
 }
@@ -92,13 +110,54 @@ impl fmt::Debug for ProviderQuotaMetadataExpectedEvidenceV1 {
     }
 }
 
+/// The raw metadata a fake upstream serves, or the fact that it is never asked for any.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ProviderQuotaMetadataUpstreamV1 {
+    /// Complete one exchange carrying this raw metadata.
+    Metadata(ProviderQuotaMetadataRawV1),
+    /// The transport boundary must not be reached.
+    NotReached,
+}
+
+impl fmt::Debug for ProviderQuotaMetadataUpstreamV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Metadata(raw) => formatter.debug_tuple("Metadata").field(raw).finish(),
+            Self::NotReached => formatter.write_str("NotReached"),
+        }
+    }
+}
+
+/// The exact expected terminal shape of one canonical metadata case.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ProviderQuotaMetadataExpectedOutcomeV1 {
+    /// Bounded metadata matched field by field, preserving the presence of every field.
+    Metadata(ProviderQuotaMetadataRawV1),
+    /// A known stable failure reached before any metadata could exist.
+    Failure {
+        /// Expected closed failure code.
+        code: ProviderCallFailureCodeV1,
+    },
+}
+
+impl fmt::Debug for ProviderQuotaMetadataExpectedOutcomeV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Metadata(raw) => formatter.debug_tuple("Metadata").field(raw).finish(),
+            Self::Failure { code } => {
+                formatter.debug_struct("Failure").field("code", code).finish()
+            }
+        }
+    }
+}
+
 /// One immutable assembled-call fixture for the quota metadata extension.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct ProviderQuotaMetadataFixtureV1 {
     case_id: ProviderQuotaMetadataCaseIdV1,
     input: ProviderCallInputV1,
-    upstream_metadata: ProviderQuotaMetadataRawV1,
-    expected_metadata: ProviderQuotaMetadataRawV1,
+    upstream: ProviderQuotaMetadataUpstreamV1,
+    expected_outcome: ProviderQuotaMetadataExpectedOutcomeV1,
     expected_evidence: ProviderQuotaMetadataExpectedEvidenceV1,
 }
 
@@ -115,16 +174,16 @@ impl ProviderQuotaMetadataFixtureV1 {
         &self.input
     }
 
-    /// Returns the raw metadata produced by the fake upstream.
+    /// Returns the canonical fake-upstream behavior.
     #[must_use]
-    pub const fn upstream_metadata(&self) -> &ProviderQuotaMetadataRawV1 {
-        &self.upstream_metadata
+    pub const fn upstream(&self) -> &ProviderQuotaMetadataUpstreamV1 {
+        &self.upstream
     }
 
-    /// Returns the exact metadata expected after the assembled host adapter.
+    /// Returns the exact terminal shape expected after the assembled host adapter.
     #[must_use]
-    pub const fn expected_metadata(&self) -> &ProviderQuotaMetadataRawV1 {
-        &self.expected_metadata
+    pub const fn expected_outcome(&self) -> &ProviderQuotaMetadataExpectedOutcomeV1 {
+        &self.expected_outcome
     }
 
     /// Returns the exact expected resolver and transport evidence.
@@ -140,8 +199,8 @@ impl fmt::Debug for ProviderQuotaMetadataFixtureV1 {
             .debug_struct("ProviderQuotaMetadataFixtureV1")
             .field("case_id", &self.case_id)
             .field("input", &self.input)
-            .field("upstream_metadata", &self.upstream_metadata)
-            .field("expected_metadata", &self.expected_metadata)
+            .field("upstream", &self.upstream)
+            .field("expected_outcome", &self.expected_outcome)
             .field("expected_evidence", &self.expected_evidence)
             .finish()
     }
@@ -173,26 +232,45 @@ const INPUT: ProviderCallInputV1 = ProviderCallInputV1 {
     headers: super::HEADERS,
 };
 
-const EXPECTED_EVIDENCE: ProviderQuotaMetadataExpectedEvidenceV1 =
+/// The same canonical input with a valid requested slot the binding does not grant.
+const MISMATCHED_SLOT_INPUT: ProviderCallInputV1 =
+    ProviderCallInputV1 { requested_credential_slot: super::DIFFERENT_SLOT, ..INPUT };
+
+const COMPLETED_EVIDENCE: ProviderQuotaMetadataExpectedEvidenceV1 =
     ProviderQuotaMetadataExpectedEvidenceV1 {
         resolver_calls: ProviderCallCountV1::One,
         transport_calls: ProviderCallCountV1::One,
+    };
+
+const UNREACHED_EVIDENCE: ProviderQuotaMetadataExpectedEvidenceV1 =
+    ProviderQuotaMetadataExpectedEvidenceV1 {
+        resolver_calls: ProviderCallCountV1::Zero,
+        transport_calls: ProviderCallCountV1::Zero,
     };
 
 const FIXTURES: &[ProviderQuotaMetadataFixtureV1] = &[
     ProviderQuotaMetadataFixtureV1 {
         case_id: ProviderQuotaMetadataCaseIdV1::AllFields,
         input: INPUT,
-        upstream_metadata: ALL_FIELDS,
-        expected_metadata: ALL_FIELDS,
-        expected_evidence: EXPECTED_EVIDENCE,
+        upstream: ProviderQuotaMetadataUpstreamV1::Metadata(ALL_FIELDS),
+        expected_outcome: ProviderQuotaMetadataExpectedOutcomeV1::Metadata(ALL_FIELDS),
+        expected_evidence: COMPLETED_EVIDENCE,
     },
     ProviderQuotaMetadataFixtureV1 {
         case_id: ProviderQuotaMetadataCaseIdV1::NoFields,
         input: INPUT,
-        upstream_metadata: NO_FIELDS,
-        expected_metadata: NO_FIELDS,
-        expected_evidence: EXPECTED_EVIDENCE,
+        upstream: ProviderQuotaMetadataUpstreamV1::Metadata(NO_FIELDS),
+        expected_outcome: ProviderQuotaMetadataExpectedOutcomeV1::Metadata(NO_FIELDS),
+        expected_evidence: COMPLETED_EVIDENCE,
+    },
+    ProviderQuotaMetadataFixtureV1 {
+        case_id: ProviderQuotaMetadataCaseIdV1::CredentialSlotMismatch,
+        input: MISMATCHED_SLOT_INPUT,
+        upstream: ProviderQuotaMetadataUpstreamV1::NotReached,
+        expected_outcome: ProviderQuotaMetadataExpectedOutcomeV1::Failure {
+            code: ProviderCallFailureCodeV1::CredentialBindingMismatch,
+        },
+        expected_evidence: UNREACHED_EVIDENCE,
     },
 ];
 
