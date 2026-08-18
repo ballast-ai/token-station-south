@@ -79,7 +79,7 @@ struct ProviderRuntime {
     abi_version: Option<String>,
 }
 
-fn expected_host_capabilities() -> BTreeMap<&'static str, [(&'static str, &'static str); 3]> {
+fn expected_host_capabilities() -> BTreeMap<&'static str, [(&'static str, &'static str); 4]> {
     BTreeMap::from([
         (
             "token-station",
@@ -94,6 +94,13 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [(&'static str, &'stat
                 // and the deliberately narrow scope.
                 ("provider_stream", "verified"),
                 ("provider_quota_metadata", "verified"),
+                // Token Station header_auth verified 2026-08-18: its
+                // compatibility-only adapter passes south.header-auth.v1 3/3,
+                // real buffered and streaming reqwest loopbacks prove exact
+                // sanctioned-header injection without Authorization, and the
+                // existing production policy remains Bearer-only. See the
+                // Header Auth design for immutable evidence and scope.
+                ("header_auth", "verified"),
             ],
         ),
         // token-station-server provider_stream verified 2026-08-17: the durable
@@ -110,6 +117,7 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [(&'static str, &'stat
                 ("provider_call", "verified"),
                 ("provider_stream", "verified"),
                 ("provider_quota_metadata", "not_verified"),
+                ("header_auth", "not_verified"),
             ],
         ),
     ])
