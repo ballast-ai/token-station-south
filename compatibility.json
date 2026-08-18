@@ -70,7 +70,7 @@
       "provider_stream": "verified",
       "provider_quota_metadata": "not_verified",
       "header_auth": "verified",
-      "controlled_query": "not_verified"
+      "controlled_query": "verified"
     }
   }
 }

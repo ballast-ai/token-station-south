@@ -143,7 +143,40 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [(&'static str, &'stat
                 // adoption record is held by that host's own repository; this
                 // manifest records only the resulting status.
                 ("header_auth", "verified"),
-                ("controlled_query", "not_verified"),
+                // token-station-server controlled_query verified 2026-08-18:
+                // the host's assembled executor runs south.controlled-query.v1
+                // 4/4 through the same real seam as its other suites
+                // (execute_raw_with / open_streaming_raw_with plus the
+                // production one-shot resolver), and a wire-level test proves
+                // the declared query reaches the upstream URL byte for byte
+                // with the path left untouched — the `%3F` corruption this
+                // contract exists to prevent. Three mutations fail the suite:
+                // dropping the query, comparing declaration order instead of
+                // canonical order, and hardcoding the negative case's evidence
+                // instead of reading the real counters (that last one was a
+                // real defect the adversarial review found and the host fixed
+                // on-branch — see the short-circuit note in the design).
+                //
+                // Scope and its honest limit: the arm unlocks Azure OpenAI and
+                // Azure AI Foundry on that host's text and embeddings
+                // surfaces. Gemini stays out — it splits by surface (native
+                // single-header on chat, dual-header on the OpenAI-compatible
+                // ones) and that host's scope table keys on provider type
+                // alone. The one mutation the suite still cannot catch is a
+                // probe that reports success without reading the prepared URL,
+                // because no fixture reaches the transport expecting a
+                // mismatch; that wiring was therefore confirmed by maintainer
+                // review rather than by the suite. An adversarial review found
+                // no P1 beyond the evidence defect above; two P2 (the
+                // embeddings surface lacked the pre-admission contract
+                // precheck, widening a pre-existing post-marker failure now
+                // that operator-supplied Azure endpoints are in scope, and the
+                // canonical query reordering that will matter once a provider
+                // can emit two sanctioned parameters) and one P3 were fixed or
+                // documented on-branch. The adoption record is held by that
+                // host's own repository; this manifest records only the
+                // resulting status.
+                ("controlled_query", "verified"),
             ],
         ),
     ])
