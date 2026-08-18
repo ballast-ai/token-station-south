@@ -413,3 +413,45 @@ assert the complete two-host status matrix. This base advancement does not alter
 by the host candidate. Apart from this exact already-merged base delta, every Rust source, Cargo
 manifest, lockfile, fixture, test, contract version, limit, suite identifier, and package artifact
 must remain byte-for-byte unchanged through the final merge.
+
+## Evidence freshness and the community demotion (2026-08-18)
+
+The evidence recorded above was measured against the two-case quota-metadata suite. That suite has
+since grown a third case, `CredentialSlotMismatch` (PR #20), added because two success-path cases
+expecting `(One, One)` and exact metadata equality could not separate correct wiring from a
+plausible shortcut: both an adapter reporting literal `(1, 1)` instead of reading real counters and
+one bypassing the host assembly path survived the frozen table.
+
+`host_capabilities.token-station.provider_quota_metadata` therefore moves from `verified` to
+`not_verified`. This is a correction rather than a new judgement. The old run is not merely old: the
+third case exists precisely because the two-case table could not support the claim that status made,
+so the evidence is known-insufficient by the reasoning that motivated the case. Restoring the status
+requires re-running this host against the three-case suite. `token-station-server` was never flipped
+for this capability and stays `not_verified`.
+
+To stop this from recurring silently, `host_capabilities.<host>.<capability>` changes from a bare
+status string to an object carrying the size of the table the status was measured against:
+
+```text
+host_capabilities.<host>.<capability>.status = verified | not_verified
+host_capabilities.<host>.<capability>.cases  = <case count at flip time>   # verified only
+```
+
+`cases` is omitted for `not_verified`, where no passing run exists to describe. `0` would instead
+assert a run against an empty table, which is a different and false claim.
+
+`verified_host_capabilities_cite_the_current_case_tables` in `south-provider-conformance` compares
+every `cases` value against the live fixture table and fails when they diverge. Extending a suite
+without re-running its adopters now breaks CI, so a stale `verified` announces itself instead of
+waiting to be noticed. The assertion lives in that crate because only it can see the fixture tables;
+`south-provider-conformance` depends on `south-contracts`, so reading them from the manifest test
+would close a dependency cycle.
+
+The remedy for a failure is to re-run the host and update `cases`, or to record the capability as
+`not_verified`. Editing `cases` to match the current table without re-running fabricates evidence
+and is the one response the assertion cannot detect.
+
+`compatibility.json` moves from schema two to schema three. The shape of every capability value
+changes from a string to an object, so a reader written against schema two cannot parse the new file
+at all. Reusing version two would leave two incompatible shapes sharing one version number, which
+would break the field exactly when a consumer needs it.

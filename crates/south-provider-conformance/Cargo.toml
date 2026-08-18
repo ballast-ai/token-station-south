@@ -14,6 +14,7 @@ south-contracts = { path = "../south-contracts", version = "0.4.1" }
 [dev-dependencies]
 bytes.workspace = true
 http.workspace = true
+serde_json.workspace = true
 static_assertions.workspace = true
 
 [lints]

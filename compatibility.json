@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "release": {
     "version": "0.4.1",
     "stability": "library_slice"
@@ -59,18 +59,45 @@
   },
   "host_capabilities": {
     "token-station": {
-      "provider_call": "verified",
-      "provider_stream": "verified",
-      "provider_quota_metadata": "verified",
-      "header_auth": "verified",
-      "controlled_query": "not_verified"
+      "provider_call": {
+        "status": "verified",
+        "cases": 7
+      },
+      "provider_stream": {
+        "status": "verified",
+        "cases": 9
+      },
+      "provider_quota_metadata": {
+        "status": "not_verified"
+      },
+      "header_auth": {
+        "status": "verified",
+        "cases": 3
+      },
+      "controlled_query": {
+        "status": "not_verified"
+      }
     },
     "token-station-server": {
-      "provider_call": "verified",
-      "provider_stream": "verified",
-      "provider_quota_metadata": "not_verified",
-      "header_auth": "verified",
-      "controlled_query": "verified"
+      "provider_call": {
+        "status": "verified",
+        "cases": 7
+      },
+      "provider_stream": {
+        "status": "verified",
+        "cases": 9
+      },
+      "provider_quota_metadata": {
+        "status": "not_verified"
+      },
+      "header_auth": {
+        "status": "verified",
+        "cases": 3
+      },
+      "controlled_query": {
+        "status": "verified",
+        "cases": 5
+      }
     }
   }
 }
