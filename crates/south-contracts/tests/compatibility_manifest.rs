@@ -85,7 +85,14 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [(&'static str, &'stat
             "token-station",
             [
                 ("provider_call", "verified"),
-                ("provider_stream", "not_verified"),
+                // Token Station provider_stream verified 2026-08-18: the
+                // explicit direct translated Bearer JSON POST canary passes
+                // south.provider-stream.v1 9/9, real reqwest and production
+                // gateway tests preserve the host-owned stream state machine,
+                // and the successful validation CI covers the exact merged
+                // Git tree. See the streaming design for immutable evidence
+                // and the deliberately narrow scope.
+                ("provider_stream", "verified"),
                 ("provider_quota_metadata", "verified"),
             ],
         ),

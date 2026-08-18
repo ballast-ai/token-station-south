@@ -1,9 +1,8 @@
 # Streaming Provider Call Vertical Slice
 
-Status: implemented on main and released as v0.1.0 (158 workspace tests, all gates green);
-independently reviewed — APPROVED with two P1 findings, both fixed (per-pull deadline observation;
-source script state moved inside the pull future + cancel-safety pinning tests at three layers).
-Remaining P2 notes live in the review record. Host adoption for streaming is separate future work.
+Status: implemented and released; provider-stream v1 is independently verified for the community
+and enterprise hosts in the capability-scoped compatibility manifest. The community verification
+evidence and its deliberately narrow production scope are recorded in Section 10.
 
 Date: 2026-08-17
 
@@ -22,10 +21,11 @@ the design from two sides:
   16 MiB frame bound. SSE framing, cross-frame translation state, exact usage evidence, terminal-
   frame withholding ("persist terminal before client visibility"), and settlement are all
   host-owned money paths.
-- **token-station** (community host, provider-call adopted but streaming not adopted): its
-  acceptance checklist (§1.8) sketches a South-driven loop that feeds an SSE frame decoder and a
-  plugin `parse_stream_chunk`, returning `StreamEvent`s through a callback. That loop depends on
-  the provider WIT runtime, which is still a placeholder crate in this workspace.
+- **token-station** (community host, with provider-call adopted but streaming not yet adopted when
+  this design was written): its acceptance checklist (§1.8) sketches a South-driven loop that
+  feeds an SSE frame decoder and a plugin `parse_stream_chunk`, returning `StreamEvent`s through a
+  callback. That loop depends on the provider WIT runtime, which is still a placeholder crate in
+  this workspace.
 
 A single primitive cannot serve both altitudes at once without either baking SSE into the
 transport contract (which locks Bedrock out) or shipping a plugin runtime prematurely.
@@ -200,7 +200,7 @@ is what makes the idle guard double as the TTFB bound.
 New suite `south.provider-stream.v1`, same philosophy: fixed fixture table, assembled-executor
 runner, adapter-reported evidence (resolver/transport call counts, pending-drop flags — now plus
 `chunks_pulled` and `poststream_error_code`), redacted debug everywhere, no internal watchdog,
-caller-owned virtual-clock pattern. Draft case list:
+caller-owned virtual-clock pattern. Frozen version-one case list:
 
 | # | Case | Verifies |
 |---|---|---|
@@ -229,6 +229,14 @@ auth (SigV4 stays host-side; those legs keep their existing transport until the 
 lands). `compatibility.json` uses `host_capabilities.<host>.provider_stream` for this status while
 the legacy top-level host summary continues to mirror provider-call status.
 
+`token-station` becomes verified for this layer-one capability only when: (a) an explicit real
+gateway canary routes its narrow eligible scope through `open_streaming_provider_call_v1`, (b) its
+assembled executor passes all nine `south.provider-stream.v1` cases, (c) real transport and
+production gateway tests prove cancellation, deadlines, bounded rejection, exactly one open, and
+no legacy replay after South may have been polled, and (d) a wiring review confirms that SSE,
+plugin rendering, routing, fallback, quota, health, and receipt semantics remain host-owned. This
+does not imply adoption of the deferred South-owned layer-two SSE/plugin orchestration.
+
 ## 9. Decisions (ruled 2026-08-17, all as recommended)
 
 - **D1 — layering ruling (§2).** Recommended as written; the alternative (SSE-aware primitive)
@@ -244,5 +252,39 @@ the legacy top-level host summary continues to mirror provider-call status.
   evidence (recommended), vs keeping the buffered slice's four-field evidence and trusting host
   test legs for stream-phase coverage.
 
-Implementation follows the buffered slice's process: RED conformance fixtures first, then core,
-then transport, then the enterprise adoption slice as a separate piece of work.
+Implementation followed the buffered slice's process: RED conformance fixtures first, then core,
+then transport, then host adoption as separate capability-scoped work.
+
+## 10. Token Station community host evidence
+
+Token Station adopted the released South `0.2.0` streaming slice at exact revision
+`2e11142d64c01d47acb291acd1bbfc809aacfb77`. The immutable host evidence is:
+
+- validation commit: `7a022e63004b2a1668ac97b720d3dd6a99c4ff3a`;
+- pull request: [GlimpseEngine/token-station#95](https://github.com/GlimpseEngine/token-station/pull/95),
+  merged into `develop-v2` on 2026-08-18;
+- merge commit: `f0fbf6a47fa2f4117b614daa26a940b54b95753e`;
+- successful pull-request CI run:
+  [32078343067](https://github.com/GlimpseEngine/token-station/actions/runs/32078343067),
+  bound to the validation commit. Root Rust, Desktop Rust, Desktop coverage, frontend, Rust 1.96,
+  supply-chain, and release gates passed. The root coverage job was skipped by the host workflow's
+  existing pull-request policy;
+- validation and merge commits have the identical Git tree
+  `c3902b467346097e397fd489ee23f40a0745fb10`, so the successful run covers the exact merged
+  content rather than a merely related branch state.
+
+The host's assembled executor passed all nine `south.provider-stream.v1` cases. Real reqwest
+loopbacks and production gateway tests covered headers-ready streaming, bounded non-2xx rejection,
+cross-chunk UTF-8 and SSE framing, cancellation, absolute deadlines, upstream interruption,
+client disconnect, server drain, quota projection, exactly one upstream open, and the prohibition
+on legacy replay after South may have been polled. The same host-owned SSE, provider-plugin,
+agent-render, quota, health, fallback, and receipt state machine remained in use. The host also
+completed its root and Desktop gates and rebuilt, audited, installed, signed, and launched the
+local Desktop application.
+
+This verification is intentionally capability-scoped. It covers only an explicit opt-in canary
+for direct, translated, OpenAI-compatible Bearer JSON POST streams. Proxy egress, Anthropic-native
+passthrough, Header or OAuth authentication, GET requests, file-backed secrets, non-opted-in
+upstreams, and legacy removal remain outside this claim. Updating the compatibility manifest does
+not widen runtime eligibility or transfer routing, fallback, health, quota, receipt, SSE parsing,
+or user-visible error ownership to South.
