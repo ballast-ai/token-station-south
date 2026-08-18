@@ -123,7 +123,26 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [(&'static str, &'stat
                 ("provider_call", "verified"),
                 ("provider_stream", "verified"),
                 ("provider_quota_metadata", "not_verified"),
-                ("header_auth", "not_verified"),
+                // token-station-server header_auth verified 2026-08-18: the
+                // host's assembled executor runs south.header-auth.v1 3/3
+                // through the same real seam as its two Bearer suites
+                // (execute_raw_with / open_streaming_raw_with plus the
+                // production one-shot resolver), with both wire-shape booleans
+                // measured at the real transport boundary. A mutation check
+                // declaring the Bearer arm instead fails the suite with
+                // SanctionedHeader and AuthorizationPresence mismatches, so the
+                // leg discriminates. An adversarial wiring review found no P1
+                // (two P2 and one P3 fixed on-branch) and a maintainer
+                // sign-off closed the loop. Scope is deliberately narrow and
+                // describes the arm rather than that host's whole surface:
+                // Anthropic is the only provider the arm unlocks there, and it
+                // routes through south on the chat and responses surfaces only
+                // — the messages surface keeps it on the legacy path because
+                // that host maps it to an Anthropic response contract while the
+                // south plan's guard admits the Chat contract alone. The
+                // adoption record is held by that host's own repository; this
+                // manifest records only the resulting status.
+                ("header_auth", "verified"),
                 ("controlled_query", "not_verified"),
             ],
         ),
