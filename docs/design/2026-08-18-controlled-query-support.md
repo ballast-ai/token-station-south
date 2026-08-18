@@ -226,6 +226,20 @@ not a machine-checkable fact, which is exactly what the "adapter-reported eviden
 for host verification" rule in `ControlledQueryEvidenceV1` already says — this paragraph records
 the specific shape that rule is covering for.
 
+**A second, host-side failure mode found in the same review, worth naming because it is easy to
+repeat.** The negative case tempts an adapter to short-circuit: construct the `QueryStringV1`,
+find it invalid, and return a failure observation without ever entering the assembled path. An
+adapter that then *hardcodes* the evidence as `(0, 0, false)` rather than reading its own counters
+reports the expected values by construction — so a host that quietly sent the rejected request
+anyway would still pass. That is precisely the case `wire_query_exact`'s presence polarity was
+designed to catch, defeated by the adapter never measuring anything.
+
+Nothing in the suite can detect this, because the evidence is adapter-reported by definition. The
+guidance for adopting hosts is therefore explicit: **evidence values must be read from the same
+instrumentation the success cases use, on every path including early returns.** A host review
+should ask to see the negative case's evidence expression and confirm it loads counters rather
+than naming constants. The first adopting host shipped this bug and fixed it on review.
+
 ## 5. Fuzz and property obligations
 
 `fuzz/fuzz_targets/contract_parsers.rs` asserts that **every accepted relative path resolves
