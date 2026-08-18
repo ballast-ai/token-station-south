@@ -45,10 +45,18 @@ macro_rules! fixed_debug {
     };
 }
 
+mod controlled_query;
 mod header_auth;
 mod quota;
 mod stream;
 
+pub use controlled_query::{
+    AssembledControlledQueryExecutionFutureV1, AssembledControlledQueryExecutorV1,
+    ControlledQueryConformanceFailureV1, ControlledQueryConformanceReportV1,
+    ControlledQueryEvidenceV1, ControlledQueryMismatchCategoryV1, ControlledQueryMismatchV1,
+    ControlledQueryObservationV1, MAX_CONTROLLED_QUERY_MISMATCHES_V1,
+    ReferenceAssembledControlledQueryExecutorV1, run_controlled_query_conformance_v1,
+};
 pub use header_auth::{
     AssembledHeaderAuthExecutionFutureV1, AssembledHeaderAuthExecutorV1,
     HeaderAuthConformanceFailureV1, HeaderAuthConformanceReportV1, HeaderAuthEvidenceV1,
@@ -647,6 +655,10 @@ impl Drop for PendingDropFlag {
     }
 }
 
+// The query arms deliberately share `InvalidRelativePath`'s body rather than merging into its
+// arm: keeping them separate is what lets the comment below record *why* they fold into that
+// code, and it makes a future query-specific code a one-line change at the right place.
+#[allow(clippy::match_same_arms)]
 const fn map_contract_error(error: ContractErrorV1) -> ProviderCallFailureCodeV1 {
     match error {
         ContractErrorV1::InvalidEndpoint => ProviderCallFailureCodeV1::InvalidEndpoint,
@@ -654,6 +666,17 @@ const fn map_contract_error(error: ContractErrorV1) -> ProviderCallFailureCodeV1
         ContractErrorV1::InvalidCredentialSlot => ProviderCallFailureCodeV1::InvalidCredentialSlot,
         ContractErrorV1::InvalidJsonBody => ProviderCallFailureCodeV1::InvalidJsonBody,
         ContractErrorV1::RequestBodyTooLarge => ProviderCallFailureCodeV1::RequestBodyTooLarge,
+        // The frozen 19-code set predates controlled query and deliberately stays frozen: both
+        // hosts' verified status and evidence records are burned to those ids. A query is part of
+        // the provider-selected destination, and every query contract error is a preparation-time
+        // failure with zero resolver and transport calls — exactly the shape of
+        // `InvalidRelativePath` — so query errors fold into that code rather than widening the
+        // contract. The distinct `ContractErrorV1` variants stay available to hosts that want the
+        // finer reason in their own logs.
+        ContractErrorV1::InvalidQueryValue
+        | ContractErrorV1::DuplicateQueryParameter
+        | ContractErrorV1::EmptyQuery
+        | ContractErrorV1::QueryTooLarge => ProviderCallFailureCodeV1::InvalidRelativePath,
     }
 }
 

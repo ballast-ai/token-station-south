@@ -5,8 +5,9 @@ use proptest::{
 use south_contracts::{
     CredentialSlotV1, JsonBodyV1, MAX_CREDENTIAL_SLOT_BYTES, MAX_ENDPOINT_BYTES,
     MAX_JSON_REQUEST_BODY_BYTES, MAX_PROVIDER_QUOTA_METADATA_TOTAL_BYTES,
-    MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES, MAX_RELATIVE_PATH_BYTES, ProviderEndpointV1,
-    ProviderQuotaMetadataFieldV1, ProviderQuotaMetadataV1, RelativePathV1,
+    MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES, MAX_QUERY_TOTAL_BYTES, MAX_RELATIVE_PATH_BYTES,
+    ProviderEndpointV1, ProviderQuotaMetadataFieldV1, ProviderQuotaMetadataV1, QueryParameterV1,
+    QueryStringV1, RelativePathV1,
 };
 
 const QUOTA_FIELDS: [ProviderQuotaMetadataFieldV1; 9] = [
@@ -217,6 +218,34 @@ proptest! {
             prop_assert!(body.len() <= MAX_JSON_REQUEST_BODY_BYTES);
             prop_assert!(serde_json::from_str::<serde_json::Value>(body.as_str()).is_ok());
             prop_assert_eq!(JsonBodyV1::parse(body.as_str()), Ok(body));
+        }
+    }
+}
+
+proptest! {
+    #![proptest_config(reproducible_config(0x51_55_45_52_59_5f_56_31))]
+
+    /// The fuzz target's query invariant, mirrored as a property: anything the grammar accepts
+    /// survives the join byte for byte and cannot move the path or introduce a fragment.
+    #[test]
+    fn accepted_queries_survive_the_join_byte_for_byte(input in any::<String>()) {
+        for parameter in QueryParameterV1::ALL {
+            let Ok(query) = QueryStringV1::try_from_iter([(parameter, input.as_str())]) else {
+                continue;
+            };
+            prop_assert!(query.as_str().is_ascii());
+            prop_assert!(query.as_str().len() <= MAX_QUERY_TOTAL_BYTES);
+            // One declaration must stay one declaration on the wire.
+            prop_assert_eq!(query.as_str().matches('&').count(), 0);
+            prop_assert_eq!(query.as_str().matches('=').count(), 1);
+
+            let path = RelativePathV1::parse("v1/resource")?;
+            let endpoint = ProviderEndpointV1::parse("https://example.com/base/")?;
+            let resolved = path.resolve_against_with_query(&endpoint, Some(&query))?;
+            prop_assert_eq!(resolved.query(), Some(query.as_str()));
+            // The query cannot move the path out of the binding prefix.
+            prop_assert_eq!(resolved.path(), "/base/v1/resource");
+            prop_assert!(resolved.fragment().is_none());
         }
     }
 }

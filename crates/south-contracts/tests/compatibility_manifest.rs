@@ -48,6 +48,8 @@ struct Conformance {
     header_auth_suite: u32,
     provider_quota_metadata_suite_id: String,
     provider_quota_metadata_suite: u32,
+    controlled_query_suite_id: String,
+    controlled_query_suite: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -79,7 +81,7 @@ struct ProviderRuntime {
     abi_version: Option<String>,
 }
 
-fn expected_host_capabilities() -> BTreeMap<&'static str, [(&'static str, &'static str); 4]> {
+fn expected_host_capabilities() -> BTreeMap<&'static str, [(&'static str, &'static str); 5]> {
     BTreeMap::from([
         (
             "token-station",
@@ -101,6 +103,10 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [(&'static str, &'stat
                 // existing production policy remains Bearer-only. See the
                 // Header Auth design for immutable evidence and scope.
                 ("header_auth", "verified"),
+                // controlled_query stays not_verified until this host runs its
+                // own adoption slice against south.controlled-query.v1. The
+                // suite existing in this repository is not adoption evidence.
+                ("controlled_query", "not_verified"),
             ],
         ),
         // token-station-server provider_stream verified 2026-08-17: the durable
@@ -118,11 +124,16 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [(&'static str, &'stat
                 ("provider_stream", "verified"),
                 ("provider_quota_metadata", "not_verified"),
                 ("header_auth", "not_verified"),
+                ("controlled_query", "not_verified"),
             ],
         ),
     ])
 }
 
+// One flat assertion per manifest field is the point of this test: the manifest is a published
+// contract, and a reader must be able to check it against the file line by line. Splitting it into
+// helpers would hide which fields are actually pinned.
+#[allow(clippy::too_many_lines)]
 #[test]
 fn compatibility_manifest_describes_the_library_slice() {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../compatibility.json");
@@ -181,16 +192,27 @@ fn compatibility_manifest_describes_the_library_slice() {
         "south.provider-quota-metadata.v1"
     );
     assert_eq!(manifest.conformance.provider_quota_metadata_suite, 1);
+    assert_eq!(manifest.conformance.controlled_query_suite_id, "south.controlled-query.v1");
+    assert_eq!(manifest.conformance.controlled_query_suite, 1);
     assert!(manifest.provider_api.wit_version.is_none());
     assert!(manifest.provider_runtime.abi_version.is_none());
     let expected_crates = BTreeMap::from([
-        ("south-contracts", "http_auth_error_stream_quota_metadata_header_auth_v1"),
-        ("south-core", "buffered_streaming_provider_call_header_auth_v1"),
+        (
+            "south-contracts",
+            "http_auth_error_stream_quota_metadata_header_auth_controlled_query_v1",
+        ),
+        ("south-core", "buffered_streaming_provider_call_header_auth_controlled_query_v1"),
         ("south-migration", "placeholder"),
         ("south-provider-api", "placeholder"),
-        ("south-provider-conformance", "provider_call_stream_quota_metadata_header_auth_suites_v1"),
+        (
+            "south-provider-conformance",
+            "provider_call_stream_quota_metadata_header_auth_controlled_query_suites_v1",
+        ),
         ("south-provider-runtime", "placeholder"),
-        ("south-testkit", "provider_call_stream_quota_metadata_header_auth_runners_v1"),
+        (
+            "south-testkit",
+            "provider_call_stream_quota_metadata_header_auth_controlled_query_runners_v1",
+        ),
         ("south-transport-reqwest", "buffered_streaming_json_post_quota_metadata_header_auth_v1"),
         ("south-transport-ureq", "placeholder"),
     ]);

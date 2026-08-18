@@ -1,0 +1,479 @@
+use std::{
+    collections::BTreeSet,
+    fmt::Display,
+    future::pending,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+
+use bytes::Bytes;
+use http::StatusCode;
+use south_contracts::{BufferedHttpResponseV1, StreamChunkV1, StreamingResponseHeadV1};
+use south_provider_conformance::{
+    CONTROLLED_QUERY_CONFORMANCE_SUITE_ID, CONTROLLED_QUERY_CONFORMANCE_SUITE_VERSION,
+    ControlledQueryCaseIdV1, ControlledQueryExpectedOutcomeV1, ControlledQueryFixtureV1,
+    ProviderCallCountV1, ProviderCallFailureCodeV1, controlled_query_fixtures_v1,
+};
+use south_testkit::{
+    AssembledControlledQueryExecutionFutureV1, AssembledControlledQueryExecutorV1,
+    ControlledQueryConformanceFailureV1, ControlledQueryConformanceReportV1,
+    ControlledQueryEvidenceV1, ControlledQueryMismatchCategoryV1, ControlledQueryObservationV1,
+    MAX_CONTROLLED_QUERY_MISMATCHES_V1, ReferenceAssembledControlledQueryExecutorV1,
+    run_controlled_query_conformance_v1,
+};
+use static_assertions::assert_not_impl_any;
+
+assert_not_impl_any!(ControlledQueryObservationV1: Display);
+assert_not_impl_any!(ControlledQueryEvidenceV1: Display);
+assert_not_impl_any!(ControlledQueryConformanceReportV1: Display);
+assert_not_impl_any!(ControlledQueryConformanceFailureV1: Display);
+
+#[tokio::test]
+async fn the_reference_executor_passes_every_canonical_case() {
+    let executor = ReferenceAssembledControlledQueryExecutorV1::new();
+
+    let report = tokio::time::timeout(
+        Duration::from_secs(30),
+        run_controlled_query_conformance_v1(&executor),
+    )
+    .await
+    .expect("the reference suite must finish inside the caller watchdog")
+    .expect("the reference executor must pass every canonical case");
+
+    assert_eq!(report.suite_id(), CONTROLLED_QUERY_CONFORMANCE_SUITE_ID);
+    assert_eq!(report.suite_version(), CONTROLLED_QUERY_CONFORMANCE_SUITE_VERSION);
+    assert_eq!(
+        report.passed_case_ids(),
+        &controlled_query_fixtures_v1()
+            .iter()
+            .map(ControlledQueryFixtureV1::case_id)
+            .collect::<Vec<_>>()
+    );
+}
+
+#[derive(Default)]
+struct MatchingExecutor {
+    order: Mutex<Vec<ControlledQueryCaseIdV1>>,
+}
+
+impl AssembledControlledQueryExecutorV1 for MatchingExecutor {
+    fn execute_case<'a>(
+        &'a self,
+        fixture: &'a ControlledQueryFixtureV1,
+    ) -> AssembledControlledQueryExecutionFutureV1<'a> {
+        Box::pin(async move {
+            self.order.lock().expect("order lock should be available").push(fixture.case_id());
+            observation_matching(fixture)
+        })
+    }
+}
+
+#[tokio::test]
+async fn object_safe_send_executor_runs_every_case_in_canonical_order() {
+    let executor = MatchingExecutor::default();
+    let dynamic: &dyn AssembledControlledQueryExecutorV1 = &executor;
+    let future = dynamic.execute_case(&controlled_query_fixtures_v1()[0]);
+    assert_send(&future);
+    drop(future);
+
+    let report = run_controlled_query_conformance_v1(dynamic)
+        .await
+        .expect("matching observations must pass");
+    assert_eq!(report.suite_id(), CONTROLLED_QUERY_CONFORMANCE_SUITE_ID);
+    assert_eq!(report.suite_version(), CONTROLLED_QUERY_CONFORMANCE_SUITE_VERSION);
+    assert_eq!(
+        *executor.order.lock().expect("order lock should be available"),
+        controlled_query_fixtures_v1()
+            .iter()
+            .map(ControlledQueryFixtureV1::case_id)
+            .collect::<Vec<_>>()
+    );
+}
+
+struct SingleMismatchExecutor {
+    case_id: ControlledQueryCaseIdV1,
+    category: ControlledQueryMismatchCategoryV1,
+}
+
+impl AssembledControlledQueryExecutorV1 for SingleMismatchExecutor {
+    fn execute_case<'a>(
+        &'a self,
+        fixture: &'a ControlledQueryFixtureV1,
+    ) -> AssembledControlledQueryExecutionFutureV1<'a> {
+        Box::pin(async move {
+            if fixture.case_id() == self.case_id {
+                observation_with_single_mismatch(fixture, self.category)
+            } else {
+                observation_matching(fixture)
+            }
+        })
+    }
+}
+
+#[tokio::test]
+async fn each_single_difference_reports_exactly_its_one_case_and_category() {
+    let isolated_mismatches = [
+        (
+            ControlledQueryCaseIdV1::InvalidQueryValueRejected,
+            ControlledQueryMismatchCategoryV1::OutcomeKind,
+        ),
+        (
+            ControlledQueryCaseIdV1::InvalidQueryValueRejected,
+            ControlledQueryMismatchCategoryV1::ErrorCode,
+        ),
+        (ControlledQueryCaseIdV1::BufferedQuerySuccess, ControlledQueryMismatchCategoryV1::Status),
+        (ControlledQueryCaseIdV1::BufferedQuerySuccess, ControlledQueryMismatchCategoryV1::Body),
+        (
+            ControlledQueryCaseIdV1::BufferedQuerySuccess,
+            ControlledQueryMismatchCategoryV1::ContentType,
+        ),
+        (
+            ControlledQueryCaseIdV1::BufferedQuerySuccess,
+            ControlledQueryMismatchCategoryV1::RetryAfter,
+        ),
+        (
+            ControlledQueryCaseIdV1::StreamingQuerySuccess,
+            ControlledQueryMismatchCategoryV1::ChunkBytes,
+        ),
+        (
+            ControlledQueryCaseIdV1::BufferedQuerySuccess,
+            ControlledQueryMismatchCategoryV1::ResolverCallCount,
+        ),
+        (
+            ControlledQueryCaseIdV1::StreamingQuerySuccess,
+            ControlledQueryMismatchCategoryV1::TransportCallCount,
+        ),
+        // Both polarities of the wire-query claim must isolate: a success case that failed to put
+        // the declared query on the wire, and a rejected case that reached a wire at all.
+        (
+            ControlledQueryCaseIdV1::BufferedQuerySuccess,
+            ControlledQueryMismatchCategoryV1::WireQuery,
+        ),
+        (
+            ControlledQueryCaseIdV1::InvalidQueryValueRejected,
+            ControlledQueryMismatchCategoryV1::WireQuery,
+        ),
+    ];
+
+    for (case_id, category) in isolated_mismatches {
+        let failure =
+            run_controlled_query_conformance_v1(&SingleMismatchExecutor { case_id, category })
+                .await
+                .expect_err("one deliberate difference must fail conformance");
+        assert_eq!(failure.suite_id(), CONTROLLED_QUERY_CONFORMANCE_SUITE_ID);
+        assert_eq!(failure.suite_version(), CONTROLLED_QUERY_CONFORMANCE_SUITE_VERSION);
+        assert_eq!(failure.evaluated_case_count(), controlled_query_fixtures_v1().len());
+        assert!(failure.mismatches().len() <= MAX_CONTROLLED_QUERY_MISMATCHES_V1);
+        assert_eq!(failure.mismatches().len(), 1, "category {category:?} must isolate");
+        let mismatch = &failure.mismatches()[0];
+        assert_eq!(mismatch.case_id(), case_id);
+        assert_eq!(mismatch.category(), category);
+    }
+}
+
+#[tokio::test]
+async fn a_fully_wrong_executor_reports_every_case_without_failing_fast() {
+    struct WrongExecutor;
+
+    impl AssembledControlledQueryExecutorV1 for WrongExecutor {
+        fn execute_case<'a>(
+            &'a self,
+            fixture: &'a ControlledQueryFixtureV1,
+        ) -> AssembledControlledQueryExecutionFutureV1<'a> {
+            Box::pin(async move {
+                let evidence = ControlledQueryEvidenceV1::new(257, 256, false);
+                match fixture.case_id() {
+                    ControlledQueryCaseIdV1::BufferedQuerySuccess => {
+                        ControlledQueryObservationV1::failure(
+                            ProviderCallFailureCodeV1::RequestFailed,
+                            evidence,
+                        )
+                    }
+                    _ => ControlledQueryObservationV1::opened(
+                        head(StatusCode::OK, None, None),
+                        Vec::new(),
+                        evidence,
+                    ),
+                }
+            })
+        }
+    }
+
+    let failure = run_controlled_query_conformance_v1(&WrongExecutor)
+        .await
+        .expect_err("deliberate mismatches must fail");
+    assert_eq!(failure.evaluated_case_count(), controlled_query_fixtures_v1().len());
+
+    let categories: BTreeSet<_> = failure
+        .mismatches()
+        .iter()
+        .map(south_testkit::ControlledQueryMismatchV1::category)
+        .collect();
+    assert!(categories.contains(&ControlledQueryMismatchCategoryV1::OutcomeKind));
+    assert!(categories.contains(&ControlledQueryMismatchCategoryV1::ResolverCallCount));
+    assert!(categories.contains(&ControlledQueryMismatchCategoryV1::TransportCallCount));
+    assert!(categories.contains(&ControlledQueryMismatchCategoryV1::WireQuery));
+    for fixture in controlled_query_fixtures_v1() {
+        assert!(failure.mismatches().iter().any(|m| m.case_id() == fixture.case_id()));
+    }
+}
+
+#[test]
+fn evidence_construction_saturates_large_boundary_counts() {
+    let evidence = ControlledQueryEvidenceV1::new(256, 257, true);
+
+    assert_eq!(evidence.resolver_calls(), ProviderCallCountV1::MoreThanOne);
+    assert_eq!(evidence.transport_calls(), ProviderCallCountV1::MoreThanOne);
+    assert!(evidence.wire_query_exact());
+}
+
+#[test]
+fn debug_output_contains_only_safe_structural_evidence() {
+    const BODY_SENTINEL: &str = "controlled-query-runner-body-debug-sentinel";
+    const METADATA_SENTINEL: &str = "controlled-query-runner-metadata-debug-sentinel";
+    const CHUNK_SENTINEL: &str = "controlled-query-runner-chunk-debug-sentinel";
+
+    let evidence = ControlledQueryEvidenceV1::new(1, 1, true);
+    let response = ControlledQueryObservationV1::response(
+        BufferedHttpResponseV1::try_from_parts(
+            StatusCode::OK,
+            BODY_SENTINEL.as_bytes().to_vec(),
+            Some(METADATA_SENTINEL.to_owned()),
+            Some(METADATA_SENTINEL.to_owned()),
+        )
+        .expect("fixture response should be valid"),
+        evidence,
+    );
+    let opened = ControlledQueryObservationV1::opened(
+        head(StatusCode::OK, Some(METADATA_SENTINEL), None),
+        vec![
+            StreamChunkV1::try_new(Bytes::from_static(CHUNK_SENTINEL.as_bytes()))
+                .expect("sentinel chunk should satisfy bounds"),
+        ],
+        evidence,
+    );
+
+    let debug = format!("{response:?} {opened:?}");
+    for sentinel in [BODY_SENTINEL, METADATA_SENTINEL, CHUNK_SENTINEL] {
+        assert!(!debug.contains(sentinel), "debug output leaked sentinel: {debug}");
+    }
+}
+
+struct PendingExecutor {
+    dropped: Arc<std::sync::atomic::AtomicBool>,
+}
+
+struct DropFlag(Arc<std::sync::atomic::AtomicBool>);
+
+impl Drop for DropFlag {
+    fn drop(&mut self) {
+        self.0.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+impl AssembledControlledQueryExecutorV1 for PendingExecutor {
+    fn execute_case<'a>(
+        &'a self,
+        _fixture: &'a ControlledQueryFixtureV1,
+    ) -> AssembledControlledQueryExecutionFutureV1<'a> {
+        Box::pin(async move {
+            let _drop_flag = DropFlag(Arc::clone(&self.dropped));
+            pending().await
+        })
+    }
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn caller_watchdog_drops_a_permanently_pending_runner_without_detached_work() {
+    let dropped = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let executor = PendingExecutor { dropped: Arc::clone(&dropped) };
+    let structured_run = async { run_controlled_query_conformance_v1(&executor).await };
+
+    let result = tokio::time::timeout(Duration::from_secs(5), structured_run).await;
+
+    assert!(result.is_err());
+    assert!(dropped.load(std::sync::atomic::Ordering::SeqCst));
+}
+
+fn head(
+    status: StatusCode,
+    content_type: Option<&str>,
+    retry_after: Option<&str>,
+) -> StreamingResponseHeadV1 {
+    StreamingResponseHeadV1::try_from_parts(
+        status,
+        content_type.map(str::to_owned),
+        retry_after.map(str::to_owned),
+    )
+    .expect("fixture head should be valid")
+}
+
+fn expected_chunks(chunks: &'static [&'static [u8]]) -> Vec<StreamChunkV1> {
+    chunks
+        .iter()
+        .map(|chunk| {
+            StreamChunkV1::try_new(Bytes::from_static(chunk))
+                .expect("expected chunk should satisfy bounds")
+        })
+        .collect()
+}
+
+const fn matching_evidence(fixture: &ControlledQueryFixtureV1) -> ControlledQueryEvidenceV1 {
+    let evidence = fixture.expected().evidence();
+    ControlledQueryEvidenceV1::new(
+        count_value(evidence.resolver_calls()),
+        count_value(evidence.transport_calls()),
+        evidence.wire_query_exact(),
+    )
+}
+
+fn observation_matching(fixture: &ControlledQueryFixtureV1) -> ControlledQueryObservationV1 {
+    let evidence = matching_evidence(fixture);
+    match fixture.expected().outcome() {
+        ControlledQueryExpectedOutcomeV1::Response { status, body, content_type, retry_after } => {
+            ControlledQueryObservationV1::response(
+                response(*status, body, *content_type, *retry_after),
+                evidence,
+            )
+        }
+        ControlledQueryExpectedOutcomeV1::Opened { status, content_type, retry_after, chunks } => {
+            ControlledQueryObservationV1::opened(
+                head(
+                    StatusCode::from_u16(*status).expect("expected status should be valid"),
+                    *content_type,
+                    *retry_after,
+                ),
+                expected_chunks(chunks),
+                evidence,
+            )
+        }
+        ControlledQueryExpectedOutcomeV1::Failure { code } => {
+            ControlledQueryObservationV1::failure(*code, evidence)
+        }
+    }
+}
+
+fn response(
+    status: u16,
+    body: &str,
+    content_type: Option<&str>,
+    retry_after: Option<&str>,
+) -> BufferedHttpResponseV1 {
+    BufferedHttpResponseV1::try_from_parts(
+        StatusCode::from_u16(status).expect("expected status should be valid"),
+        body.as_bytes().to_vec(),
+        content_type.map(str::to_owned),
+        retry_after.map(str::to_owned),
+    )
+    .expect("expected response should be valid")
+}
+
+fn observation_with_single_mismatch(
+    fixture: &ControlledQueryFixtureV1,
+    category: ControlledQueryMismatchCategoryV1,
+) -> ControlledQueryObservationV1 {
+    let expected_evidence = fixture.expected().evidence();
+    let mut resolver_calls = count_value(expected_evidence.resolver_calls());
+    let mut transport_calls = count_value(expected_evidence.transport_calls());
+    let mut wire_query_exact = expected_evidence.wire_query_exact();
+    match category {
+        ControlledQueryMismatchCategoryV1::ResolverCallCount => {
+            resolver_calls = different_count(resolver_calls);
+        }
+        ControlledQueryMismatchCategoryV1::TransportCallCount => {
+            transport_calls = different_count(transport_calls);
+        }
+        ControlledQueryMismatchCategoryV1::WireQuery => wire_query_exact = !wire_query_exact,
+        _ => {}
+    }
+    let evidence =
+        ControlledQueryEvidenceV1::new(resolver_calls, transport_calls, wire_query_exact);
+
+    match fixture.expected().outcome() {
+        ControlledQueryExpectedOutcomeV1::Response { status, body, content_type, retry_after } => {
+            let observed_status = observed_status(*status, category);
+            let observed_body = if category == ControlledQueryMismatchCategoryV1::Body {
+                "isolated-wrong-body"
+            } else {
+                body
+            };
+            let observed_content_type =
+                if category == ControlledQueryMismatchCategoryV1::ContentType {
+                    None
+                } else {
+                    *content_type
+                };
+            let observed_retry_after = if category == ControlledQueryMismatchCategoryV1::RetryAfter
+            {
+                None
+            } else {
+                *retry_after
+            };
+            ControlledQueryObservationV1::response(
+                response(
+                    observed_status,
+                    observed_body,
+                    observed_content_type,
+                    observed_retry_after,
+                ),
+                evidence,
+            )
+        }
+        ControlledQueryExpectedOutcomeV1::Opened { status, content_type, retry_after, chunks } => {
+            let observed_status = observed_status(*status, category);
+            let mut observed_chunks = expected_chunks(chunks);
+            if category == ControlledQueryMismatchCategoryV1::ChunkBytes {
+                observed_chunks[0] =
+                    StreamChunkV1::try_new(Bytes::from_static(b"isolated-wrong-chunk"))
+                        .expect("isolated chunk should satisfy bounds");
+            }
+            ControlledQueryObservationV1::opened(
+                head(
+                    StatusCode::from_u16(observed_status).expect("shifted status should be valid"),
+                    *content_type,
+                    *retry_after,
+                ),
+                observed_chunks,
+                evidence,
+            )
+        }
+        ControlledQueryExpectedOutcomeV1::Failure { code } => {
+            if category == ControlledQueryMismatchCategoryV1::OutcomeKind {
+                ControlledQueryObservationV1::opened(
+                    head(StatusCode::OK, None, None),
+                    Vec::new(),
+                    evidence,
+                )
+            } else {
+                let observed_code = if category == ControlledQueryMismatchCategoryV1::ErrorCode {
+                    ProviderCallFailureCodeV1::RequestFailed
+                } else {
+                    *code
+                };
+                ControlledQueryObservationV1::failure(observed_code, evidence)
+            }
+        }
+    }
+}
+
+const fn observed_status(expected: u16, category: ControlledQueryMismatchCategoryV1) -> u16 {
+    if matches!(category, ControlledQueryMismatchCategoryV1::Status) {
+        expected + 1
+    } else {
+        expected
+    }
+}
+
+const fn count_value(count: ProviderCallCountV1) -> usize {
+    match count {
+        ProviderCallCountV1::Zero => 0,
+        ProviderCallCountV1::One => 1,
+        ProviderCallCountV1::MoreThanOne => 2,
+    }
+}
+
+const fn different_count(count: usize) -> usize {
+    if count == 0 { 1 } else { 0 }
+}
+
+const fn assert_send<T: Send>(_: &T) {}

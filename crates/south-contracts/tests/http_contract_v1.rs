@@ -5,7 +5,8 @@ use south_contracts::{
     MAX_CREDENTIAL_SLOT_BYTES, MAX_ENDPOINT_BYTES, MAX_JSON_REQUEST_BODY_BYTES,
     MAX_RELATIVE_PATH_BYTES, MAX_RESPONSE_BODY_BYTES, MAX_RESPONSE_CONTENT_TYPE_BYTES,
     MAX_RESPONSE_RETRY_AFTER_BYTES, PreparationErrorV1, ProviderAuthV1, ProviderEndpointV1,
-    RelativePathV1, STREAM_CONTRACT_VERSION, SafeHeaders, SecretHeaderV1, TransportErrorV1,
+    QueryParameterV1, QueryStringV1, RelativePathV1, STREAM_CONTRACT_VERSION, SafeHeaders,
+    SecretHeaderV1, TransportErrorV1,
 };
 
 const SENTINEL: &str = "must-not-appear-7f23a";
@@ -46,7 +47,7 @@ fn secret_header_all_covers_every_variant() {
 
 #[test]
 fn contract_versions_are_independently_versioned() {
-    assert_eq!(HTTP_CONTRACT_VERSION, 1);
+    assert_eq!(HTTP_CONTRACT_VERSION, 2);
     assert_eq!(AUTH_CONTRACT_VERSION, 2);
     assert_eq!(ERROR_CONTRACT_VERSION, 1);
     assert_eq!(STREAM_CONTRACT_VERSION, Some(1));
@@ -551,4 +552,187 @@ fn debug_and_error_output_redact_all_untrusted_contract_values() {
     for output in error_outputs {
         assert!(!output.contains(SENTINEL));
     }
+}
+
+// ───────────────── controlled query (HTTP contract v2) ─────────────────
+
+/// Every sanctioned query parameter, in canonical table order. The exhaustive match below fails
+/// compilation when a variant is added, so the list, the value grammar, and the conformance
+/// surface must all be updated together.
+const ALL_QUERY_PARAMETERS: [QueryParameterV1; 2] = QueryParameterV1::ALL;
+
+const fn assert_query_parameter_listed(parameter: QueryParameterV1) {
+    match parameter {
+        QueryParameterV1::ApiVersion | QueryParameterV1::Alt => (),
+    }
+}
+
+#[test]
+fn query_parameter_all_covers_every_variant() {
+    for parameter in QueryParameterV1::ALL {
+        assert_query_parameter_listed(parameter);
+    }
+    let mut names: Vec<&str> =
+        ALL_QUERY_PARAMETERS.iter().map(QueryParameterV1::wire_name).collect();
+    names.sort_unstable();
+    let total = names.len();
+    names.dedup();
+    assert_eq!(names.len(), total, "QueryParameterV1::ALL must not repeat a variant");
+}
+
+#[test]
+fn sanctioned_query_names_cannot_express_a_credential() {
+    // The frozen set is the structural answer to query-borne secret exfiltration: a provider
+    // cannot name `key`, `access_token`, or `sig` because those names do not exist in the type.
+    for forbidden in ["key", "access_token", "sig", "signature", "password", "token"] {
+        assert!(
+            !ALL_QUERY_PARAMETERS.iter().any(|p| p.wire_name() == forbidden),
+            "{forbidden} must never become a sanctioned query parameter"
+        );
+    }
+}
+
+#[test]
+fn api_version_grammar_accepts_real_values_and_rejects_separators() {
+    for accepted in ["2024-10-21", "2025-04-01-preview", "v1", "1.0", "a_b"] {
+        assert!(
+            QueryStringV1::try_from_iter([(QueryParameterV1::ApiVersion, accepted)]).is_ok(),
+            "{accepted} is a real Azure api-version"
+        );
+    }
+    // Separator-only values pass the character class but are meaningless as versions and read as
+    // dot segments to anything that re-joins the URL.
+    for rejected in
+        ["", "a b", "a&b=c", "a%2Fb", "a#b", "a?b", "a/b", "a=b", ".", "..", "--", "._-"]
+    {
+        assert_eq!(
+            QueryStringV1::try_from_iter([(QueryParameterV1::ApiVersion, rejected)]),
+            Err(ContractErrorV1::InvalidQueryValue),
+            "{rejected:?} must not survive the api-version grammar"
+        );
+    }
+}
+
+#[test]
+fn alt_grammar_is_a_closed_value_set() {
+    for accepted in ["sse", "json"] {
+        assert!(QueryStringV1::try_from_iter([(QueryParameterV1::Alt, accepted)]).is_ok());
+    }
+    for rejected in ["SSE", "xml", "sse ", "", "sse&alt=json"] {
+        assert_eq!(
+            QueryStringV1::try_from_iter([(QueryParameterV1::Alt, rejected)]),
+            Err(ContractErrorV1::InvalidQueryValue),
+            "{rejected:?} is not a sanctioned alt value"
+        );
+    }
+}
+
+#[test]
+fn query_rejects_duplicate_parameters_rather_than_normalizing() {
+    // Parameter pollution — gateway and upstream disagreeing on which duplicate wins — is the
+    // classic failure of permissive query handling, so a duplicate is a contract error.
+    assert_eq!(
+        QueryStringV1::try_from_iter([
+            (QueryParameterV1::ApiVersion, "v1"),
+            (QueryParameterV1::ApiVersion, "2024-10-21"),
+        ]),
+        Err(ContractErrorV1::DuplicateQueryParameter)
+    );
+}
+
+#[test]
+fn query_serializes_in_canonical_declaration_order() {
+    let query = QueryStringV1::try_from_iter([
+        (QueryParameterV1::Alt, "sse"),
+        (QueryParameterV1::ApiVersion, "v1"),
+    ])
+    .expect("both parameters are sanctioned");
+    assert_eq!(query.as_str(), "api-version=v1&alt=sse");
+}
+
+#[test]
+fn query_debug_never_reveals_values() {
+    let query = QueryStringV1::try_from_iter([(QueryParameterV1::ApiVersion, SENTINEL_VERSION)])
+        .expect("sentinel matches the grammar");
+    let rendered = format!("{query:?}");
+    assert!(!rendered.contains(SENTINEL_VERSION), "query Debug must not print values");
+}
+
+const SENTINEL_VERSION: &str = "must-not-appear-9c41b";
+
+#[test]
+fn request_without_query_is_unchanged_by_the_v2_contract() {
+    let request = JsonPostRequestV1::new(
+        RelativePathV1::parse("v1/chat/completions").unwrap(),
+        SafeHeaders::try_from_iter([("accept", "application/json")]).unwrap(),
+        JsonBodyV1::parse("{}").unwrap(),
+        BearerAuthV1::new(CredentialSlotV1::parse("openai").unwrap()),
+    );
+    assert!(request.query().is_none(), "a v1 request is exactly a v2 request with no query");
+}
+
+#[test]
+fn relative_path_grammar_still_rejects_query_and_fragment() {
+    // The path grammar is deliberately untouched by this slice: a query attaches to the request,
+    // never to the path, so the frozen grammar and its fuzz invariants stay intact.
+    for rejected in ["v1/chat?api-version=v1", "v1/chat#frag"] {
+        assert_eq!(RelativePathV1::parse(rejected), Err(ContractErrorV1::InvalidRelativePath));
+    }
+}
+
+#[test]
+fn a_query_with_no_parameters_is_a_contract_error() {
+    // `Some(query)` on a request must mean "there is a query on the wire". An empty declaration
+    // would serialize to `""` and produce a bare trailing `?`, which is a different URL from the
+    // one the caller meant — so it is rejected at construction rather than normalized away.
+    let empty: [(QueryParameterV1, &str); 0] = [];
+    assert_eq!(QueryStringV1::try_from_iter(empty), Err(ContractErrorV1::EmptyQuery));
+}
+
+#[test]
+fn set_query_is_an_identity_map_on_every_accepted_value() {
+    // `resolve_against_with_query` proves the wire query equals the declaration byte for byte.
+    // That check is only meaningful while the grammar admits solely query-safe bytes: the `url`
+    // crate percent-encodes `#`, space, and NUL, and silently *deletes* CR and LF. No accepted
+    // value hits any of those today, which is exactly why no positive test can falsify the check
+    // — so pin the property the check depends on instead. Relaxing a grammar to admit `%`, `+`,
+    // `:`, or whitespace (plausible when `GroupId`/`task_id` land) breaks this test first.
+    let endpoint = ProviderEndpointV1::parse("https://example.com/base/").unwrap();
+    let path = RelativePathV1::parse("v1/resource").unwrap();
+    let accepted_values: [(QueryParameterV1, &[&str]); 2] = [
+        (
+            QueryParameterV1::ApiVersion,
+            &["2024-10-21", "2025-04-01-preview", "v1", "1.0", "a_b", "A-Z.0_9"],
+        ),
+        (QueryParameterV1::Alt, &["sse", "json"]),
+    ];
+
+    for (parameter, values) in accepted_values {
+        for value in values {
+            let query = QueryStringV1::try_from_iter([(parameter, *value)])
+                .expect("fixture value must match the grammar");
+            let resolved = path
+                .resolve_against_with_query(&endpoint, Some(&query))
+                .expect("an accepted query must resolve inside the binding");
+            assert_eq!(
+                resolved.query(),
+                Some(query.as_str()),
+                "{parameter:?}={value} must survive set_query unchanged"
+            );
+            // The query must never move the path, whatever the value.
+            assert_eq!(resolved.path(), "/base/v1/resource");
+            assert!(resolved.fragment().is_none());
+        }
+    }
+}
+
+#[test]
+fn a_query_free_request_must_reach_the_wire_without_a_query() {
+    // The `None` arm of the intactness check is the version-one regression guard: a path alone
+    // must never acquire a query through the join.
+    let endpoint = ProviderEndpointV1::parse("https://example.com/base/").unwrap();
+    let path = RelativePathV1::parse("v1/resource").unwrap();
+    let resolved = path.resolve_against(&endpoint).expect("a bare path must resolve");
+    assert_eq!(resolved.query(), None);
+    assert_eq!(resolved.as_str(), "https://example.com/base/v1/resource");
 }

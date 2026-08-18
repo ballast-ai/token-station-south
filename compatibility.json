@@ -1,12 +1,12 @@
 {
   "schema_version": 2,
   "release": {
-    "version": "0.3.0",
+    "version": "0.4.0",
     "stability": "library_slice"
   },
   "contracts": {
     "reserved_header_policy": 1,
-    "http": 1,
+    "http": 2,
     "auth": 2,
     "error": 1,
     "stream": 1,
@@ -32,7 +32,9 @@
     "header_auth_suite_id": "south.header-auth.v1",
     "header_auth_suite": 1,
     "provider_quota_metadata_suite_id": "south.provider-quota-metadata.v1",
-    "provider_quota_metadata_suite": 1
+    "provider_quota_metadata_suite": 1,
+    "controlled_query_suite_id": "south.controlled-query.v1",
+    "controlled_query_suite": 1
   },
   "provider_api": {
     "wit_version": null
@@ -41,13 +43,13 @@
     "abi_version": null
   },
   "crates": {
-    "south-contracts": "http_auth_error_stream_quota_metadata_header_auth_v1",
-    "south-core": "buffered_streaming_provider_call_header_auth_v1",
+    "south-contracts": "http_auth_error_stream_quota_metadata_header_auth_controlled_query_v1",
+    "south-core": "buffered_streaming_provider_call_header_auth_controlled_query_v1",
     "south-migration": "placeholder",
     "south-provider-api": "placeholder",
-    "south-provider-conformance": "provider_call_stream_quota_metadata_header_auth_suites_v1",
+    "south-provider-conformance": "provider_call_stream_quota_metadata_header_auth_controlled_query_suites_v1",
     "south-provider-runtime": "placeholder",
-    "south-testkit": "provider_call_stream_quota_metadata_header_auth_runners_v1",
+    "south-testkit": "provider_call_stream_quota_metadata_header_auth_controlled_query_runners_v1",
     "south-transport-reqwest": "buffered_streaming_json_post_quota_metadata_header_auth_v1",
     "south-transport-ureq": "placeholder"
   },
@@ -60,13 +62,15 @@
       "provider_call": "verified",
       "provider_stream": "verified",
       "provider_quota_metadata": "verified",
-      "header_auth": "verified"
+      "header_auth": "verified",
+      "controlled_query": "not_verified"
     },
     "token-station-server": {
       "provider_call": "verified",
       "provider_stream": "verified",
       "provider_quota_metadata": "not_verified",
-      "header_auth": "not_verified"
+      "header_auth": "not_verified",
+      "controlled_query": "not_verified"
     }
   }
 }

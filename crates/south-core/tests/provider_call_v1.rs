@@ -11,8 +11,8 @@ use std::{
 use http::{Method, StatusCode};
 use south_contracts::{
     BearerAuthV1, BufferedHttpResponseV1, CredentialSlotV1, JsonBodyV1, JsonPostRequestV1,
-    PreparationErrorV1, ProviderAuthV1, ProviderEndpointV1, RelativePathV1, SafeHeaders,
-    SecretHeaderV1, TransportErrorV1,
+    PreparationErrorV1, ProviderAuthV1, ProviderEndpointV1, QueryParameterV1, QueryStringV1,
+    RelativePathV1, SafeHeaders, SecretHeaderV1, TransportErrorV1,
 };
 use south_core::{
     AsyncHttpTransport, CredentialResolutionErrorV1, CredentialResolutionFuture,
@@ -737,4 +737,67 @@ fn composite_errors_never_include_request_or_secret_sentinels() {
             assert!(!rendered.contains(sentinel));
         }
     }
+}
+
+// ───────────────── controlled query (HTTP contract v2) ─────────────────
+
+#[tokio::test]
+async fn declared_query_reaches_the_transport_url_intact() {
+    let resolver = ImmediateResolver::default();
+    let transport = RecordingTransport::default();
+    let query = QueryStringV1::try_from_iter([
+        (QueryParameterV1::ApiVersion, "2024-10-21"),
+        (QueryParameterV1::Alt, "sse"),
+    ])
+    .expect("both parameters are sanctioned");
+    let request = request("v1/chat/completions", SLOT_SENTINEL).with_query(query);
+
+    execute_provider_call_v1(
+        &binding("https://example.com/base/", SLOT_SENTINEL),
+        &request,
+        &resolver,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("a sanctioned query must not block preparation");
+
+    let observation = transport
+        .observation
+        .lock()
+        .expect("observation lock")
+        .clone()
+        .expect("transport must be reached");
+    // Canonical declaration order, not the order the caller declared them in.
+    assert_eq!(observation.url.query(), Some("api-version=2024-10-21&alt=sse"));
+    // The query must not have leaked into the path: `set_path` would have percent-encoded `?`
+    // into `%3F` and produced a literal segment instead.
+    assert_eq!(observation.url.path(), "/base/v1/chat/completions");
+    assert!(observation.url.path().starts_with("/base/"), "binding prefix must survive");
+}
+
+#[tokio::test]
+async fn a_request_without_a_query_still_reaches_the_wire_query_free() {
+    let resolver = ImmediateResolver::default();
+    let transport = RecordingTransport::default();
+
+    execute_provider_call_v1(
+        &binding("https://example.com/base/", SLOT_SENTINEL),
+        &request("v1/chat/completions", SLOT_SENTINEL),
+        &resolver,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("contract version one shape stays valid");
+
+    let observation = transport
+        .observation
+        .lock()
+        .expect("observation lock")
+        .clone()
+        .expect("transport must be reached");
+    assert_eq!(observation.url.query(), None, "no query declared means no query on the wire");
 }
