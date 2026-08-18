@@ -209,6 +209,23 @@ Proposed frozen cases:
 `host_capabilities` gains a `controlled_query` key per host, `not_verified` until each host runs
 its own adoption slice.
 
+**A known blind spot in this suite, measured during the first host adoption (2026-08-18).** The
+four cases expect `wire_query_exact` of `true / true / false / true`, and the only `false` belongs
+to the zero-call case — where the probe is never invoked at all. That `false` is therefore held by
+"structurally never reached", not by "measured and found false". An adapter whose probe
+unconditionally reports `true` without ever reading the prepared URL passes the whole suite: the
+three `true` expectations are satisfied by the hardcoded value, and the `false` one is satisfied by
+the zero call. This was confirmed by mutation on a real host adapter, alongside two mutations the
+suite *does* catch (dropping the query entirely, and comparing declaration order instead of
+canonical order).
+
+Closing it needs a fifth case: one that reaches the transport with a query the adapter is expected
+to get *wrong* — for instance a fixture whose expected evidence is `wire_query_exact: false` with
+`transport_calls: One`. Until that exists, an adopting host's probe wiring is a **review item**,
+not a machine-checkable fact, which is exactly what the "adapter-reported evidence is insufficient
+for host verification" rule in `ControlledQueryEvidenceV1` already says — this paragraph records
+the specific shape that rule is covering for.
+
 ## 5. Fuzz and property obligations
 
 `fuzz/fuzz_targets/contract_parsers.rs` asserts that **every accepted relative path resolves
