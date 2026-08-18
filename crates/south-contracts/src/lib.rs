@@ -11,7 +11,7 @@ use thiserror::Error;
 use url::Url;
 
 /// The version of the buffered HTTP request and response contract.
-pub const HTTP_CONTRACT_VERSION: u16 = 1;
+pub const HTTP_CONTRACT_VERSION: u16 = 2;
 
 /// The version of the provider authentication declaration contract.
 ///
@@ -30,6 +30,12 @@ pub const MAX_ENDPOINT_BYTES: usize = 8 * 1024;
 
 /// The maximum byte length of a provider-selected relative path.
 pub const MAX_RELATIVE_PATH_BYTES: usize = 2 * 1024;
+
+/// The maximum byte length of one sanctioned query parameter value.
+pub const MAX_QUERY_VALUE_BYTES: usize = 64;
+
+/// The maximum byte length of a serialized query, excluding the leading `?`.
+pub const MAX_QUERY_TOTAL_BYTES: usize = 256;
 
 /// The maximum byte length of a provider-selected credential slot identifier.
 pub const MAX_CREDENTIAL_SLOT_BYTES: usize = 64;
@@ -361,9 +367,33 @@ impl RelativePathV1 {
         &self,
         endpoint: &ProviderEndpointV1,
     ) -> Result<Url, PreparationErrorV1> {
+        self.resolve_against_with_query(endpoint, None)
+    }
+
+    /// Appends this path and an optional sanctioned query, then rechecks the binding boundary.
+    ///
+    /// The query cannot ride along inside the path: `set_path` percent-encodes `?` into `%3F`,
+    /// which would silently turn a query into a literal path segment. It is therefore set
+    /// separately, and the post-normalization recheck proves the wire query is byte-for-byte what
+    /// was declared. That equality is what makes the recheck a proof rather than a formality: a
+    /// `#` or a re-encoded byte inside a value makes `reparsed.query()` differ from the input, and
+    /// preparation fails.
+    ///
+    /// The origin and traversal ring is unchanged by the query. `same_origin` reads scheme, host,
+    /// and effective port; `inside_base` reads `path()`. A query lives in `query()`, dot segments
+    /// are not normalized across the `?` boundary, and a `#` terminates the query rather than
+    /// extending the path — so none of those checks can be moved by query content.
+    pub fn resolve_against_with_query(
+        &self,
+        endpoint: &ProviderEndpointV1,
+        query: Option<&QueryStringV1>,
+    ) -> Result<Url, PreparationErrorV1> {
         let mut destination = endpoint.url.clone();
         let destination_path = format!("{}{relative}", endpoint.url.path(), relative = self.value);
         destination.set_path(&destination_path);
+        if let Some(query) = query {
+            destination.set_query(Some(query.as_str()));
+        }
 
         let reparsed =
             Url::parse(destination.as_str()).map_err(|_| PreparationErrorV1::UrlOutsideBinding)?;
@@ -371,11 +401,15 @@ impl RelativePathV1 {
             && reparsed.host_str() == endpoint.url.host_str()
             && reparsed.port_or_known_default() == endpoint.url.port_or_known_default();
         let inside_base = reparsed.path().starts_with(endpoint.url.path());
+        let query_intact = query.map_or_else(
+            || reparsed.query().is_none(),
+            |declared| reparsed.query() == Some(declared.as_str()),
+        );
         if !same_origin
             || !inside_base
+            || !query_intact
             || !reparsed.username().is_empty()
             || reparsed.password().is_some()
-            || reparsed.query().is_some()
             || reparsed.fragment().is_some()
         {
             return Err(PreparationErrorV1::UrlOutsideBinding);
@@ -563,6 +597,137 @@ impl SecretHeaderV1 {
     }
 }
 
+/// The frozen set of sanctioned query parameters.
+///
+/// Closed and fieldless for the same reason [`SecretHeaderV1`] is: a query is the most reliably
+/// logged component of an HTTP request — proxies, CDNs, upstream access logs, and `Referer`
+/// propagation all capture it — so it is the twin of the plain-header channel that
+/// `RESERVED_HEADERS` governs. Freezing the names is the structural answer: a provider cannot
+/// name `key`, `access_token`, or `sig`, because those names do not exist in this type. No
+/// blocklist is consulted and none is needed.
+///
+/// Values never come from credential resolution. [`ProviderAuthV1`] remains the sole path a
+/// secret takes to the wire; there is deliberately no conversion from a resolved secret into a
+/// query value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QueryParameterV1 {
+    /// `api-version` (Azure `OpenAI`, Azure AI Foundry).
+    ApiVersion,
+    /// `alt` (Gemini native streaming).
+    Alt,
+}
+
+impl QueryParameterV1 {
+    /// Every sanctioned parameter, in canonical declaration order.
+    ///
+    /// Serialization follows this order, so a request's query is byte-identical regardless of the
+    /// order the host declared its parameters in.
+    pub const ALL: [Self; 2] = [Self::ApiVersion, Self::Alt];
+
+    /// Returns the wire name of the sanctioned parameter.
+    #[must_use]
+    pub const fn wire_name(&self) -> &'static str {
+        match self {
+            Self::ApiVersion => "api-version",
+            Self::Alt => "alt",
+        }
+    }
+
+    /// Checks a candidate value against this parameter's own grammar.
+    ///
+    /// Per-parameter rather than one shared character class: the sanctioned set is small and each
+    /// grammar is known exactly, so a shared rule would admit values no upstream accepts and turn
+    /// a contract error into a runtime rejection.
+    #[must_use]
+    fn accepts(self, value: &str) -> bool {
+        match self {
+            // Real Azure versions are dated (`2024-10-21`, `2025-04-01-preview`) or the literal
+            // `v1`. This is deliberately stricter than the adopting host's own handling, which
+            // applies no sanitization to the field today.
+            Self::ApiVersion => {
+                !value.is_empty()
+                    && value.len() <= MAX_QUERY_VALUE_BYTES
+                    && value.bytes().all(|byte| {
+                        byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-')
+                    })
+            }
+            // A closed value set: the upstream accepts nothing else.
+            Self::Alt => matches!(value, "sse" | "json"),
+        }
+    }
+}
+
+/// A bounded, ordered, duplicate-free query declaration.
+///
+/// Constructed only from [`QueryParameterV1`] and values that satisfy that parameter's grammar.
+/// Serialization is canonical (declaration order), which is what lets the URL join prove after
+/// normalization that the wire query is byte-for-byte what was declared.
+#[derive(Clone, PartialEq, Eq)]
+pub struct QueryStringV1 {
+    serialized: String,
+}
+
+impl QueryStringV1 {
+    /// Validates and serializes a sanctioned query declaration.
+    ///
+    /// A repeated parameter is [`ContractErrorV1::DuplicateQueryParameter`] rather than a
+    /// last-wins normalization: parameter pollution, where this library and the upstream disagree
+    /// about which duplicate wins, is the classic failure mode of permissive query handling.
+    pub fn try_from_iter<'v, I>(parameters: I) -> Result<Self, ContractErrorV1>
+    where
+        I: IntoIterator<Item = (QueryParameterV1, &'v str)>,
+    {
+        let mut declared: Vec<(QueryParameterV1, &str)> = Vec::new();
+        for (parameter, value) in parameters {
+            if !parameter.accepts(value) {
+                return Err(ContractErrorV1::InvalidQueryValue);
+            }
+            if declared.iter().any(|(seen, _)| *seen == parameter) {
+                return Err(ContractErrorV1::DuplicateQueryParameter);
+            }
+            declared.push((parameter, value));
+        }
+        if declared.is_empty() {
+            return Err(ContractErrorV1::EmptyQuery);
+        }
+
+        let mut serialized = String::new();
+        for parameter in QueryParameterV1::ALL {
+            let Some((_, value)) = declared.iter().find(|(seen, _)| *seen == parameter) else {
+                continue;
+            };
+            if !serialized.is_empty() {
+                serialized.push('&');
+            }
+            serialized.push_str(parameter.wire_name());
+            serialized.push('=');
+            serialized.push_str(value);
+        }
+        if serialized.len() > MAX_QUERY_TOTAL_BYTES {
+            return Err(ContractErrorV1::QueryTooLarge);
+        }
+
+        Ok(Self { serialized })
+    }
+
+    /// Returns the canonical serialized query, without a leading `?`.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.serialized
+    }
+}
+
+impl fmt::Debug for QueryStringV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Values are provider-authored and land in logs; print only the shape.
+        formatter
+            .debug_struct("QueryStringV1")
+            .field("contract_version", &HTTP_CONTRACT_VERSION)
+            .field("byte_count", &self.serialized.len())
+            .finish_non_exhaustive()
+    }
+}
+
 /// A provider authentication declaration naming a scheme and a host-resolved credential slot.
 ///
 /// Neither arm carries a credential value. The header-secret arm reuses [`BearerAuthV1`] as its
@@ -617,6 +782,7 @@ pub struct JsonPostRequestV1 {
     headers: SafeHeaders,
     body: JsonBodyV1,
     auth: ProviderAuthV1,
+    query: Option<QueryStringV1>,
 }
 
 impl JsonPostRequestV1 {
@@ -631,7 +797,23 @@ impl JsonPostRequestV1 {
         body: JsonBodyV1,
         auth: impl Into<ProviderAuthV1>,
     ) -> Self {
-        Self { relative_path, headers, body, auth: auth.into() }
+        Self { relative_path, headers, body, auth: auth.into(), query: None }
+    }
+
+    /// Attaches a sanctioned query declaration to this request.
+    ///
+    /// A separate builder rather than a `new` parameter so http-contract-version-one call sites
+    /// keep compiling unchanged: a v1 request is exactly a v2 request with no query.
+    #[must_use]
+    pub fn with_query(mut self, query: QueryStringV1) -> Self {
+        self.query = Some(query);
+        self
+    }
+
+    /// Returns the sanctioned query declaration, when one was attached.
+    #[must_use]
+    pub const fn query(&self) -> Option<&QueryStringV1> {
+        self.query.as_ref()
     }
 
     /// Returns the provider-selected relative path.
@@ -1257,6 +1439,18 @@ pub enum ContractErrorV1 {
     /// The request body exceeds the contract limit.
     #[error("request body exceeds the boundary limit")]
     RequestBodyTooLarge,
+    /// A query value violates its sanctioned parameter's grammar.
+    #[error("query parameter value is invalid")]
+    InvalidQueryValue,
+    /// The same sanctioned parameter was declared more than once.
+    #[error("query parameter is declared more than once")]
+    DuplicateQueryParameter,
+    /// A query was declared with no parameters.
+    #[error("query declares no parameters")]
+    EmptyQuery,
+    /// The serialized query exceeds the contract limit.
+    #[error("query exceeds the boundary limit")]
+    QueryTooLarge,
 }
 
 impl ContractErrorV1 {
@@ -1269,6 +1463,10 @@ impl ContractErrorV1 {
             Self::InvalidCredentialSlot => "INVALID_CREDENTIAL_SLOT",
             Self::InvalidJsonBody => "INVALID_JSON_BODY",
             Self::RequestBodyTooLarge => "REQUEST_BODY_TOO_LARGE",
+            Self::InvalidQueryValue => "INVALID_QUERY_VALUE",
+            Self::DuplicateQueryParameter => "DUPLICATE_QUERY_PARAMETER",
+            Self::EmptyQuery => "EMPTY_QUERY",
+            Self::QueryTooLarge => "QUERY_TOO_LARGE",
         }
     }
 }

@@ -18,10 +18,17 @@ macro_rules! fixed_debug {
     };
 }
 
+mod controlled_query;
 mod header_auth;
 mod quota;
 mod stream;
 
+pub use controlled_query::{
+    CONTROLLED_QUERY_CONFORMANCE_SUITE_ID, CONTROLLED_QUERY_CONFORMANCE_SUITE_VERSION,
+    ControlledQueryCaseIdV1, ControlledQueryExpectedEvidenceV1, ControlledQueryExpectedOutcomeV1,
+    ControlledQueryExpectedV1, ControlledQueryFixtureV1, ControlledQueryUpstreamV1,
+    controlled_query_fixtures_v1,
+};
 pub use header_auth::{
     FAKE_HEADER_SECRET_V1, HEADER_AUTH_CONFORMANCE_SUITE_ID, HEADER_AUTH_CONFORMANCE_SUITE_VERSION,
     HeaderAuthCaseIdV1, HeaderAuthExpectedEvidenceV1, HeaderAuthExpectedOutcomeV1,

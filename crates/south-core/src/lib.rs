@@ -238,7 +238,8 @@ where
     R: CredentialResolver + ?Sized,
     T: AsyncHttpTransport + ?Sized,
 {
-    let destination = request.relative_path().resolve_against(&binding.endpoint)?;
+    let destination =
+        request.relative_path().resolve_against_with_query(&binding.endpoint, request.query())?;
 
     let requested_slot = request.auth().credential_slot();
     if requested_slot != &binding.credential_slot {
@@ -449,7 +450,8 @@ where
     R: CredentialResolver + ?Sized,
     T: AsyncStreamingTransport + ?Sized,
 {
-    let destination = request.relative_path().resolve_against(&binding.endpoint)?;
+    let destination =
+        request.relative_path().resolve_against_with_query(&binding.endpoint, request.query())?;
 
     let requested_slot = request.auth().credential_slot();
     if requested_slot != &binding.credential_slot {
