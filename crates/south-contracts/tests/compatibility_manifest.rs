@@ -288,7 +288,6 @@ fn compatibility_manifest_describes_the_library_slice() {
             "http_auth_error_stream_quota_metadata_header_auth_controlled_query_v1",
         ),
         ("south-core", "buffered_streaming_provider_call_header_auth_controlled_query_v1"),
-        ("south-migration", "placeholder"),
         ("south-provider-api", "placeholder"),
         (
             "south-provider-conformance",
@@ -300,7 +299,6 @@ fn compatibility_manifest_describes_the_library_slice() {
             "provider_call_stream_quota_metadata_header_auth_controlled_query_runners_v1",
         ),
         ("south-transport-reqwest", "buffered_streaming_json_post_quota_metadata_header_auth_v1"),
-        ("south-transport-ureq", "placeholder"),
     ]);
     assert_eq!(manifest.crates.len(), expected_crates.len());
     for (name, expected_status) in expected_crates {

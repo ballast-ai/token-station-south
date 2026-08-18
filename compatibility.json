@@ -45,13 +45,11 @@
   "crates": {
     "south-contracts": "http_auth_error_stream_quota_metadata_header_auth_controlled_query_v1",
     "south-core": "buffered_streaming_provider_call_header_auth_controlled_query_v1",
-    "south-migration": "placeholder",
     "south-provider-api": "placeholder",
     "south-provider-conformance": "provider_call_stream_quota_metadata_header_auth_controlled_query_suites_v1",
     "south-provider-runtime": "placeholder",
     "south-testkit": "provider_call_stream_quota_metadata_header_auth_controlled_query_runners_v1",
-    "south-transport-reqwest": "buffered_streaming_json_post_quota_metadata_header_auth_v1",
-    "south-transport-ureq": "placeholder"
+    "south-transport-reqwest": "buffered_streaming_json_post_quota_metadata_header_auth_v1"
   },
   "hosts": {
     "token-station": "verified",

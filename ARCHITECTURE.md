@@ -23,10 +23,25 @@ community policy      enterprise policy
 | `south-transport-reqwest` | Implemented hardened buffered and byte-streaming JSON POST transport with bounded quota metadata capture |
 | `south-provider-conformance` | Implemented immutable provider-call, provider-stream, and provider-quota-metadata v1 fixtures |
 | `south-testkit` | Implemented assembled-executor conformance runners and reference executors for all three suites |
-| `south-transport-ureq` | Placeholder for a future synchronous native transport |
-| `south-provider-api` | Placeholder for future provider WIT and manifest schemas |
-| `south-provider-runtime` | Placeholder for future sandboxed component execution |
-| `south-migration` | Placeholder for future offline fixture comparison; never production double-send |
+| `south-provider-api` | Placeholder for future provider WIT and manifest schemas; blocked on a canonical IR inventory |
+| `south-provider-runtime` | Placeholder for future sandboxed component execution; blocked on `south-provider-api` |
+
+## Removed ownership markers
+
+Two bootstrap placeholders were removed once they held no code and no live obligation. Both are
+recorded here rather than silently dropped, because the bootstrap design lists them and a reader of
+that record needs to know where they went.
+
+- `south-migration` owned offline fixture comparison for host migrations. The capability-scoped
+  conformance suites replaced it: each host proves an adapter against a frozen case table before a
+  status turns `verified`, which is a stronger and earlier check than comparing two runs after the
+  fact. Its "never production double-send" rule survives as a repository rule, not as a crate.
+- `south-transport-ureq` reserved a synchronous native transport. `south-transport-reqwest` shipped
+  first because the migration-critical host pins reqwest, and no host has since asked for a
+  synchronous stack. An empty crate did not constrain the transport traits either way, so the
+  reservation cost maintenance without protecting anything.
+
+Reintroducing either is a normal new crate with its own design record. Neither name is reserved.
 
 The implemented crate dependency graph is:
 
