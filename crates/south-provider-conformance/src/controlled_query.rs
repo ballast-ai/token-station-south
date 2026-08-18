@@ -31,6 +31,24 @@ pub enum ControlledQueryCaseIdV1 {
     /// this case an adapter could serialize in host-declaration order, pass the suite, and still
     /// disagree with another host on the wire bytes for the same declaration.
     ReversedDeclarationOrderIsCanonicalized,
+    /// A request declaring no query at all, reaching the transport and expecting `false`.
+    ///
+    /// This case exists to close a blind spot measured on a real host adapter during the first
+    /// adoption (2026-08-18). Before it, the four expected `wire_query_exact` values were
+    /// `true / true / false / true`, and the only `false` belonged to the zero-call case — where
+    /// the probe is never invoked. That `false` was therefore held by "structurally never
+    /// reached" rather than by "measured and found false", so an adapter whose probe
+    /// unconditionally reported `true` without ever reading
+    /// `PreparedHttpRequestV1::url()` passed the entire suite: the three `true` expectations were
+    /// satisfied by the hardcoded value and the `false` one by the zero call.
+    ///
+    /// This is the first case that both reaches the transport *and* expects `false`, which is the
+    /// combination the table was missing. A correct probe reads the prepared URL, finds no query,
+    /// compares it against a request that declared none, and reports `false` under the presence
+    /// polarity of [`ControlledQueryExpectedEvidenceV1::wire_query_exact`] — nothing was observed
+    /// carrying a declared query, because nothing was declared. A probe that hardcodes `true`
+    /// reports `true` here and fails with a `WireQuery` mismatch.
+    QueryFreeRequestReachesTheWire,
 }
 
 fixed_debug!(ControlledQueryCaseIdV1 {
@@ -38,6 +56,7 @@ fixed_debug!(ControlledQueryCaseIdV1 {
     StreamingQuerySuccess => "StreamingQuerySuccess",
     InvalidQueryValueRejected => "InvalidQueryValueRejected",
     ReversedDeclarationOrderIsCanonicalized => "ReversedDeclarationOrderIsCanonicalized",
+    QueryFreeRequestReachesTheWire => "QueryFreeRequestReachesTheWire",
 });
 
 /// A raw upstream exchange or fake-transport behavior for a canonical controlled-query case.
@@ -147,9 +166,16 @@ impl ControlledQueryExpectedEvidenceV1 {
     ///
     /// This is a *presence* claim, not an absence claim, which is why it is the mirror image of
     /// the header-auth suite's `authorization_header_absent`: it can only become true by observing
-    /// a wire, so a case whose transport must never be reached expects `false`. That polarity is
-    /// what makes the negative case's zero-call discipline checkable — an adapter that quietly
-    /// sent the rejected request would report `true` here and fail.
+    /// a wire carrying a declared query, so a case whose transport must never be reached expects
+    /// `false`, and so does a case that reaches the transport having declared no query at all.
+    /// That polarity is what makes the negative case's zero-call discipline checkable — an adapter
+    /// that quietly sent the rejected request would report `true` here and fail.
+    ///
+    /// The two ways of expecting `false` are not redundant.
+    /// [`ControlledQueryCaseIdV1::InvalidQueryValueRejected`] proves the wire is never reached;
+    /// [`ControlledQueryCaseIdV1::QueryFreeRequestReachesTheWire`] proves the probe is actually
+    /// measuring, because it is the only case where the transport runs and the answer is still
+    /// `false`.
     #[must_use]
     pub const fn wire_query_exact(&self) -> bool {
         self.wire_query_exact
@@ -202,7 +228,8 @@ impl fmt::Debug for ControlledQueryExpectedV1 {
 ///
 /// The declared parameters are retained *raw* rather than as a constructed `QueryStringV1`: the
 /// negative case exists precisely to exercise the construction failure, so the fixture must be
-/// able to carry a value the contract rejects.
+/// able to carry a value the contract rejects, and the query-free case must be able to carry no
+/// parameters at all — a shape `QueryStringV1` refuses to represent.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct ControlledQueryFixtureV1 {
     case_id: ControlledQueryCaseIdV1,
@@ -226,6 +253,10 @@ impl ControlledQueryFixtureV1 {
     }
 
     /// Returns the raw sanctioned parameters the request declares, in declaration order.
+    ///
+    /// An empty slice means the request declares no query, which is a valid fixture shape and
+    /// must not be handed to `QueryStringV1::try_from_iter` — that constructor rejects an empty
+    /// declaration rather than producing an empty query.
     #[must_use]
     pub const fn declared_query(&self) -> &'static [(QueryParameterV1, &'static str)] {
         self.declared_query
@@ -287,6 +318,9 @@ const REVERSED_ORDER_QUERY: &[(QueryParameterV1, &str)] = &[
     (QueryParameterV1::Alt, CONTROLLED_QUERY_ALT),
     (QueryParameterV1::ApiVersion, CONTROLLED_QUERY_API_VERSION),
 ];
+/// No declaration at all. The request must reach the transport carrying no query, which is what
+/// makes this the one case whose probe runs and must still answer `false`.
+const QUERY_FREE_QUERY: &[(QueryParameterV1, &str)] = &[];
 
 const fn query_evidence(
     resolver_calls: ProviderCallCountV1,
@@ -372,6 +406,31 @@ const CONTROLLED_QUERY_FIXTURES: &[ControlledQueryFixtureV1] = &[
             // `wire_query_exact` compares the wire against the canonical serialization, so this
             // case fails for an adapter that emits parameters in host-declaration order.
             evidence: query_evidence(ProviderCallCountV1::One, ProviderCallCountV1::One, true),
+        },
+    },
+    ControlledQueryFixtureV1 {
+        case_id: ControlledQueryCaseIdV1::QueryFreeRequestReachesTheWire,
+        input: input(CONTROLLED_QUERY_PATH, CONTROLLED_QUERY_BOUND_SLOT),
+        declared_query: QUERY_FREE_QUERY,
+        upstream: ControlledQueryUpstreamV1::Response(ProviderCallRawResponseV1 {
+            status: 200,
+            body: CONTROLLED_QUERY_RESPONSE_BODY,
+            content_type: None,
+            retry_after: None,
+        }),
+        expected: ControlledQueryExpectedV1 {
+            outcome: ControlledQueryExpectedOutcomeV1::Response {
+                status: 200,
+                body: CONTROLLED_QUERY_RESPONSE_BODY,
+                content_type: None,
+                retry_after: None,
+            },
+            // The load-bearing row of the whole table: the transport *is* reached, and the answer
+            // is still `false`. Every other `true` here can be satisfied by a probe that ignores
+            // the prepared URL and hardcodes `true`; this row cannot. It fails such a probe with
+            // a `WireQuery` mismatch, which is what turns the wire-query claim from a
+            // review item into a machine-checkable fact.
+            evidence: query_evidence(ProviderCallCountV1::One, ProviderCallCountV1::One, false),
         },
     },
 ];

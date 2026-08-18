@@ -143,14 +143,20 @@ async fn each_single_difference_reports_exactly_its_one_case_and_category() {
             ControlledQueryCaseIdV1::StreamingQuerySuccess,
             ControlledQueryMismatchCategoryV1::TransportCallCount,
         ),
-        // Both polarities of the wire-query claim must isolate: a success case that failed to put
-        // the declared query on the wire, and a rejected case that reached a wire at all.
+        // Every polarity of the wire-query claim must isolate: a success case that failed to put
+        // the declared query on the wire, a rejected case that reached a wire at all, and a
+        // query-free case whose probe claimed a declared query it never had. The last is the one
+        // that catches a probe hardcoding `true`, so its isolation is worth freezing explicitly.
         (
             ControlledQueryCaseIdV1::BufferedQuerySuccess,
             ControlledQueryMismatchCategoryV1::WireQuery,
         ),
         (
             ControlledQueryCaseIdV1::InvalidQueryValueRejected,
+            ControlledQueryMismatchCategoryV1::WireQuery,
+        ),
+        (
+            ControlledQueryCaseIdV1::QueryFreeRequestReachesTheWire,
             ControlledQueryMismatchCategoryV1::WireQuery,
         ),
     ];
@@ -169,6 +175,49 @@ async fn each_single_difference_reports_exactly_its_one_case_and_category() {
         assert_eq!(mismatch.case_id(), case_id);
         assert_eq!(mismatch.category(), category);
     }
+}
+
+/// The blind spot this suite was extended to close, frozen as a test.
+///
+/// This executor is the mutation measured on a real host adapter during the first adoption: every
+/// outcome is correct, and the wire-query probe reports `true` unconditionally without ever
+/// reading the prepared URL. Against the original four cases it passed the suite outright. It
+/// must now fail, and it must fail on exactly the query-free case, because that is the only case
+/// whose transport runs while the correct answer is `false`.
+#[tokio::test]
+async fn a_probe_that_hardcodes_the_wire_query_claim_is_caught() {
+    struct HardcodedWireQueryExecutor;
+
+    impl AssembledControlledQueryExecutorV1 for HardcodedWireQueryExecutor {
+        fn execute_case<'a>(
+            &'a self,
+            fixture: &'a ControlledQueryFixtureV1,
+        ) -> AssembledControlledQueryExecutionFutureV1<'a> {
+            Box::pin(async move {
+                let expected = fixture.expected().evidence();
+                let transport_calls = count_value(expected.transport_calls());
+                // Correct counts, correct outcome. The probe stores `true` unconditionally
+                // instead of reading the prepared URL — but it is still only *invoked* from the
+                // transport boundary, so a case that never reaches a transport keeps the initial
+                // `false`. That is precisely the mutation the old four-case table missed.
+                let evidence = ControlledQueryEvidenceV1::new(
+                    count_value(expected.resolver_calls()),
+                    transport_calls,
+                    transport_calls > 0,
+                );
+                observation_with_evidence(fixture, evidence)
+            })
+        }
+    }
+
+    let failure = run_controlled_query_conformance_v1(&HardcodedWireQueryExecutor)
+        .await
+        .expect_err("a probe that never reads the prepared URL must not pass");
+
+    assert_eq!(failure.mismatches().len(), 1);
+    let mismatch = &failure.mismatches()[0];
+    assert_eq!(mismatch.case_id(), ControlledQueryCaseIdV1::QueryFreeRequestReachesTheWire);
+    assert_eq!(mismatch.category(), ControlledQueryMismatchCategoryV1::WireQuery);
 }
 
 #[tokio::test]
@@ -328,7 +377,13 @@ const fn matching_evidence(fixture: &ControlledQueryFixtureV1) -> ControlledQuer
 }
 
 fn observation_matching(fixture: &ControlledQueryFixtureV1) -> ControlledQueryObservationV1 {
-    let evidence = matching_evidence(fixture);
+    observation_with_evidence(fixture, matching_evidence(fixture))
+}
+
+fn observation_with_evidence(
+    fixture: &ControlledQueryFixtureV1,
+    evidence: ControlledQueryEvidenceV1,
+) -> ControlledQueryObservationV1 {
     match fixture.expected().outcome() {
         ControlledQueryExpectedOutcomeV1::Response { status, body, content_type, retry_after } => {
             ControlledQueryObservationV1::response(

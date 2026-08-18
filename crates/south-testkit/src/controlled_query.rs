@@ -33,8 +33,8 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{map_contract_error, map_provider_call_error, parse_reference_input};
 
-/// Four cases multiplied by the ten closed controlled-query mismatch categories.
-pub const MAX_CONTROLLED_QUERY_MISMATCHES_V1: usize = 40;
+/// Five cases multiplied by the ten closed controlled-query mismatch categories.
+pub const MAX_CONTROLLED_QUERY_MISMATCHES_V1: usize = 50;
 
 /// A boxed, cancellation-safe assembled controlled-query executor future.
 pub type AssembledControlledQueryExecutionFutureV1<'a> =
@@ -559,6 +559,30 @@ impl AssembledControlledQueryExecutorV1 for ReferenceAssembledControlledQueryExe
     }
 }
 
+/// Turns a fixture's raw declaration into the query the request will carry, or a failure code.
+///
+/// Three outcomes, and keeping them distinct is the whole job. `Ok(Some(_))` is a declared query.
+/// `Err(_)` is a declaration the contract refuses, which is how
+/// `ControlledQueryCaseIdV1::InvalidQueryValueRejected` fails before a binding, a resolver, or a
+/// transport is ever consulted. `Ok(None)` is *no* declaration, which is a legitimate request
+/// shape and not a failure.
+///
+/// The empty slice must never reach `QueryStringV1::try_from_iter`: that constructor has no empty
+/// representation and answers `ContractErrorV1::EmptyQuery`. Routing the query-free case through
+/// it would turn it into a second rejection case with zero transport calls, which would destroy
+/// exactly the coverage it was added to provide — a reached transport whose wire-query claim is
+/// still `false`.
+fn declare_reference_query(
+    fixture: &ControlledQueryFixtureV1,
+) -> Result<Option<QueryStringV1>, ProviderCallFailureCodeV1> {
+    if fixture.declared_query().is_empty() {
+        return Ok(None);
+    }
+    QueryStringV1::try_from_iter(fixture.declared_query().iter().copied())
+        .map(Some)
+        .map_err(map_contract_error)
+}
+
 async fn execute_reference_controlled_query_case(
     fixture: &ControlledQueryFixtureV1,
 ) -> ControlledQueryObservationV1 {
@@ -575,24 +599,25 @@ async fn execute_reference_controlled_query_case(
             );
         }
     };
-    // The declared parameters are raw on purpose, so this is where the negative case fails: the
-    // contract refuses the value before a binding, a resolver, or a transport is ever consulted.
-    let query = match QueryStringV1::try_from_iter(fixture.declared_query().iter().copied()) {
+    let declared_query = match declare_reference_query(fixture) {
         Ok(query) => query,
-        Err(error) => {
+        Err(code) => {
             return ControlledQueryObservationV1::failure(
-                map_contract_error(error),
+                code,
                 ControlledQueryEvidenceV1::new(0, 0, false),
             );
         }
     };
-    let request = request.with_query(query.clone());
+    let request = match declared_query.clone() {
+        Some(query) => request.with_query(query),
+        None => request,
+    };
 
     let resolver = BearerSecretResolver { calls: Arc::clone(&resolver_calls) };
     let transport = QueryRecordingTransport {
         calls: Arc::clone(&transport_calls),
         upstream: fixture.upstream(),
-        declared_query: query,
+        declared_query,
         wire_query_exact: Arc::clone(&wire_query_exact),
     };
     let cancellation = CancellationToken::new();
@@ -684,13 +709,31 @@ impl CredentialResolver for BearerSecretResolver {
 struct QueryRecordingTransport<'fixture> {
     calls: Arc<AtomicUsize>,
     upstream: &'fixture ControlledQueryUpstreamV1,
-    declared_query: QueryStringV1,
+    declared_query: Option<QueryStringV1>,
     wire_query_exact: Arc<AtomicBool>,
 }
 
 impl QueryRecordingTransport<'_> {
+    /// Measures the presence claim on the URL that is about to be sent.
+    ///
+    /// The claim is "the wire carried the query this request declared", so it needs both halves:
+    /// a declaration to compare against, and a wire query equal to it byte for byte. A request
+    /// that declared nothing can never satisfy it, even though it reaches this boundary and its
+    /// URL is genuinely correct — there is no declared query to have observed. That asymmetry is
+    /// deliberate, and it is what
+    /// `ControlledQueryCaseIdV1::QueryFreeRequestReachesTheWire` measures: a probe must read the
+    /// prepared URL to answer at all, so one that hardcodes `true` is caught here.
     fn record_wire_query(&self, request: &PreparedHttpRequestV1<'_>) {
-        let exact = request.url().query() == Some(self.declared_query.as_str());
+        let wire = request.url().query();
+        let declared = self.declared_query.as_ref().map(QueryStringV1::as_str);
+        debug_assert!(
+            declared.is_some() || wire.is_none(),
+            "a request declaring no query must carry none"
+        );
+        // `declared.is_some()` is not redundant with the equality: without it a request that
+        // declared nothing and carried nothing would compare `None == None` and claim `true`,
+        // which is an absence claim, not the presence claim this evidence field defines.
+        let exact = declared.is_some() && wire == declared;
         self.wire_query_exact.store(exact, Ordering::SeqCst);
     }
 }
