@@ -5,7 +5,7 @@ use south_testkit::{
 };
 
 #[tokio::test(flavor = "current_thread")]
-async fn reference_executor_uses_real_core_for_both_metadata_cases() {
+async fn reference_executor_uses_real_core_for_every_metadata_case() {
     let executor = ReferenceAssembledProviderQuotaMetadataExecutorV1::new();
     let report = tokio::time::timeout(
         Duration::from_secs(5),
@@ -15,5 +15,5 @@ async fn reference_executor_uses_real_core_for_both_metadata_cases() {
     .expect("structured metadata runner watchdog must not expire")
     .expect("reference executor should pass the metadata extension suite");
 
-    assert_eq!(report.passed_case_ids().len(), 2);
+    assert_eq!(report.passed_case_ids().len(), 3);
 }

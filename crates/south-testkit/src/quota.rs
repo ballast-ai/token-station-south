@@ -21,13 +21,15 @@ use south_core::{
 use south_provider_conformance::{
     FAKE_BEARER_SECRET_V1, PROVIDER_QUOTA_METADATA_CONFORMANCE_SUITE_ID,
     PROVIDER_QUOTA_METADATA_CONFORMANCE_SUITE_VERSION, ProviderCallCountV1,
-    ProviderCallFailureCodeV1, ProviderQuotaMetadataCaseIdV1, ProviderQuotaMetadataFixtureV1,
-    ProviderQuotaMetadataRawV1, provider_quota_metadata_fixtures_v1,
+    ProviderCallFailureCodeV1, ProviderQuotaMetadataCaseIdV1,
+    ProviderQuotaMetadataExpectedOutcomeV1, ProviderQuotaMetadataFixtureV1,
+    ProviderQuotaMetadataRawV1, ProviderQuotaMetadataUpstreamV1,
+    provider_quota_metadata_fixtures_v1,
 };
 use tokio_util::sync::CancellationToken;
 
-/// Two canonical cases multiplied by twelve closed mismatch categories.
-pub const MAX_PROVIDER_QUOTA_METADATA_MISMATCHES_V1: usize = 24;
+/// Three canonical cases multiplied by thirteen closed mismatch categories.
+pub const MAX_PROVIDER_QUOTA_METADATA_MISMATCHES_V1: usize = 39;
 
 /// A boxed, cancellation-safe assembled quota metadata executor future.
 pub type AssembledProviderQuotaMetadataExecutionFutureV1<'a> =
@@ -161,6 +163,8 @@ impl fmt::Debug for ProviderQuotaMetadataObservationV1 {
 pub enum ProviderQuotaMetadataMismatchCategoryV1 {
     /// Response versus failure differed.
     OutcomeKind,
+    /// Both sides failed, but the closed failure code differed.
+    FailureCode,
     /// `x-ratelimit-limit-tokens` differed.
     XRateLimitLimitTokens,
     /// `x-ratelimit-remaining-tokens` differed.
@@ -189,6 +193,7 @@ impl fmt::Debug for ProviderQuotaMetadataMismatchCategoryV1 {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::OutcomeKind => "OutcomeKind",
+            Self::FailureCode => "FailureCode",
             Self::XRateLimitLimitTokens => "XRateLimitLimitTokens",
             Self::XRateLimitRemainingTokens => "XRateLimitRemainingTokens",
             Self::XRateLimitResetTokens => "XRateLimitResetTokens",
@@ -392,7 +397,7 @@ async fn execute_reference_case(
     let resolver = QuotaMetadataResolver { calls: Arc::clone(&resolver_calls) };
     let transport = QuotaMetadataTransport {
         calls: Arc::clone(&transport_calls),
-        metadata: *fixture.upstream_metadata(),
+        upstream: *fixture.upstream(),
     };
     let result = execute_provider_call_v1(
         &binding,
@@ -433,7 +438,7 @@ impl CredentialResolver for QuotaMetadataResolver {
 
 struct QuotaMetadataTransport {
     calls: Arc<AtomicUsize>,
-    metadata: ProviderQuotaMetadataRawV1,
+    upstream: ProviderQuotaMetadataUpstreamV1,
 }
 
 impl AsyncHttpTransport for QuotaMetadataTransport {
@@ -443,8 +448,17 @@ impl AsyncHttpTransport for QuotaMetadataTransport {
         _remaining_timeout: Duration,
     ) -> TransportFuture<'a> {
         self.calls.fetch_add(1, Ordering::SeqCst);
-        let metadata = self.metadata;
+        let upstream = self.upstream;
         Box::pin(async move {
+            let metadata = match upstream {
+                ProviderQuotaMetadataUpstreamV1::Metadata(raw) => raw,
+                // Reaching a `NotReached` transport is itself the failure the case exists to
+                // detect. Surfacing it as a transport error keeps the counter increment above
+                // visible to the evidence comparison rather than silently succeeding.
+                ProviderQuotaMetadataUpstreamV1::NotReached => {
+                    return Err(TransportErrorV1::RequestFailed);
+                }
+            };
             BufferedHttpResponseV1::try_from_parts_with_provider_quota_metadata(
                 StatusCode::OK,
                 b"{}".to_vec(),
@@ -511,17 +525,41 @@ fn compare_outcome(
     observation: &ProviderQuotaMetadataObservationV1,
     mismatches: &mut Vec<ProviderQuotaMetadataMismatchV1>,
 ) {
-    let ProviderQuotaMetadataObservedOutcomeV1::Response(actual) = &observation.outcome else {
-        record(fixture, ProviderQuotaMetadataMismatchCategoryV1::OutcomeKind, mismatches);
-        return;
-    };
-    for (field, category) in FIELD_CATEGORIES {
-        record_if(
-            actual.value(field) != fixture.expected_metadata().value(field),
-            fixture,
-            category,
-            mismatches,
-        );
+    match (fixture.expected_outcome(), &observation.outcome) {
+        (
+            ProviderQuotaMetadataExpectedOutcomeV1::Metadata(expected),
+            ProviderQuotaMetadataObservedOutcomeV1::Response(actual),
+        ) => {
+            for (field, category) in FIELD_CATEGORIES {
+                record_if(
+                    actual.value(field) != expected.value(field),
+                    fixture,
+                    category,
+                    mismatches,
+                );
+            }
+        }
+        (
+            ProviderQuotaMetadataExpectedOutcomeV1::Failure { code },
+            ProviderQuotaMetadataObservedOutcomeV1::Failure(actual),
+        ) => {
+            record_if(
+                actual != code,
+                fixture,
+                ProviderQuotaMetadataMismatchCategoryV1::FailureCode,
+                mismatches,
+            );
+        }
+        (
+            ProviderQuotaMetadataExpectedOutcomeV1::Metadata(_),
+            ProviderQuotaMetadataObservedOutcomeV1::Failure(_),
+        )
+        | (
+            ProviderQuotaMetadataExpectedOutcomeV1::Failure { .. },
+            ProviderQuotaMetadataObservedOutcomeV1::Response(_),
+        ) => {
+            record(fixture, ProviderQuotaMetadataMismatchCategoryV1::OutcomeKind, mismatches);
+        }
     }
 }
 
