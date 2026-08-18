@@ -86,7 +86,8 @@
         "cases": 9
       },
       "provider_quota_metadata": {
-        "status": "not_verified"
+        "status": "verified",
+        "cases": 3
       },
       "header_auth": {
         "status": "verified",

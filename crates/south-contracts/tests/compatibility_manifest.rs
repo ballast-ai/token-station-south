@@ -155,7 +155,28 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 5
             [
                 ("provider_call", "verified", Some(7)),
                 ("provider_stream", "verified", Some(9)),
-                ("provider_quota_metadata", "not_verified", None),
+                // token-station-server provider_quota_metadata verified
+                // 2026-08-18 against the three-case table at v0.5.0. Its
+                // assembled executor runs south.provider-quota-metadata.v1 3/3
+                // through execute_raw_with with the production one-shot
+                // resolver. This replaces an earlier flip attempt that cited a
+                // two-case run (closed PR #19): re-pinning that host to v0.5.0
+                // failed to compile, because the fixture accessor changed shape
+                // to express NotReached, so the run behind this status is a
+                // genuinely new one rather than a re-labelled old one.
+                //
+                // What the new case bought, measured rather than assumed: the
+                // mutation reporting literal (1, 1) evidence instead of reading
+                // real counters survived the two-case table and now fails on
+                // ResolverCallCount and TransportCallCount. What it did not
+                // buy: an executor bypassing the host assembly layer to call
+                // south-core directly still passes, because the binding check
+                // that rejects the mismatched slot lives in south-core, so both
+                // paths reach it and report the same failure with the same zero
+                // counts. That axis remains a maintainer review item, and the
+                // host records it as still-surviving rather than claiming the
+                // gap closed.
+                ("provider_quota_metadata", "verified", Some(3)),
                 // token-station-server header_auth verified 2026-08-18: the
                 // host's assembled executor runs south.header-auth.v1 3/3
                 // through the same real seam as its two Bearer suites
