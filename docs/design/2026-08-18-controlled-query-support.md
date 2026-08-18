@@ -276,6 +276,19 @@ instrumentation the success cases use, on every path including early returns.** 
 should ask to see the negative case's evidence expression and confirm it loads counters rather
 than naming constants. The first adopting host shipped this bug and fixed it on review.
 
+**Postscript (0.4.1): the fifth case caught a second, independent instance on the same host.**
+When that host re-pinned to the release carrying `QueryFreeRequestReachesTheWire`, its executor
+failed three categories at once on that case — it had routed the empty declaration through
+`QueryStringV1::try_from_iter`, taken the resulting `EmptyQuery` as a contract failure, and
+returned without ever reaching the transport. The new case was being treated as a second zero-call
+rejection, which is precisely the shape the design warned about two paragraphs above and which the
+old four-case table could not detect.
+
+This is worth recording because it settles what the fifth case is worth. It did not merely close a
+theoretical gap: it invalidated a real `verified` status on its first use, on a host whose adapter
+had already survived an adversarial review. A suite that cannot fail is not evidence, and this one
+could not fail on the axis it claimed to measure until the case existed.
+
 ## 5. Fuzz and property obligations
 
 `fuzz/fuzz_targets/contract_parsers.rs` asserts that **every accepted relative path resolves

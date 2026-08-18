@@ -143,39 +143,40 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [(&'static str, &'stat
                 // adoption record is held by that host's own repository; this
                 // manifest records only the resulting status.
                 ("header_auth", "verified"),
-                // token-station-server controlled_query verified 2026-08-18:
-                // the host's assembled executor runs south.controlled-query.v1
-                // 4/4 through the same real seam as its other suites
-                // (execute_raw_with / open_streaming_raw_with plus the
-                // production one-shot resolver), and a wire-level test proves
-                // the declared query reaches the upstream URL byte for byte
-                // with the path left untouched — the `%3F` corruption this
-                // contract exists to prevent. Three mutations fail the suite:
-                // dropping the query, comparing declaration order instead of
-                // canonical order, and hardcoding the negative case's evidence
-                // instead of reading the real counters (that last one was a
-                // real defect the adversarial review found and the host fixed
-                // on-branch — see the short-circuit note in the design).
+                // token-station-server controlled_query verified 2026-08-18,
+                // evidence refreshed against 0.4.1 after the suite grew its
+                // fifth case. The original run passed the four-case table, but
+                // that table could not tell an adapter that measures its wire
+                // from one that reports success without looking — and the
+                // re-run proved this host was the latter: its executor routed
+                // the empty declaration through QueryStringV1::try_from_iter,
+                // took the EmptyQuery error as a contract failure, and never
+                // reached the transport, so QueryFreeRequestReachesTheWire
+                // failed on three categories at once. Fixed on that host's
+                // branch; the first verified status was not false so much as
+                // unfalsifiable, which is exactly what the new case exists to
+                // change.
                 //
-                // Scope and its honest limit: the arm unlocks Azure OpenAI and
-                // Azure AI Foundry on that host's text and embeddings
-                // surfaces. Gemini stays out — it splits by surface (native
-                // single-header on chat, dual-header on the OpenAI-compatible
-                // ones) and that host's scope table keys on provider type
-                // alone. The one mutation the suite still cannot catch is a
-                // probe that reports success without reading the prepared URL,
-                // because no fixture reaches the transport expecting a
-                // mismatch; that wiring was therefore confirmed by maintainer
-                // review rather than by the suite. An adversarial review found
-                // no P1 beyond the evidence defect above; two P2 (the
-                // embeddings surface lacked the pre-admission contract
-                // precheck, widening a pre-existing post-marker failure now
-                // that operator-supplied Azure endpoints are in scope, and the
-                // canonical query reordering that will matter once a provider
-                // can emit two sanctioned parameters) and one P3 were fixed or
-                // documented on-branch. The adoption record is held by that
-                // host's own repository; this manifest records only the
-                // resulting status.
+                // Current evidence: the assembled executor runs
+                // south.controlled-query.v1 5/5 through the same real seam as
+                // its other suites (execute_raw_with /
+                // open_streaming_raw_with plus the production one-shot
+                // resolver), and a wire-level test proves the declared query
+                // reaches the upstream URL byte for byte with the path
+                // untouched. Two mutations now fail that previously survived
+                // or did not exist: a probe hardcoding its claim without
+                // reading the prepared URL, and dropping the is_some() half of
+                // the presence comparison. An adversarial review of the
+                // adoption found no P1 beyond an evidence-reporting defect
+                // fixed on-branch; two P2 and one P3 were fixed or documented.
+                //
+                // Scope: the arm unlocks Azure OpenAI and Azure AI Foundry on
+                // that host's text and embeddings surfaces, plus Gemini's
+                // native chat form, whose streaming ?alt=sse is the controlled
+                // query. Gemini's OpenAI-compatible surfaces stay on legacy —
+                // they send two auth headers and ProviderAuthV1 is single-arm.
+                // The adoption record is held by that host's own repository;
+                // this manifest records only the resulting status.
                 ("controlled_query", "verified"),
             ],
         ),
