@@ -122,7 +122,39 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [(&'static str, &'stat
             [
                 ("provider_call", "verified"),
                 ("provider_stream", "verified"),
-                ("provider_quota_metadata", "not_verified"),
+                // token-station-server provider_quota_metadata verified
+                // 2026-08-18. The host's assembled executor runs
+                // south.provider-quota-metadata.v1 2/2 through
+                // execute_raw_with with the production one-shot resolver, and
+                // its production types already carry the metadata — the
+                // reqwest transport fills both the buffered and streaming
+                // paths unconditionally, so this adoption proves the contract
+                // surface rather than migrating an existing mechanism. That
+                // host has no upstream quota observation at all (its rpm
+                // tracker counts its own requests and never reads a response
+                // header), so unlike the community host there is no legacy
+                // equivalence leg to run.
+                //
+                // Two mutations survive, and the review that flipped this knew
+                // it: routing the executor around the host assembly straight
+                // into south-core, and reporting literal (1, 1) evidence
+                // instead of loading the counters. Both frozen cases are
+                // success paths expecting One/One and exact metadata, so no
+                // expectation in the table separates correct wiring from a
+                // plausible shortcut. A third mutation — returning default
+                // metadata instead of the response's — fails with all nine
+                // field categories, which is what proves the suite is not
+                // vacuous.
+                //
+                // So this status rests on a suite that proves metadata
+                // survives field-by-field across whatever path the executor
+                // takes, plus a maintainer review confirming which path that
+                // is. Closing the gap needs a zero-call fixture here (slot
+                // mismatch crossed with metadata would do it) — the same
+                // shape, and the same remedy, as the fifth controlled-query
+                // case. The adoption record is held by that host's own
+                // repository; this manifest records only the resulting status.
+                ("provider_quota_metadata", "verified"),
                 // token-station-server header_auth verified 2026-08-18: the
                 // host's assembled executor runs south.header-auth.v1 3/3
                 // through the same real seam as its two Bearer suites

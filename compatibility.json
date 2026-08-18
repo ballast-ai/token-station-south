@@ -68,7 +68,7 @@
     "token-station-server": {
       "provider_call": "verified",
       "provider_stream": "verified",
-      "provider_quota_metadata": "not_verified",
+      "provider_quota_metadata": "verified",
       "header_auth": "verified",
       "controlled_query": "verified"
     }
