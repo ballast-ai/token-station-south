@@ -58,7 +58,7 @@
   "host_capabilities": {
     "token-station": {
       "provider_call": "verified",
-      "provider_stream": "not_verified",
+      "provider_stream": "verified",
       "provider_quota_metadata": "verified"
     },
     "token-station-server": {
