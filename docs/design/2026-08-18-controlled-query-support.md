@@ -206,25 +206,61 @@ Proposed frozen cases:
    resolver and transport calls — the zero-call evidence discipline the header-auth suite
    established for its slot-mismatch case.
 
+As implemented the suite carries five cases, not three: a fourth proving canonical serialization
+order is independent of declaration order, and a fifth — added the same day, see below — proving
+the wire-query probe is actually measuring.
+
 `host_capabilities` gains a `controlled_query` key per host, `not_verified` until each host runs
 its own adoption slice.
 
-**A known blind spot in this suite, measured during the first host adoption (2026-08-18).** The
-four cases expect `wire_query_exact` of `true / true / false / true`, and the only `false` belongs
-to the zero-call case — where the probe is never invoked at all. That `false` is therefore held by
-"structurally never reached", not by "measured and found false". An adapter whose probe
-unconditionally reports `true` without ever reading the prepared URL passes the whole suite: the
-three `true` expectations are satisfied by the hardcoded value, and the `false` one is satisfied by
-the zero call. This was confirmed by mutation on a real host adapter, alongside two mutations the
-suite *does* catch (dropping the query entirely, and comparing declaration order instead of
-canonical order).
+**A blind spot in this suite, measured during the first host adoption (2026-08-18) and closed the
+same day by a fifth case.** Recorded here in full because the shape of the hole is more instructive
+than the fix.
 
-Closing it needs a fifth case: one that reaches the transport with a query the adapter is expected
-to get *wrong* — for instance a fixture whose expected evidence is `wire_query_exact: false` with
-`transport_calls: One`. Until that exists, an adopting host's probe wiring is a **review item**,
-not a machine-checkable fact, which is exactly what the "adapter-reported evidence is insufficient
-for host verification" rule in `ControlledQueryEvidenceV1` already says — this paragraph records
-the specific shape that rule is covering for.
+*The hole.* The original four cases expected `wire_query_exact` of `true / true / false / true`,
+and the only `false` belonged to the zero-call case — where the probe is never invoked at all.
+That `false` was therefore held by "structurally never reached", not by "measured and found
+false". An adapter whose probe unconditionally reported `true` without ever reading the prepared
+URL passed the whole suite: the three `true` expectations were satisfied by the hardcoded value,
+and the `false` one by the zero call. This was confirmed by mutation on a real host adapter,
+alongside two mutations the suite *did* catch (dropping the query entirely, and comparing
+declaration order instead of canonical order).
+
+*The fix.* Case five, `QueryFreeRequestReachesTheWire`: a request declaring **no** query at all,
+reaching the transport via a `Response(...)` upstream, with expected evidence `resolver_calls:
+One`, `transport_calls: One`, and `wire_query_exact: false`. It is the table's first and only case
+that both reaches the transport and expects `false`, which is exactly the cell the original four
+left empty.
+
+It closes the hole because of the field's *presence* polarity. A correct probe reads
+`PreparedHttpRequestV1::url()`, finds `query() == None`, compares that against a request that
+declared nothing, and reports `false` — nothing was observed carrying a declared query, because
+none was declared. Note the claim is not "the wire query matches the declaration": under that
+reading `None == None` would be `true` and the case would prove nothing. It is "a declared query
+was observed on the wire", which requires a declaration to exist. An adapter hardcoding `true`
+reports `true` here and fails with a `WireQuery` mismatch. The mutation that previously passed the
+suite now fails on exactly this case and no other.
+
+Two implementation notes for anyone extending the table. The empty declaration must **not** be
+handed to `QueryStringV1::try_from_iter` — that constructor has no empty representation and answers
+`ContractErrorV1::EmptyQuery`, which would silently convert this case into a second zero-call
+rejection case and restore the blind spot while appearing to have five cases. And the fixture table
+freezes the property, not just the case: a test asserts that exactly one case reaches the transport
+while expecting `false`, so deleting or flipping this case reopens the hole loudly.
+
+Adding this case does **not** invalidate evidence already recorded by a verified host. The suite
+version stays at `1`: the four existing cases are byte-identical in declaration, upstream, outcome,
+and expected evidence, so any adapter that genuinely measured its wire still passes unchanged.
+What the fifth case changes is the *class of adapter that can pass* — it excludes the ones that
+were never measuring. A previously verified host must therefore re-run the suite to keep claiming
+`verified`, not because its evidence was wrong, but because the suite no longer accepts the
+evidence being unmeasured. That is a strengthening of the same assertion, not a new one.
+
+With this case in place, an adopting host's probe wiring moves from a **review item** to a
+machine-checkable fact for the specific failure of not measuring at all. The broader rule in
+`ControlledQueryEvidenceV1` — adapter-reported evidence is insufficient on its own for host
+verification — still holds for everything the runner cannot reach, including the next paragraph's
+failure mode.
 
 **A second, host-side failure mode found in the same review, worth naming because it is easy to
 repeat.** The negative case tempts an adapter to short-circuit: construct the `QueryStringV1`,

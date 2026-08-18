@@ -48,6 +48,7 @@ fn suite_identity_and_canonical_case_order_are_frozen() {
             ControlledQueryCaseIdV1::StreamingQuerySuccess,
             ControlledQueryCaseIdV1::InvalidQueryValueRejected,
             ControlledQueryCaseIdV1::ReversedDeclarationOrderIsCanonicalized,
+            ControlledQueryCaseIdV1::QueryFreeRequestReachesTheWire,
         ]
     );
 }
@@ -55,7 +56,7 @@ fn suite_identity_and_canonical_case_order_are_frozen() {
 #[test]
 fn canonical_table_freezes_queries_upstreams_outcomes_and_evidence() {
     let fixtures = controlled_query_fixtures_v1();
-    assert_eq!(fixtures.len(), 4);
+    assert_eq!(fixtures.len(), 5);
 
     // 1. BufferedQuerySuccess: one buffered exchange carrying a sanctioned `api-version`.
     let declared = fixtures[0].declared_query();
@@ -117,6 +118,33 @@ fn canonical_table_freezes_queries_upstreams_outcomes_and_evidence() {
         canonical.as_str().starts_with(QueryParameterV1::ApiVersion.wire_name()),
         "canonical order must lead with api-version regardless of declaration order"
     );
+
+    // 5. QueryFreeRequestReachesTheWire: the only case that declares nothing, and the only one
+    //    that reaches the transport while expecting `wire_query_exact: false`. Both halves are
+    //    load-bearing, so freeze both: an empty declaration, and a reached upstream.
+    assert!(fixtures[4].declared_query().is_empty());
+    assert!(matches!(fixtures[4].upstream(), ControlledQueryUpstreamV1::Response(_)));
+    assert!(
+        !fixtures[4].expected().evidence().wire_query_exact(),
+        "the query-free case is the table's only measured `false`"
+    );
+    assert_eq!(fixtures[4].expected().evidence().transport_calls(), ProviderCallCountV1::One);
+}
+
+/// The table must keep exactly one case that both reaches the transport and expects `false`.
+///
+/// Without such a case an adapter probe that hardcodes `true` and never reads the prepared URL
+/// passes the whole suite — the `true` expectations by construction, the zero-call `false` by
+/// never being invoked. This test freezes the property rather than the case, so removing
+/// `QueryFreeRequestReachesTheWire` or flipping its expectation reopens the blind spot loudly.
+#[test]
+fn some_case_reaches_the_transport_and_still_expects_no_wire_query() {
+    let measured_false = controlled_query_fixtures_v1().iter().filter(|fixture| {
+        let evidence = fixture.expected().evidence();
+        !evidence.wire_query_exact() && evidence.transport_calls() != ProviderCallCountV1::Zero
+    });
+
+    assert_eq!(measured_false.count(), 1);
 }
 
 #[test]
@@ -128,6 +156,7 @@ fn canonical_table_freezes_the_expected_wire_query_evidence() {
         (ProviderCallCountV1::One, ProviderCallCountV1::One, true),
         (ProviderCallCountV1::Zero, ProviderCallCountV1::Zero, false),
         (ProviderCallCountV1::One, ProviderCallCountV1::One, true),
+        (ProviderCallCountV1::One, ProviderCallCountV1::One, false),
     ];
     // `zip` truncates silently, so a fixture added without extending the table above would go
     // unchecked rather than failing here.
@@ -193,6 +222,13 @@ fn every_raw_fixture_field_is_checked_through_the_production_contract() {
 #[test]
 fn success_queries_construct_and_the_negative_query_is_refused_by_the_contract() {
     for fixture in controlled_query_fixtures_v1() {
+        // An empty declaration is the absence of a query, not a query the contract refuses. The
+        // constructor has no empty representation, so a correct executor never reaches it for
+        // this case — and neither does this test.
+        if fixture.declared_query().is_empty() {
+            assert_eq!(fixture.case_id(), ControlledQueryCaseIdV1::QueryFreeRequestReachesTheWire);
+            continue;
+        }
         let constructed = QueryStringV1::try_from_iter(fixture.declared_query().iter().copied());
         if fixture.case_id() == ControlledQueryCaseIdV1::InvalidQueryValueRejected {
             constructed.expect_err("the negative case value must violate its grammar");
