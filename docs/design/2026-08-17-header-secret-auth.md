@@ -1,6 +1,7 @@
 # Header-Secret Auth Vertical Slice
 
-Status: D1–D4 all ruled as recommended by lv (2026-08-17); implementation authorized
+Status: implemented and released as v0.3.0; the community host is independently verified for
+Header Auth, while the enterprise host remains not verified
 
 Date: 2026-08-17
 
@@ -145,3 +146,36 @@ bearer + org-id header: the org id is not a secret and already travels as a plai
   Recommended: `Into`.
 - **D4 — separate `south.header-auth.v1` conformance suite** (vs bumping the two frozen suites).
   Recommended: separate suite.
+
+## 7. Token Station community host evidence
+
+Token Station adopted the released South `0.3.0` Header Auth slice at exact revision
+`b472526a9702e17d09b7ebdca0e5c84e724d6d40`. The immutable host evidence is:
+
+- validation commit: `547d5139e5b32385c1207939075d35fcb2fd4b0a`;
+- pull request: [GlimpseEngine/token-station#96](https://github.com/GlimpseEngine/token-station/pull/96),
+  merged into `develop-v2` on 2026-08-18;
+- merge commit: `bfd224c6eb4366b3a8020ac8b5f48b8857d7b491`;
+- successful pull-request CI run:
+  [32095529591](https://github.com/GlimpseEngine/token-station/actions/runs/32095529591),
+  bound to the validation commit. Root Rust, Desktop Rust, Desktop coverage, frontend, Rust 1.96,
+  supply-chain, and release gates passed. Root coverage was skipped by the host workflow's
+  existing pull-request policy. The final successful attempt was a rerun after two GitHub runner
+  setup steps stopped making progress; no test job reported a product failure;
+- validation and merge commits have the identical Git tree
+  `9029a0ea5c3f064410caa9fd41abc81ae2098868`, so the successful run covers the exact merged
+  content rather than a related branch state.
+
+The host's assembled executor passed all three `south.header-auth.v1` cases. Its adapter maps only
+the five `SecretHeaderV1` names, rejects unknown credential headers before resolver or transport
+I/O, and keeps the existing production policy Bearer-only. Real reqwest loopbacks covered buffered
+`x-api-key` and streaming `x-goog-api-key` requests, exact synthetic secret values, absence of an
+`Authorization` header, one resolver call, and one upstream request. The host also ran its root and
+Desktop gates and rebuilt, audited, installed, signed, and launched the local Desktop application.
+
+This verification is intentionally capability-scoped. It proves the community host's mapping,
+redaction, assembled-core, and real-transport compatibility, but does not claim that an official
+provider package currently emits Header Auth in production. A future provider-specific dialect
+and cumulative explicit production opt-in remain separate host work. OAuth, SigV4, self-signed
+JWT, query credentials, multiple secrets, arbitrary header names, and the enterprise host remain
+outside this claim. Updating the compatibility manifest does not widen runtime eligibility.
