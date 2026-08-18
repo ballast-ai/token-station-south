@@ -44,10 +44,10 @@ and the
   `south.provider-stream.v1`, and `south.provider-quota-metadata.v1` fixtures, while
   `south-testkit` runs them against assembled host executors.
 
-The slice does not include SSE or eventstream parsing, provider WIT or runtime loading, the ureq
-transport, retries, fallback, routing, persistence, database access, or host adapters. Passing a
-library conformance suite does not by itself verify a host integration; each verified capability
-also requires review of the real host adapter wiring.
+The slice does not include SSE or eventstream parsing, provider WIT or runtime loading, a
+synchronous transport, retries, fallback, routing, persistence, database access, or host adapters.
+Passing a library conformance suite does not by itself verify a host integration; each verified
+capability also requires review of the real host adapter wiring.
 
 ## Local verification
 
