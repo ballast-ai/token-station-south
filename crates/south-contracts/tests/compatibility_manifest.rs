@@ -13,7 +13,27 @@ struct CompatibilityManifest {
     provider_runtime: ProviderRuntime,
     crates: BTreeMap<String, String>,
     hosts: BTreeMap<String, String>,
-    host_capabilities: BTreeMap<String, BTreeMap<String, String>>,
+    host_capabilities: BTreeMap<String, BTreeMap<String, HostCapability>>,
+}
+
+/// A host's status for one capability, plus the size of the conformance table that status was
+/// measured against.
+///
+/// `cases` exists because `status` alone silently decays. A suite may grow a case that no earlier
+/// run could have passed, and a bare `"verified"` string cannot say which table it came from. The
+/// freshness assertion in `south-provider-conformance` compares this number against the live
+/// fixture table, so evidence that predates a suite extension fails CI instead of waiting for
+/// someone to remember it.
+///
+/// `cases` is absent for a `not_verified` capability: no run happened, so there is no table to
+/// name. Writing `0` there would assert a passing run against an empty table, which is a different
+/// and false claim.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct HostCapability {
+    status: String,
+    #[serde(default)]
+    cases: Option<usize>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -81,12 +101,16 @@ struct ProviderRuntime {
     abi_version: Option<String>,
 }
 
-fn expected_host_capabilities() -> BTreeMap<&'static str, [(&'static str, &'static str); 5]> {
+/// The expected `(capability, status, cases)` rows per host. `cases` is `None` exactly when the
+/// status is not `verified`.
+type ExpectedCapability = (&'static str, &'static str, Option<usize>);
+
+fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 5]> {
     BTreeMap::from([
         (
             "token-station",
             [
-                ("provider_call", "verified"),
+                ("provider_call", "verified", Some(7)),
                 // Token Station provider_stream verified 2026-08-18: the
                 // explicit direct translated Bearer JSON POST canary passes
                 // south.provider-stream.v1 9/9, real reqwest and production
@@ -94,19 +118,28 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [(&'static str, &'stat
                 // and the successful validation CI covers the exact merged
                 // Git tree. See the streaming design for immutable evidence
                 // and the deliberately narrow scope.
-                ("provider_stream", "verified"),
-                ("provider_quota_metadata", "verified"),
+                ("provider_stream", "verified", Some(9)),
+                // token-station provider_quota_metadata demoted 2026-08-18. It was
+                // flipped against the two-case table, and the suite has since
+                // grown `CredentialSlotMismatch` (PR #20) — a case added
+                // precisely because two success-path cases could not separate
+                // correct wiring from a plausible shortcut. The old evidence is
+                // therefore not merely stale but known-insufficient by the
+                // reasoning that motivated the new case, so no honest `cases`
+                // value exists for it. Re-run the three-case suite against this
+                // host to restore the status.
+                ("provider_quota_metadata", "not_verified", None),
                 // Token Station header_auth verified 2026-08-18: its
                 // compatibility-only adapter passes south.header-auth.v1 3/3,
                 // real buffered and streaming reqwest loopbacks prove exact
                 // sanctioned-header injection without Authorization, and the
                 // existing production policy remains Bearer-only. See the
                 // Header Auth design for immutable evidence and scope.
-                ("header_auth", "verified"),
+                ("header_auth", "verified", Some(3)),
                 // controlled_query stays not_verified until this host runs its
                 // own adoption slice against south.controlled-query.v1. The
                 // suite existing in this repository is not adoption evidence.
-                ("controlled_query", "not_verified"),
+                ("controlled_query", "not_verified", None),
             ],
         ),
         // token-station-server provider_stream verified 2026-08-17: the durable
@@ -120,9 +153,9 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [(&'static str, &'stat
         (
             "token-station-server",
             [
-                ("provider_call", "verified"),
-                ("provider_stream", "verified"),
-                ("provider_quota_metadata", "not_verified"),
+                ("provider_call", "verified", Some(7)),
+                ("provider_stream", "verified", Some(9)),
+                ("provider_quota_metadata", "not_verified", None),
                 // token-station-server header_auth verified 2026-08-18: the
                 // host's assembled executor runs south.header-auth.v1 3/3
                 // through the same real seam as its two Bearer suites
@@ -142,7 +175,7 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [(&'static str, &'stat
                 // south plan's guard admits the Chat contract alone. The
                 // adoption record is held by that host's own repository; this
                 // manifest records only the resulting status.
-                ("header_auth", "verified"),
+                ("header_auth", "verified", Some(3)),
                 // token-station-server controlled_query verified 2026-08-18,
                 // evidence refreshed against 0.4.1 after the suite grew its
                 // fifth case. The original run passed the four-case table, but
@@ -177,7 +210,7 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [(&'static str, &'stat
                 // they send two auth headers and ProviderAuthV1 is single-arm.
                 // The adoption record is held by that host's own repository;
                 // this manifest records only the resulting status.
-                ("controlled_query", "verified"),
+                ("controlled_query", "verified", Some(5)),
             ],
         ),
     ])
@@ -193,7 +226,7 @@ fn compatibility_manifest_describes_the_library_slice() {
     let contents = fs::read_to_string(path).unwrap();
     let manifest: CompatibilityManifest = serde_json::from_str(&contents).unwrap();
 
-    assert_eq!(manifest.schema_version, 2);
+    assert_eq!(manifest.schema_version, 3);
     assert_eq!(manifest.release.version, env!("CARGO_PKG_VERSION"));
     assert_eq!(manifest.release.stability, "library_slice");
     assert_eq!(
@@ -300,17 +333,29 @@ fn compatibility_manifest_describes_the_library_slice() {
             panic!("missing host_capabilities entry for {host}");
         });
         assert_eq!(annotated.len(), capabilities.len(), "unexpected capability set for {host}");
-        for (capability, expected_status) in capabilities {
+        for (capability, expected_status, expected_cases) in capabilities {
+            let annotation = annotated.get(capability).unwrap_or_else(|| {
+                panic!("missing {host}/{capability} annotation");
+            });
             assert_eq!(
-                annotated.get(capability).map(String::as_str),
-                Some(expected_status),
+                annotation.status, expected_status,
                 "unexpected status for {host}/{capability}"
+            );
+            assert_eq!(
+                annotation.cases, expected_cases,
+                "unexpected case count for {host}/{capability}"
+            );
+            // `cases` records a passing run, so it is present exactly when one happened.
+            assert_eq!(
+                annotation.cases.is_some(),
+                annotation.status == "verified",
+                "{host}/{capability} must carry `cases` if and only if it is verified"
             );
         }
         // The legacy summary string must stay consistent with provider_call.
         assert_eq!(
-            manifest.hosts.get(host),
-            annotated.get("provider_call"),
+            manifest.hosts.get(host).map(String::as_str),
+            annotated.get("provider_call").map(|capability| capability.status.as_str()),
             "legacy host summary diverged from provider_call for {host}"
         );
     }
