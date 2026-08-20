@@ -828,6 +828,12 @@ impl fmt::Debug for ControlledUserAgentV1 {
 /// Neither arm carries a credential value. The header-secret arm reuses [`BearerAuthV1`] as its
 /// credential-slot carrier: the type is really "a credential-slot declaration", and version one
 /// froze its name.
+///
+/// `#[non_exhaustive]` since 0.7.0 (host-prelude D2): the host-signed slice adds a third arm,
+/// and an exhaustive enum would make that addition a breaking change for every downstream
+/// `match`. Downstream wildcard arms must fail closed — treat an unknown arm as ineligible,
+/// never as a default scheme.
+#[non_exhaustive]
 #[derive(Clone, PartialEq, Eq)]
 pub enum ProviderAuthV1 {
     /// The secret travels as `Authorization: Bearer …`.
@@ -1588,6 +1594,11 @@ impl ContractErrorV1 {
 }
 
 /// A failure while binding and preparing a validated provider request.
+///
+/// `#[non_exhaustive]` since 0.7.0 (host-prelude D2/D4): the host-signed slice adds finalizer
+/// variants additively. Downstream matches need a wildcard arm; route it through [`Self::code`]
+/// when only the stable string matters.
+#[non_exhaustive]
 #[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
 pub enum PreparationErrorV1 {
     /// The resolved request URL escaped the trusted host binding.
@@ -1605,6 +1616,14 @@ pub enum PreparationErrorV1 {
     /// The caller's absolute deadline was exceeded.
     #[error("provider request deadline was exceeded")]
     DeadlineExceeded,
+    /// The auth declaration uses an arm this orchestration build does not support.
+    ///
+    /// Structurally unreachable while the two frozen arms are the whole of [`ProviderAuthV1`];
+    /// load-bearing from the first release that adds an arm a deployed orchestration crate
+    /// predates. The wildcard arm that `#[non_exhaustive]` forces on cross-crate matches must
+    /// fail closed with this code instead of panicking.
+    #[error("auth shape is not supported by this build")]
+    UnsupportedAuthShape,
 }
 
 impl PreparationErrorV1 {
@@ -1617,6 +1636,7 @@ impl PreparationErrorV1 {
             Self::CredentialResolutionFailed => "CREDENTIAL_RESOLUTION_FAILED",
             Self::Cancelled => "CANCELLED",
             Self::DeadlineExceeded => "DEADLINE_EXCEEDED",
+            Self::UnsupportedAuthShape => "UNSUPPORTED_AUTH_SHAPE",
         }
     }
 }

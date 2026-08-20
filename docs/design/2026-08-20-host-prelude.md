@@ -1,6 +1,8 @@
 # Host Prelude: Shared Raw-Call Scaffolding
 
-Status: D1–D5 ruled 2026-08-20 (see §7); ready to implement as 0.6.0
+Status: D1–D5 ruled 2026-08-20 (see §7); ready to implement as 0.7.0 (renumbered 2026-08-20:
+0.6.0 shipped as the controlled user-agent release before this slice landed; provider-api moves
+to 0.8.0, the host-signed slice to 0.9.0)
 
 Date: 2026-08-20
 
@@ -137,9 +139,9 @@ untouched.
 
 ## 6. Versioning
 
-Additive only; no contract or orchestration signature changes; ships as **0.6.0**. Hosts adopt at
-their own pace — the community host from 0.4.0 (spanning the 0.5.0 quota-metadata reset it has not
-yet taken), the server from 0.5.0.
+Additive only; no contract or orchestration signature changes; ships as **0.7.0**. Hosts adopt at
+their own pace — the community host from 0.4.0 (spanning the 0.5.0 quota-metadata reset and the
+0.6.0 controlled user-agent it has not yet taken), the server from 0.6.0.
 
 ## 7. Decisions — ruled 2026-08-20
 
@@ -147,14 +149,34 @@ yet taken), the server from 0.5.0.
   stays flat.
 - **D2 — `RawAuthV1` shape: mirror the two frozen arms, but mark the enum `#[non_exhaustive]`.**
   This departs from the drafted recommendation. The host-signed slice
-  (`2026-08-20-host-signed-request-finalizer.md`) adds a third arm shortly after 0.6.0; an
+  (`2026-08-20-host-signed-request-finalizer.md`) adds a third arm shortly after 0.7.0; an
   exhaustive enum would make that addition a breaking change for every host `match`. The cost is
   one `_ =>` arm per host match today. The same reasoning applies to `ProviderAuthV1` in
   `south-contracts`, which `assemble` and the reqwest transport both match exhaustively: that enum,
   and `PreparationErrorV1` (which the host-signed slice extends with two variants), gain
-  `#[non_exhaustive]` in the same 0.6.0 release so 0.7.0 stays additive.
+  `#[non_exhaustive]` in the same 0.7.0 release so the host-signed slice (0.9.0) stays additive.
 - **D3 — transport scope: `TransportPairV1::try_new` only.** Singleton and failure-memoization
   policy stay host-side.
 - **D4 — resolver adapters: ship both** `PreparedSecretResolverV1` (+ `expecting_slot`) and
   `BoundedResolverV1`.
-- **D5 — version: 0.6.0 additive.**
+- **D5 — version: additive minor.** Ruled as 0.6.0; renumbered to **0.7.0** on 2026-08-20 (0.6.0
+  was consumed by the controlled user-agent release).
+
+## 8. Implementation addenda — 2026-08-20
+
+Three deltas from the §3 sketch, all consequences of rulings rather than new decisions:
+
+- **`RawProviderCallV1` carries `user_agent: Option<ControlledUserAgentV1>`.** The §3.1 sketch
+  predates the controlled user-agent landing in 0.6.0; the server's raw call already assembles
+  the declaration, so the shared type must carry it or the server cannot adopt. Same "pre-parsed
+  contract type" rule as `query`.
+- **`PreparationErrorV1::UnsupportedAuthShape` (`UNSUPPORTED_AUTH_SHAPE`), the D2 wildcard's
+  fail-closed landing.** Once `ProviderAuthV1` is `#[non_exhaustive]`, `south-core`'s `assemble`
+  — a cross-crate match — must carry a wildcard arm. A panic there would turn a future contract
+  arm into a runtime abort, so `assemble` became fallible and the arm returns this code instead.
+  Structurally unreachable while the two frozen arms are the whole enum; the resolved secret is
+  dropped (zeroized) on that path.
+- **`RawAuthV1`, `RawCallErrorV1`, and `RawProviderCallErrorV1` are `#[non_exhaustive]` from
+  birth** (`RawAuthV1` per D2; the two error aggregates by the same reasoning, since the
+  host-signed slice may parse new fields). Hosts consume the aggregates through `code()` /
+  `field()`, where growth is invisible.

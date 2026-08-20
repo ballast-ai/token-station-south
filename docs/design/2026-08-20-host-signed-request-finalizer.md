@@ -1,14 +1,15 @@
 # Host-Signed Auth: The Request Finalizer Seam
 
 Status: designed; decision point 8 of the target-architecture plan and D1–D5 below ruled
-2026-08-20. Ships after 0.6.0 as its own slice (0.7.0).
+2026-08-20. Ships after the host-prelude release (0.7.0) as its own slice (**0.9.0**; renumbered
+2026-08-20 — 0.6.0 was consumed by the controlled user-agent release, 0.8.0 is provider-api).
 
 Date: 2026-08-20
 
 Predecessors: `2026-08-16-minimal-provider-call.md` (assemble / transport split),
 `2026-08-17-header-secret-auth.md` (the reserved-header tension and the frozen-enum discipline
 this slice reuses), `2026-08-20-host-prelude.md` (D2: `RawAuthV1` and `ProviderAuthV1` become
-`#[non_exhaustive]` in 0.6.0 so this slice is additive).
+`#[non_exhaustive]` in 0.7.0 so this slice is additive).
 
 ## 1. Problem
 
@@ -65,7 +66,7 @@ pub enum SignedHeaderV1 {
 /// The ordered, duplicate-free set of headers a `HostSigned` declaration promises to emit.
 pub struct SignedHeaderSetV1 { /* private; validated constructor */ }
 
-#[non_exhaustive]            // from 0.6.0 (host-prelude D2)
+#[non_exhaustive]            // from 0.7.0 (host-prelude D2)
 pub enum ProviderAuthV1 {
     Bearer(BearerAuthV1),
     HeaderSecret { header: SecretHeaderV1, slot: BearerAuthV1 },
@@ -188,8 +189,8 @@ The host's `verified` judgement for this arm is this suite plus the unchanged th
 
 ## 6. Versioning
 
-Additive on top of 0.6.0's `#[non_exhaustive]` enums; ships as **0.7.0**. New `PreparationErrorV1`
-variants are additive under the same 0.6.0 ruling (that enum gains `#[non_exhaustive]` in 0.6.0
+Additive on top of 0.7.0's `#[non_exhaustive]` enums; ships as **0.9.0**. New `PreparationErrorV1`
+variants are additive under the same 0.7.0 ruling (that enum gains `#[non_exhaustive]` in 0.7.0
 too — see D4).
 
 ## 7. Decisions — ruled 2026-08-20
@@ -200,7 +201,7 @@ too — see D4).
   the finalizer owns the signing material and South sees only emitted header values. The slot
   still participates in the binding check.
 - **D3 — separate `south.host-signed.v1` suite**, the three existing suites stay frozen.
-- **D4 — `PreparationErrorV1` gains `#[non_exhaustive]` in 0.6.0** alongside `ProviderAuthV1` and
+- **D4 — `PreparationErrorV1` gains `#[non_exhaustive]` in 0.7.0** alongside `ProviderAuthV1` and
   `RawAuthV1`, so `RequestFinalizationFailed` / `RequestFinalizationRejected` land additively.
 - **D5 — the transport byte promise is enforced by conformance** (`transport_adds_only_host_and_length`
   and friends); a type-level `FinalizedRequestV1` is deferred until a second transport

@@ -2,6 +2,8 @@
 
 //! Host-neutral provider call orchestration boundaries.
 
+pub mod raw;
+
 use std::{fmt, future::Future, pin::Pin, time::Duration};
 
 use http::Method;
@@ -101,11 +103,15 @@ impl<'request> PreparedHttpRequestV1<'request> {
     /// arm produces the sanctioned header name with the verbatim secret bytes. The value lives in
     /// a South-owned allocation that zeroizes on drop, and the original resolver allocation is
     /// dropped (and therefore zeroized) here when a prefixed copy replaces it.
+    ///
+    /// `ProviderAuthV1` is `#[non_exhaustive]` since 0.7.0 (host-prelude D2): an arm newer than
+    /// this crate fails closed as `UNSUPPORTED_AUTH_SHAPE` (the resolved secret is dropped and
+    /// zeroized on that path), never panics.
     fn assemble(
         request: &'request JsonPostRequestV1,
         destination: Url,
         secret: SecretValue,
-    ) -> Self {
+    ) -> Result<Self, PreparationErrorV1> {
         let (auth_header_name, auth_header_value) = match request.auth() {
             ProviderAuthV1::Bearer(_) => {
                 const BEARER_PREFIX: &[u8] = b"Bearer ";
@@ -116,9 +122,10 @@ impl<'request> PreparedHttpRequestV1<'request> {
                 ("authorization", value)
             }
             ProviderAuthV1::HeaderSecret { header, .. } => (header.header_name(), secret.value),
+            _ => return Err(PreparationErrorV1::UnsupportedAuthShape),
         };
 
-        Self {
+        Ok(Self {
             method: Method::POST,
             url: destination,
             headers: request.headers(),
@@ -126,7 +133,7 @@ impl<'request> PreparedHttpRequestV1<'request> {
             auth_header_name,
             auth_header_value,
             user_agent: request.user_agent(),
-        }
+        })
     }
 }
 
@@ -270,7 +277,7 @@ where
             .resolve(requested_slot)
             .await
             .map_err(|_| PreparationErrorV1::CredentialResolutionFailed)?;
-        let prepared = PreparedHttpRequestV1::assemble(request, destination, secret);
+        let prepared = PreparedHttpRequestV1::assemble(request, destination, secret)?;
         let remaining_timeout = deadline
             .checked_duration_since(Instant::now())
             .filter(|remaining| !remaining.is_zero())
@@ -482,7 +489,8 @@ where
             .resolve(requested_slot)
             .await
             .map_err(|_| PreparationErrorV1::CredentialResolutionFailed)?;
-        let prepared = PreparedHttpRequestV1::assemble(request, destination, secret);
+        let prepared = PreparedHttpRequestV1::assemble(request, destination, secret)
+            .map_err(ProviderCallErrorV1::from)?;
         transport.open(&prepared).await.map_err(|error| match error {
             StreamOpenErrorV1::Rejected(rejected) => ProviderCallErrorV1::Rejected(rejected),
             StreamOpenErrorV1::Transport(error) => error.into(),

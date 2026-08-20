@@ -30,8 +30,9 @@ See [Architecture](ARCHITECTURE.md), [Compatibility](compatibility.json),
 the
 [provider quota metadata design](docs/design/2026-08-17-provider-quota-response-metadata.md), the
 [header-secret auth design](docs/design/2026-08-17-header-secret-auth.md), the
-[controlled query design](docs/design/2026-08-18-controlled-query-support.md), and the
-[controlled user-agent design](docs/design/2026-08-20-controlled-user-agent.md).
+[controlled query design](docs/design/2026-08-18-controlled-query-support.md), the
+[controlled user-agent design](docs/design/2026-08-20-controlled-user-agent.md), and the
+[host prelude design](docs/design/2026-08-20-host-prelude.md).
 
 ## Implemented library slice
 
@@ -40,11 +41,15 @@ the
   reserved-header enforcement, redacted diagnostics, and the sanctioned controlled query and
   controlled user-agent request declarations.
 - `south-core` binds a validated endpoint to one credential slot, resolves the host-owned secret,
-  and applies cancellation and caller deadlines around prepared buffered and streaming calls.
+  and applies cancellation and caller deadlines around prepared buffered and streaming calls. Its
+  `raw` module is the shared host prelude: a borrowed raw-call type, string-in contract parsing
+  that names the failing field, zero-side-effect one-shot wrappers, and the pre-resolved and
+  size-bounding credential resolver adapters both hosts previously hand-rolled.
 - `south-transport-reqwest` executes hardened buffered and byte-streaming JSON POST requests,
   applies the request's sanctioned user-agent declaration exactly once, captures only the nine
   bounded quota metadata fields, and keeps redirects, retries, compression, cookies, referer
-  propagation, and implicit system proxies disabled.
+  propagation, and implicit system proxies disabled. `TransportPairV1` builds the buffered and
+  streaming transports from one timeout configuration.
 - `south-provider-conformance` publishes immutable `south.provider-call.v1`,
   `south.provider-stream.v1`, `south.provider-quota-metadata.v1`, `south.header-auth.v1`,
   `south.controlled-query.v1`, and `south.controlled-user-agent.v1` fixtures, while

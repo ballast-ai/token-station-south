@@ -474,6 +474,7 @@ fn stable_error_codes_are_exact_and_exhaustive() {
         (PreparationErrorV1::CredentialResolutionFailed, "CREDENTIAL_RESOLUTION_FAILED"),
         (PreparationErrorV1::Cancelled, "CANCELLED"),
         (PreparationErrorV1::DeadlineExceeded, "DEADLINE_EXCEEDED"),
+        (PreparationErrorV1::UnsupportedAuthShape, "UNSUPPORTED_AUTH_SHAPE"),
     ];
     let transport = [
         (TransportErrorV1::ClientBuildFailed, "CLIENT_BUILD_FAILED"),

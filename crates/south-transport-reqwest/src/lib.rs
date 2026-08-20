@@ -279,6 +279,49 @@ impl AsyncStreamingTransport for ReqwestStreamingTransportV1 {
     }
 }
 
+/// A buffered and streaming transport pair built from one timeout configuration.
+///
+/// Both adopting hosts build both transports from one timeout source; this constructor removes
+/// that duplication (host-prelude D3). Process-singleton policy — whether construction failure is
+/// memoized as a permanent fallback — stays host-side: the hosts have genuinely different rulings
+/// there, which is the signal that `OnceLock` wiring is policy, not scaffolding.
+pub struct TransportPairV1 {
+    /// The buffered transport, configured verbatim from the supplied timeouts.
+    pub buffered: ReqwestTransportV1,
+    /// The streaming transport, derived from the same timeouts (see [`Self::try_new`]).
+    pub streaming: ReqwestStreamingTransportV1,
+}
+
+impl TransportPairV1 {
+    /// Builds both hardened transports from one buffered timeout configuration.
+    ///
+    /// The buffered transport takes the configuration verbatim. The streaming transport is the
+    /// production streaming shape derived from it: no total bound (a long generation is
+    /// legitimate wall-clock work; legal only because the idle guard is mandatory), the same
+    /// connect timeout, and the read timeout as the idle guard. A host that needs a bounded
+    /// streaming total constructs [`ReqwestStreamingTransportV1`] directly instead.
+    pub fn try_new(config: ReqwestTransportConfigV1) -> Result<Self, TransportErrorV1> {
+        let buffered = ReqwestTransportV1::new(config)?;
+        let stream_config = StreamTransportConfigV1::try_new(
+            None,
+            config.connect_timeout(),
+            config.read_timeout(),
+        )?;
+        let streaming = ReqwestStreamingTransportV1::new(stream_config)?;
+        Ok(Self { buffered, streaming })
+    }
+}
+
+impl fmt::Debug for TransportPairV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("TransportPairV1")
+            .field("buffered", &self.buffered)
+            .field("streaming", &self.streaming)
+            .finish()
+    }
+}
+
 /// A live reqwest body wrapped as a delivery-bounded pull source.
 ///
 /// Oversized network reads are split at [`MAX_STREAM_CHUNK_BYTES`]; the remainder stays buffered
