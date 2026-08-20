@@ -19,10 +19,10 @@ community policy      enterprise policy
 | Crate | Current status and ownership |
 | --- | --- |
 | `south-contracts` | Implemented bounded HTTP, Bearer and sanctioned header-secret auth, stable error, byte-streaming, and closed quota metadata contracts, plus the sanctioned controlled query and controlled user-agent declarations |
-| `south-core` | Implemented host-neutral buffered and streaming provider-call orchestration |
-| `south-transport-reqwest` | Implemented hardened buffered and byte-streaming JSON POST transport with bounded quota metadata capture and sanctioned user-agent application |
+| `south-core` | Implemented host-neutral buffered and streaming provider-call orchestration, plus the shared host prelude (`raw` module: raw-call type, contract-parse orchestration, one-shot wrappers, resolver adapters) |
+| `south-transport-reqwest` | Implemented hardened buffered and byte-streaming JSON POST transport with bounded quota metadata capture, sanctioned user-agent application, and one-config transport-pair construction |
 | `south-provider-conformance` | Implemented immutable provider-call, provider-stream, provider-quota-metadata, header-auth, controlled-query, and controlled-user-agent v1 fixtures |
-| `south-testkit` | Implemented assembled-executor conformance runners and reference executors for all six suites |
+| `south-testkit` | Implemented assembled-executor conformance runners and reference executors for all six suites, plus the owned raw-call builder for host tests |
 | `south-provider-api` | Placeholder for future provider WIT and manifest schemas; blocked on a canonical IR inventory |
 | `south-provider-runtime` | Placeholder for future sandboxed component execution; blocked on `south-provider-api` |
 

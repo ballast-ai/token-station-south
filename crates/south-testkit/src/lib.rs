@@ -49,7 +49,10 @@ mod controlled_query;
 mod controlled_user_agent;
 mod header_auth;
 mod quota;
+mod raw;
 mod stream;
+
+pub use raw::RawProviderCallBuilderV1;
 
 pub use controlled_query::{
     AssembledControlledQueryExecutionFutureV1, AssembledControlledQueryExecutorV1,
@@ -717,6 +720,12 @@ const fn map_provider_call_error(error: &ProviderCallErrorV1) -> ProviderCallFai
             }
             PreparationErrorV1::Cancelled => ProviderCallFailureCodeV1::Cancelled,
             PreparationErrorV1::DeadlineExceeded => ProviderCallFailureCodeV1::DeadlineExceeded,
+            // `PreparationErrorV1` is `#[non_exhaustive]` since 0.7.0 (host-prelude D2/D4). No
+            // frozen fixture can produce a newer preparation variant, so one reaching this
+            // mapping is an executor wiring error: use the context-free request fallback rather
+            // than expanding the frozen buffered code set (same ruling as the rejection arm
+            // below).
+            _ => ProviderCallFailureCodeV1::RequestFailed,
         },
         ProviderCallErrorV1::Transport(error) => match error {
             TransportErrorV1::ClientBuildFailed => ProviderCallFailureCodeV1::ClientBuildFailed,

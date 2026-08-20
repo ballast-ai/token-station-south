@@ -325,7 +325,7 @@ fn compatibility_manifest_describes_the_library_slice() {
         ),
         (
             "south-core",
-            "buffered_streaming_provider_call_header_auth_controlled_query_user_agent_v1",
+            "buffered_streaming_provider_call_header_auth_controlled_query_user_agent_raw_prelude_v1",
         ),
         ("south-provider-api", "placeholder"),
         (
@@ -335,11 +335,11 @@ fn compatibility_manifest_describes_the_library_slice() {
         ("south-provider-runtime", "placeholder"),
         (
             "south-testkit",
-            "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_runners_v1",
+            "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_runners_raw_builder_v1",
         ),
         (
             "south-transport-reqwest",
-            "buffered_streaming_json_post_quota_metadata_header_auth_user_agent_v1",
+            "buffered_streaming_json_post_quota_metadata_header_auth_user_agent_transport_pair_v1",
         ),
     ]);
     assert_eq!(manifest.crates.len(), expected_crates.len());
