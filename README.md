@@ -31,8 +31,10 @@ the
 [provider quota metadata design](docs/design/2026-08-17-provider-quota-response-metadata.md), the
 [header-secret auth design](docs/design/2026-08-17-header-secret-auth.md), the
 [controlled query design](docs/design/2026-08-18-controlled-query-support.md), the
-[controlled user-agent design](docs/design/2026-08-20-controlled-user-agent.md), and the
-[host prelude design](docs/design/2026-08-20-host-prelude.md).
+[controlled user-agent design](docs/design/2026-08-20-controlled-user-agent.md), the
+[host prelude design](docs/design/2026-08-20-host-prelude.md), the
+[canonical IR inventory](docs/design/2026-08-21-canonical-ir-inventory.md), and the
+[provider-api promotion](docs/design/2026-08-21-provider-api-promotion.md).
 
 ## Implemented library slice
 
@@ -54,8 +56,12 @@ the
   `south.provider-stream.v1`, `south.provider-quota-metadata.v1`, `south.header-auth.v1`,
   `south.controlled-query.v1`, and `south.controlled-user-agent.v1` fixtures, while
   `south-testkit` runs them against assembled host executors.
+- `south-provider-api` owns the v2 provider component ABI: the WIT package
+  `token-station:adapter@2.0.0` (world `provider-adapter-v2`, JSON payloads named by
+  canonical type, raw-bytes stream chunks) and the component `manifest.json` schema
+  carrying the seven-field compatibility tuple the runtime handshake refuses on mismatch.
 
-The slice does not include SSE or eventstream parsing, provider WIT or runtime loading, a
+The slice does not include SSE or eventstream parsing, component runtime loading, a
 synchronous transport, retries, fallback, routing, persistence, database access, or host adapters.
 Passing a library conformance suite does not by itself verify a host integration; each verified
 capability also requires review of the real host adapter wiring.

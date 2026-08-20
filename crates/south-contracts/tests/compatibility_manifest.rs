@@ -316,7 +316,7 @@ fn compatibility_manifest_describes_the_library_slice() {
         "south.controlled-user-agent.v1"
     );
     assert_eq!(manifest.conformance.controlled_user_agent_suite, 1);
-    assert!(manifest.provider_api.wit_version.is_none());
+    assert_eq!(manifest.provider_api.wit_version.as_deref(), Some("token-station:adapter@2.0.0"));
     assert!(manifest.provider_runtime.abi_version.is_none());
     let expected_crates = BTreeMap::from([
         (
@@ -327,7 +327,7 @@ fn compatibility_manifest_describes_the_library_slice() {
             "south-core",
             "buffered_streaming_provider_call_header_auth_controlled_query_user_agent_raw_prelude_v1",
         ),
-        ("south-provider-api", "placeholder"),
+        ("south-provider-api", "provider_adapter_v2_wit_manifest_v1"),
         (
             "south-provider-conformance",
             "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_suites_v1",
