@@ -1,7 +1,7 @@
 # Host-Signed Auth: The Request Finalizer Seam
 
-Status: drafted; ruled in principle by the target-architecture plan (decision point 8, 2026-08-20);
-D1–D5 below pending lv's ruling. Ships after 0.6.0 as its own slice.
+Status: designed; decision point 8 of the target-architecture plan and D1–D5 below ruled
+2026-08-20. Ships after 0.6.0 as its own slice (0.7.0).
 
 Date: 2026-08-20
 
@@ -192,19 +192,16 @@ Additive on top of 0.6.0's `#[non_exhaustive]` enums; ships as **0.7.0**. New `P
 variants are additive under the same 0.6.0 ruling (that enum gains `#[non_exhaustive]` in 0.6.0
 too — see D4).
 
-## 7. Decisions for lv
+## 7. Decisions — ruled 2026-08-20
 
-- **D1 — `SignedHeaderV1` as a frozen enum** (vs validated strings). Recommended: frozen; four
-  variants cover SigV4 with and without session tokens.
+- **D1 — `SignedHeaderV1` is a frozen enum**, four variants; adding one is a contract bump with a
+  conformance case.
 - **D2 — `HostSigned` bypasses `CredentialResolver`.** South never resolves the slot for this arm;
-  the finalizer owns the signing material and South only sees emitted header values. Recommended:
-  bypass. Alternative: resolve the slot and pass `SecretValue` into the view, which puts the
-  signing key in South's memory for no gain.
-- **D3 — separate `south.host-signed.v1` suite** (vs extending the three frozen suites).
-  Recommended: separate, as with header-auth D4.
-- **D4 — `PreparationErrorV1` gains `#[non_exhaustive]` in 0.6.0** alongside the two auth enums,
-  so this slice's two new variants are additive. Recommended: yes; it is the same ruling applied
-  to the same kind of enum.
-- **D5 — transport byte promise enforced by conformance only** (vs a type-level
-  `FinalizedRequestV1` the transport cannot mutate). Recommended: conformance first; the
-  type-level form is a follow-up if a second transport implementation ever appears.
+  the finalizer owns the signing material and South sees only emitted header values. The slot
+  still participates in the binding check.
+- **D3 — separate `south.host-signed.v1` suite**, the three existing suites stay frozen.
+- **D4 — `PreparationErrorV1` gains `#[non_exhaustive]` in 0.6.0** alongside `ProviderAuthV1` and
+  `RawAuthV1`, so `RequestFinalizationFailed` / `RequestFinalizationRejected` land additively.
+- **D5 — the transport byte promise is enforced by conformance** (`transport_adds_only_host_and_length`
+  and friends); a type-level `FinalizedRequestV1` is deferred until a second transport
+  implementation exists.

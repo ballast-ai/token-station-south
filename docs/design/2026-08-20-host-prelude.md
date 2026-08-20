@@ -150,9 +150,9 @@ yet taken), the server from 0.5.0.
   (`2026-08-20-host-signed-request-finalizer.md`) adds a third arm shortly after 0.6.0; an
   exhaustive enum would make that addition a breaking change for every host `match`. The cost is
   one `_ =>` arm per host match today. The same reasoning applies to `ProviderAuthV1` in
-  `south-contracts`, which `assemble` and the reqwest transport both match exhaustively: that enum
-  gains `#[non_exhaustive]` in the same 0.6.0 release so the third arm lands in 0.7.0 as an
-  additive change.
+  `south-contracts`, which `assemble` and the reqwest transport both match exhaustively: that enum,
+  and `PreparationErrorV1` (which the host-signed slice extends with two variants), gain
+  `#[non_exhaustive]` in the same 0.6.0 release so 0.7.0 stays additive.
 - **D3 — transport scope: `TransportPairV1::try_new` only.** Singleton and failure-memoization
   policy stay host-side.
 - **D4 — resolver adapters: ship both** `PreparedSecretResolverV1` (+ `expecting_slot`) and
