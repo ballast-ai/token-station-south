@@ -1,0 +1,22 @@
+[package]
+description = "Component-package and component-behavior conformance gates for provider components."
+edition.workspace = true
+license.workspace = true
+name = "south-component-conformance"
+publish = false
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+south-provider-api = { path = "../south-provider-api", version = "0.9.0" }
+thiserror.workspace = true
+token-station-protocol.workspace = true
+
+[dev-dependencies]
+south-contracts = { path = "../south-contracts", version = "0.9.0" }
+
+[lints]
+workspace = true

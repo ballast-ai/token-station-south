@@ -33,8 +33,9 @@ the
 [controlled query design](docs/design/2026-08-18-controlled-query-support.md), the
 [controlled user-agent design](docs/design/2026-08-20-controlled-user-agent.md), the
 [host prelude design](docs/design/2026-08-20-host-prelude.md), the
-[canonical IR inventory](docs/design/2026-08-21-canonical-ir-inventory.md), and the
-[provider-api promotion](docs/design/2026-08-21-provider-api-promotion.md).
+[canonical IR inventory](docs/design/2026-08-21-canonical-ir-inventory.md), the
+[provider-api promotion](docs/design/2026-08-21-provider-api-promotion.md), and the
+[component conformance gates](docs/design/2026-08-21-component-conformance.md).
 
 ## Implemented library slice
 
@@ -60,6 +61,13 @@ the
   `token-station:adapter@2.0.0` (world `provider-adapter-v2`, JSON payloads named by
   canonical type, raw-bytes stream chunks) and the component `manifest.json` schema
   carrying the seven-field compatibility tuple the runtime handshake refuses on mismatch.
+- `south-component-conformance` is gates ① and ② of the four-gate layering: package
+  admission (manifest, reported identity, tuple handshake) and the
+  `south.provider-component.v1` behavior suite (fixture-pinned translation, determinism,
+  byte-level stream incrementality, endpoint confinement, error-catalog discipline),
+  judged against a typed component seam and shipped with the native reference
+  implementation of `provider-openai-compatible`. It is this repository's one sanctioned
+  typed consumer of the Canonical IR, taken at a fixed kernel revision.
 
 The slice does not include SSE or eventstream parsing, component runtime loading, a
 synchronous transport, retries, fallback, routing, persistence, database access, or host adapters.

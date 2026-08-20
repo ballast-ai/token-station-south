@@ -24,7 +24,8 @@ community policy      enterprise policy
 | `south-provider-conformance` | Implemented immutable provider-call, provider-stream, provider-quota-metadata, header-auth, controlled-query, and controlled-user-agent v1 fixtures |
 | `south-testkit` | Implemented assembled-executor conformance runners and reference executors for all six suites, plus the owned raw-call builder for host tests |
 | `south-provider-api` | Implemented v2 provider component ABI: WIT package `token-station:adapter@2.0.0` (world `provider-adapter-v2`) plus the gate-① manifest schema with the seven-field compatibility tuple; depends on no other south crate by design |
-| `south-provider-runtime` | Placeholder for future sandboxed component execution (S3); its API surface is now fixed by `south-provider-api` |
+| `south-component-conformance` | Implemented gates ① and ② (package admission + `south.provider-component.v1` behavior suite) with the native `provider-openai-compatible` reference; the one sanctioned typed consumer of the Canonical IR, pinned to a kernel distribution tag |
+| `south-provider-runtime` | Placeholder for future sandboxed component execution (S3); its API surface is now fixed by `south-provider-api`, and gate ② already judges the behavior it must reproduce |
 
 ## Removed ownership markers
 
@@ -53,11 +54,15 @@ south-provider-conformance ---------------> south-contracts
 south-testkit ----------------------------> south-contracts
 south-testkit ----------------------------> south-core
 south-testkit ----------------------------> south-provider-conformance
+south-component-conformance --------------> south-provider-api
+south-component-conformance --------------> token-station-protocol (kernel tag)
 ```
 
 These edges are direct Cargo dependencies. They are one-way and acyclic. Only the reqwest transport
 crate owns a network-client dependency. No South crate owns a database, cache, migration directory,
-host repository dependency, or credential source.
+host repository dependency, or credential source. The kernel-tag edge is the S0-sanctioned
+exception to IR independence: conformance gate ② judges typed decode through the distribution
+channel at a fixed revision; no production crate may gain that edge.
 
 ## Host-owned concerns
 

@@ -1,7 +1,7 @@
 {
   "schema_version": 3,
   "release": {
-    "version": "0.8.0",
+    "version": "0.9.0",
     "stability": "library_slice"
   },
   "contracts": {
@@ -36,7 +36,9 @@
     "controlled_query_suite_id": "south.controlled-query.v1",
     "controlled_query_suite": 1,
     "controlled_user_agent_suite_id": "south.controlled-user-agent.v1",
-    "controlled_user_agent_suite": 1
+    "controlled_user_agent_suite": 1,
+    "provider_component_suite_id": "south.provider-component.v1",
+    "provider_component_suite": 1
   },
   "provider_api": {
     "wit_version": "token-station:adapter@2.0.0"
@@ -51,7 +53,8 @@
     "south-provider-conformance": "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_suites_v1",
     "south-provider-runtime": "placeholder",
     "south-testkit": "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_runners_raw_builder_v1",
-    "south-transport-reqwest": "buffered_streaming_json_post_quota_metadata_header_auth_user_agent_transport_pair_v1"
+    "south-transport-reqwest": "buffered_streaming_json_post_quota_metadata_header_auth_user_agent_transport_pair_v1",
+    "south-component-conformance": "provider_component_gates_reference_v1"
   },
   "hosts": {
     "token-station": "verified",

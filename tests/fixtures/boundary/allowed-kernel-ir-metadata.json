@@ -1,0 +1,27 @@
+{
+  "packages": [
+    {
+      "id": "path+file:///south-component-conformance#0.0.1",
+      "name": "south-component-conformance",
+      "version": "0.0.1",
+      "dependencies": [
+        {
+          "name": "token-station-protocol",
+          "rename": null,
+          "source": "git+https://github.com/ballast-ai/token-station-kernel.git?tag=v0.2.0",
+          "path": null
+        }
+      ]
+    },
+    {
+      "id": "git+https://github.com/ballast-ai/token-station-kernel.git?tag=v0.2.0#token-station-protocol@0.3.0",
+      "name": "token-station-protocol",
+      "version": "0.3.0",
+      "source": "git+https://github.com/ballast-ai/token-station-kernel.git?tag=v0.2.0",
+      "dependencies": []
+    }
+  ],
+  "workspace_members": [
+    "path+file:///south-component-conformance#0.0.1"
+  ]
+}

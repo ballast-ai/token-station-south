@@ -1,0 +1,27 @@
+{
+  "packages": [
+    {
+      "id": "path+file:///south-component-conformance#0.0.1",
+      "name": "south-component-conformance",
+      "version": "0.0.1",
+      "dependencies": [
+        {
+          "name": "token-station-protocol",
+          "rename": null,
+          "source": "git+https://github.com/GlimpseEngine/token-station.git?rev=abc",
+          "path": null
+        }
+      ]
+    },
+    {
+      "id": "git+https://github.com/GlimpseEngine/token-station.git?rev=abc#token-station-protocol@0.3.0",
+      "name": "token-station-protocol",
+      "version": "0.3.0",
+      "source": "git+https://github.com/GlimpseEngine/token-station.git?rev=abc",
+      "dependencies": []
+    }
+  ],
+  "workspace_members": [
+    "path+file:///south-component-conformance#0.0.1"
+  ]
+}

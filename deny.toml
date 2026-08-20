@@ -24,3 +24,6 @@ wildcards = "deny"
 [sources]
 unknown-git = "deny"
 unknown-registry = "deny"
+# The kernel mirror distributes the Canonical IR at fixed revisions; conformance
+# gate 2 (component behavior) is the one sanctioned typed consumer (S0 invariant).
+allow-git = ["https://github.com/ballast-ai/token-station-kernel"]

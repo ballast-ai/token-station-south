@@ -9,7 +9,7 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
-south-contracts = { path = "../south-contracts", version = "0.8.0" }
+south-contracts = { path = "../south-contracts", version = "0.9.0" }
 
 [dev-dependencies]
 bytes.workspace = true
