@@ -36,7 +36,10 @@ pub type ComponentResultV1<T> = Result<T, ErrorEnvelope>;
 ///
 /// Chunks are raw bounded bytes (S0 ruling D2). A split may land inside a
 /// UTF-8 sequence; a parser buffers bytes and decodes only complete frames.
-pub trait StreamParserV1 {
+///
+/// `Send` because host streams cross worker threads; a wasm guest is
+/// single-threaded, so the bound costs it nothing.
+pub trait StreamParserV1: Send {
     /// Consumes one fragment and emits whatever complete events it completed.
     ///
     /// Zero events is a normal answer: the fragment ended mid-frame.

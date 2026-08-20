@@ -1,5 +1,5 @@
 [package]
-description = "Sandboxed provider component runtime boundary."
+description = "Sandboxed execution of provider components (gate 4 of the conformance layering)."
 edition.workspace = true
 license.workspace = true
 name = "south-provider-runtime"
@@ -7,6 +7,16 @@ publish = false
 repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
+
+[dependencies]
+serde_json.workspace = true
+south-provider-api = { path = "../south-provider-api", version = "0.10.0" }
+thiserror.workspace = true
+wasmtime.workspace = true
+wasmtime-wasi.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
 
 [lints]
 workspace = true

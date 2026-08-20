@@ -34,8 +34,9 @@ the
 [controlled user-agent design](docs/design/2026-08-20-controlled-user-agent.md), the
 [host prelude design](docs/design/2026-08-20-host-prelude.md), the
 [canonical IR inventory](docs/design/2026-08-21-canonical-ir-inventory.md), the
-[provider-api promotion](docs/design/2026-08-21-provider-api-promotion.md), and the
-[component conformance gates](docs/design/2026-08-21-component-conformance.md).
+[provider-api promotion](docs/design/2026-08-21-provider-api-promotion.md), the
+[component conformance gates](docs/design/2026-08-21-component-conformance.md), and the
+[provider runtime](docs/design/2026-08-21-provider-runtime.md).
 
 ## Implemented library slice
 
@@ -69,7 +70,16 @@ the
   implementation of `provider-openai-compatible`. It is this repository's one sanctioned
   typed consumer of the Canonical IR, taken at a fixed kernel revision.
 
-The slice does not include SSE or eventstream parsing, component runtime loading, a
+- `south-provider-runtime` executes provider components inside a wasmtime sandbox:
+  gated loading (manifest, forbidden-import scan, reported identity), locked-down WASI
+  (no preopens, no environment, no sockets/http by refusal), per-store memory limits,
+  epoch call deadlines, boundary payload ceilings, one instance per stream — with a
+  deliberately JSON-only API face, so the runtime never consumes the Canonical IR. The
+  conformance crate's `sandbox` feature provides the typed seam over it, and
+  `components/provider-openai-compatible` packages the reference implementation as the
+  first official `wasm32-wasip2` component (`scripts/build-reference-component.sh`).
+
+The slice does not include a
 synchronous transport, retries, fallback, routing, persistence, database access, or host adapters.
 Passing a library conformance suite does not by itself verify a host integration; each verified
 capability also requires review of the real host adapter wiring.
@@ -77,6 +87,7 @@ capability also requires review of the real host adapter wiring.
 ## Local verification
 
 ```bash
+rustup target add wasm32-wasip2  # once; guest components build as child cargo invocations
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo nextest run --workspace --all-features

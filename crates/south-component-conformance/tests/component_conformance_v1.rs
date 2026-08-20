@@ -43,7 +43,7 @@ fn reference_manifest() -> ComponentManifestV1 {
             kernel_version: "0.2.0".to_owned(),
             kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb09c".to_owned(),
             wit_package: WIT_PACKAGE.to_owned(),
-            south_runtime: "0.9.0".to_owned(),
+            south_runtime: "0.10.0".to_owned(),
         },
     }
 }
@@ -107,7 +107,7 @@ fn the_tuple_handshake_refuses_any_mismatch_in_tuple_order() {
         ir_schema_id: "token-station-protocol@0.3.0/v0.2.0".to_owned(),
         kernel_version: "0.2.0".to_owned(),
         kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb09c".to_owned(),
-        south_runtime: "0.9.0".to_owned(),
+        south_runtime: "0.10.0".to_owned(),
     };
     assert_eq!(compatibility_matches(&manifest, &expectations), Ok(()));
 
@@ -119,7 +119,7 @@ fn the_tuple_handshake_refuses_any_mismatch_in_tuple_order() {
     ));
 
     let mut newer_runtime = expectations;
-    newer_runtime.south_runtime = "0.10.0".to_owned();
+    newer_runtime.south_runtime = "0.11.0".to_owned();
     assert!(matches!(
         compatibility_matches(&manifest, &newer_runtime),
         Err(CompatibilityMismatchV1::SouthRuntime { .. })

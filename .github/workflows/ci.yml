@@ -19,6 +19,9 @@ jobs:
         with:
           toolchain: 1.96.0
           components: clippy, rustfmt
+          # The runtime tests and the sandbox parity test build real
+          # wasm32-wasip2 guest components as child cargo invocations.
+          targets: wasm32-wasip2
       - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2
         with:
           tool: cargo-nextest,cargo-deny,cargo-audit,cargo-machete

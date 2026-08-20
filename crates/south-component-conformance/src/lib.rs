@@ -29,10 +29,13 @@
 //! The design record is `docs/design/2026-08-21-component-conformance.md`;
 //! the contract it enforces is the S0 canonical IR inventory.
 
+pub mod abi;
 mod component;
 mod fixture;
 pub mod reference;
 mod report;
+#[cfg(feature = "sandbox")]
+pub mod sandbox;
 mod suite;
 
 pub use component::{ComponentResultV1, ProviderComponentV1, StreamParserV1};

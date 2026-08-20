@@ -8,12 +8,16 @@ yanked = "deny"
 [licenses]
 allow = [
   "Apache-2.0",
+  # The wasmtime family used by south-provider-runtime offers only this license.
+  "Apache-2.0 WITH LLVM-exception",
   "BSD-2-Clause",
   "BSD-3-Clause",
   "CDLA-Permissive-2.0",
   "ISC",
   "MIT",
   "Unicode-3.0",
+  # foldhash, the default hashbrown hasher in the wasmtime dependency tree.
+  "Zlib",
 ]
 confidence-threshold = 0.8
 
