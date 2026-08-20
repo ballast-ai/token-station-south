@@ -59,7 +59,7 @@ interface common {
 /// Every function here returns something that is not a credential.
 ///
 /// This interface is orthogonal to the host-signed request finalizer
-/// (`HostSigned` + `RequestFinalizer`, the 0.9.0 auth slice): `sign` serves
+/// (`HostSigned` + `RequestFinalizer`, its own auth slice): `sign` serves
 /// signatures a component places in the body or an ordinary header, while the
 /// finalizer serves signatures bound to the final request bytes and written
 /// into reserved headers. A component must not imitate SigV4 through `sign`.

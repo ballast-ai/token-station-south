@@ -3,6 +3,12 @@ set -euo pipefail
 
 readonly FORBIDDEN_NAME_PATTERN='(^|-)(token-station|sqlx|rusqlite|diesel|sea-orm|redis|deadpool-redis|postgres|tokio-postgres|mysql|mysql-async|mongodb|surrealdb|clickhouse|cassandra|scylla|rocksdb|sled|redb|lmdb|heed|duckdb|memcache)(-|$)'
 readonly FORBIDDEN_SOURCE_PATTERN='GlimpseEngine/(token-station|token-station-server)(\.git)?([?#]|$)'
+# The one sanctioned typed-IR edge (S0 invariant 6): conformance gate 2 takes
+# `token-station-protocol` from the kernel distribution mirror, and nothing
+# else in this workspace may.
+readonly KERNEL_SOURCE_PATTERN='ballast-ai/token-station-kernel(\.git)?([?#]|$)'
+readonly KERNEL_IR_PACKAGE='token-station-protocol'
+readonly KERNEL_IR_CONSUMER='south-component-conformance'
 
 check_metadata() {
   local candidate_file="$1"
@@ -11,6 +17,9 @@ check_metadata() {
   jq -e \
     --arg name_pattern "$FORBIDDEN_NAME_PATTERN" \
     --arg source_pattern "$FORBIDDEN_SOURCE_PATTERN" \
+    --arg kernel_source_pattern "$KERNEL_SOURCE_PATTERN" \
+    --arg kernel_ir_package "$KERNEL_IR_PACKAGE" \
+    --arg kernel_ir_consumer "$KERNEL_IR_CONSUMER" \
     --argjson reqwest_features '["__rustls", "__rustls-ring", "__tls", "rustls-tls", "rustls-tls-webpki-roots", "rustls-tls-webpki-roots-no-provider", "stream"]' \
     --argjson require_resolved_graph "$require_resolved_graph" \
     '[
@@ -27,15 +36,31 @@ check_metadata() {
       (
         .packages[]
         | select(.name | gsub("_"; "-") | test($name_pattern; "i"))
+        | select(
+            (
+              .name == $kernel_ir_package
+              and ((.source // "") | test($kernel_source_pattern; "i"))
+            )
+            | not
+          )
       ),
       (
-        .packages[].dependencies[]
+        .packages[] as $package
+        | $package.dependencies[]
         | select(
           (.name | gsub("_"; "-") | test($name_pattern; "i"))
           or ((.rename // "") | gsub("_"; "-") | test($name_pattern; "i"))
           or ((.source // "") | gsub("_"; "-") | test($source_pattern; "i"))
           or ((.path // "") | gsub("_"; "-") | test("/(token-station|token-station-server)(/|$)"; "i"))
         )
+        | select(
+            (
+              $package.name == $kernel_ir_consumer
+              and .name == $kernel_ir_package
+              and ((.source // "") | test($kernel_source_pattern; "i"))
+            )
+            | not
+          )
       ),
       (
         (.workspace_members // []) as $workspace_members
@@ -139,10 +164,12 @@ if [[ "${1:-}" == "--self-test" ]]; then
       exit 1
     fi
   done
-  if ! check_metadata "tests/fixtures/boundary/allowed-metadata.json"; then
-    echo "boundary self-test failed: allowed fixture was rejected" >&2
-    exit 1
-  fi
+  for fixture in tests/fixtures/boundary/allowed-*.json; do
+    if ! check_metadata "$fixture"; then
+      echo "boundary self-test failed: allowed fixture was rejected: $fixture" >&2
+      exit 1
+    fi
+  done
   if check_metadata "tests/fixtures/boundary/incomplete-live-metadata.json" true; then
     echo "boundary self-test failed: incomplete live metadata was accepted" >&2
     exit 1

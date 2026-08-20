@@ -73,7 +73,8 @@ the donor's v1 world. `south-provider-api` was a three-line placeholder.
   with S2's native reference implementation. The plan's S1 verify is read
   accordingly.
 - **D5 — version: 0.8.0** (per the renumbered allocation: 0.7.0 host-prelude,
-  0.8.0 provider-api, 0.9.0 host-signed finalizer).
+  0.8.0 provider-api; the host-signed finalizer takes its own minor at ship time — the
+  2026-08-21 ruling released 0.9.0 to the S2 conformance slice and retired pre-allocation).
 
 ## 4. Obligations
 

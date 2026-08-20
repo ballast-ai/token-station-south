@@ -1,7 +1,9 @@
 # Host-Signed Auth: The Request Finalizer Seam
 
 Status: designed; decision point 8 of the target-architecture plan and D1–D5 below ruled
-2026-08-20. Ships after the host-prelude release (0.7.0) as its own slice (**0.9.0**; renumbered
+2026-08-20. Ships after the host-prelude release (0.7.0) as its own slice (version assigned at
+ship time — the 2026-08-21 ruling released 0.9.0 to the S2 conformance slice and retired
+pre-allocation; renumbered
 2026-08-20 — 0.6.0 was consumed by the controlled user-agent release, 0.8.0 is provider-api).
 
 Date: 2026-08-20
@@ -189,7 +191,9 @@ The host's `verified` judgement for this arm is this suite plus the unchanged th
 
 ## 6. Versioning
 
-Additive on top of 0.7.0's `#[non_exhaustive]` enums; ships as **0.9.0**. New `PreparationErrorV1`
+Additive on top of 0.7.0's `#[non_exhaustive]` enums; ships as its own minor, numbered at ship
+time (pre-allocation retired 2026-08-21; the previously reserved 0.9.0 went to the S2
+conformance slice). New `PreparationErrorV1`
 variants are additive under the same 0.7.0 ruling (that enum gains `#[non_exhaustive]` in 0.7.0
 too — see D4).
 

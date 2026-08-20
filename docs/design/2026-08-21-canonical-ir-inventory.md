@@ -170,7 +170,7 @@ field on the IR (plan-visible), never a smuggled `extensions` key (§8, D5).
 | `Bearer{secret}` | `Bearer` | host resolves slot → south assembles `Authorization: Bearer` |
 | `Header{name, secret}` (name ∈ credential-header catalog) | `HeaderSecret(SecretHeaderV1)` (name ∈ frozen sanctioned enum) | as above, verbatim header |
 | `OAuth{secret, scopes}` | `Bearer` after **host-side minting**, front-loaded before the funds marker (prelude `PreparedSecretResolverV1` pattern) | host mints; component never sees the exchange |
-| — (inexpressible in v1: SigV4) | `HostSigned` + `RequestFinalizer` (south 0.9.0, plan decision 8) | host signs the finalized bytes; component declares `emits` |
+| — (inexpressible in v1: SigV4) | `HostSigned` + `RequestFinalizer` (its own south slice, plan decision 8) | host signs the finalized bytes; component declares `emits` |
 
 Two catalogs must not drift: protocol's `CREDENTIAL_HEADERS` (redaction/refusal
 list) and south's `SecretHeaderV1` + `RESERVED_HEADERS` (sanctioned wire arms).
@@ -261,7 +261,7 @@ bump. Gate ② includes an unknown-field round-trip fixture per payload type.
 1. WIT world for the south component boundary compiles, named per tuple #4,
    embedding the §3 envelope (JSON payloads + bytes chunk entry point).
 2. Manifest schema validates, carrying the full seven-field tuple of §4 and
-   the declared dialect + auth arm(s) + `emits` (for `HostSigned`, 0.9.0).
+   the declared dialect + auth arm(s) + `emits` (for `HostSigned`, with its slice).
 3. The reference component (`provider-openai-compatible` donor) signs the
    contract: builds against the WIT, passes manifest admission (gate ①).
 4. south's `compatibility.json` `provider_api.wit_version` goes non-null, and

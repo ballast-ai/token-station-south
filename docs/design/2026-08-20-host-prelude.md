@@ -2,7 +2,8 @@
 
 Status: D1–D5 ruled 2026-08-20 (see §7); ready to implement as 0.7.0 (renumbered 2026-08-20:
 0.6.0 shipped as the controlled user-agent release before this slice landed; provider-api moves
-to 0.8.0, the host-signed slice to 0.9.0)
+to 0.8.0, the host-signed slice to its own later minor — numbered at ship time per the
+2026-08-21 ruling that retired pre-allocation)
 
 Date: 2026-08-20
 
@@ -154,7 +155,7 @@ their own pace — the community host from 0.4.0 (spanning the 0.5.0 quota-metad
   one `_ =>` arm per host match today. The same reasoning applies to `ProviderAuthV1` in
   `south-contracts`, which `assemble` and the reqwest transport both match exhaustively: that enum,
   and `PreparationErrorV1` (which the host-signed slice extends with two variants), gain
-  `#[non_exhaustive]` in the same 0.7.0 release so the host-signed slice (0.9.0) stays additive.
+  `#[non_exhaustive]` in the same 0.7.0 release so the host-signed slice stays additive.
 - **D3 — transport scope: `TransportPairV1::try_new` only.** Singleton and failure-memoization
   policy stay host-side.
 - **D4 — resolver adapters: ship both** `PreparedSecretResolverV1` (+ `expecting_slot`) and

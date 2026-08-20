@@ -20,7 +20,8 @@ pub const COMPONENT_BEHAVIOR_SUITE: &str = "south.provider-component.v1";
 ///
 /// Closed on purpose: an arm this schema does not know is a version mismatch,
 /// not a request to honour. `host_signed` arrives with the finalizer slice
-/// (0.9.0) as a schema bump carrying its `emits` declaration alongside.
+/// (its own later minor, numbered at ship time) as a schema bump carrying
+/// its `emits` declaration alongside.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AuthArmV1 {
