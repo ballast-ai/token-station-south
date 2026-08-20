@@ -321,7 +321,7 @@ fn compatibility_manifest_describes_the_library_slice() {
     assert_eq!(manifest.conformance.provider_component_suite_id, "south.provider-component.v1");
     assert_eq!(manifest.conformance.provider_component_suite, 1);
     assert_eq!(manifest.provider_api.wit_version.as_deref(), Some("token-station:adapter@2.0.0"));
-    assert!(manifest.provider_runtime.abi_version.is_none());
+    assert_eq!(manifest.provider_runtime.abi_version.as_deref(), Some("provider-adapter-v2"));
     let expected_crates = BTreeMap::from([
         (
             "south-contracts",
@@ -337,7 +337,7 @@ fn compatibility_manifest_describes_the_library_slice() {
             "south-provider-conformance",
             "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_suites_v1",
         ),
-        ("south-provider-runtime", "placeholder"),
+        ("south-provider-runtime", "sandboxed_component_execution_v1"),
         (
             "south-testkit",
             "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_runners_raw_builder_v1",

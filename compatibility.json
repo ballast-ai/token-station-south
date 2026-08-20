@@ -1,7 +1,7 @@
 {
   "schema_version": 3,
   "release": {
-    "version": "0.9.0",
+    "version": "0.10.0",
     "stability": "library_slice"
   },
   "contracts": {
@@ -44,14 +44,14 @@
     "wit_version": "token-station:adapter@2.0.0"
   },
   "provider_runtime": {
-    "abi_version": null
+    "abi_version": "provider-adapter-v2"
   },
   "crates": {
     "south-contracts": "http_auth_error_stream_quota_metadata_header_auth_controlled_query_user_agent_v1",
     "south-core": "buffered_streaming_provider_call_header_auth_controlled_query_user_agent_raw_prelude_v1",
     "south-provider-api": "provider_adapter_v2_wit_manifest_v1",
     "south-provider-conformance": "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_suites_v1",
-    "south-provider-runtime": "placeholder",
+    "south-provider-runtime": "sandboxed_component_execution_v1",
     "south-testkit": "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_runners_raw_builder_v1",
     "south-transport-reqwest": "buffered_streaming_json_post_quota_metadata_header_auth_user_agent_transport_pair_v1",
     "south-component-conformance": "provider_component_gates_reference_v1"

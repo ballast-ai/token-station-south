@@ -25,7 +25,7 @@ community policy      enterprise policy
 | `south-testkit` | Implemented assembled-executor conformance runners and reference executors for all six suites, plus the owned raw-call builder for host tests |
 | `south-provider-api` | Implemented v2 provider component ABI: WIT package `token-station:adapter@2.0.0` (world `provider-adapter-v2`) plus the gate-① manifest schema with the seven-field compatibility tuple; depends on no other south crate by design |
 | `south-component-conformance` | Implemented gates ① and ② (package admission + `south.provider-component.v1` behavior suite) with the native `provider-openai-compatible` reference; the one sanctioned typed consumer of the Canonical IR, pinned to a kernel distribution tag |
-| `south-provider-runtime` | Placeholder for future sandboxed component execution (S3); its API surface is now fixed by `south-provider-api`, and gate ② already judges the behavior it must reproduce |
+| `south-provider-runtime` | Implemented sandboxed component execution: gated loading, locked-down WASI, memory/deadline/payload/stream bounds, `host.sign` behind the manifest's secret allowlist — JSON-face only, never an IR consumer; the typed seam over it is the conformance crate's `sandbox` feature |
 
 ## Removed ownership markers
 
@@ -56,10 +56,14 @@ south-testkit ----------------------------> south-core
 south-testkit ----------------------------> south-provider-conformance
 south-component-conformance --------------> south-provider-api
 south-component-conformance --------------> token-station-protocol (kernel tag)
+south-component-conformance (sandbox) ----> south-provider-runtime
+south-provider-runtime -------------------> south-provider-api
 ```
 
 These edges are direct Cargo dependencies. They are one-way and acyclic. Only the reqwest transport
-crate owns a network-client dependency. No South crate owns a database, cache, migration directory,
+crate owns a network-client dependency, and only the runtime crate owns the wasmtime engine (its
+typed seam lives behind the conformance crate's `sandbox` feature so wasm guests, which depend on
+the conformance crate for the abi shims, never pull the engine into their build). No South crate owns a database, cache, migration directory,
 host repository dependency, or credential source. The kernel-tag edge is the S0-sanctioned
 exception to IR independence: conformance gate ② judges typed decode through the distribution
 channel at a fixed revision; no production crate may gain that edge.

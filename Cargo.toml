@@ -7,7 +7,7 @@ edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/GlimpseEngine/token-station-south"
 rust-version = "1.96"
-version = "0.9.0"
+version = "0.10.0"
 
 [workspace.dependencies]
 bytes = "1.10.1"
@@ -22,6 +22,18 @@ token-station-protocol = { version = "0.3.0", git = "https://github.com/ballast-
 tokio = "1.52.3"
 tokio-util = "0.7.18"
 url = "2.5.4"
+wasmtime = { version = "46", default-features = false, features = [
+    "runtime",
+    "component-model",
+    "cranelift",
+    # Compilation cache: compiling each component with Cranelift on every start
+    # takes seconds; persist by content and config hash.
+    "cache",
+    # Tests hand-write WAT for a component importing wasi:sockets to prove the
+    # rejection path. Production loads binary .wasm without WAT.
+    "wat",
+] }
+wasmtime-wasi = "46"
 wit-parser = "0.253"
 zeroize = "1.8.2"
 
