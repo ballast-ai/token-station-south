@@ -6,9 +6,10 @@ use std::{
 };
 
 use south_contracts::{
-    BearerAuthV1, CredentialSlotV1, JsonBodyV1, JsonPostRequestV1, MAX_STREAM_CHUNK_BYTES,
-    MAX_STREAM_ERROR_BODY_BYTES, ProviderAuthV1, ProviderEndpointV1, RelativePathV1, SafeHeaders,
-    SecretHeaderV1, StreamReadErrorV1, StreamTransportConfigV1, TransportErrorV1,
+    BearerAuthV1, ControlledUserAgentV1, CredentialSlotV1, JsonBodyV1, JsonPostRequestV1,
+    MAX_STREAM_CHUNK_BYTES, MAX_STREAM_ERROR_BODY_BYTES, ProviderAuthV1, ProviderEndpointV1,
+    RelativePathV1, SafeHeaders, SecretHeaderV1, StreamReadErrorV1, StreamTransportConfigV1,
+    TransportErrorV1,
 };
 use south_core::{
     CredentialResolutionFuture, CredentialResolver, ProviderBindingV1, ProviderCallErrorV1,
@@ -327,6 +328,50 @@ async fn header_secret_open_injects_the_sanctioned_header_and_no_authorization()
     assert_eq!(received.headers.get("x-api-key").map(String::as_str), Some(SECRET_SENTINEL));
     // No Authorization header may exist on the wire for a header-secret exchange.
     assert!(!received.headers.contains_key("authorization"));
+    assert_eq!(call.head().status().as_u16(), 200);
+
+    let mut delivered = Vec::new();
+    while let Some(result) = call.next_chunk().await {
+        let chunk = result.expect("streamed pulls should not fail");
+        delivered.extend_from_slice(chunk.as_bytes());
+    }
+    assert_eq!(delivered, CHUNK_ONE);
+    loopback.task.await.expect("server task should finish");
+}
+
+#[tokio::test]
+async fn streaming_open_applies_the_declared_user_agent_verbatim() {
+    // The streaming transport shares `assemble_headers` with the buffered one; this pins the
+    // shared path from the streaming side so a future split cannot silently drop the declaration
+    // on one of them.
+    let mut first = chunked_headers(&[("content-type", "text/event-stream")]);
+    first.extend_from_slice(&encoded_chunk(CHUNK_ONE));
+    first.extend_from_slice(b"0\r\n\r\n");
+    let loopback = scripted_loopback(first, None, Vec::new(), false);
+    let transport =
+        ReqwestStreamingTransportV1::new(stream_config()).expect("transport should build");
+    let resolver = StaticResolver::default();
+    let binding = ProviderBindingV1::new(
+        ProviderEndpointV1::parse(&loopback.endpoint).expect("loopback endpoint should be valid"),
+        CredentialSlotV1::parse("primary").expect("fixture slot should be valid"),
+    );
+    let user_agent = ControlledUserAgentV1::try_from_static("opencode/1.15.6")
+        .expect("an audited inventory value must be accepted");
+    let request = request().with_user_agent(user_agent);
+
+    let mut call = open_streaming_provider_call_v1(
+        &binding,
+        &request,
+        &resolver,
+        &transport,
+        None,
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("a streaming open declaring a user-agent should succeed");
+    let received = loopback.request.await.expect("server should report the request");
+
+    assert_eq!(received.headers.get("user-agent").map(String::as_str), Some("opencode/1.15.6"));
     assert_eq!(call.head().status().as_u16(), 200);
 
     let mut delivered = Vec::new();

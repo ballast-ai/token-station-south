@@ -7,8 +7,8 @@ use std::{
 
 use http::StatusCode;
 use south_contracts::{
-    BearerAuthV1, BufferedHttpResponseV1, CredentialSlotV1, JsonBodyV1, JsonPostRequestV1,
-    MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES, MAX_RESPONSE_BODY_BYTES,
+    BearerAuthV1, BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1, JsonBodyV1,
+    JsonPostRequestV1, MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES, MAX_RESPONSE_BODY_BYTES,
     MAX_RESPONSE_CONTENT_TYPE_BYTES, MAX_RESPONSE_RETRY_AFTER_BYTES, ProviderAuthV1,
     ProviderEndpointV1, RelativePathV1, SafeHeaders, SecretHeaderV1, TransportErrorV1,
 };
@@ -33,6 +33,9 @@ const HEADER_SENTINEL: &str = "transport-header-sentinel";
 struct ReceivedRequest {
     request_line: String,
     headers: BTreeMap<String, String>,
+    /// Every header name in wire order, duplicates preserved — the map above collapses them, so
+    /// exactly-once claims must count here.
+    header_names: Vec<String>,
     body: Vec<u8>,
 }
 
@@ -73,13 +76,15 @@ async fn read_request(stream: &mut TcpStream) -> ReceivedRequest {
         std::str::from_utf8(&bytes[..header_end]).expect("fixture request headers should be UTF-8");
     let mut lines = header_text.split("\r\n");
     let request_line = lines.next().expect("request line should exist").to_owned();
-    let headers = lines
+    let header_pairs: Vec<(String, String)> = lines
         .filter(|line| !line.is_empty())
         .map(|line| {
             let (name, value) = line.split_once(':').expect("fixture header should contain colon");
             (name.to_ascii_lowercase(), value.trim().to_owned())
         })
-        .collect::<BTreeMap<_, _>>();
+        .collect();
+    let header_names: Vec<String> = header_pairs.iter().map(|(name, _)| name.clone()).collect();
+    let headers = header_pairs.into_iter().collect::<BTreeMap<_, _>>();
     let body_length = headers
         .get("content-length")
         .expect("buffered request should have content-length")
@@ -95,6 +100,7 @@ async fn read_request(stream: &mut TcpStream) -> ReceivedRequest {
     ReceivedRequest {
         request_line,
         headers,
+        header_names,
         body: bytes[header_end..header_end + body_length].to_vec(),
     }
 }
@@ -333,6 +339,85 @@ async fn header_secret_call_injects_the_sanctioned_header_and_no_authorization()
             .expect_err("the plain header channel must keep rejecting sanctioned names");
         assert_eq!(error.code(), "RESERVED_HEADER_FORBIDDEN");
     }
+}
+
+// ─────────────── controlled user-agent (HTTP contract v3) ───────────────
+
+#[tokio::test]
+async fn declared_user_agent_reaches_the_wire_verbatim_and_exactly_once() {
+    let loopback = loopback_once(response(
+        "200 OK",
+        &[("content-type", "application/json")],
+        br#"{"ok":true}"#,
+    ))
+    .await;
+    let transport = ReqwestTransportV1::new(config()).expect("transport should build");
+    let resolver = StaticResolver::default();
+    let binding = ProviderBindingV1::new(
+        ProviderEndpointV1::parse(&loopback.endpoint).expect("loopback endpoint should be valid"),
+        CredentialSlotV1::parse("primary").expect("fixture slot should be valid"),
+    );
+    let user_agent = ControlledUserAgentV1::try_from_static("claude-cli/2.1.114 (external, cli)")
+        .expect("an audited inventory value must be accepted");
+    let request = request().with_user_agent(user_agent);
+
+    execute_provider_call_v1(
+        &binding,
+        &request,
+        &resolver,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("a call declaring a user-agent should succeed");
+    let received = loopback.request.await.expect("server should report the request");
+    loopback.task.await.expect("server task should finish");
+
+    assert_eq!(
+        received.headers.get("user-agent").map(String::as_str),
+        Some("claude-cli/2.1.114 (external, cli)"),
+        "the declared user-agent must reach the wire byte for byte"
+    );
+    // The map above collapses duplicates, so exactly-once is counted on the raw name list. One
+    // occurrence is what makes the typed slot the single source of the header.
+    assert_eq!(received.header_names.iter().filter(|name| *name == "user-agent").count(), 1);
+    // The declaration must not have displaced the ordinary or auth channels.
+    assert_eq!(received.headers.get("x-test").map(String::as_str), Some(HEADER_SENTINEL));
+    assert_eq!(
+        received.headers.get("authorization").map(String::as_str),
+        Some("Bearer transport-secret-sentinel")
+    );
+}
+
+#[tokio::test]
+async fn an_undeclared_request_carries_no_user_agent_at_all() {
+    // The hardened client configures no default user-agent and reqwest adds none on its own; this
+    // pins both halves, because a spontaneous default would silently break provider policies that
+    // key on the header's absence and would blur whose identity the wire is claiming.
+    let loopback = loopback_once(response(
+        "200 OK",
+        &[("content-type", "application/json")],
+        br#"{"ok":true}"#,
+    ))
+    .await;
+    let transport = ReqwestTransportV1::new(config()).expect("transport should build");
+
+    call(
+        &loopback.endpoint,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("an undeclared call should succeed");
+    let received = loopback.request.await.expect("server should report the request");
+    loopback.task.await.expect("server task should finish");
+
+    assert!(
+        !received.headers.contains_key("user-agent"),
+        "no declaration means no user-agent on the wire"
+    );
 }
 
 #[tokio::test]

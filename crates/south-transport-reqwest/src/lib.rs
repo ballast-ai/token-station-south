@@ -347,12 +347,23 @@ fn request_body(owner: Arc<str>) -> Bytes {
 }
 
 fn assemble_headers(request: &PreparedHttpRequestV1<'_>) -> Result<HeaderMap, TransportErrorV1> {
-    let mut headers = HeaderMap::with_capacity(request.headers().len() + 1);
+    let mut headers = HeaderMap::with_capacity(request.headers().len() + 2);
     for (name, value) in request.headers().iter() {
         let name =
             HeaderName::from_bytes(name.as_bytes()).map_err(|_| TransportErrorV1::RequestFailed)?;
         let value = HeaderValue::from_str(value).map_err(|_| TransportErrorV1::RequestFailed)?;
         headers.insert(name, value);
+    }
+
+    // The sanctioned user-agent declaration is the single source of this header: the ordinary
+    // channel cannot carry the name (reserved) and the client sets no default, so inserting it
+    // here is what puts it on the wire exactly once. The value grammar admits only printable
+    // ASCII, so encoding it cannot fail; the error arm exists because `HeaderValue::from_str` is
+    // fallible, not because an accepted value can reach it.
+    if let Some(user_agent) = request.user_agent() {
+        let value = HeaderValue::from_str(user_agent.as_str())
+            .map_err(|_| TransportErrorV1::RequestFailed)?;
+        headers.insert(HeaderName::from_static("user-agent"), value);
     }
 
     // The prepared request carries exactly one auth header: `authorization` with its `Bearer `

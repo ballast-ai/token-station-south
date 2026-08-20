@@ -10,9 +10,9 @@ use std::{
 
 use http::{Method, StatusCode};
 use south_contracts::{
-    BearerAuthV1, BufferedHttpResponseV1, CredentialSlotV1, JsonBodyV1, JsonPostRequestV1,
-    PreparationErrorV1, ProviderAuthV1, ProviderEndpointV1, QueryParameterV1, QueryStringV1,
-    RelativePathV1, SafeHeaders, SecretHeaderV1, TransportErrorV1,
+    BearerAuthV1, BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1, JsonBodyV1,
+    JsonPostRequestV1, PreparationErrorV1, ProviderAuthV1, ProviderEndpointV1, QueryParameterV1,
+    QueryStringV1, RelativePathV1, SafeHeaders, SecretHeaderV1, TransportErrorV1,
 };
 use south_core::{
     AsyncHttpTransport, CredentialResolutionErrorV1, CredentialResolutionFuture,
@@ -175,6 +175,7 @@ struct Observation {
     body: String,
     auth_header_name: String,
     auth_header_value: Vec<u8>,
+    user_agent: Option<&'static str>,
     remaining_timeout: Duration,
     prepared_debug: String,
 }
@@ -198,6 +199,7 @@ impl AsyncHttpTransport for RecordingTransport {
             body: prepared.body().as_str().to_owned(),
             auth_header_name: auth_header_name.to_owned(),
             auth_header_value: auth_header_value.to_vec(),
+            user_agent: prepared.user_agent().map(ControlledUserAgentV1::as_str),
             remaining_timeout,
             prepared_debug: format!("{prepared:?}"),
         };
@@ -337,6 +339,7 @@ async fn success_prepares_exactly_one_post_for_the_transport() {
             body: format!(r#"{{"value":"{BODY_SENTINEL}"}}"#),
             auth_header_name: "authorization".to_owned(),
             auth_header_value: format!("Bearer {SECRET_SENTINEL}").into_bytes(),
+            user_agent: None,
             remaining_timeout: Duration::from_secs(30),
             prepared_debug: format!(
                 "PreparedHttpRequestV1 {{ method: POST, header_count: 1, body_byte_count: {}, .. }}",
@@ -800,4 +803,66 @@ async fn a_request_without_a_query_still_reaches_the_wire_query_free() {
         .clone()
         .expect("transport must be reached");
     assert_eq!(observation.url.query(), None, "no query declared means no query on the wire");
+}
+
+// ─────────────── controlled user-agent (HTTP contract v3) ───────────────
+
+#[tokio::test]
+async fn declared_user_agent_reaches_the_transport_boundary_intact() {
+    let resolver = ImmediateResolver::default();
+    let transport = RecordingTransport::default();
+    let user_agent = ControlledUserAgentV1::try_from_static("aws-sdk-js/1.0.0 KiroIDE")
+        .expect("an audited inventory value must be accepted");
+    let request = request("v1/chat/completions", SLOT_SENTINEL).with_user_agent(user_agent);
+
+    execute_provider_call_v1(
+        &binding("https://example.com/base/", SLOT_SENTINEL),
+        &request,
+        &resolver,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("a sanctioned user-agent must not block preparation");
+
+    let observation = transport
+        .observation
+        .lock()
+        .expect("observation lock")
+        .clone()
+        .expect("transport must be reached");
+    assert_eq!(observation.user_agent, Some("aws-sdk-js/1.0.0 KiroIDE"));
+    // The declaration is a header concern only: it must not have touched the URL or the auth
+    // channel.
+    assert_eq!(observation.url.as_str(), "https://example.com/base/v1/chat/completions");
+    assert_eq!(observation.auth_header_name, "authorization");
+}
+
+#[tokio::test]
+async fn a_request_without_a_user_agent_prepares_none() {
+    let resolver = ImmediateResolver::default();
+    let transport = RecordingTransport::default();
+
+    execute_provider_call_v1(
+        &binding("https://example.com/base/", SLOT_SENTINEL),
+        &request("v1/chat/completions", SLOT_SENTINEL),
+        &resolver,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("contract version two shape stays valid");
+
+    let observation = transport
+        .observation
+        .lock()
+        .expect("observation lock")
+        .clone()
+        .expect("transport must be reached");
+    assert_eq!(
+        observation.user_agent, None,
+        "no user-agent declared means none at the prepared boundary"
+    );
 }
