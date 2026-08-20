@@ -46,6 +46,7 @@ macro_rules! fixed_debug {
 }
 
 mod controlled_query;
+mod controlled_user_agent;
 mod header_auth;
 mod quota;
 mod stream;
@@ -56,6 +57,14 @@ pub use controlled_query::{
     ControlledQueryEvidenceV1, ControlledQueryMismatchCategoryV1, ControlledQueryMismatchV1,
     ControlledQueryObservationV1, MAX_CONTROLLED_QUERY_MISMATCHES_V1,
     ReferenceAssembledControlledQueryExecutorV1, run_controlled_query_conformance_v1,
+};
+pub use controlled_user_agent::{
+    AssembledControlledUserAgentExecutionFutureV1, AssembledControlledUserAgentExecutorV1,
+    ControlledUserAgentConformanceFailureV1, ControlledUserAgentConformanceReportV1,
+    ControlledUserAgentEvidenceV1, ControlledUserAgentMismatchCategoryV1,
+    ControlledUserAgentMismatchV1, ControlledUserAgentObservationV1,
+    MAX_CONTROLLED_USER_AGENT_MISMATCHES_V1, ReferenceAssembledControlledUserAgentExecutorV1,
+    run_controlled_user_agent_conformance_v1,
 };
 pub use header_auth::{
     AssembledHeaderAuthExecutionFutureV1, AssembledHeaderAuthExecutorV1,
@@ -677,13 +686,19 @@ const fn map_contract_error(error: ContractErrorV1) -> ProviderCallFailureCodeV1
         | ContractErrorV1::DuplicateQueryParameter
         | ContractErrorV1::EmptyQuery
         | ContractErrorV1::QueryTooLarge => ProviderCallFailureCodeV1::InvalidRelativePath,
+        // The controlled user-agent declaration error is the same preparation-time, zero-call
+        // shape, and the frozen set has exactly one preparation-time provider-declaration code —
+        // so both sanctioned channels fold their declaration errors into it.
+        ContractErrorV1::InvalidUserAgentValue => ProviderCallFailureCodeV1::InvalidRelativePath,
     }
 }
 
-// Canonical fixtures are immutable and their ordinary headers are production-parsed in the
-// conformance package's public table tests. The frozen 19-code provider-call set intentionally has
-// no header-policy code, so a failure here means that internal fixture invariant was violated. Use
-// the context-free request fallback rather than panicking or expanding the stable code contract.
+// The frozen 19-code provider-call set intentionally has no header-policy code, so header
+// validation failures surface through the context-free request fallback rather than panicking or
+// expanding the stable code contract. For the provider-call, stream, quota, and query suites this
+// path is an internal fixture invariant — their canonical headers always parse. The controlled
+// user-agent suite's reserved-header case exercises it deliberately: its fixture smuggles a plain
+// `user-agent` pair through the ordinary channel and expects exactly this fold at zero calls.
 const fn map_canonical_fixture_header_invariant_failure(
     _error: HeaderPolicyError,
 ) -> ProviderCallFailureCodeV1 {

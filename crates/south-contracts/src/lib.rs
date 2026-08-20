@@ -11,7 +11,11 @@ use thiserror::Error;
 use url::Url;
 
 /// The version of the buffered HTTP request and response contract.
-pub const HTTP_CONTRACT_VERSION: u16 = 2;
+///
+/// Version three is additive: a version-two request is exactly a version-three request with no
+/// controlled user-agent declaration, just as a version-one request is a version-two request with
+/// no query.
+pub const HTTP_CONTRACT_VERSION: u16 = 3;
 
 /// The version of the provider authentication declaration contract.
 ///
@@ -36,6 +40,13 @@ pub const MAX_QUERY_VALUE_BYTES: usize = 64;
 
 /// The maximum byte length of a serialized query, excluding the leading `?`.
 pub const MAX_QUERY_TOTAL_BYTES: usize = 256;
+
+/// The maximum byte length of a controlled user-agent value.
+///
+/// Generous against the audited host inventory (34 bytes at its longest) for the same reason the
+/// query value bound is: the character class, not the length, does the security work, and a bound
+/// that tracked observed values would break on the next host release without adding protection.
+pub const MAX_USER_AGENT_BYTES: usize = 256;
 
 /// The maximum byte length of a provider-selected credential slot identifier.
 pub const MAX_CREDENTIAL_SLOT_BYTES: usize = 64;
@@ -744,6 +755,74 @@ impl fmt::Debug for QueryStringV1 {
     }
 }
 
+/// A sanctioned `user-agent` declaration for one provider request.
+///
+/// The header name is fixed: this type sets `user-agent` and nothing else, so the sanctioned
+/// channel cannot become a generic header channel, the way the Bearer arm is fixed to
+/// `authorization`. The ordinary [`SafeHeaders`] channel keeps rejecting the name via
+/// `RESERVED_HEADERS`, which together with the single typed slot makes "exactly one `user-agent`
+/// on the wire" structural rather than checked.
+///
+/// The value is `&'static str` by construction: it must exist in host program text. That is the
+/// provenance every audited host consumer actually has — compile-time impersonation literals —
+/// and it closes the value channel one level stronger than a validator could: no path exists from
+/// resolver output, configuration, or request data to a user-agent value. (`String::leak` defeats
+/// this, so `'static` provenance is a discipline claim against accidental flows, not a proof
+/// against a hostile host.)
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct ControlledUserAgentV1 {
+    value: &'static str,
+}
+
+impl ControlledUserAgentV1 {
+    /// Validates a compile-time user-agent literal against the frozen value grammar.
+    ///
+    /// Accepted: non-empty, at most [`MAX_USER_AGENT_BYTES`], every byte printable ASCII
+    /// including space (`0x20..=0x7E`), and no leading or trailing space. The grammar is strictly
+    /// narrower than an HTTP header value, so an accepted value can never fail header encoding at
+    /// a transport; control bytes and CR/LF are unrepresentable, which closes header injection
+    /// before any boundary.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ContractErrorV1::InvalidUserAgentValue`] when the value violates the grammar.
+    pub const fn try_from_static(value: &'static str) -> Result<Self, ContractErrorV1> {
+        let bytes = value.as_bytes();
+        if bytes.is_empty() || bytes.len() > MAX_USER_AGENT_BYTES {
+            return Err(ContractErrorV1::InvalidUserAgentValue);
+        }
+        if bytes[0] == b' ' || bytes[bytes.len() - 1] == b' ' {
+            return Err(ContractErrorV1::InvalidUserAgentValue);
+        }
+        let mut index = 0;
+        while index < bytes.len() {
+            if bytes[index] < 0x20 || bytes[index] > 0x7E {
+                return Err(ContractErrorV1::InvalidUserAgentValue);
+            }
+            index += 1;
+        }
+        Ok(Self { value })
+    }
+
+    /// Returns the declared user-agent value.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        self.value
+    }
+}
+
+impl fmt::Debug for ControlledUserAgentV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // The value is a compile-time literal rather than a secret, but it lands in logs like any
+        // provider-adjacent string, and the redaction discipline is uniform: print only the shape.
+        formatter
+            .debug_struct("ControlledUserAgentV1")
+            .field("contract_version", &HTTP_CONTRACT_VERSION)
+            .field("byte_count", &self.value.len())
+            .finish_non_exhaustive()
+    }
+}
+
 /// A provider authentication declaration naming a scheme and a host-resolved credential slot.
 ///
 /// Neither arm carries a credential value. The header-secret arm reuses [`BearerAuthV1`] as its
@@ -799,6 +878,7 @@ pub struct JsonPostRequestV1 {
     body: JsonBodyV1,
     auth: ProviderAuthV1,
     query: Option<QueryStringV1>,
+    user_agent: Option<ControlledUserAgentV1>,
 }
 
 impl JsonPostRequestV1 {
@@ -813,7 +893,7 @@ impl JsonPostRequestV1 {
         body: JsonBodyV1,
         auth: impl Into<ProviderAuthV1>,
     ) -> Self {
-        Self { relative_path, headers, body, auth: auth.into(), query: None }
+        Self { relative_path, headers, body, auth: auth.into(), query: None, user_agent: None }
     }
 
     /// Attaches a sanctioned query declaration to this request.
@@ -830,6 +910,22 @@ impl JsonPostRequestV1 {
     #[must_use]
     pub const fn query(&self) -> Option<&QueryStringV1> {
         self.query.as_ref()
+    }
+
+    /// Attaches a sanctioned user-agent declaration to this request.
+    ///
+    /// A separate builder rather than a `new` parameter so http-contract-version-two call sites
+    /// keep compiling unchanged: a v2 request is exactly a v3 request with no user-agent.
+    #[must_use]
+    pub const fn with_user_agent(mut self, user_agent: ControlledUserAgentV1) -> Self {
+        self.user_agent = Some(user_agent);
+        self
+    }
+
+    /// Returns the sanctioned user-agent declaration, when one was attached.
+    #[must_use]
+    pub const fn user_agent(&self) -> Option<ControlledUserAgentV1> {
+        self.user_agent
     }
 
     /// Returns the provider-selected relative path.
@@ -1467,6 +1563,9 @@ pub enum ContractErrorV1 {
     /// The serialized query exceeds the contract limit.
     #[error("query exceeds the boundary limit")]
     QueryTooLarge,
+    /// A controlled user-agent value violates the frozen value grammar.
+    #[error("user-agent value is invalid")]
+    InvalidUserAgentValue,
 }
 
 impl ContractErrorV1 {
@@ -1483,6 +1582,7 @@ impl ContractErrorV1 {
             Self::DuplicateQueryParameter => "DUPLICATE_QUERY_PARAMETER",
             Self::EmptyQuery => "EMPTY_QUERY",
             Self::QueryTooLarge => "QUERY_TOO_LARGE",
+            Self::InvalidUserAgentValue => "INVALID_USER_AGENT_VALUE",
         }
     }
 }

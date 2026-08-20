@@ -6,9 +6,9 @@ use std::{fmt, future::Future, pin::Pin, time::Duration};
 
 use http::Method;
 use south_contracts::{
-    BufferedHttpResponseV1, CredentialSlotV1, JsonBodyV1, JsonPostRequestV1, PreparationErrorV1,
-    ProviderAuthV1, ProviderEndpointV1, SafeHeaders, StreamChunkV1, StreamReadErrorV1,
-    StreamRejectedV1, StreamingResponseHeadV1, TransportErrorV1,
+    BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1, JsonBodyV1, JsonPostRequestV1,
+    PreparationErrorV1, ProviderAuthV1, ProviderEndpointV1, SafeHeaders, StreamChunkV1,
+    StreamReadErrorV1, StreamRejectedV1, StreamingResponseHeadV1, TransportErrorV1,
 };
 use thiserror::Error;
 use tokio::time::{Instant, timeout_at};
@@ -91,6 +91,7 @@ pub struct PreparedHttpRequestV1<'request> {
     body: &'request JsonBodyV1,
     auth_header_name: &'static str,
     auth_header_value: Zeroizing<Vec<u8>>,
+    user_agent: Option<ControlledUserAgentV1>,
 }
 
 impl<'request> PreparedHttpRequestV1<'request> {
@@ -124,6 +125,7 @@ impl<'request> PreparedHttpRequestV1<'request> {
             body: request.body(),
             auth_header_name,
             auth_header_value,
+            user_agent: request.user_agent(),
         }
     }
 }
@@ -161,6 +163,16 @@ impl PreparedHttpRequestV1<'_> {
     #[must_use]
     pub fn auth_header(&self) -> (&'static str, &[u8]) {
         (self.auth_header_name, self.auth_header_value.as_slice())
+    }
+
+    /// Returns the sanctioned user-agent declaration, when the request attached one.
+    ///
+    /// Transports must apply it as the request's only `user-agent` header. The ordinary header
+    /// channel cannot carry the name (it is reserved) and the auth channel never produces it, so
+    /// applying this declaration is the single source of the header on the wire.
+    #[must_use]
+    pub const fn user_agent(&self) -> Option<ControlledUserAgentV1> {
+        self.user_agent
     }
 }
 

@@ -70,6 +70,8 @@ struct Conformance {
     provider_quota_metadata_suite: u32,
     controlled_query_suite_id: String,
     controlled_query_suite: u32,
+    controlled_user_agent_suite_id: String,
+    controlled_user_agent_suite: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -105,7 +107,7 @@ struct ProviderRuntime {
 /// status is not `verified`.
 type ExpectedCapability = (&'static str, &'static str, Option<usize>);
 
-fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 5]> {
+fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 6]> {
     BTreeMap::from([
         (
             "token-station",
@@ -140,6 +142,8 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 5
                 // own adoption slice against south.controlled-query.v1. The
                 // suite existing in this repository is not adoption evidence.
                 ("controlled_query", "not_verified", None),
+                // controlled_user_agent stays not_verified for the same reason.
+                ("controlled_user_agent", "not_verified", None),
             ],
         ),
         // token-station-server provider_stream verified 2026-08-17: the durable
@@ -232,6 +236,12 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 5
                 // The adoption record is held by that host's own repository;
                 // this manifest records only the resulting status.
                 ("controlled_query", "verified", Some(5)),
+                // controlled_user_agent stays not_verified until that host runs
+                // its own adoption slice against south.controlled-user-agent.v1
+                // (its migration batches 3 and 4b are the expected consumers).
+                // The suite existing in this repository is not adoption
+                // evidence.
+                ("controlled_user_agent", "not_verified", None),
             ],
         ),
     ])
@@ -301,25 +311,36 @@ fn compatibility_manifest_describes_the_library_slice() {
     assert_eq!(manifest.conformance.provider_quota_metadata_suite, 1);
     assert_eq!(manifest.conformance.controlled_query_suite_id, "south.controlled-query.v1");
     assert_eq!(manifest.conformance.controlled_query_suite, 1);
+    assert_eq!(
+        manifest.conformance.controlled_user_agent_suite_id,
+        "south.controlled-user-agent.v1"
+    );
+    assert_eq!(manifest.conformance.controlled_user_agent_suite, 1);
     assert!(manifest.provider_api.wit_version.is_none());
     assert!(manifest.provider_runtime.abi_version.is_none());
     let expected_crates = BTreeMap::from([
         (
             "south-contracts",
-            "http_auth_error_stream_quota_metadata_header_auth_controlled_query_v1",
+            "http_auth_error_stream_quota_metadata_header_auth_controlled_query_user_agent_v1",
         ),
-        ("south-core", "buffered_streaming_provider_call_header_auth_controlled_query_v1"),
+        (
+            "south-core",
+            "buffered_streaming_provider_call_header_auth_controlled_query_user_agent_v1",
+        ),
         ("south-provider-api", "placeholder"),
         (
             "south-provider-conformance",
-            "provider_call_stream_quota_metadata_header_auth_controlled_query_suites_v1",
+            "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_suites_v1",
         ),
         ("south-provider-runtime", "placeholder"),
         (
             "south-testkit",
-            "provider_call_stream_quota_metadata_header_auth_controlled_query_runners_v1",
+            "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_runners_v1",
         ),
-        ("south-transport-reqwest", "buffered_streaming_json_post_quota_metadata_header_auth_v1"),
+        (
+            "south-transport-reqwest",
+            "buffered_streaming_json_post_quota_metadata_header_auth_user_agent_v1",
+        ),
     ]);
     assert_eq!(manifest.crates.len(), expected_crates.len());
     for (name, expected_status) in expected_crates {

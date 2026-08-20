@@ -27,21 +27,27 @@ See [Architecture](ARCHITECTURE.md), [Compatibility](compatibility.json),
 [minimal provider call design](docs/design/2026-08-16-minimal-provider-call.md), the
 [streaming provider call design](docs/design/2026-08-17-streaming-provider-call.md), and the
 [community compatibility release](docs/design/2026-08-17-community-host-compatibility-release.md),
-and the
-[provider quota metadata design](docs/design/2026-08-17-provider-quota-response-metadata.md).
+the
+[provider quota metadata design](docs/design/2026-08-17-provider-quota-response-metadata.md), the
+[header-secret auth design](docs/design/2026-08-17-header-secret-auth.md), the
+[controlled query design](docs/design/2026-08-18-controlled-query-support.md), and the
+[controlled user-agent design](docs/design/2026-08-20-controlled-user-agent.md).
 
 ## Implemented library slice
 
-- `south-contracts` defines version-one bounded HTTP, Bearer authentication, stable error,
-  byte-streaming, and closed provider quota metadata contracts, including reserved-header
-  enforcement and redacted diagnostics.
+- `south-contracts` defines bounded HTTP, Bearer and sanctioned header-secret authentication,
+  stable error, byte-streaming, and closed provider quota metadata contracts — including
+  reserved-header enforcement, redacted diagnostics, and the sanctioned controlled query and
+  controlled user-agent request declarations.
 - `south-core` binds a validated endpoint to one credential slot, resolves the host-owned secret,
   and applies cancellation and caller deadlines around prepared buffered and streaming calls.
 - `south-transport-reqwest` executes hardened buffered and byte-streaming JSON POST requests,
-  captures only the nine bounded quota metadata fields, and keeps redirects, retries, compression,
-  cookies, referer propagation, and implicit system proxies disabled.
+  applies the request's sanctioned user-agent declaration exactly once, captures only the nine
+  bounded quota metadata fields, and keeps redirects, retries, compression, cookies, referer
+  propagation, and implicit system proxies disabled.
 - `south-provider-conformance` publishes immutable `south.provider-call.v1`,
-  `south.provider-stream.v1`, and `south.provider-quota-metadata.v1` fixtures, while
+  `south.provider-stream.v1`, `south.provider-quota-metadata.v1`, `south.header-auth.v1`,
+  `south.controlled-query.v1`, and `south.controlled-user-agent.v1` fixtures, while
   `south-testkit` runs them against assembled host executors.
 
 The slice does not include SSE or eventstream parsing, provider WIT or runtime loading, a

@@ -1,12 +1,12 @@
 use http::StatusCode;
 use south_contracts::{
-    AUTH_CONTRACT_VERSION, BearerAuthV1, BufferedHttpResponseV1, ContractErrorV1, CredentialSlotV1,
-    ERROR_CONTRACT_VERSION, HTTP_CONTRACT_VERSION, JsonBodyV1, JsonPostRequestV1,
-    MAX_CREDENTIAL_SLOT_BYTES, MAX_ENDPOINT_BYTES, MAX_JSON_REQUEST_BODY_BYTES,
-    MAX_RELATIVE_PATH_BYTES, MAX_RESPONSE_BODY_BYTES, MAX_RESPONSE_CONTENT_TYPE_BYTES,
-    MAX_RESPONSE_RETRY_AFTER_BYTES, PreparationErrorV1, ProviderAuthV1, ProviderEndpointV1,
-    QueryParameterV1, QueryStringV1, RelativePathV1, STREAM_CONTRACT_VERSION, SafeHeaders,
-    SecretHeaderV1, TransportErrorV1,
+    AUTH_CONTRACT_VERSION, BearerAuthV1, BufferedHttpResponseV1, ContractErrorV1,
+    ControlledUserAgentV1, CredentialSlotV1, ERROR_CONTRACT_VERSION, HTTP_CONTRACT_VERSION,
+    JsonBodyV1, JsonPostRequestV1, MAX_CREDENTIAL_SLOT_BYTES, MAX_ENDPOINT_BYTES,
+    MAX_JSON_REQUEST_BODY_BYTES, MAX_RELATIVE_PATH_BYTES, MAX_RESPONSE_BODY_BYTES,
+    MAX_RESPONSE_CONTENT_TYPE_BYTES, MAX_RESPONSE_RETRY_AFTER_BYTES, MAX_USER_AGENT_BYTES,
+    PreparationErrorV1, ProviderAuthV1, ProviderEndpointV1, QueryParameterV1, QueryStringV1,
+    RelativePathV1, STREAM_CONTRACT_VERSION, SafeHeaders, SecretHeaderV1, TransportErrorV1,
 };
 
 const SENTINEL: &str = "must-not-appear-7f23a";
@@ -47,7 +47,7 @@ fn secret_header_all_covers_every_variant() {
 
 #[test]
 fn contract_versions_are_independently_versioned() {
-    assert_eq!(HTTP_CONTRACT_VERSION, 2);
+    assert_eq!(HTTP_CONTRACT_VERSION, 3);
     assert_eq!(AUTH_CONTRACT_VERSION, 2);
     assert_eq!(ERROR_CONTRACT_VERSION, 1);
     assert_eq!(STREAM_CONTRACT_VERSION, Some(1));
@@ -735,4 +735,138 @@ fn a_query_free_request_must_reach_the_wire_without_a_query() {
     let resolved = path.resolve_against(&endpoint).expect("a bare path must resolve");
     assert_eq!(resolved.query(), None);
     assert_eq!(resolved.as_str(), "https://example.com/base/v1/resource");
+}
+
+// ─────────────── controlled user-agent (HTTP contract v3) ───────────────
+
+const SENTINEL_USER_AGENT: &str = "must-not-appear-4e87d/1.0";
+
+/// The constructor is `const fn`, so a host builds its user-agents in `const` context and a
+/// malformed literal fails at host compile time rather than at request time.
+const CONST_CONTEXT_USER_AGENT: ControlledUserAgentV1 =
+    match ControlledUserAgentV1::try_from_static("claude-cli/2.1.114 (external, cli)") {
+        Ok(user_agent) => user_agent,
+        Err(_) => panic!("a known-good literal must construct in const context"),
+    };
+
+#[test]
+fn user_agent_constructs_in_const_context_and_round_trips() {
+    assert_eq!(CONST_CONTEXT_USER_AGENT.as_str(), "claude-cli/2.1.114 (external, cli)");
+}
+
+#[test]
+fn user_agent_grammar_accepts_every_audited_host_value() {
+    // The four values measured in the adopting host's inventory (design record §1), plus the
+    // shortest accepted shape. Product tokens, slashes, dots, parentheses, commas, and single
+    // interior spaces must all survive verbatim.
+    for accepted in [
+        "opencode/1.15.6",
+        "GitHubCopilotChat/0.43.0",
+        "aws-sdk-js/1.0.0 KiroIDE",
+        "claude-cli/2.1.114 (external, cli)",
+        "a",
+    ] {
+        let user_agent = ControlledUserAgentV1::try_from_static(accepted)
+            .expect("every audited inventory value must be accepted");
+        assert_eq!(user_agent.as_str(), accepted);
+    }
+}
+
+#[test]
+fn user_agent_grammar_rejects_every_unsafe_byte_class() {
+    // The grammar is deliberately narrower than an HTTP header value: control bytes and CR/LF
+    // close header injection, non-ASCII closes encoding ambiguity, and edge spaces close
+    // whitespace-trimming disagreements between intermediaries.
+    for rejected in [
+        "",
+        " leading-space",
+        "trailing-space ",
+        " ",
+        "line\nbreak",
+        "line\rbreak",
+        "tab\tseparated",
+        "del\u{7f}byte",
+        "ctl\u{1f}byte",
+        "smart\u{201d}quote",
+        "\u{6a21}\u{578b}/1.0",
+    ] {
+        assert_eq!(
+            ControlledUserAgentV1::try_from_static(rejected),
+            Err(ContractErrorV1::InvalidUserAgentValue),
+            "{rejected:?} must not survive the user-agent grammar"
+        );
+    }
+}
+
+#[test]
+fn user_agent_enforces_its_size_boundary() {
+    // `String::leak` manufactures the `'static` inputs here; the design record names that escape
+    // hatch as the reason `'static` provenance is a discipline claim, not a proof.
+    let at_limit: &'static str = "a".repeat(MAX_USER_AGENT_BYTES).leak();
+    let over_limit: &'static str = "a".repeat(MAX_USER_AGENT_BYTES + 1).leak();
+
+    assert!(ControlledUserAgentV1::try_from_static(at_limit).is_ok());
+    assert_eq!(
+        ControlledUserAgentV1::try_from_static(over_limit),
+        Err(ContractErrorV1::InvalidUserAgentValue)
+    );
+}
+
+#[test]
+fn request_without_user_agent_is_unchanged_by_the_v3_contract() {
+    let request = JsonPostRequestV1::new(
+        RelativePathV1::parse("v1/chat/completions").unwrap(),
+        SafeHeaders::try_from_iter([("accept", "application/json")]).unwrap(),
+        JsonBodyV1::parse("{}").unwrap(),
+        BearerAuthV1::new(CredentialSlotV1::parse("openai").unwrap()),
+    );
+    assert!(
+        request.user_agent().is_none(),
+        "a v2 request is exactly a v3 request with no user-agent"
+    );
+}
+
+#[test]
+fn request_carries_the_declared_user_agent() {
+    let user_agent = ControlledUserAgentV1::try_from_static("opencode/1.15.6").unwrap();
+    let request = JsonPostRequestV1::new(
+        RelativePathV1::parse("v1/chat/completions").unwrap(),
+        SafeHeaders::try_from_iter([("accept", "application/json")]).unwrap(),
+        JsonBodyV1::parse("{}").unwrap(),
+        BearerAuthV1::new(CredentialSlotV1::parse("glm-coding").unwrap()),
+    )
+    .with_user_agent(user_agent);
+
+    assert_eq!(request.user_agent().map(ControlledUserAgentV1::as_str), Some("opencode/1.15.6"));
+}
+
+#[test]
+fn user_agent_stays_on_the_reserved_header_list() {
+    // The sanctioned field is an opt-in, not a relaxation: the ordinary header channel must keep
+    // refusing the name, which is what makes the wire's exactly-once property structural.
+    let error = SafeHeaders::try_from_iter([("user-agent", "smuggled/1.0")])
+        .expect_err("user-agent must stay reserved");
+    assert_eq!(error.code(), "RESERVED_HEADER_FORBIDDEN");
+}
+
+#[test]
+fn invalid_user_agent_error_code_is_stable() {
+    assert_eq!(ContractErrorV1::InvalidUserAgentValue.code(), "INVALID_USER_AGENT_VALUE");
+}
+
+#[test]
+fn user_agent_debug_never_reveals_the_value() {
+    let user_agent = ControlledUserAgentV1::try_from_static(SENTINEL_USER_AGENT)
+        .expect("the sentinel matches the grammar");
+    let request = JsonPostRequestV1::new(
+        RelativePathV1::parse("v1/chat/completions").unwrap(),
+        SafeHeaders::try_from_iter([("accept", "application/json")]).unwrap(),
+        JsonBodyV1::parse("{}").unwrap(),
+        BearerAuthV1::new(CredentialSlotV1::parse("glm-coding").unwrap()),
+    )
+    .with_user_agent(user_agent);
+
+    for output in [format!("{user_agent:?}"), format!("{request:?}")] {
+        assert!(!output.contains("must-not-appear"), "debug output leaked the value: {output}");
+    }
 }
