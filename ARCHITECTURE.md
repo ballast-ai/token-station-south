@@ -23,8 +23,8 @@ community policy      enterprise policy
 | `south-transport-reqwest` | Implemented hardened buffered and byte-streaming JSON POST transport with bounded quota metadata capture, sanctioned user-agent application, and one-config transport-pair construction |
 | `south-provider-conformance` | Implemented immutable provider-call, provider-stream, provider-quota-metadata, header-auth, controlled-query, and controlled-user-agent v1 fixtures |
 | `south-testkit` | Implemented assembled-executor conformance runners and reference executors for all six suites, plus the owned raw-call builder for host tests |
-| `south-provider-api` | Placeholder for future provider WIT and manifest schemas; blocked on a canonical IR inventory |
-| `south-provider-runtime` | Placeholder for future sandboxed component execution; blocked on `south-provider-api` |
+| `south-provider-api` | Implemented v2 provider component ABI: WIT package `token-station:adapter@2.0.0` (world `provider-adapter-v2`) plus the gate-① manifest schema with the seven-field compatibility tuple; depends on no other south crate by design |
+| `south-provider-runtime` | Placeholder for future sandboxed component execution (S3); its API surface is now fixed by `south-provider-api` |
 
 ## Removed ownership markers
 

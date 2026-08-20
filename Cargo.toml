@@ -7,7 +7,7 @@ edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/GlimpseEngine/token-station-south"
 rust-version = "1.96"
-version = "0.7.0"
+version = "0.8.0"
 
 [workspace.dependencies]
 bytes = "1.10.1"
@@ -21,6 +21,7 @@ thiserror = "2.0.12"
 tokio = "1.52.3"
 tokio-util = "0.7.18"
 url = "2.5.4"
+wit-parser = "0.253"
 zeroize = "1.8.2"
 
 [workspace.lints.rust]
