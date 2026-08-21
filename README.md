@@ -35,8 +35,9 @@ the
 [host prelude design](docs/design/2026-08-20-host-prelude.md), the
 [canonical IR inventory](docs/design/2026-08-21-canonical-ir-inventory.md), the
 [provider-api promotion](docs/design/2026-08-21-provider-api-promotion.md), the
-[component conformance gates](docs/design/2026-08-21-component-conformance.md), and the
-[provider runtime](docs/design/2026-08-21-provider-runtime.md).
+[component conformance gates](docs/design/2026-08-21-component-conformance.md), the
+[provider runtime](docs/design/2026-08-21-provider-runtime.md), and the
+[OpenAI-compatible host parity](docs/design/2026-08-21-openai-compat-host-parity.md).
 
 ## Implemented library slice
 
