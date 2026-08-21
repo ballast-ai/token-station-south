@@ -43,7 +43,7 @@ fn reference_manifest() -> ComponentManifestV1 {
             kernel_version: "0.2.0".to_owned(),
             kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb09c".to_owned(),
             wit_package: WIT_PACKAGE.to_owned(),
-            south_runtime: "0.11.0".to_owned(),
+            south_runtime: "0.12.0".to_owned(),
         },
     }
 }
@@ -162,7 +162,7 @@ fn the_tuple_handshake_refuses_any_mismatch_in_tuple_order() {
         ir_schema_id: "token-station-protocol@0.3.0/v0.2.0".to_owned(),
         kernel_version: "0.2.0".to_owned(),
         kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb09c".to_owned(),
-        south_runtime: "0.11.0".to_owned(),
+        south_runtime: "0.12.0".to_owned(),
     };
     assert_eq!(compatibility_matches(&manifest, &expectations), Ok(()));
 
@@ -176,7 +176,7 @@ fn the_tuple_handshake_refuses_any_mismatch_in_tuple_order() {
     let mut newer_runtime = expectations;
     // Deliberately *not* the manifest's version — this arm proves a mismatch
     // is refused, so it must stay one step ahead of whatever the release is.
-    newer_runtime.south_runtime = "0.12.0".to_owned();
+    newer_runtime.south_runtime = "0.13.0".to_owned();
     assert!(matches!(
         compatibility_matches(&manifest, &newer_runtime),
         Err(CompatibilityMismatchV1::SouthRuntime { .. })
@@ -187,7 +187,7 @@ fn the_tuple_handshake_refuses_any_mismatch_in_tuple_order() {
 /// compared them. Gate ① checks the package manifest against the identity the
 /// component *reports*, and that identity comes from the reference
 /// implementation — never from the component's own crate manifest. So the
-/// 0.11.0 release moved the package to 2.0.0, left the crate at 1.0.0, and
+/// 0.12.0 release moved the package to 2.0.0, left the crate at 1.0.0, and
 /// shipped one artifact carrying two version numbers through a green run.
 ///
 /// The tuple's `south_runtime` is the same shape of gap one field over. The

@@ -10,7 +10,7 @@ version.workspace = true
 
 [dependencies]
 serde_json.workspace = true
-south-provider-api = { path = "../south-provider-api", version = "0.11.0" }
+south-provider-api = { path = "../south-provider-api", version = "0.12.0" }
 thiserror.workspace = true
 wasmtime.workspace = true
 wasmtime-wasi.workspace = true
