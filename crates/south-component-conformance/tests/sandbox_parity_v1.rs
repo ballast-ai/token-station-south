@@ -93,7 +93,7 @@ fn the_shipped_package_passes_gate_one_and_the_tuple_handshake() {
         ir_schema_id: "token-station-protocol@0.3.0/v0.2.0".to_owned(),
         kernel_version: "0.2.0".to_owned(),
         kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb00c".to_owned(),
-        south_runtime: "0.12.0".to_owned(),
+        south_runtime: "0.12.1".to_owned(),
     };
     // Deliberately one hex digit off first: the handshake must refuse …
     assert!(compatibility_matches(&manifest, &expectations).is_err());
