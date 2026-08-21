@@ -66,30 +66,57 @@ fn anthropic_reasoning_history(message: &Message) -> Option<String> {
     (!thinking.is_empty()).then_some(thinking)
 }
 
-fn message_to_openai_for_model(
-    message: &Message,
-    requires_reasoning_content: bool,
-) -> Result<Value, ErrorEnvelope> {
+/// Whether this model wants the provider-private `reasoning_content` field
+/// replayed on assistant turns.
+///
+/// R2 (host-parity slice). The field is not universally accepted: legacy
+/// reasoner-style upstreams **reject** a request carrying it, which is why the
+/// enterprise host gates it per model. Emitting it unconditionally whenever the
+/// IR happens to hold a thinking block sends a field that is known to be
+/// refused.
+///
+/// The gate is `ProviderConfig.models[].supported_parameters`, which is inside
+/// the S0 §6 policy fence — a component may read it, so this needs no new IR
+/// field and no `extensions` smuggling (S0 ruling D5).
+///
+/// Undeclared models keep the previous DeepSeek-prefix heuristic: a host that
+/// ships no catalog (the community host's usual shape) sees no behaviour
+/// change, while a host that declares one gets exact control. Declared wins:
+/// a model listed with no `reasoning_content` parameter is a deliberate "no".
+fn wants_reasoning_content(request: &ChatRequest, config: &ProviderConfig) -> bool {
+    config.models.iter().find(|model| model.model == request.model).map_or_else(
+        || request.model.get(..8).is_some_and(|prefix| prefix.eq_ignore_ascii_case("deepseek")),
+        |model| model.supported_parameters.contains("reasoning_content"),
+    )
+}
+
+/// Renders one canonical message into the `OpenAI` Chat Completions shape.
+///
+/// Infallible since the host-parity slice: the only failure this ever had was
+/// refusing `RedactedThinking`, and that block is now dropped (R3).
+fn message_to_openai_for_model(message: &Message, requires_reasoning_content: bool) -> Value {
     let mut out = Map::new();
     out.insert("role".to_owned(), json!(message.role));
+    // R5 (host-parity slice): the key is always written, `null` when the
+    // canonical content is absent. Omitting it is a third spelling of "empty"
+    // that some compatible providers treat differently from `null`.
+    if message.content.is_none() {
+        out.insert("content".to_owned(), Value::Null);
+    }
     if let Some(content) = &message.content {
         match content {
             Content::Text(text) => {
                 out.insert("content".to_owned(), json!(text));
             }
             Content::Parts(parts) => {
-                let mut text = String::new();
                 let mut reasoning = String::new();
                 let mut multimodal = Vec::new();
-                let mut requires_array = false;
                 for part in parts {
                     match part {
-                        ContentPart::Text { text: part_text } => {
-                            text.push_str(part_text);
-                            multimodal.push(json!({"type": "text", "text": part_text}));
+                        ContentPart::Text { text } => {
+                            multimodal.push(json!({"type": "text", "text": text}));
                         }
                         ContentPart::ImageUrl { image_url } => {
-                            requires_array = true;
                             multimodal.push(json!({
                                 "type": "image_url",
                                 "image_url": image_url
@@ -98,28 +125,40 @@ fn message_to_openai_for_model(
                         ContentPart::Thinking { thinking, .. } => {
                             reasoning.push_str(thinking);
                         }
-                        ContentPart::RedactedThinking { .. } => {
-                            return Err(capability(
-                                "OpenAI-compatible Chat Completions cannot replay redacted reasoning",
-                            ));
-                        }
+                        // R3 (host-parity slice): an encrypted reasoning block
+                        // is dropped, not refused. Refusing turned a request
+                        // the enterprise host serves today into a 400, and a
+                        // migration that only swaps implementations must not
+                        // change which requests succeed. The block carries no
+                        // OpenAI-compatible spelling, so dropping it is the
+                        // same lossy-but-working choice the host already makes.
+                        ContentPart::RedactedThinking { .. } => {}
                         ContentPart::Unknown(value) => {
-                            requires_array = true;
                             multimodal.push(value.clone());
                         }
                     }
                 }
-                out.insert(
-                    "content".to_owned(),
-                    if requires_array {
-                        Value::Array(multimodal)
-                    } else if text.is_empty() {
-                        Value::Null
-                    } else {
-                        json!(text)
-                    },
-                );
-                if !reasoning.is_empty() {
+                // R1 + R5 (host-parity slice): `Content::Parts` always renders
+                // as an array and `Content::Text` always as a string, so the
+                // Text/Parts distinction the IR draws survives the boundary.
+                //
+                // The previous shape collapsed a text-only parts array to a
+                // bare string and an all-thinking parts array to `null`. Both
+                // are lossy: the IR states the difference and this is the
+                // adapter that must not lose it. The enterprise host has
+                // rendered it this way in production all along; this adopts
+                // its behaviour rather than inventing one.
+                //
+                // Consequence worth knowing: an assistant turn whose content
+                // is nothing but thinking blocks now renders `content: []`.
+                // OpenAI documents assistant `content` as string-or-null, so
+                // hosts that previously saw `null` here see an empty array
+                // instead. See the design record's migration note.
+                out.insert("content".to_owned(), Value::Array(multimodal));
+                // R2: same gate as the tool-call placeholder below — a model
+                // that does not declare the field never receives it, however
+                // much thinking the IR carries.
+                if requires_reasoning_content && !reasoning.is_empty() {
                     out.insert("reasoning_content".to_owned(), json!(reasoning));
                 }
             }
@@ -165,14 +204,15 @@ fn message_to_openai_for_model(
     if let Some(name) = &message.name {
         out.insert("name".to_owned(), json!(name));
     }
-    Ok(Value::Object(out))
+    Value::Object(out)
 }
 
-fn body_of(request: &ChatRequest) -> Result<Value, ErrorEnvelope> {
+/// Infallible since the host-parity slice: its only failure came from message
+/// rendering, which no longer has one (R3).
+fn body_of(request: &ChatRequest, config: &ProviderConfig) -> Value {
     let mut body = Map::new();
     body.insert("model".to_owned(), json!(request.model));
-    let requires_reasoning_content =
-        request.model.get(..8).is_some_and(|prefix| prefix.eq_ignore_ascii_case("deepseek"));
+    let requires_reasoning_content = wants_reasoning_content(request, config);
     body.insert(
         "messages".to_owned(),
         Value::Array(
@@ -180,7 +220,7 @@ fn body_of(request: &ChatRequest) -> Result<Value, ErrorEnvelope> {
                 .messages
                 .iter()
                 .map(|message| message_to_openai_for_model(message, requires_reasoning_content))
-                .collect::<Result<Vec<_>, _>>()?,
+                .collect(),
         ),
     );
     if request.stream {
@@ -242,7 +282,7 @@ fn body_of(request: &ChatRequest) -> Result<Value, ErrorEnvelope> {
         };
         body.insert("response_format".to_owned(), format);
     }
-    Ok(Value::Object(body))
+    Value::Object(body)
 }
 
 /// Whether `reasoning_effort` may be sent for the chosen model. Native
@@ -371,16 +411,40 @@ fn events_of_frame(
         }
     };
     if choices.is_some_and(Vec::is_empty) && usage.is_none() {
-        return Err(provider_protocol_error("the upstream SSE event contains no choices"));
+        // S5 (host-parity slice): an event with no choices and no usage is
+        // ignored, not refused.
+        //
+        // Refusing it terminates the whole stream, and this exact shape is not
+        // exotic: Azure OpenAI opens a stream with a `prompt_filter_results`
+        // frame that carries an empty `choices` array — and `azure-openai-v1`
+        // is a dialect this component's own manifest declares. Ordinary
+        // keepalive frames look the same. The enterprise host has always
+        // ignored them.
+        return Ok(events);
     }
     for choice in choices.into_iter().flatten() {
         let index = index_of(&choice["index"]);
         let delta = &choice["delta"];
 
-        if let Some(thinking) = delta["reasoning_content"].as_str() {
+        // S4 (host-parity slice): the ecosystem spells the reasoning delta two
+        // ways — `reasoning_content` (DeepSeek) and a bare `reasoning`
+        // (Qwen, OpenWebUI and others). Reading only the first silently drops
+        // every thinking token from the second family: no error, no event,
+        // the client simply never sees the reasoning. Both are read here.
+        //
+        // S1 (host-parity slice): a zero-length delta carries nothing. OpenAI's
+        // opening frame is `delta:{role:"assistant",content:""}` by convention,
+        // and emitting an event for it makes a northbound renderer open an
+        // empty content block, shifting every block index after it. Suppressed
+        // for text and reasoning alike.
+        let thinking = delta["reasoning_content"]
+            .as_str()
+            .or_else(|| delta["reasoning"].as_str())
+            .filter(|delta| !delta.is_empty());
+        if let Some(thinking) = thinking {
             events.push(StreamEvent::ThinkingDelta { index, thinking_delta: thinking.to_owned() });
         }
-        if let Some(text) = delta["content"].as_str() {
+        if let Some(text) = delta["content"].as_str().filter(|text| !text.is_empty()) {
             events.push(StreamEvent::Delta { index, content: text.to_owned() });
         }
         for call in delta["tool_calls"].as_array().into_iter().flatten() {
@@ -493,7 +557,7 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-openai-compatible".to_owned(),
-            version: "1.0.0".to_owned(),
+            version: "2.0.0".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
@@ -518,7 +582,7 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
         );
         descriptor.headers =
             SafeHeaders::try_new([("content-type", "application/json")]).map_err(internal)?;
-        let mut body = body_of(request)?;
+        let mut body = body_of(request, config);
         // `reasoning_effort` arrives through the extensions passthrough;
         // render it when the chosen model allows it.
         if let Some(effort) = request.extensions.get("reasoning_effort").and_then(Value::as_str)
@@ -585,8 +649,16 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
                     // A reasoning report lifts content into parts form with
                     // the thinking block first; plain responses keep the
                     // bare-string shape.
+                    // P1 (host-parity slice): the non-streaming twin of S4 —
+                    // both reasoning spellings are read. Fixing only the
+                    // streaming side would leave "thinking appears when
+                    // streaming, vanishes when buffered", which is harder to
+                    // diagnose than either failure alone.
                     content: match (
-                        message["reasoning_content"].as_str().filter(|s| !s.is_empty()),
+                        message["reasoning_content"]
+                            .as_str()
+                            .or_else(|| message["reasoning"].as_str())
+                            .filter(|s| !s.is_empty()),
                         message["content"].as_str(),
                     ) {
                         (Some(thinking), text) => Some(Content::Parts({

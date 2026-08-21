@@ -19,7 +19,7 @@ use token_station_protocol::{Auth, SecretRef};
 fn reference_manifest() -> ComponentManifestV1 {
     ComponentManifestV1 {
         name: "provider-openai-compatible".to_owned(),
-        version: "1.0.0".to_owned(),
+        version: "2.0.0".to_owned(),
         api_version: PROVIDER_WORLD.to_owned(),
         providers: vec!["openai-compatible".to_owned(), "azure-openai-v1".to_owned()],
         capabilities: BTreeSet::from([
@@ -43,7 +43,7 @@ fn reference_manifest() -> ComponentManifestV1 {
             kernel_version: "0.2.0".to_owned(),
             kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb09c".to_owned(),
             wit_package: WIT_PACKAGE.to_owned(),
-            south_runtime: "0.10.0".to_owned(),
+            south_runtime: "0.11.0".to_owned(),
         },
     }
 }
@@ -51,6 +51,33 @@ fn reference_manifest() -> ComponentManifestV1 {
 fn shipped_pack() -> FixturePackV1 {
     let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures");
     FixturePackV1::load(&directory).expect("the shipped fixture pack loads")
+}
+
+/// The fixture pack is discovered by scanning the directory, so a case whose
+/// file is renamed, mistyped or lost simply stops existing — the suite still
+/// reports green over whatever remains. That is the wrong failure mode for a
+/// pack whose whole job is to be frozen.
+///
+/// This names the cases the host-parity slice added, each of which pins a
+/// behaviour an adopting host depends on. A pack missing any of them is not
+/// the pack this component was verified against.
+#[test]
+fn the_shipped_pack_still_carries_every_host_parity_case() {
+    let pack = shipped_pack();
+    let present: BTreeSet<&str> = pack.cases().iter().map(|case| case.name.as_str()).collect();
+    for required in [
+        "provider.request.text-parts-array-is-preserved",
+        "provider.request.empty-content-shapes",
+        "provider.request.redacted-thinking-is-dropped",
+        "provider.request.reasoning-content-is-declared",
+        "provider.request.reasoning-content-is-withheld",
+        "provider.stream.empty-deltas-are-suppressed",
+        "provider.stream.bare-reasoning-field",
+        "provider.stream.empty-choices-frame-is-ignored",
+        "provider.response.bare-reasoning-field",
+    ] {
+        assert!(present.contains(required), "the frozen pack lost `{required}`");
+    }
 }
 
 /// Gate ② against the reference implementation: the run that freezes the
@@ -107,7 +134,7 @@ fn the_tuple_handshake_refuses_any_mismatch_in_tuple_order() {
         ir_schema_id: "token-station-protocol@0.3.0/v0.2.0".to_owned(),
         kernel_version: "0.2.0".to_owned(),
         kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb09c".to_owned(),
-        south_runtime: "0.10.0".to_owned(),
+        south_runtime: "0.11.0".to_owned(),
     };
     assert_eq!(compatibility_matches(&manifest, &expectations), Ok(()));
 
@@ -119,7 +146,9 @@ fn the_tuple_handshake_refuses_any_mismatch_in_tuple_order() {
     ));
 
     let mut newer_runtime = expectations;
-    newer_runtime.south_runtime = "0.11.0".to_owned();
+    // Deliberately *not* the manifest's version — this arm proves a mismatch
+    // is refused, so it must stay one step ahead of whatever the release is.
+    newer_runtime.south_runtime = "0.12.0".to_owned();
     assert!(matches!(
         compatibility_matches(&manifest, &newer_runtime),
         Err(CompatibilityMismatchV1::SouthRuntime { .. })
