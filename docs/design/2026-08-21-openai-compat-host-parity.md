@@ -6,6 +6,22 @@
 - Origin: the enterprise host's S5-5a adoption ledger
   (`token-station-doc` `docs/design/2026-08-21-s5a-server-component-adoption.md`)
 - Status: rulings taken 2026-08-21; this is the south half of them
+- Release: south **0.11.0**; the official component package **2.0.0**
+
+## 0. Versioning
+
+South goes `0.10.0 → 0.11.0` and the component package `1.0.0 → 2.0.0`.
+
+The component's **ABI is unchanged** — still `token-station:adapter@2.0.0`,
+world `provider-adapter-v2`. The major bump is about *behaviour*: five of the
+seven changes are strictly more permissive, but **R2 and R5 change what an
+adopting host puts on the wire for inputs it already handles**, and a host that
+upgrades without reading §4 can regress. A major version is the cheapest way to
+make the migration notes unmissable.
+
+The compatibility tuple's `south_runtime` moves with the release, so a host
+still pinned to `0.10.0` is refused at gate ① rather than silently running new
+behaviour against old expectations — which is exactly what that field is for.
 
 ## 1. Why this slice exists
 
