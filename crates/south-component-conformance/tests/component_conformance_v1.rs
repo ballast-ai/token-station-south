@@ -53,6 +53,33 @@ fn shipped_pack() -> FixturePackV1 {
     FixturePackV1::load(&directory).expect("the shipped fixture pack loads")
 }
 
+/// The fixture pack is discovered by scanning the directory, so a case whose
+/// file is renamed, mistyped or lost simply stops existing — the suite still
+/// reports green over whatever remains. That is the wrong failure mode for a
+/// pack whose whole job is to be frozen.
+///
+/// This names the cases the host-parity slice added, each of which pins a
+/// behaviour an adopting host depends on. A pack missing any of them is not
+/// the pack this component was verified against.
+#[test]
+fn the_shipped_pack_still_carries_every_host_parity_case() {
+    let pack = shipped_pack();
+    let present: BTreeSet<&str> = pack.cases().iter().map(|case| case.name.as_str()).collect();
+    for required in [
+        "provider.request.text-parts-array-is-preserved",
+        "provider.request.empty-content-shapes",
+        "provider.request.redacted-thinking-is-dropped",
+        "provider.request.reasoning-content-is-declared",
+        "provider.request.reasoning-content-is-withheld",
+        "provider.stream.empty-deltas-are-suppressed",
+        "provider.stream.bare-reasoning-field",
+        "provider.stream.empty-choices-frame-is-ignored",
+        "provider.response.bare-reasoning-field",
+    ] {
+        assert!(present.contains(required), "the frozen pack lost `{required}`");
+    }
+}
+
 /// Gate ② against the reference implementation: the run that freezes the
 /// fixture table. Every failure is printed so a drift names its case.
 #[test]
