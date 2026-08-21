@@ -33,6 +33,8 @@ the
 [controlled query design](docs/design/2026-08-18-controlled-query-support.md), the
 [controlled user-agent design](docs/design/2026-08-20-controlled-user-agent.md), the
 [host prelude design](docs/design/2026-08-20-host-prelude.md), the
+[host-signed request finalizer design](docs/design/2026-08-20-host-signed-request-finalizer.md)
+(designed, not yet shipped), the
 [canonical IR inventory](docs/design/2026-08-21-canonical-ir-inventory.md), the
 [provider-api promotion](docs/design/2026-08-21-provider-api-promotion.md), the
 [component conformance gates](docs/design/2026-08-21-component-conformance.md), the
