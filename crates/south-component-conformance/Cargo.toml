@@ -29,5 +29,9 @@ south-contracts = { path = "../south-contracts", version = "0.11.0" }
 name = "sandbox_parity_v1"
 required-features = ["sandbox"]
 
+[[test]]
+name = "anthropic_sandbox_parity_v1"
+required-features = ["sandbox"]
+
 [lints]
 workspace = true

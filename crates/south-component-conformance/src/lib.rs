@@ -33,6 +33,7 @@ pub mod abi;
 mod component;
 mod fixture;
 pub mod reference;
+pub mod reference_anthropic;
 mod report;
 #[cfg(feature = "sandbox")]
 pub mod sandbox;
