@@ -103,13 +103,23 @@ fn part_to_block(part: &ContentPart) -> Value {
     }
 }
 
-fn content_to_blocks(content: Option<&Content>) -> Value {
+/// `None` when the turn carried no content at all, so the caller can omit the
+/// field rather than invent one.
+///
+/// Messages requires `content` on every message, so a turn without it is a
+/// request the upstream refuses either way. Sending `""` would make the
+/// component the author of content the caller never wrote, and would report
+/// the refusal against a body that is not the one the caller composed.
+/// Omitting keeps the request the caller's.
+fn content_to_blocks(content: Option<&Content>) -> Option<Value> {
     match content {
         // Messages accepts a bare string as well as a block array, and a bare
         // string is what a plain turn should stay.
-        Some(Content::Text(text)) => json!(text),
-        Some(Content::Parts(parts)) => Value::Array(parts.iter().map(part_to_block).collect()),
-        None => json!(""),
+        Some(Content::Text(text)) => Some(json!(text)),
+        Some(Content::Parts(parts)) => {
+            Some(Value::Array(parts.iter().map(part_to_block).collect()))
+        }
+        None => None,
     }
 }
 
@@ -138,10 +148,14 @@ fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<&str>, Vec<V
     for message in &request.messages {
         match message.role {
             Role::System => system.extend(system_text_of(message.content.as_ref())),
-            Role::User => messages.push(json!({
-                "role": "user",
-                "content": content_to_blocks(message.content.as_ref()),
-            })),
+            Role::User => {
+                let mut turn = Map::new();
+                turn.insert("role".to_owned(), json!("user"));
+                if let Some(content) = content_to_blocks(message.content.as_ref()) {
+                    turn.insert("content".to_owned(), content);
+                }
+                messages.push(Value::Object(turn));
+            }
             Role::Assistant => {
                 let mut blocks: Vec<Value> = match message.content.as_ref() {
                     // A bare string becomes the one text block it stands for;
@@ -485,7 +499,7 @@ impl ProviderComponentV1 for AnthropicReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-anthropic".to_owned(),
-            version: "1.0.0".to_owned(),
+            version: "1.0.1".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
