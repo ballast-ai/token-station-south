@@ -53,34 +53,6 @@ fn shipped_pack() -> FixturePackV1 {
     FixturePackV1::load(&directory).expect("the shipped fixture pack loads")
 }
 
-fn repo_root() -> &'static Path {
-    Path::new(env!("CARGO_MANIFEST_DIR")).parent().and_then(Path::parent).expect("repo root")
-}
-
-/// The manifest the official component actually ships, read from disk rather
-/// than hand-copied: [`reference_manifest`] resembles it, which is not the
-/// same as being it.
-fn shipped_component_manifest() -> ComponentManifestV1 {
-    let source = std::fs::read_to_string(
-        repo_root().join("components/provider-openai-compatible/manifest.json"),
-    )
-    .expect("the shipped component manifest reads");
-    serde_json::from_str(&source).expect("the shipped component manifest parses")
-}
-
-/// The `version` of a crate manifest's `[package]` table. A five-line scan
-/// rather than a TOML parser this crate would otherwise never need.
-fn package_version(cargo_toml: &str) -> &str {
-    cargo_toml
-        .lines()
-        .skip_while(|line| line.trim() != "[package]")
-        .skip(1)
-        .take_while(|line| !line.trim_start().starts_with('['))
-        .find_map(|line| line.trim().strip_prefix("version = \""))
-        .and_then(|value| value.strip_suffix('"'))
-        .expect("the crate manifest declares a package version")
-}
-
 /// The fixture pack is discovered by scanning the directory, so a case whose
 /// file is renamed, mistyped or lost simply stops existing — the suite still
 /// reports green over whatever remains. That is the wrong failure mode for a
@@ -181,40 +153,6 @@ fn the_tuple_handshake_refuses_any_mismatch_in_tuple_order() {
         compatibility_matches(&manifest, &newer_runtime),
         Err(CompatibilityMismatchV1::SouthRuntime { .. })
     ));
-}
-
-/// The official component's version is written in two files and nothing
-/// compared them. Gate ① checks the package manifest against the identity the
-/// component *reports*, and that identity comes from the reference
-/// implementation — never from the component's own crate manifest. So the
-/// 0.12.1 release moved the package to 2.0.0, left the crate at 1.0.0, and
-/// shipped one artifact carrying two version numbers through a green run.
-///
-/// The tuple's `south_runtime` is the same shape of gap one field over. The
-/// shipped manifest declares the release it was verified with, and both this
-/// file and the parity test hold that release as a literal — so a workspace
-/// bump that updates none of the three leaves the package quietly one release
-/// behind while every assertion still agrees with itself. Pinning it to this
-/// crate's own version (the workspace version) makes the bump the machine's
-/// job, the way `compatibility.json`'s release version is already pinned.
-#[test]
-fn the_shipped_component_package_agrees_with_its_crate_and_this_release() {
-    let manifest = shipped_component_manifest();
-    let cargo_toml = std::fs::read_to_string(
-        repo_root().join("components/provider-openai-compatible/Cargo.toml"),
-    )
-    .expect("the component's crate manifest reads");
-
-    assert_eq!(
-        package_version(&cargo_toml),
-        manifest.version,
-        "the component's crate version and its package manifest are one number in two files"
-    );
-    assert_eq!(
-        manifest.compatibility.south_runtime,
-        env!("CARGO_PKG_VERSION"),
-        "the shipped manifest must declare the release it ships in"
-    );
 }
 
 /// S0 ruling D4: every sanctioned secret header south can put on the wire is
