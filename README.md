@@ -41,7 +41,8 @@ the
 [provider runtime](docs/design/2026-08-21-provider-runtime.md), the
 [OpenAI-compatible host parity](docs/design/2026-08-21-openai-compat-host-parity.md), and the
 [Anthropic provider component](docs/design/2026-08-22-anthropic-provider-component.md), and the
-[Gemini provider component](docs/design/2026-08-22-gemini-provider-component.md).
+[Gemini provider component](docs/design/2026-08-22-gemini-provider-component.md), and the
+[renderer refusal for unmappable blocks](docs/design/2026-08-23-renderer-refusal-for-unmappable-blocks.md).
 
 ## Implemented library slice
 

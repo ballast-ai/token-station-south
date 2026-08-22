@@ -12,12 +12,12 @@ version.workspace = true
 bytes.workspace = true
 http.workspace = true
 reqwest.workspace = true
-south-contracts = { path = "../south-contracts", version = "0.14.0" }
-south-core = { path = "../south-core", version = "0.14.0" }
+south-contracts = { path = "../south-contracts", version = "0.15.0" }
+south-core = { path = "../south-core", version = "0.15.0" }
 zeroize.workspace = true
 
 [dev-dependencies]
-south-testkit = { path = "../south-testkit", version = "0.14.0" }
+south-testkit = { path = "../south-testkit", version = "0.15.0" }
 tokio = { workspace = true, features = ["io-util", "macros", "net", "rt", "sync", "test-util", "time"] }
 tokio-util = { workspace = true, features = ["rt"] }
 

@@ -19,7 +19,7 @@ use token_station_protocol::{Auth, SecretRef};
 fn reference_manifest() -> ComponentManifestV1 {
     ComponentManifestV1 {
         name: "provider-openai-compatible".to_owned(),
-        version: "2.0.0".to_owned(),
+        version: "2.1.0".to_owned(),
         api_version: PROVIDER_WORLD.to_owned(),
         providers: vec!["openai-compatible".to_owned(), "azure-openai-v1".to_owned()],
         capabilities: BTreeSet::from([
@@ -43,7 +43,7 @@ fn reference_manifest() -> ComponentManifestV1 {
             kernel_version: "0.2.0".to_owned(),
             kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb09c".to_owned(),
             wit_package: WIT_PACKAGE.to_owned(),
-            south_runtime: "0.14.0".to_owned(),
+            south_runtime: "0.15.0".to_owned(),
         },
     }
 }
@@ -134,7 +134,7 @@ fn the_tuple_handshake_refuses_any_mismatch_in_tuple_order() {
         ir_schema_id: "token-station-protocol@0.3.0/v0.2.0".to_owned(),
         kernel_version: "0.2.0".to_owned(),
         kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb09c".to_owned(),
-        south_runtime: "0.14.0".to_owned(),
+        south_runtime: "0.15.0".to_owned(),
     };
     assert_eq!(compatibility_matches(&manifest, &expectations), Ok(()));
 
