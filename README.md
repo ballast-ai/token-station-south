@@ -38,8 +38,9 @@ the
 [canonical IR inventory](docs/design/2026-08-21-canonical-ir-inventory.md), the
 [provider-api promotion](docs/design/2026-08-21-provider-api-promotion.md), the
 [component conformance gates](docs/design/2026-08-21-component-conformance.md), the
-[provider runtime](docs/design/2026-08-21-provider-runtime.md), and the
-[OpenAI-compatible host parity](docs/design/2026-08-21-openai-compat-host-parity.md).
+[provider runtime](docs/design/2026-08-21-provider-runtime.md), the
+[OpenAI-compatible host parity](docs/design/2026-08-21-openai-compat-host-parity.md), and the
+[Anthropic provider component](docs/design/2026-08-22-anthropic-provider-component.md).
 
 ## Implemented library slice
 
@@ -70,17 +71,23 @@ the
   `south.provider-component.v1` behavior suite (fixture-pinned translation, determinism,
   byte-level stream incrementality, endpoint confinement, error-catalog discipline),
   judged against a typed component seam and shipped with the native reference
-  implementation of `provider-openai-compatible`. It is this repository's one sanctioned
-  typed consumer of the Canonical IR, taken at a fixed kernel revision.
+  implementations of `provider-openai-compatible` and `provider-anthropic`, each with its
+  own frozen fixture pack — sharing one pack would freeze whichever dialect was written
+  first. It is this repository's one sanctioned typed consumer of the Canonical IR, taken
+  at a fixed kernel revision.
 
 - `south-provider-runtime` executes provider components inside a wasmtime sandbox:
   gated loading (manifest, forbidden-import scan, reported identity), locked-down WASI
   (no preopens, no environment, no sockets/http by refusal), per-store memory limits,
   epoch call deadlines, boundary payload ceilings, one instance per stream — with a
   deliberately JSON-only API face, so the runtime never consumes the Canonical IR. The
-  conformance crate's `sandbox` feature provides the typed seam over it, and
-  `components/provider-openai-compatible` packages the reference implementation as the
-  first official `wasm32-wasip2` component (`scripts/build-reference-component.sh`).
+  conformance crate's `sandbox` feature provides the typed seam over it, and `components/`
+  packages each native reference as an official `wasm32-wasip2` component:
+  `provider-openai-compatible` (`scripts/build-reference-component.sh`) covers the
+  OpenAI-compatible and Azure dialects, `provider-anthropic`
+  (`scripts/build-anthropic-component.sh`) covers Anthropic Messages. A component and its
+  native reference are the same code, so sandbox parity is a property of construction that
+  the parity tests then prove end to end.
 
 The slice does not include a
 synchronous transport, retries, fallback, routing, persistence, database access, or host adapters.

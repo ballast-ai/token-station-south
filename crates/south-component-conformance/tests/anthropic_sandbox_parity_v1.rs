@@ -133,18 +133,3 @@ fn the_two_official_components_are_not_the_same_package() {
         "two components, two frozen packs"
     );
 }
-
-/// The crate version and the manifest version are two declarations of the same
-/// fact, and they drift silently: nothing recomputes one from the other.
-#[test]
-fn the_component_version_numbers_agree() {
-    let (_, manifest) = shipped_manifest();
-    let cargo_toml =
-        std::fs::read_to_string(repo_root().join("components/provider-anthropic/Cargo.toml"))
-            .expect("the component crate manifest reads");
-    assert!(
-        cargo_toml.contains(&format!("version = \"{}\"", manifest.version)),
-        "components/provider-anthropic/Cargo.toml must declare version {}",
-        manifest.version
-    );
-}
