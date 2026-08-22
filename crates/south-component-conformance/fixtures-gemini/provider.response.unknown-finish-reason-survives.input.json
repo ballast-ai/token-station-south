@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"x\"}]}, \"finishReason\": \"RECITATION\"}], \"modelVersion\": \"m\", \"usageMetadata\": {\"promptTokenCount\": 1, \"candidatesTokenCount\": 1}}"
+}

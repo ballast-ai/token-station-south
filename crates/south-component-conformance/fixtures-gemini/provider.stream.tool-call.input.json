@@ -1,0 +1,5 @@
+{
+  "chunks": [
+    "data: {\"candidates\": [{\"content\": {\"parts\": [{\"functionCall\": {\"name\": \"get_weather\", \"args\": {\"city\": \"SF\"}}}]}, \"finishReason\": \"STOP\"}], \"usageMetadata\": {\"promptTokenCount\": 5, \"candidatesTokenCount\": 3}}\n\n"
+  ]
+}

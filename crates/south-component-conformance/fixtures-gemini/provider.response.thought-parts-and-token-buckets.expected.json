@@ -1,0 +1,30 @@
+{
+  "id": "",
+  "model": "gemini-2.5-pro",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "let me reconsider"
+          },
+          {
+            "type": "text",
+            "text": "42"
+          }
+        ]
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "input_tokens": 100,
+    "output_tokens": 5,
+    "cache_read_tokens": 80,
+    "cache_write_tokens": 0,
+    "reasoning_tokens": 40
+  }
+}

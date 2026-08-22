@@ -1,0 +1,35 @@
+{
+  "method": "POST",
+  "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "auth": {
+    "scheme": "header",
+    "name": "x-goog-api-key",
+    "secret": "provider_api_key"
+  },
+  "body": {
+    "contents": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Weather in Beijing?"
+          }
+        ]
+      }
+    ],
+    "systemInstruction": {
+      "parts": [
+        {
+          "text": "Be terse."
+        }
+      ]
+    },
+    "generationConfig": {
+      "temperature": 0.2,
+      "maxOutputTokens": 512
+    }
+  }
+}

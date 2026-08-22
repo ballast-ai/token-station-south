@@ -1,0 +1,24 @@
+{
+  "method": "POST",
+  "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:streamGenerateContent?alt=sse",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "auth": {
+    "scheme": "header",
+    "name": "x-goog-api-key",
+    "secret": "provider_api_key"
+  },
+  "body": {
+    "contents": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "text": "hi"
+          }
+        ]
+      }
+    ]
+  }
+}

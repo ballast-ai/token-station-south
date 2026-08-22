@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"checking\"}, {\"functionCall\": {\"name\": \"get_weather\", \"args\": {\"city\": \"SF\"}}}]}, \"finishReason\": \"STOP\"}], \"modelVersion\": \"gemini-2.5-pro\", \"usageMetadata\": {\"promptTokenCount\": 20, \"candidatesTokenCount\": 8}}"
+}
