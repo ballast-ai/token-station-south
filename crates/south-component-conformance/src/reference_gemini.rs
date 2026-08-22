@@ -65,14 +65,27 @@ fn tool_call_names(request: &ChatRequest) -> std::collections::HashMap<&str, &st
         .collect()
 }
 
-fn part_to_gemini(part: &ContentPart) -> Value {
-    match part {
+/// Gemini `parts` have no `type` discriminator at all, so an unmodelled part
+/// from any other wire has no spelling here — not even a lossy one. It is
+/// refused by name rather than pushed into `parts`, where the upstream would
+/// reject the request for an unknown field or silently read an empty part.
+/// (Renderer refusal, 0.15.0; see the design record.)
+fn unmappable_part(value: &Value) -> ErrorEnvelope {
+    let kind = value.get("type").and_then(Value::as_str).unwrap_or("<untyped>");
+    capability(format!(
+        "content block `{kind}` has no Gemini `parts` rendering; route the request to a \
+         provider that speaks its wire"
+    ))
+}
+
+fn part_to_gemini(part: &ContentPart) -> ComponentResultV1<Value> {
+    Ok(match part {
         ContentPart::Text { text } => json!({"text": text}),
         ContentPart::ImageUrl { image_url } => {
             if let Some(rest) = image_url.url.strip_prefix("data:")
                 && let Some((mime, data)) = rest.split_once(";base64,")
             {
-                return json!({"inline_data": {"mime_type": mime, "data": data}});
+                return Ok(json!({"inline_data": {"mime_type": mime, "data": data}}));
             }
             // A remote image is a URI reference. The mime type is not knowable
             // from the URL, and guessing one is worse than letting the upstream
@@ -83,19 +96,21 @@ fn part_to_gemini(part: &ContentPart) -> Value {
         // Gemini marks reasoning with a flag on an ordinary text part.
         ContentPart::Thinking { thinking, .. } => json!({"text": thinking, "thought": true}),
         ContentPart::RedactedThinking { data } => json!({"thoughtSignature": data}),
-        ContentPart::Unknown(value) => value.clone(),
-    }
+        ContentPart::Unknown(value) => return Err(unmappable_part(value)),
+    })
 }
 
 /// The parts a turn contributes. Empty when the turn carried no content — the
 /// caller drops such a turn rather than sending an empty `parts`, which the
 /// upstream rejects.
-fn content_to_parts(content: Option<&Content>) -> Vec<Value> {
-    match content {
+fn content_to_parts(content: Option<&Content>) -> ComponentResultV1<Vec<Value>> {
+    Ok(match content {
         Some(Content::Text(text)) => vec![json!({"text": text})],
-        Some(Content::Parts(parts)) => parts.iter().map(part_to_gemini).collect(),
+        Some(Content::Parts(parts)) => {
+            parts.iter().map(part_to_gemini).collect::<ComponentResultV1<Vec<Value>>>()?
+        }
         None => Vec::new(),
-    }
+    })
 }
 
 fn system_text_of(content: Option<&Content>) -> Vec<&str> {
@@ -124,7 +139,7 @@ fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<&str>, Vec<V
         match message.role {
             Role::System => system.extend(system_text_of(message.content.as_ref())),
             Role::User | Role::Assistant => {
-                let mut parts = content_to_parts(message.content.as_ref());
+                let mut parts = content_to_parts(message.content.as_ref())?;
                 for call in &message.tool_calls {
                     if call.name.is_empty() {
                         return Err(capability(
@@ -430,7 +445,7 @@ impl ProviderComponentV1 for GeminiReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-gemini".to_owned(),
-            version: "1.0.0".to_owned(),
+            version: "1.1.0".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }

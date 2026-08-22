@@ -10,7 +10,7 @@ version.workspace = true
 
 [dependencies]
 http.workspace = true
-south-contracts = { path = "../south-contracts", version = "0.14.0" }
+south-contracts = { path = "../south-contracts", version = "0.15.0" }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["macros", "time"] }
 tokio-util = { workspace = true, features = ["rt"] }

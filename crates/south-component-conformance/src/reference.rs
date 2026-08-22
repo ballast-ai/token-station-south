@@ -90,11 +90,40 @@ fn wants_reasoning_content(request: &ChatRequest, config: &ProviderConfig) -> bo
     )
 }
 
+/// Content-part `type`s this renderer forwards verbatim when the IR does not
+/// model them. They are Chat Completions' own vocabulary, so the upstream can
+/// read them; the IR merely has no typed field for them yet.
+const OPENAI_NATIVE_UNKNOWN_PART_TYPES: &[&str] = &["input_audio", "file"];
+
+/// The refusal for a part this wire cannot spell (renderer refusal, 0.15.0).
+///
+/// An unmodelled part that is not Chat Completions vocabulary — an Anthropic
+/// server-tool block, a `document`, a `search_result`, a part invented by
+/// another wire — used to be pushed into the `content` array as-is. The
+/// upstream then either rejected the whole request with its own 400 or, worse,
+/// read the block as nothing and answered as if the content had never been
+/// there. The IR's contract is "never drop"; this renderer's half of it is
+/// "never smuggle": a block it cannot express is refused by name so the host
+/// can route the request to a provider that speaks that wire. This is the
+/// opposite choice from R3 on purpose — `redacted_thinking` is side metadata
+/// whose loss leaves the answer intact, whereas these blocks *are* the content
+/// the answer depends on.
+fn unmappable_part(wire: &str, value: &Value) -> ErrorEnvelope {
+    let kind = value.get("type").and_then(Value::as_str).unwrap_or("<untyped>");
+    capability(format!(
+        "content block `{kind}` has no {wire} rendering; route the request to a provider \
+         that speaks its wire"
+    ))
+}
+
 /// Renders one canonical message into the `OpenAI` Chat Completions shape.
 ///
-/// Infallible since the host-parity slice: the only failure this ever had was
-/// refusing `RedactedThinking`, and that block is now dropped (R3).
-fn message_to_openai_for_model(message: &Message, requires_reasoning_content: bool) -> Value {
+/// Fails only for a content part this wire cannot spell; see
+/// [`unmappable_part`]. Everything else renders.
+fn message_to_openai_for_model(
+    message: &Message,
+    requires_reasoning_content: bool,
+) -> ComponentResultV1<Value> {
     let mut out = Map::new();
     out.insert("role".to_owned(), json!(message.role));
     // R5 (host-parity slice): the key is always written, `null` when the
@@ -134,6 +163,13 @@ fn message_to_openai_for_model(message: &Message, requires_reasoning_content: bo
                         // same lossy-but-working choice the host already makes.
                         ContentPart::RedactedThinking { .. } => {}
                         ContentPart::Unknown(value) => {
+                            let native =
+                                value.get("type").and_then(Value::as_str).is_some_and(|kind| {
+                                    OPENAI_NATIVE_UNKNOWN_PART_TYPES.contains(&kind)
+                                });
+                            if !native {
+                                return Err(unmappable_part("OpenAI Chat Completions", value));
+                            }
                             multimodal.push(value.clone());
                         }
                     }
@@ -204,25 +240,20 @@ fn message_to_openai_for_model(message: &Message, requires_reasoning_content: bo
     if let Some(name) = &message.name {
         out.insert("name".to_owned(), json!(name));
     }
-    Value::Object(out)
+    Ok(Value::Object(out))
 }
 
-/// Infallible since the host-parity slice: its only failure came from message
-/// rendering, which no longer has one (R3).
-fn body_of(request: &ChatRequest, config: &ProviderConfig) -> Value {
+/// Fails only through message rendering, for a part this wire cannot spell.
+fn body_of(request: &ChatRequest, config: &ProviderConfig) -> ComponentResultV1<Value> {
     let mut body = Map::new();
     body.insert("model".to_owned(), json!(request.model));
     let requires_reasoning_content = wants_reasoning_content(request, config);
-    body.insert(
-        "messages".to_owned(),
-        Value::Array(
-            request
-                .messages
-                .iter()
-                .map(|message| message_to_openai_for_model(message, requires_reasoning_content))
-                .collect(),
-        ),
-    );
+    let messages = request
+        .messages
+        .iter()
+        .map(|message| message_to_openai_for_model(message, requires_reasoning_content))
+        .collect::<ComponentResultV1<Vec<Value>>>()?;
+    body.insert("messages".to_owned(), Value::Array(messages));
     if request.stream {
         body.insert("stream".to_owned(), json!(true));
         body.insert("stream_options".to_owned(), json!({"include_usage": true}));
@@ -282,7 +313,7 @@ fn body_of(request: &ChatRequest, config: &ProviderConfig) -> Value {
         };
         body.insert("response_format".to_owned(), format);
     }
-    Value::Object(body)
+    Ok(Value::Object(body))
 }
 
 /// Whether `reasoning_effort` may be sent for the chosen model. Native
@@ -557,7 +588,7 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-openai-compatible".to_owned(),
-            version: "2.0.0".to_owned(),
+            version: "2.1.0".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
@@ -582,7 +613,7 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
         );
         descriptor.headers =
             SafeHeaders::try_new([("content-type", "application/json")]).map_err(internal)?;
-        let mut body = body_of(request, config);
+        let mut body = body_of(request, config)?;
         // `reasoning_effort` arrives through the extensions passthrough;
         // render it when the chosen model allows it.
         if let Some(effort) = request.extensions.get("reasoning_effort").and_then(Value::as_str)
