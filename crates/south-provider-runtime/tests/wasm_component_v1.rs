@@ -53,7 +53,7 @@ fn manifest_json(version: &str) -> String {
             "kernel_version": "0.2.0",
             "kernel_revision": "72458e3a11fe157f9ac04818c44b62a3dd2cb09c",
             "wit_package": "token-station:adapter@2.0.0",
-            "south_runtime": "0.13.0",
+            "south_runtime": "0.14.0",
         },
     })
     .to_string()

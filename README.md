@@ -34,7 +34,7 @@ the
 [controlled user-agent design](docs/design/2026-08-20-controlled-user-agent.md), the
 [host prelude design](docs/design/2026-08-20-host-prelude.md), the
 [host-signed request finalizer design](docs/design/2026-08-20-host-signed-request-finalizer.md)
-(designed, not yet shipped), the
+(shipped in 0.14.0; see its §8 for the one half deliberately left), the
 [canonical IR inventory](docs/design/2026-08-21-canonical-ir-inventory.md), the
 [provider-api promotion](docs/design/2026-08-21-provider-api-promotion.md), the
 [component conformance gates](docs/design/2026-08-21-component-conformance.md), the
@@ -55,8 +55,10 @@ the
   that names the failing field, zero-side-effect one-shot wrappers, and the pre-resolved and
   size-bounding credential resolver adapters both hosts previously hand-rolled.
 - `south-transport-reqwest` executes hardened buffered and byte-streaming JSON POST requests,
-  applies the request's sanctioned user-agent declaration exactly once, captures only the nine
-  bounded quota metadata fields, and keeps redirects, retries, compression, cookies, referer
+  applies the request's sanctioned user-agent declaration exactly once, applies every auth header
+  the prepared request carries (one for the credential arms, the finalizer's diffed set for the
+  host-signed arm), adds exactly `TRANSPORT_ADDED_HEADERS_V1` and nothing else, captures only the
+  nine bounded quota metadata fields, and keeps redirects, retries, compression, cookies, referer
   propagation, and implicit system proxies disabled. `TransportPairV1` builds the buffered and
   streaming transports from one timeout configuration.
 - `south-provider-conformance` publishes immutable `south.provider-call.v1`,

@@ -389,8 +389,29 @@ fn request_body(owner: Arc<str>) -> Bytes {
     Bytes::from_owner(JsonBodyOwner(owner))
 }
 
+/// Every header name this transport puts on the wire that the request did not declare.
+///
+/// The host-signed arm makes this list load-bearing: a finalizer signs the request it was shown,
+/// so anything the transport adds afterwards is a byte outside the signature. Two of the three
+/// are pure functions of what the finalizer *did* see — `host` of the URL, `content-length` of
+/// the body — which is why a finalizer may legally include `host` in its signed-headers list.
+///
+/// `accept` is the third, and it was not in the design record's promise: it arrived as a
+/// `reqwest` client default, invisible until the host-signed wire fixture counted the headers on
+/// a real socket. It is set explicitly here rather than left to the client so it is South's
+/// constant and not a dependency's, and it is listed here so a signer can account for it. A
+/// scheme that must sign the *complete* header set — rather than a chosen subset, as `SigV4`
+/// does — needs this name in its calculation.
+///
+/// Adding a name to this list is a contract change. The wire fixture compares against it exactly,
+/// so a fourth header cannot arrive quietly.
+pub const TRANSPORT_ADDED_HEADERS_V1: [&str; 3] = ["accept", "content-length", "host"];
+
 fn assemble_headers(request: &PreparedHttpRequestV1<'_>) -> Result<HeaderMap, TransportErrorV1> {
-    let mut headers = HeaderMap::with_capacity(request.headers().len() + 2);
+    let mut headers = HeaderMap::with_capacity(request.headers().len() + 3);
+
+    // Explicit, not the client default: see `TRANSPORT_ADDED_HEADERS_V1`.
+    headers.insert(header::ACCEPT, HeaderValue::from_static("*/*"));
     for (name, value) in request.headers().iter() {
         let name =
             HeaderName::from_bytes(name.as_bytes()).map_err(|_| TransportErrorV1::RequestFailed)?;
@@ -409,13 +430,19 @@ fn assemble_headers(request: &PreparedHttpRequestV1<'_>) -> Result<HeaderMap, Tr
         headers.insert(HeaderName::from_static("user-agent"), value);
     }
 
-    // The prepared request carries exactly one auth header: `authorization` with its `Bearer `
-    // prefix, or one sanctioned secret header with the verbatim secret. Injecting only that pair
-    // keeps `Authorization` off the wire for header-secret exchanges.
-    let (auth_name, auth_value) = request.auth_header();
-    let auth_name = HeaderName::from_bytes(auth_name.as_bytes())
-        .map_err(|_| TransportErrorV1::RequestFailed)?;
-    headers.insert(auth_name, auth_header_value(auth_value)?);
+    // The two credential arms carry exactly one auth header: `authorization` with its `Bearer `
+    // prefix, or one sanctioned secret header with the verbatim secret. The host-signed arm
+    // carries the finalizer's diffed set — one to four. Injecting only what the prepared request
+    // hands over keeps `Authorization` off the wire for header-secret exchanges, and keeps a
+    // signature's headers exactly as the signer emitted them.
+    //
+    // Every value is marked sensitive. A signature is not a credential, but it is derived from
+    // one and it is the thing a log-scraping attacker would replay.
+    for (auth_name, auth_value) in request.auth_headers() {
+        let auth_name = HeaderName::from_bytes(auth_name.as_bytes())
+            .map_err(|_| TransportErrorV1::RequestFailed)?;
+        headers.insert(auth_name, auth_header_value(auth_value)?);
+    }
     Ok(headers)
 }
 
