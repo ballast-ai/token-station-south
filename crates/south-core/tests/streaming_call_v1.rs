@@ -206,7 +206,10 @@ impl ScriptedTransport {
 impl AsyncStreamingTransport for ScriptedTransport {
     fn open<'a>(&'a self, request: &'a PreparedHttpRequestV1<'_>) -> StreamingOpenFutureV1<'a> {
         self.calls.fetch_add(1, Ordering::SeqCst);
-        let (auth_name, auth_value) = request.auth_header();
+        let (auth_name, auth_value) = request
+            .auth_headers()
+            .next()
+            .expect("both credential arms bind exactly one auth header");
         *self.observed_auth.lock().expect("test auth lock should be available") =
             Some((auth_name.to_owned(), auth_value.to_vec()));
         let source = ScriptedSource {

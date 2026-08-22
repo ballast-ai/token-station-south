@@ -48,10 +48,15 @@ macro_rules! fixed_debug {
 mod controlled_query;
 mod controlled_user_agent;
 mod header_auth;
+mod host_signed;
 mod quota;
 mod raw;
 mod stream;
 
+pub use host_signed::{
+    DeterministicRequestFinalizerV1, FAKE_SIGNING_KEY_V1, FinalizerBehaviorV1,
+    HangingRequestFinalizerV1, ObservedFinalizeViewV1, expected_signature_v1,
+};
 pub use raw::RawProviderCallBuilderV1;
 
 pub use controlled_query::{

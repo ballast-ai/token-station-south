@@ -1,14 +1,14 @@
 {
   "schema_version": 3,
   "release": {
-    "version": "0.13.0",
+    "version": "0.14.0",
     "stability": "library_slice"
   },
   "contracts": {
     "reserved_header_policy": 1,
     "http": 3,
-    "auth": 2,
-    "error": 1,
+    "auth": 3,
+    "error": 2,
     "stream": 1,
     "provider_quota_metadata": 1,
     "canonical_ir": null,

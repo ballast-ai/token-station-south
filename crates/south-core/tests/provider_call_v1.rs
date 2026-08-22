@@ -187,7 +187,10 @@ impl AsyncHttpTransport for RecordingTransport {
         remaining_timeout: Duration,
     ) -> TransportFuture<'a> {
         self.calls.fetch_add(1, Ordering::SeqCst);
-        let (auth_header_name, auth_header_value) = prepared.auth_header();
+        let (auth_header_name, auth_header_value) = prepared
+            .auth_headers()
+            .next()
+            .expect("both credential arms bind exactly one auth header");
         let observation = Observation {
             method: prepared.method().clone(),
             url: prepared.url().clone(),

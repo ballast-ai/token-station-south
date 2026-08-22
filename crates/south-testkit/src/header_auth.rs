@@ -708,11 +708,14 @@ struct WireRecordingTransport<'fixture> {
 
 impl WireRecordingTransport<'_> {
     fn record_wire_shape(&self, request: &PreparedHttpRequestV1<'_>) {
-        let (auth_name, auth_value) = request.auth_header();
-        let sanctioned_header_exact = auth_name == self.expected_header.header_name()
-            && auth_value == FAKE_HEADER_SECRET_V1.as_bytes();
-        let authorization_header_absent =
-            auth_name != "authorization" && request.headers().get("authorization").is_none();
+        // The header-secret arm binds exactly one auth header. Assert that here rather than
+        // unwrapping: this crate denies `expect` outside tests, and "the arm bound no header"
+        // is a shape this probe should report as a failed wire shape, not a panic.
+        let bound: Vec<(&str, &[u8])> = request.auth_headers().collect();
+        let sanctioned_header_exact =
+            bound == [(self.expected_header.header_name(), FAKE_HEADER_SECRET_V1.as_bytes())];
+        let authorization_header_absent = bound.iter().all(|(name, _)| *name != "authorization")
+            && request.headers().get("authorization").is_none();
         self.wire_shape.sanctioned_header_exact.store(sanctioned_header_exact, Ordering::SeqCst);
         self.wire_shape
             .authorization_header_absent

@@ -6,7 +6,8 @@ use south_contracts::{
     MAX_JSON_REQUEST_BODY_BYTES, MAX_RELATIVE_PATH_BYTES, MAX_RESPONSE_BODY_BYTES,
     MAX_RESPONSE_CONTENT_TYPE_BYTES, MAX_RESPONSE_RETRY_AFTER_BYTES, MAX_USER_AGENT_BYTES,
     PreparationErrorV1, ProviderAuthV1, ProviderEndpointV1, QueryParameterV1, QueryStringV1,
-    RelativePathV1, STREAM_CONTRACT_VERSION, SafeHeaders, SecretHeaderV1, TransportErrorV1,
+    RelativePathV1, STREAM_CONTRACT_VERSION, SafeHeaders, SecretHeaderV1, SignedHeaderSetErrorV1,
+    SignedHeaderSetV1, SignedHeaderV1, TransportErrorV1,
 };
 
 const SENTINEL: &str = "must-not-appear-7f23a";
@@ -48,8 +49,8 @@ fn secret_header_all_covers_every_variant() {
 #[test]
 fn contract_versions_are_independently_versioned() {
     assert_eq!(HTTP_CONTRACT_VERSION, 3);
-    assert_eq!(AUTH_CONTRACT_VERSION, 2);
-    assert_eq!(ERROR_CONTRACT_VERSION, 1);
+    assert_eq!(AUTH_CONTRACT_VERSION, 3);
+    assert_eq!(ERROR_CONTRACT_VERSION, 2);
     assert_eq!(STREAM_CONTRACT_VERSION, Some(1));
 }
 
@@ -870,4 +871,99 @@ fn user_agent_debug_never_reveals_the_value() {
     for output in [format!("{user_agent:?}"), format!("{request:?}")] {
         assert!(!output.contains("must-not-appear"), "debug output leaked the value: {output}");
     }
+}
+
+/// Every permitted signed header in canonical table order. Exhaustive on purpose: adding a
+/// `SignedHeaderV1` variant fails compilation here until the list, the reserved-header pin, and
+/// the host-signed conformance surface are updated together.
+const ALL_SIGNED_HEADERS: [SignedHeaderV1; 4] = SignedHeaderV1::ALL;
+
+const fn assert_signed_header_listed(header: SignedHeaderV1) {
+    match header {
+        SignedHeaderV1::Authorization
+        | SignedHeaderV1::XAmzDate
+        | SignedHeaderV1::XAmzContentSha256
+        | SignedHeaderV1::XAmzSecurityToken => {}
+    }
+}
+
+#[test]
+fn signed_header_names_are_frozen_and_stay_on_the_reserved_list() {
+    // Host-signed D1. The reserved-list half is the load-bearing one: a signed header that the
+    // plain channel could also carry would let a provider set the very bytes the signature is
+    // computed over, from a channel the signer never sees.
+    let expected_names =
+        ["authorization", "x-amz-date", "x-amz-content-sha256", "x-amz-security-token"];
+    for (header, expected_name) in ALL_SIGNED_HEADERS.into_iter().zip(expected_names) {
+        assert_signed_header_listed(header);
+        assert_eq!(header.header_name(), expected_name);
+
+        let error = SafeHeaders::try_from_iter([(header.header_name(), SENTINEL)])
+            .expect_err("every permitted signed header must stay reserved");
+        assert_eq!(error.code(), "RESERVED_HEADER_FORBIDDEN");
+    }
+
+    let mut names: Vec<&str> = ALL_SIGNED_HEADERS.iter().map(|h| h.header_name()).collect();
+    names.sort_unstable();
+    let total = names.len();
+    names.dedup();
+    assert_eq!(names.len(), total, "SignedHeaderV1::ALL must not repeat a variant");
+}
+
+#[test]
+fn a_signed_header_set_normalizes_order_and_refuses_empty_or_duplicate() {
+    // Normalization means two declarations naming the same headers are the same declaration.
+    // Without it the allow-list diff would have to be order-insensitive at every comparison site,
+    // and one site that forgot would reject a valid signer.
+    let written_backwards =
+        SignedHeaderSetV1::new(&[SignedHeaderV1::XAmzSecurityToken, SignedHeaderV1::Authorization])
+            .expect("a two-header declaration is valid in any order");
+    let written_forwards =
+        SignedHeaderSetV1::new(&[SignedHeaderV1::Authorization, SignedHeaderV1::XAmzSecurityToken])
+            .expect("same two headers");
+    assert_eq!(written_backwards, written_forwards);
+    assert_eq!(
+        written_backwards.headers(),
+        [SignedHeaderV1::Authorization, SignedHeaderV1::XAmzSecurityToken]
+    );
+    assert!(written_backwards.contains(SignedHeaderV1::Authorization));
+    assert!(!written_backwards.contains(SignedHeaderV1::XAmzDate));
+    assert_eq!(written_backwards.len(), 2);
+    assert!(!written_backwards.is_empty());
+
+    // An empty declaration would make the diff vacuous: emit nothing, satisfy everything.
+    assert_eq!(SignedHeaderSetV1::new(&[]), Err(SignedHeaderSetErrorV1::Empty));
+    assert_eq!(
+        SignedHeaderSetV1::new(&[SignedHeaderV1::XAmzDate, SignedHeaderV1::XAmzDate]),
+        Err(SignedHeaderSetErrorV1::Duplicate)
+    );
+}
+
+#[test]
+fn the_host_signed_arm_declares_a_slot_and_its_emitted_headers() {
+    let slot = CredentialSlotV1::parse("aws.bedrock.primary").unwrap();
+    let emits = SignedHeaderSetV1::new(&SignedHeaderV1::ALL).expect("full set is valid");
+    let auth =
+        ProviderAuthV1::HostSigned { slot: BearerAuthV1::new(slot.clone()), emits: emits.clone() };
+
+    // The slot participates in the binding check exactly as the other two arms do, even though
+    // South never resolves it (host-signed D2).
+    assert_eq!(auth.credential_slot(), &slot);
+    assert!(
+        matches!(&auth, ProviderAuthV1::HostSigned { emits: declared, .. } if *declared == emits)
+    );
+
+    // Debug must not become a credential leak vector as the arm count grows.
+    let rendered = format!("{auth:?}");
+    assert!(rendered.contains("HostSigned"), "{rendered}");
+    assert!(!rendered.contains(SENTINEL), "{rendered}");
+}
+
+#[test]
+fn the_finalizer_preparation_errors_carry_stable_codes() {
+    assert_eq!(PreparationErrorV1::RequestFinalizationFailed.code(), "REQUEST_FINALIZATION_FAILED");
+    assert_eq!(
+        PreparationErrorV1::RequestFinalizationRejected.code(),
+        "REQUEST_FINALIZATION_REJECTED"
+    );
 }

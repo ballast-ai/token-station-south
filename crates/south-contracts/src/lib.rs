@@ -19,12 +19,18 @@ pub const HTTP_CONTRACT_VERSION: u16 = 3;
 
 /// The version of the provider authentication declaration contract.
 ///
-/// Version two is additive: a version-one request is exactly a version-two request using the
-/// [`ProviderAuthV1::Bearer`] arm. Version two adds the sanctioned header-secret scheme.
-pub const AUTH_CONTRACT_VERSION: u16 = 2;
+/// Each version is additive: a version-one request is exactly a version-two request using the
+/// [`ProviderAuthV1::Bearer`] arm, version two adds the sanctioned header-secret scheme, and
+/// version three adds [`ProviderAuthV1::HostSigned`] — the arm whose credential never crosses
+/// into South at all.
+pub const AUTH_CONTRACT_VERSION: u16 = 3;
 
 /// The version of the stable provider-call error contract.
-pub const ERROR_CONTRACT_VERSION: u16 = 1;
+///
+/// Version two is additive: it adds the two request-finalization preparation codes. A consumer
+/// pinned to version one sees them through [`PreparationErrorV1::code`] like any other, which is
+/// why the enum is `#[non_exhaustive]`.
+pub const ERROR_CONTRACT_VERSION: u16 = 2;
 
 /// The version of the byte-level streaming provider call contract.
 pub const STREAM_CONTRACT_VERSION: Option<u16> = Some(1);
@@ -118,6 +124,9 @@ const RESERVED_HEADERS: &[&str] = &[
     "transfer-encoding",
     "upgrade",
     "user-agent",
+    "x-amz-content-sha256",
+    "x-amz-date",
+    "x-amz-security-token",
     "x-api-key",
     "x-goog-api-key",
     "xi-api-key",
@@ -608,6 +617,124 @@ impl SecretHeaderV1 {
     }
 }
 
+/// The frozen set of headers a host request finalizer is permitted to emit.
+///
+/// Closed and fieldless for the same reason [`SecretHeaderV1`] is, and for one more: these names
+/// carry a signature over the whole request, so a provider that could name its own would be
+/// choosing what the signature covers. Every name here is on `RESERVED_HEADERS`, which a unit
+/// test asserts — the plain [`SafeHeaders`] channel can never carry one, in either direction.
+///
+/// Adding a variant is a deliberate contract bump with a conformance case.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SignedHeaderV1 {
+    /// `authorization` — the AWS `SigV4` credential scope, signed headers list, and signature.
+    Authorization,
+    /// `x-amz-date` — the signing timestamp the signature is bound to.
+    XAmzDate,
+    /// `x-amz-content-sha256` — the payload hash the signature commits to.
+    XAmzContentSha256,
+    /// `x-amz-security-token` — the STS session token, when the credential carries one.
+    XAmzSecurityToken,
+}
+
+impl SignedHeaderV1 {
+    /// Every permitted header, in canonical declaration order.
+    ///
+    /// [`SignedHeaderSetV1`] normalizes to this order, so two declarations naming the same
+    /// headers compare equal regardless of the order the caller wrote them in.
+    pub const ALL: [Self; 4] =
+        [Self::Authorization, Self::XAmzDate, Self::XAmzContentSha256, Self::XAmzSecurityToken];
+
+    /// Returns the lowercase wire name of the permitted header.
+    #[must_use]
+    pub const fn header_name(self) -> &'static str {
+        match self {
+            Self::Authorization => "authorization",
+            Self::XAmzDate => "x-amz-date",
+            Self::XAmzContentSha256 => "x-amz-content-sha256",
+            Self::XAmzSecurityToken => "x-amz-security-token",
+        }
+    }
+}
+
+/// A rejected [`SignedHeaderSetV1`] construction.
+#[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
+pub enum SignedHeaderSetErrorV1 {
+    /// The declaration named no headers.
+    ///
+    /// An empty set would make the allow-list diff vacuous: a finalizer could emit nothing and
+    /// still satisfy it, producing an unsigned request that looks finalized.
+    #[error("a host-signed declaration must name at least one header")]
+    Empty,
+    /// The declaration named the same header twice.
+    #[error("a host-signed declaration must not name the same header twice")]
+    Duplicate,
+}
+
+/// The non-empty, duplicate-free set of headers a [`ProviderAuthV1::HostSigned`] declaration
+/// promises its finalizer will emit.
+///
+/// This is the allow-list South diffs the finalizer's output against, in **both** directions: an
+/// undeclared name is a finalizer exceeding its declaration, and a declared name that never
+/// arrived is a broken signer — a signature missing `x-amz-security-token` is not a request with
+/// one fewer header, it is a request that will be rejected upstream for reasons the log will not
+/// explain. Being part of the request declaration, it is fixed before finalisation runs and the
+/// host cannot widen it at finalise time.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SignedHeaderSetV1 {
+    headers: Vec<SignedHeaderV1>,
+}
+
+impl SignedHeaderSetV1 {
+    /// Validates and normalizes a declaration.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SignedHeaderSetErrorV1`] when the declaration is empty or names a duplicate.
+    pub fn new(headers: &[SignedHeaderV1]) -> Result<Self, SignedHeaderSetErrorV1> {
+        if headers.is_empty() {
+            return Err(SignedHeaderSetErrorV1::Empty);
+        }
+        let mut normalized = Vec::with_capacity(headers.len());
+        for candidate in SignedHeaderV1::ALL {
+            if headers.contains(&candidate) {
+                normalized.push(candidate);
+            }
+        }
+        if normalized.len() != headers.len() {
+            return Err(SignedHeaderSetErrorV1::Duplicate);
+        }
+        Ok(Self { headers: normalized })
+    }
+
+    /// Returns the declared headers in canonical order.
+    #[must_use]
+    pub fn headers(&self) -> &[SignedHeaderV1] {
+        &self.headers
+    }
+
+    /// Reports whether the declaration names this header.
+    #[must_use]
+    pub fn contains(&self, header: SignedHeaderV1) -> bool {
+        self.headers.contains(&header)
+    }
+
+    /// Returns how many headers the declaration names; never zero.
+    #[must_use]
+    pub const fn len(&self) -> usize {
+        self.headers.len()
+    }
+
+    /// Always `false`; a validated declaration names at least one header.
+    ///
+    /// Present because a bare `len()` invites the clippy lint, and because a caller reading
+    /// `is_empty()` should get the invariant rather than reach for `len() == 0`.
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        false
+    }
+}
+
 /// The frozen set of sanctioned query parameters.
 ///
 /// Closed and fieldless for the same reason [`SecretHeaderV1`] is: a query is the most reliably
@@ -845,6 +972,18 @@ pub enum ProviderAuthV1 {
         /// The credential-slot declaration resolved by the host, exactly as in the Bearer arm.
         slot: BearerAuthV1,
     },
+    /// The host signs the finalised request and emits exactly the declared headers.
+    ///
+    /// Unlike the other two arms, South never resolves this slot: the signing material stays
+    /// entirely host-side and South sees only the emitted header values (host-signed D2). The
+    /// slot still participates in the binding check, so a request cannot be signed with an
+    /// identity the binding does not authorize.
+    HostSigned {
+        /// The signing identity the host finalizer will use; checked against the binding.
+        slot: BearerAuthV1,
+        /// The headers the finalizer promises to emit, enforced in both directions.
+        emits: SignedHeaderSetV1,
+    },
 }
 
 impl ProviderAuthV1 {
@@ -852,7 +991,9 @@ impl ProviderAuthV1 {
     #[must_use]
     pub const fn credential_slot(&self) -> &CredentialSlotV1 {
         match self {
-            Self::Bearer(slot) | Self::HeaderSecret { slot, .. } => slot.credential_slot(),
+            Self::Bearer(slot)
+            | Self::HeaderSecret { slot, .. }
+            | Self::HostSigned { slot, .. } => slot.credential_slot(),
         }
     }
 }
@@ -871,6 +1012,11 @@ impl fmt::Debug for ProviderAuthV1 {
                 .debug_struct("HeaderSecret")
                 .field("header", header)
                 .field("slot", slot)
+                .finish(),
+            Self::HostSigned { slot, emits } => formatter
+                .debug_struct("HostSigned")
+                .field("slot", slot)
+                .field("emits", &emits.headers())
                 .finish(),
         }
     }
@@ -1624,6 +1770,15 @@ pub enum PreparationErrorV1 {
     /// fail closed with this code instead of panicking.
     #[error("auth shape is not supported by this build")]
     UnsupportedAuthShape,
+    /// The host request finalizer returned an error; nothing reached the network.
+    #[error("host request finalization failed")]
+    RequestFinalizationFailed,
+    /// The finalizer's emitted headers did not match its declaration; nothing reached the network.
+    ///
+    /// Covers all four rejections: an undeclared name, a declared name that never arrived, an
+    /// empty value, and a duplicate.
+    #[error("host request finalization produced headers outside its declaration")]
+    RequestFinalizationRejected,
 }
 
 impl PreparationErrorV1 {
@@ -1637,6 +1792,8 @@ impl PreparationErrorV1 {
             Self::Cancelled => "CANCELLED",
             Self::DeadlineExceeded => "DEADLINE_EXCEEDED",
             Self::UnsupportedAuthShape => "UNSUPPORTED_AUTH_SHAPE",
+            Self::RequestFinalizationFailed => "REQUEST_FINALIZATION_FAILED",
+            Self::RequestFinalizationRejected => "REQUEST_FINALIZATION_REJECTED",
         }
     }
 }

@@ -1,7 +1,8 @@
 # Host-Signed Auth: The Request Finalizer Seam
 
-Status: designed; decision point 8 of the target-architecture plan and D1–D5 below ruled
-2026-08-20. Ships after the host-prelude release (0.7.0) as its own slice (version assigned at
+Status: **shipped in 0.14.0** (2026-08-22), except the host-pluggable half of D3 — see §8.
+Decision point 8 of the target-architecture plan and D1–D5 below ruled 2026-08-20. Shipped after
+the host-prelude release (0.7.0) as its own slice (version assigned at
 ship time — the 2026-08-21 ruling released 0.9.0 to the S2 conformance slice and retired
 pre-allocation; renumbered
 2026-08-20 — 0.6.0 was consumed by the controlled user-agent release, 0.8.0 is provider-api).
@@ -93,13 +94,16 @@ at finalise time.
 
 ```rust
 /// What the finalizer may see: the request exactly as the transport will send it.
+/// Shipped with private fields and accessors (the crate's shape everywhere else), and with one
+/// field this sketch missed — see the correction below.
 pub struct FinalizeViewV1<'a> {
-    pub method: &'a Method,
-    pub url: &'a Url,                 // binding-resolved, sanctioned query already appended
-    pub headers: &'a SafeHeaders,     // ordinary headers, validated, in declaration order
-    pub body: &'a [u8],               // the exact JSON bytes the transport will write
-    pub slot: &'a CredentialSlotV1,
-    pub emits: &'a SignedHeaderSetV1,
+    method: &'a Method,
+    url: &'a Url,                 // binding-resolved, sanctioned query already appended
+    headers: &'a SafeHeaders,     // ordinary headers, validated, in declaration order
+    body: &'a [u8],               // the exact JSON bytes the transport will write
+    user_agent: Option<ControlledUserAgentV1>,   // ← added at implementation; see below
+    slot: &'a CredentialSlotV1,
+    emits: &'a SignedHeaderSetV1,
 }
 
 /// Headers emitted by the finalizer; South diffs them against `emits` before sending.
@@ -154,6 +158,22 @@ checked by conformance (D5):
 A finalizer therefore *can* include `host` in `SignedHeaders`, because the transport's `host` is a
 pure function of a URL the finalizer saw.
 
+> **Correction, 2026-08-22 (implementation).** The claim above — "these are the only headers the
+> transport may add" — was **wrong about the world**. `ReqwestTransportV1` also sent `accept: */*`,
+> a `reqwest` client default nobody had counted; the wire fixture found it on its first run.
+>
+> The promise now names three headers, published as
+> `south_transport_reqwest::TRANSPORT_ADDED_HEADERS_V1`, and `accept` is set explicitly by South
+> rather than inherited from the client, so it is South's constant and not a dependency's. Two of
+> the three remain pure functions of what the finalizer saw; `accept` is a fixed literal. A
+> `SigV4` finalizer is unaffected (it signs a chosen subset), but a scheme that must sign the
+> *complete* header set has to account for this name, which is why it is published rather than
+> merely fixed.
+>
+> The same parenthetical also claimed `user-agent` was "already a `SafeHeaders` host obligation
+> and therefore in the view". It is not: `user-agent` is reserved and travels in its own typed
+> slot, so a finalizer could not have seen it. `FinalizeViewV1::user_agent()` was added.
+
 ## 4. Conformance: `south.host-signed.v1` (D3)
 
 A new frozen suite, separate from the three existing ones, with a **deterministic fake finalizer**
@@ -207,6 +227,29 @@ too — see D4).
 - **D3 — separate `south.host-signed.v1` suite**, the three existing suites stay frozen.
 - **D4 — `PreparationErrorV1` gains `#[non_exhaustive]` in 0.7.0** alongside `ProviderAuthV1` and
   `RawAuthV1`, so `RequestFinalizationFailed` / `RequestFinalizationRejected` land additively.
-- **D5 — the transport byte promise is enforced by conformance** (`transport_adds_only_host_and_length`
-  and friends); a type-level `FinalizedRequestV1` is deferred until a second transport
-  implementation exists.
+- **D5 — the transport byte promise is enforced by conformance**
+  (`the_transport_adds_exactly_its_declared_header_set_and_nothing_else` and friends); a
+  type-level `FinalizedRequestV1` is deferred until a second transport implementation exists.
+
+## 8. What shipped, and what did not (2026-08-22)
+
+Shipped: the contract (`SignedHeaderV1`, `SignedHeaderSetV1`, `ProviderAuthV1::HostSigned`, the
+two `PreparationErrorV1` variants), the seam (`FinalizeViewV1`, `FinalizedHeadersV1`,
+`RequestFinalizerV1`, the allow-list diff), both entry points
+(`execute_signed_provider_call_v1`, `open_streaming_signed_provider_call_v1`), the transport's
+multi-header application and its published added-header set, the deterministic fake finalizer in
+`south-testkit`, and every case in §4 — as
+`south-testkit/tests/host_signed_call_v1.rs` plus
+`south-transport-reqwest/tests/host_signed_wire_v1.rs`.
+
+**Not shipped: the host-pluggable half of D3.** The §4 cases run against South's own
+orchestration, which is what proves *South's* seam. They are not yet a shipped fixture pack a
+third-party host runs against *its own* finalizer — the shape the other three suites have. That
+suite would answer a different question: "does this host's `SigV4` signer satisfy its own
+declaration, deterministically, once per call?" It is deliberately left until the server's
+finalizer exists, because a runner designed without a single real implementation to run would be
+designed against a guess. Until then, a host's `verified` judgement for this arm rests on the
+three existing suites plus its own tests.
+
+Also still host-side: the server's `RequestFinalizerV1` impl wrapping its existing `SigV4` code.
+South ships no AWS code and this slice did not change that.

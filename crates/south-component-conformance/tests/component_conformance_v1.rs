@@ -43,7 +43,7 @@ fn reference_manifest() -> ComponentManifestV1 {
             kernel_version: "0.2.0".to_owned(),
             kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb09c".to_owned(),
             wit_package: WIT_PACKAGE.to_owned(),
-            south_runtime: "0.13.0".to_owned(),
+            south_runtime: "0.14.0".to_owned(),
         },
     }
 }
@@ -134,7 +134,7 @@ fn the_tuple_handshake_refuses_any_mismatch_in_tuple_order() {
         ir_schema_id: "token-station-protocol@0.3.0/v0.2.0".to_owned(),
         kernel_version: "0.2.0".to_owned(),
         kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb09c".to_owned(),
-        south_runtime: "0.13.0".to_owned(),
+        south_runtime: "0.14.0".to_owned(),
     };
     assert_eq!(compatibility_matches(&manifest, &expectations), Ok(()));
 
@@ -146,9 +146,15 @@ fn the_tuple_handshake_refuses_any_mismatch_in_tuple_order() {
     ));
 
     let mut newer_runtime = expectations;
-    // Deliberately *not* the manifest's version — this arm proves a mismatch
-    // is refused, so it must stay one step ahead of whatever the release is.
-    newer_runtime.south_runtime = "0.14.0".to_owned();
+    // Deliberately *not* the manifest's version — this arm proves a mismatch is refused, so the
+    // value must never be a release number.
+    //
+    // It used to be "the next version", and a blanket version bump collapsed it into the matching
+    // value twice: once during 0.14.0, and the `shipped_packages_v1` comment records an earlier
+    // round. A sentinel no release can ever equal is the structural fix — the trap is not that
+    // people are careless with `sed`, it is that a literal one step ahead of the release is
+    // *indistinguishable* from a literal that should track the release.
+    newer_runtime.south_runtime = "99.99.99".to_owned();
     assert!(matches!(
         compatibility_matches(&manifest, &newer_runtime),
         Err(CompatibilityMismatchV1::SouthRuntime { .. })

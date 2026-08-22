@@ -44,7 +44,7 @@ fn host_expectations() -> HostExpectationsV1 {
         ir_schema_id: "token-station-protocol@0.3.0/v0.2.0".to_owned(),
         kernel_version: "0.2.0".to_owned(),
         kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb09c".to_owned(),
-        south_runtime: "0.13.0".to_owned(),
+        south_runtime: "0.14.0".to_owned(),
     }
 }
 
@@ -109,7 +109,7 @@ fn the_manifest_declares_exactly_what_the_dialect_uses() {
             kernel_version: "0.2.0".to_owned(),
             kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb09c".to_owned(),
             wit_package: WIT_PACKAGE.to_owned(),
-            south_runtime: "0.13.0".to_owned(),
+            south_runtime: "0.14.0".to_owned(),
         },
     );
 }
