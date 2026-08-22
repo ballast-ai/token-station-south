@@ -1,0 +1,14 @@
+[
+  {
+    "model": "gemini-2.5-pro",
+    "tool": true,
+    "vision": true,
+    "json_schema": true,
+    "context_window": 1000000,
+    "supported_parameters": [
+      "stop",
+      "temperature",
+      "top_p"
+    ]
+  }
+]

@@ -34,6 +34,7 @@ mod component;
 mod fixture;
 pub mod reference;
 pub mod reference_anthropic;
+pub mod reference_gemini;
 mod report;
 #[cfg(feature = "sandbox")]
 pub mod sandbox;

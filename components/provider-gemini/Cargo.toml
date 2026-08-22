@@ -1,0 +1,28 @@
+# The official Gemini provider component, compiled to a
+# `wasm32-wasip2` component. Standalone (not a workspace member): the main
+# workspace must stay buildable without a wasm toolchain, and this crate must
+# stay buildable without wasmtime (the conformance dependency's `sandbox`
+# feature stays off).
+[package]
+name = "provider-gemini"
+version = "1.0.0"
+edition = "2021"
+publish = false
+
+# Standalone: stops cargo from walking up into the main workspace.
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# The translation logic and the guest-side JSON shims. Gate 2 froze its
+# behavior against exactly this implementation, so the component cannot drift
+# from the native reference: they are the same code.
+south-component-conformance = { path = "../../crates/south-component-conformance", default-features = false }
+wit-bindgen = "0.59"
+
+[profile.release]
+lto = "thin"
+opt-level = "s"
+strip = true

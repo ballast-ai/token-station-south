@@ -40,7 +40,8 @@ the
 [component conformance gates](docs/design/2026-08-21-component-conformance.md), the
 [provider runtime](docs/design/2026-08-21-provider-runtime.md), the
 [OpenAI-compatible host parity](docs/design/2026-08-21-openai-compat-host-parity.md), and the
-[Anthropic provider component](docs/design/2026-08-22-anthropic-provider-component.md).
+[Anthropic provider component](docs/design/2026-08-22-anthropic-provider-component.md), and the
+[Gemini provider component](docs/design/2026-08-22-gemini-provider-component.md).
 
 ## Implemented library slice
 
@@ -71,9 +72,9 @@ the
   `south.provider-component.v1` behavior suite (fixture-pinned translation, determinism,
   byte-level stream incrementality, endpoint confinement, error-catalog discipline),
   judged against a typed component seam and shipped with the native reference
-  implementations of `provider-openai-compatible` and `provider-anthropic`, each with its
-  own frozen fixture pack — sharing one pack would freeze whichever dialect was written
-  first. It is this repository's one sanctioned typed consumer of the Canonical IR, taken
+  implementations of `provider-openai-compatible`, `provider-anthropic` and
+  `provider-gemini`, each with its own frozen fixture pack — sharing one pack would freeze
+  whichever dialect was written first. It is this repository's one sanctioned typed consumer of the Canonical IR, taken
   at a fixed kernel revision.
 
 - `south-provider-runtime` executes provider components inside a wasmtime sandbox:
@@ -85,7 +86,10 @@ the
   packages each native reference as an official `wasm32-wasip2` component:
   `provider-openai-compatible` (`scripts/build-reference-component.sh`) covers the
   OpenAI-compatible and Azure dialects, `provider-anthropic`
-  (`scripts/build-anthropic-component.sh`) covers Anthropic Messages. A component and its
+  (`scripts/build-anthropic-component.sh`) covers Anthropic Messages, and
+  `provider-gemini` (`scripts/build-gemini-component.sh`) covers Gemini
+  `generateContent` — including its streaming operation, which the dialect selects with a
+  different URL suffix rather than a body field. A component and its
   native reference are the same code, so sandbox parity is a property of construction that
   the parity tests then prove end to end.
 

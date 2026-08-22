@@ -33,5 +33,9 @@ required-features = ["sandbox"]
 name = "anthropic_sandbox_parity_v1"
 required-features = ["sandbox"]
 
+[[test]]
+name = "gemini_sandbox_parity_v1"
+required-features = ["sandbox"]
+
 [lints]
 workspace = true

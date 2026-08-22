@@ -1,0 +1,6 @@
+{
+  "chunks": [
+    "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"weighing\", \"thought\": true}]}}]}\n\n",
+    "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"42\"}]}, \"finishReason\": \"STOP\"}], \"usageMetadata\": {\"promptTokenCount\": 1, \"candidatesTokenCount\": 1}}\n\n"
+  ]
+}

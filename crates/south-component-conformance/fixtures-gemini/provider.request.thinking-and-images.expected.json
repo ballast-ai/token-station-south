@@ -1,0 +1,47 @@
+{
+  "method": "POST",
+  "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "auth": {
+    "scheme": "header",
+    "name": "x-goog-api-key",
+    "secret": "provider_api_key"
+  },
+  "body": {
+    "contents": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "text": "what is this"
+          },
+          {
+            "inline_data": {
+              "mime_type": "image/png",
+              "data": "AAAA"
+            }
+          },
+          {
+            "file_data": {
+              "file_uri": "https://example/x.png"
+            }
+          }
+        ]
+      },
+      {
+        "role": "model",
+        "parts": [
+          {
+            "text": "Weighed both.",
+            "thought": true
+          },
+          {
+            "text": "A cat."
+          }
+        ]
+      }
+    ]
+  }
+}
