@@ -12,14 +12,14 @@ use std::path::Path;
 
 use south_component_conformance::reference_gemini::GeminiReferenceV1;
 use south_component_conformance::{
-    FixturePackV1, HostExpectationsV1, PROVIDER_COMPONENT_SUITE_V1, ProviderComponentV1,
-    accepts_manifest, compatibility_matches, reported_identity_matches,
-    run_provider_component_suite_v1,
+    FixturePackV1, PROVIDER_COMPONENT_SUITE_V1, ProviderComponentV1, accepts_manifest,
+    reported_identity_matches, run_provider_component_suite_v1,
 };
 use south_provider_api::{
     AuthArmV1, COMPONENT_BEHAVIOR_SUITE, CompatibilityDeclarationV1, ComponentCapabilityV1,
     ComponentManifestV1, ComponentPermissionsV1, ConformanceSpecV1, PROVIDER_WORLD, WIT_PACKAGE,
 };
+use south_provider_api::{HostExpectationsV1, compatibility_matches};
 
 fn repo_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().and_then(Path::parent).expect("repo root")
@@ -44,7 +44,7 @@ fn host_expectations() -> HostExpectationsV1 {
         ir_schema_id: "token-station-protocol@0.3.0/v0.2.0".to_owned(),
         kernel_version: "0.2.0".to_owned(),
         kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb09c".to_owned(),
-        south_runtime: "0.15.0".to_owned(),
+        south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
     }
 }
 
@@ -109,7 +109,7 @@ fn the_manifest_declares_exactly_what_the_dialect_uses() {
             kernel_version: "0.2.0".to_owned(),
             kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb09c".to_owned(),
             wit_package: WIT_PACKAGE.to_owned(),
-            south_runtime: "0.15.0".to_owned(),
+            south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
         },
     );
 }

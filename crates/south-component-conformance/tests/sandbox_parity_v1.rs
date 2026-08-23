@@ -9,10 +9,11 @@ use std::sync::OnceLock;
 use south_component_conformance::reference::OpenAiCompatibleReferenceV1;
 use south_component_conformance::sandbox::SandboxedComponentV1;
 use south_component_conformance::{
-    FixturePackV1, HostExpectationsV1, ProviderComponentV1, accepts_manifest,
-    compatibility_matches, reported_identity_matches, run_provider_component_suite_v1,
+    FixturePackV1, ProviderComponentV1, accepts_manifest, reported_identity_matches,
+    run_provider_component_suite_v1,
 };
 use south_provider_api::ComponentManifestV1;
+use south_provider_api::{HostExpectationsV1, compatibility_matches};
 use south_provider_runtime::{ComponentRuntimeV1, NoSecretsV1, RuntimeLimitsV1};
 
 fn repo_root() -> &'static Path {
@@ -93,7 +94,7 @@ fn the_shipped_package_passes_gate_one_and_the_tuple_handshake() {
         ir_schema_id: "token-station-protocol@0.3.0/v0.2.0".to_owned(),
         kernel_version: "0.2.0".to_owned(),
         kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb00c".to_owned(),
-        south_runtime: "0.15.0".to_owned(),
+        south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
     };
     // Deliberately one hex digit off first: the handshake must refuse …
     assert!(compatibility_matches(&manifest, &expectations).is_err());

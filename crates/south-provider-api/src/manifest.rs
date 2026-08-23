@@ -402,3 +402,70 @@ pub enum ManifestErrorV1 {
     #[error("compatibility.south_runtime `{0}` is not a `major.minor.patch` triple")]
     InvalidSouthRuntimeVersion(String),
 }
+
+// -- compatibility admission -------------------------------------------------
+
+/// What the admitting host was built against, for the tuple handshake.
+///
+/// The manifest-side constants (`wit_package`, world name, suite name) are
+/// already exact-validated by [`accepts_manifest`]; these four are the values
+/// only a live host knows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HostExpectationsV1 {
+    pub ir_schema_id: String,
+    pub kernel_version: String,
+    pub kernel_revision: String,
+    pub south_runtime: String,
+}
+
+/// Why the compatibility handshake refused a component.
+#[derive(Debug, Clone, Error, PartialEq, Eq)]
+pub enum CompatibilityMismatchV1 {
+    #[error("component was built against IR `{declared}`; this host distributes `{expected}`")]
+    IrSchema { declared: String, expected: String },
+    #[error("component was built against kernel `{declared}`; this host distributes `{expected}`")]
+    KernelVersion { declared: String, expected: String },
+    #[error("component pins kernel revision `{declared}`; this host distributes `{expected}`")]
+    KernelRevision { declared: String, expected: String },
+    #[error("component was verified with south runtime `{declared}`; this host runs `{expected}`")]
+    SouthRuntime { declared: String, expected: String },
+}
+
+/// Gate ①, tuple half: the manifest's compatibility declaration must equal
+/// what the admitting host was built against. Refusal, never silent
+/// degradation, and never a partial acceptance.
+///
+/// # Errors
+///
+/// Returns the first [`CompatibilityMismatchV1`] found, in tuple order.
+pub fn compatibility_matches(
+    manifest: &ComponentManifestV1,
+    expectations: &HostExpectationsV1,
+) -> Result<(), CompatibilityMismatchV1> {
+    let declared = manifest.compatibility_tuple();
+    if declared.ir_schema_id != expectations.ir_schema_id {
+        return Err(CompatibilityMismatchV1::IrSchema {
+            declared: declared.ir_schema_id.to_owned(),
+            expected: expectations.ir_schema_id.clone(),
+        });
+    }
+    if declared.kernel_version != expectations.kernel_version {
+        return Err(CompatibilityMismatchV1::KernelVersion {
+            declared: declared.kernel_version.to_owned(),
+            expected: expectations.kernel_version.clone(),
+        });
+    }
+    if declared.kernel_revision != expectations.kernel_revision {
+        return Err(CompatibilityMismatchV1::KernelRevision {
+            declared: declared.kernel_revision.to_owned(),
+            expected: expectations.kernel_revision.clone(),
+        });
+    }
+    if declared.south_runtime != expectations.south_runtime {
+        return Err(CompatibilityMismatchV1::SouthRuntime {
+            declared: declared.south_runtime.to_owned(),
+            expected: expectations.south_runtime.clone(),
+        });
+    }
+    Ok(())
+}

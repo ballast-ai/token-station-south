@@ -15,6 +15,7 @@ use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
+use south_provider_api::HostExpectationsV1;
 use south_provider_runtime::{
     CallErrorV1, ComponentRuntimeV1, LoadErrorV1, LoadedComponentV1, RuntimeLimitsV1,
     SecretSignerV1,
@@ -39,6 +40,10 @@ fn guest_wasm() -> &'static Path {
 }
 
 fn manifest_json(version: &str) -> String {
+    manifest_json_with_runtime(version, "0.16.0")
+}
+
+fn manifest_json_with_runtime(version: &str, south_runtime: &str) -> String {
     json!({
         "name": "test-provider",
         "version": version,
@@ -53,7 +58,7 @@ fn manifest_json(version: &str) -> String {
             "kernel_version": "0.2.0",
             "kernel_revision": "72458e3a11fe157f9ac04818c44b62a3dd2cb09c",
             "wit_package": "token-station:adapter@2.0.0",
-            "south_runtime": "0.15.0",
+            "south_runtime": south_runtime,
         },
     })
     .to_string()
@@ -104,7 +109,8 @@ fn config_json(extra: &Value) -> String {
 
 fn load() -> LoadedComponentV1 {
     let dir = package("ok", &manifest_json("1.0.0"), Some(guest_wasm()));
-    LoadedComponentV1::load(&runtime(), &dir, FixedSigner).expect("the honest package loads")
+    LoadedComponentV1::load(&runtime(), &dir, &expectations(), FixedSigner)
+        .expect("the honest package loads")
 }
 
 // -- gates -------------------------------------------------------------------
@@ -129,7 +135,7 @@ fn the_manifest_gate_runs_before_any_code_is_read() {
     // No component.wasm in the package at all: if the manifest gate is really
     // first, the loader never notices.
     let dir = package("network", &manifest.to_string(), None);
-    let refused = LoadedComponentV1::load(&runtime(), &dir, FixedSigner);
+    let refused = LoadedComponentV1::load(&runtime(), &dir, &expectations(), FixedSigner);
 
     assert!(matches!(refused, Err(LoadErrorV1::Manifest(_))), "got {refused:?}");
 }
@@ -140,7 +146,7 @@ fn the_identity_gate_refuses_a_package_that_lies_about_its_version() {
     // repackaged-around-vetting case.
     let dir = package("liar", &manifest_json("9.9.9"), Some(guest_wasm()));
 
-    let refused = LoadedComponentV1::load(&runtime(), &dir, FixedSigner);
+    let refused = LoadedComponentV1::load(&runtime(), &dir, &expectations(), FixedSigner);
 
     match refused {
         Err(LoadErrorV1::IdentityMismatch { declared, reported }) => {
@@ -161,7 +167,7 @@ fn a_component_that_asks_for_the_network_is_refused_by_name() {
     let dir = package("sockets", &manifest_json("1.0.0"), None);
     std::fs::write(dir.join("component.wasm"), wat).expect("wat writes");
 
-    let refused = LoadedComponentV1::load(&runtime(), &dir, FixedSigner);
+    let refused = LoadedComponentV1::load(&runtime(), &dir, &expectations(), FixedSigner);
 
     match refused {
         Err(LoadErrorV1::ForbiddenImport(name)) => {
@@ -242,8 +248,8 @@ fn a_declared_secret_reaches_the_signer_and_an_undeclared_one_never_does() {
     }
 
     let dir = package("signing", &manifest_json("1.0.0"), Some(guest_wasm()));
-    let component =
-        LoadedComponentV1::load(&runtime(), &dir, Tattletale).expect("the honest package loads");
+    let component = LoadedComponentV1::load(&runtime(), &dir, &expectations(), Tattletale)
+        .expect("the honest package loads");
 
     let request = |secret: &str| {
         json!({
@@ -298,4 +304,52 @@ fn each_stream_gets_its_own_instance_so_buffers_cannot_interleave() {
     let finished = right.parse_chunk(b"\n\n").expect("parses");
     let events: Value = serde_json::from_str(&finished).expect("events json");
     assert_eq!(events, json!([{ "type": "delta", "index": 0, "content": "from-right" }]));
+}
+
+// -- compatibility admission -------------------------------------------------
+
+fn expectations() -> HostExpectationsV1 {
+    HostExpectationsV1 {
+        ir_schema_id: "token-station-protocol@0.3.0/v0.2.0".to_owned(),
+        kernel_version: "0.2.0".to_owned(),
+        kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb09c".to_owned(),
+        south_runtime: "0.16.0".to_owned(),
+    }
+}
+
+/// The gate order is the point, not just the refusal. A stale package paired
+/// with bytes that are not a component at all must be refused for the tuple,
+/// because the tuple is checked before the Wasm is opened — otherwise a host
+/// upgrading South would see "not a provider component" and go looking for the
+/// wrong bug.
+#[test]
+fn an_incompatible_tuple_is_refused_before_the_wasm_is_opened() {
+    let stale = manifest_json_with_runtime("1.0.0", "0.15.0");
+    let dir = package("stale-tuple", &stale, None);
+    std::fs::write(dir.join("component.wasm"), b"this is not a component")
+        .expect("temp dir is writable");
+
+    let refused = LoadedComponentV1::load(&runtime(), &dir, &expectations(), FixedSigner);
+    assert!(
+        matches!(refused, Err(LoadErrorV1::Incompatible(_))),
+        "the tuple must be judged before the bytes: {refused:?}"
+    );
+}
+
+/// And the same through the embedded entry point, since that is the one the
+/// community host uses.
+#[test]
+fn the_embedded_loader_enforces_the_tuple_too() {
+    let stale = manifest_json_with_runtime("1.0.0", "0.15.0");
+    let refused = LoadedComponentV1::load_embedded(
+        &runtime(),
+        &stale,
+        b"this is not a component",
+        &expectations(),
+        FixedSigner,
+    );
+    assert!(
+        matches!(refused, Err(LoadErrorV1::Incompatible(_))),
+        "load_embedded must run the same handshake: {refused:?}"
+    );
 }

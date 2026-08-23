@@ -6,14 +6,14 @@ use std::path::Path;
 
 use south_component_conformance::reference::OpenAiCompatibleReferenceV1;
 use south_component_conformance::{
-    CompatibilityMismatchV1, FixturePackV1, HostExpectationsV1, PROVIDER_COMPONENT_SUITE_V1,
-    ProviderComponentV1, accepts_manifest, compatibility_matches, reported_identity_matches,
-    run_provider_component_suite_v1,
+    FixturePackV1, PROVIDER_COMPONENT_SUITE_V1, ProviderComponentV1, accepts_manifest,
+    reported_identity_matches, run_provider_component_suite_v1,
 };
 use south_provider_api::{
     AuthArmV1, COMPONENT_BEHAVIOR_SUITE, CompatibilityDeclarationV1, ComponentCapabilityV1,
     ComponentManifestV1, ComponentPermissionsV1, ConformanceSpecV1, PROVIDER_WORLD, WIT_PACKAGE,
 };
+use south_provider_api::{CompatibilityMismatchV1, HostExpectationsV1, compatibility_matches};
 use token_station_protocol::{Auth, SecretRef};
 
 fn reference_manifest() -> ComponentManifestV1 {
@@ -43,7 +43,7 @@ fn reference_manifest() -> ComponentManifestV1 {
             kernel_version: "0.2.0".to_owned(),
             kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb09c".to_owned(),
             wit_package: WIT_PACKAGE.to_owned(),
-            south_runtime: "0.15.0".to_owned(),
+            south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
         },
     }
 }
@@ -134,7 +134,7 @@ fn the_tuple_handshake_refuses_any_mismatch_in_tuple_order() {
         ir_schema_id: "token-station-protocol@0.3.0/v0.2.0".to_owned(),
         kernel_version: "0.2.0".to_owned(),
         kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb09c".to_owned(),
-        south_runtime: "0.15.0".to_owned(),
+        south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
     };
     assert_eq!(compatibility_matches(&manifest, &expectations), Ok(()));
 

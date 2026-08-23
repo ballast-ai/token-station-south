@@ -4,8 +4,9 @@ use std::collections::BTreeSet;
 
 use south_provider_api::{
     ADAPTER_WIT, AuthArmV1, COMPONENT_BEHAVIOR_SUITE, CompatibilityDeclarationV1,
-    ComponentCapabilityV1, ComponentManifestV1, ComponentPermissionsV1, ConformanceSpecV1,
-    ManifestErrorV1, PROVIDER_WORLD, WIT_PACKAGE,
+    CompatibilityMismatchV1, ComponentCapabilityV1, ComponentManifestV1, ComponentPermissionsV1,
+    ConformanceSpecV1, HostExpectationsV1, ManifestErrorV1, PROVIDER_WORLD, WIT_PACKAGE,
+    compatibility_matches,
 };
 use wit_parser::{Resolve, Type, TypeDefKind};
 
@@ -114,7 +115,7 @@ fn reference_manifest() -> ComponentManifestV1 {
             kernel_version: "0.2.0".to_owned(),
             kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb09c".to_owned(),
             wit_package: WIT_PACKAGE.to_owned(),
-            south_runtime: "0.15.0".to_owned(),
+            south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
         },
     }
 }
@@ -318,4 +319,86 @@ fn an_unauthenticated_component_may_declare_no_arms_and_no_secrets() {
     manifest.auth_arms.clear();
     manifest.permissions.secrets.clear();
     assert_eq!(manifest.validate(), Ok(()));
+}
+
+// -- compatibility admission -------------------------------------------------
+//
+// These types moved here from `south-component-conformance` because they are
+// production admission, not a test fixture: the loader now requires them, so a
+// host cannot forget to wire the handshake. The four fields below are the ones
+// only a live host knows — the manifest-side constants (`wit_package`, world
+// name, suite name) are already exact-validated by `accepts_manifest`.
+
+fn host_expectations() -> HostExpectationsV1 {
+    HostExpectationsV1 {
+        ir_schema_id: "token-station-protocol@0.3.0/v0.2.0".to_owned(),
+        kernel_version: "0.2.0".to_owned(),
+        kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb09c".to_owned(),
+        south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
+    }
+}
+
+#[test]
+fn a_matching_tuple_is_admitted() {
+    let mut manifest = reference_manifest();
+    manifest.compatibility.south_runtime = env!("CARGO_PKG_VERSION").to_owned();
+    assert_eq!(compatibility_matches(&manifest, &host_expectations()), Ok(()));
+}
+
+/// Each of the four host-known fields, tampered one at a time. The handshake
+/// refuses rather than degrading, and it names both sides so the operator can
+/// see which half is stale.
+#[test]
+fn every_host_known_field_is_refused_when_it_disagrees() {
+    let base = || {
+        let mut manifest = reference_manifest();
+        manifest.compatibility.south_runtime = env!("CARGO_PKG_VERSION").to_owned();
+        manifest
+    };
+
+    let mut ir = base();
+    ir.compatibility.ir_schema_id = "token-station-protocol@0.4.0/v0.2.0".to_owned();
+    assert!(matches!(
+        compatibility_matches(&ir, &host_expectations()),
+        Err(CompatibilityMismatchV1::IrSchema { .. })
+    ));
+
+    let mut kernel = base();
+    kernel.compatibility.kernel_version = "0.3.0".to_owned();
+    assert!(matches!(
+        compatibility_matches(&kernel, &host_expectations()),
+        Err(CompatibilityMismatchV1::KernelVersion { .. })
+    ));
+
+    let mut revision = base();
+    revision.compatibility.kernel_revision = "0".repeat(40);
+    assert!(matches!(
+        compatibility_matches(&revision, &host_expectations()),
+        Err(CompatibilityMismatchV1::KernelRevision { .. })
+    ));
+
+    let mut runtime = base();
+    runtime.compatibility.south_runtime = "0.15.0".to_owned();
+    assert!(matches!(
+        compatibility_matches(&runtime, &host_expectations()),
+        Err(CompatibilityMismatchV1::SouthRuntime { .. })
+    ));
+}
+
+/// A component built for the previous release is refused by name. This is the
+/// case the tuple exists for, and until now nothing enforced it: the field was
+/// declared in every manifest and compared nowhere outside these tests.
+#[test]
+fn a_component_from_the_previous_release_is_named_in_the_refusal() {
+    // An explicit literal, not a derived value: this is the *previous* release,
+    // and the whole point is that it no longer matches whatever this one is.
+    let mut manifest = reference_manifest();
+    manifest.compatibility.south_runtime = "0.15.0".to_owned();
+    let Err(CompatibilityMismatchV1::SouthRuntime { declared, expected }) =
+        compatibility_matches(&manifest, &host_expectations())
+    else {
+        panic!("a stale south_runtime must be refused");
+    };
+    assert_eq!(declared, "0.15.0");
+    assert_eq!(expected, env!("CARGO_PKG_VERSION"));
 }
