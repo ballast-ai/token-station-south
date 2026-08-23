@@ -33,7 +33,7 @@ wasmtime = { version = "46", default-features = false, features = [
     # rejection path. Production loads binary .wasm without WAT.
     "wat",
 ] }
-wasmtime-wasi = "46"
+wasmtime-wasi = "47"
 wit-parser = "0.253"
 zeroize = "1.8.2"
 
