@@ -5,7 +5,7 @@ use std::fmt;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use south_provider_api::{ComponentManifestV1, ComponentMetadataV1};
+use south_provider_api::{ComponentManifestV1, ComponentMetadataV1, HostExpectationsV1};
 use wasmtime::Store;
 use wasmtime::component::{Component, Linker};
 
@@ -88,9 +88,10 @@ impl LoadedComponentV1 {
     pub fn load(
         runtime: &ComponentRuntimeV1,
         dir: &Path,
+        expectations: &HostExpectationsV1,
         signer: impl SecretSignerV1 + Sync,
     ) -> Result<Self, LoadErrorV1> {
-        let (manifest, component) = read_package(runtime, dir)?;
+        let (manifest, component) = read_package(runtime, dir, expectations)?;
         Self::admit(runtime, manifest, component, Arc::new(signer))
     }
 
@@ -104,9 +105,10 @@ impl LoadedComponentV1 {
         runtime: &ComponentRuntimeV1,
         manifest_source: &str,
         wasm: &[u8],
+        expectations: &HostExpectationsV1,
         signer: impl SecretSignerV1 + Sync,
     ) -> Result<Self, LoadErrorV1> {
-        let (manifest, component) = parse_package(runtime, manifest_source, wasm)?;
+        let (manifest, component) = parse_package(runtime, manifest_source, wasm, expectations)?;
         Self::admit(runtime, manifest, component, Arc::new(signer))
     }
 

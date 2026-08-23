@@ -6,7 +6,10 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use south_provider_api::{ComponentManifestV1, ComponentMetadataV1, ManifestErrorV1};
+use south_provider_api::{
+    CompatibilityMismatchV1, ComponentManifestV1, ComponentMetadataV1, HostExpectationsV1,
+    ManifestErrorV1, compatibility_matches,
+};
 use thiserror::Error;
 use wasmtime::component::{Component, ResourceTable};
 use wasmtime::{StoreLimits, StoreLimitsBuilder};
@@ -89,6 +92,8 @@ pub enum LoadErrorV1 {
     ManifestSyntax(serde_json::Error),
     #[error("manifest refused: {0}")]
     Manifest(ManifestErrorV1),
+    #[error("component is not compatible with this host: {0}")]
+    Incompatible(CompatibilityMismatchV1),
     /// The bytes are not a WASM component, or do not export the provider
     /// world — the ABI-mismatch load failure.
     #[error("not a provider component: {0}")]
@@ -142,6 +147,7 @@ pub enum CallErrorV1 {
 pub fn read_package(
     runtime: &ComponentRuntimeV1,
     dir: &Path,
+    expectations: &HostExpectationsV1,
 ) -> Result<(ComponentManifestV1, Component), LoadErrorV1> {
     let manifest_path = dir.join("manifest.json");
     let manifest_bytes = read_file_limited(&manifest_path, MAX_MANIFEST_BYTES)
@@ -150,6 +156,9 @@ pub fn read_package(
         LoadErrorV1::Unreadable { path: manifest_path, reason: UnreadableReasonV1::NotUtf8(error) }
     })?;
     let manifest = gate_manifest(&manifest_source)?;
+    // Refused here the component's bytes are never even read, which is the
+    // cheapest possible answer to "this package was built for another host".
+    compatibility_matches(&manifest, expectations).map_err(LoadErrorV1::Incompatible)?;
 
     let wasm_path = dir.join("component.wasm");
     let wasm = read_file_limited(&wasm_path, MAX_COMPONENT_BYTES)
@@ -166,8 +175,13 @@ pub fn parse_package(
     runtime: &ComponentRuntimeV1,
     manifest_source: &str,
     wasm: &[u8],
+    expectations: &HostExpectationsV1,
 ) -> Result<(ComponentManifestV1, Component), LoadErrorV1> {
     let manifest = gate_manifest(manifest_source)?;
+    // The tuple handshake sits between the manifest and the Wasm on purpose: a
+    // component built against another host is refused before its bytes are
+    // opened, so a stale package cannot reach the import scan or the engine.
+    compatibility_matches(&manifest, expectations).map_err(LoadErrorV1::Incompatible)?;
     let component = gate_component(runtime, wasm)?;
     Ok((manifest, component))
 }

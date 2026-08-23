@@ -35,10 +35,10 @@
 mod manifest;
 
 pub use manifest::{
-    AuthArmV1, COMPONENT_BEHAVIOR_SUITE, CompatibilityDeclarationV1, CompatibilityTupleV1,
-    ComponentCapabilityV1, ComponentManifestV1, ComponentMetadataV1, ComponentPermissionsV1,
-    ConformanceSpecV1, ManifestErrorV1, PROVIDER_WORLD, WIT_PACKAGE, validate_component_name,
-    validate_package_relative_path,
+    AuthArmV1, COMPONENT_BEHAVIOR_SUITE, CompatibilityDeclarationV1, CompatibilityMismatchV1,
+    CompatibilityTupleV1, ComponentCapabilityV1, ComponentManifestV1, ComponentMetadataV1,
+    ComponentPermissionsV1, ConformanceSpecV1, HostExpectationsV1, ManifestErrorV1, PROVIDER_WORLD,
+    WIT_PACKAGE, compatibility_matches, validate_component_name, validate_package_relative_path,
 };
 
 /// The component ABI, as WIT source.
