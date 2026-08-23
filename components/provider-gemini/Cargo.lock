@@ -115,7 +115,7 @@ dependencies = [
 
 [[package]]
 name = "provider-gemini"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "south-component-conformance",
  "wit-bindgen",
@@ -181,7 +181,7 @@ dependencies = [
 
 [[package]]
 name = "south-component-conformance"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -192,7 +192,7 @@ dependencies = [
 
 [[package]]
 name = "south-provider-api"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "serde",
  "thiserror",
@@ -243,7 +243,7 @@ dependencies = [
 [[package]]
 name = "token-station-protocol"
 version = "0.3.0"
-source = "git+https://github.com/ballast-ai/token-station-kernel.git?tag=v0.2.0#ab6bb2ffaab534e6732d1bfc53d24c7caa51fa35"
+source = "git+https://github.com/ballast-ai/token-station-kernel.git?rev=ab6bb2ffaab534e6732d1bfc53d24c7caa51fa35#ab6bb2ffaab534e6732d1bfc53d24c7caa51fa35"
 dependencies = [
  "serde",
  "serde_json",
