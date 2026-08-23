@@ -18,7 +18,7 @@ serde = "1.0.219"
 serde_json = "1.0.140"
 static_assertions = "1.1.0"
 thiserror = "2.0.12"
-token-station-protocol = { version = "0.3.0", git = "https://github.com/ballast-ai/token-station-kernel.git", tag = "v0.2.0" }
+token-station-protocol = { version = "0.3.0", git = "https://github.com/ballast-ai/token-station-kernel.git", rev = "ab6bb2ffaab534e6732d1bfc53d24c7caa51fa35" }
 tokio = "1.52.3"
 tokio-util = "0.7.18"
 url = "2.5.4"
