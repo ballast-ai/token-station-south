@@ -1,9 +1,9 @@
 # The Task Adapter Vocabulary: three semantics, proposed
 
-Status: **proposed** — D1–D3 are recommendations, not rulings. Written ahead of
+Status: **ruled 2026-08-27** — D1–D3 as recommended below. Written ahead of
 the slice because each one decides a field of a vocabulary that is meant to be
 frozen, and a frozen contract argued after the fact is a contract nobody can
-change. Issue: #52.
+change. Issue: #52, which the implementing slice closes.
 
 Date: 2026-08-27
 
@@ -156,6 +156,11 @@ the component's.
 component suite: per-dialect fixtures that feed a terminal body and assert the
 kind, plus adversarial rows for the words that must fall through to `unknown`.
 Those fixtures are the mechanism that keeps rule 2 true as families are added.
+One row is required per family by the ruling: a 404 query body. A family whose
+upstream expresses task expiry only as a 404 stays `unknown` under rules 2 and
+4 — deliberately, since a 404 is also what a wrong credential or a transient
+gateway returns — and the host's reconciliation policy, not the observation,
+is what eventually settles such a task.
 
 ## 5. The fourth item of #52 — sized, deliberately not done
 
