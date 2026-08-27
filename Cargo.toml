@@ -22,7 +22,7 @@ token-station-protocol = { version = "0.3.0", git = "https://github.com/ballast-
 tokio = "1.52.3"
 tokio-util = "0.7.18"
 url = "2.5.4"
-wasmtime = { version = "47", default-features = false, features = [
+wasmtime = { version = "48", default-features = false, features = [
     "runtime",
     "component-model",
     "cranelift",
@@ -33,7 +33,7 @@ wasmtime = { version = "47", default-features = false, features = [
     # rejection path. Production loads binary .wasm without WAT.
     "wat",
 ] }
-wasmtime-wasi = "47"
+wasmtime-wasi = "48"
 wit-parser = "0.257"
 zeroize = "1.8.2"
 
