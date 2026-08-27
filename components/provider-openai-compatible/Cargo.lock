@@ -186,7 +186,6 @@ dependencies = [
  "serde",
  "serde_json",
  "south-provider-api",
- "thiserror",
  "token-station-protocol",
 ]
 
