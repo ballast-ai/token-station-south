@@ -16,6 +16,17 @@ use south_provider_api::{
 use south_provider_api::{CompatibilityMismatchV1, HostExpectationsV1, compatibility_matches};
 use token_station_protocol::{Auth, SecretRef};
 
+/// The manifest's `emits` vocabulary (`SIGNED_HEADER_NAMES`) is the wire-name
+/// projection of the host half's frozen `SignedHeaderV1` — repeated in
+/// `south-provider-api` because that crate depends on no other south crate.
+/// This is the test the repetition is licensed by.
+#[test]
+fn the_manifest_signed_header_vocabulary_is_the_host_halfs() {
+    let host_half: Vec<&str> =
+        south_contracts::SignedHeaderV1::ALL.iter().map(|header| header.header_name()).collect();
+    assert_eq!(south_provider_api::SIGNED_HEADER_NAMES, host_half.as_slice());
+}
+
 fn reference_manifest() -> ComponentManifestV1 {
     ComponentManifestV1 {
         name: "provider-openai-compatible".to_owned(),
@@ -29,6 +40,7 @@ fn reference_manifest() -> ComponentManifestV1 {
             "json_schema".to_owned(),
         ]),
         auth_arms: BTreeSet::from(["bearer".to_owned(), "header_secret".to_owned()]),
+        emits: Vec::new(),
         permissions: ComponentPermissionsV1 {
             network: false,
             filesystem: false,

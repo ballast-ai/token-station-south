@@ -40,8 +40,9 @@ pub use manifest::{
     COMPONENT_BEHAVIOR_SUITE, CompatibilityDeclarationV1, CompatibilityMismatchV1,
     CompatibilityTupleV1, ComponentManifestV1, ComponentMetadataV1, ComponentPermissionsV1,
     ConformanceSpecV1, HostExpectationsV1, KNOWN_WORLDS, ManifestErrorV1, PROVIDER_AUTH_ARMS,
-    PROVIDER_CAPABILITIES, PROVIDER_WORLD, PROVIDER_WORLD_SCHEMA, WIT_PACKAGE, WorldSchemaV1,
-    compatibility_matches, known_world, validate_component_name, validate_package_relative_path,
+    PROVIDER_CAPABILITIES, PROVIDER_WORLD, PROVIDER_WORLD_SCHEMA, SIGNED_HEADER_NAMES, WIT_PACKAGE,
+    WorldSchemaV1, compatibility_matches, known_world, validate_component_name,
+    validate_package_relative_path,
 };
 
 /// The component ABI, as WIT source.

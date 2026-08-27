@@ -101,6 +101,7 @@ fn reference_manifest() -> ComponentManifestV1 {
             "json_schema".to_owned(),
         ]),
         auth_arms: BTreeSet::from(["bearer".to_owned(), "header_secret".to_owned()]),
+        emits: Vec::new(),
         permissions: ComponentPermissionsV1 {
             network: false,
             filesystem: false,
@@ -153,7 +154,7 @@ fn the_reference_manifest_round_trips_through_json() {
 #[test]
 fn unknown_manifest_fields_are_a_version_mismatch_not_a_shrug() {
     let mut value = serde_json::to_value(reference_manifest()).expect("serializable manifest");
-    value["emits"] = serde_json::json!(["authorization"]);
+    value["telemetry"] = serde_json::json!(["latency"]);
     let parsed: Result<ComponentManifestV1, _> = serde_json::from_value(value);
     assert!(parsed.is_err(), "unknown fields must fail loudly");
 }
@@ -219,14 +220,75 @@ fn a_word_outside_the_declared_worlds_vocabulary_is_refused_by_name() {
         })
     );
 
-    let mut signed = reference_manifest();
-    signed.auth_arms.insert("host_signed".to_owned());
+    let mut mutual_tls = reference_manifest();
+    mutual_tls.auth_arms.insert("mtls".to_owned());
     assert_eq!(
-        signed.validate(),
+        mutual_tls.validate(),
         Err(ManifestErrorV1::AuthArmIsNotInTheWorldVocabulary {
-            auth_arm: "host_signed".to_owned(),
+            auth_arm: "mtls".to_owned(),
             world: PROVIDER_WORLD.to_owned(),
         })
+    );
+}
+
+fn host_signed_manifest() -> ComponentManifestV1 {
+    let mut manifest = reference_manifest();
+    manifest.auth_arms = BTreeSet::from(["host_signed".to_owned()]);
+    manifest.emits = vec![
+        "authorization".to_owned(),
+        "x-amz-date".to_owned(),
+        "x-amz-content-sha256".to_owned(),
+        "x-amz-security-token".to_owned(),
+    ];
+    manifest
+}
+
+/// The component half of `HostSigned` (2026-08-27 manifest-schema record,
+/// D2): the arm plus its `emits` allow-list validates clean and round-trips.
+#[test]
+fn a_host_signed_manifest_declares_the_arm_and_its_emits() {
+    let manifest = host_signed_manifest();
+    assert_eq!(manifest.validate(), Ok(()));
+
+    let encoded = serde_json::to_string_pretty(&manifest).expect("serializable manifest");
+    let decoded: ComponentManifestV1 = serde_json::from_str(&encoded).expect("valid manifest");
+    assert_eq!(decoded, manifest);
+    assert_eq!(decoded.validate(), Ok(()));
+}
+
+/// D2–D3's coherence rules, each refused by name: an empty allow-list makes
+/// the finalizer diff vacuous, a mixed arm set makes a signed request
+/// indistinguishable from an unauthenticated one, and `emits` without the arm
+/// is a declaration about a finalizer that will never run.
+#[test]
+fn host_signed_coherence_is_refused_shape_by_shape() {
+    let mut empty_emits = host_signed_manifest();
+    empty_emits.emits.clear();
+    assert_eq!(empty_emits.validate(), Err(ManifestErrorV1::HostSignedNamesNoHeader));
+
+    let mut mixed = host_signed_manifest();
+    mixed.auth_arms.insert("bearer".to_owned());
+    assert_eq!(mixed.validate(), Err(ManifestErrorV1::HostSignedAdmitsNoOtherArm));
+
+    let mut orphaned = reference_manifest();
+    orphaned.emits = vec!["authorization".to_owned()];
+    assert_eq!(
+        orphaned.validate(),
+        Err(ManifestErrorV1::EmitsRequireTheHostSignedArm("authorization".to_owned()))
+    );
+
+    let mut unknown_header = host_signed_manifest();
+    unknown_header.emits = vec!["x-goog-signature".to_owned()];
+    assert_eq!(
+        unknown_header.validate(),
+        Err(ManifestErrorV1::EmitIsNotASignedHeader("x-goog-signature".to_owned()))
+    );
+
+    let mut duplicated = host_signed_manifest();
+    duplicated.emits = vec!["authorization".to_owned(), "authorization".to_owned()];
+    assert_eq!(
+        duplicated.validate(),
+        Err(ManifestErrorV1::HostSignedNamesAHeaderTwice("authorization".to_owned()))
     );
 }
 
