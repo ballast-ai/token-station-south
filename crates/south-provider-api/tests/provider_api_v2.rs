@@ -3,10 +3,10 @@
 use std::collections::BTreeSet;
 
 use south_provider_api::{
-    ADAPTER_WIT, AuthArmV1, COMPONENT_BEHAVIOR_SUITE, CompatibilityDeclarationV1,
-    CompatibilityMismatchV1, ComponentCapabilityV1, ComponentManifestV1, ComponentPermissionsV1,
-    ConformanceSpecV1, HostExpectationsV1, ManifestErrorV1, PROVIDER_WORLD, WIT_PACKAGE,
-    compatibility_matches,
+    ADAPTER_WIT, COMPONENT_BEHAVIOR_SUITE, CompatibilityDeclarationV1, CompatibilityMismatchV1,
+    ComponentManifestV1, ComponentPermissionsV1, ConformanceSpecV1, HostExpectationsV1,
+    KNOWN_WORLDS, ManifestErrorV1, PROVIDER_WORLD, PROVIDER_WORLD_SCHEMA, WIT_PACKAGE,
+    compatibility_matches, known_world,
 };
 use wit_parser::{Resolve, Type, TypeDefKind};
 
@@ -95,12 +95,12 @@ fn reference_manifest() -> ComponentManifestV1 {
         api_version: PROVIDER_WORLD.to_owned(),
         providers: vec!["openai-compatible".to_owned()],
         capabilities: BTreeSet::from([
-            ComponentCapabilityV1::Chat,
-            ComponentCapabilityV1::Stream,
-            ComponentCapabilityV1::ToolCall,
-            ComponentCapabilityV1::JsonSchema,
+            "chat".to_owned(),
+            "stream".to_owned(),
+            "tool_call".to_owned(),
+            "json_schema".to_owned(),
         ]),
-        auth_arms: BTreeSet::from([AuthArmV1::Bearer, AuthArmV1::HeaderSecret]),
+        auth_arms: BTreeSet::from(["bearer".to_owned(), "header_secret".to_owned()]),
         permissions: ComponentPermissionsV1 {
             network: false,
             filesystem: false,
@@ -180,28 +180,60 @@ fn rejects_a_credential_pasted_into_the_secrets_list() {
 }
 
 #[test]
+fn the_provider_world_is_the_only_known_world_and_resolves_by_name() {
+    assert_eq!(KNOWN_WORLDS, &[PROVIDER_WORLD_SCHEMA]);
+    assert_eq!(known_world(PROVIDER_WORLD), Some(&PROVIDER_WORLD_SCHEMA));
+    assert_eq!(known_world("task-adapter-v1"), None);
+}
+
+#[test]
 fn rejects_the_v1_world_and_the_v1_suite() {
     let mut old_world = reference_manifest();
     old_world.api_version = "provider-adapter-v1".to_owned();
     assert_eq!(
         old_world.validate(),
-        Err(ManifestErrorV1::ApiVersionIsNotTheProviderWorld("provider-adapter-v1".to_owned()))
+        Err(ManifestErrorV1::ApiVersionIsNotAKnownWorld("provider-adapter-v1".to_owned()))
     );
 
     let mut old_suite = reference_manifest();
     old_suite.conformance.required_suite = "provider-protocol-v1".to_owned();
     assert_eq!(
         old_suite.validate(),
-        Err(ManifestErrorV1::ConformanceSuiteIsNotTheComponentSuite(
-            "provider-protocol-v1".to_owned()
-        ))
+        Err(ManifestErrorV1::ConformanceSuiteIsNotTheWorldSuite {
+            declared: "provider-protocol-v1".to_owned(),
+            world: PROVIDER_WORLD.to_owned(),
+            expected: COMPONENT_BEHAVIOR_SUITE.to_owned(),
+        })
+    );
+}
+
+#[test]
+fn a_word_outside_the_declared_worlds_vocabulary_is_refused_by_name() {
+    let mut embeddings = reference_manifest();
+    embeddings.capabilities.insert("embeddings".to_owned());
+    assert_eq!(
+        embeddings.validate(),
+        Err(ManifestErrorV1::CapabilityIsNotInTheWorldVocabulary {
+            capability: "embeddings".to_owned(),
+            world: PROVIDER_WORLD.to_owned(),
+        })
+    );
+
+    let mut signed = reference_manifest();
+    signed.auth_arms.insert("host_signed".to_owned());
+    assert_eq!(
+        signed.validate(),
+        Err(ManifestErrorV1::AuthArmIsNotInTheWorldVocabulary {
+            auth_arm: "host_signed".to_owned(),
+            world: PROVIDER_WORLD.to_owned(),
+        })
     );
 }
 
 #[test]
 fn requires_chat_and_a_provider_family() {
     let mut chatless = reference_manifest();
-    chatless.capabilities.remove(&ComponentCapabilityV1::Chat);
+    chatless.capabilities.remove("chat");
     assert_eq!(chatless.validate(), Err(ManifestErrorV1::ChatCapabilityRequired));
 
     let mut familyless = reference_manifest();
@@ -276,7 +308,11 @@ fn the_compatibility_declaration_is_shape_checked_field_by_field() {
     wrong_package.compatibility.wit_package = "token-station:adapter@1.0.0".to_owned();
     assert_eq!(
         wrong_package.validate(),
-        Err(ManifestErrorV1::WitPackageMismatch("token-station:adapter@1.0.0".to_owned()))
+        Err(ManifestErrorV1::WitPackageIsNotTheWorldPackage {
+            declared: "token-station:adapter@1.0.0".to_owned(),
+            world: PROVIDER_WORLD.to_owned(),
+            expected: WIT_PACKAGE.to_owned(),
+        })
     );
 
     for bad_schema_id in [

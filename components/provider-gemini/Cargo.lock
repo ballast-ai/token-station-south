@@ -181,7 +181,7 @@ dependencies = [
 
 [[package]]
 name = "south-component-conformance"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -191,7 +191,7 @@ dependencies = [
 
 [[package]]
 name = "south-provider-api"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "serde",
  "thiserror",

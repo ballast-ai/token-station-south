@@ -10,8 +10,8 @@ use south_component_conformance::{
     reported_identity_matches, run_provider_component_suite_v1,
 };
 use south_provider_api::{
-    AuthArmV1, COMPONENT_BEHAVIOR_SUITE, CompatibilityDeclarationV1, ComponentCapabilityV1,
-    ComponentManifestV1, ComponentPermissionsV1, ConformanceSpecV1, PROVIDER_WORLD, WIT_PACKAGE,
+    COMPONENT_BEHAVIOR_SUITE, CompatibilityDeclarationV1, ComponentManifestV1,
+    ComponentPermissionsV1, ConformanceSpecV1, PROVIDER_WORLD, WIT_PACKAGE,
 };
 use south_provider_api::{CompatibilityMismatchV1, HostExpectationsV1, compatibility_matches};
 use token_station_protocol::{Auth, SecretRef};
@@ -23,12 +23,12 @@ fn reference_manifest() -> ComponentManifestV1 {
         api_version: PROVIDER_WORLD.to_owned(),
         providers: vec!["openai-compatible".to_owned(), "azure-openai-v1".to_owned()],
         capabilities: BTreeSet::from([
-            ComponentCapabilityV1::Chat,
-            ComponentCapabilityV1::Stream,
-            ComponentCapabilityV1::ToolCall,
-            ComponentCapabilityV1::JsonSchema,
+            "chat".to_owned(),
+            "stream".to_owned(),
+            "tool_call".to_owned(),
+            "json_schema".to_owned(),
         ]),
-        auth_arms: BTreeSet::from([AuthArmV1::Bearer, AuthArmV1::HeaderSecret]),
+        auth_arms: BTreeSet::from(["bearer".to_owned(), "header_secret".to_owned()]),
         permissions: ComponentPermissionsV1 {
             network: false,
             filesystem: false,
