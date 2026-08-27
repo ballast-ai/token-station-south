@@ -55,6 +55,15 @@ struct Contracts {
     canonical_ir: Option<String>,
     header_limits: HeaderLimits,
     provider_quota_metadata_limits: ProviderQuotaMetadataLimits,
+    task: u16,
+    task_limits: TaskLimits,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TaskLimits {
+    task_id_bytes: usize,
+    callback_url_bytes: usize,
 }
 
 #[derive(Debug, Deserialize)]
@@ -275,6 +284,12 @@ fn compatibility_manifest_describes_the_library_slice() {
         south_contracts::PROVIDER_QUOTA_METADATA_CONTRACT_VERSION
     );
     assert!(manifest.contracts.canonical_ir.is_none());
+    assert_eq!(manifest.contracts.task, south_contracts::TASK_CONTRACT_VERSION);
+    assert_eq!(manifest.contracts.task_limits.task_id_bytes, south_contracts::MAX_TASK_ID_BYTES);
+    assert_eq!(
+        manifest.contracts.task_limits.callback_url_bytes,
+        south_contracts::MAX_CALLBACK_URL_BYTES
+    );
     assert_eq!(manifest.contracts.header_limits.count, south_contracts::MAX_PROVIDER_HEADER_COUNT);
     assert_eq!(
         manifest.contracts.header_limits.name_bytes,

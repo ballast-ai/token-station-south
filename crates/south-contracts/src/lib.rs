@@ -2,6 +2,13 @@
 
 //! Host-neutral contracts for provider execution.
 
+mod task;
+
+pub use task::{
+    HostMintedValuesV1, MAX_CALLBACK_URL_BYTES, MAX_TASK_ID_BYTES, TASK_CONTRACT_VERSION,
+    TaskContractErrorV1, TaskFailureKindV1, TaskObservationV1,
+};
+
 use std::{collections::BTreeMap, fmt, sync::Arc, time::Duration};
 
 use bytes::Bytes;
