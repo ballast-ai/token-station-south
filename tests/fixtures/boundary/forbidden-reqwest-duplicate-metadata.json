@@ -5,16 +5,16 @@
       "dependencies": [
         {
           "name": "reqwest",
-          "req": "=0.12.28",
+          "req": "=0.13.4",
           "uses_default_features": false,
-          "features": ["rustls-tls", "stream"]
+          "features": ["rustls", "stream"]
         },
         {
           "name": "reqwest",
           "rename": "reqwest_alias",
-          "req": "=0.12.28",
+          "req": "=0.13.4",
           "uses_default_features": false,
-          "features": ["stream", "rustls-tls"]
+          "features": ["stream", "rustls"]
         }
       ]
     }

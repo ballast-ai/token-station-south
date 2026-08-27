@@ -20,7 +20,7 @@ check_metadata() {
     --arg kernel_source_pattern "$KERNEL_SOURCE_PATTERN" \
     --arg kernel_ir_package "$KERNEL_IR_PACKAGE" \
     --arg kernel_ir_consumer "$KERNEL_IR_CONSUMER" \
-    --argjson reqwest_features '["__rustls", "__rustls-ring", "__tls", "rustls-tls", "rustls-tls-webpki-roots", "rustls-tls-webpki-roots-no-provider", "stream"]' \
+    --argjson reqwest_features '["__rustls", "__rustls-aws-lc-rs", "__tls", "rustls", "stream"]' \
     --argjson require_resolved_graph "$require_resolved_graph" \
     '[
       (
@@ -109,9 +109,9 @@ check_metadata() {
         | .dependencies[]
         | select(.name == "reqwest")
         | select(
-            .req != "=0.12.28"
+            .req != "=0.13.4"
             or .uses_default_features != false
-            or ((.features // []) | sort) != ["rustls-tls", "stream"]
+            or ((.features // []) | sort) != ["rustls", "stream"]
           )
       ),
       (
@@ -140,7 +140,7 @@ check_metadata() {
                 else
                   $transport_count != 1
                   or ($reqwest_packages | length) != 1
-                  or $reqwest_packages[0].version != "0.12.28"
+                  or $reqwest_packages[0].version != "0.13.4"
                   or ([
                         $metadata.resolve.nodes[]
                         | select(.id == $reqwest_packages[0].id)
