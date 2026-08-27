@@ -1,7 +1,7 @@
 {
   "schema_version": 3,
   "release": {
-    "version": "0.18.0",
+    "version": "0.19.0",
     "stability": "library_slice"
   },
   "contracts": {
@@ -22,6 +22,11 @@
       "field_count": 9,
       "value_bytes": 256,
       "total_bytes": 2304
+    },
+    "task": 1,
+    "task_limits": {
+      "task_id_bytes": 128,
+      "callback_url_bytes": 8192
     }
   },
   "conformance": {

@@ -1,9 +1,13 @@
 # The Task Adapter Vocabulary: three semantics, proposed
 
-Status: **ruled 2026-08-27** — D1–D3 as recommended below. Written ahead of
-the slice because each one decides a field of a vocabulary that is meant to be
-frozen, and a frozen contract argued after the fact is a contract nobody can
-change. Issue: #52, which the implementing slice closes.
+Status: **ruled 2026-08-27**; shipped in 0.19.0 — the vocabulary the rulings
+froze, as `south-contracts::task` (`HostMintedValuesV1`,
+`TaskObservationV1`, `TaskFailureKindV1`, task contract version one). D1
+stays an entry-point rule the module records for the slice that builds them;
+the fourth item stays deliberately not done (§5); the WIT lowering and the
+task world's `KNOWN_WORLDS` entry land with the world's own slice, as the
+manifest-schema record already assigns them. Issue: #52, closed by this
+slice.
 
 Date: 2026-08-27
 
