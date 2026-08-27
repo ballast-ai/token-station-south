@@ -4,6 +4,13 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    groups:
+      # wasmtime and wasmtime-wasi share a lockstep major version; bumping
+      # one without the other never builds.
+      wasmtime:
+        patterns:
+          - wasmtime
+          - wasmtime-wasi
   - package-ecosystem: github-actions
     directory: /
     schedule:
