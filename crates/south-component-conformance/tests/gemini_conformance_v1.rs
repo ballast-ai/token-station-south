@@ -16,8 +16,8 @@ use south_component_conformance::{
     reported_identity_matches, run_provider_component_suite_v1,
 };
 use south_provider_api::{
-    AuthArmV1, COMPONENT_BEHAVIOR_SUITE, CompatibilityDeclarationV1, ComponentCapabilityV1,
-    ComponentManifestV1, ComponentPermissionsV1, ConformanceSpecV1, PROVIDER_WORLD, WIT_PACKAGE,
+    COMPONENT_BEHAVIOR_SUITE, CompatibilityDeclarationV1, ComponentManifestV1,
+    ComponentPermissionsV1, ConformanceSpecV1, PROVIDER_WORLD, WIT_PACKAGE,
 };
 use south_provider_api::{HostExpectationsV1, compatibility_matches};
 
@@ -76,14 +76,10 @@ fn gate_one_admits_the_shipped_package_and_its_reported_identity() {
 fn the_manifest_declares_exactly_what_the_dialect_uses() {
     let manifest = shipped_manifest();
     assert_eq!(manifest.providers, vec!["gemini".to_owned()]);
-    assert_eq!(manifest.auth_arms, BTreeSet::from([AuthArmV1::HeaderSecret]));
+    assert_eq!(manifest.auth_arms, BTreeSet::from(["header_secret".to_owned()]));
     assert_eq!(
         manifest.capabilities,
-        BTreeSet::from([
-            ComponentCapabilityV1::Chat,
-            ComponentCapabilityV1::Stream,
-            ComponentCapabilityV1::ToolCall,
-        ]),
+        BTreeSet::from(["chat".to_owned(), "stream".to_owned(), "tool_call".to_owned(),]),
         "the dialect's structured-output knob is not translated yet, so it is not claimed"
     );
     assert_eq!(

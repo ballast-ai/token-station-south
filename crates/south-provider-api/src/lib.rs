@@ -27,18 +27,21 @@
 //!
 //! # Versioning
 //!
-//! The manifest's `api_version` must equal the world it was built against
-//! ([`PROVIDER_WORLD`]). A breaking ABI change ships a `-v3` world alongside
-//! `-v2`; it never edits `-v2` in place, because installed components are
-//! compiled artifacts that cannot be migrated.
+//! The manifest's `api_version` declares the world it was built against, and
+//! must name a world this South knows ([`KNOWN_WORLDS`]); the suite name, the
+//! capability vocabulary, and the auth arms are validated against that world
+//! (2026-08-27 manifest-schema record, D1). A breaking ABI change ships a
+//! `-v3` world alongside `-v2`; it never edits `-v2` in place, because
+//! installed components are compiled artifacts that cannot be migrated.
 
 mod manifest;
 
 pub use manifest::{
-    AuthArmV1, COMPONENT_BEHAVIOR_SUITE, CompatibilityDeclarationV1, CompatibilityMismatchV1,
-    CompatibilityTupleV1, ComponentCapabilityV1, ComponentManifestV1, ComponentMetadataV1,
-    ComponentPermissionsV1, ConformanceSpecV1, HostExpectationsV1, ManifestErrorV1, PROVIDER_WORLD,
-    WIT_PACKAGE, compatibility_matches, validate_component_name, validate_package_relative_path,
+    COMPONENT_BEHAVIOR_SUITE, CompatibilityDeclarationV1, CompatibilityMismatchV1,
+    CompatibilityTupleV1, ComponentManifestV1, ComponentMetadataV1, ComponentPermissionsV1,
+    ConformanceSpecV1, HostExpectationsV1, KNOWN_WORLDS, ManifestErrorV1, PROVIDER_AUTH_ARMS,
+    PROVIDER_CAPABILITIES, PROVIDER_WORLD, PROVIDER_WORLD_SCHEMA, WIT_PACKAGE, WorldSchemaV1,
+    compatibility_matches, known_world, validate_component_name, validate_package_relative_path,
 };
 
 /// The component ABI, as WIT source.

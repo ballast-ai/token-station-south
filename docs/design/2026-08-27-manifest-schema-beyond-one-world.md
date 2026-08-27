@@ -1,9 +1,11 @@
 # The Manifest Schema Beyond One World: two extensions, proposed
 
-Status: **ruled 2026-08-27** — D1–D4 as recommended below. Issues: #43
-(the `host_signed` arm) and #53 (a second component world), each closed by its
-implementing slice. Written as one record because they are the same question
-asked twice.
+Status: **ruled 2026-08-27**; D1 shipped in 0.17.0 — the manifest declares its
+world, and the suite name, capability vocabulary, auth arms and WIT package
+are validated against that world (`KNOWN_WORLDS`, one world today). D2–D4
+(the `host_signed` arm, #43) await their slice. Issues: #43 and #53, each
+closed by its implementing slice. Written as one record because they are the
+same question asked twice.
 
 Date: 2026-08-27
 

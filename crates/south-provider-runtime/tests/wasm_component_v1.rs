@@ -40,7 +40,7 @@ fn guest_wasm() -> &'static Path {
 }
 
 fn manifest_json(version: &str) -> String {
-    manifest_json_with_runtime(version, "0.16.0")
+    manifest_json_with_runtime(version, "0.17.0")
 }
 
 fn manifest_json_with_runtime(version: &str, south_runtime: &str) -> String {
@@ -313,7 +313,7 @@ fn expectations() -> HostExpectationsV1 {
         ir_schema_id: "token-station-protocol@0.3.0/v0.2.0".to_owned(),
         kernel_version: "0.2.0".to_owned(),
         kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb09c".to_owned(),
-        south_runtime: "0.16.0".to_owned(),
+        south_runtime: "0.17.0".to_owned(),
     }
 }
 

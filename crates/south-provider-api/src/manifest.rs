@@ -16,38 +16,67 @@ pub const PROVIDER_WORLD: &str = "provider-adapter-v2";
 /// so the manifest validates exactly; S2 builds the suite under this name.
 pub const COMPONENT_BEHAVIOR_SUITE: &str = "south.provider-component.v1";
 
-/// Which auth arms the component's descriptors may use.
+/// A component world this South knows, and the properties gate ① validates a
+/// manifest against once the manifest has declared which world it is for
+/// (2026-08-27 manifest-schema record, D1).
 ///
-/// Closed on purpose: an arm this schema does not know is a version mismatch,
-/// not a request to honour. `host_signed` arrives with the finalizer slice
-/// (its own later minor, numbered at ship time) as a schema bump carrying
-/// its `emits` declaration alongside.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum AuthArmV1 {
-    /// `Authorization: Bearer <resolved secret>`, including host-minted
-    /// (OAuth-shaped) credentials whose product is a bearer token.
-    Bearer,
-    /// The resolved secret travels verbatim in one sanctioned provider header.
-    HeaderSecret,
-    /// The host exchanges the named grant for a token before the funds
-    /// marker and presents it as a bearer token; the component never sees
-    /// the exchange.
-    Oauth,
+/// The suite name, the capability vocabulary, and the auth arms are
+/// properties of the declared world, not constants of the schema. Each
+/// vocabulary is closed on purpose: a word a world does not know is a version
+/// mismatch, not a request to honour.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WorldSchemaV1 {
+    /// The world name a manifest declares in `api_version` (tuple 4).
+    pub world: &'static str,
+    /// The WIT package that world's functions live in (tuple 3).
+    pub wit_package: &'static str,
+    /// The suite that world is judged by (tuple 6).
+    pub behavior_suite: &'static str,
+    /// That world's capability vocabulary.
+    pub capabilities: &'static [&'static str],
+    /// That world's auth arm vocabulary.
+    pub auth_arms: &'static [&'static str],
 }
 
-/// Which part of the v2 ABI surface the component implements.
+/// The provider world's capability vocabulary.
 ///
 /// `chat` and `stream` name world functions; `tool_call` and `json_schema`
-/// name `ChatRequest` fields the component promises to translate. The set is
-/// closed by construction — v2 defines no function or field beyond these.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ComponentCapabilityV1 {
-    Chat,
-    Stream,
-    ToolCall,
-    JsonSchema,
+/// name `ChatRequest` fields the component promises to translate. Closed by
+/// construction — v2 defines no function or field beyond these.
+pub const PROVIDER_CAPABILITIES: &[&str] = &["chat", "stream", "tool_call", "json_schema"];
+
+/// The provider world's auth arm vocabulary.
+///
+/// - `bearer`: `Authorization: Bearer <resolved secret>`, including
+///   host-minted (OAuth-shaped) credentials whose product is a bearer token.
+/// - `header_secret`: the resolved secret travels verbatim in one sanctioned
+///   provider header.
+/// - `oauth`: the host exchanges the named grant for a token before the funds
+///   marker and presents it as a bearer token; the component never sees the
+///   exchange.
+///
+/// `host_signed` arrives with the component half of the finalizer (#43, its
+/// own later minor) as a schema bump carrying its `emits` declaration
+/// alongside.
+pub const PROVIDER_AUTH_ARMS: &[&str] = &["bearer", "header_secret", "oauth"];
+
+/// The provider world, as gate ① validates it.
+pub const PROVIDER_WORLD_SCHEMA: WorldSchemaV1 = WorldSchemaV1 {
+    world: PROVIDER_WORLD,
+    wit_package: WIT_PACKAGE,
+    behavior_suite: COMPONENT_BEHAVIOR_SUITE,
+    capabilities: PROVIDER_CAPABILITIES,
+    auth_arms: PROVIDER_AUTH_ARMS,
+};
+
+/// Every world this South can admit. The task adapter world (#52) enters
+/// here when its vocabulary ships.
+pub const KNOWN_WORLDS: &[WorldSchemaV1] = &[PROVIDER_WORLD_SCHEMA];
+
+/// Resolves a manifest's declared `api_version` to a world this South knows.
+#[must_use]
+pub fn known_world(api_version: &str) -> Option<&'static WorldSchemaV1> {
+    KNOWN_WORLDS.iter().find(|schema| schema.world == api_version)
 }
 
 /// What the sandbox must grant.
@@ -114,17 +143,21 @@ pub struct ComponentManifestV1 {
     pub name: String,
     /// Tuple 7 — the component's own version, a `major.minor.patch` triple.
     pub version: String,
-    /// Tuple 4 — must equal [`PROVIDER_WORLD`].
+    /// Tuple 4 — the world this manifest is for; must name a world in
+    /// [`KNOWN_WORLDS`].
     pub api_version: String,
     /// Provider dialect families this component translates, e.g.
     /// `openai-compatible`. Also names the usage cache convention the host's
     /// pricing folds (S0 ruling D1).
     pub providers: Vec<String>,
-    pub capabilities: BTreeSet<ComponentCapabilityV1>,
-    /// Auth arms the component's descriptors may use; empty means the
-    /// component never attaches a credential (unauthenticated upstreams).
+    /// Words from the declared world's capability vocabulary; a word the
+    /// world does not know is refused with its name.
+    pub capabilities: BTreeSet<String>,
+    /// Auth arms the component's descriptors may use, from the declared
+    /// world's vocabulary; empty means the component never attaches a
+    /// credential (unauthenticated upstreams).
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
-    pub auth_arms: BTreeSet<AuthArmV1>,
+    pub auth_arms: BTreeSet<String>,
     pub permissions: ComponentPermissionsV1,
     pub conformance: ConformanceSpecV1,
     pub compatibility: CompatibilityDeclarationV1,
@@ -180,7 +213,8 @@ impl ComponentManifestV1 {
 
     /// Checks everything gate ① requires before a package may be admitted.
     ///
-    /// Order is deliberate: identity first, then the sandbox, then role
+    /// Order is deliberate: identity first (which resolves the declared
+    /// world), then the sandbox, then the world's vocabulary, then role
     /// coherence, then conformance, then the compatibility declaration — so a
     /// package missing a name is not reported as a tuple violation.
     ///
@@ -188,14 +222,15 @@ impl ComponentManifestV1 {
     ///
     /// Returns the first [`ManifestErrorV1`] found.
     pub fn validate(&self) -> Result<(), ManifestErrorV1> {
-        self.validate_identity()?;
+        let world = self.validate_identity()?;
         self.validate_sandbox()?;
-        self.validate_role()?;
-        self.validate_conformance()?;
-        self.validate_compatibility()
+        self.validate_vocabulary(world)?;
+        self.validate_role(world)?;
+        self.validate_conformance(world)?;
+        self.validate_compatibility(world)
     }
 
-    fn validate_identity(&self) -> Result<(), ManifestErrorV1> {
+    fn validate_identity(&self) -> Result<&'static WorldSchemaV1, ManifestErrorV1> {
         if self.name.is_empty() {
             return Err(ManifestErrorV1::MissingName);
         }
@@ -203,10 +238,8 @@ impl ComponentManifestV1 {
         if !is_semver_triple(&self.version) {
             return Err(ManifestErrorV1::InvalidVersion(self.version.clone()));
         }
-        if self.api_version != PROVIDER_WORLD {
-            return Err(ManifestErrorV1::ApiVersionIsNotTheProviderWorld(self.api_version.clone()));
-        }
-        Ok(())
+        known_world(&self.api_version)
+            .ok_or_else(|| ManifestErrorV1::ApiVersionIsNotAKnownWorld(self.api_version.clone()))
     }
 
     fn validate_sandbox(&self) -> Result<(), ManifestErrorV1> {
@@ -224,12 +257,34 @@ impl ComponentManifestV1 {
         Ok(())
     }
 
-    fn validate_role(&self) -> Result<(), ManifestErrorV1> {
-        if !self.capabilities.contains(&ComponentCapabilityV1::Chat) {
-            return Err(ManifestErrorV1::ChatCapabilityRequired);
+    fn validate_vocabulary(&self, world: &WorldSchemaV1) -> Result<(), ManifestErrorV1> {
+        for capability in &self.capabilities {
+            if !world.capabilities.contains(&capability.as_str()) {
+                return Err(ManifestErrorV1::CapabilityIsNotInTheWorldVocabulary {
+                    capability: capability.clone(),
+                    world: world.world.to_owned(),
+                });
+            }
         }
-        if self.providers.is_empty() {
-            return Err(ManifestErrorV1::ProviderFamilyRequired);
+        for auth_arm in &self.auth_arms {
+            if !world.auth_arms.contains(&auth_arm.as_str()) {
+                return Err(ManifestErrorV1::AuthArmIsNotInTheWorldVocabulary {
+                    auth_arm: auth_arm.clone(),
+                    world: world.world.to_owned(),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_role(&self, world: &WorldSchemaV1) -> Result<(), ManifestErrorV1> {
+        if world.world == PROVIDER_WORLD {
+            if !self.capabilities.contains("chat") {
+                return Err(ManifestErrorV1::ChatCapabilityRequired);
+            }
+            if self.providers.is_empty() {
+                return Err(ManifestErrorV1::ProviderFamilyRequired);
+            }
         }
         for provider in &self.providers {
             validate_component_name(provider)
@@ -238,11 +293,13 @@ impl ComponentManifestV1 {
         Ok(())
     }
 
-    fn validate_conformance(&self) -> Result<(), ManifestErrorV1> {
-        if self.conformance.required_suite != COMPONENT_BEHAVIOR_SUITE {
-            return Err(ManifestErrorV1::ConformanceSuiteIsNotTheComponentSuite(
-                self.conformance.required_suite.clone(),
-            ));
+    fn validate_conformance(&self, world: &WorldSchemaV1) -> Result<(), ManifestErrorV1> {
+        if self.conformance.required_suite != world.behavior_suite {
+            return Err(ManifestErrorV1::ConformanceSuiteIsNotTheWorldSuite {
+                declared: self.conformance.required_suite.clone(),
+                world: world.world.to_owned(),
+                expected: world.behavior_suite.to_owned(),
+            });
         }
         if self.conformance.fixtures.is_empty() {
             return Err(ManifestErrorV1::MissingFixtures);
@@ -251,11 +308,13 @@ impl ComponentManifestV1 {
         Ok(())
     }
 
-    fn validate_compatibility(&self) -> Result<(), ManifestErrorV1> {
-        if self.compatibility.wit_package != WIT_PACKAGE {
-            return Err(ManifestErrorV1::WitPackageMismatch(
-                self.compatibility.wit_package.clone(),
-            ));
+    fn validate_compatibility(&self, world: &WorldSchemaV1) -> Result<(), ManifestErrorV1> {
+        if self.compatibility.wit_package != world.wit_package {
+            return Err(ManifestErrorV1::WitPackageIsNotTheWorldPackage {
+                declared: self.compatibility.wit_package.clone(),
+                world: world.world.to_owned(),
+                expected: world.wit_package.to_owned(),
+            });
         }
         if !is_ir_schema_id(&self.compatibility.ir_schema_id) {
             return Err(ManifestErrorV1::InvalidIrSchemaId(
@@ -371,8 +430,12 @@ pub enum ManifestErrorV1 {
     InvalidName(String),
     #[error("version `{0}` is not a `major.minor.patch` triple")]
     InvalidVersion(String),
-    #[error("api_version `{0}` is not the provider world `provider-adapter-v2`")]
-    ApiVersionIsNotTheProviderWorld(String),
+    #[error("api_version `{0}` is not a world this South knows")]
+    ApiVersionIsNotAKnownWorld(String),
+    #[error("capability `{capability}` is not in the `{world}` world's vocabulary")]
+    CapabilityIsNotInTheWorldVocabulary { capability: String, world: String },
+    #[error("auth arm `{auth_arm}` is not in the `{world}` world's vocabulary")]
+    AuthArmIsNotInTheWorldVocabulary { auth_arm: String, world: String },
     #[error("components have no network; the host makes every request")]
     NetworkPermissionDenied,
     #[error("components have no file system")]
@@ -385,14 +448,20 @@ pub enum ManifestErrorV1 {
     ProviderFamilyRequired,
     #[error("provider family `{0}` must be one lowercase kebab-case component")]
     InvalidProviderFamily(String),
-    #[error("conformance.required_suite `{0}` is not `south.provider-component.v1`")]
-    ConformanceSuiteIsNotTheComponentSuite(String),
+    #[error(
+        "conformance.required_suite `{declared}` is not the suite the `{world}` world is judged \
+         by (`{expected}`)"
+    )]
+    ConformanceSuiteIsNotTheWorldSuite { declared: String, world: String, expected: String },
     #[error("conformance.fixtures is empty")]
     MissingFixtures,
     #[error("conformance.fixtures `{0}` must be a normalized relative package path")]
     InvalidFixturesPath(String),
-    #[error("compatibility.wit_package `{0}` is not `token-station:adapter@2.0.0`")]
-    WitPackageMismatch(String),
+    #[error(
+        "compatibility.wit_package `{declared}` is not the `{world}` world's package \
+         (`{expected}`)"
+    )]
+    WitPackageIsNotTheWorldPackage { declared: String, world: String, expected: String },
     #[error("compatibility.ir_schema_id `{0}` is not `token-station-protocol@<x.y.z>/v<x.y.z>`")]
     InvalidIrSchemaId(String),
     #[error("compatibility.kernel_version `{0}` is not a `major.minor.patch` triple")]
