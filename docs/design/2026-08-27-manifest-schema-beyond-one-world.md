@@ -3,9 +3,13 @@
 Status: **ruled 2026-08-27**; D1 shipped in 0.17.0 — the manifest declares its
 world, and the suite name, capability vocabulary, auth arms and WIT package
 are validated against that world (`KNOWN_WORLDS`, one world today). D2–D4
-(the `host_signed` arm, #43) await their slice. Issues: #43 and #53, each
-closed by its implementing slice. Written as one record because they are the
-same question asked twice.
+shipped in 0.18.0 — the `host_signed` arm with its `emits` allow-list, the
+gate ① coherence refusals (empty, duplicate, out-of-vocabulary, orphaned
+`emits`, mixed arms), descriptors carrying nothing new, a south minor. The
+gate ② fixture shape for a `host_signed` component's descriptors (`auth`
+absent) is authored with the first such component, as fixtures always are.
+Issues: #43 and #53, each closed by its implementing slice. Written as one
+record because they are the same question asked twice.
 
 Date: 2026-08-27
 

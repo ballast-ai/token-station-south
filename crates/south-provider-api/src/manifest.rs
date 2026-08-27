@@ -54,11 +54,20 @@ pub const PROVIDER_CAPABILITIES: &[&str] = &["chat", "stream", "tool_call", "jso
 /// - `oauth`: the host exchanges the named grant for a token before the funds
 ///   marker and presents it as a bearer token; the component never sees the
 ///   exchange.
+/// - `host_signed`: the host's request finalizer signs every request after
+///   the component returns its descriptor; the descriptor itself carries no
+///   auth, and the manifest's `emits` set is the contract the finalizer's
+///   output is diffed against (2026-08-27 manifest-schema record, D2–D3).
+pub const PROVIDER_AUTH_ARMS: &[&str] = &["bearer", "header_secret", "oauth", "host_signed"];
+
+/// The signed-header vocabulary a `host_signed` manifest may name in `emits`.
 ///
-/// `host_signed` arrives with the component half of the finalizer (#43, its
-/// own later minor) as a schema bump carrying its `emits` declaration
-/// alongside.
-pub const PROVIDER_AUTH_ARMS: &[&str] = &["bearer", "header_secret", "oauth"];
+/// The wire names of the host half's frozen `SignedHeaderV1` enum
+/// (`south-contracts`), repeated here because this crate deliberately depends
+/// on no other south crate; a conformance-crate test pins the two lists
+/// together.
+pub const SIGNED_HEADER_NAMES: &[&str] =
+    &["authorization", "x-amz-date", "x-amz-content-sha256", "x-amz-security-token"];
 
 /// The provider world, as gate ① validates it.
 pub const PROVIDER_WORLD_SCHEMA: WorldSchemaV1 = WorldSchemaV1 {
@@ -158,6 +167,13 @@ pub struct ComponentManifestV1 {
     /// credential (unauthenticated upstreams).
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub auth_arms: BTreeSet<String>,
+    /// The headers a `host_signed` component promises its host's finalizer
+    /// will emit — the allow-list South diffs the finalizer's output against,
+    /// in both directions. Required non-empty with the `host_signed` arm,
+    /// refused without it. A `Vec`, not a set, so a duplicate is refused by
+    /// name rather than silently collapsed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub emits: Vec<String>,
     pub permissions: ComponentPermissionsV1,
     pub conformance: ConformanceSpecV1,
     pub compatibility: CompatibilityDeclarationV1,
@@ -225,6 +241,7 @@ impl ComponentManifestV1 {
         let world = self.validate_identity()?;
         self.validate_sandbox()?;
         self.validate_vocabulary(world)?;
+        self.validate_signing()?;
         self.validate_role(world)?;
         self.validate_conformance(world)?;
         self.validate_compatibility(world)
@@ -272,6 +289,41 @@ impl ComponentManifestV1 {
                     auth_arm: auth_arm.clone(),
                     world: world.world.to_owned(),
                 });
+            }
+        }
+        Ok(())
+    }
+
+    /// The `host_signed` coherence rules (2026-08-27 manifest-schema record,
+    /// D2–D3).
+    ///
+    /// A signed request's descriptor carries no auth, so the manifest
+    /// declaration is the only thing telling the host these requests are
+    /// finalized. Making that indistinguishability unreachable means the arm
+    /// admits no mixture: `host_signed` stands alone, its `emits` allow-list
+    /// is non-empty, duplicate-free, and drawn from the frozen signed-header
+    /// vocabulary — the same shapes, refused with the same words, as the host
+    /// half's `SignedHeaderSetV1`.
+    fn validate_signing(&self) -> Result<(), ManifestErrorV1> {
+        if !self.auth_arms.contains("host_signed") {
+            if let Some(header) = self.emits.first() {
+                return Err(ManifestErrorV1::EmitsRequireTheHostSignedArm(header.clone()));
+            }
+            return Ok(());
+        }
+        if self.auth_arms.len() > 1 {
+            return Err(ManifestErrorV1::HostSignedAdmitsNoOtherArm);
+        }
+        if self.emits.is_empty() {
+            return Err(ManifestErrorV1::HostSignedNamesNoHeader);
+        }
+        let mut seen = BTreeSet::new();
+        for header in &self.emits {
+            if !SIGNED_HEADER_NAMES.contains(&header.as_str()) {
+                return Err(ManifestErrorV1::EmitIsNotASignedHeader(header.clone()));
+            }
+            if !seen.insert(header.as_str()) {
+                return Err(ManifestErrorV1::HostSignedNamesAHeaderTwice(header.clone()));
             }
         }
         Ok(())
@@ -436,6 +488,18 @@ pub enum ManifestErrorV1 {
     CapabilityIsNotInTheWorldVocabulary { capability: String, world: String },
     #[error("auth arm `{auth_arm}` is not in the `{world}` world's vocabulary")]
     AuthArmIsNotInTheWorldVocabulary { auth_arm: String, world: String },
+    #[error("emits names `{0}` but the manifest does not declare the `host_signed` arm")]
+    EmitsRequireTheHostSignedArm(String),
+    #[error(
+        "a host-signed component's requests are all finalized; `host_signed` admits no other arm"
+    )]
+    HostSignedAdmitsNoOtherArm,
+    #[error("a host-signed declaration must name at least one header")]
+    HostSignedNamesNoHeader,
+    #[error("`{0}` is not a signed header the finalizer vocabulary permits")]
+    EmitIsNotASignedHeader(String),
+    #[error("a host-signed declaration must not name the same header twice; `{0}` repeats")]
+    HostSignedNamesAHeaderTwice(String),
     #[error("components have no network; the host makes every request")]
     NetworkPermissionDenied,
     #[error("components have no file system")]
