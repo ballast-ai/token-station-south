@@ -51,6 +51,17 @@ fn shipped_manifest() -> (String, ComponentManifestV1) {
     (source, manifest)
 }
 
+/// The host expectations this package was verified against — the true values,
+/// as the gate ① test below re-asserts after deliberately trying a wrong one.
+fn host_expectations() -> HostExpectationsV1 {
+    HostExpectationsV1 {
+        ir_schema_id: "token-station-protocol@0.3.0/v0.2.0".to_owned(),
+        kernel_version: "0.2.0".to_owned(),
+        kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb09c".to_owned(),
+        south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
+    }
+}
+
 fn sandboxed() -> SandboxedComponentV1 {
     let runtime = ComponentRuntimeV1::new(RuntimeLimitsV1::default()).expect("engine builds");
     let wasm = std::fs::read(component_wasm()).expect("the component reads");
@@ -59,6 +70,7 @@ fn sandboxed() -> SandboxedComponentV1 {
         &runtime,
         &source,
         &wasm,
+        &host_expectations(),
         NoSecretsV1,
     )
     .expect("the shipped package passes every load gate");

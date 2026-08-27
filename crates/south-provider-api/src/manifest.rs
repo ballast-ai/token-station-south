@@ -408,7 +408,8 @@ pub enum ManifestErrorV1 {
 /// What the admitting host was built against, for the tuple handshake.
 ///
 /// The manifest-side constants (`wit_package`, world name, suite name) are
-/// already exact-validated by [`accepts_manifest`]; these four are the values
+/// already exact-validated by `accepts_manifest` (in the conformance crate,
+/// which this one deliberately does not depend on); these four are the values
 /// only a live host knows.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HostExpectationsV1 {
