@@ -5,9 +5,9 @@
       "dependencies": [
         {
           "name": "reqwest",
-          "req": "=0.12.28",
+          "req": "=0.13.4",
           "uses_default_features": false,
-          "features": ["rustls-tls", "stream", "system-proxy"]
+          "features": ["rustls", "stream", "system-proxy"]
         }
       ]
     }

@@ -213,8 +213,10 @@ tests, so no wall-clock sleep is required.
 
 `south-transport-reqwest` builds a dedicated client with:
 
-- reqwest `0.12.28`, matching the enterprise host's direct dependency line, with default features
-  disabled and only `rustls-tls` and `stream` enabled;
+- reqwest `0.13.4` (upgraded from `0.12.28` on 2026-08-27), matching the enterprise host's direct
+  dependency line, with default features disabled and only `rustls` and `stream` enabled. Since
+  0.13, `rustls` verifies certificates through the platform trust store
+  (`rustls-platform-verifier`) rather than bundled webpki roots, on the aws-lc-rs provider;
 - `no_proxy()` and no `system-proxy` feature;
 - `redirect(Policy::none())`;
 - `retry(reqwest::retry::never())`;
@@ -224,8 +226,8 @@ tests, so no wall-clock sleep is required.
 - per-request timeout bounded by the caller's explicit execution timeout.
 
 The dependency boundary checks both direct declarations and Cargo's resolved graph. When the
-reqwest transport is present, the graph must contain exactly one reqwest package at `0.12.28`, and
-its unified feature set must equal the features implied by `rustls-tls` plus `stream`. This prevents
+reqwest transport is present, the graph must contain exactly one reqwest package at `0.13.4`, and
+its unified feature set must equal the features implied by `rustls` plus `stream`. This prevents
 another dependency from silently adding a second reqwest version or enabling policy-changing
 features through Cargo feature unification. Live Cargo metadata must include array-valued
 `workspace_members` and `resolve.nodes`; incomplete metadata fails closed.
