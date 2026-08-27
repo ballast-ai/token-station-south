@@ -1,8 +1,9 @@
 # The Manifest Schema Beyond One World: two extensions, proposed
 
-Status: **proposed** — D1–D4 are recommendations, not rulings. Issues: #43
-(the `host_signed` arm) and #53 (a second component world). Written as one
-record because they are the same question asked twice.
+Status: **ruled 2026-08-27** — D1–D4 as recommended below. Issues: #43
+(the `host_signed` arm) and #53 (a second component world), each closed by its
+implementing slice. Written as one record because they are the same question
+asked twice.
 
 Date: 2026-08-27
 
