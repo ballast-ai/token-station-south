@@ -39,10 +39,13 @@ the
 [provider-api promotion](docs/design/2026-08-21-provider-api-promotion.md), the
 [component conformance gates](docs/design/2026-08-21-component-conformance.md), the
 [provider runtime](docs/design/2026-08-21-provider-runtime.md), the
-[OpenAI-compatible host parity](docs/design/2026-08-21-openai-compat-host-parity.md), and the
-[Anthropic provider component](docs/design/2026-08-22-anthropic-provider-component.md), and the
-[Gemini provider component](docs/design/2026-08-22-gemini-provider-component.md), and the
-[renderer refusal for unmappable blocks](docs/design/2026-08-23-renderer-refusal-for-unmappable-blocks.md).
+[OpenAI-compatible host parity](docs/design/2026-08-21-openai-compat-host-parity.md), the
+[Anthropic provider component](docs/design/2026-08-22-anthropic-provider-component.md), the
+[Gemini provider component](docs/design/2026-08-22-gemini-provider-component.md), the
+[renderer refusal for unmappable blocks](docs/design/2026-08-23-renderer-refusal-for-unmappable-blocks.md),
+the [task adapter vocabulary](docs/design/2026-08-27-task-adapter-vocabulary.md) (proposed), and the
+[manifest schema beyond one world](docs/design/2026-08-27-manifest-schema-beyond-one-world.md)
+(proposed).
 
 ## Implemented library slice
 
