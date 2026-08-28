@@ -29,7 +29,7 @@ fn head(status: StatusCode) -> StreamingResponseHeadV1 {
 
 #[test]
 fn stream_contract_version_and_limits_are_frozen() {
-    assert_eq!(STREAM_CONTRACT_VERSION, Some(1));
+    assert_eq!(STREAM_CONTRACT_VERSION, Some(2));
     assert_eq!(MAX_STREAM_ERROR_BODY_BYTES, 64 * 1024);
     assert_eq!(MAX_STREAM_CHUNK_BYTES, 64 * 1024);
 }

@@ -1,16 +1,18 @@
 {
   "schema_version": 3,
   "release": {
-    "version": "0.19.0",
+    "version": "0.20.0",
     "stability": "library_slice"
   },
   "contracts": {
     "reserved_header_policy": 1,
-    "http": 3,
+    "http": 4,
     "auth": 3,
     "error": 2,
-    "stream": 1,
+    "stream": 2,
     "provider_quota_metadata": 1,
+    "response_diagnostic": 1,
+    "response_transcript": 1,
     "canonical_ir": null,
     "header_limits": {
       "count": 64,
@@ -22,6 +24,17 @@
       "field_count": 9,
       "value_bytes": 256,
       "total_bytes": 2304
+    },
+    "response_diagnostic_limits": {
+      "field_count": 8,
+      "value_bytes": 256,
+      "total_bytes": 2048
+    },
+    "response_transcript_limits": {
+      "count": 64,
+      "name_bytes": 256,
+      "value_bytes": 4096,
+      "total_bytes": 16384
     },
     "task": 1,
     "task_limits": {

@@ -5,8 +5,12 @@ use south_contracts::{
     CredentialSlotV1, JsonBodyV1, MAX_CREDENTIAL_SLOT_BYTES, MAX_ENDPOINT_BYTES,
     MAX_JSON_REQUEST_BODY_BYTES, MAX_PROVIDER_QUOTA_METADATA_TOTAL_BYTES,
     MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES, MAX_QUERY_TOTAL_BYTES, MAX_RELATIVE_PATH_BYTES,
+    MAX_RESPONSE_DIAGNOSTIC_TOTAL_BYTES, MAX_RESPONSE_DIAGNOSTIC_VALUE_BYTES,
+    MAX_RESPONSE_TRANSCRIPT_COUNT, MAX_RESPONSE_TRANSCRIPT_NAME_BYTES,
+    MAX_RESPONSE_TRANSCRIPT_TOTAL_BYTES, MAX_RESPONSE_TRANSCRIPT_VALUE_BYTES,
     ProviderEndpointV1, ProviderQuotaMetadataFieldV1, ProviderQuotaMetadataV1, QueryParameterV1,
-    QueryStringV1, RelativePathV1,
+    QueryStringV1, RESPONSE_DIAGNOSTIC_FIELD_COUNT, RelativePathV1, ResponseDiagnosticFieldV1,
+    ResponseDiagnosticsV1, ResponseTranscriptV1,
 };
 
 const QUOTA_FIELDS: [ProviderQuotaMetadataFieldV1; 9] = [
@@ -126,5 +130,59 @@ fuzz_target!(|data: &[u8]| {
             present.into_iter().map(|(field, value)| (field, value.to_owned())),
         );
         assert_eq!(rebuilt, Ok(metadata));
+    }
+
+    let diagnostic_fields = input
+        .split('\0')
+        .enumerate()
+        .map(|(index, value)| {
+            (ResponseDiagnosticFieldV1::ALL[index % RESPONSE_DIAGNOSTIC_FIELD_COUNT], value.to_owned())
+        })
+        .collect::<Vec<_>>();
+    if let Ok(diagnostics) = ResponseDiagnosticsV1::try_from_iter(diagnostic_fields) {
+        let present = ResponseDiagnosticFieldV1::ALL
+            .into_iter()
+            .filter_map(|field| diagnostics.value(field).map(|value| (field, value)))
+            .collect::<Vec<_>>();
+        assert_eq!(present.len(), diagnostics.present_field_count());
+        assert!(present.len() <= RESPONSE_DIAGNOSTIC_FIELD_COUNT);
+        assert!(present.iter().all(|(_, value)| value.len() <= MAX_RESPONSE_DIAGNOSTIC_VALUE_BYTES));
+        assert!(
+            present.iter().map(|(_, value)| value.len()).sum::<usize>()
+                <= MAX_RESPONSE_DIAGNOSTIC_TOTAL_BYTES
+        );
+        // The accessor order and `iter()` must agree, or a host reading one and a person reading
+        // the other would see different metadata for the same response.
+        let iterated = diagnostics.iter().collect::<Vec<_>>();
+        assert_eq!(iterated.len(), present.len());
+        let rebuilt = ResponseDiagnosticsV1::try_from_iter(
+            present.into_iter().map(|(field, value)| (field, value.to_owned())),
+        );
+        assert_eq!(rebuilt, Ok(diagnostics));
+    }
+
+    // The transcript is total: every input must produce a value that honours its own bounds and
+    // never retains a denied header, whatever arbitrary bytes arrive.
+    let transcript_headers = input
+        .split('\0')
+        .map(|chunk| chunk.split_once('=').unwrap_or((chunk, "")))
+        .map(|(name, value)| (name, Some(value)))
+        .collect::<Vec<_>>();
+    let transcript = ResponseTranscriptV1::capture(transcript_headers);
+    assert!(transcript.len() <= MAX_RESPONSE_TRANSCRIPT_COUNT);
+    assert_eq!(transcript.is_empty(), transcript.len() == 0);
+    assert!(
+        transcript.iter().map(|(name, value)| name.len() + value.len()).sum::<usize>()
+            <= MAX_RESPONSE_TRANSCRIPT_TOTAL_BYTES
+    );
+    for (name, value) in transcript.iter() {
+        assert_eq!(name, name.to_ascii_lowercase());
+        assert!(name.len() <= MAX_RESPONSE_TRANSCRIPT_NAME_BYTES);
+        assert!(value.len() <= MAX_RESPONSE_TRANSCRIPT_VALUE_BYTES);
+        // Whatever the upstream sent, a credential-bearing header never survives capture.
+        assert!(!matches!(
+            name,
+            "authorization" | "proxy-authenticate" | "proxy-authorization" | "set-cookie" | "set-cookie2"
+        ));
     }
 });

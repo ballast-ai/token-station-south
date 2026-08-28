@@ -22,7 +22,12 @@ use url::Url;
 /// Version three is additive: a version-two request is exactly a version-three request with no
 /// controlled user-agent declaration, just as a version-one request is a version-two request with
 /// no query.
-pub const HTTP_CONTRACT_VERSION: u16 = 3;
+///
+/// Version four is additive on the response side: a buffered response gains the closed
+/// [`ResponseDiagnosticsV1`] allow-list and the bounded, display-only [`ResponseTranscriptV1`].
+/// A version-three response is exactly a version-four response with both empty, which is what the
+/// pre-existing constructors produce.
+pub const HTTP_CONTRACT_VERSION: u16 = 4;
 
 /// The version of the provider authentication declaration contract.
 ///
@@ -40,7 +45,10 @@ pub const AUTH_CONTRACT_VERSION: u16 = 3;
 pub const ERROR_CONTRACT_VERSION: u16 = 2;
 
 /// The version of the byte-level streaming provider call contract.
-pub const STREAM_CONTRACT_VERSION: Option<u16> = Some(1);
+///
+/// Version two mirrors the version-four HTTP contract on the streaming head: the same closed
+/// diagnostics allow-list and display-only transcript, empty for a version-one head.
+pub const STREAM_CONTRACT_VERSION: Option<u16> = Some(2);
 
 /// The maximum byte length of a trusted provider base endpoint.
 pub const MAX_ENDPOINT_BYTES: usize = 8 * 1024;
@@ -88,6 +96,62 @@ pub const MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES: usize = 256;
 /// The maximum combined byte length of all provider quota response metadata values.
 pub const MAX_PROVIDER_QUOTA_METADATA_TOTAL_BYTES: usize =
     PROVIDER_QUOTA_METADATA_FIELD_COUNT * MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES;
+
+/// The version of the closed provider diagnostic response header contract.
+pub const RESPONSE_DIAGNOSTIC_CONTRACT_VERSION: u16 = 1;
+
+/// The exact number of approved provider diagnostic response header fields.
+pub const RESPONSE_DIAGNOSTIC_FIELD_COUNT: usize = 8;
+
+/// The maximum byte length of one provider diagnostic response header value.
+pub const MAX_RESPONSE_DIAGNOSTIC_VALUE_BYTES: usize = 256;
+
+/// The maximum combined byte length of all provider diagnostic response header values.
+pub const MAX_RESPONSE_DIAGNOSTIC_TOTAL_BYTES: usize =
+    RESPONSE_DIAGNOSTIC_FIELD_COUNT * MAX_RESPONSE_DIAGNOSTIC_VALUE_BYTES;
+
+/// The version of the bounded, display-only response header transcript contract.
+pub const RESPONSE_TRANSCRIPT_CONTRACT_VERSION: u16 = 1;
+
+/// The maximum number of headers retained in one response transcript.
+pub const MAX_RESPONSE_TRANSCRIPT_COUNT: usize = 64;
+
+/// The maximum byte length of one response transcript header name.
+pub const MAX_RESPONSE_TRANSCRIPT_NAME_BYTES: usize = 256;
+
+/// The maximum byte length of one response transcript header value.
+pub const MAX_RESPONSE_TRANSCRIPT_VALUE_BYTES: usize = 4 * 1024;
+
+/// The maximum combined byte length of response transcript header names and values.
+pub const MAX_RESPONSE_TRANSCRIPT_TOTAL_BYTES: usize = 16 * 1024;
+
+/// The headers a response transcript never retains.
+///
+/// The response-side mirror of [`RESERVED_HEADERS`]. A transcript is a *display* artefact — an
+/// operator reading what the upstream actually answered — so it captures broadly rather than by
+/// name. That makes the exclusions the whole of its security argument, and they are of two kinds:
+///
+/// - **Credential-bearing**: `set-cookie`, `set-cookie2`, and any `authorization` /
+///   `proxy-authenticate` echo. A session token pasted into a debugging pane is a leaked session
+///   token, and transcripts are read by humans and forwarded in bug reports.
+/// - **Hop-by-hop framing**: `connection`, `keep-alive`, `transfer-encoding`, `te`, `trailer`,
+///   `upgrade`, `proxy-connection`. These describe one hop's framing, never the provider's answer,
+///   and reproducing them invites a reader to draw conclusions about a connection that no longer
+///   exists.
+const RESPONSE_TRANSCRIPT_DENIED_HEADERS: &[&str] = &[
+    "authorization",
+    "connection",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "proxy-connection",
+    "set-cookie",
+    "set-cookie2",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+];
 
 /// The maximum byte length of the buffered error body attached to a rejected stream.
 pub const MAX_STREAM_ERROR_BODY_BYTES: usize = 64 * 1024;
@@ -1195,6 +1259,303 @@ impl fmt::Debug for ProviderQuotaMetadataFieldV1 {
     }
 }
 
+/// The closed set of provider diagnostic response header fields.
+///
+/// Distinct from [`ProviderQuotaMetadataFieldV1`], which carries rate-limit *水位* a host reads to
+/// pace itself. These are the fields an operator quotes back to a provider's support desk when a
+/// call goes wrong: the upstream's own request id, which organisation and API build served it, how
+/// long it spent, and which edge answered. They inform a human, never the host's control flow.
+///
+/// Closed by construction, like every response-side allow-list here: a header absent from this
+/// enum never crosses the component boundary. The negative reasoning matters as much as the
+/// positive — `set-cookie`, any `authorization` echo, and every vendor header that could carry a
+/// credential or a tracking identifier are excluded, and must stay excluded.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ResponseDiagnosticFieldV1 {
+    /// `x-request-id`.
+    XRequestId,
+    /// `request-id`.
+    RequestId,
+    /// `anthropic-request-id`.
+    AnthropicRequestId,
+    /// `openai-organization`.
+    OpenAiOrganization,
+    /// `openai-processing-ms`.
+    OpenAiProcessingMs,
+    /// `openai-version`.
+    OpenAiVersion,
+    /// `cf-ray`.
+    CfRay,
+    /// `server`.
+    Server,
+}
+
+impl ResponseDiagnosticFieldV1 {
+    /// Every approved field, in declaration order.
+    ///
+    /// Tests and transports that must cover the whole approved set iterate this constant instead of
+    /// writing their own array: a new variant then reaches them automatically. The exhaustive match
+    /// in [`ResponseDiagnosticFieldV1::as_header_name`] makes adding a variant without a wire name
+    /// a compile error, and this constant makes adding one that no transport collects impossible to
+    /// miss. (`ProviderQuotaMetadataFieldV1` predates this discipline and grew a hand-maintained
+    /// duplicate array in the reqwest transport instead; do not repeat that here.)
+    pub const ALL: [Self; RESPONSE_DIAGNOSTIC_FIELD_COUNT] = [
+        Self::XRequestId,
+        Self::RequestId,
+        Self::AnthropicRequestId,
+        Self::OpenAiOrganization,
+        Self::OpenAiProcessingMs,
+        Self::OpenAiVersion,
+        Self::CfRay,
+        Self::Server,
+    ];
+
+    /// Returns the canonical lowercase HTTP header name.
+    #[must_use]
+    pub const fn as_header_name(self) -> &'static str {
+        match self {
+            Self::XRequestId => "x-request-id",
+            Self::RequestId => "request-id",
+            Self::AnthropicRequestId => "anthropic-request-id",
+            Self::OpenAiOrganization => "openai-organization",
+            Self::OpenAiProcessingMs => "openai-processing-ms",
+            Self::OpenAiVersion => "openai-version",
+            Self::CfRay => "cf-ray",
+            Self::Server => "server",
+        }
+    }
+
+    const fn index(self) -> usize {
+        match self {
+            Self::XRequestId => 0,
+            Self::RequestId => 1,
+            Self::AnthropicRequestId => 2,
+            Self::OpenAiOrganization => 3,
+            Self::OpenAiProcessingMs => 4,
+            Self::OpenAiVersion => 5,
+            Self::CfRay => 6,
+            Self::Server => 7,
+        }
+    }
+}
+
+impl fmt::Debug for ResponseDiagnosticFieldV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::XRequestId => "XRequestId",
+            Self::RequestId => "RequestId",
+            Self::AnthropicRequestId => "AnthropicRequestId",
+            Self::OpenAiOrganization => "OpenAiOrganization",
+            Self::OpenAiProcessingMs => "OpenAiProcessingMs",
+            Self::OpenAiVersion => "OpenAiVersion",
+            Self::CfRay => "CfRay",
+            Self::Server => "Server",
+        })
+    }
+}
+
+/// Exactly the approved, bounded provider diagnostic response header values.
+#[derive(Clone, Default, PartialEq, Eq)]
+pub struct ResponseDiagnosticsV1 {
+    values: Option<Arc<[Option<String>; RESPONSE_DIAGNOSTIC_FIELD_COUNT]>>,
+}
+
+impl ResponseDiagnosticsV1 {
+    /// Validates a closed sequence of provider diagnostic header fields.
+    ///
+    /// Bounds mirror [`ProviderQuotaMetadataV1::try_from_iter`] exactly: per-value length, header
+    /// legality, a checked running total, and duplicate-slot refusal. Every failure collapses to
+    /// [`TransportErrorV1::ResponseMetadataInvalid`] — the caller learns the metadata was
+    /// unacceptable, never which value or how it was malformed.
+    pub fn try_from_iter<I>(fields: I) -> Result<Self, TransportErrorV1>
+    where
+        I: IntoIterator<Item = (ResponseDiagnosticFieldV1, String)>,
+    {
+        let mut values: [Option<String>; RESPONSE_DIAGNOSTIC_FIELD_COUNT] = Default::default();
+        let mut total_bytes = 0_usize;
+        let mut present_field_count = 0_usize;
+
+        for (field, value) in fields {
+            if value.len() > MAX_RESPONSE_DIAGNOSTIC_VALUE_BYTES
+                || HeaderValue::from_str(&value).is_err()
+            {
+                return Err(TransportErrorV1::ResponseMetadataInvalid);
+            }
+            total_bytes = total_bytes
+                .checked_add(value.len())
+                .ok_or(TransportErrorV1::ResponseMetadataInvalid)?;
+            if total_bytes > MAX_RESPONSE_DIAGNOSTIC_TOTAL_BYTES {
+                return Err(TransportErrorV1::ResponseMetadataInvalid);
+            }
+            let slot = &mut values[field.index()];
+            if slot.is_some() {
+                return Err(TransportErrorV1::ResponseMetadataInvalid);
+            }
+            *slot = Some(value);
+            present_field_count += 1;
+        }
+
+        Ok(Self { values: (present_field_count != 0).then(|| Arc::new(values)) })
+    }
+
+    /// Returns one approved field when present.
+    #[must_use]
+    pub fn value(&self, field: ResponseDiagnosticFieldV1) -> Option<&str> {
+        self.values.as_ref().and_then(|values| values[field.index()].as_deref())
+    }
+
+    /// Returns the number of present approved fields.
+    #[must_use]
+    pub fn present_field_count(&self) -> usize {
+        self.values.as_ref().map_or(0, |values| values.iter().flatten().count())
+    }
+
+    /// Returns every present field with its canonical header name, in declaration order.
+    pub fn iter(&self) -> impl Iterator<Item = (&'static str, &str)> {
+        ResponseDiagnosticFieldV1::ALL
+            .into_iter()
+            .filter_map(|field| Some((field.as_header_name(), self.value(field)?)))
+    }
+}
+
+impl fmt::Debug for ResponseDiagnosticsV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ResponseDiagnosticsV1")
+            .field("contract_version", &RESPONSE_DIAGNOSTIC_CONTRACT_VERSION)
+            .field("present_field_count", &self.present_field_count())
+            .finish_non_exhaustive()
+    }
+}
+
+/// A bounded, display-only transcript of what the upstream actually answered with.
+///
+/// The deliberate counterpart to [`ResponseDiagnosticsV1`] and [`ProviderQuotaMetadataV1`], which
+/// are *closed* sets a host may read programmatically. A transcript is **captured broadly and
+/// consumed by humans only**: an operator asking "what did the provider really send back?" cannot
+/// be served by an allow-list, because the header they need is by definition the one nobody thought
+/// to approve in advance.
+///
+/// The safety argument therefore rests on three properties rather than on a name list:
+///
+/// 1. **Denied by kind** — credential-bearing and hop-by-hop headers never enter, whatever the
+///    upstream sends. See [`RESPONSE_TRANSCRIPT_DENIED_HEADERS`].
+/// 2. **Bounded** — at most [`MAX_RESPONSE_TRANSCRIPT_COUNT`] headers within
+///    [`MAX_RESPONSE_TRANSCRIPT_TOTAL_BYTES`]; a hostile or broken upstream cannot make a
+///    transcript grow without limit. Overflow **truncates and records the fact**
+///    ([`ResponseTranscriptV1::truncated`]) rather than failing the call: a transcript is a
+///    debugging aid and must never turn a good response into an outage.
+/// 3. **Inert** — nothing in South reads a transcript, and hosts must not branch on one. It carries
+///    no meaning to the machine; it is evidence for a person.
+///
+/// The distinction from the closed contracts is the point: widening what a *human* may see does not
+/// widen what the *host's control flow* may depend upon, so the reviewed trust boundary the closed
+/// contracts establish is left intact.
+#[derive(Clone, Default, PartialEq, Eq)]
+pub struct ResponseTranscriptV1 {
+    headers: Option<Arc<[(String, String)]>>,
+    truncated: bool,
+}
+
+impl ResponseTranscriptV1 {
+    /// Captures a bounded transcript, dropping denied, malformed, and over-budget headers.
+    ///
+    /// Total by construction: there is no error case. A header that is denied, unnameable,
+    /// non-UTF-8, or past a bound is *skipped*, and anything skipped for want of room sets
+    /// [`ResponseTranscriptV1::truncated`]. This mirrors how the transports already treat optional
+    /// quota metadata — silently degrade — and never the hard failure reserved for the
+    /// contractually required `content-type` and `retry-after`.
+    #[must_use]
+    pub fn capture<'a, I>(headers: I) -> Self
+    where
+        I: IntoIterator<Item = (&'a str, Option<&'a str>)>,
+    {
+        let mut captured: Vec<(String, String)> = Vec::new();
+        let mut total_bytes = 0_usize;
+        let mut truncated = false;
+
+        for (name, value) in headers {
+            let name = name.to_ascii_lowercase();
+            // A non-UTF-8 value is dropped rather than lossily rendered: a transcript that silently
+            // substitutes replacement characters would misinform the very reader it exists for.
+            let Some(value) = value else {
+                truncated = true;
+                continue;
+            };
+            if RESPONSE_TRANSCRIPT_DENIED_HEADERS.contains(&name.as_str()) {
+                continue;
+            }
+            if name.len() > MAX_RESPONSE_TRANSCRIPT_NAME_BYTES
+                || value.len() > MAX_RESPONSE_TRANSCRIPT_VALUE_BYTES
+                || HeaderValue::from_str(value).is_err()
+            {
+                truncated = true;
+                continue;
+            }
+            if captured.len() >= MAX_RESPONSE_TRANSCRIPT_COUNT {
+                truncated = true;
+                continue;
+            }
+            let entry_bytes = name.len().saturating_add(value.len());
+            match total_bytes.checked_add(entry_bytes) {
+                Some(next) if next <= MAX_RESPONSE_TRANSCRIPT_TOTAL_BYTES => total_bytes = next,
+                _ => {
+                    truncated = true;
+                    continue;
+                }
+            }
+            captured.push((name, value.to_owned()));
+        }
+
+        Self {
+            headers: (!captured.is_empty()).then(|| Arc::from(captured.into_boxed_slice())),
+            truncated,
+        }
+    }
+
+    /// Returns every retained header, in the order the upstream sent them.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.headers
+            .as_deref()
+            .unwrap_or(&[])
+            .iter()
+            .map(|(name, value)| (name.as_str(), value.as_str()))
+    }
+
+    /// Returns the number of retained headers.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.headers.as_deref().map_or(0, <[(String, String)]>::len)
+    }
+
+    /// Returns whether the transcript retained nothing at all.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Returns whether any header was dropped for want of room or for being malformed.
+    ///
+    /// Denied headers do **not** set this: their exclusion is the contract working as designed, not
+    /// an incomplete capture, and reporting it would invite a reader to hunt for a header that is
+    /// never coming.
+    #[must_use]
+    pub const fn truncated(&self) -> bool {
+        self.truncated
+    }
+}
+
+impl fmt::Debug for ResponseTranscriptV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ResponseTranscriptV1")
+            .field("contract_version", &RESPONSE_TRANSCRIPT_CONTRACT_VERSION)
+            .field("header_count", &self.len())
+            .field("truncated", &self.truncated)
+            .finish_non_exhaustive()
+    }
+}
+
 /// Exactly the approved, bounded provider quota response metadata values.
 #[derive(Clone, Default, PartialEq, Eq)]
 pub struct ProviderQuotaMetadataV1 {
@@ -1319,6 +1680,8 @@ pub struct BufferedHttpResponseV1 {
     content_type: Option<String>,
     retry_after: Option<String>,
     provider_quota_metadata: ProviderQuotaMetadataV1,
+    response_diagnostics: ResponseDiagnosticsV1,
+    response_transcript: ResponseTranscriptV1,
 }
 
 impl BufferedHttpResponseV1 {
@@ -1346,6 +1709,32 @@ impl BufferedHttpResponseV1 {
         retry_after: Option<String>,
         provider_quota_metadata: ProviderQuotaMetadataV1,
     ) -> Result<Self, TransportErrorV1> {
+        Self::try_from_parts_with_response_metadata(
+            status,
+            body,
+            content_type,
+            retry_after,
+            provider_quota_metadata,
+            ResponseDiagnosticsV1::default(),
+            ResponseTranscriptV1::default(),
+        )
+    }
+
+    /// Validates a buffered response and every response-side metadata contract.
+    ///
+    /// The two newer arguments are already-validated values, so this constructor does not re-check
+    /// them — [`ResponseDiagnosticsV1::try_from_iter`] enforces the closed allow-list's bounds, and
+    /// [`ResponseTranscriptV1::capture`] is total and bounds itself. The same division of labour the
+    /// quota metadata argument already follows.
+    pub fn try_from_parts_with_response_metadata(
+        status: StatusCode,
+        body: Vec<u8>,
+        content_type: Option<String>,
+        retry_after: Option<String>,
+        provider_quota_metadata: ProviderQuotaMetadataV1,
+        response_diagnostics: ResponseDiagnosticsV1,
+        response_transcript: ResponseTranscriptV1,
+    ) -> Result<Self, TransportErrorV1> {
         if status.is_redirection() {
             return Err(TransportErrorV1::RedirectDenied);
         }
@@ -1356,7 +1745,15 @@ impl BufferedHttpResponseV1 {
         validate_response_metadata(retry_after.as_deref(), MAX_RESPONSE_RETRY_AFTER_BYTES)?;
         let body = String::from_utf8(body).map_err(|_| TransportErrorV1::ResponseBodyNotUtf8)?;
 
-        Ok(Self { status, body, content_type, retry_after, provider_quota_metadata })
+        Ok(Self {
+            status,
+            body,
+            content_type,
+            retry_after,
+            provider_quota_metadata,
+            response_diagnostics,
+            response_transcript,
+        })
     }
 
     /// Returns the upstream HTTP status.
@@ -1388,6 +1785,18 @@ impl BufferedHttpResponseV1 {
     pub const fn provider_quota_metadata(&self) -> &ProviderQuotaMetadataV1 {
         &self.provider_quota_metadata
     }
+
+    /// Returns the closed provider diagnostic response headers.
+    #[must_use]
+    pub const fn response_diagnostics(&self) -> &ResponseDiagnosticsV1 {
+        &self.response_diagnostics
+    }
+
+    /// Returns the bounded, display-only response header transcript.
+    #[must_use]
+    pub const fn response_transcript(&self) -> &ResponseTranscriptV1 {
+        &self.response_transcript
+    }
 }
 
 impl fmt::Debug for BufferedHttpResponseV1 {
@@ -1400,6 +1809,8 @@ impl fmt::Debug for BufferedHttpResponseV1 {
             .field("has_content_type", &self.content_type.is_some())
             .field("has_retry_after", &self.retry_after.is_some())
             .field("provider_quota_metadata", &self.provider_quota_metadata)
+            .field("response_diagnostics", &self.response_diagnostics)
+            .field("response_transcript", &self.response_transcript)
             .finish_non_exhaustive()
     }
 }
@@ -1414,6 +1825,8 @@ pub struct StreamingResponseHeadV1 {
     content_type: Option<String>,
     retry_after: Option<String>,
     provider_quota_metadata: ProviderQuotaMetadataV1,
+    response_diagnostics: ResponseDiagnosticsV1,
+    response_transcript: ResponseTranscriptV1,
 }
 
 impl StreamingResponseHeadV1 {
@@ -1440,13 +1853,44 @@ impl StreamingResponseHeadV1 {
         retry_after: Option<String>,
         provider_quota_metadata: ProviderQuotaMetadataV1,
     ) -> Result<Self, TransportErrorV1> {
+        Self::try_from_parts_with_response_metadata(
+            status,
+            content_type,
+            retry_after,
+            provider_quota_metadata,
+            ResponseDiagnosticsV1::default(),
+            ResponseTranscriptV1::default(),
+        )
+    }
+
+    /// Validates a streaming response head and every response-side metadata contract.
+    ///
+    /// The buffered mirror of this constructor is
+    /// [`BufferedHttpResponseV1::try_from_parts_with_response_metadata`]; the two shapes are
+    /// deliberately identical minus the body, and a change to one that is not made to the other
+    /// compiles silently. Keep them in step.
+    pub fn try_from_parts_with_response_metadata(
+        status: StatusCode,
+        content_type: Option<String>,
+        retry_after: Option<String>,
+        provider_quota_metadata: ProviderQuotaMetadataV1,
+        response_diagnostics: ResponseDiagnosticsV1,
+        response_transcript: ResponseTranscriptV1,
+    ) -> Result<Self, TransportErrorV1> {
         if status.is_redirection() {
             return Err(TransportErrorV1::RedirectDenied);
         }
         validate_response_metadata(content_type.as_deref(), MAX_RESPONSE_CONTENT_TYPE_BYTES)?;
         validate_response_metadata(retry_after.as_deref(), MAX_RESPONSE_RETRY_AFTER_BYTES)?;
 
-        Ok(Self { status, content_type, retry_after, provider_quota_metadata })
+        Ok(Self {
+            status,
+            content_type,
+            retry_after,
+            provider_quota_metadata,
+            response_diagnostics,
+            response_transcript,
+        })
     }
 
     /// Returns the upstream HTTP status.
@@ -1472,6 +1916,18 @@ impl StreamingResponseHeadV1 {
     pub const fn provider_quota_metadata(&self) -> &ProviderQuotaMetadataV1 {
         &self.provider_quota_metadata
     }
+
+    /// Returns the closed provider diagnostic response headers.
+    #[must_use]
+    pub const fn response_diagnostics(&self) -> &ResponseDiagnosticsV1 {
+        &self.response_diagnostics
+    }
+
+    /// Returns the bounded, display-only response header transcript.
+    #[must_use]
+    pub const fn response_transcript(&self) -> &ResponseTranscriptV1 {
+        &self.response_transcript
+    }
 }
 
 impl fmt::Debug for StreamingResponseHeadV1 {
@@ -1483,6 +1939,8 @@ impl fmt::Debug for StreamingResponseHeadV1 {
             .field("has_content_type", &self.content_type.is_some())
             .field("has_retry_after", &self.retry_after.is_some())
             .field("provider_quota_metadata", &self.provider_quota_metadata)
+            .field("response_diagnostics", &self.response_diagnostics)
+            .field("response_transcript", &self.response_transcript)
             .finish_non_exhaustive()
     }
 }

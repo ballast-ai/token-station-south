@@ -52,11 +52,32 @@ struct Contracts {
     error: u16,
     stream: Option<u16>,
     provider_quota_metadata: u16,
+    response_diagnostic: u16,
+    response_transcript: u16,
     canonical_ir: Option<String>,
     header_limits: HeaderLimits,
     provider_quota_metadata_limits: ProviderQuotaMetadataLimits,
+    response_diagnostic_limits: ResponseDiagnosticLimits,
+    response_transcript_limits: ResponseTranscriptLimits,
     task: u16,
     task_limits: TaskLimits,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ResponseDiagnosticLimits {
+    field_count: usize,
+    value_bytes: usize,
+    total_bytes: usize,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ResponseTranscriptLimits {
+    count: usize,
+    name_bytes: usize,
+    value_bytes: usize,
+    total_bytes: usize,
 }
 
 #[derive(Debug, Deserialize)]
@@ -284,6 +305,42 @@ fn compatibility_manifest_describes_the_library_slice() {
         south_contracts::PROVIDER_QUOTA_METADATA_CONTRACT_VERSION
     );
     assert!(manifest.contracts.canonical_ir.is_none());
+    assert_eq!(
+        manifest.contracts.response_diagnostic,
+        south_contracts::RESPONSE_DIAGNOSTIC_CONTRACT_VERSION
+    );
+    assert_eq!(
+        manifest.contracts.response_transcript,
+        south_contracts::RESPONSE_TRANSCRIPT_CONTRACT_VERSION
+    );
+    assert_eq!(
+        manifest.contracts.response_diagnostic_limits.field_count,
+        south_contracts::RESPONSE_DIAGNOSTIC_FIELD_COUNT
+    );
+    assert_eq!(
+        manifest.contracts.response_diagnostic_limits.value_bytes,
+        south_contracts::MAX_RESPONSE_DIAGNOSTIC_VALUE_BYTES
+    );
+    assert_eq!(
+        manifest.contracts.response_diagnostic_limits.total_bytes,
+        south_contracts::MAX_RESPONSE_DIAGNOSTIC_TOTAL_BYTES
+    );
+    assert_eq!(
+        manifest.contracts.response_transcript_limits.count,
+        south_contracts::MAX_RESPONSE_TRANSCRIPT_COUNT
+    );
+    assert_eq!(
+        manifest.contracts.response_transcript_limits.name_bytes,
+        south_contracts::MAX_RESPONSE_TRANSCRIPT_NAME_BYTES
+    );
+    assert_eq!(
+        manifest.contracts.response_transcript_limits.value_bytes,
+        south_contracts::MAX_RESPONSE_TRANSCRIPT_VALUE_BYTES
+    );
+    assert_eq!(
+        manifest.contracts.response_transcript_limits.total_bytes,
+        south_contracts::MAX_RESPONSE_TRANSCRIPT_TOTAL_BYTES
+    );
     assert_eq!(manifest.contracts.task, south_contracts::TASK_CONTRACT_VERSION);
     assert_eq!(manifest.contracts.task_limits.task_id_bytes, south_contracts::MAX_TASK_ID_BYTES);
     assert_eq!(

@@ -48,10 +48,10 @@ fn secret_header_all_covers_every_variant() {
 
 #[test]
 fn contract_versions_are_independently_versioned() {
-    assert_eq!(HTTP_CONTRACT_VERSION, 3);
+    assert_eq!(HTTP_CONTRACT_VERSION, 4);
     assert_eq!(AUTH_CONTRACT_VERSION, 3);
     assert_eq!(ERROR_CONTRACT_VERSION, 2);
-    assert_eq!(STREAM_CONTRACT_VERSION, Some(1));
+    assert_eq!(STREAM_CONTRACT_VERSION, Some(2));
 }
 
 #[test]

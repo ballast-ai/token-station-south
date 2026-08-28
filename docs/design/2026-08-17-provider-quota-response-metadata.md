@@ -270,7 +270,10 @@ Host tests must prove:
    double-send or replay;
 3. absent, partial, duplicate, oversized, and non-UTF-8 approved headers do not synthesize a quota
    window or fail an otherwise valid response;
-4. unknown response headers never appear in the South-adapted `HttpResponseParts`;
+4. unknown response headers never appear in the South-adapted `HttpResponseParts`
+   (still true; narrowed 2026-08-28 — the host-facing buffered response and streaming head
+   additionally carry a bounded, display-only `ResponseTranscriptV1` that no host logic may
+   read, see `2026-08-28-response-header-visibility.md`);
 5. response, metadata, endpoint, path, slot, request, and fake-secret sentinels remain absent from
    `Debug`, `Display`, and stable errors;
 6. the South attempt count remains exactly one and no legacy replay is introduced.

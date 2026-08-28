@@ -8,10 +8,11 @@ use bytes::Bytes;
 use http::{HeaderMap, HeaderName, HeaderValue, header};
 use south_contracts::{
     BufferedHttpResponseV1, MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES, MAX_RESPONSE_BODY_BYTES,
-    MAX_RESPONSE_CONTENT_TYPE_BYTES, MAX_RESPONSE_RETRY_AFTER_BYTES, MAX_STREAM_CHUNK_BYTES,
-    MAX_STREAM_ERROR_BODY_BYTES, ProviderQuotaMetadataFieldV1, ProviderQuotaMetadataV1,
-    StreamChunkV1, StreamReadErrorV1, StreamRejectedV1, StreamTransportConfigV1,
-    StreamingResponseHeadV1, TransportErrorV1,
+    MAX_RESPONSE_CONTENT_TYPE_BYTES, MAX_RESPONSE_DIAGNOSTIC_VALUE_BYTES,
+    MAX_RESPONSE_RETRY_AFTER_BYTES, MAX_STREAM_CHUNK_BYTES, MAX_STREAM_ERROR_BODY_BYTES,
+    ProviderQuotaMetadataFieldV1, ProviderQuotaMetadataV1, ResponseDiagnosticFieldV1,
+    ResponseDiagnosticsV1, ResponseTranscriptV1, StreamChunkV1, StreamReadErrorV1,
+    StreamRejectedV1, StreamTransportConfigV1, StreamingResponseHeadV1, TransportErrorV1,
 };
 use south_core::{
     AsyncHttpTransport, AsyncStreamingTransport, OpenedByteStreamV1, PreparedHttpRequestV1,
@@ -163,14 +164,20 @@ impl ReqwestTransportV1 {
             MAX_RESPONSE_RETRY_AFTER_BYTES,
         )?;
         let provider_quota_metadata = provider_quota_metadata(response.headers())?;
+        // Every response-header read must happen before `read_bounded_body` consumes `response`:
+        // past this point the upstream's `HeaderMap` is gone.
+        let response_diagnostics = response_diagnostics(response.headers())?;
+        let response_transcript = response_transcript(response.headers());
         let body = read_bounded_body(response).await?;
 
-        BufferedHttpResponseV1::try_from_parts_with_provider_quota_metadata(
+        BufferedHttpResponseV1::try_from_parts_with_response_metadata(
             status,
             body,
             content_type,
             retry_after,
             provider_quota_metadata,
+            response_diagnostics,
+            response_transcript,
         )
     }
 }
@@ -250,11 +257,17 @@ impl ReqwestStreamingTransportV1 {
             MAX_RESPONSE_RETRY_AFTER_BYTES,
         )?;
         let provider_quota_metadata = provider_quota_metadata(response.headers())?;
-        let head = StreamingResponseHeadV1::try_from_parts_with_provider_quota_metadata(
+        // As in the buffered arm: read the headers while `response` still owns them, because both
+        // the success and the rejection path below move it away.
+        let response_diagnostics = response_diagnostics(response.headers())?;
+        let response_transcript = response_transcript(response.headers());
+        let head = StreamingResponseHeadV1::try_from_parts_with_response_metadata(
             status,
             content_type,
             retry_after,
             provider_quota_metadata,
+            response_diagnostics,
+            response_transcript,
         )?;
 
         if status.is_success() {
@@ -541,6 +554,42 @@ fn provider_quota_metadata(
             optional_quota_metadata(headers, field).map(|value| (field, value))
         }),
     )
+}
+
+/// Collects the closed diagnostic allow-list.
+///
+/// Iterates [`ResponseDiagnosticFieldV1::ALL`] rather than a hand-written array, so a field added to
+/// the contract is collected here without a second edit. (`PROVIDER_QUOTA_METADATA_FIELDS` above
+/// predates that constant and must be kept in step by hand — the reason the newer contract carries
+/// its own `ALL`.)
+fn response_diagnostics(headers: &HeaderMap) -> Result<ResponseDiagnosticsV1, TransportErrorV1> {
+    ResponseDiagnosticsV1::try_from_iter(ResponseDiagnosticFieldV1::ALL.into_iter().filter_map(
+        |field| optional_single_header(headers, field.as_header_name()).map(|value| (field, value)),
+    ))
+}
+
+/// Captures the bounded, display-only transcript of every other response header.
+///
+/// Deliberately total: [`ResponseTranscriptV1::capture`] drops what it may not keep and records that
+/// it did, so a hostile or merely odd upstream cannot fail an otherwise good response here.
+fn response_transcript(headers: &HeaderMap) -> ResponseTranscriptV1 {
+    ResponseTranscriptV1::capture(
+        headers.iter().map(|(name, value)| (name.as_str(), value.to_str().ok())),
+    )
+}
+
+/// Reads one single-valued header, dropping duplicates and over-long values.
+///
+/// Mirrors [`optional_quota_metadata`]'s silent-drop policy: optional response metadata degrades,
+/// it never fails the exchange.
+fn optional_single_header(headers: &HeaderMap, name: &str) -> Option<String> {
+    let values = headers.get_all(name);
+    let mut values = values.iter();
+    let value = values.next()?;
+    if values.next().is_some() || value.as_bytes().len() > MAX_RESPONSE_DIAGNOSTIC_VALUE_BYTES {
+        return None;
+    }
+    value.to_str().ok().map(str::to_owned)
 }
 
 fn optional_quota_metadata(
