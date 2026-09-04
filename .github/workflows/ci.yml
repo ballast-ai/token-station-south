@@ -22,7 +22,7 @@ jobs:
           # The runtime tests and the sandbox parity test build real
           # wasm32-wasip2 guest components as child cargo invocations.
           targets: wasm32-wasip2
-      - uses: taiki-e/install-action@b6ff580856c41316412a0b9b60540fbc6f8c82cc # v2
+      - uses: taiki-e/install-action@37f7c5781271959fb65b6b35224e28652ff2b63d # v2
         with:
           tool: cargo-nextest,cargo-deny,cargo-audit,cargo-machete
       - name: Format
@@ -68,7 +68,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
         with:
           toolchain: nightly-2026-08-15
-      - uses: taiki-e/install-action@b6ff580856c41316412a0b9b60540fbc6f8c82cc # v2
+      - uses: taiki-e/install-action@37f7c5781271959fb65b6b35224e28652ff2b63d # v2
         with:
           tool: cargo-fuzz
       - name: Fuzz untrusted headers
