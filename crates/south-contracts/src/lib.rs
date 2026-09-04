@@ -1439,7 +1439,7 @@ impl fmt::Debug for ResponseDiagnosticsV1 {
 /// The safety argument therefore rests on three properties rather than on a name list:
 ///
 /// 1. **Denied by kind** — credential-bearing and hop-by-hop headers never enter, whatever the
-///    upstream sends. See [`RESPONSE_TRANSCRIPT_DENIED_HEADERS`].
+///    upstream sends. See `RESPONSE_TRANSCRIPT_DENIED_HEADERS`.
 /// 2. **Bounded** — at most [`MAX_RESPONSE_TRANSCRIPT_COUNT`] headers within
 ///    [`MAX_RESPONSE_TRANSCRIPT_TOTAL_BYTES`]; a hostile or broken upstream cannot make a
 ///    transcript grow without limit. Overflow **truncates and records the fact**
