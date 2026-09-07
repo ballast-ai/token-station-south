@@ -401,7 +401,7 @@ fn compatibility_manifest_describes_the_library_slice() {
         ),
         (
             "south-core",
-            "buffered_streaming_provider_call_header_auth_controlled_query_user_agent_raw_prelude_v1",
+            "buffered_streaming_provider_call_header_auth_controlled_query_user_agent_raw_prelude_signed_raw_call_v1",
         ),
         ("south-provider-api", "provider_adapter_v2_wit_manifest_v1"),
         ("south-component-conformance", "provider_component_gates_reference_v1"),
@@ -412,7 +412,7 @@ fn compatibility_manifest_describes_the_library_slice() {
         ("south-provider-runtime", "sandboxed_component_execution_v1"),
         (
             "south-testkit",
-            "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_runners_raw_builder_v1",
+            "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_runners_raw_builder_signed_raw_builder_v1",
         ),
         (
             "south-transport-reqwest",

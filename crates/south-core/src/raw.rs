@@ -11,13 +11,18 @@
 //! refresh, JWT signing), settlement semantics, and the numeric value of any bound stay
 //! host-owned. No new parsing grammar is introduced — every grammar stays in `south-contracts`
 //! under its existing fuzz obligations.
+//!
+//! The host-signed arm has its own raw type, [`RawSignedProviderCallV1`], and its own pair of
+//! one-shot wrappers (design record: `docs/design/2026-09-08-host-prelude-signed-raw-call.md`).
+//! It parses the same fields through the same grammars; only the declaration a host attaches
+//! differs — a finalizer's emitted-header set in place of a credential scheme.
 
 use std::fmt;
 
 use south_contracts::{
     BearerAuthV1, BufferedHttpResponseV1, ContractErrorV1, ControlledUserAgentV1, CredentialSlotV1,
     HeaderPolicyError, JsonBodyV1, JsonPostRequestV1, ProviderAuthV1, ProviderEndpointV1,
-    QueryStringV1, RelativePathV1, SafeHeaders, SecretHeaderV1,
+    QueryStringV1, RelativePathV1, SafeHeaders, SecretHeaderV1, SignedHeaderSetV1,
 };
 use thiserror::Error;
 use tokio::time::Instant;
@@ -27,7 +32,9 @@ use zeroize::Zeroizing;
 use crate::{
     AsyncHttpTransport, AsyncStreamingTransport, CredentialResolutionErrorV1,
     CredentialResolutionFuture, CredentialResolver, ProviderBindingV1, ProviderCallErrorV1,
-    SecretValue, StreamingCallV1, execute_provider_call_v1, open_streaming_provider_call_v1,
+    RequestFinalizerV1, SecretValue, StreamingCallV1, execute_provider_call_v1,
+    execute_signed_provider_call_v1, open_streaming_provider_call_v1,
+    open_streaming_signed_provider_call_v1,
 };
 
 /// The authentication arm of a raw provider call.
@@ -36,8 +43,10 @@ use crate::{
 /// names the scheme; the credential slot travels separately as [`RawProviderCallV1`]'s
 /// `requested_slot`.
 ///
-/// `#[non_exhaustive]` from birth (host-prelude D2): the host-signed slice adds a third arm, and
-/// host `match`es must already carry a fail-closed wildcard arm.
+/// `#[non_exhaustive]` from birth (host-prelude D2), so host `match`es must already carry a
+/// fail-closed wildcard arm. The host-signed slice did not become the third arm D2 anticipated:
+/// its declaration is a [`SignedHeaderSetV1`], which this `Copy`, lifetime-free enum cannot carry.
+/// It became the sibling type [`RawSignedProviderCallV1`] instead (signed-raw-call record, D1).
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RawAuthV1 {
@@ -80,6 +89,52 @@ impl fmt::Debug for RawProviderCallV1<'_> {
         formatter
             .debug_struct("RawProviderCallV1")
             .field("auth", &self.auth)
+            .field("header_count", &self.headers.len())
+            .field("body_byte_count", &self.body.len())
+            .field("has_query", &self.query.is_some())
+            .field("has_user_agent", &self.user_agent.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
+/// A borrowed host-signed raw provider call: [`RawProviderCallV1`]'s field set with the
+/// finalizer's declaration in place of a credential scheme.
+///
+/// The host-prelude record (D2) planned the host-signed slice as a third [`RawAuthV1`] arm. That
+/// arm cannot carry what the host-signed request must declare: `RawAuthV1` is `Copy` and
+/// lifetime-free, and [`SignedHeaderSetV1`] is neither. So the declaration travels where the
+/// scheme would have, on a sibling type — the same fields, the same grammars, the same
+/// [`RawCallErrorV1`] field names; only `emits` replaces `auth`. South still never resolves this
+/// slot (host-signed D2): the host's [`RequestFinalizerV1`] owns the signing material, and the
+/// slot only participates in the binding check.
+pub struct RawSignedProviderCallV1<'a> {
+    /// The trusted base endpoint, unparsed.
+    pub endpoint: &'a str,
+    /// The provider-selected relative path, unparsed and query-free.
+    pub relative_path: &'a str,
+    /// The host-binding-side credential slot, unparsed.
+    pub bound_slot: &'a str,
+    /// The request-declaration-side credential slot, unparsed. Production paths keep the two
+    /// slots equal; a mismatch surfaces as `CREDENTIAL_BINDING_MISMATCH` at execution time.
+    pub requested_slot: &'a str,
+    /// Ordinary request headers, validated against the header policy during parse.
+    pub headers: &'a [(String, String)],
+    /// The JSON request body, unparsed.
+    pub body: &'a str,
+    /// The headers the host's finalizer will emit — no more, no fewer. South diffs the
+    /// finalizer's output against this set before anything reaches the transport.
+    pub emits: &'a SignedHeaderSetV1,
+    /// The sanctioned query declaration, when the call carries one.
+    pub query: Option<QueryStringV1>,
+    /// The sanctioned user-agent declaration, when the call carries one.
+    pub user_agent: Option<ControlledUserAgentV1>,
+}
+
+impl fmt::Debug for RawSignedProviderCallV1<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("RawSignedProviderCallV1")
+            .field("declared_header_count", &self.emits.len())
             .field("header_count", &self.headers.len())
             .field("body_byte_count", &self.body.len())
             .field("has_query", &self.query.is_some())
@@ -153,31 +208,25 @@ impl RawCallErrorV1 {
 pub fn parse_raw_call(
     raw: &RawProviderCallV1<'_>,
 ) -> Result<(ProviderBindingV1, JsonPostRequestV1), RawCallErrorV1> {
-    let endpoint = ProviderEndpointV1::parse(raw.endpoint).map_err(RawCallErrorV1::Endpoint)?;
-    let bound_slot = CredentialSlotV1::parse(raw.bound_slot).map_err(RawCallErrorV1::BoundSlot)?;
-    let requested_slot =
-        CredentialSlotV1::parse(raw.requested_slot).map_err(RawCallErrorV1::RequestedSlot)?;
-    let relative_path =
-        RelativePathV1::parse(raw.relative_path).map_err(RawCallErrorV1::RelativePath)?;
-    let body = JsonBodyV1::parse(raw.body).map_err(RawCallErrorV1::Body)?;
-    let headers =
-        SafeHeaders::try_from_iter(raw.headers.iter().map(|(name, value)| (name.as_str(), value)))
-            .map_err(RawCallErrorV1::Headers)?;
-
-    let binding = ProviderBindingV1::new(endpoint, bound_slot);
-    let slot = BearerAuthV1::new(requested_slot);
+    let parts = parse_raw_parts(
+        raw.endpoint,
+        raw.relative_path,
+        raw.bound_slot,
+        raw.requested_slot,
+        raw.headers,
+        raw.body,
+    )?;
+    let slot = BearerAuthV1::new(parts.requested_slot);
     let auth = match raw.auth {
         RawAuthV1::Bearer => ProviderAuthV1::Bearer(slot),
         RawAuthV1::HeaderSecret(header) => ProviderAuthV1::HeaderSecret { header, slot },
     };
-    let mut request = JsonPostRequestV1::new(relative_path, headers, body, auth);
-    if let Some(query) = raw.query.clone() {
-        request = request.with_query(query);
-    }
-    if let Some(user_agent) = raw.user_agent {
-        request = request.with_user_agent(user_agent);
-    }
-    Ok((binding, request))
+    let request = finish_request(
+        JsonPostRequestV1::new(parts.relative_path, parts.headers, parts.body, auth),
+        raw.query.clone(),
+        raw.user_agent,
+    );
+    Ok((parts.binding, request))
 }
 
 /// Returns whether one raw call parses, for pre-admission checks.
@@ -187,6 +236,92 @@ pub fn parse_raw_call(
 #[must_use]
 pub fn raw_call_parses(raw: &RawProviderCallV1<'_>) -> bool {
     parse_raw_call(raw).is_ok()
+}
+
+/// Parses one host-signed raw call into the binding and request the signed entry points consume.
+///
+/// Same determinism and zero-side-effect guarantees as [`parse_raw_call`], through the same
+/// grammars; the request's auth is [`ProviderAuthV1::HostSigned`] carrying a clone of the
+/// declaration. A host may pre-check with [`raw_signed_call_parses`].
+pub fn parse_raw_signed_call(
+    raw: &RawSignedProviderCallV1<'_>,
+) -> Result<(ProviderBindingV1, JsonPostRequestV1), RawCallErrorV1> {
+    let parts = parse_raw_parts(
+        raw.endpoint,
+        raw.relative_path,
+        raw.bound_slot,
+        raw.requested_slot,
+        raw.headers,
+        raw.body,
+    )?;
+    let auth = ProviderAuthV1::HostSigned {
+        slot: BearerAuthV1::new(parts.requested_slot),
+        emits: raw.emits.clone(),
+    };
+    let request = finish_request(
+        JsonPostRequestV1::new(parts.relative_path, parts.headers, parts.body, auth),
+        raw.query.clone(),
+        raw.user_agent,
+    );
+    Ok((parts.binding, request))
+}
+
+/// Returns whether one host-signed raw call parses, for pre-admission checks.
+///
+/// Carries the same determinism guarantee as [`parse_raw_signed_call`].
+#[must_use]
+pub fn raw_signed_call_parses(raw: &RawSignedProviderCallV1<'_>) -> bool {
+    parse_raw_signed_call(raw).is_ok()
+}
+
+/// The fields both raw shapes share, parsed through the contract grammars in one place.
+struct ParsedRawParts {
+    binding: ProviderBindingV1,
+    requested_slot: CredentialSlotV1,
+    relative_path: RelativePathV1,
+    headers: SafeHeaders,
+    body: JsonBodyV1,
+}
+
+fn parse_raw_parts(
+    endpoint: &str,
+    relative_path: &str,
+    bound_slot: &str,
+    requested_slot: &str,
+    headers: &[(String, String)],
+    body: &str,
+) -> Result<ParsedRawParts, RawCallErrorV1> {
+    let endpoint = ProviderEndpointV1::parse(endpoint).map_err(RawCallErrorV1::Endpoint)?;
+    let bound_slot = CredentialSlotV1::parse(bound_slot).map_err(RawCallErrorV1::BoundSlot)?;
+    let requested_slot =
+        CredentialSlotV1::parse(requested_slot).map_err(RawCallErrorV1::RequestedSlot)?;
+    let relative_path =
+        RelativePathV1::parse(relative_path).map_err(RawCallErrorV1::RelativePath)?;
+    let body = JsonBodyV1::parse(body).map_err(RawCallErrorV1::Body)?;
+    let headers =
+        SafeHeaders::try_from_iter(headers.iter().map(|(name, value)| (name.as_str(), value)))
+            .map_err(RawCallErrorV1::Headers)?;
+    Ok(ParsedRawParts {
+        binding: ProviderBindingV1::new(endpoint, bound_slot),
+        requested_slot,
+        relative_path,
+        headers,
+        body,
+    })
+}
+
+fn finish_request(
+    mut request: JsonPostRequestV1,
+    query: Option<QueryStringV1>,
+    user_agent: Option<ControlledUserAgentV1>,
+) -> JsonPostRequestV1 {
+    if let Some(query) = query {
+        request = request.with_query(query);
+    }
+    if let Some(user_agent) = user_agent {
+        request = request.with_user_agent(user_agent);
+    }
+    request
 }
 
 /// A raw one-shot wrapper failure: either the parse phase or the orchestrated call.
@@ -253,6 +388,64 @@ where
     open_streaming_provider_call_v1(&binding, &request, resolver, transport, deadline, cancellation)
         .await
         .map_err(RawProviderCallErrorV1::Call)
+}
+
+/// Parses one host-signed raw call, then executes it as a buffered JSON POST.
+///
+/// The signed twin of [`execute_raw_call_v1`]: a finalizer takes the resolver's place, exactly as
+/// [`execute_signed_provider_call_v1`] is the twin of `execute_provider_call_v1`. The parse
+/// invariant is the same — a parse failure returns before the finalizer or the transport is
+/// invoked — and so is everything after the parse: the finalizer runs once, inside the deadline
+/// and cancellation scope, and its output is diffed against `emits` before any byte is sent.
+pub async fn execute_signed_raw_call_v1<F, T>(
+    raw: &RawSignedProviderCallV1<'_>,
+    finalizer: &F,
+    transport: &T,
+    deadline: Instant,
+    cancellation: &CancellationToken,
+) -> Result<BufferedHttpResponseV1, RawProviderCallErrorV1>
+where
+    F: RequestFinalizerV1 + ?Sized,
+    T: AsyncHttpTransport + ?Sized,
+{
+    let (binding, request) = parse_raw_signed_call(raw).map_err(RawProviderCallErrorV1::Parse)?;
+    execute_signed_provider_call_v1(
+        &binding,
+        &request,
+        finalizer,
+        transport,
+        deadline,
+        cancellation,
+    )
+    .await
+    .map_err(RawProviderCallErrorV1::Call)
+}
+
+/// Parses one host-signed raw call, then opens it as a streaming JSON POST.
+///
+/// Carries the same zero-side-effect parse invariant as [`execute_signed_raw_call_v1`].
+pub async fn open_streaming_signed_raw_call_v1<F, T>(
+    raw: &RawSignedProviderCallV1<'_>,
+    finalizer: &F,
+    transport: &T,
+    deadline: Option<Instant>,
+    cancellation: &CancellationToken,
+) -> Result<StreamingCallV1, RawProviderCallErrorV1>
+where
+    F: RequestFinalizerV1 + ?Sized,
+    T: AsyncStreamingTransport + ?Sized,
+{
+    let (binding, request) = parse_raw_signed_call(raw).map_err(RawProviderCallErrorV1::Parse)?;
+    open_streaming_signed_provider_call_v1(
+        &binding,
+        &request,
+        finalizer,
+        transport,
+        deadline,
+        cancellation,
+    )
+    .await
+    .map_err(RawProviderCallErrorV1::Call)
 }
 
 /// A resolver holding one pre-resolved secret in a South-owned zeroizing allocation.

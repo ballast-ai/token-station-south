@@ -2,8 +2,8 @@
 
 use std::fmt;
 
-use south_contracts::{ControlledUserAgentV1, QueryStringV1};
-use south_core::raw::{RawAuthV1, RawProviderCallV1};
+use south_contracts::{ControlledUserAgentV1, QueryStringV1, SignedHeaderSetV1, SignedHeaderV1};
+use south_core::raw::{RawAuthV1, RawProviderCallV1, RawSignedProviderCallV1};
 
 /// Owns the data behind one [`RawProviderCallV1`] and lends borrowed views of it.
 ///
@@ -143,12 +143,169 @@ impl fmt::Debug for RawProviderCallBuilderV1 {
     }
 }
 
+/// Owns the data behind one [`RawSignedProviderCallV1`] and lends borrowed views of it.
+///
+/// The signed twin of [`RawProviderCallBuilderV1`]: the same defaults, with a three-header
+/// declaration (`authorization`, `x-amz-date`, `x-amz-content-sha256` — a session-token-less
+/// `SigV4` signer's set) in place of the credential arm.
+pub struct RawSignedProviderCallBuilderV1 {
+    endpoint: String,
+    relative_path: String,
+    bound_slot: String,
+    requested_slot: String,
+    headers: Vec<(String, String)>,
+    body: String,
+    emits: SignedHeaderSetV1,
+    query: Option<QueryStringV1>,
+    user_agent: Option<ControlledUserAgentV1>,
+}
+
+impl RawSignedProviderCallBuilderV1 {
+    /// Creates a builder holding a minimal valid host-signed call.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            endpoint: "https://provider.invalid".to_owned(),
+            relative_path: "model/invoke".to_owned(),
+            bound_slot: "primary".to_owned(),
+            requested_slot: "primary".to_owned(),
+            headers: Vec::new(),
+            body: "{}".to_owned(),
+            emits: SignedHeaderSetV1::new(&[
+                SignedHeaderV1::Authorization,
+                SignedHeaderV1::XAmzDate,
+                SignedHeaderV1::XAmzContentSha256,
+            ])
+            .unwrap_or_else(|_| unreachable!("three distinct permitted headers form a valid set")),
+            query: None,
+            user_agent: None,
+        }
+    }
+
+    /// Replaces the trusted base endpoint.
+    #[must_use]
+    pub fn endpoint(mut self, endpoint: impl Into<String>) -> Self {
+        self.endpoint = endpoint.into();
+        self
+    }
+
+    /// Replaces the provider-selected relative path.
+    #[must_use]
+    pub fn relative_path(mut self, relative_path: impl Into<String>) -> Self {
+        self.relative_path = relative_path.into();
+        self
+    }
+
+    /// Replaces the binding-side credential slot.
+    #[must_use]
+    pub fn bound_slot(mut self, bound_slot: impl Into<String>) -> Self {
+        self.bound_slot = bound_slot.into();
+        self
+    }
+
+    /// Replaces the request-declaration-side credential slot.
+    #[must_use]
+    pub fn requested_slot(mut self, requested_slot: impl Into<String>) -> Self {
+        self.requested_slot = requested_slot.into();
+        self
+    }
+
+    /// Replaces both slots with one value, the production shape.
+    #[must_use]
+    pub fn slot(self, slot: &str) -> Self {
+        self.bound_slot(slot).requested_slot(slot)
+    }
+
+    /// Appends one ordinary request header.
+    #[must_use]
+    pub fn header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
+        self.headers.push((name.into(), value.into()));
+        self
+    }
+
+    /// Replaces the JSON request body.
+    #[must_use]
+    pub fn body(mut self, body: impl Into<String>) -> Self {
+        self.body = body.into();
+        self
+    }
+
+    /// Replaces the finalizer's declaration.
+    #[must_use]
+    pub fn emits(mut self, emits: SignedHeaderSetV1) -> Self {
+        self.emits = emits;
+        self
+    }
+
+    /// Attaches a sanctioned query declaration.
+    #[must_use]
+    pub fn query(mut self, query: QueryStringV1) -> Self {
+        self.query = Some(query);
+        self
+    }
+
+    /// Attaches a sanctioned user-agent declaration.
+    #[must_use]
+    pub const fn user_agent(mut self, user_agent: ControlledUserAgentV1) -> Self {
+        self.user_agent = Some(user_agent);
+        self
+    }
+
+    /// Lends the borrowed host-signed raw call the signed entry points consume.
+    #[must_use]
+    pub fn as_raw_signed_call(&self) -> RawSignedProviderCallV1<'_> {
+        RawSignedProviderCallV1 {
+            endpoint: &self.endpoint,
+            relative_path: &self.relative_path,
+            bound_slot: &self.bound_slot,
+            requested_slot: &self.requested_slot,
+            headers: &self.headers,
+            body: &self.body,
+            emits: &self.emits,
+            query: self.query.clone(),
+            user_agent: self.user_agent,
+        }
+    }
+}
+
+impl Default for RawSignedProviderCallBuilderV1 {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl fmt::Debug for RawSignedProviderCallBuilderV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("RawSignedProviderCallBuilderV1")
+            .field("declared_header_count", &self.emits.len())
+            .field("header_count", &self.headers.len())
+            .field("has_query", &self.query.is_some())
+            .field("has_user_agent", &self.user_agent.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use south_contracts::{QueryParameterV1, QueryStringV1, SecretHeaderV1};
     use south_core::raw::{parse_raw_call, raw_call_parses};
 
     use super::*;
+
+    #[test]
+    fn default_signed_builder_lends_a_minimal_valid_host_signed_call() {
+        use south_contracts::ProviderAuthV1;
+        use south_core::raw::{parse_raw_signed_call, raw_signed_call_parses};
+
+        let builder = RawSignedProviderCallBuilderV1::new().slot("aws.primary");
+        let raw = builder.as_raw_signed_call();
+        assert!(raw_signed_call_parses(&raw));
+        let (_, request) = parse_raw_signed_call(&raw).expect("parses");
+        assert!(
+            matches!(request.auth(), ProviderAuthV1::HostSigned { emits, .. } if emits.len() == 3)
+        );
+    }
 
     #[test]
     fn default_builder_lends_a_minimal_valid_bearer_call() {

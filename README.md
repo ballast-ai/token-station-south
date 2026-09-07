@@ -57,7 +57,9 @@ the [task adapter vocabulary](docs/design/2026-08-27-task-adapter-vocabulary.md)
   and applies cancellation and caller deadlines around prepared buffered and streaming calls. Its
   `raw` module is the shared host prelude: a borrowed raw-call type, string-in contract parsing
   that names the failing field, zero-side-effect one-shot wrappers, and the pre-resolved and
-  size-bounding credential resolver adapters both hosts previously hand-rolled.
+  size-bounding credential resolver adapters both hosts previously hand-rolled — plus the
+  host-signed twin of that raw call and its wrappers, which take a host finalizer in place of a
+  credential resolver.
 - `south-transport-reqwest` executes hardened buffered and byte-streaming JSON POST requests,
   applies the request's sanctioned user-agent declaration exactly once, applies every auth header
   the prepared request carries (one for the credential arms, the finalizer's diffed set for the
