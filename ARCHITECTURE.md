@@ -75,6 +75,31 @@ quota ledgers, audit persistence, task persistence, credential sources, or traci
 It never reads a database directly. Transport I/O, time, cancellation, component bytes, and runtime
 permissions must be explicit capabilities at their operational boundaries.
 
+### Where the vocabulary line runs: objective facts in, business choices out
+
+South may carry vocabulary for what an upstream *reported* and for what *happened* — never for
+what a host *decided*. The line, ruled 2026-09-08 for the task and (future) metering vocabularies:
+
+| May live in South | Stays host-side |
+| --- | --- |
+| **Metering**: tokens, seconds, images, characters, milliunits an upstream reported | **Pricing**: unit prices, tiers, discounts, rate cards |
+| **Metering uncertainty**: how "the upstream reported no usage" is expressed | **Business model**: BYOK fee splits, routing attribution, tenant policy |
+| **Settlement outcome vocabulary**: the closed set of ways a settlement can end | **Funds policy**: when to reserve, whose ledger to debit, how much to hold |
+
+A metering vocabulary is admitted only with a second consumer in sight: a shared library that
+freezes one host's persisted format is not sharing, it is exporting that host's migration burden.
+
+### What never enters South, even when it could be moved
+
+Two tests, ruled 2026-09-08. Material whose **leak impact exceeds one API key** stays host-side:
+service-account private keys, key-encryption keys, anything that decrypts every tenant's rows.
+Logic whose **wrong decision is money or an unrecoverable credential** stays host-side: BYOK wallet
+selection and its exclusivity rules, single-use rotation's concurrency guard, anything that depends
+on database semantics to be correct. Minting, OAuth refresh, and request signing therefore remain
+host code by design; South offers the finalizer seam (`RequestFinalizerV1`) for the *position* of a
+signature, never for the material. A host keeps a per-provider authentication layer above South,
+and that layer is not a gap South intends to close.
+
 During migration, `token-station-protocol` may re-export South types under old Rust paths. It must
 not define duplicate nominal types, and South must never depend back on that compatibility layer.
 

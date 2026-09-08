@@ -700,9 +700,17 @@ impl SecretHeaderV1 {
 /// test asserts — the plain [`SafeHeaders`] channel can never carry one, in either direction.
 ///
 /// Adding a variant is a deliberate contract bump with a conformance case.
+///
+/// The set is not AWS-specific, even though three of its four names are. What the host-signed
+/// arm fixes is *where* the finalizer runs and *which names* it may emit — never the scheme. A
+/// finalizer that computes a provider JWT over the finalised request (Kling's `HS256` token, for
+/// one) declares `Authorization` alone and is as much a host-signed call as `SigV4` is; the three
+/// `x-amz-*` names simply stay undeclared. South never learns which scheme produced the bytes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SignedHeaderV1 {
-    /// `authorization` — the AWS `SigV4` credential scope, signed headers list, and signature.
+    /// `authorization` — whatever credential the finalizer computed over the finalised request:
+    /// an AWS `SigV4` credential scope, signed headers list, and signature; a provider-specific
+    /// `Bearer` JWT signed by the host; any other scheme whose value is a function of the request.
     Authorization,
     /// `x-amz-date` — the signing timestamp the signature is bound to.
     XAmzDate,
