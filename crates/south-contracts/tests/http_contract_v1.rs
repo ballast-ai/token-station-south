@@ -3,11 +3,11 @@ use south_contracts::{
     AUTH_CONTRACT_VERSION, BearerAuthV1, BufferedHttpResponseV1, ContractErrorV1,
     ControlledUserAgentV1, CredentialSlotV1, ERROR_CONTRACT_VERSION, HTTP_CONTRACT_VERSION,
     JsonBodyV1, JsonPostRequestV1, MAX_CREDENTIAL_SLOT_BYTES, MAX_ENDPOINT_BYTES,
-    MAX_JSON_REQUEST_BODY_BYTES, MAX_RELATIVE_PATH_BYTES, MAX_RESPONSE_BODY_BYTES,
-    MAX_RESPONSE_CONTENT_TYPE_BYTES, MAX_RESPONSE_RETRY_AFTER_BYTES, MAX_USER_AGENT_BYTES,
-    PreparationErrorV1, ProviderAuthV1, ProviderEndpointV1, QueryParameterV1, QueryStringV1,
-    RelativePathV1, STREAM_CONTRACT_VERSION, SafeHeaders, SecretHeaderV1, SignedHeaderSetErrorV1,
-    SignedHeaderSetV1, SignedHeaderV1, TransportErrorV1,
+    MAX_JSON_REQUEST_BODY_BYTES, MAX_QUERY_VALUE_BYTES, MAX_RELATIVE_PATH_BYTES,
+    MAX_RESPONSE_BODY_BYTES, MAX_RESPONSE_CONTENT_TYPE_BYTES, MAX_RESPONSE_RETRY_AFTER_BYTES,
+    MAX_USER_AGENT_BYTES, PreparationErrorV1, ProviderAuthV1, ProviderEndpointV1, QueryParameterV1,
+    QueryStringV1, RelativePathV1, STREAM_CONTRACT_VERSION, SafeHeaders, SecretHeaderV1,
+    SignedHeaderSetErrorV1, SignedHeaderSetV1, SignedHeaderV1, TransportErrorV1,
 };
 
 const SENTINEL: &str = "must-not-appear-7f23a";
@@ -48,7 +48,7 @@ fn secret_header_all_covers_every_variant() {
 
 #[test]
 fn contract_versions_are_independently_versioned() {
-    assert_eq!(HTTP_CONTRACT_VERSION, 4);
+    assert_eq!(HTTP_CONTRACT_VERSION, 5);
     assert_eq!(AUTH_CONTRACT_VERSION, 3);
     assert_eq!(ERROR_CONTRACT_VERSION, 2);
     assert_eq!(STREAM_CONTRACT_VERSION, Some(2));
@@ -561,11 +561,11 @@ fn debug_and_error_output_redact_all_untrusted_contract_values() {
 /// Every sanctioned query parameter, in canonical table order. The exhaustive match below fails
 /// compilation when a variant is added, so the list, the value grammar, and the conformance
 /// surface must all be updated together.
-const ALL_QUERY_PARAMETERS: [QueryParameterV1; 2] = QueryParameterV1::ALL;
+const ALL_QUERY_PARAMETERS: [QueryParameterV1; 3] = QueryParameterV1::ALL;
 
 const fn assert_query_parameter_listed(parameter: QueryParameterV1) {
     match parameter {
-        QueryParameterV1::ApiVersion | QueryParameterV1::Alt => (),
+        QueryParameterV1::ApiVersion | QueryParameterV1::Alt | QueryParameterV1::GroupId => (),
     }
 }
 
@@ -627,6 +627,40 @@ fn alt_grammar_is_a_closed_value_set() {
             "{rejected:?} is not a sanctioned alt value"
         );
     }
+}
+
+#[test]
+fn group_id_grammar_is_a_bounded_digit_string() {
+    // Real MiniMax group ids are decimal account identifiers; `19000` is the documentation
+    // example and the nineteen-digit form is what the platform issues today.
+    for accepted in ["19000", "1782000000000000000", "0"] {
+        assert!(
+            QueryStringV1::try_from_iter([(QueryParameterV1::GroupId, accepted)]).is_ok(),
+            "{accepted} is a well-formed group id"
+        );
+    }
+    // Anything that is not a bare digit string is refused: signs, separators, letters, a
+    // smuggled second parameter, and the empty value.
+    for rejected in ["", "-1", "+1", "1 9", "19000&alt=sse", "abc", "19000#", "１９", " 19000"] {
+        assert_eq!(
+            QueryStringV1::try_from_iter([(QueryParameterV1::GroupId, rejected)]),
+            Err(ContractErrorV1::InvalidQueryValue),
+            "{rejected:?} must not survive the GroupId grammar"
+        );
+    }
+    let too_long = "9".repeat(MAX_QUERY_VALUE_BYTES + 1);
+    assert_eq!(
+        QueryStringV1::try_from_iter([(QueryParameterV1::GroupId, too_long.as_str())]),
+        Err(ContractErrorV1::InvalidQueryValue)
+    );
+    // The wire name keeps the upstream's exact casing and sorts after the two older parameters.
+    assert_eq!(QueryParameterV1::GroupId.wire_name(), "GroupId");
+    let query = QueryStringV1::try_from_iter([
+        (QueryParameterV1::GroupId, "19000"),
+        (QueryParameterV1::ApiVersion, "v1"),
+    ])
+    .expect("two distinct sanctioned parameters construct");
+    assert_eq!(query.as_str(), "api-version=v1&GroupId=19000");
 }
 
 #[test]

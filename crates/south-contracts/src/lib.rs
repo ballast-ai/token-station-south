@@ -27,7 +27,11 @@ use url::Url;
 /// [`ResponseDiagnosticsV1`] allow-list and the bounded, display-only [`ResponseTranscriptV1`].
 /// A version-three response is exactly a version-four response with both empty, which is what the
 /// pre-existing constructors produce.
-pub const HTTP_CONTRACT_VERSION: u16 = 4;
+///
+/// Version five is additive on the request side: the sanctioned query set gains
+/// [`QueryParameterV1::GroupId`]. A version-four request is exactly a version-five request that
+/// declares no `GroupId`; every previously accepted declaration serializes byte-identically.
+pub const HTTP_CONTRACT_VERSION: u16 = 5;
 
 /// The version of the provider authentication declaration contract.
 ///
@@ -824,6 +828,13 @@ pub enum QueryParameterV1 {
     ApiVersion,
     /// `alt` (Gemini native streaming).
     Alt,
+    /// `GroupId` (`MiniMax` on its China host, `api.minimaxi.com`, which rejects every request
+    /// that does not carry the account's group id; the international host does not use it).
+    ///
+    /// Admitted in contract version five, after being deliberately left out of the initial set
+    /// (controlled-query record, D5) until a text-surface consumer existed: without it, every
+    /// `MiniMax` China-host text request falls back to the host's legacy path.
+    GroupId,
 }
 
 impl QueryParameterV1 {
@@ -831,7 +842,7 @@ impl QueryParameterV1 {
     ///
     /// Serialization follows this order, so a request's query is byte-identical regardless of the
     /// order the host declared its parameters in.
-    pub const ALL: [Self; 2] = [Self::ApiVersion, Self::Alt];
+    pub const ALL: [Self; 3] = [Self::ApiVersion, Self::Alt, Self::GroupId];
 
     /// Returns the wire name of the sanctioned parameter.
     #[must_use]
@@ -839,6 +850,8 @@ impl QueryParameterV1 {
         match self {
             Self::ApiVersion => "api-version",
             Self::Alt => "alt",
+            // Mixed case on purpose: the upstream matches the name exactly.
+            Self::GroupId => "GroupId",
         }
     }
 
@@ -868,6 +881,14 @@ impl QueryParameterV1 {
             }
             // A closed value set: the upstream accepts nothing else.
             Self::Alt => matches!(value, "sse" | "json"),
+            // A `MiniMax` group id is a decimal account identifier. Digits only: the value is
+            // operator configuration, not provider output, and nothing narrower than a digit
+            // string is ever a real group id. No leading-sign, no separators.
+            Self::GroupId => {
+                !value.is_empty()
+                    && value.len() <= MAX_QUERY_VALUE_BYTES
+                    && value.bytes().all(|byte| byte.is_ascii_digit())
+            }
         }
     }
 }
@@ -2430,6 +2451,7 @@ mod query_serialization_completeness_tests {
             let value = match parameter {
                 QueryParameterV1::ApiVersion => "v1",
                 QueryParameterV1::Alt => "sse",
+                QueryParameterV1::GroupId => "19000",
             };
             let query = QueryStringV1::try_from_iter([(parameter, value)])
                 .expect("a sanctioned parameter with a valid value must construct");
