@@ -267,7 +267,7 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 6
                 // they send two auth headers and ProviderAuthV1 is single-arm.
                 // The adoption record is held by that host's own repository;
                 // this manifest records only the resulting status.
-                ("controlled_query", "verified", Some(5)),
+                ("controlled_query", "verified", Some(6)),
                 // controlled_user_agent stays not_verified until that host runs
                 // its own adoption slice against south.controlled-user-agent.v1
                 // (its migration batches 3 and 4b are the expected consumers).

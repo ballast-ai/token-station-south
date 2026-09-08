@@ -1,12 +1,12 @@
 {
   "schema_version": 3,
   "release": {
-    "version": "0.21.0",
+    "version": "0.22.0",
     "stability": "library_slice"
   },
   "contracts": {
     "reserved_header_policy": 1,
-    "http": 4,
+    "http": 5,
     "auth": 3,
     "error": 2,
     "stream": 2,
@@ -121,7 +121,7 @@
       },
       "controlled_query": {
         "status": "verified",
-        "cases": 5
+        "cases": 6
       },
       "controlled_user_agent": {
         "status": "not_verified"

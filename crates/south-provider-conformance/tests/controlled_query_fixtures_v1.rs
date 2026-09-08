@@ -49,14 +49,30 @@ fn suite_identity_and_canonical_case_order_are_frozen() {
             ControlledQueryCaseIdV1::InvalidQueryValueRejected,
             ControlledQueryCaseIdV1::ReversedDeclarationOrderIsCanonicalized,
             ControlledQueryCaseIdV1::QueryFreeRequestReachesTheWire,
+            ControlledQueryCaseIdV1::BufferedGroupIdQuerySuccess,
         ]
     );
+}
+
+/// Contract version five's parameter has its own success case, appended after the frozen five so
+/// no existing case moves and no recorded host evidence is invalidated.
+#[test]
+fn the_group_id_case_declares_the_new_parameter_and_reaches_the_wire() {
+    let fixtures = controlled_query_fixtures_v1();
+    let fixture = &fixtures[5];
+    assert_eq!(fixture.case_id(), ControlledQueryCaseIdV1::BufferedGroupIdQuerySuccess);
+    assert_eq!(fixture.declared_query(), [(QueryParameterV1::GroupId, "1782000000000000000")]);
+    assert!(matches!(fixture.upstream(), ControlledQueryUpstreamV1::Response(_)));
+    assert!(fixture.expected().evidence().wire_query_exact());
+    let query = QueryStringV1::try_from_iter(fixture.declared_query().iter().copied())
+        .expect("the group id fixture value satisfies its grammar");
+    assert_eq!(query.as_str(), "GroupId=1782000000000000000");
 }
 
 #[test]
 fn canonical_table_freezes_queries_upstreams_outcomes_and_evidence() {
     let fixtures = controlled_query_fixtures_v1();
-    assert_eq!(fixtures.len(), 5);
+    assert_eq!(fixtures.len(), 6);
 
     // 1. BufferedQuerySuccess: one buffered exchange carrying a sanctioned `api-version`.
     let declared = fixtures[0].declared_query();
@@ -157,6 +173,8 @@ fn canonical_table_freezes_the_expected_wire_query_evidence() {
         (ProviderCallCountV1::Zero, ProviderCallCountV1::Zero, false),
         (ProviderCallCountV1::One, ProviderCallCountV1::One, true),
         (ProviderCallCountV1::One, ProviderCallCountV1::One, false),
+        // Contract version five: the `GroupId` success case, appended last.
+        (ProviderCallCountV1::One, ProviderCallCountV1::One, true),
     ];
     // `zip` truncates silently, so a fixture added without extending the table above would go
     // unchecked rather than failing here.
