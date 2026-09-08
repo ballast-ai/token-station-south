@@ -1,13 +1,13 @@
 {
   "schema_version": 3,
   "release": {
-    "version": "0.22.0",
+    "version": "0.23.0",
     "stability": "library_slice"
   },
   "contracts": {
     "reserved_header_policy": 1,
     "http": 5,
-    "auth": 3,
+    "auth": 4,
     "error": 2,
     "stream": 2,
     "provider_quota_metadata": 1,
@@ -92,8 +92,7 @@
         "status": "not_verified"
       },
       "header_auth": {
-        "status": "verified",
-        "cases": 3
+        "status": "not_verified"
       },
       "controlled_query": {
         "status": "not_verified"
@@ -117,7 +116,7 @@
       },
       "header_auth": {
         "status": "verified",
-        "cases": 3
+        "cases": 4
       },
       "controlled_query": {
         "status": "verified",

@@ -54,6 +54,9 @@ pub enum RawAuthV1 {
     Bearer,
     /// The secret travels verbatim in one sanctioned provider-specific header.
     HeaderSecret(SecretHeaderV1),
+    /// The secret travels both as `Authorization: Bearer …` and verbatim in the named sanctioned
+    /// header (auth contract version four).
+    BearerAndHeaderSecret(SecretHeaderV1),
 }
 
 /// A borrowed raw provider call carrying exactly what both hosts already assemble.
@@ -220,6 +223,9 @@ pub fn parse_raw_call(
     let auth = match raw.auth {
         RawAuthV1::Bearer => ProviderAuthV1::Bearer(slot),
         RawAuthV1::HeaderSecret(header) => ProviderAuthV1::HeaderSecret { header, slot },
+        RawAuthV1::BearerAndHeaderSecret(header) => {
+            ProviderAuthV1::BearerAndHeaderSecret { header, slot }
+        }
     };
     let request = finish_request(
         JsonPostRequestV1::new(parts.relative_path, parts.headers, parts.body, auth),

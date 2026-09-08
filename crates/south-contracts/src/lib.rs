@@ -38,8 +38,9 @@ pub const HTTP_CONTRACT_VERSION: u16 = 5;
 /// Each version is additive: a version-one request is exactly a version-two request using the
 /// [`ProviderAuthV1::Bearer`] arm, version two adds the sanctioned header-secret scheme, and
 /// version three adds [`ProviderAuthV1::HostSigned`] — the arm whose credential never crosses
-/// into South at all.
-pub const AUTH_CONTRACT_VERSION: u16 = 3;
+/// into South at all. Version four adds [`ProviderAuthV1::BearerAndHeaderSecret`], the one
+/// closed shape in which a single resolved secret is bound to two headers.
+pub const AUTH_CONTRACT_VERSION: u16 = 4;
 
 /// The version of the stable provider-call error contract.
 ///
@@ -1074,7 +1075,7 @@ pub enum ProviderAuthV1 {
     },
     /// The host signs the finalised request and emits exactly the declared headers.
     ///
-    /// Unlike the other two arms, South never resolves this slot: the signing material stays
+    /// Unlike the credential arms, South never resolves this slot: the signing material stays
     /// entirely host-side and South sees only the emitted header values (host-signed D2). The
     /// slot still participates in the binding check, so a request cannot be signed with an
     /// identity the binding does not authorize.
@@ -1083,6 +1084,21 @@ pub enum ProviderAuthV1 {
         slot: BearerAuthV1,
         /// The headers the finalizer promises to emit, enforced in both directions.
         emits: SignedHeaderSetV1,
+    },
+    /// The secret travels twice: as `Authorization: Bearer …` **and** verbatim in one sanctioned
+    /// provider-specific header.
+    ///
+    /// One closed shape for the one upstream surface that demands both — Gemini's
+    /// `OpenAI`-compatible endpoints accept a key only when `x-goog-api-key` and the Bearer
+    /// header agree. Both names are reserved, so the plain header channel could never carry the
+    /// second copy, and a general "list of auth headers" would reopen exactly the choice this
+    /// enum exists to close. South resolves one slot, once; the two bindings are derived from the
+    /// same resolved value (auth contract version four).
+    BearerAndHeaderSecret {
+        /// The sanctioned header that carries the verbatim secret alongside the Bearer header.
+        header: SecretHeaderV1,
+        /// The credential-slot declaration resolved by the host, exactly as in the Bearer arm.
+        slot: BearerAuthV1,
     },
 }
 
@@ -1093,7 +1109,8 @@ impl ProviderAuthV1 {
         match self {
             Self::Bearer(slot)
             | Self::HeaderSecret { slot, .. }
-            | Self::HostSigned { slot, .. } => slot.credential_slot(),
+            | Self::HostSigned { slot, .. }
+            | Self::BearerAndHeaderSecret { slot, .. } => slot.credential_slot(),
         }
     }
 }
@@ -1117,6 +1134,11 @@ impl fmt::Debug for ProviderAuthV1 {
                 .debug_struct("HostSigned")
                 .field("slot", slot)
                 .field("emits", &emits.headers())
+                .finish(),
+            Self::BearerAndHeaderSecret { header, slot } => formatter
+                .debug_struct("BearerAndHeaderSecret")
+                .field("header", header)
+                .field("slot", slot)
                 .finish(),
         }
     }

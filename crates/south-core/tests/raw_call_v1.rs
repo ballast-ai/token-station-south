@@ -475,9 +475,9 @@ impl RequestFinalizerV1 for CountingFinalizer {
     }
 }
 
-type RecordedSignedWire = Arc<Mutex<Option<(Vec<String>, String)>>>;
+type RecordedSignedWire = Arc<Mutex<Option<(Vec<(String, Vec<u8>)>, String)>>>;
 
-/// Records every auth header name the finalised request carries, plus the URL.
+/// Records every auth header (name and value) the prepared request carries, plus the URL.
 struct RecordingSignedTransport {
     calls: AtomicUsize,
     recorded: RecordedSignedWire,
@@ -494,8 +494,9 @@ impl RecordingSignedTransport {
 
     fn record(&self, request: &PreparedHttpRequestV1<'_>) {
         self.calls.fetch_add(1, Ordering::SeqCst);
-        let names = request.auth_headers().map(|(name, _)| name.to_owned()).collect();
-        *self.recorded.lock().unwrap() = Some((names, request.url().to_string()));
+        let headers =
+            request.auth_headers().map(|(name, value)| (name.to_owned(), value.to_vec())).collect();
+        *self.recorded.lock().unwrap() = Some((headers, request.url().to_string()));
     }
 }
 
@@ -617,14 +618,44 @@ async fn execute_signed_delegates_and_binds_exactly_the_declared_headers() {
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(finalizer.calls(), 1, "the finalizer signs exactly once per call");
     assert_eq!(transport.calls(), 1);
-    let (names, url) = transport.recorded.lock().unwrap().clone().unwrap();
+    let (headers, url) = transport.recorded.lock().unwrap().clone().unwrap();
     let mut declared_names: Vec<String> =
         emits.headers().iter().map(|header| header.header_name().to_owned()).collect();
-    let mut bound_names = names;
+    let mut bound_names: Vec<String> = headers.into_iter().map(|(name, _)| name).collect();
     declared_names.sort();
     bound_names.sort();
     assert_eq!(bound_names, declared_names, "the wire carries the declaration, no more, no fewer");
     assert!(url.starts_with("https://provider.invalid/model/anthropic.test-v1:0/invoke"));
+}
+
+/// Auth contract version four: the combined arm binds the one resolved secret twice, in a
+/// fixed order, from exactly one resolver call.
+#[tokio::test]
+async fn execute_binds_the_bearer_and_header_secret_arm_twice_from_one_resolution() {
+    let headers: Vec<(String, String)> = Vec::new();
+    let raw = RawProviderCallV1 {
+        auth: RawAuthV1::BearerAndHeaderSecret(SecretHeaderV1::XGoogApiKey),
+        ..valid_raw(&headers, "{}")
+    };
+    let resolver = CountingResolver::new();
+    let transport = RecordingSignedTransport::new();
+    let cancellation = CancellationToken::new();
+
+    let response = execute_raw_call_v1(&raw, &resolver, &transport, far_deadline(), &cancellation)
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(resolver.calls(), 1, "one slot, resolved once, bound twice");
+    let (bound, _) = transport.recorded.lock().unwrap().clone().unwrap();
+    assert_eq!(
+        bound,
+        vec![
+            ("authorization".to_owned(), format!("Bearer {SECRET}").into_bytes()),
+            ("x-goog-api-key".to_owned(), SECRET.as_bytes().to_vec()),
+        ],
+        "authorization first, then the sanctioned header, both from the same secret"
+    );
 }
 
 #[tokio::test]

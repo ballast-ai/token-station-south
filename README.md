@@ -49,8 +49,9 @@ the [task adapter vocabulary](docs/design/2026-08-27-task-adapter-vocabulary.md)
 
 ## Implemented library slice
 
-- `south-contracts` defines bounded HTTP, Bearer and sanctioned header-secret authentication,
-  stable error, byte-streaming, and closed provider quota metadata contracts — including
+- `south-contracts` defines bounded HTTP, Bearer, sanctioned header-secret, and combined
+  Bearer-plus-header-secret authentication, stable error, byte-streaming, and closed provider
+  quota metadata contracts — including
   reserved-header enforcement, redacted diagnostics, and the sanctioned controlled query and
   controlled user-agent request declarations.
 - `south-core` binds a validated endpoint to one credential slot, resolves the host-owned secret,

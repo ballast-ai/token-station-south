@@ -18,7 +18,7 @@ community policy      enterprise policy
 
 | Crate | Current status and ownership |
 | --- | --- |
-| `south-contracts` | Implemented bounded HTTP, Bearer and sanctioned header-secret auth, stable error, byte-streaming, and closed quota metadata contracts, plus the sanctioned controlled query and controlled user-agent declarations |
+| `south-contracts` | Implemented bounded HTTP, Bearer, sanctioned header-secret, and combined Bearer-plus-header-secret auth, stable error, byte-streaming, and closed quota metadata contracts, plus the sanctioned controlled query and controlled user-agent declarations |
 | `south-core` | Implemented host-neutral buffered and streaming provider-call orchestration, plus the shared host prelude (`raw` module: raw-call type and its host-signed twin, contract-parse orchestration, one-shot wrappers for both, resolver adapters) |
 | `south-transport-reqwest` | Implemented hardened buffered and byte-streaming JSON POST transport with bounded quota metadata capture, sanctioned user-agent application, and one-config transport-pair construction |
 | `south-provider-conformance` | Implemented immutable provider-call, provider-stream, provider-quota-metadata, header-auth, controlled-query, and controlled-user-agent v1 fixtures |

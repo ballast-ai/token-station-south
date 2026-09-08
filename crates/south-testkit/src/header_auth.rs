@@ -574,8 +574,14 @@ async fn execute_reference_header_auth_case(
     let wire_shape = Arc::new(WireShapeProbe::default());
 
     let secret_header = fixture.secret_header();
+    let bearer_alongside = fixture.bearer_alongside();
     let parsed = parse_reference_input_with_auth(fixture.input(), |slot| {
-        ProviderAuthV1::HeaderSecret { header: secret_header, slot: BearerAuthV1::new(slot) }
+        let slot = BearerAuthV1::new(slot);
+        if bearer_alongside {
+            ProviderAuthV1::BearerAndHeaderSecret { header: secret_header, slot }
+        } else {
+            ProviderAuthV1::HeaderSecret { header: secret_header, slot }
+        }
     });
     let (binding, request) = match parsed {
         Ok(parsed) => parsed,
@@ -592,6 +598,7 @@ async fn execute_reference_header_auth_case(
         calls: Arc::clone(&transport_calls),
         upstream: fixture.upstream(),
         expected_header: secret_header,
+        expected_bearer_alongside: bearer_alongside,
         wire_shape: Arc::clone(&wire_shape),
     };
     let cancellation = CancellationToken::new();
@@ -703,17 +710,25 @@ struct WireRecordingTransport<'fixture> {
     calls: Arc<AtomicUsize>,
     upstream: &'fixture HeaderAuthUpstreamV1,
     expected_header: SecretHeaderV1,
+    expected_bearer_alongside: bool,
     wire_shape: Arc<WireShapeProbe>,
 }
 
 impl WireRecordingTransport<'_> {
     fn record_wire_shape(&self, request: &PreparedHttpRequestV1<'_>) {
-        // The header-secret arm binds exactly one auth header. Assert that here rather than
-        // unwrapping: this crate denies `expect` outside tests, and "the arm bound no header"
-        // is a shape this probe should report as a failed wire shape, not a panic.
-        let bound: Vec<(&str, &[u8])> = request.auth_headers().collect();
-        let sanctioned_header_exact =
-            bound == [(self.expected_header.header_name(), FAKE_HEADER_SECRET_V1.as_bytes())];
+        // The header-secret arm binds exactly one auth header; the combined arm binds exactly
+        // two, `authorization` first. Compare whole sets rather than unwrapping: this crate
+        // denies `expect` outside tests, and "the arm bound the wrong headers" is a shape this
+        // probe should report as a failed wire shape, not a panic.
+        let bound: Vec<(&str, Vec<u8>)> =
+            request.auth_headers().map(|(name, value)| (name, value.to_vec())).collect();
+        let secret = FAKE_HEADER_SECRET_V1.as_bytes();
+        let mut expected: Vec<(&str, Vec<u8>)> = Vec::with_capacity(2);
+        if self.expected_bearer_alongside {
+            expected.push(("authorization", [b"Bearer ".as_slice(), secret].concat()));
+        }
+        expected.push((self.expected_header.header_name(), secret.to_vec()));
+        let sanctioned_header_exact = bound == expected;
         let authorization_header_absent = bound.iter().all(|(name, _)| *name != "authorization")
             && request.headers().get("authorization").is_none();
         self.wire_shape.sanctioned_header_exact.store(sanctioned_header_exact, Ordering::SeqCst);

@@ -126,7 +126,7 @@ async fn each_single_difference_reports_exactly_its_one_case_and_category() {
             .expect_err("one deliberate difference must fail conformance");
         assert_eq!(failure.suite_id(), HEADER_AUTH_CONFORMANCE_SUITE_ID);
         assert_eq!(failure.suite_version(), HEADER_AUTH_CONFORMANCE_SUITE_VERSION);
-        assert_eq!(failure.evaluated_case_count(), 3);
+        assert_eq!(failure.evaluated_case_count(), 4);
         assert!(failure.mismatches().len() <= MAX_HEADER_AUTH_MISMATCHES_V1);
         assert_eq!(failure.mismatches().len(), 1, "category {category:?} must isolate");
         let mismatch = &failure.mismatches()[0];
@@ -166,7 +166,7 @@ async fn a_fully_wrong_executor_reports_every_case_without_failing_fast() {
     let failure = run_header_auth_conformance_v1(&WrongExecutor)
         .await
         .expect_err("deliberate mismatches must fail");
-    assert_eq!(failure.evaluated_case_count(), 3);
+    assert_eq!(failure.evaluated_case_count(), 4);
 
     let categories: BTreeSet<_> =
         failure.mismatches().iter().map(south_testkit::HeaderAuthMismatchV1::category).collect();

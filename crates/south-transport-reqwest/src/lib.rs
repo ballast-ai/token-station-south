@@ -443,11 +443,12 @@ fn assemble_headers(request: &PreparedHttpRequestV1<'_>) -> Result<HeaderMap, Tr
         headers.insert(HeaderName::from_static("user-agent"), value);
     }
 
-    // The two credential arms carry exactly one auth header: `authorization` with its `Bearer `
-    // prefix, or one sanctioned secret header with the verbatim secret. The host-signed arm
-    // carries the finalizer's diffed set — one to four. Injecting only what the prepared request
-    // hands over keeps `Authorization` off the wire for header-secret exchanges, and keeps a
-    // signature's headers exactly as the signer emitted them.
+    // The Bearer and header-secret arms carry exactly one auth header: `authorization` with its
+    // `Bearer ` prefix, or one sanctioned secret header with the verbatim secret; the combined
+    // arm carries both. The host-signed arm carries the finalizer's diffed set — one to four.
+    // Injecting only what the prepared request hands over keeps `Authorization` off the wire for
+    // header-secret exchanges, and keeps a signature's headers exactly as the signer emitted
+    // them.
     //
     // Every value is marked sensitive. A signature is not a credential, but it is derived from
     // one and it is the thing a log-scraping attacker would replay.
