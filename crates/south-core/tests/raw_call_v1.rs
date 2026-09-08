@@ -8,18 +8,21 @@ use std::time::Duration;
 
 use http::StatusCode;
 use south_contracts::{
-    BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1, QueryParameterV1,
-    QueryStringV1, SecretHeaderV1, StreamChunkV1, StreamingResponseHeadV1, TransportErrorV1,
+    BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1, ProviderAuthV1,
+    QueryParameterV1, QueryStringV1, SecretHeaderV1, SignedHeaderSetV1, SignedHeaderV1,
+    StreamChunkV1, StreamingResponseHeadV1, TransportErrorV1,
 };
 use south_core::raw::{
     BoundedResolverV1, PreparedSecretResolverV1, RawAuthV1, RawCallErrorV1, RawProviderCallErrorV1,
-    RawProviderCallV1, execute_raw_call_v1, open_streaming_raw_call_v1, parse_raw_call,
-    raw_call_parses,
+    RawProviderCallV1, RawSignedProviderCallV1, execute_raw_call_v1, execute_signed_raw_call_v1,
+    open_streaming_raw_call_v1, open_streaming_signed_raw_call_v1, parse_raw_call,
+    parse_raw_signed_call, raw_call_parses, raw_signed_call_parses,
 };
 use south_core::{
-    AsyncHttpTransport, AsyncStreamingTransport, CredentialResolver, OpenedByteStreamV1,
-    PreparedHttpRequestV1, ProviderCallErrorV1, SecretValue, StreamByteSourceV1,
-    StreamChunkFutureV1, StreamOpenErrorV1, StreamingOpenFutureV1, TransportFuture,
+    AsyncHttpTransport, AsyncStreamingTransport, CredentialResolver, FinalizeFutureV1,
+    FinalizeViewV1, FinalizedHeadersV1, OpenedByteStreamV1, PreparedHttpRequestV1,
+    ProviderCallErrorV1, RequestFinalizerV1, SecretValue, StreamByteSourceV1, StreamChunkFutureV1,
+    StreamOpenErrorV1, StreamingOpenFutureV1, TransportFuture,
 };
 use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
@@ -404,4 +407,290 @@ fn debug_output_redacts_the_prepared_secret() {
     let rendered = format!("{raw:?}");
     assert!(!rendered.contains("secret-ish"));
     assert!(!rendered.contains("provider.invalid"));
+}
+
+// ── Host-signed twin (signed-raw-call record) ────────────────────────────────────────────────
+
+fn declared() -> SignedHeaderSetV1 {
+    SignedHeaderSetV1::new(&[
+        SignedHeaderV1::Authorization,
+        SignedHeaderV1::XAmzDate,
+        SignedHeaderV1::XAmzContentSha256,
+    ])
+    .expect("fixture declaration is valid")
+}
+
+const fn valid_signed_raw<'a>(
+    headers: &'a [(String, String)],
+    body: &'a str,
+    emits: &'a SignedHeaderSetV1,
+) -> RawSignedProviderCallV1<'a> {
+    RawSignedProviderCallV1 {
+        endpoint: "https://provider.invalid",
+        relative_path: "model/anthropic.test-v1:0/invoke",
+        bound_slot: "aws.primary",
+        requested_slot: "aws.primary",
+        headers,
+        body,
+        emits,
+        query: None,
+        user_agent: None,
+    }
+}
+
+/// Emits exactly what the view declares, with reproducible values; counts calls.
+struct CountingFinalizer {
+    calls: AtomicUsize,
+    omit_one: bool,
+}
+
+impl CountingFinalizer {
+    const fn new() -> Self {
+        Self { calls: AtomicUsize::new(0), omit_one: false }
+    }
+
+    const fn omitting_one() -> Self {
+        Self { calls: AtomicUsize::new(0), omit_one: true }
+    }
+
+    fn calls(&self) -> usize {
+        self.calls.load(Ordering::SeqCst)
+    }
+}
+
+impl RequestFinalizerV1 for CountingFinalizer {
+    fn finalize<'a>(&'a self, view: FinalizeViewV1<'a>) -> FinalizeFutureV1<'a> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        Box::pin(async move {
+            let mut headers = FinalizedHeadersV1::new();
+            for (index, header) in view.emits().headers().iter().enumerate() {
+                if self.omit_one && index == 0 {
+                    continue;
+                }
+                let value = format!("{}={}", header.header_name(), view.body().len());
+                headers.insert(*header, value.into_bytes());
+            }
+            Ok(headers)
+        })
+    }
+}
+
+type RecordedSignedWire = Arc<Mutex<Option<(Vec<String>, String)>>>;
+
+/// Records every auth header name the finalised request carries, plus the URL.
+struct RecordingSignedTransport {
+    calls: AtomicUsize,
+    recorded: RecordedSignedWire,
+}
+
+impl RecordingSignedTransport {
+    fn new() -> Self {
+        Self { calls: AtomicUsize::new(0), recorded: Arc::new(Mutex::new(None)) }
+    }
+
+    fn calls(&self) -> usize {
+        self.calls.load(Ordering::SeqCst)
+    }
+
+    fn record(&self, request: &PreparedHttpRequestV1<'_>) {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        let names = request.auth_headers().map(|(name, _)| name.to_owned()).collect();
+        *self.recorded.lock().unwrap() = Some((names, request.url().to_string()));
+    }
+}
+
+impl AsyncHttpTransport for RecordingSignedTransport {
+    fn execute<'a>(
+        &'a self,
+        request: &'a PreparedHttpRequestV1<'_>,
+        _remaining_timeout: Duration,
+    ) -> TransportFuture<'a> {
+        self.record(request);
+        Box::pin(async move {
+            BufferedHttpResponseV1::try_from_parts(
+                StatusCode::OK,
+                b"{\"ok\":true}".to_vec(),
+                Some("application/json".to_owned()),
+                None,
+            )
+        })
+    }
+}
+
+impl AsyncStreamingTransport for RecordingSignedTransport {
+    fn open<'a>(&'a self, request: &'a PreparedHttpRequestV1<'_>) -> StreamingOpenFutureV1<'a> {
+        self.record(request);
+        Box::pin(async move {
+            let head = StreamingResponseHeadV1::try_from_parts(
+                StatusCode::OK,
+                Some("application/vnd.amazon.eventstream".to_owned()),
+                None,
+            )
+            .map_err(StreamOpenErrorV1::Transport)?;
+            // Binary, non-UTF-8 bytes: the streaming twin must hand them through untouched.
+            let source = OneChunkStreamSource {
+                chunk: Some(
+                    StreamChunkV1::try_new(bytes::Bytes::from_static(&[
+                        0x00, 0x00, 0x00, 0x10, 0xff,
+                    ]))
+                    .map_err(|_| StreamOpenErrorV1::Transport(TransportErrorV1::RequestFailed))?,
+                ),
+            };
+            OpenedByteStreamV1::try_new(head, Box::new(source))
+                .map_err(StreamOpenErrorV1::Transport)
+        })
+    }
+}
+
+#[test]
+fn signed_precheck_agrees_with_parse_for_valid_and_invalid_inputs() {
+    let headers: Vec<(String, String)> = Vec::new();
+    let emits = declared();
+    let valid = valid_signed_raw(&headers, "{}", &emits);
+    assert!(raw_signed_call_parses(&valid));
+    assert!(parse_raw_signed_call(&valid).is_ok());
+
+    let invalid = RawSignedProviderCallV1 { relative_path: "/absolute", ..valid };
+    assert!(!raw_signed_call_parses(&invalid));
+    let error = parse_raw_signed_call(&invalid).unwrap_err();
+    assert_eq!(error.field(), "relative_path");
+    assert!(matches!(error, RawCallErrorV1::RelativePath(_)));
+}
+
+#[test]
+fn signed_parse_carries_the_declaration_query_and_user_agent() {
+    let headers = vec![("x-request-id".to_owned(), "req-signed".to_owned())];
+    let emits = declared();
+    let raw = RawSignedProviderCallV1 {
+        query: Some(
+            QueryStringV1::try_from_iter([(QueryParameterV1::ApiVersion, "2024-01-01")]).unwrap(),
+        ),
+        user_agent: Some(ControlledUserAgentV1::try_from_static("south-drill/1.0").unwrap()),
+        ..valid_signed_raw(&headers, "{\"model\":\"m\"}", &emits)
+    };
+
+    let (_, request) = parse_raw_signed_call(&raw).unwrap();
+
+    let ProviderAuthV1::HostSigned { slot, emits: parsed } = request.auth() else {
+        panic!("the signed raw call must parse into the host-signed arm");
+    };
+    assert_eq!(slot.credential_slot().as_str(), "aws.primary");
+    assert_eq!(parsed, &emits, "the declaration must travel verbatim");
+    assert!(request.query().is_some());
+    assert_eq!(request.user_agent().map(ControlledUserAgentV1::as_str), Some("south-drill/1.0"));
+}
+
+#[tokio::test]
+async fn signed_parse_failure_returns_before_finalizer_or_transport_is_invoked() {
+    let headers: Vec<(String, String)> = Vec::new();
+    let emits = declared();
+    let raw =
+        RawSignedProviderCallV1 { body: "not json", ..valid_signed_raw(&headers, "{}", &emits) };
+    let finalizer = CountingFinalizer::new();
+    let transport = RecordingSignedTransport::new();
+    let cancellation = CancellationToken::new();
+
+    let error =
+        execute_signed_raw_call_v1(&raw, &finalizer, &transport, far_deadline(), &cancellation)
+            .await
+            .unwrap_err();
+
+    assert!(matches!(error, RawProviderCallErrorV1::Parse(RawCallErrorV1::Body(_))));
+    assert_eq!(finalizer.calls(), 0);
+    assert_eq!(transport.calls(), 0);
+}
+
+#[tokio::test]
+async fn execute_signed_delegates_and_binds_exactly_the_declared_headers() {
+    let headers = vec![("x-request-id".to_owned(), "req-signed".to_owned())];
+    let emits = declared();
+    let raw = valid_signed_raw(&headers, "{\"model\":\"m\"}", &emits);
+    let finalizer = CountingFinalizer::new();
+    let transport = RecordingSignedTransport::new();
+    let cancellation = CancellationToken::new();
+
+    let response =
+        execute_signed_raw_call_v1(&raw, &finalizer, &transport, far_deadline(), &cancellation)
+            .await
+            .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(finalizer.calls(), 1, "the finalizer signs exactly once per call");
+    assert_eq!(transport.calls(), 1);
+    let (names, url) = transport.recorded.lock().unwrap().clone().unwrap();
+    let mut declared_names: Vec<String> =
+        emits.headers().iter().map(|header| header.header_name().to_owned()).collect();
+    let mut bound_names = names;
+    declared_names.sort();
+    bound_names.sort();
+    assert_eq!(bound_names, declared_names, "the wire carries the declaration, no more, no fewer");
+    assert!(url.starts_with("https://provider.invalid/model/anthropic.test-v1:0/invoke"));
+}
+
+#[tokio::test]
+async fn signed_slot_mismatch_is_refused_before_the_finalizer_runs() {
+    let headers: Vec<(String, String)> = Vec::new();
+    let emits = declared();
+    let raw = RawSignedProviderCallV1 {
+        requested_slot: "other",
+        ..valid_signed_raw(&headers, "{}", &emits)
+    };
+    let finalizer = CountingFinalizer::new();
+    let transport = RecordingSignedTransport::new();
+    let cancellation = CancellationToken::new();
+
+    let error =
+        execute_signed_raw_call_v1(&raw, &finalizer, &transport, far_deadline(), &cancellation)
+            .await
+            .unwrap_err();
+
+    assert_eq!(error.code(), "CREDENTIAL_BINDING_MISMATCH");
+    assert_eq!(finalizer.calls(), 0);
+    assert_eq!(transport.calls(), 0);
+}
+
+#[tokio::test]
+async fn signed_declaration_mismatch_is_rejected_before_the_transport() {
+    let headers: Vec<(String, String)> = Vec::new();
+    let emits = declared();
+    let raw = valid_signed_raw(&headers, "{}", &emits);
+    let finalizer = CountingFinalizer::omitting_one();
+    let transport = RecordingSignedTransport::new();
+    let cancellation = CancellationToken::new();
+
+    let error =
+        execute_signed_raw_call_v1(&raw, &finalizer, &transport, far_deadline(), &cancellation)
+            .await
+            .unwrap_err();
+
+    assert_eq!(error.code(), "REQUEST_FINALIZATION_REJECTED");
+    assert_eq!(finalizer.calls(), 1);
+    assert_eq!(
+        transport.calls(),
+        0,
+        "a signer that breaks its declaration never reaches the network"
+    );
+}
+
+#[tokio::test]
+async fn open_streaming_signed_delegates_and_pulls_binary_chunks() {
+    let headers = vec![("accept".to_owned(), "application/vnd.amazon.eventstream".to_owned())];
+    let emits = declared();
+    let raw = valid_signed_raw(&headers, "{}", &emits);
+    let finalizer = CountingFinalizer::new();
+    let transport = RecordingSignedTransport::new();
+    let cancellation = CancellationToken::new();
+
+    let mut stream =
+        open_streaming_signed_raw_call_v1(&raw, &finalizer, &transport, None, &cancellation)
+            .await
+            .unwrap();
+
+    assert_eq!(stream.head().status(), StatusCode::OK);
+    assert_eq!(stream.head().content_type(), Some("application/vnd.amazon.eventstream"));
+    assert_eq!(finalizer.calls(), 1);
+    assert_eq!(transport.calls(), 1);
+    let chunk = stream.next_chunk().await.unwrap().unwrap();
+    assert_eq!(chunk.as_bytes(), &[0x00, 0x00, 0x00, 0x10, 0xff], "bytes are not UTF-8 checked");
+    assert!(stream.next_chunk().await.is_none());
 }

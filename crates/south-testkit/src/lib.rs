@@ -57,7 +57,7 @@ pub use host_signed::{
     DeterministicRequestFinalizerV1, FAKE_SIGNING_KEY_V1, FinalizerBehaviorV1,
     HangingRequestFinalizerV1, ObservedFinalizeViewV1, expected_signature_v1,
 };
-pub use raw::RawProviderCallBuilderV1;
+pub use raw::{RawProviderCallBuilderV1, RawSignedProviderCallBuilderV1};
 
 pub use controlled_query::{
     AssembledControlledQueryExecutionFutureV1, AssembledControlledQueryExecutorV1,
