@@ -131,7 +131,8 @@
         "status": "not_verified"
       },
       "provider_get": {
-        "status": "not_verified"
+        "status": "verified",
+        "cases": 4
       }
     }
   }

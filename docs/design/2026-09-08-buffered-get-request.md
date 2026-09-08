@@ -125,6 +125,10 @@ Additive; ships as **0.24.0** with `compatibility.json` `http: 6` and the new su
 are annotated `provider_get: not_verified` until each runs the suite through its own adapter; the
 evidence-freshness rule applies from the first run.
 
+> 2026-09-09: the server host ran the suite 4/4 through its production adapter (dev-v2
+> `89139b4d`; task poller behind a `task_poll` switch, default off) and is annotated
+> `verified, cases: 4`. The community host has no task poller and stays `not_verified`.
+
 ## 6. Decisions — ruled 2026-09-08
 
 - **D1 — a separate `GetRequestV1`, not a method field on `JsonPostRequestV1`.** The POST

@@ -280,14 +280,27 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 7
                 // The suite existing in this repository is not adoption
                 // evidence.
                 ("controlled_user_agent", "not_verified", None),
-                // provider_get (the body-less GET, HTTP contract v6, 0.24.0) stays
-                // not_verified until that host's task poller adopts
-                // execute_get_raw_call_v1 behind its SouthSurface::TaskPoll switch
-                // and runs south.provider-get.v1 4/4 through the same real seam as
-                // its other suites. The suite existing in this repository is not
-                // adoption evidence, and the freshness rule applies from the first
-                // run: `cases` is written only by a run against the live table.
-                ("provider_get", "not_verified", None),
+                // token-station-server provider_get verified 2026-09-09 against
+                // the four-case table at v0.24.0: that host's task poller adopts
+                // execute_get_raw_call_v1 (dev-v2 merge 89139b4d, adoption commit
+                // e96babe2) behind a new `task_poll` kill-switch surface, and its
+                // assembled executor runs south.provider-get.v1 4/4 through the
+                // production re-export of the same prelude function, with the
+                // three wire-shape booleans (method GET, body slot absent, query
+                // exact) measured on the prepared request at the transport
+                // boundary. A loopback wire test pins the production GET entry
+                // point (GET, `task_id` query, Authorization, no body, no
+                // content-length, no content-type), and the poller's own
+                // equivalence tests prove the switched-on leg lands the same
+                // terminal row as the legacy leg, refuses a 302 the legacy client
+                // would follow, and carries MiniMax's `task_id` to the wire.
+                //
+                // Scope: the surface is switched **off** by builtin default on
+                // that host until its operator records a parity run; the status
+                // here describes the adapter's conformance, not production
+                // traffic. The adoption record is held by that host's own
+                // repository; this manifest records only the resulting status.
+                ("provider_get", "verified", Some(4)),
             ],
         ),
     ])
