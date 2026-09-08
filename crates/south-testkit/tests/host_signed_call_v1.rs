@@ -14,15 +14,16 @@ use std::{
 
 use http::StatusCode;
 use south_contracts::{
-    BearerAuthV1, BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1, JsonBodyV1,
-    JsonPostRequestV1, ProviderAuthV1, ProviderEndpointV1, QueryParameterV1, QueryStringV1,
-    RelativePathV1, SafeHeaders, SignedHeaderSetV1, SignedHeaderV1, StreamingResponseHeadV1,
+    BearerAuthV1, BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1, GetRequestV1,
+    JsonBodyV1, JsonPostRequestV1, ProviderAuthV1, ProviderEndpointV1, QueryParameterV1,
+    QueryStringV1, RelativePathV1, SafeHeaders, SignedHeaderSetV1, SignedHeaderV1,
+    StreamingResponseHeadV1,
 };
 use south_core::{
     AsyncHttpTransport, AsyncStreamingTransport, OpenedByteStreamV1, PreparedHttpRequestV1,
     ProviderBindingV1, ProviderCallErrorV1, StreamByteSourceV1, StreamChunkFutureV1,
-    StreamOpenErrorV1, StreamingOpenFutureV1, TransportFuture, execute_signed_provider_call_v1,
-    open_streaming_signed_provider_call_v1,
+    StreamOpenErrorV1, StreamingOpenFutureV1, TransportFuture, execute_signed_get_call_v1,
+    execute_signed_provider_call_v1, open_streaming_signed_provider_call_v1,
 };
 use south_testkit::{
     DeterministicRequestFinalizerV1, FinalizerBehaviorV1, HangingRequestFinalizerV1,
@@ -112,7 +113,9 @@ impl RecordingTransport {
             *wire = Some(WireRecord {
                 url: request.url().to_string(),
                 auth_headers: headers,
-                body: request.body().as_str().as_bytes().to_vec(),
+                body: request
+                    .body()
+                    .map_or_else(Vec::new, |body| body.as_str().as_bytes().to_vec()),
                 user_agent: request.user_agent().map(|agent| agent.as_str().to_owned()),
             });
         }
@@ -440,4 +443,112 @@ fn no_signed_header_can_travel_through_the_plain_channel() {
             .expect_err("a signed header name must stay reserved");
         assert_eq!(error.code(), "RESERVED_HEADER_FORBIDDEN");
     }
+}
+
+// ── the GET twin (HTTP contract v6): same seam, method GET, the empty payload ─────────────
+
+const POLL_PATH: &str = "model/invoke/276843862449040";
+
+fn signed_get_request(slot: &str) -> GetRequestV1 {
+    GetRequestV1::new(
+        RelativePathV1::parse(POLL_PATH).expect("fixture path"),
+        SafeHeaders::try_from_iter([("x-test", "header-sentinel")]).expect("fixture header"),
+        ProviderAuthV1::HostSigned {
+            slot: BearerAuthV1::new(CredentialSlotV1::parse(slot).expect("fixture slot")),
+            emits: declared(),
+        },
+    )
+    .with_query(
+        QueryStringV1::try_from_iter([(QueryParameterV1::ApiVersion, "2024-01-01")])
+            .expect("fixture query"),
+    )
+    .with_user_agent(ControlledUserAgentV1::try_from_static(AGENT).expect("fixture agent"))
+}
+
+/// The view a correct South must show the finalizer for a poll: method `GET`, the empty body —
+/// what a payload-hashing scheme such as `SigV4` hashes for a body-less request.
+fn expected_get_view() -> ObservedFinalizeViewV1 {
+    ObservedFinalizeViewV1 {
+        method: "GET".to_owned(),
+        url: format!("{ENDPOINT}/{POLL_PATH}?api-version=2024-01-01"),
+        headers: vec![("x-test".to_owned(), "header-sentinel".to_owned())],
+        body: Vec::new(),
+        user_agent: Some(AGENT.to_owned()),
+        slot: SLOT.to_owned(),
+        emits: declared().headers().to_vec(),
+    }
+}
+
+#[tokio::test]
+async fn a_signed_get_shows_the_finalizer_method_get_and_the_empty_payload() {
+    let finalizer = DeterministicRequestFinalizerV1::correct();
+    let transport = RecordingTransport::default();
+    execute_signed_get_call_v1(
+        &binding(),
+        &signed_get_request(SLOT),
+        &finalizer,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("a correct signer completes the poll");
+
+    assert_eq!(finalizer.calls(), 1);
+    let observed = finalizer.observed().expect("the finalizer recorded its view");
+    assert_eq!(observed, expected_get_view());
+
+    // The signature covers the GET view, and the transport is handed exactly that request: no
+    // body slot (the recorder's empty fallback), the same agent, the declared headers.
+    let expected: WireHeaders = declared()
+        .headers()
+        .iter()
+        .map(|header| {
+            (
+                header.header_name().to_owned(),
+                expected_signature_v1(&expected_get_view(), *header).into_bytes(),
+            )
+        })
+        .collect();
+    assert_eq!(transport.auth_headers(), expected);
+    assert_eq!(transport.calls(), 1);
+    assert_eq!(transport.url(), expected_get_view().url);
+    assert_eq!(transport.body_and_agent(), Some((Vec::new(), Some(AGENT.to_owned()))));
+}
+
+#[tokio::test]
+async fn the_signed_get_entry_point_refuses_a_credential_arm_and_an_unbound_slot() {
+    let finalizer = DeterministicRequestFinalizerV1::correct();
+    let transport = RecordingTransport::default();
+    let bearer = GetRequestV1::new(
+        RelativePathV1::parse(POLL_PATH).expect("fixture path"),
+        SafeHeaders::default(),
+        BearerAuthV1::new(CredentialSlotV1::parse(SLOT).expect("fixture slot")),
+    );
+    let error = execute_signed_get_call_v1(
+        &binding(),
+        &bearer,
+        &finalizer,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect_err("a Bearer GET has nothing to sign");
+    assert_eq!(code(&error), "UNSUPPORTED_AUTH_SHAPE");
+
+    let error = execute_signed_get_call_v1(
+        &binding(),
+        &signed_get_request("aws.bedrock.other"),
+        &finalizer,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect_err("an unbound slot cannot be signed");
+    assert_eq!(code(&error), "CREDENTIAL_BINDING_MISMATCH");
+
+    assert_eq!(finalizer.calls(), 0, "a signer must not see a request it cannot sign");
+    assert_eq!(transport.calls(), 0);
 }

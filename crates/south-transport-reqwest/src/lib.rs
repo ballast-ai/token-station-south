@@ -132,12 +132,12 @@ impl ReqwestTransportV1 {
         remaining_timeout: Duration,
     ) -> Result<BufferedHttpResponseV1, TransportErrorV1> {
         let headers = assemble_headers(request)?;
-        let response = self
+        let builder = self
             .client
             .request(request.method().clone(), request.url().clone())
             .headers(headers)
-            .body(request_body(request.body().shared_owner()))
-            .timeout(effective_timeout(remaining_timeout, self.total_timeout))
+            .timeout(effective_timeout(remaining_timeout, self.total_timeout));
+        let response = attach_body(builder, request)
             .send()
             .await
             .map_err(|error| classify_send_error(&error))?;
@@ -232,11 +232,10 @@ impl ReqwestStreamingTransportV1 {
         request: &PreparedHttpRequestV1<'_>,
     ) -> Result<OpenedByteStreamV1, StreamOpenErrorV1> {
         let headers = assemble_headers(request)?;
-        let mut builder = self
-            .client
-            .request(request.method().clone(), request.url().clone())
-            .headers(headers)
-            .body(request_body(request.body().shared_owner()));
+        let mut builder = attach_body(
+            self.client.request(request.method().clone(), request.url().clone()).headers(headers),
+            request,
+        );
         if let Some(total) = self.total_timeout {
             builder = builder.timeout(total);
         }
@@ -402,12 +401,29 @@ fn request_body(owner: Arc<str>) -> Bytes {
     Bytes::from_owner(JsonBodyOwner(owner))
 }
 
+/// Attaches the prepared request's body exactly when it has one.
+///
+/// A body-less GET (HTTP contract version six) has no body slot at all: nothing is attached, so
+/// `reqwest` sends neither a payload nor a `content-length`, and `TRANSPORT_ADDED_HEADERS_V1`'s
+/// second name is absent from that wire by construction rather than set to zero.
+fn attach_body(
+    builder: reqwest::RequestBuilder,
+    request: &PreparedHttpRequestV1<'_>,
+) -> reqwest::RequestBuilder {
+    match request.body() {
+        Some(body) => builder.body(request_body(body.shared_owner())),
+        None => builder,
+    }
+}
+
 /// Every header name this transport puts on the wire that the request did not declare.
 ///
 /// The host-signed arm makes this list load-bearing: a finalizer signs the request it was shown,
 /// so anything the transport adds afterwards is a byte outside the signature. Two of the three
 /// are pure functions of what the finalizer *did* see — `host` of the URL, `content-length` of
 /// the body — which is why a finalizer may legally include `host` in its signed-headers list.
+/// `content-length` is the one name that is conditional: a body-less GET (HTTP contract version
+/// six) carries no body, so the transport attaches none and the client emits no length for it.
 ///
 /// `accept` is the third, and it was not in the design record's promise: it arrived as a
 /// `reqwest` client default, invisible until the host-signed wire fixture counted the headers on

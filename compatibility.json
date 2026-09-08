@@ -1,12 +1,12 @@
 {
   "schema_version": 3,
   "release": {
-    "version": "0.23.0",
+    "version": "0.24.0",
     "stability": "library_slice"
   },
   "contracts": {
     "reserved_header_policy": 1,
-    "http": 5,
+    "http": 6,
     "auth": 4,
     "error": 2,
     "stream": 2,
@@ -55,6 +55,8 @@
     "controlled_query_suite": 1,
     "controlled_user_agent_suite_id": "south.controlled-user-agent.v1",
     "controlled_user_agent_suite": 1,
+    "provider_get_suite_id": "south.provider-get.v1",
+    "provider_get_suite": 1,
     "provider_component_suite_id": "south.provider-component.v1",
     "provider_component_suite": 1
   },
@@ -65,13 +67,13 @@
     "abi_version": "provider-adapter-v2"
   },
   "crates": {
-    "south-contracts": "http_auth_error_stream_quota_metadata_header_auth_controlled_query_user_agent_v1",
-    "south-core": "buffered_streaming_provider_call_header_auth_controlled_query_user_agent_raw_prelude_signed_raw_call_v1",
+    "south-contracts": "http_get_request_auth_error_stream_quota_metadata_header_auth_controlled_query_user_agent_v1",
+    "south-core": "buffered_streaming_provider_call_buffered_get_call_header_auth_controlled_query_user_agent_raw_prelude_signed_raw_call_get_raw_call_v1",
     "south-provider-api": "provider_adapter_v2_wit_manifest_v1",
-    "south-provider-conformance": "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_suites_v1",
+    "south-provider-conformance": "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_provider_get_suites_v1",
     "south-provider-runtime": "sandboxed_component_execution_v1",
-    "south-testkit": "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_runners_raw_builder_signed_raw_builder_v1",
-    "south-transport-reqwest": "buffered_streaming_json_post_quota_metadata_header_auth_user_agent_transport_pair_v1",
+    "south-testkit": "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_provider_get_runners_raw_builder_signed_raw_builder_get_raw_builder_v1",
+    "south-transport-reqwest": "buffered_streaming_json_post_buffered_get_quota_metadata_header_auth_user_agent_transport_pair_v1",
     "south-component-conformance": "provider_component_gates_reference_v1"
   },
   "hosts": {
@@ -99,6 +101,9 @@
       },
       "controlled_user_agent": {
         "status": "not_verified"
+      },
+      "provider_get": {
+        "status": "not_verified"
       }
     },
     "token-station-server": {
@@ -123,6 +128,9 @@
         "cases": 6
       },
       "controlled_user_agent": {
+        "status": "not_verified"
+      },
+      "provider_get": {
         "status": "not_verified"
       }
     }

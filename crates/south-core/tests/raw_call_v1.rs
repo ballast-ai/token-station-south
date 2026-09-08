@@ -13,10 +13,11 @@ use south_contracts::{
     StreamChunkV1, StreamingResponseHeadV1, TransportErrorV1,
 };
 use south_core::raw::{
-    BoundedResolverV1, PreparedSecretResolverV1, RawAuthV1, RawCallErrorV1, RawProviderCallErrorV1,
-    RawProviderCallV1, RawSignedProviderCallV1, execute_raw_call_v1, execute_signed_raw_call_v1,
-    open_streaming_raw_call_v1, open_streaming_signed_raw_call_v1, parse_raw_call,
-    parse_raw_signed_call, raw_call_parses, raw_signed_call_parses,
+    BoundedResolverV1, PreparedSecretResolverV1, RawAuthV1, RawCallErrorV1, RawGetProviderCallV1,
+    RawProviderCallErrorV1, RawProviderCallV1, RawSignedProviderCallV1, execute_get_raw_call_v1,
+    execute_raw_call_v1, execute_signed_raw_call_v1, open_streaming_raw_call_v1,
+    open_streaming_signed_raw_call_v1, parse_raw_call, parse_raw_get_call, parse_raw_signed_call,
+    raw_call_parses, raw_get_call_parses, raw_signed_call_parses,
 };
 use south_core::{
     AsyncHttpTransport, AsyncStreamingTransport, CredentialResolver, FinalizeFutureV1,
@@ -72,15 +73,25 @@ type RecordedAuth = Arc<Mutex<Option<(String, Vec<u8>, String, Option<String>)>>
 struct RecordingTransport {
     calls: AtomicUsize,
     recorded: RecordedAuth,
+    /// The prepared method and whether a body slot existed, for the GET twin's tests.
+    shape: Mutex<Option<(String, bool)>>,
 }
 
 impl RecordingTransport {
     fn new() -> Self {
-        Self { calls: AtomicUsize::new(0), recorded: Arc::new(Mutex::new(None)) }
+        Self {
+            calls: AtomicUsize::new(0),
+            recorded: Arc::new(Mutex::new(None)),
+            shape: Mutex::new(None),
+        }
     }
 
     fn calls(&self) -> usize {
         self.calls.load(Ordering::SeqCst)
+    }
+
+    fn shape(&self) -> (String, bool) {
+        self.shape.lock().unwrap().clone().expect("transport must be reached")
     }
 
     fn record(&self, request: &PreparedHttpRequestV1<'_>) {
@@ -94,6 +105,8 @@ impl RecordingTransport {
             request.url().to_string(),
             request.user_agent().map(|agent| agent.as_str().to_owned()),
         ));
+        *self.shape.lock().unwrap() =
+            Some((request.method().to_string(), request.body().is_some()));
     }
 }
 
@@ -724,4 +737,199 @@ async fn open_streaming_signed_delegates_and_pulls_binary_chunks() {
     let chunk = stream.next_chunk().await.unwrap().unwrap();
     assert_eq!(chunk.as_bytes(), &[0x00, 0x00, 0x00, 0x10, 0xff], "bytes are not UTF-8 checked");
     assert!(stream.next_chunk().await.is_none());
+}
+
+// ─────────────────── the raw body-less GET (HTTP contract v6) ───────────────────
+
+const fn valid_raw_get(headers: &[(String, String)]) -> RawGetProviderCallV1<'_> {
+    RawGetProviderCallV1 {
+        endpoint: "https://provider.invalid",
+        relative_path: "v1/videos/276843862449040",
+        bound_slot: "primary",
+        requested_slot: "primary",
+        headers,
+        auth: RawAuthV1::Bearer,
+        query: None,
+        user_agent: None,
+    }
+}
+
+#[test]
+fn get_precheck_agrees_with_parse_for_valid_and_invalid_inputs() {
+    let headers = vec![("accept".to_owned(), "application/json".to_owned())];
+    let valid = valid_raw_get(&headers);
+    assert!(raw_get_call_parses(&valid));
+    assert!(parse_raw_get_call(&valid).is_ok());
+
+    let invalid = RawGetProviderCallV1 { relative_path: "../up", ..valid_raw_get(&headers) };
+    assert!(!raw_get_call_parses(&invalid));
+    assert!(parse_raw_get_call(&invalid).is_err());
+}
+
+#[test]
+fn get_parse_error_names_the_failing_field_in_the_shared_order_and_never_the_body() {
+    let headers: Vec<(String, String)> = Vec::new();
+
+    let bad_endpoint = RawGetProviderCallV1 { endpoint: "not-a-url", ..valid_raw_get(&headers) };
+    let error = parse_raw_get_call(&bad_endpoint).unwrap_err();
+    assert_eq!(error.field(), "endpoint");
+    assert_eq!(error.code(), "INVALID_ENDPOINT");
+
+    let bad_bound_slot = RawGetProviderCallV1 { bound_slot: "", ..valid_raw_get(&headers) };
+    let error = parse_raw_get_call(&bad_bound_slot).unwrap_err();
+    assert_eq!(error.field(), "bound_slot");
+
+    let bad_requested_slot = RawGetProviderCallV1 { requested_slot: "", ..valid_raw_get(&headers) };
+    let error = parse_raw_get_call(&bad_requested_slot).unwrap_err();
+    assert_eq!(error.field(), "requested_slot");
+
+    let bad_path = RawGetProviderCallV1 { relative_path: "../up", ..valid_raw_get(&headers) };
+    let error = parse_raw_get_call(&bad_path).unwrap_err();
+    assert_eq!(error.field(), "relative_path");
+    assert_eq!(error.code(), "INVALID_RELATIVE_PATH");
+
+    let reserved = vec![("authorization".to_owned(), "Bearer smuggled".to_owned())];
+    let bad_headers = valid_raw_get(&reserved);
+    let error = parse_raw_get_call(&bad_headers).unwrap_err();
+    assert_eq!(error.field(), "headers");
+    assert_eq!(error.code(), "RESERVED_HEADER_FORBIDDEN");
+    assert!(matches!(error, RawCallErrorV1::Headers(_)));
+
+    // The first failing field wins, in the POST shape's order minus the body step: a bad
+    // endpoint is reported ahead of bad headers.
+    let both = RawGetProviderCallV1 { endpoint: "not-a-url", ..valid_raw_get(&reserved) };
+    assert_eq!(parse_raw_get_call(&both).unwrap_err().field(), "endpoint");
+}
+
+#[test]
+fn get_parse_carries_auth_arm_query_and_user_agent_into_a_body_less_request() {
+    let headers: Vec<(String, String)> = Vec::new();
+    let query =
+        QueryStringV1::try_from_iter([(QueryParameterV1::TaskId, "276843862449040")]).unwrap();
+    let user_agent = ControlledUserAgentV1::try_from_static("prelude-poll/1.0").unwrap();
+    let raw = RawGetProviderCallV1 {
+        relative_path: "v1/query/video_generation",
+        auth: RawAuthV1::BearerAndHeaderSecret(SecretHeaderV1::XGoogApiKey),
+        query: Some(query.clone()),
+        user_agent: Some(user_agent),
+        ..valid_raw_get(&headers)
+    };
+
+    let (binding, request) = parse_raw_get_call(&raw).unwrap();
+    assert_eq!(request.relative_path().as_str(), "v1/query/video_generation");
+    assert_eq!(request.query().map(QueryStringV1::as_str), Some(query.as_str()));
+    assert_eq!(request.user_agent().map(ControlledUserAgentV1::as_str), Some("prelude-poll/1.0"));
+    assert!(matches!(
+        request.auth(),
+        ProviderAuthV1::BearerAndHeaderSecret { header: SecretHeaderV1::XGoogApiKey, .. }
+    ));
+    let rendered = format!("{raw:?} {binding:?}");
+    assert!(!rendered.contains("provider.invalid"));
+    assert!(!rendered.contains("video_generation"));
+    assert!(!rendered.contains("body"), "the raw GET has no body field to describe: {rendered}");
+}
+
+#[tokio::test]
+async fn get_parse_failure_returns_before_resolver_or_transport_is_invoked() {
+    let headers: Vec<(String, String)> = Vec::new();
+    let invalid = RawGetProviderCallV1 { relative_path: "../up", ..valid_raw_get(&headers) };
+    let resolver = CountingResolver::new();
+    let transport = RecordingTransport::new();
+    let cancellation = CancellationToken::new();
+
+    let error =
+        execute_get_raw_call_v1(&invalid, &resolver, &transport, far_deadline(), &cancellation)
+            .await
+            .unwrap_err();
+
+    assert!(matches!(error, RawProviderCallErrorV1::Parse(RawCallErrorV1::RelativePath(_))));
+    assert_eq!(error.code(), "INVALID_RELATIVE_PATH");
+    assert_eq!(resolver.calls(), 0);
+    assert_eq!(transport.calls(), 0);
+}
+
+#[tokio::test]
+async fn execute_get_delegates_to_orchestration_as_a_body_less_get() {
+    let headers = vec![("accept".to_owned(), "application/json".to_owned())];
+    let query =
+        QueryStringV1::try_from_iter([(QueryParameterV1::TaskId, "276843862449040")]).unwrap();
+    let raw = RawGetProviderCallV1 {
+        relative_path: "v1/query/video_generation",
+        query: Some(query),
+        ..valid_raw_get(&headers)
+    };
+    let resolver = CountingResolver::new();
+    let transport = RecordingTransport::new();
+    let cancellation = CancellationToken::new();
+
+    let response =
+        execute_get_raw_call_v1(&raw, &resolver, &transport, far_deadline(), &cancellation)
+            .await
+            .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(resolver.calls(), 1);
+    assert_eq!(transport.calls(), 1);
+    let recorded = transport.recorded.lock().unwrap().clone().unwrap();
+    assert_eq!(recorded.0, "authorization");
+    assert_eq!(recorded.1, format!("Bearer {SECRET}").into_bytes());
+    assert_eq!(
+        recorded.2,
+        "https://provider.invalid/v1/query/video_generation?task_id=276843862449040"
+    );
+    assert_eq!(transport.shape(), ("GET".to_owned(), false), "method GET, no body slot");
+}
+
+#[tokio::test]
+async fn execute_get_binds_the_header_secret_arm_verbatim() {
+    let headers: Vec<(String, String)> = Vec::new();
+    let raw = RawGetProviderCallV1 {
+        auth: RawAuthV1::HeaderSecret(SecretHeaderV1::XApiKey),
+        ..valid_raw_get(&headers)
+    };
+    let resolver = CountingResolver::new();
+    let transport = RecordingTransport::new();
+    let cancellation = CancellationToken::new();
+
+    execute_get_raw_call_v1(&raw, &resolver, &transport, far_deadline(), &cancellation)
+        .await
+        .unwrap();
+
+    let recorded = transport.recorded.lock().unwrap().clone().unwrap();
+    assert_eq!(recorded.0, "x-api-key");
+    assert_eq!(recorded.1, SECRET.as_bytes());
+    assert_eq!(transport.shape(), ("GET".to_owned(), false));
+}
+
+#[tokio::test]
+async fn get_slot_mismatch_surfaces_as_credential_binding_mismatch() {
+    let headers: Vec<(String, String)> = Vec::new();
+    let raw = RawGetProviderCallV1 { requested_slot: "other", ..valid_raw_get(&headers) };
+    let resolver = CountingResolver::new();
+    let transport = RecordingTransport::new();
+    let cancellation = CancellationToken::new();
+
+    let error = execute_get_raw_call_v1(&raw, &resolver, &transport, far_deadline(), &cancellation)
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), "CREDENTIAL_BINDING_MISMATCH");
+    assert!(matches!(error, RawProviderCallErrorV1::Call(ProviderCallErrorV1::Preparation(_))));
+    assert_eq!(resolver.calls(), 0);
+    assert_eq!(transport.calls(), 0);
+}
+
+/// The POST shape is untouched by the GET twin: its transport still sees a POST with a body.
+#[tokio::test]
+async fn the_post_shape_still_prepares_a_post_with_a_body_slot() {
+    let headers: Vec<(String, String)> = Vec::new();
+    let raw = valid_raw(&headers, "{}");
+    let resolver = CountingResolver::new();
+    let transport = RecordingTransport::new();
+
+    execute_raw_call_v1(&raw, &resolver, &transport, far_deadline(), &CancellationToken::new())
+        .await
+        .unwrap();
+
+    assert_eq!(transport.shape(), ("POST".to_owned(), true));
 }

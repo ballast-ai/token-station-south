@@ -1,13 +1,14 @@
 use http::StatusCode;
 use south_contracts::{
     AUTH_CONTRACT_VERSION, BearerAuthV1, BufferedHttpResponseV1, ContractErrorV1,
-    ControlledUserAgentV1, CredentialSlotV1, ERROR_CONTRACT_VERSION, HTTP_CONTRACT_VERSION,
-    JsonBodyV1, JsonPostRequestV1, MAX_CREDENTIAL_SLOT_BYTES, MAX_ENDPOINT_BYTES,
-    MAX_JSON_REQUEST_BODY_BYTES, MAX_QUERY_VALUE_BYTES, MAX_RELATIVE_PATH_BYTES,
-    MAX_RESPONSE_BODY_BYTES, MAX_RESPONSE_CONTENT_TYPE_BYTES, MAX_RESPONSE_RETRY_AFTER_BYTES,
-    MAX_USER_AGENT_BYTES, PreparationErrorV1, ProviderAuthV1, ProviderEndpointV1, QueryParameterV1,
-    QueryStringV1, RelativePathV1, STREAM_CONTRACT_VERSION, SafeHeaders, SecretHeaderV1,
-    SignedHeaderSetErrorV1, SignedHeaderSetV1, SignedHeaderV1, TransportErrorV1,
+    ControlledUserAgentV1, CredentialSlotV1, ERROR_CONTRACT_VERSION, GetRequestV1,
+    HTTP_CONTRACT_VERSION, JsonBodyV1, JsonPostRequestV1, MAX_CREDENTIAL_SLOT_BYTES,
+    MAX_ENDPOINT_BYTES, MAX_JSON_REQUEST_BODY_BYTES, MAX_QUERY_VALUE_BYTES,
+    MAX_RELATIVE_PATH_BYTES, MAX_RESPONSE_BODY_BYTES, MAX_RESPONSE_CONTENT_TYPE_BYTES,
+    MAX_RESPONSE_RETRY_AFTER_BYTES, MAX_USER_AGENT_BYTES, PreparationErrorV1, ProviderAuthV1,
+    ProviderEndpointV1, QueryParameterV1, QueryStringV1, RelativePathV1, STREAM_CONTRACT_VERSION,
+    SafeHeaders, SecretHeaderV1, SignedHeaderSetErrorV1, SignedHeaderSetV1, SignedHeaderV1,
+    TransportErrorV1,
 };
 
 const SENTINEL: &str = "must-not-appear-7f23a";
@@ -48,7 +49,7 @@ fn secret_header_all_covers_every_variant() {
 
 #[test]
 fn contract_versions_are_independently_versioned() {
-    assert_eq!(HTTP_CONTRACT_VERSION, 5);
+    assert_eq!(HTTP_CONTRACT_VERSION, 6);
     assert_eq!(AUTH_CONTRACT_VERSION, 4);
     assert_eq!(ERROR_CONTRACT_VERSION, 2);
     assert_eq!(STREAM_CONTRACT_VERSION, Some(2));
@@ -561,11 +562,14 @@ fn debug_and_error_output_redact_all_untrusted_contract_values() {
 /// Every sanctioned query parameter, in canonical table order. The exhaustive match below fails
 /// compilation when a variant is added, so the list, the value grammar, and the conformance
 /// surface must all be updated together.
-const ALL_QUERY_PARAMETERS: [QueryParameterV1; 3] = QueryParameterV1::ALL;
+const ALL_QUERY_PARAMETERS: [QueryParameterV1; 4] = QueryParameterV1::ALL;
 
 const fn assert_query_parameter_listed(parameter: QueryParameterV1) {
     match parameter {
-        QueryParameterV1::ApiVersion | QueryParameterV1::Alt | QueryParameterV1::GroupId => (),
+        QueryParameterV1::ApiVersion
+        | QueryParameterV1::Alt
+        | QueryParameterV1::GroupId
+        | QueryParameterV1::TaskId => (),
     }
 }
 
@@ -663,6 +667,142 @@ fn group_id_grammar_is_a_bounded_digit_string() {
     assert_eq!(query.as_str(), "api-version=v1&GroupId=19000");
 }
 
+// ───────────────── buffered GET request (HTTP contract v6) ─────────────────
+
+#[test]
+fn task_id_grammar_is_a_bounded_digit_string_appended_last() {
+    // Real MiniMax task ids are decimal identifiers; the fifteen-digit form is what the platform
+    // returns from `video_generation` today.
+    for accepted in ["276843862449040", "0", "1"] {
+        assert!(
+            QueryStringV1::try_from_iter([(QueryParameterV1::TaskId, accepted)]).is_ok(),
+            "{accepted} is a well-formed task id"
+        );
+    }
+    // The grammar is digits only (buffered-GET record, D3): no signs, separators, letters, UUID
+    // shapes, smuggled parameters, or the empty value. A host meeting a non-numeric task id
+    // falls back rather than widening the grammar.
+    for rejected in [
+        "",
+        "-1",
+        "+1",
+        "1 9",
+        "1&alt=sse",
+        "abc",
+        "1#",
+        "１９",
+        " 1",
+        "cgt-20240101-abc",
+        "3f0a9c2e-1b4d-4c8e-9f2a-7d6b5c4a3e21",
+    ] {
+        assert_eq!(
+            QueryStringV1::try_from_iter([(QueryParameterV1::TaskId, rejected)]),
+            Err(ContractErrorV1::InvalidQueryValue),
+            "{rejected:?} must not survive the task_id grammar"
+        );
+    }
+    let too_long = "9".repeat(MAX_QUERY_VALUE_BYTES + 1);
+    assert_eq!(
+        QueryStringV1::try_from_iter([(QueryParameterV1::TaskId, too_long.as_str())]),
+        Err(ContractErrorV1::InvalidQueryValue)
+    );
+    // The wire name is the upstream's snake case, and it sorts after every older parameter.
+    assert_eq!(QueryParameterV1::TaskId.wire_name(), "task_id");
+    let query = QueryStringV1::try_from_iter([
+        (QueryParameterV1::TaskId, "276843862449040"),
+        (QueryParameterV1::GroupId, "19000"),
+        (QueryParameterV1::ApiVersion, "v1"),
+    ])
+    .expect("three distinct sanctioned parameters construct");
+    assert_eq!(query.as_str(), "api-version=v1&GroupId=19000&task_id=276843862449040");
+}
+
+#[test]
+fn get_request_is_the_post_field_set_minus_the_body() {
+    let path = RelativePathV1::parse("v1/query/video_generation").unwrap();
+    let headers = SafeHeaders::try_from_iter([("accept", "application/json")]).unwrap();
+    let auth = BearerAuthV1::new(CredentialSlotV1::parse("minimax.primary").unwrap());
+    let request = GetRequestV1::new(path, headers, auth);
+
+    assert_eq!(request.relative_path().as_str(), "v1/query/video_generation");
+    assert_eq!(request.headers().get("accept"), Some("application/json"));
+    assert_eq!(request.headers().iter().count(), 1);
+    assert_eq!(request.auth().credential_slot().as_str(), "minimax.primary");
+    assert!(request.query().is_none(), "a GET declares no query until one is attached");
+    assert!(request.user_agent().is_none());
+
+    let query = QueryStringV1::try_from_iter([(QueryParameterV1::TaskId, "276843862449040")])
+        .expect("the task id fixture satisfies its grammar");
+    let user_agent = ControlledUserAgentV1::try_from_static("south-test/1.0").unwrap();
+    let request = request.with_query(query.clone()).with_user_agent(user_agent);
+    assert_eq!(request.query(), Some(&query));
+    assert_eq!(
+        request.user_agent().map(|agent| agent.as_str().to_owned()),
+        Some("south-test/1.0".to_owned())
+    );
+}
+
+#[test]
+fn get_request_accepts_every_credential_arm_through_one_constructor() {
+    let path = RelativePathV1::parse("v1/videos/276843862449040").unwrap();
+    let headers = SafeHeaders::try_from_iter([("accept", "application/json")]).unwrap();
+    let slot = CredentialSlotV1::parse("primary").unwrap();
+
+    let bearer = GetRequestV1::new(path.clone(), headers.clone(), BearerAuthV1::new(slot.clone()));
+    assert!(matches!(bearer.auth(), ProviderAuthV1::Bearer(_)));
+
+    let header_secret = GetRequestV1::new(
+        path.clone(),
+        headers.clone(),
+        ProviderAuthV1::HeaderSecret {
+            header: SecretHeaderV1::XApiKey,
+            slot: BearerAuthV1::new(slot.clone()),
+        },
+    );
+    assert!(matches!(header_secret.auth(), ProviderAuthV1::HeaderSecret { .. }));
+
+    let combined = GetRequestV1::new(
+        path.clone(),
+        headers.clone(),
+        ProviderAuthV1::BearerAndHeaderSecret {
+            header: SecretHeaderV1::XGoogApiKey,
+            slot: BearerAuthV1::new(slot.clone()),
+        },
+    );
+    assert!(matches!(combined.auth(), ProviderAuthV1::BearerAndHeaderSecret { .. }));
+
+    let signed = GetRequestV1::new(
+        path,
+        headers,
+        ProviderAuthV1::HostSigned {
+            slot: BearerAuthV1::new(slot),
+            emits: SignedHeaderSetV1::new(&[SignedHeaderV1::Authorization]).unwrap(),
+        },
+    );
+    assert!(matches!(signed.auth(), ProviderAuthV1::HostSigned { .. }));
+}
+
+#[test]
+fn get_request_debug_shows_shape_only() {
+    let request = GetRequestV1::new(
+        RelativePathV1::parse(&format!("v1/{SENTINEL}")).unwrap(),
+        SafeHeaders::try_from_iter([("x-test", SENTINEL)]).unwrap(),
+        BearerAuthV1::new(CredentialSlotV1::parse(SENTINEL).unwrap()),
+    )
+    .with_query(QueryStringV1::try_from_iter([(QueryParameterV1::TaskId, "7")]).unwrap());
+    let rendered = format!("{request:?}");
+    assert_eq!(
+        rendered,
+        format!(
+            "GetRequestV1 {{ http_contract_version: {HTTP_CONTRACT_VERSION}, \
+             auth_contract_version: {AUTH_CONTRACT_VERSION}, header_count: 1, has_query: true, \
+             has_user_agent: false, .. }}"
+        )
+    );
+    assert!(!rendered.contains(SENTINEL));
+    assert!(!rendered.contains("task_id=7"));
+}
+
 #[test]
 fn query_rejects_duplicate_parameters_rather_than_normalizing() {
     // Parameter pollution — gateway and upstream disagreeing on which duplicate wins — is the
@@ -735,12 +875,14 @@ fn set_query_is_an_identity_map_on_every_accepted_value() {
     // `:`, or whitespace (plausible when `GroupId`/`task_id` land) breaks this test first.
     let endpoint = ProviderEndpointV1::parse("https://example.com/base/").unwrap();
     let path = RelativePathV1::parse("v1/resource").unwrap();
-    let accepted_values: [(QueryParameterV1, &[&str]); 2] = [
+    let accepted_values: [(QueryParameterV1, &[&str]); 4] = [
         (
             QueryParameterV1::ApiVersion,
             &["2024-10-21", "2025-04-01-preview", "v1", "1.0", "a_b", "A-Z.0_9"],
         ),
         (QueryParameterV1::Alt, &["sse", "json"]),
+        (QueryParameterV1::GroupId, &["19000", "1782000000000000000"]),
+        (QueryParameterV1::TaskId, &["0", "276843862449040"]),
     ];
 
     for (parameter, values) in accepted_values {

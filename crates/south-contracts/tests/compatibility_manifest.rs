@@ -102,6 +102,8 @@ struct Conformance {
     controlled_query_suite: u32,
     controlled_user_agent_suite_id: String,
     controlled_user_agent_suite: u32,
+    provider_get_suite_id: String,
+    provider_get_suite: u32,
     provider_component_suite_id: String,
     provider_component_suite: u32,
 }
@@ -139,7 +141,7 @@ struct ProviderRuntime {
 /// status is not `verified`.
 type ExpectedCapability = (&'static str, &'static str, Option<usize>);
 
-fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 6]> {
+fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 7]> {
     BTreeMap::from([
         (
             "token-station",
@@ -176,6 +178,10 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 6
                 ("controlled_query", "not_verified", None),
                 // controlled_user_agent stays not_verified for the same reason.
                 ("controlled_user_agent", "not_verified", None),
+                // provider_get (the body-less GET, HTTP contract v6, 0.24.0) stays
+                // not_verified until this host runs south.provider-get.v1 through
+                // its own adapter. The community host has no task poller today.
+                ("provider_get", "not_verified", None),
             ],
         ),
         // token-station-server provider_stream verified 2026-08-17: the durable
@@ -274,6 +280,14 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 6
                 // The suite existing in this repository is not adoption
                 // evidence.
                 ("controlled_user_agent", "not_verified", None),
+                // provider_get (the body-less GET, HTTP contract v6, 0.24.0) stays
+                // not_verified until that host's task poller adopts
+                // execute_get_raw_call_v1 behind its SouthSurface::TaskPoll switch
+                // and runs south.provider-get.v1 4/4 through the same real seam as
+                // its other suites. The suite existing in this repository is not
+                // adoption evidence, and the freshness rule applies from the first
+                // run: `cases` is written only by a run against the live table.
+                ("provider_get", "not_verified", None),
             ],
         ),
     ])
@@ -390,6 +404,8 @@ fn compatibility_manifest_describes_the_library_slice() {
         "south.controlled-user-agent.v1"
     );
     assert_eq!(manifest.conformance.controlled_user_agent_suite, 1);
+    assert_eq!(manifest.conformance.provider_get_suite_id, "south.provider-get.v1");
+    assert_eq!(manifest.conformance.provider_get_suite, 1);
     assert_eq!(manifest.conformance.provider_component_suite_id, "south.provider-component.v1");
     assert_eq!(manifest.conformance.provider_component_suite, 1);
     assert_eq!(manifest.provider_api.wit_version.as_deref(), Some("token-station:adapter@2.0.0"));
@@ -397,26 +413,26 @@ fn compatibility_manifest_describes_the_library_slice() {
     let expected_crates = BTreeMap::from([
         (
             "south-contracts",
-            "http_auth_error_stream_quota_metadata_header_auth_controlled_query_user_agent_v1",
+            "http_get_request_auth_error_stream_quota_metadata_header_auth_controlled_query_user_agent_v1",
         ),
         (
             "south-core",
-            "buffered_streaming_provider_call_header_auth_controlled_query_user_agent_raw_prelude_signed_raw_call_v1",
+            "buffered_streaming_provider_call_buffered_get_call_header_auth_controlled_query_user_agent_raw_prelude_signed_raw_call_get_raw_call_v1",
         ),
         ("south-provider-api", "provider_adapter_v2_wit_manifest_v1"),
         ("south-component-conformance", "provider_component_gates_reference_v1"),
         (
             "south-provider-conformance",
-            "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_suites_v1",
+            "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_provider_get_suites_v1",
         ),
         ("south-provider-runtime", "sandboxed_component_execution_v1"),
         (
             "south-testkit",
-            "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_runners_raw_builder_signed_raw_builder_v1",
+            "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_provider_get_runners_raw_builder_signed_raw_builder_get_raw_builder_v1",
         ),
         (
             "south-transport-reqwest",
-            "buffered_streaming_json_post_quota_metadata_header_auth_user_agent_transport_pair_v1",
+            "buffered_streaming_json_post_buffered_get_quota_metadata_header_auth_user_agent_transport_pair_v1",
         ),
     ]);
     assert_eq!(manifest.crates.len(), expected_crates.len());

@@ -31,7 +31,12 @@ use url::Url;
 /// Version five is additive on the request side: the sanctioned query set gains
 /// [`QueryParameterV1::GroupId`]. A version-four request is exactly a version-five request that
 /// declares no `GroupId`; every previously accepted declaration serializes byte-identically.
-pub const HTTP_CONTRACT_VERSION: u16 = 5;
+///
+/// Version six is additive on the request side: it admits the body-less [`GetRequestV1`] beside
+/// the JSON POST shape, and the sanctioned query set gains [`QueryParameterV1::TaskId`]. A
+/// version-five request is exactly a version-six request that is not a `GetRequestV1` and
+/// declares no `task_id`; [`JsonPostRequestV1`] itself is untouched.
+pub const HTTP_CONTRACT_VERSION: u16 = 6;
 
 /// The version of the provider authentication declaration contract.
 ///
@@ -844,6 +849,15 @@ pub enum QueryParameterV1 {
     /// (controlled-query record, D5) until a text-surface consumer existed: without it, every
     /// `MiniMax` China-host text request falls back to the host's legacy path.
     GroupId,
+    /// `task_id` (`MiniMax` asynchronous task polling, `v1/query/video_generation?task_id=…`).
+    ///
+    /// Admitted in contract version six with the body-less GET request, the second of the two
+    /// names the controlled-query record (D5) deferred. It is the only sanctioned parameter
+    /// whose value a *provider* mints: a task id is provider output echoed back on the poll. The
+    /// grammar is still digits only (buffered-GET record, D3), because the one upstream that
+    /// carries a task id in the query issues numeric ids; a host meeting another shape falls
+    /// back rather than widening the grammar.
+    TaskId,
 }
 
 impl QueryParameterV1 {
@@ -851,7 +865,7 @@ impl QueryParameterV1 {
     ///
     /// Serialization follows this order, so a request's query is byte-identical regardless of the
     /// order the host declared its parameters in.
-    pub const ALL: [Self; 3] = [Self::ApiVersion, Self::Alt, Self::GroupId];
+    pub const ALL: [Self; 4] = [Self::ApiVersion, Self::Alt, Self::GroupId, Self::TaskId];
 
     /// Returns the wire name of the sanctioned parameter.
     #[must_use]
@@ -861,6 +875,7 @@ impl QueryParameterV1 {
             Self::Alt => "alt",
             // Mixed case on purpose: the upstream matches the name exactly.
             Self::GroupId => "GroupId",
+            Self::TaskId => "task_id",
         }
     }
 
@@ -893,7 +908,11 @@ impl QueryParameterV1 {
             // A `MiniMax` group id is a decimal account identifier. Digits only: the value is
             // operator configuration, not provider output, and nothing narrower than a digit
             // string is ever a real group id. No leading-sign, no separators.
-            Self::GroupId => {
+            // A `MiniMax` task id is likewise a decimal identifier. Same digit grammar, and
+            // deliberately not shared with `GroupId` through one arm: the two are separate
+            // contract decisions (D3 of two records), and narrowing one must not narrow the
+            // other.
+            Self::GroupId | Self::TaskId => {
                 !value.is_empty()
                     && value.len() <= MAX_QUERY_VALUE_BYTES
                     && value.bytes().all(|byte| byte.is_ascii_digit())
@@ -1235,6 +1254,98 @@ impl fmt::Debug for JsonPostRequestV1 {
             .field("auth_contract_version", &AUTH_CONTRACT_VERSION)
             .field("header_count", &self.headers.len())
             .field("body_byte_count", &self.body.len())
+            .finish_non_exhaustive()
+    }
+}
+
+/// A bounded provider request for one body-less GET operation (HTTP contract version six).
+///
+/// [`JsonPostRequestV1`]'s field set minus the body, with the same builders and the same
+/// grammars. A separate type rather than a method field on the POST shape (buffered-GET record,
+/// D1): the POST type's name, its mandatory body, and every invariant the streaming path relies
+/// on stay exactly as frozen, and "a JSON POST request with method GET and a body" is not
+/// constructible. There is no streaming GET (D2): a poll is a bounded reply by nature.
+#[derive(PartialEq, Eq)]
+pub struct GetRequestV1 {
+    relative_path: RelativePathV1,
+    headers: SafeHeaders,
+    auth: ProviderAuthV1,
+    query: Option<QueryStringV1>,
+    user_agent: Option<ControlledUserAgentV1>,
+}
+
+impl GetRequestV1 {
+    /// Creates a request from independently validated, bounded fields.
+    ///
+    /// The auth parameter accepts a bare [`BearerAuthV1`] unchanged, as the POST constructor
+    /// does, as well as any explicit [`ProviderAuthV1`] declaration.
+    #[must_use]
+    pub fn new(
+        relative_path: RelativePathV1,
+        headers: SafeHeaders,
+        auth: impl Into<ProviderAuthV1>,
+    ) -> Self {
+        Self { relative_path, headers, auth: auth.into(), query: None, user_agent: None }
+    }
+
+    /// Attaches a sanctioned query declaration to this request.
+    ///
+    /// This is where a poll that carries its task id as a query parameter declares it:
+    /// [`QueryParameterV1::TaskId`]. A poll whose task id is a path segment declares nothing
+    /// here — the id travels in the relative path like any other segment.
+    #[must_use]
+    pub fn with_query(mut self, query: QueryStringV1) -> Self {
+        self.query = Some(query);
+        self
+    }
+
+    /// Returns the sanctioned query declaration, when one was attached.
+    #[must_use]
+    pub const fn query(&self) -> Option<&QueryStringV1> {
+        self.query.as_ref()
+    }
+
+    /// Attaches a sanctioned user-agent declaration to this request.
+    #[must_use]
+    pub const fn with_user_agent(mut self, user_agent: ControlledUserAgentV1) -> Self {
+        self.user_agent = Some(user_agent);
+        self
+    }
+
+    /// Returns the sanctioned user-agent declaration, when one was attached.
+    #[must_use]
+    pub const fn user_agent(&self) -> Option<ControlledUserAgentV1> {
+        self.user_agent
+    }
+
+    /// Returns the provider-selected relative path.
+    #[must_use]
+    pub const fn relative_path(&self) -> &RelativePathV1 {
+        &self.relative_path
+    }
+
+    /// Returns the validated ordinary request headers.
+    #[must_use]
+    pub const fn headers(&self) -> &SafeHeaders {
+        &self.headers
+    }
+
+    /// Returns the provider authentication declaration.
+    #[must_use]
+    pub const fn auth(&self) -> &ProviderAuthV1 {
+        &self.auth
+    }
+}
+
+impl fmt::Debug for GetRequestV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("GetRequestV1")
+            .field("http_contract_version", &HTTP_CONTRACT_VERSION)
+            .field("auth_contract_version", &AUTH_CONTRACT_VERSION)
+            .field("header_count", &self.headers.len())
+            .field("has_query", &self.query.is_some())
+            .field("has_user_agent", &self.user_agent.is_some())
             .finish_non_exhaustive()
     }
 }
@@ -2482,6 +2593,7 @@ mod query_serialization_completeness_tests {
                 QueryParameterV1::ApiVersion => "v1",
                 QueryParameterV1::Alt => "sse",
                 QueryParameterV1::GroupId => "19000",
+                QueryParameterV1::TaskId => "276843862449040",
             };
             let query = QueryStringV1::try_from_iter([(parameter, value)])
                 .expect("a sanctioned parameter with a valid value must construct");

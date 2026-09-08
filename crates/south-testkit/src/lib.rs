@@ -49,6 +49,7 @@ mod controlled_query;
 mod controlled_user_agent;
 mod header_auth;
 mod host_signed;
+mod provider_get;
 mod quota;
 mod raw;
 mod stream;
@@ -57,7 +58,9 @@ pub use host_signed::{
     DeterministicRequestFinalizerV1, FAKE_SIGNING_KEY_V1, FinalizerBehaviorV1,
     HangingRequestFinalizerV1, ObservedFinalizeViewV1, expected_signature_v1,
 };
-pub use raw::{RawProviderCallBuilderV1, RawSignedProviderCallBuilderV1};
+pub use raw::{
+    RawGetProviderCallBuilderV1, RawProviderCallBuilderV1, RawSignedProviderCallBuilderV1,
+};
 
 pub use controlled_query::{
     AssembledControlledQueryExecutionFutureV1, AssembledControlledQueryExecutorV1,
@@ -80,6 +83,13 @@ pub use header_auth::{
     HeaderAuthMismatchCategoryV1, HeaderAuthMismatchV1, HeaderAuthObservationV1,
     MAX_HEADER_AUTH_MISMATCHES_V1, ReferenceAssembledHeaderAuthExecutorV1,
     run_header_auth_conformance_v1,
+};
+pub use provider_get::{
+    AssembledProviderGetExecutionFutureV1, AssembledProviderGetExecutorV1,
+    MAX_PROVIDER_GET_MISMATCHES_V1, ProviderGetConformanceFailureV1,
+    ProviderGetConformanceReportV1, ProviderGetEvidenceV1, ProviderGetMismatchCategoryV1,
+    ProviderGetMismatchV1, ProviderGetObservationV1, ReferenceAssembledProviderGetExecutorV1,
+    parse_reference_get_input, run_provider_get_conformance_v1,
 };
 pub use quota::{
     AssembledProviderQuotaMetadataExecutionFutureV1, AssembledProviderQuotaMetadataExecutorV1,

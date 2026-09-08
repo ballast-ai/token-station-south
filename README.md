@@ -49,19 +49,21 @@ the [task adapter vocabulary](docs/design/2026-08-27-task-adapter-vocabulary.md)
 
 ## Implemented library slice
 
-- `south-contracts` defines bounded HTTP, Bearer, sanctioned header-secret, and combined
-  Bearer-plus-header-secret authentication, stable error, byte-streaming, and closed provider
-  quota metadata contracts — including
+- `south-contracts` defines bounded HTTP (the JSON POST request and the body-less GET request),
+  Bearer, sanctioned header-secret, and combined Bearer-plus-header-secret authentication, stable
+  error, byte-streaming, and closed provider quota metadata contracts — including
   reserved-header enforcement, redacted diagnostics, and the sanctioned controlled query and
   controlled user-agent request declarations.
 - `south-core` binds a validated endpoint to one credential slot, resolves the host-owned secret,
-  and applies cancellation and caller deadlines around prepared buffered and streaming calls. Its
+  and applies cancellation and caller deadlines around prepared buffered and streaming JSON POST
+  calls and buffered body-less GET calls. Its
   `raw` module is the shared host prelude: a borrowed raw-call type, string-in contract parsing
   that names the failing field, zero-side-effect one-shot wrappers, and the pre-resolved and
   size-bounding credential resolver adapters both hosts previously hand-rolled — plus the
   host-signed twin of that raw call and its wrappers, which take a host finalizer in place of a
-  credential resolver.
-- `south-transport-reqwest` executes hardened buffered and byte-streaming JSON POST requests,
+  credential resolver, and the body-less GET twin a task poller hands over.
+- `south-transport-reqwest` executes hardened buffered and byte-streaming JSON POST requests and
+  buffered body-less GET requests,
   applies the request's sanctioned user-agent declaration exactly once, applies every auth header
   the prepared request carries (one for the credential arms, the finalizer's diffed set for the
   host-signed arm), adds exactly `TRANSPORT_ADDED_HEADERS_V1` and nothing else, captures only the
@@ -70,8 +72,8 @@ the [task adapter vocabulary](docs/design/2026-08-27-task-adapter-vocabulary.md)
   streaming transports from one timeout configuration.
 - `south-provider-conformance` publishes immutable `south.provider-call.v1`,
   `south.provider-stream.v1`, `south.provider-quota-metadata.v1`, `south.header-auth.v1`,
-  `south.controlled-query.v1`, and `south.controlled-user-agent.v1` fixtures, while
-  `south-testkit` runs them against assembled host executors.
+  `south.controlled-query.v1`, `south.controlled-user-agent.v1`, and `south.provider-get.v1`
+  fixtures, while `south-testkit` runs them against assembled host executors.
 - `south-provider-api` owns the v2 provider component ABI: the WIT package
   `token-station:adapter@2.0.0` (world `provider-adapter-v2`, JSON payloads named by
   canonical type, raw-bytes stream chunks) and the component `manifest.json` schema
