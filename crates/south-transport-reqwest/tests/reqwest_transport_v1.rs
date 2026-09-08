@@ -282,6 +282,66 @@ async fn sends_exact_post_and_preserves_created_response() {
     assert_eq!(result.retry_after(), Some("7"));
 }
 
+/// Auth contract version four: the combined arm puts the same secret on the wire twice —
+/// `Bearer `-prefixed in `authorization` and verbatim in the sanctioned header — each exactly
+/// once.
+#[tokio::test]
+async fn bearer_and_header_secret_call_injects_both_headers_exactly_once() {
+    let loopback = loopback_once(response(
+        "200 OK",
+        &[("content-type", "application/json")],
+        br#"{"ok":true}"#,
+    ))
+    .await;
+    let transport = ReqwestTransportV1::new(config()).expect("transport should build");
+    let resolver = StaticResolver::default();
+    let binding = ProviderBindingV1::new(
+        ProviderEndpointV1::parse(&loopback.endpoint).expect("loopback endpoint should be valid"),
+        CredentialSlotV1::parse("primary").expect("fixture slot should be valid"),
+    );
+    let request = JsonPostRequestV1::new(
+        RelativePathV1::parse("v1beta/openai/chat/completions")
+            .expect("fixture path should be valid"),
+        SafeHeaders::try_from_iter([("x-test", HEADER_SENTINEL)])
+            .expect("fixture headers should be valid"),
+        JsonBodyV1::parse(&format!(r#"{{"value":"{BODY_SENTINEL}"}}"#))
+            .expect("fixture body should be valid"),
+        ProviderAuthV1::BearerAndHeaderSecret {
+            header: SecretHeaderV1::XGoogApiKey,
+            slot: BearerAuthV1::new(
+                CredentialSlotV1::parse("primary").expect("fixture slot should be valid"),
+            ),
+        },
+    );
+
+    let result = execute_provider_call_v1(
+        &binding,
+        &request,
+        &resolver,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("a combined-arm call should succeed");
+    let received = loopback.request.await.expect("server should report the request");
+    loopback.task.await.expect("server task should finish");
+
+    assert_eq!(
+        received.headers.get("authorization").map(String::as_str),
+        Some(format!("Bearer {SECRET_SENTINEL}").as_str())
+    );
+    assert_eq!(received.headers.get("x-goog-api-key").map(String::as_str), Some(SECRET_SENTINEL));
+    for name in ["authorization", "x-goog-api-key"] {
+        assert_eq!(
+            received.header_names.iter().filter(|candidate| candidate.as_str() == name).count(),
+            1,
+            "{name} must appear exactly once on the wire"
+        );
+    }
+    assert_eq!(result.status().as_u16(), 200);
+}
+
 #[tokio::test]
 async fn header_secret_call_injects_the_sanctioned_header_and_no_authorization() {
     for header in SecretHeaderV1::ALL {

@@ -47,14 +47,35 @@ fn suite_identity_and_canonical_case_order_are_frozen() {
             HeaderAuthCaseIdV1::BufferedHeaderSecretSuccess,
             HeaderAuthCaseIdV1::StreamingHeaderSecretSuccess,
             HeaderAuthCaseIdV1::HeaderSecretSlotMismatch,
+            HeaderAuthCaseIdV1::BufferedBearerAndHeaderSecretSuccess,
         ]
     );
+}
+
+/// Auth contract version four's arm has its own success case, appended after the frozen three so
+/// no existing case moves and no recorded host evidence is invalidated.
+#[test]
+fn the_combined_arm_case_declares_both_bindings_and_expects_authorization_on_the_wire() {
+    let fixtures = header_auth_fixtures_v1();
+    let fixture = &fixtures[3];
+    assert_eq!(fixture.case_id(), HeaderAuthCaseIdV1::BufferedBearerAndHeaderSecretSuccess);
+    assert_eq!(fixture.secret_header(), SecretHeaderV1::XGoogApiKey);
+    assert!(fixture.bearer_alongside());
+    assert!(matches!(fixture.upstream(), HeaderAuthUpstreamV1::Response(_)));
+    let evidence = fixture.expected().evidence();
+    assert!(evidence.sanctioned_header_exact());
+    assert!(
+        !evidence.authorization_header_absent(),
+        "the combined arm puts authorization on the wire"
+    );
+    // Every frozen case keeps the single-header shape.
+    assert!(fixtures[..3].iter().all(|frozen| !frozen.bearer_alongside()));
 }
 
 #[test]
 fn canonical_table_freezes_headers_upstreams_outcomes_and_evidence() {
     let fixtures = header_auth_fixtures_v1();
-    assert_eq!(fixtures.len(), 3);
+    assert_eq!(fixtures.len(), 4);
 
     // 1. BufferedHeaderSecretSuccess: one buffered exchange under the sanctioned header.
     assert_eq!(fixtures[0].secret_header(), SecretHeaderV1::XApiKey);
@@ -108,7 +129,10 @@ fn canonical_table_freezes_the_expected_wire_shape_evidence() {
         (ProviderCallCountV1::One, ProviderCallCountV1::One, true, true),
         (ProviderCallCountV1::One, ProviderCallCountV1::One, true, true),
         (ProviderCallCountV1::Zero, ProviderCallCountV1::Zero, false, true),
+        // Auth contract version four: the combined arm, appended last.
+        (ProviderCallCountV1::One, ProviderCallCountV1::One, true, false),
     ];
+    assert_eq!(fixtures.len(), expected_evidence.len());
     for (fixture, expected) in fixtures.iter().zip(expected_evidence) {
         let evidence = fixture.expected().evidence();
         assert_eq!(evidence.resolver_calls(), expected.0);

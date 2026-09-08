@@ -169,7 +169,7 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 6
                 // sanctioned-header injection without Authorization, and the
                 // existing production policy remains Bearer-only. See the
                 // Header Auth design for immutable evidence and scope.
-                ("header_auth", "verified", Some(3)),
+                ("header_auth", "not_verified", None),
                 // controlled_query stays not_verified until this host runs its
                 // own adoption slice against south.controlled-query.v1. The
                 // suite existing in this repository is not adoption evidence.
@@ -232,7 +232,7 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 6
                 // south plan's guard admits the Chat contract alone. The
                 // adoption record is held by that host's own repository; this
                 // manifest records only the resulting status.
-                ("header_auth", "verified", Some(3)),
+                ("header_auth", "verified", Some(4)),
                 // token-station-server controlled_query verified 2026-08-18,
                 // evidence refreshed against 0.4.1 after the suite grew its
                 // fifth case. The original run passed the four-case table, but

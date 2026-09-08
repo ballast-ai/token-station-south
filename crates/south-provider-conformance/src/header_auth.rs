@@ -28,12 +28,21 @@ pub enum HeaderAuthCaseIdV1 {
     StreamingHeaderSecretSuccess,
     /// A header-secret request whose valid slot differs from the binding.
     HeaderSecretSlotMismatch,
+    /// One successful buffered exchange under the combined arm (auth contract version four): the
+    /// same resolved secret must reach the wire twice — verbatim in the sanctioned header **and**
+    /// `Bearer `-prefixed in `authorization` — with exactly one resolver call behind both.
+    ///
+    /// This is the only case whose `authorization_header_absent` expectation is `false`. An
+    /// adapter that hardcodes the absence claim, or resolves the slot once per header, fails
+    /// here and nowhere else.
+    BufferedBearerAndHeaderSecretSuccess,
 }
 
 fixed_debug!(HeaderAuthCaseIdV1 {
     BufferedHeaderSecretSuccess => "BufferedHeaderSecretSuccess",
     StreamingHeaderSecretSuccess => "StreamingHeaderSecretSuccess",
     HeaderSecretSlotMismatch => "HeaderSecretSlotMismatch",
+    BufferedBearerAndHeaderSecretSuccess => "BufferedBearerAndHeaderSecretSuccess",
 });
 
 /// A raw upstream exchange or fake-transport behavior for a canonical header-auth case.
@@ -203,6 +212,7 @@ pub struct HeaderAuthFixtureV1 {
     case_id: HeaderAuthCaseIdV1,
     input: ProviderCallInputV1,
     secret_header: SecretHeaderV1,
+    bearer_alongside: bool,
     upstream: HeaderAuthUpstreamV1,
     expected: HeaderAuthExpectedV1,
 }
@@ -225,6 +235,12 @@ impl HeaderAuthFixtureV1 {
     pub const fn secret_header(&self) -> SecretHeaderV1 {
         self.secret_header
     }
+    /// Returns whether the request declares the combined arm — the secret also travels as
+    /// `Authorization: Bearer …` — rather than the header-secret arm alone.
+    #[must_use]
+    pub const fn bearer_alongside(&self) -> bool {
+        self.bearer_alongside
+    }
 
     /// Returns the canonical fake-upstream behavior.
     #[must_use]
@@ -245,6 +261,7 @@ impl fmt::Debug for HeaderAuthFixtureV1 {
             .debug_struct("HeaderAuthFixtureV1")
             .field("case_id", &self.case_id)
             .field("secret_header", &self.secret_header)
+            .field("bearer_alongside", &self.bearer_alongside)
             .field("input", &self.input)
             .field("upstream", &self.upstream)
             .field("expected", &self.expected)
@@ -275,11 +292,26 @@ const fn wire_evidence(
     }
 }
 
+/// The combined arm's evidence: the sanctioned header is exact **and** `authorization` is on the
+/// wire, so the absence claim is expected `false` — the only such row in the table.
+const fn dual_wire_evidence(
+    resolver_calls: ProviderCallCountV1,
+    transport_calls: ProviderCallCountV1,
+) -> HeaderAuthExpectedEvidenceV1 {
+    HeaderAuthExpectedEvidenceV1 {
+        resolver_calls,
+        transport_calls,
+        sanctioned_header_exact: true,
+        authorization_header_absent: false,
+    }
+}
+
 const HEADER_AUTH_FIXTURES: &[HeaderAuthFixtureV1] = &[
     HeaderAuthFixtureV1 {
         case_id: HeaderAuthCaseIdV1::BufferedHeaderSecretSuccess,
         input: input(HEADER_AUTH_PATH, HEADER_AUTH_BOUND_SLOT),
         secret_header: SecretHeaderV1::XApiKey,
+        bearer_alongside: false,
         upstream: HeaderAuthUpstreamV1::Response(ProviderCallRawResponseV1 {
             status: 201,
             body: HEADER_AUTH_RESPONSE_BODY,
@@ -300,6 +332,7 @@ const HEADER_AUTH_FIXTURES: &[HeaderAuthFixtureV1] = &[
         case_id: HeaderAuthCaseIdV1::StreamingHeaderSecretSuccess,
         input: input(HEADER_AUTH_PATH, HEADER_AUTH_BOUND_SLOT),
         secret_header: SecretHeaderV1::XGoogApiKey,
+        bearer_alongside: false,
         upstream: HeaderAuthUpstreamV1::Stream(ProviderStreamRawStreamV1::assemble(
             ProviderStreamRawHeadV1::assemble(200, Some(HEADER_AUTH_CONTENT_TYPE), None),
             HEADER_AUTH_CHUNKS,
@@ -319,12 +352,35 @@ const HEADER_AUTH_FIXTURES: &[HeaderAuthFixtureV1] = &[
         case_id: HeaderAuthCaseIdV1::HeaderSecretSlotMismatch,
         input: input(HEADER_AUTH_PATH, HEADER_AUTH_DIFFERENT_SLOT),
         secret_header: SecretHeaderV1::ApiKey,
+        bearer_alongside: false,
         upstream: HeaderAuthUpstreamV1::NotReached,
         expected: HeaderAuthExpectedV1 {
             outcome: HeaderAuthExpectedOutcomeV1::Failure {
                 code: ProviderCallFailureCodeV1::CredentialBindingMismatch,
             },
             evidence: wire_evidence(ProviderCallCountV1::Zero, ProviderCallCountV1::Zero, false),
+        },
+    },
+    HeaderAuthFixtureV1 {
+        case_id: HeaderAuthCaseIdV1::BufferedBearerAndHeaderSecretSuccess,
+        input: input(HEADER_AUTH_PATH, HEADER_AUTH_BOUND_SLOT),
+        // The one production shape that needs both: Gemini's OpenAI-compatible surface.
+        secret_header: SecretHeaderV1::XGoogApiKey,
+        bearer_alongside: true,
+        upstream: HeaderAuthUpstreamV1::Response(ProviderCallRawResponseV1 {
+            status: 200,
+            body: HEADER_AUTH_RESPONSE_BODY,
+            content_type: Some(HEADER_AUTH_CONTENT_TYPE),
+            retry_after: None,
+        }),
+        expected: HeaderAuthExpectedV1 {
+            outcome: HeaderAuthExpectedOutcomeV1::Response {
+                status: 200,
+                body: HEADER_AUTH_RESPONSE_BODY,
+                content_type: Some(HEADER_AUTH_CONTENT_TYPE),
+                retry_after: None,
+            },
+            evidence: dual_wire_evidence(ProviderCallCountV1::One, ProviderCallCountV1::One),
         },
     },
 ];

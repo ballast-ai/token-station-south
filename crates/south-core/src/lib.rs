@@ -237,6 +237,15 @@ pub trait RequestFinalizerV1: Send + Sync {
 /// One auth header bound to the wire: its frozen name and its zeroizing value.
 type BoundAuthHeader = (&'static str, Zeroizing<Vec<u8>>);
 
+/// `Bearer `-prefixes a resolved secret into a fresh zeroizing allocation.
+fn bearer_prefixed(secret: &SecretValue) -> Zeroizing<Vec<u8>> {
+    const BEARER_PREFIX: &[u8] = b"Bearer ";
+    let mut value = Zeroizing::new(Vec::with_capacity(BEARER_PREFIX.len() + secret.value.len()));
+    value.extend_from_slice(BEARER_PREFIX);
+    value.extend_from_slice(&secret.value);
+    value
+}
+
 /// Diffs what the finalizer emitted against what it declared.
 ///
 /// Rejection order is the design record's: an undeclared name, a declared name that never
@@ -289,12 +298,13 @@ pub struct PreparedHttpRequestV1<'request> {
 }
 
 impl<'request> PreparedHttpRequestV1<'request> {
-    /// Binds the resolved secret to the one auth header declared by the request.
+    /// Binds the resolved secret to the auth header(s) declared by the request.
     ///
     /// The Bearer arm produces `authorization` with a `Bearer `-prefixed value; the header-secret
-    /// arm produces the sanctioned header name with the verbatim secret bytes. The value lives in
-    /// a South-owned allocation that zeroizes on drop, and the original resolver allocation is
-    /// dropped (and therefore zeroized) here when a prefixed copy replaces it.
+    /// arm produces the sanctioned header name with the verbatim secret bytes; the combined arm
+    /// produces both, from the one resolved value. Every value lives in a South-owned allocation
+    /// that zeroizes on drop, and the original resolver allocation is dropped (and therefore
+    /// zeroized) here when a prefixed copy replaces it.
     ///
     /// `ProviderAuthV1` is `#[non_exhaustive]` since 0.7.0 (host-prelude D2): an arm newer than
     /// this crate fails closed as `UNSUPPORTED_AUTH_SHAPE` (the resolved secret is dropped and
@@ -304,16 +314,17 @@ impl<'request> PreparedHttpRequestV1<'request> {
         destination: Url,
         secret: SecretValue,
     ) -> Result<Self, PreparationErrorV1> {
-        let (auth_header_name, auth_header_value) = match request.auth() {
-            ProviderAuthV1::Bearer(_) => {
-                const BEARER_PREFIX: &[u8] = b"Bearer ";
-                let mut value =
-                    Zeroizing::new(Vec::with_capacity(BEARER_PREFIX.len() + secret.value.len()));
-                value.extend_from_slice(BEARER_PREFIX);
-                value.extend_from_slice(&secret.value);
-                ("authorization", value)
+        let auth_headers: Vec<BoundAuthHeader> = match request.auth() {
+            ProviderAuthV1::Bearer(_) => vec![("authorization", bearer_prefixed(&secret))],
+            ProviderAuthV1::HeaderSecret { header, .. } => {
+                vec![(header.header_name(), secret.value)]
             }
-            ProviderAuthV1::HeaderSecret { header, .. } => (header.header_name(), secret.value),
+            // Two bindings of one secret, in a fixed order; the verbatim copy takes over the
+            // resolver allocation and the prefixed copy is a fresh zeroizing allocation.
+            ProviderAuthV1::BearerAndHeaderSecret { header, .. } => vec![
+                ("authorization", bearer_prefixed(&secret)),
+                (header.header_name(), secret.value),
+            ],
             // The host-signed arm has no secret to bind and no header to assemble here: its
             // headers exist only after the finalizer has seen the finished request. Reaching this
             // point means a caller used the unsigned entry point for a signed request, which is a
@@ -329,7 +340,7 @@ impl<'request> PreparedHttpRequestV1<'request> {
             url: destination,
             headers: request.headers(),
             body: request.body(),
-            auth_headers: vec![(auth_header_name, auth_header_value)],
+            auth_headers,
             user_agent: request.user_agent(),
         })
     }
@@ -409,10 +420,11 @@ impl PreparedHttpRequestV1<'_> {
     /// sanctioned name, every signed name, and `authorization` itself stay on the reserved-header
     /// blacklist.
     ///
-    /// The two credential arms yield exactly one element, as the single-header accessor this
-    /// replaced always did. The host-signed arm yields the finalizer's diffed output in the
-    /// declaration's canonical order — one to four elements, never zero: a request that reached a
-    /// transport has passed the allow-list diff, and an empty declaration cannot be constructed.
+    /// The Bearer and header-secret arms yield exactly one element, as the single-header accessor
+    /// this replaced always did; the combined arm yields two (`authorization` first). The
+    /// host-signed arm yields the finalizer's diffed output in the declaration's canonical order —
+    /// one to four elements, never zero: a request that reached a transport has passed the
+    /// allow-list diff, and an empty declaration cannot be constructed.
     #[must_use]
     pub fn auth_headers(&self) -> impl ExactSizeIterator<Item = (&'static str, &[u8])> {
         self.auth_headers.iter().map(|(name, value)| (*name, value.as_slice()))
