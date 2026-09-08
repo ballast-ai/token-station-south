@@ -8,10 +8,10 @@ use std::{fmt, future::Future, pin::Pin, time::Duration};
 
 use http::Method;
 use south_contracts::{
-    BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1, JsonBodyV1, JsonPostRequestV1,
-    PreparationErrorV1, ProviderAuthV1, ProviderEndpointV1, SafeHeaders, SignedHeaderSetV1,
-    SignedHeaderV1, StreamChunkV1, StreamReadErrorV1, StreamRejectedV1, StreamingResponseHeadV1,
-    TransportErrorV1,
+    BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1, GetRequestV1, JsonBodyV1,
+    JsonPostRequestV1, PreparationErrorV1, ProviderAuthV1, ProviderEndpointV1, QueryStringV1,
+    RelativePathV1, SafeHeaders, SignedHeaderSetV1, SignedHeaderV1, StreamChunkV1,
+    StreamReadErrorV1, StreamRejectedV1, StreamingResponseHeadV1, TransportErrorV1,
 };
 use thiserror::Error;
 use tokio::time::{Instant, timeout_at};
@@ -292,9 +292,64 @@ pub struct PreparedHttpRequestV1<'request> {
     method: Method,
     url: Url,
     headers: &'request SafeHeaders,
-    body: &'request JsonBodyV1,
+    /// `None` exactly for a [`GetRequestV1`] (HTTP contract version six): a body-less request
+    /// has no body slot at all, rather than an empty one, so a transport cannot send `{}` or a
+    /// zero-length payload where the contract promised nothing.
+    body: Option<&'request JsonBodyV1>,
     auth_headers: Vec<BoundAuthHeader>,
     user_agent: Option<ControlledUserAgentV1>,
+}
+
+/// The method-neutral projection of a request the orchestration layer prepares.
+///
+/// [`JsonPostRequestV1`] and [`GetRequestV1`] are separate contract types on purpose
+/// (buffered-GET record, D1): the POST shape keeps its mandatory body and the GET shape has no
+/// body slot. This private projection is where the two meet, so the binding check, the
+/// assembly of auth headers, and the finalizer view are written once. It owns nothing but the
+/// method — every other field borrows the request it was projected from.
+struct RequestParts<'request> {
+    method: Method,
+    relative_path: &'request RelativePathV1,
+    query: Option<&'request QueryStringV1>,
+    headers: &'request SafeHeaders,
+    body: Option<&'request JsonBodyV1>,
+    auth: &'request ProviderAuthV1,
+    user_agent: Option<ControlledUserAgentV1>,
+}
+
+impl<'request> From<&'request JsonPostRequestV1> for RequestParts<'request> {
+    fn from(request: &'request JsonPostRequestV1) -> Self {
+        Self {
+            method: Method::POST,
+            relative_path: request.relative_path(),
+            query: request.query(),
+            headers: request.headers(),
+            body: Some(request.body()),
+            auth: request.auth(),
+            user_agent: request.user_agent(),
+        }
+    }
+}
+
+impl<'request> From<&'request GetRequestV1> for RequestParts<'request> {
+    fn from(request: &'request GetRequestV1) -> Self {
+        Self {
+            method: Method::GET,
+            relative_path: request.relative_path(),
+            query: request.query(),
+            headers: request.headers(),
+            body: None,
+            auth: request.auth(),
+            user_agent: request.user_agent(),
+        }
+    }
+}
+
+impl RequestParts<'_> {
+    /// Resolves the destination inside the binding, sanctioned query appended.
+    fn destination(&self, binding: &ProviderBindingV1) -> Result<Url, PreparationErrorV1> {
+        self.relative_path.resolve_against_with_query(&binding.endpoint, self.query)
+    }
 }
 
 impl<'request> PreparedHttpRequestV1<'request> {
@@ -310,11 +365,11 @@ impl<'request> PreparedHttpRequestV1<'request> {
     /// this crate fails closed as `UNSUPPORTED_AUTH_SHAPE` (the resolved secret is dropped and
     /// zeroized on that path), never panics.
     fn assemble(
-        request: &'request JsonPostRequestV1,
+        request: RequestParts<'request>,
         destination: Url,
         secret: SecretValue,
     ) -> Result<Self, PreparationErrorV1> {
-        let auth_headers: Vec<BoundAuthHeader> = match request.auth() {
+        let auth_headers: Vec<BoundAuthHeader> = match request.auth {
             ProviderAuthV1::Bearer(_) => vec![("authorization", bearer_prefixed(&secret))],
             ProviderAuthV1::HeaderSecret { header, .. } => {
                 vec![(header.header_name(), secret.value)]
@@ -336,12 +391,12 @@ impl<'request> PreparedHttpRequestV1<'request> {
         };
 
         Ok(Self {
-            method: Method::POST,
+            method: request.method,
             url: destination,
-            headers: request.headers(),
-            body: request.body(),
+            headers: request.headers,
+            body: request.body,
             auth_headers,
-            user_agent: request.user_agent(),
+            user_agent: request.user_agent,
         })
     }
 
@@ -349,17 +404,17 @@ impl<'request> PreparedHttpRequestV1<'request> {
     ///
     /// The result is the request the finalizer sees. `bind_finalized` completes it.
     fn assemble_unsigned(
-        request: &'request JsonPostRequestV1,
+        request: RequestParts<'request>,
         destination: Url,
     ) -> Result<Self, PreparationErrorV1> {
-        match request.auth() {
+        match request.auth {
             ProviderAuthV1::HostSigned { .. } => Ok(Self {
-                method: Method::POST,
+                method: request.method,
                 url: destination,
-                headers: request.headers(),
-                body: request.body(),
+                headers: request.headers,
+                body: request.body,
                 auth_headers: Vec::new(),
-                user_agent: request.user_agent(),
+                user_agent: request.user_agent,
             }),
             _ => Err(PreparationErrorV1::UnsupportedAuthShape),
         }
@@ -375,7 +430,10 @@ impl<'request> PreparedHttpRequestV1<'request> {
             method: &self.method,
             url: &self.url,
             headers: self.headers,
-            body: self.body.as_str().as_bytes(),
+            // A GET has no body, and the view says so with the empty slice: a payload-hashing
+            // signer (SigV4 hashes the empty payload exactly as AWS specifies) needs nothing
+            // else, and a signer that hashes nothing ignores it either way.
+            body: self.body.map_or(&[], |body| body.as_str().as_bytes()),
             user_agent: self.user_agent,
             slot,
             emits,
@@ -407,9 +465,12 @@ impl PreparedHttpRequestV1<'_> {
         self.headers
     }
 
-    /// Returns the exact validated JSON body.
+    /// Returns the exact validated JSON body, or `None` for a body-less GET.
+    ///
+    /// `Option` since HTTP contract version six. A transport attaches a body exactly when this
+    /// is `Some`: a `None` here means no body slot on the wire, not an empty one.
     #[must_use]
-    pub const fn body(&self) -> &JsonBodyV1 {
+    pub const fn body(&self) -> Option<&JsonBodyV1> {
         self.body
     }
 
@@ -447,7 +508,8 @@ impl fmt::Debug for PreparedHttpRequestV1<'_> {
             .debug_struct("PreparedHttpRequestV1")
             .field("method", &self.method)
             .field("header_count", &self.headers.len())
-            .field("body_byte_count", &self.body.len())
+            // Zero exactly when there is no body: a JSON body is never empty.
+            .field("body_byte_count", &self.body.map_or(0, JsonBodyV1::len))
             .finish_non_exhaustive()
     }
 }
@@ -515,10 +577,51 @@ where
     R: CredentialResolver + ?Sized,
     T: AsyncHttpTransport + ?Sized,
 {
-    let destination =
-        request.relative_path().resolve_against_with_query(&binding.endpoint, request.query())?;
+    execute_buffered(binding, request.into(), resolver, transport, deadline, cancellation).await
+}
 
-    let requested_slot = request.auth().credential_slot();
+/// Validates, authorizes, resolves, prepares, and executes one buffered body-less GET.
+///
+/// The GET twin of [`execute_provider_call_v1`] (HTTP contract version six): the same validation
+/// order, the same binding check, the same biased cancellation race, and the same three
+/// credential arms. Only the method and the absence of a body differ, and both are fixed by the
+/// request type rather than by a parameter. There is no streaming GET (buffered-GET record, D2).
+///
+/// # Errors
+///
+/// Returns [`ProviderCallErrorV1`] exactly as the POST twin does. A host-signed request is
+/// `UNSUPPORTED_AUTH_SHAPE` here; it belongs to [`execute_signed_get_call_v1`].
+pub async fn execute_get_call_v1<R, T>(
+    binding: &ProviderBindingV1,
+    request: &GetRequestV1,
+    resolver: &R,
+    transport: &T,
+    deadline: Instant,
+    cancellation: &CancellationToken,
+) -> Result<BufferedHttpResponseV1, ProviderCallErrorV1>
+where
+    R: CredentialResolver + ?Sized,
+    T: AsyncHttpTransport + ?Sized,
+{
+    execute_buffered(binding, request.into(), resolver, transport, deadline, cancellation).await
+}
+
+/// The one buffered credential-arm flow both request shapes share.
+async fn execute_buffered<R, T>(
+    binding: &ProviderBindingV1,
+    request: RequestParts<'_>,
+    resolver: &R,
+    transport: &T,
+    deadline: Instant,
+    cancellation: &CancellationToken,
+) -> Result<BufferedHttpResponseV1, ProviderCallErrorV1>
+where
+    R: CredentialResolver + ?Sized,
+    T: AsyncHttpTransport + ?Sized,
+{
+    let destination = request.destination(binding)?;
+
+    let requested_slot = request.auth.credential_slot();
     if requested_slot != &binding.credential_slot {
         return Err(PreparationErrorV1::CredentialBindingMismatch.into());
     }
@@ -582,7 +685,50 @@ where
     F: RequestFinalizerV1 + ?Sized,
     T: AsyncHttpTransport + ?Sized,
 {
-    let (destination, emits) = prepare_signed(binding, request)?;
+    execute_signed_buffered(binding, request.into(), finalizer, transport, deadline, cancellation)
+        .await
+}
+
+/// Executes one host-signed buffered body-less GET.
+///
+/// The GET twin of [`execute_signed_provider_call_v1`], and the signed twin of
+/// [`execute_get_call_v1`]. The finalizer sees a [`FinalizeViewV1`] whose method is `GET` and
+/// whose body is the empty slice — which is what a payload-hashing scheme such as `SigV4` expects
+/// for a body-less request — so a signer written for the POST arm works here unchanged.
+///
+/// # Errors
+///
+/// Returns [`ProviderCallErrorV1`] exactly as the POST twin does.
+pub async fn execute_signed_get_call_v1<F, T>(
+    binding: &ProviderBindingV1,
+    request: &GetRequestV1,
+    finalizer: &F,
+    transport: &T,
+    deadline: Instant,
+    cancellation: &CancellationToken,
+) -> Result<BufferedHttpResponseV1, ProviderCallErrorV1>
+where
+    F: RequestFinalizerV1 + ?Sized,
+    T: AsyncHttpTransport + ?Sized,
+{
+    execute_signed_buffered(binding, request.into(), finalizer, transport, deadline, cancellation)
+        .await
+}
+
+/// The one buffered host-signed flow both request shapes share.
+async fn execute_signed_buffered<F, T>(
+    binding: &ProviderBindingV1,
+    request: RequestParts<'_>,
+    finalizer: &F,
+    transport: &T,
+    deadline: Instant,
+    cancellation: &CancellationToken,
+) -> Result<BufferedHttpResponseV1, ProviderCallErrorV1>
+where
+    F: RequestFinalizerV1 + ?Sized,
+    T: AsyncHttpTransport + ?Sized,
+{
+    let (destination, emits) = prepare_signed(binding, &request)?;
 
     if cancellation.is_cancelled() {
         return Err(PreparationErrorV1::Cancelled.into());
@@ -592,8 +738,9 @@ where
     }
 
     let execution = async {
+        let slot = request.auth.credential_slot();
         let mut prepared = PreparedHttpRequestV1::assemble_unsigned(request, destination)?;
-        finalize_into(&mut prepared, finalizer, emits, request.auth().credential_slot()).await?;
+        finalize_into(&mut prepared, finalizer, emits, slot).await?;
         let remaining_timeout = deadline
             .checked_duration_since(Instant::now())
             .filter(|remaining| !remaining.is_zero())
@@ -613,18 +760,17 @@ where
 /// Resolves the destination and proves the request really is host-signed.
 fn prepare_signed<'request>(
     binding: &ProviderBindingV1,
-    request: &'request JsonPostRequestV1,
+    request: &RequestParts<'request>,
 ) -> Result<(Url, &'request SignedHeaderSetV1), ProviderCallErrorV1> {
-    let destination =
-        request.relative_path().resolve_against_with_query(&binding.endpoint, request.query())?;
+    let destination = request.destination(binding)?;
 
-    let ProviderAuthV1::HostSigned { emits, .. } = request.auth() else {
+    let ProviderAuthV1::HostSigned { emits, .. } = request.auth else {
         return Err(PreparationErrorV1::UnsupportedAuthShape.into());
     };
 
     // The binding check is identical to the other arms: South never resolves this slot, but the
     // binding still decides which identity a request may be signed with.
-    if request.auth().credential_slot() != &binding.credential_slot {
+    if request.auth.credential_slot() != &binding.credential_slot {
         return Err(PreparationErrorV1::CredentialBindingMismatch.into());
     }
 
@@ -825,10 +971,10 @@ where
     R: CredentialResolver + ?Sized,
     T: AsyncStreamingTransport + ?Sized,
 {
-    let destination =
-        request.relative_path().resolve_against_with_query(&binding.endpoint, request.query())?;
+    let request = RequestParts::from(request);
+    let destination = request.destination(binding)?;
 
-    let requested_slot = request.auth().credential_slot();
+    let requested_slot = request.auth.credential_slot();
     if requested_slot != &binding.credential_slot {
         return Err(PreparationErrorV1::CredentialBindingMismatch.into());
     }
@@ -897,7 +1043,8 @@ where
     F: RequestFinalizerV1 + ?Sized,
     T: AsyncStreamingTransport + ?Sized,
 {
-    let (destination, emits) = prepare_signed(binding, request)?;
+    let request = RequestParts::from(request);
+    let (destination, emits) = prepare_signed(binding, &request)?;
 
     if cancellation.is_cancelled() {
         return Err(PreparationErrorV1::Cancelled.into());
@@ -907,9 +1054,10 @@ where
     }
 
     let open = async {
+        let slot = request.auth.credential_slot();
         let mut prepared = PreparedHttpRequestV1::assemble_unsigned(request, destination)
             .map_err(ProviderCallErrorV1::from)?;
-        finalize_into(&mut prepared, finalizer, emits, request.auth().credential_slot()).await?;
+        finalize_into(&mut prepared, finalizer, emits, slot).await?;
         transport.open(&prepared).await.map_err(|error| match error {
             StreamOpenErrorV1::Rejected(rejected) => ProviderCallErrorV1::Rejected(rejected),
             StreamOpenErrorV1::Transport(error) => error.into(),

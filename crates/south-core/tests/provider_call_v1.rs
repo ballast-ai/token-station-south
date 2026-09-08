@@ -10,14 +10,15 @@ use std::{
 
 use http::{Method, StatusCode};
 use south_contracts::{
-    BearerAuthV1, BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1, JsonBodyV1,
-    JsonPostRequestV1, PreparationErrorV1, ProviderAuthV1, ProviderEndpointV1, QueryParameterV1,
-    QueryStringV1, RelativePathV1, SafeHeaders, SecretHeaderV1, TransportErrorV1,
+    BearerAuthV1, BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1, GetRequestV1,
+    JsonBodyV1, JsonPostRequestV1, PreparationErrorV1, ProviderAuthV1, ProviderEndpointV1,
+    QueryParameterV1, QueryStringV1, RelativePathV1, SafeHeaders, SecretHeaderV1,
+    SignedHeaderSetV1, SignedHeaderV1, TransportErrorV1,
 };
 use south_core::{
     AsyncHttpTransport, CredentialResolutionErrorV1, CredentialResolutionFuture,
     CredentialResolver, PreparedHttpRequestV1, ProviderBindingV1, ProviderCallErrorV1, SecretValue,
-    TransportFuture, execute_provider_call_v1,
+    TransportFuture, execute_get_call_v1, execute_provider_call_v1,
 };
 use static_assertions::{assert_impl_all, assert_not_impl_any};
 use tokio::sync::oneshot;
@@ -199,7 +200,7 @@ impl AsyncHttpTransport for RecordingTransport {
                 .get("x-test")
                 .expect("prepared fixture should retain its ordinary header")
                 .to_owned(),
-            body: prepared.body().as_str().to_owned(),
+            body: prepared.body().map_or_else(String::new, |body| body.as_str().to_owned()),
             auth_header_name: auth_header_name.to_owned(),
             auth_header_value: auth_header_value.to_vec(),
             user_agent: prepared.user_agent().map(ControlledUserAgentV1::as_str),
@@ -868,4 +869,181 @@ async fn a_request_without_a_user_agent_prepares_none() {
         observation.user_agent, None,
         "no user-agent declared means none at the prepared boundary"
     );
+}
+
+// ─────────────────── buffered GET request (HTTP contract v6) ───────────────────
+
+fn get_request(path: &str, slot: &str) -> GetRequestV1 {
+    GetRequestV1::new(
+        RelativePathV1::parse(path).expect("fixture path should be valid"),
+        SafeHeaders::try_from_iter([("x-test", HEADER_SENTINEL)])
+            .expect("fixture headers should be valid"),
+        BearerAuthV1::new(CredentialSlotV1::parse(slot).expect("fixture slot should be valid")),
+    )
+}
+
+fn observed(transport: &RecordingTransport) -> Observation {
+    transport
+        .observation
+        .lock()
+        .expect("test observation lock should be available")
+        .as_ref()
+        .expect("transport should record the prepared request")
+        .clone()
+}
+
+#[tokio::test(start_paused = true)]
+async fn get_success_prepares_exactly_one_body_less_get_for_the_transport() {
+    let resolver = ImmediateResolver::default();
+    let transport = RecordingTransport::default();
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+
+    let result = execute_get_call_v1(
+        &binding(&format!("https://{ENDPOINT_SENTINEL}/base"), SLOT_SENTINEL),
+        &get_request(PATH_SENTINEL, SLOT_SENTINEL),
+        &resolver,
+        &transport,
+        deadline,
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("a valid prepared GET should succeed");
+
+    assert_eq!(result.status(), StatusCode::CREATED);
+    assert_eq!(resolver.calls.load(Ordering::SeqCst), 1);
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 1);
+    let observation = observed(&transport);
+    assert_eq!(
+        &observation,
+        &Observation {
+            method: Method::GET,
+            url: Url::parse(&format!("https://{ENDPOINT_SENTINEL}/base/{PATH_SENTINEL}"))
+                .expect("expected prepared URL should be valid"),
+            header: HEADER_SENTINEL.to_owned(),
+            // No body slot at all: the recorder's fallback for `None`, not an empty JSON body.
+            body: String::new(),
+            auth_header_name: "authorization".to_owned(),
+            auth_header_value: format!("Bearer {SECRET_SENTINEL}").into_bytes(),
+            user_agent: None,
+            remaining_timeout: Duration::from_secs(30),
+            prepared_debug:
+                "PreparedHttpRequestV1 { method: GET, header_count: 1, body_byte_count: 0, .. }"
+                    .to_owned(),
+        }
+    );
+}
+
+#[tokio::test]
+async fn get_slot_mismatch_stops_before_resolver_and_transport() {
+    let resolver = ImmediateResolver::default();
+    let transport = RecordingTransport::default();
+
+    let error = execute_get_call_v1(
+        &binding(&format!("https://{ENDPOINT_SENTINEL}/base"), SLOT_SENTINEL),
+        &get_request(PATH_SENTINEL, "other-slot"),
+        &resolver,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect_err("a slot outside the binding must be refused");
+
+    assert!(matches!(
+        error,
+        ProviderCallErrorV1::Preparation(PreparationErrorV1::CredentialBindingMismatch)
+    ));
+    assert_eq!(resolver.calls.load(Ordering::SeqCst), 0);
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn get_task_id_query_reaches_the_transport_url_intact() {
+    let resolver = ImmediateResolver::default();
+    let transport = RecordingTransport::default();
+    let query = QueryStringV1::try_from_iter([(QueryParameterV1::TaskId, "276843862449040")])
+        .expect("the task id fixture satisfies its grammar");
+    let request = get_request("v1/query/video_generation", SLOT_SENTINEL).with_query(query);
+
+    execute_get_call_v1(
+        &binding("https://example.com/base/", SLOT_SENTINEL),
+        &request,
+        &resolver,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("a sanctioned task id must not block preparation");
+
+    let observation = observed(&transport);
+    assert_eq!(observation.method, Method::GET);
+    assert_eq!(observation.url.query(), Some("task_id=276843862449040"));
+    assert_eq!(observation.url.path(), "/base/v1/query/video_generation");
+    assert!(observation.body.is_empty(), "a poll carries its id in the URL, never a body");
+}
+
+#[tokio::test]
+async fn get_declared_user_agent_and_header_secret_arm_reach_the_boundary() {
+    let resolver = ImmediateResolver::default();
+    let transport = RecordingTransport::default();
+    let request = GetRequestV1::new(
+        RelativePathV1::parse("v1/videos/276843862449040").expect("fixture path"),
+        SafeHeaders::try_from_iter([("x-test", HEADER_SENTINEL)]).expect("fixture headers"),
+        ProviderAuthV1::HeaderSecret {
+            header: SecretHeaderV1::XApiKey,
+            slot: BearerAuthV1::new(CredentialSlotV1::parse(SLOT_SENTINEL).expect("slot")),
+        },
+    )
+    .with_user_agent(ControlledUserAgentV1::try_from_static("south-poll/1.0").expect("agent"));
+
+    execute_get_call_v1(
+        &binding("https://example.com/base/", SLOT_SENTINEL),
+        &request,
+        &resolver,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("the header-secret arm binds on a GET exactly as on a POST");
+
+    let observation = observed(&transport);
+    assert_eq!(observation.auth_header_name, "x-api-key");
+    assert_eq!(observation.auth_header_value, SECRET_SENTINEL.as_bytes());
+    assert_eq!(observation.user_agent, Some("south-poll/1.0"));
+}
+
+#[tokio::test]
+async fn the_unsigned_get_entry_point_refuses_the_host_signed_arm() {
+    let resolver = ImmediateResolver::default();
+    let transport = RecordingTransport::default();
+    let request = GetRequestV1::new(
+        RelativePathV1::parse(PATH_SENTINEL).expect("fixture path"),
+        SafeHeaders::default(),
+        ProviderAuthV1::HostSigned {
+            slot: BearerAuthV1::new(CredentialSlotV1::parse(SLOT_SENTINEL).expect("slot")),
+            emits: SignedHeaderSetV1::new(&[SignedHeaderV1::Authorization]).expect("declaration"),
+        },
+    );
+
+    let error = execute_get_call_v1(
+        &binding("https://example.com/base/", SLOT_SENTINEL),
+        &request,
+        &resolver,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect_err("the unsigned GET path cannot serve a signed request");
+
+    assert!(matches!(
+        error,
+        ProviderCallErrorV1::Preparation(PreparationErrorV1::UnsupportedAuthShape)
+    ));
+    // Same seam as the POST twin: the shape is refused at assembly, after resolution and before
+    // the transport, so the dangerous half — an unauthenticated request on the wire — cannot
+    // happen.
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 0);
 }

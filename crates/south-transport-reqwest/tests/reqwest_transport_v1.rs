@@ -7,14 +7,15 @@ use std::{
 
 use http::StatusCode;
 use south_contracts::{
-    BearerAuthV1, BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1, JsonBodyV1,
-    JsonPostRequestV1, MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES, MAX_RESPONSE_BODY_BYTES,
-    MAX_RESPONSE_CONTENT_TYPE_BYTES, MAX_RESPONSE_RETRY_AFTER_BYTES, ProviderAuthV1,
-    ProviderEndpointV1, RelativePathV1, SafeHeaders, SecretHeaderV1, TransportErrorV1,
+    BearerAuthV1, BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1, GetRequestV1,
+    JsonBodyV1, JsonPostRequestV1, MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES,
+    MAX_RESPONSE_BODY_BYTES, MAX_RESPONSE_CONTENT_TYPE_BYTES, MAX_RESPONSE_RETRY_AFTER_BYTES,
+    ProviderAuthV1, ProviderEndpointV1, QueryParameterV1, QueryStringV1, RelativePathV1,
+    SafeHeaders, SecretHeaderV1, TransportErrorV1,
 };
 use south_core::{
     CredentialResolutionFuture, CredentialResolver, ProviderBindingV1, ProviderCallErrorV1,
-    SecretValue, execute_provider_call_v1,
+    SecretValue, execute_get_call_v1, execute_provider_call_v1,
 };
 use south_transport_reqwest::{ReqwestTransportConfigV1, ReqwestTransportV1};
 use tokio::{
@@ -85,11 +86,11 @@ async fn read_request(stream: &mut TcpStream) -> ReceivedRequest {
         .collect();
     let header_names: Vec<String> = header_pairs.iter().map(|(name, _)| name.clone()).collect();
     let headers = header_pairs.into_iter().collect::<BTreeMap<_, _>>();
-    let body_length = headers
-        .get("content-length")
-        .expect("buffered request should have content-length")
-        .parse::<usize>()
-        .expect("fixture content-length should be numeric");
+    // A JSON POST always declares its length; a body-less GET (HTTP contract v6) declares none
+    // and carries nothing, which is exactly what its wire fixture asserts.
+    let body_length = headers.get("content-length").map_or(0, |length| {
+        length.parse::<usize>().expect("fixture content-length should be numeric")
+    });
     while bytes.len() - header_end < body_length {
         let mut chunk = [0_u8; 1024];
         let count = stream.read(&mut chunk).await.expect("fixture body should read");
@@ -280,6 +281,77 @@ async fn sends_exact_post_and_preserves_created_response() {
     assert_eq!(result.body(), r#"{"ok":true}"#);
     assert_eq!(result.content_type(), Some("application/json"));
     assert_eq!(result.retry_after(), Some("7"));
+}
+
+/// HTTP contract version six: a body-less GET reaches the socket as `GET`, with the declared
+/// query on the request target, no body bytes, and no `content-length` — the one name in
+/// `TRANSPORT_ADDED_HEADERS_V1` that is a function of a body the request does not have.
+#[tokio::test]
+async fn sends_exact_body_less_get_with_the_task_id_query_and_no_content_length() {
+    let loopback = loopback_once(response(
+        "200 OK",
+        &[("content-type", "application/json")],
+        br#"{"status":"Success"}"#,
+    ))
+    .await;
+    let transport = ReqwestTransportV1::new(config()).expect("transport should build");
+    let resolver = StaticResolver::default();
+    let binding = ProviderBindingV1::new(
+        ProviderEndpointV1::parse(&loopback.endpoint).expect("loopback endpoint should be valid"),
+        CredentialSlotV1::parse("primary").expect("fixture slot should be valid"),
+    );
+    let request = GetRequestV1::new(
+        RelativePathV1::parse("v1/query/video_generation").expect("fixture path should be valid"),
+        SafeHeaders::try_from_iter([("x-test", HEADER_SENTINEL)])
+            .expect("fixture headers should be valid"),
+        BearerAuthV1::new(
+            CredentialSlotV1::parse("primary").expect("fixture slot should be valid"),
+        ),
+    )
+    .with_query(
+        QueryStringV1::try_from_iter([(QueryParameterV1::TaskId, "276843862449040")])
+            .expect("fixture query should be valid"),
+    );
+
+    let result = execute_get_call_v1(
+        &binding,
+        &request,
+        &resolver,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("a body-less GET should succeed");
+    let received = loopback.request.await.expect("server should report the request");
+    loopback.task.await.expect("server task should finish");
+
+    assert_eq!(
+        received.request_line,
+        "GET /base/v1/query/video_generation?task_id=276843862449040 HTTP/1.1"
+    );
+    assert_eq!(received.headers.get("x-test").map(String::as_str), Some(HEADER_SENTINEL));
+    assert_eq!(
+        received.headers.get("authorization").map(String::as_str),
+        Some("Bearer transport-secret-sentinel")
+    );
+    assert!(received.body.is_empty(), "a GET carries no body bytes");
+    assert!(
+        !received.header_names.iter().any(|name| name == "content-length"),
+        "no body means no content-length: {:?}",
+        received.header_names
+    );
+    assert!(
+        !received.header_names.iter().any(|name| name == "content-type"),
+        "the transport adds no content-type of its own"
+    );
+    // Everything else the transport adds is still exactly the declared set.
+    let mut names = received.header_names.clone();
+    names.sort_unstable();
+    assert_eq!(names, ["accept", "authorization", "host", "x-test"]);
+    assert_eq!(resolver.calls.load(Ordering::SeqCst), 1);
+    assert_eq!(result.status().as_u16(), 200);
+    assert_eq!(result.body(), r#"{"status":"Success"}"#);
 }
 
 /// Auth contract version four: the combined arm puts the same secret on the wire twice —

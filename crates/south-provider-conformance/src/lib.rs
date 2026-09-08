@@ -21,6 +21,7 @@ macro_rules! fixed_debug {
 mod controlled_query;
 mod controlled_user_agent;
 mod header_auth;
+mod provider_get;
 mod quota;
 mod stream;
 
@@ -40,6 +41,12 @@ pub use header_auth::{
     FAKE_HEADER_SECRET_V1, HEADER_AUTH_CONFORMANCE_SUITE_ID, HEADER_AUTH_CONFORMANCE_SUITE_VERSION,
     HeaderAuthCaseIdV1, HeaderAuthExpectedEvidenceV1, HeaderAuthExpectedOutcomeV1,
     HeaderAuthExpectedV1, HeaderAuthFixtureV1, HeaderAuthUpstreamV1, header_auth_fixtures_v1,
+};
+pub use provider_get::{
+    PROVIDER_GET_CONFORMANCE_SUITE_ID, PROVIDER_GET_CONFORMANCE_SUITE_VERSION,
+    ProviderGetAuthArmV1, ProviderGetCaseIdV1, ProviderGetExpectedEvidenceV1,
+    ProviderGetExpectedOutcomeV1, ProviderGetExpectedV1, ProviderGetFixtureV1, ProviderGetInputV1,
+    ProviderGetUpstreamV1, provider_get_fixtures_v1,
 };
 pub use quota::{
     PROVIDER_QUOTA_METADATA_CONFORMANCE_SUITE_ID,

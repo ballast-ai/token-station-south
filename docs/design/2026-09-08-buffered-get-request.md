@@ -1,6 +1,6 @@
 # The Buffered GET Request: Task Polling Through South
 
-Status: draft for ruling (D1–D4 in §6); targets 0.24.0
+Status: D1–D4 ruled 2026-09-08 (see §6); shipped as 0.24.0
 
 Date: 2026-09-08
 
@@ -102,8 +102,14 @@ added-header set are method-independent.
 A dedicated `south.provider-get.v1` suite (D4), four frozen cases: buffered GET success under the
 Bearer arm; the same under a sanctioned header; a slot mismatch refused before resolver and
 transport; a GET carrying `task_id` whose wire query is exact. Evidence: resolver and transport
-call counts, `wire_method_get` (measured at the transport boundary, presence polarity like
-`wire_query_exact`), and `wire_body_absent`.
+call counts and three wire-shape booleans measured at the transport boundary — `wire_method_get`
+(presence polarity: `false` until a transport call observes `GET`), `wire_body_absent` (absence
+polarity: vacuously `true` when the transport is never reached, `true` at the boundary only when
+the prepared request has no body slot at all), and `wire_query_exact` (the controlled-query
+suite's polarity: `true` only when a query was declared *and* the wire carried it exactly). Two
+rows reach the transport and still expect `wire_query_exact == false`, so a probe that hardcodes
+`true` fails a row. The fixture input is the provider-call input minus its body: a GET fixture
+cannot carry one.
 
 ## 4. Consumer
 
@@ -115,21 +121,25 @@ a new `SouthSurface::TaskPoll`, default off until the host records its parity ru
 
 ## 5. Versioning
 
-Additive; ships as **0.24.0** with `compatibility.json` `http: 6` and the new suite. The
-community host is annotated `not_verified` for the new capability until it runs the suite.
+Additive; ships as **0.24.0** with `compatibility.json` `http: 6` and the new suite. Both hosts
+are annotated `provider_get: not_verified` until each runs the suite through its own adapter; the
+evidence-freshness rule applies from the first run.
 
-## 6. Decisions for lv
+## 6. Decisions — ruled 2026-09-08
 
-- **D1 — a separate `GetRequestV1` versus a method field on `JsonPostRequestV1`.** Recommend
-  separate: the POST type's name, its mandatory body, and every invariant the streaming path
-  relies on stay exactly as frozen; a method field would make "a JSON POST request with method
-  GET and a body" constructible and force every consumer to reject it.
-- **D2 — buffered only, no streaming GET.** Recommend buffered only: polling is a bounded JSON
-  reply by nature, no host consumes a streamed GET, and the task-adapter record's rule against
-  reserving unconsumed shapes applies.
-- **D3 — `task_id` grammar: digits only.** Recommend digits only, the `GroupId` posture: the
-  one upstream that uses it issues numeric ids; a host meeting another shape falls back.
-- **D4 — a dedicated `south.provider-get.v1` suite versus cases appended to the provider-call
-  suite.** Recommend dedicated, per the header-auth and controlled-query precedents: the frozen
-  provider-call table is burned into two hosts' evidence, and a GET is a different call shape,
-  not a variant of the same one.
+- **D1 — a separate `GetRequestV1`, not a method field on `JsonPostRequestV1`.** The POST
+  type's name, its mandatory body, and every invariant the streaming path relies on stay exactly
+  as frozen; a method field would make "a JSON POST request with method GET and a body"
+  constructible and force every consumer to reject it. The two shapes meet in one private
+  projection inside `south-core`, so the binding check, the auth-header assembly, and the
+  finalizer view are written once.
+- **D2 — buffered only, no streaming GET.** Polling is a bounded JSON reply by nature, no host
+  consumes a streamed GET, and the task-adapter record's rule against reserving unconsumed shapes
+  applies.
+- **D3 — `task_id` grammar: digits only.** The `GroupId` posture: the one upstream that uses it
+  issues numeric ids; a host meeting another shape falls back rather than widening the grammar.
+  The two digit grammars are deliberately separate arms of one decision each, so narrowing one
+  never narrows the other.
+- **D4 — a dedicated `south.provider-get.v1` suite.** Per the header-auth and controlled-query
+  precedents: the frozen provider-call table is burned into two hosts' evidence, and a GET is a
+  different call shape, not a variant of the same one.

@@ -16,13 +16,19 @@
 //! one-shot wrappers (design record: `docs/design/2026-09-08-host-prelude-signed-raw-call.md`).
 //! It parses the same fields through the same grammars; only the declaration a host attaches
 //! differs — a finalizer's emitted-header set in place of a credential scheme.
+//!
+//! The body-less GET (HTTP contract version six) has its own raw type too, [`RawGetProviderCallV1`]
+//! — the raw call minus `body` — with one parse and one buffered one-shot wrapper (design record:
+//! `docs/design/2026-09-08-buffered-get-request.md`). It is what a host's task poller hands over:
+//! the same endpoint, slot, headers, and credential arm as the submit leg it follows.
 
 use std::fmt;
 
 use south_contracts::{
     BearerAuthV1, BufferedHttpResponseV1, ContractErrorV1, ControlledUserAgentV1, CredentialSlotV1,
-    HeaderPolicyError, JsonBodyV1, JsonPostRequestV1, ProviderAuthV1, ProviderEndpointV1,
-    QueryStringV1, RelativePathV1, SafeHeaders, SecretHeaderV1, SignedHeaderSetV1,
+    GetRequestV1, HeaderPolicyError, JsonBodyV1, JsonPostRequestV1, ProviderAuthV1,
+    ProviderEndpointV1, QueryStringV1, RelativePathV1, SafeHeaders, SecretHeaderV1,
+    SignedHeaderSetV1,
 };
 use thiserror::Error;
 use tokio::time::Instant;
@@ -32,8 +38,8 @@ use zeroize::Zeroizing;
 use crate::{
     AsyncHttpTransport, AsyncStreamingTransport, CredentialResolutionErrorV1,
     CredentialResolutionFuture, CredentialResolver, ProviderBindingV1, ProviderCallErrorV1,
-    RequestFinalizerV1, SecretValue, StreamingCallV1, execute_provider_call_v1,
-    execute_signed_provider_call_v1, open_streaming_provider_call_v1,
+    RequestFinalizerV1, SecretValue, StreamingCallV1, execute_get_call_v1,
+    execute_provider_call_v1, execute_signed_provider_call_v1, open_streaming_provider_call_v1,
     open_streaming_signed_provider_call_v1,
 };
 
@@ -57,6 +63,19 @@ pub enum RawAuthV1 {
     /// The secret travels both as `Authorization: Bearer …` and verbatim in the named sanctioned
     /// header (auth contract version four).
     BearerAndHeaderSecret(SecretHeaderV1),
+}
+
+impl RawAuthV1 {
+    /// Attaches the parsed slot to this arm, producing the contract declaration.
+    const fn declare(self, slot: BearerAuthV1) -> ProviderAuthV1 {
+        match self {
+            Self::Bearer => ProviderAuthV1::Bearer(slot),
+            Self::HeaderSecret(header) => ProviderAuthV1::HeaderSecret { header, slot },
+            Self::BearerAndHeaderSecret(header) => {
+                ProviderAuthV1::BearerAndHeaderSecret { header, slot }
+            }
+        }
+    }
 }
 
 /// A borrowed raw provider call carrying exactly what both hosts already assemble.
@@ -146,6 +165,50 @@ impl fmt::Debug for RawSignedProviderCallV1<'_> {
     }
 }
 
+/// A borrowed raw body-less GET: [`RawProviderCallV1`]'s field set minus `body`.
+///
+/// This is what a host's task poller already assembles for one poll — the endpoint, slot,
+/// headers, and credential arm of the submit leg it follows, plus the provider-selected path
+/// (which carries the task id for five of the six polling families) and, for the one family
+/// that carries it as a query, a [`QueryStringV1`] declaring `task_id`. There is no body field
+/// because there is no body slot: the contract type this parses to, [`GetRequestV1`], cannot
+/// carry one, so a host cannot send a payload on a poll by mistake (buffered-GET record, D1).
+///
+/// Same grammars, same [`RawCallErrorV1`] field names; [`RawCallErrorV1::Body`] is never
+/// produced here. The credential arm is the same [`RawAuthV1`] the POST shape uses. There is no
+/// streaming twin (D2), and no host-signed twin until a consumer needs one.
+pub struct RawGetProviderCallV1<'a> {
+    /// The trusted base endpoint, unparsed.
+    pub endpoint: &'a str,
+    /// The provider-selected relative path, unparsed and query-free.
+    pub relative_path: &'a str,
+    /// The host-binding-side credential slot, unparsed.
+    pub bound_slot: &'a str,
+    /// The request-declaration-side credential slot, unparsed. Production paths keep the two
+    /// slots equal; a mismatch surfaces as `CREDENTIAL_BINDING_MISMATCH` at execution time.
+    pub requested_slot: &'a str,
+    /// Ordinary request headers, validated against the header policy during parse.
+    pub headers: &'a [(String, String)],
+    /// The authentication arm selected by the host.
+    pub auth: RawAuthV1,
+    /// The sanctioned query declaration, when the call carries one.
+    pub query: Option<QueryStringV1>,
+    /// The sanctioned user-agent declaration, when the call carries one.
+    pub user_agent: Option<ControlledUserAgentV1>,
+}
+
+impl fmt::Debug for RawGetProviderCallV1<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("RawGetProviderCallV1")
+            .field("auth", &self.auth)
+            .field("header_count", &self.headers.len())
+            .field("has_query", &self.query.is_some())
+            .field("has_user_agent", &self.user_agent.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
 /// A raw-call contract validation failure, naming the field that failed.
 ///
 /// This type aggregates the existing contract and header-policy errors; it introduces no new
@@ -167,7 +230,8 @@ pub enum RawCallErrorV1 {
     /// The `relative_path` field failed contract validation.
     #[error("relative path failed contract validation")]
     RelativePath(ContractErrorV1),
-    /// The `body` field failed contract validation.
+    /// The `body` field failed contract validation. Never produced for a body-less GET, which
+    /// has no such field.
     #[error("request body failed contract validation")]
     Body(ContractErrorV1),
     /// The `headers` field violated the header policy.
@@ -189,7 +253,8 @@ impl RawCallErrorV1 {
         }
     }
 
-    /// Returns the [`RawProviderCallV1`] field name that failed.
+    /// Returns the raw-call field name that failed. The names are shared by every raw shape
+    /// ([`RawProviderCallV1`], [`RawSignedProviderCallV1`], [`RawGetProviderCallV1`]).
     #[must_use]
     pub const fn field(&self) -> &'static str {
         match self {
@@ -219,14 +284,7 @@ pub fn parse_raw_call(
         raw.headers,
         raw.body,
     )?;
-    let slot = BearerAuthV1::new(parts.requested_slot);
-    let auth = match raw.auth {
-        RawAuthV1::Bearer => ProviderAuthV1::Bearer(slot),
-        RawAuthV1::HeaderSecret(header) => ProviderAuthV1::HeaderSecret { header, slot },
-        RawAuthV1::BearerAndHeaderSecret(header) => {
-            ProviderAuthV1::BearerAndHeaderSecret { header, slot }
-        }
-    };
+    let auth = raw.auth.declare(BearerAuthV1::new(parts.requested_slot));
     let request = finish_request(
         JsonPostRequestV1::new(parts.relative_path, parts.headers, parts.body, auth),
         raw.query.clone(),
@@ -280,7 +338,37 @@ pub fn raw_signed_call_parses(raw: &RawSignedProviderCallV1<'_>) -> bool {
     parse_raw_signed_call(raw).is_ok()
 }
 
-/// The fields both raw shapes share, parsed through the contract grammars in one place.
+/// Parses one raw body-less GET into the binding and request [`execute_get_call_v1`] consumes.
+///
+/// Same determinism and zero-side-effect guarantees as [`parse_raw_call`], through the same
+/// grammars in the same order minus the body step. A host may pre-check with
+/// [`raw_get_call_parses`].
+pub fn parse_raw_get_call(
+    raw: &RawGetProviderCallV1<'_>,
+) -> Result<(ProviderBindingV1, GetRequestV1), RawCallErrorV1> {
+    let parts =
+        parse_raw_binding(raw.endpoint, raw.relative_path, raw.bound_slot, raw.requested_slot)?;
+    let headers = parse_raw_headers(raw.headers)?;
+    let auth = raw.auth.declare(BearerAuthV1::new(parts.requested_slot));
+    let mut request = GetRequestV1::new(parts.relative_path, headers, auth);
+    if let Some(query) = raw.query.clone() {
+        request = request.with_query(query);
+    }
+    if let Some(user_agent) = raw.user_agent {
+        request = request.with_user_agent(user_agent);
+    }
+    Ok((parts.binding, request))
+}
+
+/// Returns whether one raw body-less GET parses, for pre-admission checks.
+///
+/// Carries the same determinism guarantee as [`parse_raw_get_call`].
+#[must_use]
+pub fn raw_get_call_parses(raw: &RawGetProviderCallV1<'_>) -> bool {
+    parse_raw_get_call(raw).is_ok()
+}
+
+/// The fields the two JSON POST shapes share, parsed through the contract grammars in one place.
 struct ParsedRawParts {
     binding: ProviderBindingV1,
     requested_slot: CredentialSlotV1,
@@ -289,6 +377,10 @@ struct ParsedRawParts {
     body: JsonBodyV1,
 }
 
+/// The parse order is part of the prelude's observable behavior — a host that pre-checks sees
+/// the first failing field — so the POST shapes keep it exactly: endpoint, bound slot, requested
+/// slot, relative path, body, headers. The GET shape runs the same sequence with the body step
+/// removed, through the same two helpers.
 fn parse_raw_parts(
     endpoint: &str,
     relative_path: &str,
@@ -297,23 +389,47 @@ fn parse_raw_parts(
     headers: &[(String, String)],
     body: &str,
 ) -> Result<ParsedRawParts, RawCallErrorV1> {
+    let parts = parse_raw_binding(endpoint, relative_path, bound_slot, requested_slot)?;
+    let body = JsonBodyV1::parse(body).map_err(RawCallErrorV1::Body)?;
+    let headers = parse_raw_headers(headers)?;
+    Ok(ParsedRawParts {
+        binding: parts.binding,
+        requested_slot: parts.requested_slot,
+        relative_path: parts.relative_path,
+        headers,
+        body,
+    })
+}
+
+/// The fields every raw shape shares: where the call goes and which identity it binds.
+struct ParsedRawBinding {
+    binding: ProviderBindingV1,
+    requested_slot: CredentialSlotV1,
+    relative_path: RelativePathV1,
+}
+
+fn parse_raw_binding(
+    endpoint: &str,
+    relative_path: &str,
+    bound_slot: &str,
+    requested_slot: &str,
+) -> Result<ParsedRawBinding, RawCallErrorV1> {
     let endpoint = ProviderEndpointV1::parse(endpoint).map_err(RawCallErrorV1::Endpoint)?;
     let bound_slot = CredentialSlotV1::parse(bound_slot).map_err(RawCallErrorV1::BoundSlot)?;
     let requested_slot =
         CredentialSlotV1::parse(requested_slot).map_err(RawCallErrorV1::RequestedSlot)?;
     let relative_path =
         RelativePathV1::parse(relative_path).map_err(RawCallErrorV1::RelativePath)?;
-    let body = JsonBodyV1::parse(body).map_err(RawCallErrorV1::Body)?;
-    let headers =
-        SafeHeaders::try_from_iter(headers.iter().map(|(name, value)| (name.as_str(), value)))
-            .map_err(RawCallErrorV1::Headers)?;
-    Ok(ParsedRawParts {
+    Ok(ParsedRawBinding {
         binding: ProviderBindingV1::new(endpoint, bound_slot),
         requested_slot,
         relative_path,
-        headers,
-        body,
     })
+}
+
+fn parse_raw_headers(headers: &[(String, String)]) -> Result<SafeHeaders, RawCallErrorV1> {
+    SafeHeaders::try_from_iter(headers.iter().map(|(name, value)| (name.as_str(), value)))
+        .map_err(RawCallErrorV1::Headers)
 }
 
 fn finish_request(
@@ -392,6 +508,28 @@ where
 {
     let (binding, request) = parse_raw_call(raw).map_err(RawProviderCallErrorV1::Parse)?;
     open_streaming_provider_call_v1(&binding, &request, resolver, transport, deadline, cancellation)
+        .await
+        .map_err(RawProviderCallErrorV1::Call)
+}
+
+/// Parses one raw body-less GET, then executes it as a buffered call.
+///
+/// The GET twin of [`execute_raw_call_v1`], with the same zero-side-effect parse invariant: a
+/// parse failure returns before the resolver or transport is invoked. There is no streaming
+/// twin (buffered-GET record, D2) — a poll is a bounded reply by nature.
+pub async fn execute_get_raw_call_v1<R, T>(
+    raw: &RawGetProviderCallV1<'_>,
+    resolver: &R,
+    transport: &T,
+    deadline: Instant,
+    cancellation: &CancellationToken,
+) -> Result<BufferedHttpResponseV1, RawProviderCallErrorV1>
+where
+    R: CredentialResolver + ?Sized,
+    T: AsyncHttpTransport + ?Sized,
+{
+    let (binding, request) = parse_raw_get_call(raw).map_err(RawProviderCallErrorV1::Parse)?;
+    execute_get_call_v1(&binding, &request, resolver, transport, deadline, cancellation)
         .await
         .map_err(RawProviderCallErrorV1::Call)
 }
