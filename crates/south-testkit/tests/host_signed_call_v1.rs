@@ -113,9 +113,7 @@ impl RecordingTransport {
             *wire = Some(WireRecord {
                 url: request.url().to_string(),
                 auth_headers: headers,
-                body: request
-                    .body()
-                    .map_or_else(Vec::new, |body| body.as_str().as_bytes().to_vec()),
+                body: request.body().map_or_else(Vec::new, |body| body.as_bytes().to_vec()),
                 user_agent: request.user_agent().map(|agent| agent.as_str().to_owned()),
             });
         }

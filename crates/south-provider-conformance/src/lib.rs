@@ -22,6 +22,7 @@ mod controlled_query;
 mod controlled_user_agent;
 mod header_auth;
 mod provider_get;
+mod provider_multipart;
 mod quota;
 mod stream;
 
@@ -47,6 +48,13 @@ pub use provider_get::{
     ProviderGetAuthArmV1, ProviderGetCaseIdV1, ProviderGetExpectedEvidenceV1,
     ProviderGetExpectedOutcomeV1, ProviderGetExpectedV1, ProviderGetFixtureV1, ProviderGetInputV1,
     ProviderGetUpstreamV1, provider_get_fixtures_v1,
+};
+pub use provider_multipart::{
+    PROVIDER_MULTIPART_CONFORMANCE_SUITE_ID, PROVIDER_MULTIPART_CONFORMANCE_SUITE_VERSION,
+    ProviderMultipartAuthArmV1, ProviderMultipartCaseIdV1, ProviderMultipartExpectedEvidenceV1,
+    ProviderMultipartExpectedOutcomeV1, ProviderMultipartExpectedV1, ProviderMultipartFixtureV1,
+    ProviderMultipartInputV1, ProviderMultipartUpstreamV1, provider_multipart_fixtures_v1,
+    provider_multipart_mismatched_boundary_v1,
 };
 pub use quota::{
     PROVIDER_QUOTA_METADATA_CONFORMANCE_SUITE_ID,

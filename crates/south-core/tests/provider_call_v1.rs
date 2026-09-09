@@ -11,14 +11,15 @@ use std::{
 use http::{Method, StatusCode};
 use south_contracts::{
     BearerAuthV1, BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1, GetRequestV1,
-    JsonBodyV1, JsonPostRequestV1, PreparationErrorV1, ProviderAuthV1, ProviderEndpointV1,
-    QueryParameterV1, QueryStringV1, RelativePathV1, SafeHeaders, SecretHeaderV1,
-    SignedHeaderSetV1, SignedHeaderV1, TransportErrorV1,
+    JsonBodyV1, JsonPostRequestV1, MultipartBodyV1, MultipartBoundaryV1, MultipartPostRequestV1,
+    PreparationErrorV1, ProviderAuthV1, ProviderEndpointV1, QueryParameterV1, QueryStringV1,
+    RelativePathV1, SafeHeaders, SecretHeaderV1, SignedHeaderSetV1, SignedHeaderV1,
+    TransportErrorV1,
 };
 use south_core::{
     AsyncHttpTransport, CredentialResolutionErrorV1, CredentialResolutionFuture,
     CredentialResolver, PreparedHttpRequestV1, ProviderBindingV1, ProviderCallErrorV1, SecretValue,
-    TransportFuture, execute_get_call_v1, execute_provider_call_v1,
+    TransportFuture, execute_get_call_v1, execute_multipart_call_v1, execute_provider_call_v1,
 };
 use static_assertions::{assert_impl_all, assert_not_impl_any};
 use tokio::sync::oneshot;
@@ -200,7 +201,9 @@ impl AsyncHttpTransport for RecordingTransport {
                 .get("x-test")
                 .expect("prepared fixture should retain its ordinary header")
                 .to_owned(),
-            body: prepared.body().map_or_else(String::new, |body| body.as_str().to_owned()),
+            body: prepared.body().map_or_else(String::new, |body| {
+                String::from_utf8_lossy(body.as_bytes()).into_owned()
+            }),
             auth_header_name: auth_header_name.to_owned(),
             auth_header_value: auth_header_value.to_vec(),
             user_agent: prepared.user_agent().map(ControlledUserAgentV1::as_str),
@@ -1045,5 +1048,197 @@ async fn the_unsigned_get_entry_point_refuses_the_host_signed_arm() {
     // Same seam as the POST twin: the shape is refused at assembly, after resolution and before
     // the transport, so the dangerous half — an unauthenticated request on the wire — cannot
     // happen.
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 0);
+}
+
+// ───────────────── multipart POST (HTTP contract v7) ─────────────────
+
+const MULTIPART_BOUNDARY: &str = "core-test-boundary";
+
+fn multipart_body() -> MultipartBodyV1 {
+    let boundary = MultipartBoundaryV1::parse(MULTIPART_BOUNDARY).expect("fixture boundary");
+    let bytes = format!(
+        "--{MULTIPART_BOUNDARY}\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\n{BODY_SENTINEL}\r\n--{MULTIPART_BOUNDARY}--\r\n"
+    )
+    .into_bytes();
+    MultipartBodyV1::parse(bytes, boundary).expect("fixture body is delimited by its boundary")
+}
+
+fn multipart_request(path: &str, slot: &str) -> MultipartPostRequestV1 {
+    MultipartPostRequestV1::try_new(
+        RelativePathV1::parse(path).expect("fixture path should be valid"),
+        SafeHeaders::try_from_iter([("x-test", HEADER_SENTINEL)])
+            .expect("fixture headers should be valid"),
+        multipart_body(),
+        BearerAuthV1::new(CredentialSlotV1::parse(slot).expect("fixture slot should be valid")),
+    )
+    .expect("fixture headers carry no content-type")
+}
+
+#[tokio::test(start_paused = true)]
+async fn multipart_success_prepares_one_post_whose_media_type_south_renders() {
+    let resolver = ImmediateResolver::default();
+    let transport = RecordingTransport::default();
+    let request = multipart_request(PATH_SENTINEL, SLOT_SENTINEL);
+
+    let result = execute_multipart_call_v1(
+        &binding(&format!("https://{ENDPOINT_SENTINEL}/base"), SLOT_SENTINEL),
+        &request,
+        &resolver,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("a valid prepared multipart call should succeed");
+
+    assert_eq!(result.status(), StatusCode::CREATED);
+    assert_eq!(resolver.calls.load(Ordering::SeqCst), 1);
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 1);
+    let observation = observed(&transport);
+    assert_eq!(observation.method, Method::POST);
+    assert_eq!(observation.auth_header_name, "authorization");
+    // The bytes reach the boundary unmodified — South re-encodes nothing.
+    assert_eq!(observation.body.as_bytes(), multipart_body().as_bytes());
+    assert_eq!(
+        observation.prepared_debug,
+        format!(
+            "PreparedHttpRequestV1 {{ method: POST, header_count: 1, body_byte_count: {}, .. }}",
+            multipart_body().len()
+        )
+    );
+    for sentinel in [ENDPOINT_SENTINEL, PATH_SENTINEL, HEADER_SENTINEL, SECRET_SENTINEL] {
+        assert!(!observation.prepared_debug.contains(sentinel));
+    }
+}
+
+/// The media type is South's, rendered from the boundary the contract validated, and the JSON and
+/// GET shapes report none — which is what keeps their wire bytes identical to version six.
+#[tokio::test]
+async fn only_the_multipart_shape_reports_a_content_type_to_the_transport() {
+    /// One slot per transport call, so "never reached" and "reached, reported none" stay
+    /// distinguishable without nesting two `Option`s.
+    #[derive(Default)]
+    struct ContentTypeProbe {
+        seen: Mutex<Vec<Option<String>>>,
+    }
+
+    impl AsyncHttpTransport for ContentTypeProbe {
+        fn execute<'a>(
+            &'a self,
+            prepared: &'a PreparedHttpRequestV1<'_>,
+            _remaining_timeout: Duration,
+        ) -> TransportFuture<'a> {
+            self.seen.lock().expect("probe lock").push(prepared.content_type().map(str::to_owned));
+            Box::pin(async { Ok(response()) })
+        }
+    }
+
+    let deadline = || tokio::time::Instant::now() + Duration::from_secs(30);
+    let bound = binding("https://example.com/base/", SLOT_SENTINEL);
+
+    let probe = ContentTypeProbe::default();
+    execute_multipart_call_v1(
+        &bound,
+        &multipart_request("v1/audio/transcriptions", SLOT_SENTINEL),
+        &ImmediateResolver::default(),
+        &probe,
+        deadline(),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("multipart succeeds");
+    assert_eq!(
+        probe.seen.lock().expect("probe lock").as_slice(),
+        [Some(format!("multipart/form-data; boundary={MULTIPART_BOUNDARY}"))],
+        "the multipart shape renders its own media type"
+    );
+
+    let probe = ContentTypeProbe::default();
+    execute_provider_call_v1(
+        &bound,
+        &request("v1/chat/completions", SLOT_SENTINEL),
+        &ImmediateResolver::default(),
+        &probe,
+        deadline(),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("json succeeds");
+    assert_eq!(
+        probe.seen.lock().expect("probe lock").as_slice(),
+        [None],
+        "the JSON shape's content-type stays an ordinary header the host declares"
+    );
+
+    let probe = ContentTypeProbe::default();
+    execute_get_call_v1(
+        &bound,
+        &get_request("v1/videos/1", SLOT_SENTINEL),
+        &ImmediateResolver::default(),
+        &probe,
+        deadline(),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("get succeeds");
+    assert_eq!(probe.seen.lock().expect("probe lock").as_slice(), [None]);
+}
+
+#[tokio::test]
+async fn multipart_slot_mismatch_stops_before_resolver_and_transport() {
+    let resolver = ImmediateResolver::default();
+    let transport = RecordingTransport::default();
+
+    let error = execute_multipart_call_v1(
+        &binding(&format!("https://{ENDPOINT_SENTINEL}/base"), SLOT_SENTINEL),
+        &multipart_request(PATH_SENTINEL, "other-slot"),
+        &resolver,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect_err("a slot outside the binding must be refused");
+
+    assert!(matches!(
+        error,
+        ProviderCallErrorV1::Preparation(PreparationErrorV1::CredentialBindingMismatch)
+    ));
+    assert_eq!(resolver.calls.load(Ordering::SeqCst), 0);
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 0);
+}
+
+/// A host-signed multipart request has no signed entry point to reach (multipart record, D5), so
+/// the unsigned one must refuse it rather than send it unauthenticated.
+#[tokio::test]
+async fn the_multipart_entry_point_refuses_the_host_signed_arm() {
+    let transport = RecordingTransport::default();
+    let request = MultipartPostRequestV1::try_new(
+        RelativePathV1::parse(PATH_SENTINEL).expect("fixture path"),
+        SafeHeaders::default(),
+        multipart_body(),
+        ProviderAuthV1::HostSigned {
+            slot: BearerAuthV1::new(CredentialSlotV1::parse(SLOT_SENTINEL).expect("slot")),
+            emits: SignedHeaderSetV1::new(&[SignedHeaderV1::Authorization]).expect("declaration"),
+        },
+    )
+    .expect("valid");
+
+    let error = execute_multipart_call_v1(
+        &binding("https://example.com/base/", SLOT_SENTINEL),
+        &request,
+        &ImmediateResolver::default(),
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect_err("the unsigned multipart path cannot serve a signed request");
+
+    assert!(matches!(
+        error,
+        ProviderCallErrorV1::Preparation(PreparationErrorV1::UnsupportedAuthShape)
+    ));
     assert_eq!(transport.calls.load(Ordering::SeqCst), 0);
 }

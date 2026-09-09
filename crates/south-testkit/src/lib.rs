@@ -50,6 +50,7 @@ mod controlled_user_agent;
 mod header_auth;
 mod host_signed;
 mod provider_get;
+mod provider_multipart;
 mod quota;
 mod raw;
 mod stream;
@@ -59,7 +60,8 @@ pub use host_signed::{
     HangingRequestFinalizerV1, ObservedFinalizeViewV1, expected_signature_v1,
 };
 pub use raw::{
-    RawGetProviderCallBuilderV1, RawProviderCallBuilderV1, RawSignedProviderCallBuilderV1,
+    RawGetProviderCallBuilderV1, RawMultipartProviderCallBuilderV1, RawProviderCallBuilderV1,
+    RawSignedProviderCallBuilderV1,
 };
 
 pub use controlled_query::{
@@ -90,6 +92,14 @@ pub use provider_get::{
     ProviderGetConformanceReportV1, ProviderGetEvidenceV1, ProviderGetMismatchCategoryV1,
     ProviderGetMismatchV1, ProviderGetObservationV1, ReferenceAssembledProviderGetExecutorV1,
     parse_reference_get_input, run_provider_get_conformance_v1,
+};
+pub use provider_multipart::{
+    AssembledProviderMultipartExecutionFutureV1, AssembledProviderMultipartExecutorV1,
+    MAX_PROVIDER_MULTIPART_MISMATCHES_V1, ProviderMultipartConformanceFailureV1,
+    ProviderMultipartConformanceReportV1, ProviderMultipartEvidenceV1,
+    ProviderMultipartMismatchCategoryV1, ProviderMultipartMismatchV1,
+    ProviderMultipartObservationV1, ReferenceAssembledProviderMultipartExecutorV1,
+    parse_reference_multipart_input, run_provider_multipart_conformance_v1,
 };
 pub use quota::{
     AssembledProviderQuotaMetadataExecutionFutureV1, AssembledProviderQuotaMetadataExecutorV1,
@@ -708,6 +718,22 @@ const fn map_contract_error(error: ContractErrorV1) -> ProviderCallFailureCodeV1
         // shape, and the frozen set has exactly one preparation-time provider-declaration code —
         // so both sanctioned channels fold their declaration errors into it.
         ContractErrorV1::InvalidUserAgentValue => ProviderCallFailureCodeV1::InvalidRelativePath,
+        // The three multipart declaration errors (HTTP contract version seven) fold the same
+        // way, and deliberately **not** into `InvalidJsonBody`: a multipart request has no JSON
+        // body, so that code would be an actively false statement about what was rejected, where
+        // this one is the fold this function already documents for a preparation-time, zero-call
+        // declaration failure. A multipart body over the limit is a different matter — it raises
+        // `RequestBodyTooLarge`, the same variant the JSON shape raises, and lands on the same
+        // frozen code above.
+        ContractErrorV1::InvalidMultipartBoundary
+        | ContractErrorV1::InvalidMultipartBody
+        | ContractErrorV1::ContentTypeHeaderNotPermitted => {
+            ProviderCallFailureCodeV1::InvalidRelativePath
+        }
+        // `ContractErrorV1` is `#[non_exhaustive]` since 0.25.0. No frozen fixture can produce a
+        // variant this version does not know, so one reaching here is an executor wiring error:
+        // use the context-free request fallback rather than widening the frozen code set.
+        _ => ProviderCallFailureCodeV1::RequestFailed,
     }
 }
 

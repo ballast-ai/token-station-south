@@ -3,12 +3,13 @@ use south_contracts::{
     AUTH_CONTRACT_VERSION, BearerAuthV1, BufferedHttpResponseV1, ContractErrorV1,
     ControlledUserAgentV1, CredentialSlotV1, ERROR_CONTRACT_VERSION, GetRequestV1,
     HTTP_CONTRACT_VERSION, JsonBodyV1, JsonPostRequestV1, MAX_CREDENTIAL_SLOT_BYTES,
-    MAX_ENDPOINT_BYTES, MAX_JSON_REQUEST_BODY_BYTES, MAX_QUERY_VALUE_BYTES,
-    MAX_RELATIVE_PATH_BYTES, MAX_RESPONSE_BODY_BYTES, MAX_RESPONSE_CONTENT_TYPE_BYTES,
-    MAX_RESPONSE_RETRY_AFTER_BYTES, MAX_USER_AGENT_BYTES, PreparationErrorV1, ProviderAuthV1,
-    ProviderEndpointV1, QueryParameterV1, QueryStringV1, RelativePathV1, STREAM_CONTRACT_VERSION,
-    SafeHeaders, SecretHeaderV1, SignedHeaderSetErrorV1, SignedHeaderSetV1, SignedHeaderV1,
-    TransportErrorV1,
+    MAX_ENDPOINT_BYTES, MAX_JSON_REQUEST_BODY_BYTES, MAX_MULTIPART_BOUNDARY_BYTES,
+    MAX_QUERY_VALUE_BYTES, MAX_RELATIVE_PATH_BYTES, MAX_RESPONSE_BODY_BYTES,
+    MAX_RESPONSE_CONTENT_TYPE_BYTES, MAX_RESPONSE_RETRY_AFTER_BYTES, MAX_USER_AGENT_BYTES,
+    MultipartBodyV1, MultipartBoundaryV1, MultipartPostRequestV1, PreparationErrorV1,
+    ProviderAuthV1, ProviderEndpointV1, QueryParameterV1, QueryStringV1, RelativePathV1,
+    STREAM_CONTRACT_VERSION, SafeHeaders, SecretHeaderV1, SignedHeaderSetErrorV1,
+    SignedHeaderSetV1, SignedHeaderV1, TransportErrorV1,
 };
 
 const SENTINEL: &str = "must-not-appear-7f23a";
@@ -49,7 +50,7 @@ fn secret_header_all_covers_every_variant() {
 
 #[test]
 fn contract_versions_are_independently_versioned() {
-    assert_eq!(HTTP_CONTRACT_VERSION, 6);
+    assert_eq!(HTTP_CONTRACT_VERSION, 7);
     assert_eq!(AUTH_CONTRACT_VERSION, 4);
     assert_eq!(ERROR_CONTRACT_VERSION, 2);
     assert_eq!(STREAM_CONTRACT_VERSION, Some(2));
@@ -1142,4 +1143,229 @@ fn the_finalizer_preparation_errors_carry_stable_codes() {
         PreparationErrorV1::RequestFinalizationRejected.code(),
         "REQUEST_FINALIZATION_REJECTED"
     );
+}
+
+// ───────────────── multipart request body (HTTP contract v7) ─────────────────
+
+const SENTINEL_BOUNDARY: &str = "boundary-sentinel";
+
+/// A well-formed body for `boundary`: one text part, opened and closed by the delimiter.
+fn multipart_body_for(boundary: &str) -> Vec<u8> {
+    format!(
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\nm\r\n--{boundary}--\r\n"
+    )
+    .into_bytes()
+}
+
+fn boundary(value: &str) -> MultipartBoundaryV1 {
+    MultipartBoundaryV1::parse(value).expect("fixture boundary satisfies RFC 2046 §5.1.1")
+}
+
+#[test]
+fn boundary_grammar_is_rfc_2046_unwidened() {
+    // Every character class the RFC admits, including a space in an interior position.
+    let longest = "b".repeat(MAX_MULTIPART_BOUNDARY_BYTES);
+    for accepted in [
+        "simple",
+        "----WebKitFormBoundary7MA4YWxkTrZu0gW",
+        "a",
+        "0",
+        "'()+_,-./:=?",
+        "has space inside",
+        longest.as_str(),
+    ] {
+        assert!(
+            MultipartBoundaryV1::parse(accepted).is_ok(),
+            "{accepted:?} is a well-formed boundary"
+        );
+    }
+    // The grammar is not widened for convenience: no empty value, nothing over seventy bytes, no
+    // character outside `bchars`, and no trailing space — that last one the `content-type`
+    // parameter cannot represent unambiguously beside the value.
+    let too_long = "b".repeat(MAX_MULTIPART_BOUNDARY_BYTES + 1);
+    for rejected in [
+        "",
+        "trailing ",
+        "quote\"inside",
+        "semi;colon",
+        "back\\slash",
+        "at@sign",
+        "percent%",
+        "brace{",
+        "tab\there",
+        "new\nline",
+        "café",
+        too_long.as_str(),
+    ] {
+        assert_eq!(
+            MultipartBoundaryV1::parse(rejected),
+            Err(ContractErrorV1::InvalidMultipartBoundary),
+            "{rejected:?} must not survive the boundary grammar"
+        );
+    }
+    assert_eq!(MAX_MULTIPART_BOUNDARY_BYTES, 70, "RFC 2046 §5.1.1");
+}
+
+#[test]
+fn a_multipart_body_must_be_delimited_by_the_boundary_it_declares() {
+    let good = MultipartBodyV1::parse(multipart_body_for("edge"), boundary("edge"))
+        .expect("a body delimited by its own boundary is valid");
+    assert_eq!(good.boundary().as_str(), "edge");
+    assert_eq!(good.content_type(), "multipart/form-data; boundary=edge");
+    assert!(!good.is_empty());
+
+    // The failure this type exists to catch: bytes delimited by a *different* boundary than the
+    // one travelling in the media type. A splice that damaged the delimiter produces exactly
+    // this, and nothing downstream could tell.
+    assert_eq!(
+        MultipartBodyV1::parse(multipart_body_for("other"), boundary("edge")),
+        Err(ContractErrorV1::InvalidMultipartBody)
+    );
+    // Truncated: opens correctly, never closes.
+    let truncated = b"--edge\r\nX: 1\r\n\r\nm\r\n".to_vec();
+    assert_eq!(
+        MultipartBodyV1::parse(truncated, boundary("edge")),
+        Err(ContractErrorV1::InvalidMultipartBody)
+    );
+    assert_eq!(
+        MultipartBodyV1::parse(Vec::new(), boundary("edge")),
+        Err(ContractErrorV1::InvalidMultipartBody)
+    );
+    // Both line endings a real encoder emits after the closing delimiter, plus none at all.
+    for tail in ["", "\r\n", "\n"] {
+        let body = format!("--edge\r\nX: 1\r\n\r\nm\r\n--edge--{tail}").into_bytes();
+        assert!(
+            MultipartBodyV1::parse(body, boundary("edge")).is_ok(),
+            "closing delimiter followed by {tail:?} must be accepted"
+        );
+    }
+    // An RFC-legal epilogue is refused, deliberately: scanning a hundred-megabyte body for an
+    // interior delimiter is quadratic, and every real encoder terminates at the end. Its host
+    // falls back to the legacy path rather than South widening the rule.
+    let with_epilogue = b"--edge\r\nX: 1\r\n\r\nm\r\n--edge--\r\nepilogue".to_vec();
+    assert_eq!(
+        MultipartBodyV1::parse(with_epilogue, boundary("edge")),
+        Err(ContractErrorV1::InvalidMultipartBody)
+    );
+}
+
+#[test]
+fn a_multipart_body_shares_one_allocation_and_redacts_its_debug() {
+    let bytes = multipart_body_for(SENTINEL_BOUNDARY);
+    let expected = bytes.clone();
+    let body = MultipartBodyV1::parse(bytes, boundary(SENTINEL_BOUNDARY)).expect("valid");
+    assert_eq!(body.as_bytes(), expected.as_slice());
+    assert_eq!(body.len(), expected.len());
+    // The transport sends this allocation rather than a copy of it.
+    let shared = body.shared_owner();
+    assert_eq!(shared.as_ptr(), body.as_bytes().as_ptr());
+
+    let rendered = format!("{body:?}");
+    assert!(!rendered.contains(SENTINEL_BOUNDARY), "Debug must not leak the boundary: {rendered}");
+    assert!(!rendered.contains("model"), "Debug must not leak body content: {rendered}");
+}
+
+#[test]
+fn a_multipart_request_renders_its_own_media_type_and_refuses_a_second_source() {
+    let path = RelativePathV1::parse("v1/audio/transcriptions").unwrap();
+    let slot = CredentialSlotV1::parse("openai.primary").unwrap();
+
+    let request = MultipartPostRequestV1::try_new(
+        path.clone(),
+        SafeHeaders::try_from_iter([("x-request-id", "req-1")]).unwrap(),
+        MultipartBodyV1::parse(multipart_body_for("edge"), boundary("edge")).unwrap(),
+        BearerAuthV1::new(slot.clone()),
+    )
+    .expect("ordinary headers without a content-type are accepted");
+    assert_eq!(request.relative_path().as_str(), "v1/audio/transcriptions");
+    assert_eq!(request.body().content_type(), "multipart/form-data; boundary=edge");
+    assert_eq!(request.headers().get("content-type"), None);
+    assert!(request.query().is_none() && request.user_agent().is_none());
+
+    // The second source is refused under any casing: the shape renders its own media type, and
+    // an opaque body gives no way to notice that a host-supplied one disagrees with the bytes.
+    for name in ["content-type", "Content-Type", "CONTENT-TYPE"] {
+        assert_eq!(
+            MultipartPostRequestV1::try_new(
+                path.clone(),
+                SafeHeaders::try_from_iter([(name, "text/plain")]).unwrap(),
+                MultipartBodyV1::parse(multipart_body_for("edge"), boundary("edge")).unwrap(),
+                BearerAuthV1::new(slot.clone()),
+            )
+            .err(),
+            Some(ContractErrorV1::ContentTypeHeaderNotPermitted),
+            "{name} must be refused"
+        );
+    }
+}
+
+#[test]
+fn a_multipart_request_carries_every_credential_arm_query_and_user_agent() {
+    let build = |auth: ProviderAuthV1| {
+        MultipartPostRequestV1::try_new(
+            RelativePathV1::parse("v1/images/edits").unwrap(),
+            SafeHeaders::default(),
+            MultipartBodyV1::parse(multipart_body_for("edge"), boundary("edge")).unwrap(),
+            auth,
+        )
+        .expect("valid")
+    };
+    let slot = CredentialSlotV1::parse("primary").unwrap();
+    assert!(matches!(
+        build(ProviderAuthV1::Bearer(BearerAuthV1::new(slot.clone()))).auth(),
+        ProviderAuthV1::Bearer(_)
+    ));
+    assert!(matches!(
+        build(ProviderAuthV1::HeaderSecret {
+            header: SecretHeaderV1::ApiKey,
+            slot: BearerAuthV1::new(slot.clone()),
+        })
+        .auth(),
+        ProviderAuthV1::HeaderSecret { .. }
+    ));
+    assert!(matches!(
+        build(ProviderAuthV1::BearerAndHeaderSecret {
+            header: SecretHeaderV1::XGoogApiKey,
+            slot: BearerAuthV1::new(slot.clone()),
+        })
+        .auth(),
+        ProviderAuthV1::BearerAndHeaderSecret { .. }
+    ));
+    assert!(matches!(
+        build(ProviderAuthV1::HostSigned {
+            slot: BearerAuthV1::new(slot.clone()),
+            emits: SignedHeaderSetV1::new(&[SignedHeaderV1::Authorization]).unwrap(),
+        })
+        .auth(),
+        ProviderAuthV1::HostSigned { .. }
+    ));
+
+    let query =
+        QueryStringV1::try_from_iter([(QueryParameterV1::ApiVersion, "2025-04-01-preview")])
+            .unwrap();
+    let agent = ControlledUserAgentV1::try_from_static("south-test/1.0").unwrap();
+    let request = build(ProviderAuthV1::Bearer(BearerAuthV1::new(slot)))
+        .with_query(query.clone())
+        .with_user_agent(agent);
+    assert_eq!(request.query(), Some(&query));
+    assert_eq!(
+        request.user_agent().map(|agent| agent.as_str().to_owned()),
+        Some("south-test/1.0".to_owned())
+    );
+}
+
+#[test]
+fn multipart_request_debug_shows_shape_only() {
+    let request = MultipartPostRequestV1::try_new(
+        RelativePathV1::parse(&format!("v1/{SENTINEL}")).unwrap(),
+        SafeHeaders::try_from_iter([("x-test", SENTINEL)]).unwrap(),
+        MultipartBodyV1::parse(multipart_body_for(SENTINEL_BOUNDARY), boundary(SENTINEL_BOUNDARY))
+            .unwrap(),
+        BearerAuthV1::new(CredentialSlotV1::parse(SENTINEL).unwrap()),
+    )
+    .unwrap();
+    let rendered = format!("{request:?}");
+    assert!(rendered.starts_with("MultipartPostRequestV1 {"));
+    assert!(!rendered.contains(SENTINEL));
+    assert!(!rendered.contains(SENTINEL_BOUNDARY));
 }

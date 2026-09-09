@@ -16,8 +16,8 @@ use south_contracts::{
 };
 use south_core::{
     AsyncHttpTransport, AsyncStreamingTransport, OpenedByteStreamV1, PreparedHttpRequestV1,
-    StreamByteSourceV1, StreamChunkFutureV1, StreamOpenErrorV1, StreamingOpenFutureV1,
-    TransportFuture,
+    RequestBodyRefV1, StreamByteSourceV1, StreamChunkFutureV1, StreamOpenErrorV1,
+    StreamingOpenFutureV1, TransportFuture,
 };
 use zeroize::Zeroizing;
 
@@ -401,6 +401,22 @@ fn request_body(owner: Arc<str>) -> Bytes {
     Bytes::from_owner(JsonBodyOwner(owner))
 }
 
+struct MultipartBodyOwner(Arc<[u8]>);
+
+impl AsRef<[u8]> for MultipartBodyOwner {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+/// Shares a multipart body's contract allocation with the wire, as `request_body` does for JSON.
+///
+/// The sharing is what makes a 100 MiB upload affordable: the contract validated those bytes
+/// once, and the transport sends the same allocation rather than a copy of it.
+fn multipart_request_body(owner: Arc<[u8]>) -> Bytes {
+    Bytes::from_owner(MultipartBodyOwner(owner))
+}
+
 /// Attaches the prepared request's body exactly when it has one.
 ///
 /// A body-less GET (HTTP contract version six) has no body slot at all: nothing is attached, so
@@ -411,7 +427,10 @@ fn attach_body(
     request: &PreparedHttpRequestV1<'_>,
 ) -> reqwest::RequestBuilder {
     match request.body() {
-        Some(body) => builder.body(request_body(body.shared_owner())),
+        Some(RequestBodyRefV1::Json(body)) => builder.body(request_body(body.shared_owner())),
+        Some(RequestBodyRefV1::Multipart(body)) => {
+            builder.body(multipart_request_body(body.shared_owner()))
+        }
         None => builder,
     }
 }
@@ -432,6 +451,13 @@ fn attach_body(
 /// scheme that must sign the *complete* header set — rather than a chosen subset, as `SigV4`
 /// does — needs this name in its calculation.
 ///
+/// `content-type` is deliberately **not** on this list even though a multipart request puts one
+/// on the wire (HTTP contract version seven). The distinction this list draws is between what the
+/// transport adds on its own behalf and what it emits because a request declared it: an auth
+/// header is not listed either, for the same reason. A signer that must account for the complete
+/// header set reads the prepared request — `content_type()` and `auth_headers()` — rather than
+/// this constant, which answers only "what did the transport add that nobody asked for".
+///
 /// Adding a name to this list is a contract change. The wire fixture compares against it exactly,
 /// so a fourth header cannot arrive quietly.
 pub const TRANSPORT_ADDED_HEADERS_V1: [&str; 3] = ["accept", "content-length", "host"];
@@ -446,6 +472,20 @@ fn assemble_headers(request: &PreparedHttpRequestV1<'_>) -> Result<HeaderMap, Tr
             HeaderName::from_bytes(name.as_bytes()).map_err(|_| TransportErrorV1::RequestFailed)?;
         let value = HeaderValue::from_str(value).map_err(|_| TransportErrorV1::RequestFailed)?;
         headers.insert(name, value);
+    }
+
+    // A body that carries its own media type is the single source of `content-type`: the
+    // multipart request shape refuses to carry that name in its ordinary headers, so inserting
+    // the rendered value here is what puts it on the wire exactly once, and it cannot disagree
+    // with the bytes because both come from the boundary the contract validated. The JSON and
+    // GET shapes report `None` and are assembled exactly as they were before version seven —
+    // their `content-type`, if any, is an ordinary header the host declared. The value is
+    // rendered from a validated boundary, so encoding it cannot fail; the error arm exists
+    // because `HeaderValue::from_str` is fallible.
+    if let Some(content_type) = request.content_type() {
+        let value =
+            HeaderValue::from_str(content_type).map_err(|_| TransportErrorV1::RequestFailed)?;
+        headers.insert(header::CONTENT_TYPE, value);
     }
 
     // The sanctioned user-agent declaration is the single source of this header: the ordinary

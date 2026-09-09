@@ -9,9 +9,10 @@ use std::{fmt, future::Future, pin::Pin, time::Duration};
 use http::Method;
 use south_contracts::{
     BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1, GetRequestV1, JsonBodyV1,
-    JsonPostRequestV1, PreparationErrorV1, ProviderAuthV1, ProviderEndpointV1, QueryStringV1,
-    RelativePathV1, SafeHeaders, SignedHeaderSetV1, SignedHeaderV1, StreamChunkV1,
-    StreamReadErrorV1, StreamRejectedV1, StreamingResponseHeadV1, TransportErrorV1,
+    JsonPostRequestV1, MultipartBodyV1, MultipartPostRequestV1, PreparationErrorV1, ProviderAuthV1,
+    ProviderEndpointV1, QueryStringV1, RelativePathV1, SafeHeaders, SignedHeaderSetV1,
+    SignedHeaderV1, StreamChunkV1, StreamReadErrorV1, StreamRejectedV1, StreamingResponseHeadV1,
+    TransportErrorV1,
 };
 use thiserror::Error;
 use tokio::time::{Instant, timeout_at};
@@ -294,25 +295,81 @@ pub struct PreparedHttpRequestV1<'request> {
     headers: &'request SafeHeaders,
     /// `None` exactly for a [`GetRequestV1`] (HTTP contract version six): a body-less request
     /// has no body slot at all, rather than an empty one, so a transport cannot send `{}` or a
-    /// zero-length payload where the contract promised nothing.
-    body: Option<&'request JsonBodyV1>,
+    /// zero-length payload where the contract promised nothing. Since version seven the `Some`
+    /// arm also says *which* body shape it is, because a multipart body brings a media type the
+    /// transport must emit and a JSON one does not.
+    body: Option<RequestBodyRefV1<'request>>,
     auth_headers: Vec<BoundAuthHeader>,
     user_agent: Option<ControlledUserAgentV1>,
 }
 
+/// The body a prepared request carries, borrowed from the contract type that owns it.
+///
+/// A transport needs two things from a body — the bytes to send, and whether South renders a
+/// media type for them — and those differ per shape rather than per request. Naming the shape
+/// keeps both answers on the value itself instead of in a rule the transport has to remember.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RequestBodyRefV1<'request> {
+    /// One complete JSON value, from a [`JsonPostRequestV1`].
+    Json(&'request JsonBodyV1),
+    /// Opaque bytes under a rendered media type, from a [`MultipartPostRequestV1`].
+    Multipart(&'request MultipartBodyV1),
+}
+
+impl<'request> RequestBodyRefV1<'request> {
+    /// Returns the exact bytes a transport must send.
+    #[must_use]
+    pub fn as_bytes(self) -> &'request [u8] {
+        match self {
+            Self::Json(body) => body.as_str().as_bytes(),
+            Self::Multipart(body) => body.as_bytes(),
+        }
+    }
+
+    /// Returns the media type South renders for this body, when it renders one.
+    ///
+    /// `None` for JSON, deliberately: that shape's `content-type` travels through the ordinary
+    /// header channel and has since version one, and hosts legitimately send values South does
+    /// not get to normalize. Rendering one for them would be a wire change wearing a refactor's
+    /// clothes.
+    #[must_use]
+    pub fn content_type(self) -> Option<&'request str> {
+        match self {
+            Self::Json(_) => None,
+            Self::Multipart(body) => Some(body.content_type()),
+        }
+    }
+
+    /// Returns the body's byte length.
+    #[must_use]
+    pub fn len(self) -> usize {
+        match self {
+            Self::Json(body) => body.len(),
+            Self::Multipart(body) => body.len(),
+        }
+    }
+
+    /// Returns whether the body is empty — never true for a validated body of either shape.
+    #[must_use]
+    pub fn is_empty(self) -> bool {
+        self.len() == 0
+    }
+}
+
 /// The method-neutral projection of a request the orchestration layer prepares.
 ///
-/// [`JsonPostRequestV1`] and [`GetRequestV1`] are separate contract types on purpose
-/// (buffered-GET record, D1): the POST shape keeps its mandatory body and the GET shape has no
-/// body slot. This private projection is where the two meet, so the binding check, the
-/// assembly of auth headers, and the finalizer view are written once. It owns nothing but the
-/// method — every other field borrows the request it was projected from.
+/// [`JsonPostRequestV1`], [`GetRequestV1`] and [`MultipartPostRequestV1`] are separate contract
+/// types on purpose (buffered-GET record D1, multipart record D1): the JSON shape keeps its
+/// mandatory JSON body, the GET shape has no body slot, and the multipart shape carries opaque
+/// bytes under a rendered media type. This private projection is where the three meet, so the
+/// binding check, the assembly of auth headers, and the finalizer view are written once. It owns
+/// nothing but the method — every other field borrows the request it was projected from.
 struct RequestParts<'request> {
     method: Method,
     relative_path: &'request RelativePathV1,
     query: Option<&'request QueryStringV1>,
     headers: &'request SafeHeaders,
-    body: Option<&'request JsonBodyV1>,
+    body: Option<RequestBodyRefV1<'request>>,
     auth: &'request ProviderAuthV1,
     user_agent: Option<ControlledUserAgentV1>,
 }
@@ -324,7 +381,7 @@ impl<'request> From<&'request JsonPostRequestV1> for RequestParts<'request> {
             relative_path: request.relative_path(),
             query: request.query(),
             headers: request.headers(),
-            body: Some(request.body()),
+            body: Some(RequestBodyRefV1::Json(request.body())),
             auth: request.auth(),
             user_agent: request.user_agent(),
         }
@@ -339,6 +396,20 @@ impl<'request> From<&'request GetRequestV1> for RequestParts<'request> {
             query: request.query(),
             headers: request.headers(),
             body: None,
+            auth: request.auth(),
+            user_agent: request.user_agent(),
+        }
+    }
+}
+
+impl<'request> From<&'request MultipartPostRequestV1> for RequestParts<'request> {
+    fn from(request: &'request MultipartPostRequestV1) -> Self {
+        Self {
+            method: Method::POST,
+            relative_path: request.relative_path(),
+            query: request.query(),
+            headers: request.headers(),
+            body: Some(RequestBodyRefV1::Multipart(request.body())),
             auth: request.auth(),
             user_agent: request.user_agent(),
         }
@@ -432,8 +503,10 @@ impl<'request> PreparedHttpRequestV1<'request> {
             headers: self.headers,
             // A GET has no body, and the view says so with the empty slice: a payload-hashing
             // signer (SigV4 hashes the empty payload exactly as AWS specifies) needs nothing
-            // else, and a signer that hashes nothing ignores it either way.
-            body: self.body.map_or(&[], |body| body.as_str().as_bytes()),
+            // else, and a signer that hashes nothing ignores it either way. A multipart body
+            // signs as its own bytes, exactly as a JSON one does — the view is bytes, and always
+            // was, so this seam needed nothing for version seven.
+            body: self.body.map_or(&[][..], RequestBodyRefV1::as_bytes),
             user_agent: self.user_agent,
             slot,
             emits,
@@ -465,13 +538,24 @@ impl PreparedHttpRequestV1<'_> {
         self.headers
     }
 
-    /// Returns the exact validated JSON body, or `None` for a body-less GET.
+    /// Returns the validated body and its shape, or `None` for a body-less GET.
     ///
-    /// `Option` since HTTP contract version six. A transport attaches a body exactly when this
-    /// is `Some`: a `None` here means no body slot on the wire, not an empty one.
+    /// `Option` since HTTP contract version six, and shape-naming since version seven. A
+    /// transport attaches a body exactly when this is `Some`: a `None` here means no body slot
+    /// on the wire, not an empty one.
     #[must_use]
-    pub const fn body(&self) -> Option<&JsonBodyV1> {
+    pub const fn body(&self) -> Option<RequestBodyRefV1<'_>> {
         self.body
+    }
+
+    /// Returns the media type the transport must emit, when South renders one.
+    ///
+    /// `Some` exactly for a multipart body, whose media type is rendered from the boundary the
+    /// contract validated. `None` for the JSON and GET shapes, whose `content-type` — if any —
+    /// is the host's to declare through the ordinary header channel.
+    #[must_use]
+    pub fn content_type(&self) -> Option<&str> {
+        self.body.and_then(RequestBodyRefV1::content_type)
     }
 
     /// Returns every auth header as its name and complete value bytes.
@@ -508,8 +592,9 @@ impl fmt::Debug for PreparedHttpRequestV1<'_> {
             .debug_struct("PreparedHttpRequestV1")
             .field("method", &self.method)
             .field("header_count", &self.headers.len())
-            // Zero exactly when there is no body: a JSON body is never empty.
-            .field("body_byte_count", &self.body.map_or(0, JsonBodyV1::len))
+            // Zero exactly when there is no body: a validated body of either shape is never
+            // empty.
+            .field("body_byte_count", &self.body.map_or(0, RequestBodyRefV1::len))
             .finish_non_exhaustive()
     }
 }
@@ -594,6 +679,35 @@ where
 pub async fn execute_get_call_v1<R, T>(
     binding: &ProviderBindingV1,
     request: &GetRequestV1,
+    resolver: &R,
+    transport: &T,
+    deadline: Instant,
+    cancellation: &CancellationToken,
+) -> Result<BufferedHttpResponseV1, ProviderCallErrorV1>
+where
+    R: CredentialResolver + ?Sized,
+    T: AsyncHttpTransport + ?Sized,
+{
+    execute_buffered(binding, request.into(), resolver, transport, deadline, cancellation).await
+}
+
+/// Validates, authorizes, resolves, prepares, and executes one buffered multipart POST.
+///
+/// The multipart twin of [`execute_provider_call_v1`] (HTTP contract version seven): the same
+/// validation order, the same binding check, the same biased cancellation race, and the same
+/// three credential arms. Only the body shape differs, and with it one wire fact — the transport
+/// emits the media type the contract rendered from the body's boundary, rather than whatever the
+/// host put in its ordinary headers, because a `MultipartPostRequestV1` refuses to carry a
+/// `content-type` there at all. There is no streaming multipart and no host-signed twin
+/// (multipart record, D5): no host consumes either.
+///
+/// # Errors
+///
+/// Returns [`ProviderCallErrorV1`] exactly as the JSON twin does. A host-signed request is
+/// `UNSUPPORTED_AUTH_SHAPE` here, as it is on every unsigned entry point.
+pub async fn execute_multipart_call_v1<R, T>(
+    binding: &ProviderBindingV1,
+    request: &MultipartPostRequestV1,
     resolver: &R,
     transport: &T,
     deadline: Instant,

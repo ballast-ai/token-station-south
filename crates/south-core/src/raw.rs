@@ -21,14 +21,20 @@
 //! — the raw call minus `body` — with one parse and one buffered one-shot wrapper (design record:
 //! `docs/design/2026-09-08-buffered-get-request.md`). It is what a host's task poller hands over:
 //! the same endpoint, slot, headers, and credential arm as the submit leg it follows.
+//!
+//! The multipart POST (HTTP contract version seven) likewise has [`RawMultipartProviderCallV1`] —
+//! the raw call whose `body` is opaque bytes plus the boundary that delimits them (design record:
+//! `docs/design/2026-09-09-multipart-request-body.md`). It is what a host's audio-transcription
+//! and image-edit paths hand over: a client body they have already spliced, byte-precise, which
+//! South sends without learning what a part is.
 
 use std::fmt;
 
 use south_contracts::{
     BearerAuthV1, BufferedHttpResponseV1, ContractErrorV1, ControlledUserAgentV1, CredentialSlotV1,
-    GetRequestV1, HeaderPolicyError, JsonBodyV1, JsonPostRequestV1, ProviderAuthV1,
-    ProviderEndpointV1, QueryStringV1, RelativePathV1, SafeHeaders, SecretHeaderV1,
-    SignedHeaderSetV1,
+    GetRequestV1, HeaderPolicyError, JsonBodyV1, JsonPostRequestV1, MultipartBodyV1,
+    MultipartBoundaryV1, MultipartPostRequestV1, ProviderAuthV1, ProviderEndpointV1, QueryStringV1,
+    RelativePathV1, SafeHeaders, SecretHeaderV1, SignedHeaderSetV1,
 };
 use thiserror::Error;
 use tokio::time::Instant;
@@ -39,8 +45,8 @@ use crate::{
     AsyncHttpTransport, AsyncStreamingTransport, CredentialResolutionErrorV1,
     CredentialResolutionFuture, CredentialResolver, ProviderBindingV1, ProviderCallErrorV1,
     RequestFinalizerV1, SecretValue, StreamingCallV1, execute_get_call_v1,
-    execute_provider_call_v1, execute_signed_provider_call_v1, open_streaming_provider_call_v1,
-    open_streaming_signed_provider_call_v1,
+    execute_multipart_call_v1, execute_provider_call_v1, execute_signed_provider_call_v1,
+    open_streaming_provider_call_v1, open_streaming_signed_provider_call_v1,
 };
 
 /// The authentication arm of a raw provider call.
@@ -209,6 +215,61 @@ impl fmt::Debug for RawGetProviderCallV1<'_> {
     }
 }
 
+/// A borrowed raw multipart POST: [`RawProviderCallV1`]'s field set with opaque bytes and their
+/// boundary in place of the JSON body string.
+///
+/// This is what a host's multipart call sites already hold immediately before their upstream
+/// send: a client body they have parsed, validated and spliced, plus the boundary they read out
+/// of the client's `content-type`. South re-validates the boundary's grammar and that the bytes
+/// are delimited by it, and sends them unmodified.
+///
+/// `headers` must not carry a `content-type`: this shape renders its own from the boundary, and
+/// a second source could disagree with the bytes. A host that passes one is refused with
+/// [`RawCallErrorV1::ContentTypeHeader`] before any resolver or transport is touched.
+///
+/// Like every other raw shape the fields are borrowed; the parse copies the body once into the
+/// contract's shared allocation, exactly as the JSON shape's parse copies its string. A host
+/// that would rather not pay that copy for a large upload can build [`MultipartBodyV1`] from an
+/// owned `Vec<u8>` and use the typed entry point directly.
+pub struct RawMultipartProviderCallV1<'a> {
+    /// The trusted base endpoint, unparsed.
+    pub endpoint: &'a str,
+    /// The provider-selected relative path, unparsed and query-free.
+    pub relative_path: &'a str,
+    /// The host-binding-side credential slot, unparsed.
+    pub bound_slot: &'a str,
+    /// The request-declaration-side credential slot, unparsed. Production paths keep the two
+    /// slots equal; a mismatch surfaces as `CREDENTIAL_BINDING_MISMATCH` at execution time.
+    pub requested_slot: &'a str,
+    /// Ordinary request headers, validated against the header policy during parse. Must not
+    /// carry a `content-type`.
+    pub headers: &'a [(String, String)],
+    /// The already-encoded multipart body, unparsed.
+    pub body: &'a [u8],
+    /// The boundary delimiting `body`, unparsed and without its `--` prefix.
+    pub boundary: &'a str,
+    /// The authentication arm selected by the host.
+    pub auth: RawAuthV1,
+    /// The sanctioned query declaration, when the call carries one.
+    pub query: Option<QueryStringV1>,
+    /// The sanctioned user-agent declaration, when the call carries one.
+    pub user_agent: Option<ControlledUserAgentV1>,
+}
+
+impl fmt::Debug for RawMultipartProviderCallV1<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("RawMultipartProviderCallV1")
+            .field("auth", &self.auth)
+            .field("header_count", &self.headers.len())
+            .field("body_byte_count", &self.body.len())
+            .field("boundary_byte_count", &self.boundary.len())
+            .field("has_query", &self.query.is_some())
+            .field("has_user_agent", &self.user_agent.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
 /// A raw-call contract validation failure, naming the field that failed.
 ///
 /// This type aggregates the existing contract and header-policy errors; it introduces no new
@@ -237,6 +298,12 @@ pub enum RawCallErrorV1 {
     /// The `headers` field violated the header policy.
     #[error("request headers violated the header policy")]
     Headers(HeaderPolicyError),
+    /// The `boundary` field failed contract validation (multipart shapes only).
+    #[error("multipart boundary failed contract validation")]
+    Boundary(ContractErrorV1),
+    /// The `headers` field carried a `content-type` on a shape that renders its own.
+    #[error("content-type header is not permitted on this request shape")]
+    ContentTypeHeader(ContractErrorV1),
 }
 
 impl RawCallErrorV1 {
@@ -248,7 +315,9 @@ impl RawCallErrorV1 {
             | Self::BoundSlot(error)
             | Self::RequestedSlot(error)
             | Self::RelativePath(error)
-            | Self::Body(error) => error.code(),
+            | Self::Body(error)
+            | Self::Boundary(error)
+            | Self::ContentTypeHeader(error) => error.code(),
             Self::Headers(error) => error.code(),
         }
     }
@@ -263,7 +332,10 @@ impl RawCallErrorV1 {
             Self::RequestedSlot(_) => "requested_slot",
             Self::RelativePath(_) => "relative_path",
             Self::Body(_) => "body",
-            Self::Headers(_) => "headers",
+            Self::Boundary(_) => "boundary",
+            // The host's fix is in the field it supplied, not in the name of the rule: it must
+            // stop putting a `content-type` in `headers`, because this shape renders one.
+            Self::Headers(_) | Self::ContentTypeHeader(_) => "headers",
         }
     }
 }
@@ -366,6 +438,48 @@ pub fn parse_raw_get_call(
 #[must_use]
 pub fn raw_get_call_parses(raw: &RawGetProviderCallV1<'_>) -> bool {
     parse_raw_get_call(raw).is_ok()
+}
+
+/// Parses one raw multipart POST into the binding and request
+/// [`execute_multipart_call_v1`] consumes.
+///
+/// Same determinism and zero-side-effect guarantees as [`parse_raw_call`], through the same
+/// grammars, with the JSON body step replaced by the boundary grammar and the delimiter check.
+/// The body is copied once into the contract's shared allocation. A host may pre-check with
+/// [`raw_multipart_call_parses`].
+///
+/// # Errors
+///
+/// Returns [`RawCallErrorV1`] naming the field that failed, including
+/// [`RawCallErrorV1::ContentTypeHeader`] when `headers` carries a `content-type`.
+pub fn parse_raw_multipart_call(
+    raw: &RawMultipartProviderCallV1<'_>,
+) -> Result<(ProviderBindingV1, MultipartPostRequestV1), RawCallErrorV1> {
+    let parts =
+        parse_raw_binding(raw.endpoint, raw.relative_path, raw.bound_slot, raw.requested_slot)?;
+    let boundary = MultipartBoundaryV1::parse(raw.boundary).map_err(RawCallErrorV1::Boundary)?;
+    let body = MultipartBodyV1::parse(raw.body.to_vec(), boundary).map_err(RawCallErrorV1::Body)?;
+    let headers = parse_raw_headers(raw.headers)?;
+    let auth = raw.auth.declare(BearerAuthV1::new(parts.requested_slot));
+    let mut request = MultipartPostRequestV1::try_new(parts.relative_path, headers, body, auth)
+        .map_err(RawCallErrorV1::ContentTypeHeader)?;
+    if let Some(query) = raw.query.clone() {
+        request = request.with_query(query);
+    }
+    if let Some(user_agent) = raw.user_agent {
+        request = request.with_user_agent(user_agent);
+    }
+    Ok((parts.binding, request))
+}
+
+/// Returns whether one raw multipart POST parses, for pre-admission checks.
+///
+/// Carries the same determinism guarantee as [`parse_raw_multipart_call`]. Note that it copies
+/// the body to answer, so a host pre-checking a large upload should prefer to parse once and
+/// keep the result.
+#[must_use]
+pub fn raw_multipart_call_parses(raw: &RawMultipartProviderCallV1<'_>) -> bool {
+    parse_raw_multipart_call(raw).is_ok()
 }
 
 /// The fields the two JSON POST shapes share, parsed through the contract grammars in one place.
@@ -530,6 +644,33 @@ where
 {
     let (binding, request) = parse_raw_get_call(raw).map_err(RawProviderCallErrorV1::Parse)?;
     execute_get_call_v1(&binding, &request, resolver, transport, deadline, cancellation)
+        .await
+        .map_err(RawProviderCallErrorV1::Call)
+}
+
+/// Parses one raw multipart POST, then executes it as a buffered call.
+///
+/// The multipart twin of [`execute_raw_call_v1`], with the same zero-side-effect parse
+/// invariant: a parse failure returns before the resolver or transport is invoked. There is no
+/// streaming twin and no host-signed twin (multipart record, D5).
+///
+/// # Errors
+///
+/// Returns [`RawProviderCallErrorV1`] exactly as the JSON twin does.
+pub async fn execute_multipart_raw_call_v1<R, T>(
+    raw: &RawMultipartProviderCallV1<'_>,
+    resolver: &R,
+    transport: &T,
+    deadline: Instant,
+    cancellation: &CancellationToken,
+) -> Result<BufferedHttpResponseV1, RawProviderCallErrorV1>
+where
+    R: CredentialResolver + ?Sized,
+    T: AsyncHttpTransport + ?Sized,
+{
+    let (binding, request) =
+        parse_raw_multipart_call(raw).map_err(RawProviderCallErrorV1::Parse)?;
+    execute_multipart_call_v1(&binding, &request, resolver, transport, deadline, cancellation)
         .await
         .map_err(RawProviderCallErrorV1::Call)
 }

@@ -10,12 +10,13 @@ use south_contracts::{
     BearerAuthV1, BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1, GetRequestV1,
     JsonBodyV1, JsonPostRequestV1, MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES,
     MAX_RESPONSE_BODY_BYTES, MAX_RESPONSE_CONTENT_TYPE_BYTES, MAX_RESPONSE_RETRY_AFTER_BYTES,
-    ProviderAuthV1, ProviderEndpointV1, QueryParameterV1, QueryStringV1, RelativePathV1,
-    SafeHeaders, SecretHeaderV1, TransportErrorV1,
+    MultipartBodyV1, MultipartBoundaryV1, MultipartPostRequestV1, ProviderAuthV1,
+    ProviderEndpointV1, QueryParameterV1, QueryStringV1, RelativePathV1, SafeHeaders,
+    SecretHeaderV1, TransportErrorV1,
 };
 use south_core::{
     CredentialResolutionFuture, CredentialResolver, ProviderBindingV1, ProviderCallErrorV1,
-    SecretValue, execute_get_call_v1, execute_provider_call_v1,
+    SecretValue, execute_get_call_v1, execute_multipart_call_v1, execute_provider_call_v1,
 };
 use south_transport_reqwest::{ReqwestTransportConfigV1, ReqwestTransportV1};
 use tokio::{
@@ -1075,4 +1076,81 @@ async fn cancellation_drops_real_reqwest_io_without_detaching_work() {
 
     assert_eq!(result.expect_err("cancelled call should fail").code(), "CANCELLED");
     assert!(remaining.is_empty(), "cancelled request must not leave detached writes");
+}
+
+/// HTTP contract version seven: a multipart POST reaches the socket with the bytes the host
+/// encoded, under the media type South rendered from the declared boundary, and with a
+/// `content-length` matching those bytes. The host never gets to state the media type, so the
+/// wire cannot carry one that disagrees with the body.
+#[tokio::test]
+async fn sends_exact_multipart_body_under_the_rendered_media_type() {
+    const BOUNDARY: &str = "transport-test-boundary";
+    let body_bytes = format!(
+        "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\n{BODY_SENTINEL}\r\n--{BOUNDARY}--\r\n"
+    )
+    .into_bytes();
+
+    let loopback = loopback_once(response(
+        "200 OK",
+        &[("content-type", "application/json")],
+        br#"{"text":"ok"}"#,
+    ))
+    .await;
+    let transport = ReqwestTransportV1::new(config()).expect("transport should build");
+    let resolver = StaticResolver::default();
+    let binding = ProviderBindingV1::new(
+        ProviderEndpointV1::parse(&loopback.endpoint).expect("loopback endpoint should be valid"),
+        CredentialSlotV1::parse("primary").expect("fixture slot should be valid"),
+    );
+    let request = MultipartPostRequestV1::try_new(
+        RelativePathV1::parse("v1/audio/transcriptions").expect("fixture path should be valid"),
+        SafeHeaders::try_from_iter([("x-test", HEADER_SENTINEL)])
+            .expect("fixture headers should be valid"),
+        MultipartBodyV1::parse(
+            body_bytes.clone(),
+            MultipartBoundaryV1::parse(BOUNDARY).expect("fixture boundary should be valid"),
+        )
+        .expect("fixture body is delimited by its boundary"),
+        BearerAuthV1::new(
+            CredentialSlotV1::parse("primary").expect("fixture slot should be valid"),
+        ),
+    )
+    .expect("fixture headers carry no content-type");
+
+    let result = execute_multipart_call_v1(
+        &binding,
+        &request,
+        &resolver,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("a multipart call should succeed");
+    let received = loopback.request.await.expect("server should report the request");
+    loopback.task.await.expect("server task should finish");
+
+    assert_eq!(received.request_line, "POST /base/v1/audio/transcriptions HTTP/1.1");
+    assert_eq!(
+        received.headers.get("content-type").map(String::as_str),
+        Some(format!("multipart/form-data; boundary={BOUNDARY}").as_str()),
+        "the rendered media type, not one the host supplied"
+    );
+    assert_eq!(
+        received.headers.get("content-length").map(String::as_str),
+        Some(body_bytes.len().to_string().as_str())
+    );
+    assert_eq!(received.body, body_bytes, "the encoded bytes reach the wire unmodified");
+    assert_eq!(received.headers.get("x-test").map(String::as_str), Some(HEADER_SENTINEL));
+    assert_eq!(
+        received.headers.get("authorization").map(String::as_str),
+        Some("Bearer transport-secret-sentinel")
+    );
+    // Exactly one content-type on the wire: the ordinary header channel could not have carried a
+    // second, because the request shape refuses to hold one.
+    assert_eq!(
+        received.header_names.iter().filter(|name| name.as_str() == "content-type").count(),
+        1
+    );
+    assert_eq!(result.status().as_u16(), 200);
 }

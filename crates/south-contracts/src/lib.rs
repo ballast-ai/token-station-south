@@ -36,7 +36,12 @@ use url::Url;
 /// the JSON POST shape, and the sanctioned query set gains [`QueryParameterV1::TaskId`]. A
 /// version-five request is exactly a version-six request that is not a `GetRequestV1` and
 /// declares no `task_id`; [`JsonPostRequestV1`] itself is untouched.
-pub const HTTP_CONTRACT_VERSION: u16 = 6;
+///
+/// Version seven is additive on the request side: it admits [`MultipartPostRequestV1`], whose
+/// body is bounded opaque bytes under a media type this contract renders, beside the other two
+/// shapes. A version-six request is exactly a version-seven request that is not a
+/// `MultipartPostRequestV1`; the JSON and GET shapes are untouched.
+pub const HTTP_CONTRACT_VERSION: u16 = 7;
 
 /// The version of the provider authentication declaration contract.
 ///
@@ -84,6 +89,18 @@ pub const MAX_CREDENTIAL_SLOT_BYTES: usize = 64;
 
 /// The maximum byte length of a buffered JSON request body.
 pub const MAX_JSON_REQUEST_BODY_BYTES: usize = 32 * 1024 * 1024;
+
+/// The maximum byte length of one multipart request body.
+///
+/// Deliberately larger than the JSON limit and equal to the adopting host's own media-inference
+/// cap: the bodies this admits are audio uploads and image edits, and a 32 MiB ceiling would
+/// silently push exactly the requests this shape exists to carry back onto a host's legacy path.
+/// The transport shares one allocation with the contract, so the cost is one buffer per request
+/// rather than a copy per hop.
+pub const MAX_MULTIPART_REQUEST_BODY_BYTES: usize = 100 * 1024 * 1024;
+
+/// The maximum byte length of one multipart boundary, per RFC 2046 §5.1.1.
+pub const MAX_MULTIPART_BOUNDARY_BYTES: usize = 70;
 
 /// The maximum byte length of a buffered UTF-8 response body.
 pub const MAX_RESPONSE_BODY_BYTES: usize = 32 * 1024 * 1024;
@@ -617,6 +634,188 @@ impl fmt::Debug for JsonBodyV1 {
         formatter
             .debug_struct("JsonBodyV1")
             .field("byte_count", &self.value.len())
+            .finish_non_exhaustive()
+    }
+}
+
+/// A validated `multipart/form-data` boundary (RFC 2046 §5.1.1).
+///
+/// The grammar is the RFC's, unwidened: one to seventy characters from `bchars`, and the last
+/// one may not be a space. The adopting host already enforces exactly this before it forwards a
+/// client body; moving it into the contract means a host that forgets cannot put a malformed
+/// `content-type` on the wire, because the media type is rendered from this value rather than
+/// supplied alongside it.
+#[derive(Clone, PartialEq, Eq)]
+pub struct MultipartBoundaryV1 {
+    value: String,
+}
+
+impl MultipartBoundaryV1 {
+    /// Validates one boundary against the RFC 2046 §5.1.1 grammar.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ContractErrorV1::InvalidMultipartBoundary`] for an empty value, one longer than
+    /// [`MAX_MULTIPART_BOUNDARY_BYTES`], one carrying a character outside `bchars`, or one
+    /// ending in a space.
+    pub fn parse(input: &str) -> Result<Self, ContractErrorV1> {
+        if input.is_empty() || input.len() > MAX_MULTIPART_BOUNDARY_BYTES {
+            return Err(ContractErrorV1::InvalidMultipartBoundary);
+        }
+        if !input.bytes().all(is_boundary_character) {
+            return Err(ContractErrorV1::InvalidMultipartBoundary);
+        }
+        // `boundary := 0*69<bchars> bcharsnospace` — a trailing space is not part of the value,
+        // so a boundary that ends in one is ambiguous on the wire rather than merely ugly.
+        if input.ends_with(' ') {
+            return Err(ContractErrorV1::InvalidMultipartBoundary);
+        }
+        Ok(Self { value: input.to_owned() })
+    }
+
+    /// Returns the exact validated boundary.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.value
+    }
+}
+
+impl fmt::Debug for MultipartBoundaryV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("MultipartBoundaryV1")
+            .field("byte_count", &self.value.len())
+            .finish_non_exhaustive()
+    }
+}
+
+/// `bchars` per RFC 2046 §5.1.1: `bcharsnospace` plus the space.
+const fn is_boundary_character(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric()
+        || matches!(
+            byte,
+            b'\''
+                | b'('
+                | b')'
+                | b'+'
+                | b'_'
+                | b','
+                | b'-'
+                | b'.'
+                | b'/'
+                | b':'
+                | b'='
+                | b'?'
+                | b' '
+        )
+}
+
+/// A bounded, opaque request body delimited by the boundary it declares.
+///
+/// This contract does not parse multipart. It carries bytes a host has already encoded, and
+/// validates only what can be checked without becoming a parser: the length, the boundary's own
+/// grammar, and that the bytes are actually delimited by that boundary. South learns nothing
+/// about parts, field names, or file contents, which is the whole point — the host's own splice
+/// discipline (replace a text field's value, never touch a binary part) stays where it works,
+/// and its bytes reach the wire unmodified.
+#[derive(PartialEq, Eq)]
+pub struct MultipartBodyV1 {
+    bytes: Arc<[u8]>,
+    boundary: MultipartBoundaryV1,
+    content_type: Arc<str>,
+}
+
+impl MultipartBodyV1 {
+    /// Validates one already-encoded multipart body against the boundary it declares.
+    ///
+    /// The two delimiter checks are deliberately the cheap ones. The opening check is what
+    /// catches the failure this type exists to prevent — a body whose boundary no longer agrees
+    /// with the media type sent beside it, which is precisely what a careless in-place splice
+    /// produces. The closing check requires the body to *end* with the closing delimiter rather
+    /// than merely contain it: a scan for an interior match is quadratic in a body this large,
+    /// and every real client encoder terminates there. A body with an RFC-legal epilogue is
+    /// therefore refused, which sends its host back to its legacy path — failing closed, the
+    /// posture every other narrowing in this contract takes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ContractErrorV1::RequestBodyTooLarge`] above
+    /// [`MAX_MULTIPART_REQUEST_BODY_BYTES`], or [`ContractErrorV1::InvalidMultipartBody`] when
+    /// the bytes are not delimited by the declared boundary.
+    pub fn parse(bytes: Vec<u8>, boundary: MultipartBoundaryV1) -> Result<Self, ContractErrorV1> {
+        if bytes.len() > MAX_MULTIPART_REQUEST_BODY_BYTES {
+            return Err(ContractErrorV1::RequestBodyTooLarge);
+        }
+        let opening = format!("--{}", boundary.as_str());
+        if !bytes.starts_with(opening.as_bytes()) {
+            return Err(ContractErrorV1::InvalidMultipartBody);
+        }
+        let closing = format!("--{}--", boundary.as_str());
+        let terminated = bytes.ends_with(closing.as_bytes())
+            || bytes.ends_with(format!("{closing}\r\n").as_bytes())
+            || bytes.ends_with(format!("{closing}\n").as_bytes());
+        if !terminated {
+            return Err(ContractErrorV1::InvalidMultipartBody);
+        }
+        let content_type = format!("multipart/form-data; boundary={}", boundary.as_str());
+        Ok(Self {
+            bytes: Arc::from(bytes),
+            boundary,
+            content_type: Arc::from(content_type.as_str()),
+        })
+    }
+
+    /// Returns the exact validated body bytes.
+    #[must_use]
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    /// Shares the validated backing allocation with an asynchronous transport.
+    ///
+    /// The byte twin of [`JsonBodyV1::shared_owner`], and the reason a 100 MiB upload is not
+    /// copied on its way to the wire.
+    #[must_use]
+    pub fn shared_owner(&self) -> Arc<[u8]> {
+        Arc::clone(&self.bytes)
+    }
+
+    /// Returns the declared boundary.
+    #[must_use]
+    pub const fn boundary(&self) -> &MultipartBoundaryV1 {
+        &self.boundary
+    }
+
+    /// Returns the rendered media type, `multipart/form-data; boundary=…`.
+    ///
+    /// Rendered once here rather than supplied by the host: with an opaque body there is no
+    /// second source to disagree with, so a `content-type` and a body cannot describe different
+    /// things.
+    #[must_use]
+    pub fn content_type(&self) -> &str {
+        &self.content_type
+    }
+
+    /// Returns the request body's byte length.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.bytes.len()
+    }
+
+    /// Returns whether the request body is empty — never true for a validated body, which
+    /// carries at least its two delimiters.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.bytes.is_empty()
+    }
+}
+
+impl fmt::Debug for MultipartBodyV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("MultipartBodyV1")
+            .field("byte_count", &self.bytes.len())
+            .field("boundary", &self.boundary)
             .finish_non_exhaustive()
     }
 }
@@ -1344,6 +1543,115 @@ impl fmt::Debug for GetRequestV1 {
             .field("http_contract_version", &HTTP_CONTRACT_VERSION)
             .field("auth_contract_version", &AUTH_CONTRACT_VERSION)
             .field("header_count", &self.headers.len())
+            .field("has_query", &self.query.is_some())
+            .field("has_user_agent", &self.user_agent.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
+/// A bounded provider request for one multipart POST (HTTP contract version seven).
+///
+/// [`JsonPostRequestV1`]'s field set with a [`MultipartBodyV1`] in place of the JSON one, and
+/// the same builders and grammars for everything else. A separate type rather than a body enum
+/// on the POST shape (multipart record, D1): the JSON type's mandatory body and every invariant
+/// the streaming path relies on stay exactly as frozen, and "a JSON POST whose body is
+/// multipart" is not constructible.
+#[derive(PartialEq, Eq)]
+pub struct MultipartPostRequestV1 {
+    relative_path: RelativePathV1,
+    headers: SafeHeaders,
+    body: MultipartBodyV1,
+    auth: ProviderAuthV1,
+    query: Option<QueryStringV1>,
+    user_agent: Option<ControlledUserAgentV1>,
+}
+
+impl MultipartPostRequestV1 {
+    /// Creates a request from independently validated, bounded fields.
+    ///
+    /// Fallible where the other two shapes' constructors are not, for one reason: this request
+    /// renders its own `content-type` from the body's boundary, so the ordinary header channel
+    /// must not also carry one. The JSON shape can safely let a host set that header — its body
+    /// is validated to be JSON, so the two cannot disagree — but an opaque body has no such
+    /// guarantee, and two sources for one header is exactly how a body and its media type come
+    /// to describe different things. The check is on this type; [`SafeHeaders`] and the shared
+    /// reserved-header list are untouched.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ContractErrorV1::ContentTypeHeaderNotPermitted`] when `headers` carries a
+    /// `content-type` under any casing.
+    pub fn try_new(
+        relative_path: RelativePathV1,
+        headers: SafeHeaders,
+        body: MultipartBodyV1,
+        auth: impl Into<ProviderAuthV1>,
+    ) -> Result<Self, ContractErrorV1> {
+        if headers.get("content-type").is_some() {
+            return Err(ContractErrorV1::ContentTypeHeaderNotPermitted);
+        }
+        Ok(Self { relative_path, headers, body, auth: auth.into(), query: None, user_agent: None })
+    }
+
+    /// Attaches a sanctioned query declaration to this request.
+    #[must_use]
+    pub fn with_query(mut self, query: QueryStringV1) -> Self {
+        self.query = Some(query);
+        self
+    }
+
+    /// Returns the sanctioned query declaration, when one was attached.
+    #[must_use]
+    pub const fn query(&self) -> Option<&QueryStringV1> {
+        self.query.as_ref()
+    }
+
+    /// Attaches a sanctioned user-agent declaration to this request.
+    #[must_use]
+    pub const fn with_user_agent(mut self, user_agent: ControlledUserAgentV1) -> Self {
+        self.user_agent = Some(user_agent);
+        self
+    }
+
+    /// Returns the sanctioned user-agent declaration, when one was attached.
+    #[must_use]
+    pub const fn user_agent(&self) -> Option<ControlledUserAgentV1> {
+        self.user_agent
+    }
+
+    /// Returns the provider-selected relative path.
+    #[must_use]
+    pub const fn relative_path(&self) -> &RelativePathV1 {
+        &self.relative_path
+    }
+
+    /// Returns the validated ordinary request headers, which never include `content-type`.
+    #[must_use]
+    pub const fn headers(&self) -> &SafeHeaders {
+        &self.headers
+    }
+
+    /// Returns the validated multipart body.
+    #[must_use]
+    pub const fn body(&self) -> &MultipartBodyV1 {
+        &self.body
+    }
+
+    /// Returns the provider authentication declaration.
+    #[must_use]
+    pub const fn auth(&self) -> &ProviderAuthV1 {
+        &self.auth
+    }
+}
+
+impl fmt::Debug for MultipartPostRequestV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("MultipartPostRequestV1")
+            .field("http_contract_version", &HTTP_CONTRACT_VERSION)
+            .field("auth_contract_version", &AUTH_CONTRACT_VERSION)
+            .field("header_count", &self.headers.len())
+            .field("body_byte_count", &self.body.len())
             .field("has_query", &self.query.is_some())
             .field("has_user_agent", &self.user_agent.is_some())
             .finish_non_exhaustive()
@@ -2313,6 +2621,14 @@ impl fmt::Debug for StreamTransportConfigV1 {
 }
 
 /// A provider request contract validation failure.
+///
+/// `#[non_exhaustive]` since 0.25.0, for the reason [`PreparationErrorV1`] has carried since
+/// 0.7.0: a new request shape brings new ways for a field to be invalid, and the three multipart
+/// variants that arrived with HTTP contract version seven would otherwise have broken every
+/// downstream exhaustive match — as they will once, at this version, and never again. Downstream
+/// matches need a wildcard arm; route it through [`Self::code`] when only the stable string
+/// matters.
+#[non_exhaustive]
 #[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
 pub enum ContractErrorV1 {
     /// The trusted base endpoint is invalid.
@@ -2345,6 +2661,15 @@ pub enum ContractErrorV1 {
     /// A controlled user-agent value violates the frozen value grammar.
     #[error("user-agent value is invalid")]
     InvalidUserAgentValue,
+    /// A multipart boundary violates the RFC 2046 §5.1.1 grammar.
+    #[error("multipart boundary is invalid")]
+    InvalidMultipartBoundary,
+    /// A multipart body does not delimit itself with the boundary it declared.
+    #[error("multipart body does not match its declared boundary")]
+    InvalidMultipartBody,
+    /// A request that renders its own media type was given a `content-type` header to carry.
+    #[error("content-type header is not permitted on this request shape")]
+    ContentTypeHeaderNotPermitted,
 }
 
 impl ContractErrorV1 {
@@ -2362,6 +2687,9 @@ impl ContractErrorV1 {
             Self::EmptyQuery => "EMPTY_QUERY",
             Self::QueryTooLarge => "QUERY_TOO_LARGE",
             Self::InvalidUserAgentValue => "INVALID_USER_AGENT_VALUE",
+            Self::InvalidMultipartBoundary => "INVALID_MULTIPART_BOUNDARY",
+            Self::InvalidMultipartBody => "INVALID_MULTIPART_BODY",
+            Self::ContentTypeHeaderNotPermitted => "CONTENT_TYPE_HEADER_NOT_PERMITTED",
         }
     }
 }

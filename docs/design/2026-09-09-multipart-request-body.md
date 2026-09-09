@@ -1,6 +1,6 @@
 # The Multipart Request Body: Opaque Bytes Under a Declared Media Type
 
-Status: draft for ruling (D1–D6 in §6); targets 0.25.0
+Status: D1–D6 ruled 2026-09-09 (see §6); shipped as 0.25.0
 
 Date: 2026-09-09
 
@@ -96,10 +96,17 @@ emits exactly `multipart/form-data; boundary=<declared>`. One source, no disagre
 - **Length** against `MAX_MULTIPART_REQUEST_BODY_BYTES` (see D4).
 - **The boundary grammar**, RFC 2046 §5.1.1 — the same rule the host already enforces, moved into
   the contract so a host that forgets it cannot send a request whose `content-type` is malformed.
-- **That the body opens with `--<boundary>`** and carries the closing `--<boundary>--`. This is
-  the one integrity check worth its cost: it catches exactly the failure the host's own comments
-  worry about — a spliced body whose boundary no longer matches its header — and it is a byte
-  comparison, not a parse. South still does not know what a part is.
+- **That the body opens with `--<boundary>` and ends with `--<boundary>--`** (optionally followed
+  by a line ending). This is the one integrity check worth its cost: it catches exactly the
+  failure the host's own comments worry about — a spliced body whose boundary no longer matches
+  its header — and it is a byte comparison, not a parse. South still does not know what a part is.
+
+  > Narrowed during implementation, deliberately: the draft said the closing delimiter must be
+  > *carried*, which means scanning for an interior match — quadratic in a body that may be 100
+  > MiB. Requiring it at the *end* is `O(boundary)` and catches truncation, which is the failure
+  > that actually occurs. The cost is that an RFC-legal epilogue is refused; every real client
+  > encoder terminates at the closing delimiter, and a host that meets one falls back to its
+  > legacy path — the same fail-closed posture every other narrowing in this contract takes.
 
 `HTTP_CONTRACT_VERSION: 6 → 7`, additive: a version-six request is exactly a version-seven request
 that is not a `MultipartPostRequestV1`. `JsonPostRequestV1` and `GetRequestV1` are untouched.
@@ -166,7 +173,13 @@ predates this slice and is not ours to overturn.
 
 ## 5. Versioning
 
-Additive; ships as **0.25.0** with `compatibility.json` `http: 7` and the new suite. Both hosts
+Additive; ships as **0.25.0** with `compatibility.json` `http: 7` and the new suite.
+
+One public type changes shape beyond the additions: `ContractErrorV1` becomes
+`#[non_exhaustive]` as its three multipart variants land. Three new ways for a field to be
+invalid could not be added to a closed enum without breaking every downstream exhaustive match,
+and `PreparationErrorV1` has carried the same attribute, for the same reason, since 0.7.0. It
+breaks such matches once, at this version, and never again. Both hosts
 are annotated `provider_multipart: not_verified` until each runs the suite through its own
 adapter.
 
@@ -174,32 +187,32 @@ Fuzz obligations grow by one target: `MultipartBodyV1::parse` takes attacker-sha
 boundary, which is exactly the shape the existing `contract_parsers` target covers for the other
 grammars.
 
-## 6. Decisions for lv
+## 6. Decisions — ruled 2026-09-09
 
 - **D1 — a separate `MultipartPostRequestV1` versus a body enum on `JsonPostRequestV1`.**
-  Recommend separate, on the precedent that settled the GET slice's D1: the POST type's name, its
+  Separate, on the precedent that settled the GET slice's D1: the POST type's name, its
   mandatory JSON body, and every invariant the streaming path relies on stay exactly as frozen. A
   body enum would make "a JSON POST whose body is multipart" constructible and force the
   streaming entry points, which have no multipart consumer, to reject it at runtime.
-- **D2 — an opaque byte body versus a modeled part list.** Recommend opaque. The host has already
+- **D2 — an opaque byte body versus a modeled part list.** Opaque. The host has already
   encoded a correct multipart body and spliced it byte-precisely; a part model would force it to
   *decode* that body so South could *re-encode* it, which changes the boundary, discards the
   host's careful "never touch a binary part" work, and breaks the byte-identity-with-legacy
   discipline every adoption so far has rested on. South also has no business learning what a form
   field is.
 - **D3 — South renders `content-type` from the declaration, and the type refuses a
-  `content-type` in its ordinary headers.** Recommend as designed. The alternative — let the host
+  `content-type` in its ordinary headers.** As designed. The alternative — let the host
   pass it as a header, as the JSON arm does — is safe only because a JSON body is validated; with
   opaque bytes it permits a header and body that disagree, which is the one thing an opaque body
   makes possible and a contract should not.
-- **D4 — the byte cap.** Recommend a new `MAX_MULTIPART_REQUEST_BODY_BYTES = 100 MiB`, matching
+- **D4 — the byte cap.** A new `MAX_MULTIPART_REQUEST_BODY_BYTES = 100 MiB`, matching
   the host's existing media-inference limit, rather than reusing the 32 MiB JSON cap. Reusing 32
   MiB would silently fall back to legacy for audio between 32 and 100 MiB — a coverage hole in
   exactly the models this slice exists to unblock. The transport shares one allocation, so the
   cost is one buffer, not a copy per hop.
-- **D5 — buffered only; no streaming multipart, no host-signed twin.** Recommend as designed. The
+- **D5 — buffered only; no streaming multipart, no host-signed twin.** As designed. The
   image-edit handler rejects `stream=true` outright, ASR is buffered, and no host signs a
   multipart request. The task-adapter record's rule against reserving unconsumed shapes applies.
-- **D6 — a dedicated `south.provider-multipart.v1` suite.** Recommend dedicated, per the
+- **D6 — a dedicated `south.provider-multipart.v1` suite.** Dedicated, per the
   header-auth, controlled-query, and provider-get precedents: the frozen provider-call table is
   burned into two hosts' evidence, and a multipart POST is a different call shape.
