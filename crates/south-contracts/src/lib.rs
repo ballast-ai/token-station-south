@@ -41,7 +41,12 @@ use url::Url;
 /// body is bounded opaque bytes under a media type this contract renders, beside the other two
 /// shapes. A version-six request is exactly a version-seven request that is not a
 /// `MultipartPostRequestV1`; the JSON and GET shapes are untouched.
-pub const HTTP_CONTRACT_VERSION: u16 = 7;
+///
+/// Version eight is additive on the *response* side, and is the first version that is: it admits
+/// [`BufferedBinaryResponseV1`], a buffered body that was never required to be UTF-8. No request
+/// shape changes, and [`BufferedHttpResponseV1`] keeps its UTF-8 guarantee exactly as frozen — a
+/// consumer of the text response cannot be handed bytes by this version or any later one.
+pub const HTTP_CONTRACT_VERSION: u16 = 8;
 
 /// The version of the provider authentication declaration contract.
 ///
@@ -104,6 +109,16 @@ pub const MAX_MULTIPART_BOUNDARY_BYTES: usize = 70;
 
 /// The maximum byte length of a buffered UTF-8 response body.
 pub const MAX_RESPONSE_BODY_BYTES: usize = 32 * 1024 * 1024;
+
+/// The maximum byte length of a buffered binary response body.
+///
+/// Deliberately larger than the UTF-8 limit and equal to the adopting host's own cap on every
+/// buffered upstream success body: the bodies this admits are synthesised audio and rendered
+/// images, and a 32 MiB ceiling would silently push artifacts between the two numbers back onto a
+/// host's legacy path — a coverage hole in exactly the models this shape exists to unblock. The
+/// same reasoning that sized [`MAX_MULTIPART_REQUEST_BODY_BYTES`], applied in the other
+/// direction. The UTF-8 cap is unchanged.
+pub const MAX_BINARY_RESPONSE_BODY_BYTES: usize = 64 * 1024 * 1024;
 
 /// The maximum byte length of the response `content-type` value.
 pub const MAX_RESPONSE_CONTENT_TYPE_BYTES: usize = 256;
@@ -2273,6 +2288,188 @@ impl fmt::Debug for BufferedHttpResponseV1 {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("BufferedHttpResponseV1")
+            .field("contract_version", &HTTP_CONTRACT_VERSION)
+            .field("status", &self.status)
+            .field("body_byte_count", &self.body.len())
+            .field("has_content_type", &self.content_type.is_some())
+            .field("has_retry_after", &self.retry_after.is_some())
+            .field("provider_quota_metadata", &self.provider_quota_metadata)
+            .field("response_diagnostics", &self.response_diagnostics)
+            .field("response_transcript", &self.response_transcript)
+            .finish_non_exhaustive()
+    }
+}
+
+/// A bounded HTTP response whose body was never required to be UTF-8.
+///
+/// The binary twin of [`BufferedHttpResponseV1`], and deliberately a separate type rather than a
+/// widening of it. Widening would have made the text body `Vec<u8>` and forced `body()` to return
+/// either an `Option<&str>`, breaking every existing call site, or a lossy conversion, silently
+/// corrupting. Worse than either: it would have stripped the UTF-8 *guarantee* from consumers that
+/// never asked for a weaker contract. Here the guarantee stays exactly where it was.
+///
+/// The body is opaque. This contract performs no media sniffing, keeps no allow-list of acceptable
+/// payload types, and never converts: what the wire carried is what the host receives. Which media
+/// types are acceptable is host policy, and an allow-list would break the first time an upstream
+/// answered `audio/mpeg;codecs=mp3`.
+///
+/// Bytes are returned for **every** status, including a non-2xx. An upstream that answers a
+/// success with audio answers a rejection with JSON, and a type whose body shape depended on the
+/// status would be the worst of both worlds. A host reading an error body calls
+/// [`str::from_utf8`] itself and owns the failure.
+#[derive(PartialEq, Eq)]
+pub struct BufferedBinaryResponseV1 {
+    status: StatusCode,
+    body: Vec<u8>,
+    content_type: Option<String>,
+    retry_after: Option<String>,
+    provider_quota_metadata: ProviderQuotaMetadataV1,
+    response_diagnostics: ResponseDiagnosticsV1,
+    response_transcript: ResponseTranscriptV1,
+}
+
+impl BufferedBinaryResponseV1 {
+    /// Validates a buffered binary response with the legacy empty quota metadata shape.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TransportErrorV1`] exactly as the UTF-8 twin does, minus
+    /// [`TransportErrorV1::ResponseBodyNotUtf8`], which this path cannot produce.
+    pub fn try_from_parts(
+        status: StatusCode,
+        body: Vec<u8>,
+        content_type: Option<String>,
+        retry_after: Option<String>,
+    ) -> Result<Self, TransportErrorV1> {
+        Self::try_from_parts_with_provider_quota_metadata(
+            status,
+            body,
+            content_type,
+            retry_after,
+            ProviderQuotaMetadataV1::default(),
+        )
+    }
+
+    /// Validates a buffered binary response and all explicitly allowed quota metadata.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TransportErrorV1`] exactly as [`Self::try_from_parts`] does.
+    pub fn try_from_parts_with_provider_quota_metadata(
+        status: StatusCode,
+        body: Vec<u8>,
+        content_type: Option<String>,
+        retry_after: Option<String>,
+        provider_quota_metadata: ProviderQuotaMetadataV1,
+    ) -> Result<Self, TransportErrorV1> {
+        Self::try_from_parts_with_response_metadata(
+            status,
+            body,
+            content_type,
+            retry_after,
+            provider_quota_metadata,
+            ResponseDiagnosticsV1::default(),
+            ResponseTranscriptV1::default(),
+        )
+    }
+
+    /// Validates a buffered binary response and every response-side metadata contract.
+    ///
+    /// The same division of labour the UTF-8 twin follows: the two newer arguments are
+    /// already-validated values and are not re-checked here.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TransportErrorV1::RedirectDenied`] for a 3xx,
+    /// [`TransportErrorV1::ResponseBodyTooLarge`] above [`MAX_BINARY_RESPONSE_BODY_BYTES`],
+    /// and [`TransportErrorV1::ResponseMetadataInvalid`] for an out-of-bounds `content-type`
+    /// or `retry-after`. It cannot return [`TransportErrorV1::ResponseBodyNotUtf8`].
+    pub fn try_from_parts_with_response_metadata(
+        status: StatusCode,
+        body: Vec<u8>,
+        content_type: Option<String>,
+        retry_after: Option<String>,
+        provider_quota_metadata: ProviderQuotaMetadataV1,
+        response_diagnostics: ResponseDiagnosticsV1,
+        response_transcript: ResponseTranscriptV1,
+    ) -> Result<Self, TransportErrorV1> {
+        if status.is_redirection() {
+            return Err(TransportErrorV1::RedirectDenied);
+        }
+        if body.len() > MAX_BINARY_RESPONSE_BODY_BYTES {
+            return Err(TransportErrorV1::ResponseBodyTooLarge);
+        }
+        validate_response_metadata(content_type.as_deref(), MAX_RESPONSE_CONTENT_TYPE_BYTES)?;
+        validate_response_metadata(retry_after.as_deref(), MAX_RESPONSE_RETRY_AFTER_BYTES)?;
+
+        Ok(Self {
+            status,
+            body,
+            content_type,
+            retry_after,
+            provider_quota_metadata,
+            response_diagnostics,
+            response_transcript,
+        })
+    }
+
+    /// Returns the upstream HTTP status.
+    #[must_use]
+    pub const fn status(&self) -> StatusCode {
+        self.status
+    }
+
+    /// Returns the bounded response body as opaque bytes.
+    ///
+    /// There is deliberately no `as_str`, `text`, or `is_utf8` companion. A host that wants text
+    /// calls [`str::from_utf8`] and owns the failure; South does not decide that a payload is
+    /// text, and never converts one lossily.
+    #[must_use]
+    pub fn body(&self) -> &[u8] {
+        &self.body
+    }
+
+    /// Returns the response body's byte length.
+    #[must_use]
+    pub const fn body_len(&self) -> usize {
+        self.body.len()
+    }
+
+    /// Returns the bounded `content-type` value when present.
+    #[must_use]
+    pub fn content_type(&self) -> Option<&str> {
+        self.content_type.as_deref()
+    }
+
+    /// Returns the bounded `retry-after` value when present.
+    #[must_use]
+    pub fn retry_after(&self) -> Option<&str> {
+        self.retry_after.as_deref()
+    }
+
+    /// Returns the bounded provider quota response metadata.
+    #[must_use]
+    pub const fn provider_quota_metadata(&self) -> &ProviderQuotaMetadataV1 {
+        &self.provider_quota_metadata
+    }
+
+    /// Returns the closed provider diagnostic response headers.
+    #[must_use]
+    pub const fn response_diagnostics(&self) -> &ResponseDiagnosticsV1 {
+        &self.response_diagnostics
+    }
+
+    /// Returns the bounded, display-only response header transcript.
+    #[must_use]
+    pub const fn response_transcript(&self) -> &ResponseTranscriptV1 {
+        &self.response_transcript
+    }
+}
+
+impl fmt::Debug for BufferedBinaryResponseV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("BufferedBinaryResponseV1")
             .field("contract_version", &HTTP_CONTRACT_VERSION)
             .field("status", &self.status)
             .field("body_byte_count", &self.body.len())

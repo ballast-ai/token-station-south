@@ -1,6 +1,6 @@
 # The Buffered Binary Response: Bytes Without a UTF-8 Proof
 
-Status: **draft for ruling** — D1–D9 in §6 are proposals, not decisions
+Status: D1–D9 ruled 2026-09-10 (see §6); shipped as 0.26.0
 
 Date: 2026-09-09
 
@@ -132,9 +132,30 @@ A dedicated `south.provider-binary.v1` suite, on the header-auth, controlled-que
 and provider-multipart precedents. The frozen `south.provider-call.v1` table is burned into two
 hosts' evidence and a binary response is a different exchange shape.
 
-The case table must include at least one **non-2xx carrying a JSON body**, because that is the
-shape D3 exists to settle, and one body containing a byte sequence that is not valid UTF-8, whose
-whole point is that it now succeeds.
+Six frozen cases, each defending one decision:
+
+| Case | Defends |
+|---|---|
+| `BinarySuccessNonUtf8Body` | the slice itself: bytes no UTF-8 decoder accepts, delivered verbatim |
+| `BinaryRejectionCarriesJsonBody` | D3, bytes on a non-2xx rather than a transport error |
+| `BinaryBodyAboveTextCapSucceeds` | D4, the only case that catches a silent reuse of the 32 MiB cap |
+| `BinaryBodyAboveBinaryCapRefused` | D4's other edge, `RESPONSE_BODY_TOO_LARGE` above 64 MiB |
+| `BinarySlotMismatch` | the shared refusal, before resolver and transport |
+| `TextArmStillRefusesNonUtf8` | D1, the polarity pin |
+
+The last one is the case worth naming here. It drives the *same bytes* through the frozen UTF-8
+entry point and expects `RESPONSE_BODY_NOT_UTF8`, so an implementation that widened
+`BufferedHttpResponseV1` instead of adding a type passes the other five and fails this one.
+
+Two evidence booleans, both presence claims. `wire_binary_response_observed` is raised only inside
+`execute_binary`, so it answers *which trait carried the exchange*; `wire_body_bytes_exact` is
+measured on the returned value against the upstream's bytes, so a truncating or re-encoding
+implementation reaches the seam and still fails. The polarity is load-bearing: **two rows reach a
+transport and still expect `false`** — the over-cap row, which returns nothing, and the UTF-8 row,
+whose transport is a different trait. A probe that hardcodes `true` fails both.
+
+The two oversized cases carry a fill byte and a length rather than a multi-megabyte literal, so
+the table stays static data and the executor materialises the buffer.
 
 ## 4. Consumer
 
@@ -217,29 +238,29 @@ runs the suite through its own adapter.
 
 Fuzz obligations do not grow. There is no new grammar, because the binary body is never parsed.
 
-## 6. Decisions — proposed, awaiting ruling
+## 6. Decisions — ruled 2026-09-10
 
 - **D1 — a separate `BufferedBinaryResponseV1` versus widening `BufferedHttpResponseV1`.**
-  **Recommend separate.** Widening makes `body` a `Vec<u8>`, and then `body()` returns either
+  **Separate.** Widening makes `body` a `Vec<u8>`, and then `body()` returns either
   `Option<&str>`, which breaks both hosts at every call site, or a lossy conversion, which
   silently corrupts. Worse than either: widening strips the UTF-8 *guarantee* from the text path,
   so every existing consumer inherits a weaker contract it never asked for. This is the rule T1's
   D1 and T2's D1 both settled, applied on the response side.
 
 - **D2 — a third transport trait versus a method on `AsyncHttpTransport`.**
-  **Recommend a third trait.** `AsyncHttpTransport::execute` returns
+  **A third trait.** `AsyncHttpTransport::execute` returns
   `Result<BufferedHttpResponseV1, _>` by signature, so the response shape cannot vary at the call
   site. Adding a required method to a public trait breaks every host implementation, and a
   defaulted one returning "unsupported" ships a capability that silently is not there. The
   streaming path answered this once by taking `AsyncStreamingTransport` and its own head type.
 
 - **D3 — bytes on every status, including a non-2xx.**
-  **Recommend as designed.** A text-to-speech 200 is audio and its 400 is JSON. A type whose body
+  **As designed.** A text-to-speech 200 is audio and its 400 is JSON. A type whose body
   shape depends on the status would be the worst of both worlds. The binary entry point returns
   bytes for every status, and a host reading an error body calls `str::from_utf8` and owns the
   failure. South does not inspect a response body today, and this slice does not start.
 
-- **D4 — the byte cap.** **Recommend a dedicated `MAX_BINARY_RESPONSE_BODY_BYTES = 64 MiB`**,
+- **D4 — the byte cap.** **A dedicated `MAX_BINARY_RESPONSE_BODY_BYTES = 64 MiB`**,
   matching the host's `UPSTREAM_JSON_BODY_CAP` exactly rather than reusing the 32 MiB text cap.
   This is T2's D4 argument with the numbers from §4.2 substituted: a South cap below the host's own
   limit silently falls back to legacy for artifacts between 32 and 64 MiB, in exactly the models
@@ -248,24 +269,29 @@ Fuzz obligations do not grow. There is no new grammar, because the binary body i
   touched.
 
 - **D5 — no content-type allow-list, no sniffing, no conversion.**
-  **Recommend as designed.** South bounds the `content-type` value at 256 bytes and hands it over.
+  **As designed.** South bounds the `content-type` value at 256 bytes and hands it over.
   Which media types are acceptable is host policy, and an allow-list would break the first time an
   upstream answers `audio/mpeg;codecs=mp3`.
 
-- **D6 — which request shapes get a binary twin.** **Recommend JSON POST only.** §4.1 settles
+- **D6 — which request shapes get a binary twin.** **JSON POST only.** §4.1 settles
   it from the source: all three blocked call sites are JSON POSTs, the `reve` edit path the ledger
   filed as `T2+T3` is a JSON POST too, and the two binary GETs are absolute-URL artifact fetches
   South cannot carry with or without this slice. A GET or multipart binary twin would be a
   reservation with no consumer, which is what `AGENTS.md` forbids and what got
   `south-transport-ureq` deleted. One entry point, `execute_binary_call_v1`.
 
-- **D7 — a raw twin.** **Recommend none for now.** The host's binary call sites already hold a
+- **D7 — a raw twin.** **None for now.** The host's binary call sites already hold a
   typed provider and model config, and its existing adapter wrappers around the JSON POST arm are
   typed (`south_adapter.rs:711`). If the adoption turns out to want the raw shape, it is an
   additive follow-up with a real consumer behind it, which is the right time to add it.
 
-- **D8 — a dedicated `south.provider-binary.v1` suite.** **Recommend dedicated**, on the
+- **D8 — a dedicated `south.provider-binary.v1` suite.** **Dedicated**, on the
   header-auth, controlled-query, provider-get and provider-multipart precedents.
 
-- **D9 — streaming stays untouched.** **Recommend as designed.** Binary streaming is already
+- **D9 — streaming stays untouched.** **As designed.** Binary streaming is already
   unrestricted. No streaming binary type and no second head shape.
+
+> 2026-09-10: ruled "按推荐" — every decision as proposed. Shipped as 0.26.0 with
+> `compatibility.json` `http: 8` and the `south.provider-binary.v1` suite. Both hosts are
+> annotated `provider_binary: not_verified`: the community host has no surface that answers in
+> bytes, and the server host's adoption is gated on the ninth kill-switch surface §4.3 names.

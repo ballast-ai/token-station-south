@@ -10,16 +10,18 @@ use std::{
 
 use http::{Method, StatusCode};
 use south_contracts::{
-    BearerAuthV1, BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1, GetRequestV1,
-    JsonBodyV1, JsonPostRequestV1, MultipartBodyV1, MultipartBoundaryV1, MultipartPostRequestV1,
-    PreparationErrorV1, ProviderAuthV1, ProviderEndpointV1, QueryParameterV1, QueryStringV1,
-    RelativePathV1, SafeHeaders, SecretHeaderV1, SignedHeaderSetV1, SignedHeaderV1,
-    TransportErrorV1,
+    BearerAuthV1, BufferedBinaryResponseV1, BufferedHttpResponseV1, ControlledUserAgentV1,
+    CredentialSlotV1, GetRequestV1, JsonBodyV1, JsonPostRequestV1, MultipartBodyV1,
+    MultipartBoundaryV1, MultipartPostRequestV1, PreparationErrorV1, ProviderAuthV1,
+    ProviderEndpointV1, QueryParameterV1, QueryStringV1, RelativePathV1, SafeHeaders,
+    SecretHeaderV1, SignedHeaderSetV1, SignedHeaderV1, TransportErrorV1,
 };
 use south_core::{
-    AsyncHttpTransport, CredentialResolutionErrorV1, CredentialResolutionFuture,
-    CredentialResolver, PreparedHttpRequestV1, ProviderBindingV1, ProviderCallErrorV1, SecretValue,
-    TransportFuture, execute_get_call_v1, execute_multipart_call_v1, execute_provider_call_v1,
+    AsyncBinaryHttpTransport, AsyncHttpTransport, BinaryTransportFutureV1,
+    CredentialResolutionErrorV1, CredentialResolutionFuture, CredentialResolver,
+    PreparedHttpRequestV1, ProviderBindingV1, ProviderCallErrorV1, SecretValue, TransportFuture,
+    execute_binary_call_v1, execute_get_call_v1, execute_multipart_call_v1,
+    execute_provider_call_v1,
 };
 use static_assertions::{assert_impl_all, assert_not_impl_any};
 use tokio::sync::oneshot;
@@ -1240,5 +1242,206 @@ async fn the_multipart_entry_point_refuses_the_host_signed_arm() {
         error,
         ProviderCallErrorV1::Preparation(PreparationErrorV1::UnsupportedAuthShape)
     ));
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 0);
+}
+
+/// A byte sequence no UTF-8 decoder accepts, shaped like the head of an MP3 frame.
+const BINARY_SENTINEL: &[u8] = &[0xff, 0xfb, 0x90, 0x80, 0x00, 0x80];
+
+/// The binary twin of [`RecordingTransport`], recording the same request-side facts.
+///
+/// Deliberately records what the *request* looked like rather than what the response was: the
+/// point of these cases is that the binary arm changes nothing before the wire. One type may
+/// implement both transport traits, and the shipped reqwest transport does.
+#[derive(Default)]
+struct BinaryRecordingTransport {
+    calls: AtomicUsize,
+    observation: Mutex<Option<Observation>>,
+}
+
+impl AsyncBinaryHttpTransport for BinaryRecordingTransport {
+    fn execute_binary<'a>(
+        &'a self,
+        prepared: &'a PreparedHttpRequestV1<'_>,
+        remaining_timeout: Duration,
+    ) -> BinaryTransportFutureV1<'a> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        let (auth_header_name, auth_header_value) = prepared
+            .auth_headers()
+            .next()
+            .expect("both credential arms bind exactly one auth header");
+        let observation = Observation {
+            method: prepared.method().clone(),
+            url: prepared.url().clone(),
+            header: prepared
+                .headers()
+                .get("x-test")
+                .expect("prepared fixture should retain its ordinary header")
+                .to_owned(),
+            body: prepared.body().map_or_else(String::new, |body| {
+                String::from_utf8_lossy(body.as_bytes()).into_owned()
+            }),
+            auth_header_name: auth_header_name.to_owned(),
+            auth_header_value: auth_header_value.to_vec(),
+            user_agent: prepared.user_agent().map(ControlledUserAgentV1::as_str),
+            remaining_timeout,
+            prepared_debug: format!("{prepared:?}"),
+        };
+        *self.observation.lock().expect("test observation lock should be available") =
+            Some(observation);
+        Box::pin(async {
+            Ok(BufferedBinaryResponseV1::try_from_parts(
+                StatusCode::OK,
+                BINARY_SENTINEL.to_vec(),
+                Some("audio/mpeg".to_owned()),
+                None,
+            )
+            .expect("fixture response is valid"))
+        })
+    }
+}
+
+#[tokio::test]
+async fn the_binary_entry_point_delivers_bytes_no_utf8_decoder_would_accept() {
+    let transport = BinaryRecordingTransport::default();
+
+    let response = execute_binary_call_v1(
+        &binding("https://example.com/base/", SLOT_SENTINEL),
+        &request(PATH_SENTINEL, SLOT_SENTINEL),
+        &ImmediateResolver::default(),
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("a binary response body is not required to be UTF-8");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.body(), BINARY_SENTINEL);
+    assert_eq!(response.content_type(), Some("audio/mpeg"));
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn the_binary_arm_prepares_exactly_what_the_utf8_arm_prepares() {
+    // The load-bearing claim of D6's "JSON POST only": this is the same request type going
+    // through the same preparation, and the only thing that differs is which transport trait
+    // receives it. If the binary arm ever grew its own request handling, this test is what
+    // notices.
+    let binding = binding("https://example.com/base/", SLOT_SENTINEL);
+    let request = request(PATH_SENTINEL, SLOT_SENTINEL);
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+
+    let text_transport = RecordingTransport::default();
+    execute_provider_call_v1(
+        &binding,
+        &request,
+        &ImmediateResolver::default(),
+        &text_transport,
+        deadline,
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("the UTF-8 arm succeeds");
+
+    let binary_transport = BinaryRecordingTransport::default();
+    execute_binary_call_v1(
+        &binding,
+        &request,
+        &ImmediateResolver::default(),
+        &binary_transport,
+        deadline,
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("the binary arm succeeds");
+
+    let text = text_transport.observation.lock().expect("lock").clone().expect("observed");
+    let binary = binary_transport.observation.lock().expect("lock").clone().expect("observed");
+
+    assert_eq!(text.method, binary.method);
+    assert_eq!(text.url, binary.url);
+    assert_eq!(text.header, binary.header);
+    assert_eq!(text.body, binary.body);
+    assert_eq!(text.auth_header_name, binary.auth_header_name);
+    assert_eq!(text.auth_header_value, binary.auth_header_value);
+    assert_eq!(text.user_agent, binary.user_agent);
+    assert_eq!(text.prepared_debug, binary.prepared_debug);
+}
+
+#[tokio::test]
+async fn the_binary_entry_point_refuses_a_slot_mismatch_before_the_transport() {
+    let transport = BinaryRecordingTransport::default();
+
+    let error = execute_binary_call_v1(
+        &binding("https://example.com/base/", SLOT_SENTINEL),
+        &request(PATH_SENTINEL, "different-slot-sentinel"),
+        &ImmediateResolver::default(),
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect_err("a requested slot that is not the bound one cannot reach a transport");
+
+    assert!(matches!(
+        error,
+        ProviderCallErrorV1::Preparation(PreparationErrorV1::CredentialBindingMismatch)
+    ));
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn the_binary_entry_point_refuses_the_host_signed_arm() {
+    let transport = BinaryRecordingTransport::default();
+    let request = JsonPostRequestV1::new(
+        RelativePathV1::parse(PATH_SENTINEL).expect("fixture path"),
+        SafeHeaders::try_from_iter([("x-test", HEADER_SENTINEL)]).expect("fixture header"),
+        JsonBodyV1::parse(&format!("{{\"value\":\"{BODY_SENTINEL}\"}}")).expect("fixture body"),
+        ProviderAuthV1::HostSigned {
+            slot: BearerAuthV1::new(CredentialSlotV1::parse(SLOT_SENTINEL).expect("slot")),
+            emits: SignedHeaderSetV1::new(&[SignedHeaderV1::Authorization]).expect("declaration"),
+        },
+    );
+
+    let error = execute_binary_call_v1(
+        &binding("https://example.com/base/", SLOT_SENTINEL),
+        &request,
+        &ImmediateResolver::default(),
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect_err("the unsigned binary path cannot serve a signed request");
+
+    assert!(matches!(
+        error,
+        ProviderCallErrorV1::Preparation(PreparationErrorV1::UnsupportedAuthShape)
+    ));
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn a_cancelled_token_pre_empts_the_binary_arm_before_the_transport() {
+    // The binary arm shares one flow with the UTF-8 arm, so cancellation precedence is inherited
+    // rather than reimplemented. Pinned here because "inherited" is exactly the kind of claim a
+    // later refactor breaks silently.
+    let transport = BinaryRecordingTransport::default();
+    let cancellation = CancellationToken::new();
+    cancellation.cancel();
+
+    let error = execute_binary_call_v1(
+        &binding("https://example.com/base/", SLOT_SENTINEL),
+        &request(PATH_SENTINEL, SLOT_SENTINEL),
+        &ImmediateResolver::default(),
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &cancellation,
+    )
+    .await
+    .expect_err("a cancelled call never reaches a transport");
+
+    assert!(matches!(error, ProviderCallErrorV1::Preparation(PreparationErrorV1::Cancelled)));
     assert_eq!(transport.calls.load(Ordering::SeqCst), 0);
 }

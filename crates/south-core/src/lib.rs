@@ -8,11 +8,11 @@ use std::{fmt, future::Future, pin::Pin, time::Duration};
 
 use http::Method;
 use south_contracts::{
-    BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1, GetRequestV1, JsonBodyV1,
-    JsonPostRequestV1, MultipartBodyV1, MultipartPostRequestV1, PreparationErrorV1, ProviderAuthV1,
-    ProviderEndpointV1, QueryStringV1, RelativePathV1, SafeHeaders, SignedHeaderSetV1,
-    SignedHeaderV1, StreamChunkV1, StreamReadErrorV1, StreamRejectedV1, StreamingResponseHeadV1,
-    TransportErrorV1,
+    BufferedBinaryResponseV1, BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1,
+    GetRequestV1, JsonBodyV1, JsonPostRequestV1, MultipartBodyV1, MultipartPostRequestV1,
+    PreparationErrorV1, ProviderAuthV1, ProviderEndpointV1, QueryStringV1, RelativePathV1,
+    SafeHeaders, SignedHeaderSetV1, SignedHeaderV1, StreamChunkV1, StreamReadErrorV1,
+    StreamRejectedV1, StreamingResponseHeadV1, TransportErrorV1,
 };
 use thiserror::Error;
 use tokio::time::{Instant, timeout_at};
@@ -616,6 +616,93 @@ pub trait AsyncHttpTransport: Send + Sync {
     ) -> TransportFuture<'a>;
 }
 
+/// A cancellation-safe asynchronous binary HTTP transport future.
+pub type BinaryTransportFutureV1<'a> =
+    Pin<Box<dyn Future<Output = Result<BufferedBinaryResponseV1, TransportErrorV1>> + Send + 'a>>;
+
+/// An injected asynchronous transport that buffers a response body without proving it is UTF-8.
+///
+/// A third trait beside [`AsyncHttpTransport`] and [`AsyncStreamingTransport`], not a method on
+/// the first. [`AsyncHttpTransport::execute`] fixes [`BufferedHttpResponseV1`] in its signature,
+/// so the response shape cannot vary at the call site; adding a required method would break every
+/// host implementation, and a defaulted one returning "unsupported" would ship a capability that
+/// silently is not there. The streaming path settled the same question the same way.
+///
+/// One implementation may serve all three traits over a single client, and the shipped reqwest
+/// transport does exactly that. The obligations are identical to [`AsyncHttpTransport`]'s:
+/// implementations must stop in-progress I/O when the returned future is dropped, and the supplied
+/// timeout is the remaining caller-owned deadline budget at the point transport begins.
+pub trait AsyncBinaryHttpTransport: Send + Sync {
+    /// Executes exactly one prepared request, buffering the response as opaque bytes.
+    fn execute_binary<'a>(
+        &'a self,
+        request: &'a PreparedHttpRequestV1<'_>,
+        remaining_timeout: Duration,
+    ) -> BinaryTransportFutureV1<'a>;
+}
+
+/// The one buffered flow's view of "hand this prepared request to a transport".
+///
+/// Private, and the reason the text and binary entry points cannot drift: everything before the
+/// terminal transport call — destination resolution, the credential-binding check, the two
+/// pre-flight guards, credential resolution, assembly, the remaining-budget computation, and the
+/// biased cancellation race — is written once in [`execute_buffered`] and shared verbatim. Only
+/// this last step differs.
+///
+/// A wrapper type per arm rather than two blanket impls over the transport traits, because one
+/// transport may implement both and blanket impls would then overlap.
+trait BufferedDispatchV1: Send + Sync {
+    /// The response shape this arm buffers.
+    ///
+    /// `Send` is load-bearing rather than incidental: without it the shared flow's future stops
+    /// being `Send`, and every host that spawns a provider call would break. The transport traits
+    /// carry the same bound for the same reason.
+    type Response: Send;
+
+    /// Executes one prepared request within the remaining timeout budget.
+    fn dispatch<'a>(
+        &'a self,
+        request: &'a PreparedHttpRequestV1<'_>,
+        remaining_timeout: Duration,
+    ) -> Pin<Box<dyn Future<Output = Result<Self::Response, TransportErrorV1>> + Send + 'a>>;
+}
+
+/// The UTF-8 arm of [`BufferedDispatchV1`].
+struct TextDispatchV1<'transport, T: ?Sized>(&'transport T);
+
+impl<T> BufferedDispatchV1 for TextDispatchV1<'_, T>
+where
+    T: AsyncHttpTransport + ?Sized,
+{
+    type Response = BufferedHttpResponseV1;
+
+    fn dispatch<'a>(
+        &'a self,
+        request: &'a PreparedHttpRequestV1<'_>,
+        remaining_timeout: Duration,
+    ) -> Pin<Box<dyn Future<Output = Result<Self::Response, TransportErrorV1>> + Send + 'a>> {
+        self.0.execute(request, remaining_timeout)
+    }
+}
+
+/// The binary arm of [`BufferedDispatchV1`].
+struct BinaryDispatchV1<'transport, T: ?Sized>(&'transport T);
+
+impl<T> BufferedDispatchV1 for BinaryDispatchV1<'_, T>
+where
+    T: AsyncBinaryHttpTransport + ?Sized,
+{
+    type Response = BufferedBinaryResponseV1;
+
+    fn dispatch<'a>(
+        &'a self,
+        request: &'a PreparedHttpRequestV1<'_>,
+        remaining_timeout: Duration,
+    ) -> Pin<Box<dyn Future<Output = Result<Self::Response, TransportErrorV1>> + Send + 'a>> {
+        self.0.execute_binary(request, remaining_timeout)
+    }
+}
+
 /// A provider call failure without request, response, endpoint, or credential context.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum ProviderCallErrorV1 {
@@ -662,7 +749,15 @@ where
     R: CredentialResolver + ?Sized,
     T: AsyncHttpTransport + ?Sized,
 {
-    execute_buffered(binding, request.into(), resolver, transport, deadline, cancellation).await
+    execute_buffered(
+        binding,
+        request.into(),
+        resolver,
+        TextDispatchV1(transport),
+        deadline,
+        cancellation,
+    )
+    .await
 }
 
 /// Validates, authorizes, resolves, prepares, and executes one buffered body-less GET.
@@ -688,7 +783,15 @@ where
     R: CredentialResolver + ?Sized,
     T: AsyncHttpTransport + ?Sized,
 {
-    execute_buffered(binding, request.into(), resolver, transport, deadline, cancellation).await
+    execute_buffered(
+        binding,
+        request.into(),
+        resolver,
+        TextDispatchV1(transport),
+        deadline,
+        cancellation,
+    )
+    .await
 }
 
 /// Validates, authorizes, resolves, prepares, and executes one buffered multipart POST.
@@ -717,21 +820,76 @@ where
     R: CredentialResolver + ?Sized,
     T: AsyncHttpTransport + ?Sized,
 {
-    execute_buffered(binding, request.into(), resolver, transport, deadline, cancellation).await
+    execute_buffered(
+        binding,
+        request.into(),
+        resolver,
+        TextDispatchV1(transport),
+        deadline,
+        cancellation,
+    )
+    .await
 }
 
-/// The one buffered credential-arm flow both request shapes share.
-async fn execute_buffered<R, T>(
+/// Validates, authorizes, resolves, prepares, and executes one JSON POST whose response body is
+/// buffered as opaque bytes.
+///
+/// The binary-response twin of [`execute_provider_call_v1`] (HTTP contract version eight): the
+/// same request type, the same validation order, the same binding check, the same biased
+/// cancellation race, and the same three credential arms. Only the response shape differs, and it
+/// differs by injected transport — this entry point takes an [`AsyncBinaryHttpTransport`] and
+/// returns a [`BufferedBinaryResponseV1`], whose body was never required to be UTF-8.
+///
+/// Bytes come back on **every** status, a non-2xx included. An upstream that answers a success
+/// with audio answers a rejection with JSON; a host reading that error body calls
+/// [`str::from_utf8`] itself.
+///
+/// JSON POST only, and deliberately so. Every call site this shape exists for — synthesised speech
+/// and rendered images — is a JSON POST. There is no binary GET twin because the two host paths
+/// that read binary over a GET fetch absolute, ephemeral artifact URLs, which a
+/// [`ProviderBindingV1`] cannot address, and no binary multipart twin because no multipart call
+/// site answers in bytes. Reserving either would be a shape with no consumer.
+///
+/// # Errors
+///
+/// Returns [`ProviderCallErrorV1`] exactly as the UTF-8 twin does, minus
+/// [`TransportErrorV1::ResponseBodyNotUtf8`], which this path cannot produce. A host-signed
+/// request is `UNSUPPORTED_AUTH_SHAPE` here, as it is on every unsigned entry point.
+pub async fn execute_binary_call_v1<R, T>(
     binding: &ProviderBindingV1,
-    request: RequestParts<'_>,
+    request: &JsonPostRequestV1,
     resolver: &R,
     transport: &T,
     deadline: Instant,
     cancellation: &CancellationToken,
-) -> Result<BufferedHttpResponseV1, ProviderCallErrorV1>
+) -> Result<BufferedBinaryResponseV1, ProviderCallErrorV1>
 where
     R: CredentialResolver + ?Sized,
-    T: AsyncHttpTransport + ?Sized,
+    T: AsyncBinaryHttpTransport + ?Sized,
+{
+    execute_buffered(
+        binding,
+        request.into(),
+        resolver,
+        BinaryDispatchV1(transport),
+        deadline,
+        cancellation,
+    )
+    .await
+}
+
+/// The one buffered credential-arm flow both request shapes share.
+async fn execute_buffered<R, D>(
+    binding: &ProviderBindingV1,
+    request: RequestParts<'_>,
+    resolver: &R,
+    dispatch: D,
+    deadline: Instant,
+    cancellation: &CancellationToken,
+) -> Result<D::Response, ProviderCallErrorV1>
+where
+    R: CredentialResolver + ?Sized,
+    D: BufferedDispatchV1,
 {
     let destination = request.destination(binding)?;
 
@@ -757,7 +915,7 @@ where
             .checked_duration_since(Instant::now())
             .filter(|remaining| !remaining.is_zero())
             .ok_or(PreparationErrorV1::DeadlineExceeded)?;
-        transport.execute(&prepared, remaining_timeout).await.map_err(ProviderCallErrorV1::from)
+        dispatch.dispatch(&prepared, remaining_timeout).await.map_err(ProviderCallErrorV1::from)
     };
 
     tokio::select! {

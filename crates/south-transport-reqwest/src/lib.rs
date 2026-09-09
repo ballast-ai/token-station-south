@@ -7,7 +7,8 @@ use std::{fmt, sync::Arc, time::Duration};
 use bytes::Bytes;
 use http::{HeaderMap, HeaderName, HeaderValue, header};
 use south_contracts::{
-    BufferedHttpResponseV1, MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES, MAX_RESPONSE_BODY_BYTES,
+    BufferedBinaryResponseV1, BufferedHttpResponseV1, MAX_BINARY_RESPONSE_BODY_BYTES,
+    MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES, MAX_RESPONSE_BODY_BYTES,
     MAX_RESPONSE_CONTENT_TYPE_BYTES, MAX_RESPONSE_DIAGNOSTIC_VALUE_BYTES,
     MAX_RESPONSE_RETRY_AFTER_BYTES, MAX_STREAM_CHUNK_BYTES, MAX_STREAM_ERROR_BODY_BYTES,
     ProviderQuotaMetadataFieldV1, ProviderQuotaMetadataV1, ResponseDiagnosticFieldV1,
@@ -15,9 +16,9 @@ use south_contracts::{
     StreamRejectedV1, StreamTransportConfigV1, StreamingResponseHeadV1, TransportErrorV1,
 };
 use south_core::{
-    AsyncHttpTransport, AsyncStreamingTransport, OpenedByteStreamV1, PreparedHttpRequestV1,
-    RequestBodyRefV1, StreamByteSourceV1, StreamChunkFutureV1, StreamOpenErrorV1,
-    StreamingOpenFutureV1, TransportFuture,
+    AsyncBinaryHttpTransport, AsyncHttpTransport, AsyncStreamingTransport, BinaryTransportFutureV1,
+    OpenedByteStreamV1, PreparedHttpRequestV1, RequestBodyRefV1, StreamByteSourceV1,
+    StreamChunkFutureV1, StreamOpenErrorV1, StreamingOpenFutureV1, TransportFuture,
 };
 use zeroize::Zeroizing;
 
@@ -125,12 +126,78 @@ impl AsyncHttpTransport for ReqwestTransportV1 {
     }
 }
 
+impl AsyncBinaryHttpTransport for ReqwestTransportV1 {
+    fn execute_binary<'a>(
+        &'a self,
+        request: &'a PreparedHttpRequestV1<'_>,
+        remaining_timeout: Duration,
+    ) -> BinaryTransportFutureV1<'a> {
+        Box::pin(async move {
+            let parts = self
+                .fetch_buffered(request, remaining_timeout, MAX_BINARY_RESPONSE_BODY_BYTES)
+                .await?;
+            BufferedBinaryResponseV1::try_from_parts_with_response_metadata(
+                parts.status,
+                parts.body,
+                parts.content_type,
+                parts.retry_after,
+                parts.provider_quota_metadata,
+                parts.response_diagnostics,
+                parts.response_transcript,
+            )
+        })
+    }
+}
+
+/// One buffered exchange's validated parts, before a contract type is chosen for them.
+///
+/// The UTF-8 and binary arms differ only in which type they hand these to and which cap bounds
+/// the body, so everything up to that point — hardening, the `content-length` pre-check, the
+/// ordered header reads, the streamed body read — is written once in
+/// [`ReqwestTransportV1::fetch_buffered`].
+struct BufferedPartsV1 {
+    status: http::StatusCode,
+    body: Vec<u8>,
+    content_type: Option<String>,
+    retry_after: Option<String>,
+    provider_quota_metadata: ProviderQuotaMetadataV1,
+    response_diagnostics: ResponseDiagnosticsV1,
+    response_transcript: ResponseTranscriptV1,
+}
+
 impl ReqwestTransportV1 {
     async fn execute_one(
         &self,
         request: &PreparedHttpRequestV1<'_>,
         remaining_timeout: Duration,
     ) -> Result<BufferedHttpResponseV1, TransportErrorV1> {
+        let parts =
+            self.fetch_buffered(request, remaining_timeout, MAX_RESPONSE_BODY_BYTES).await?;
+
+        BufferedHttpResponseV1::try_from_parts_with_response_metadata(
+            parts.status,
+            parts.body,
+            parts.content_type,
+            parts.retry_after,
+            parts.provider_quota_metadata,
+            parts.response_diagnostics,
+            parts.response_transcript,
+        )
+    }
+
+    /// Performs one buffered exchange and returns its validated parts.
+    ///
+    /// `body_cap` is the only thing the two buffered arms disagree about: the UTF-8 arm bounds a
+    /// body at [`MAX_RESPONSE_BODY_BYTES`] and the binary arm at
+    /// [`MAX_BINARY_RESPONSE_BODY_BYTES`]. It bounds both the declared `content-length` pre-check
+    /// and the streamed read, so an oversized body is refused before it is buffered whenever the
+    /// upstream declares its length, and mid-read otherwise.
+    async fn fetch_buffered(
+        &self,
+        request: &PreparedHttpRequestV1<'_>,
+        remaining_timeout: Duration,
+        body_cap: usize,
+    ) -> Result<BufferedPartsV1, TransportErrorV1> {
         let headers = assemble_headers(request)?;
         let builder = self
             .client
@@ -145,10 +212,7 @@ impl ReqwestTransportV1 {
         if response.status().is_redirection() {
             return Err(TransportErrorV1::RedirectDenied);
         }
-        if response
-            .content_length()
-            .is_some_and(|declared| declared > MAX_RESPONSE_BODY_BYTES as u64)
-        {
+        if response.content_length().is_some_and(|declared| declared > body_cap as u64) {
             return Err(TransportErrorV1::ResponseBodyTooLarge);
         }
 
@@ -168,9 +232,9 @@ impl ReqwestTransportV1 {
         // past this point the upstream's `HeaderMap` is gone.
         let response_diagnostics = response_diagnostics(response.headers())?;
         let response_transcript = response_transcript(response.headers());
-        let body = read_bounded_body(response).await?;
+        let body = read_bounded_body(response, body_cap).await?;
 
-        BufferedHttpResponseV1::try_from_parts_with_response_metadata(
+        Ok(BufferedPartsV1 {
             status,
             body,
             content_type,
@@ -178,7 +242,7 @@ impl ReqwestTransportV1 {
             provider_quota_metadata,
             response_diagnostics,
             response_transcript,
-        )
+        })
     }
 }
 
@@ -662,12 +726,15 @@ fn optional_quota_metadata(
     value.to_str().ok().map(str::to_owned)
 }
 
-async fn read_bounded_body(mut response: reqwest::Response) -> Result<Vec<u8>, TransportErrorV1> {
+async fn read_bounded_body(
+    mut response: reqwest::Response,
+    body_cap: usize,
+) -> Result<Vec<u8>, TransportErrorV1> {
     let mut body = Vec::new();
     while let Some(chunk) = response.chunk().await.map_err(|error| classify_read_error(&error))? {
         let next_length =
             body.len().checked_add(chunk.len()).ok_or(TransportErrorV1::ResponseBodyTooLarge)?;
-        if next_length > MAX_RESPONSE_BODY_BYTES {
+        if next_length > body_cap {
             return Err(TransportErrorV1::ResponseBodyTooLarge);
         }
         body.extend_from_slice(&chunk);
