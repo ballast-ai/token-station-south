@@ -306,13 +306,28 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 8
                 // traffic. The adoption record is held by that host's own
                 // repository; this manifest records only the resulting status.
                 ("provider_get", "verified", Some(4)),
-                // provider_multipart stays not_verified until that host routes its
-                // audio-transcription and image-edit paths through
-                // execute_multipart_raw_call_v1 and runs south.provider-multipart.v1 5/5
-                // through the same real seam as its other suites. The suite existing in this
-                // repository is not adoption evidence, and the freshness rule applies from the
-                // first run: `cases` is written only by a run against the live table.
-                ("provider_multipart", "not_verified", None),
+                // token-station-server provider_multipart verified 2026-09-09 against the
+                // five-case table at v0.25.0: that host routes its audio-transcription and
+                // image-edit paths through the multipart shape (dev-v2 merge b05d41ec,
+                // adoption commit 269dd2fd) behind a new `multipart` kill-switch surface, and
+                // its assembled executor runs south.provider-multipart.v1 5/5 through the same
+                // core function its production entry point calls, with both wire-shape booleans
+                // measured on the prepared request at the transport boundary.
+                //
+                // What that host's own equivalence tests add beyond the suite: the switched-on
+                // ASR leg refuses a 302 its legacy client follows, and the switched-off leg
+                // proves the request still reaches the upstream — so "routed through South" is
+                // measured rather than assumed. Two of the five cases are refusals that never
+                // reach a boundary, which is what makes the presence-polarity evidence
+                // falsifiable there.
+                //
+                // Scope: the surface is switched **off** by builtin default on that host until
+                // its operator records a parity run; this status describes the adapter's
+                // conformance, not production traffic. Its ElevenLabs and Azure Speech ASR
+                // providers stay outside the host's own auth scope, so the arms this table
+                // exercises are the two it actually routes. The adoption record is held by that
+                // host's repository; this manifest records only the resulting status.
+                ("provider_multipart", "verified", Some(5)),
             ],
         ),
     ])
