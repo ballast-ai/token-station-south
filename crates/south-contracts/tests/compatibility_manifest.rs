@@ -334,13 +334,30 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 9
                 // exercises are the two it actually routes. The adoption record is held by that
                 // host's repository; this manifest records only the resulting status.
                 ("provider_multipart", "verified", Some(5)),
-                // provider_binary (HTTP contract v8, 0.26.0) stays not_verified until that host
-                // runs south.provider-binary.v1 through its own adapter. Its adoption is gated
-                // on work this release does not contain: none of its eight kill-switch surfaces
-                // covers text-to-speech or image generation, so routing the first binary call
-                // site needs a ninth. Annotating before that would claim evidence no run
-                // produced.
-                ("provider_binary", "not_verified", None),
+                // token-station-server provider_binary verified 2026-09-10 against the
+                // six-case table at v0.26.0: that host routes the byte-answering dialects of
+                // `/v1/audio/speech` through the binary shape behind a **ninth** kill-switch
+                // surface, `binary_response`, and its assembled executor runs
+                // south.provider-binary.v1 6/6 through the same core function its production
+                // entry point calls.
+                //
+                // What that host's own equivalence tests add beyond the suite: the switched-on
+                // leg hands the client bytes that are not valid UTF-8, byte-identically — a
+                // request that could not have existed on the pre-0.26.0 contract — and the
+                // switched-off leg proves the same request still reaches the upstream with the
+                // routed counter unmoved. Two of the six cases never reach a binary transport
+                // (one is refused before it; one drives the frozen UTF-8 entry point instead
+                // and must still be refused there), which is what makes the presence-polarity
+                // evidence falsifiable on that host.
+                //
+                // Scope: the surface is switched **off** by builtin default until that host's
+                // operator records a parity run; this status describes the adapter's
+                // conformance, not production traffic. Its ElevenLabs and Azure Speech
+                // text-to-speech providers stay outside that host's own auth scope, so the arm
+                // this table exercises is the Bearer one it actually routes. The adoption
+                // record is held by that host's repository; this manifest records only the
+                // resulting status.
+                ("provider_binary", "verified", Some(6)),
             ],
         ),
     ])

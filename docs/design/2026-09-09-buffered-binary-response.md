@@ -292,6 +292,15 @@ Fuzz obligations do not grow. There is no new grammar, because the binary body i
   unrestricted. No streaming binary type and no second head shape.
 
 > 2026-09-10: ruled "按推荐" — every decision as proposed. Shipped as 0.26.0 with
-> `compatibility.json` `http: 8` and the `south.provider-binary.v1` suite. Both hosts are
-> annotated `provider_binary: not_verified`: the community host has no surface that answers in
-> bytes, and the server host's adoption is gated on the ninth kill-switch surface §4.3 names.
+> `compatibility.json` `http: 8` and the `south.provider-binary.v1` suite.
+>
+> The server host built the ninth kill-switch surface §4.3 called for, named `binary_response`,
+> wired the byte-answering dialects of `/v1/audio/speech` behind it, and ran the suite 6/6 through
+> its production adapter — annotated `verified, cases: 6`. Its own equivalence tests add what a
+> conformance suite cannot: the switched-on leg hands a client bytes that are not valid UTF-8,
+> byte-identically, which is a request that could not have existed on the previous contract. The
+> community host has no surface that answers in bytes and stays `not_verified`.
+>
+> §4.1's correction held up under the host's own audit: the four `reve` models the ledger filed
+> as `T2+T3` are JSON POSTs, so T3 unblocks 15 rather than 11. Day one is five, for the auth-scope
+> reason §4.4 gives, and the surface ships switched off pending a parity run.

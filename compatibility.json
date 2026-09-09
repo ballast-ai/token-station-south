@@ -1,7 +1,7 @@
 {
   "schema_version": 3,
   "release": {
-    "version": "0.27.0",
+    "version": "0.27.1",
     "stability": "library_slice"
   },
   "contracts": {
@@ -149,7 +149,8 @@
         "cases": 5
       },
       "provider_binary": {
-        "status": "not_verified"
+        "status": "verified",
+        "cases": 6
       }
     }
   }
