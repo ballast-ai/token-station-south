@@ -1,14 +1,14 @@
 use http::StatusCode;
 use south_contracts::{
-    AUTH_CONTRACT_VERSION, BearerAuthV1, BufferedHttpResponseV1, ContractErrorV1,
-    ControlledUserAgentV1, CredentialSlotV1, ERROR_CONTRACT_VERSION, GetRequestV1,
-    HTTP_CONTRACT_VERSION, JsonBodyV1, JsonPostRequestV1, MAX_CREDENTIAL_SLOT_BYTES,
-    MAX_ENDPOINT_BYTES, MAX_JSON_REQUEST_BODY_BYTES, MAX_MULTIPART_BOUNDARY_BYTES,
-    MAX_QUERY_VALUE_BYTES, MAX_RELATIVE_PATH_BYTES, MAX_RESPONSE_BODY_BYTES,
-    MAX_RESPONSE_CONTENT_TYPE_BYTES, MAX_RESPONSE_RETRY_AFTER_BYTES, MAX_USER_AGENT_BYTES,
-    MultipartBodyV1, MultipartBoundaryV1, MultipartPostRequestV1, PreparationErrorV1,
-    ProviderAuthV1, ProviderEndpointV1, QueryParameterV1, QueryStringV1, RelativePathV1,
-    STREAM_CONTRACT_VERSION, SafeHeaders, SecretHeaderV1, SignedHeaderSetErrorV1,
+    AUTH_CONTRACT_VERSION, BearerAuthV1, BufferedBinaryResponseV1, BufferedHttpResponseV1,
+    ContractErrorV1, ControlledUserAgentV1, CredentialSlotV1, ERROR_CONTRACT_VERSION, GetRequestV1,
+    HTTP_CONTRACT_VERSION, JsonBodyV1, JsonPostRequestV1, MAX_BINARY_RESPONSE_BODY_BYTES,
+    MAX_CREDENTIAL_SLOT_BYTES, MAX_ENDPOINT_BYTES, MAX_JSON_REQUEST_BODY_BYTES,
+    MAX_MULTIPART_BOUNDARY_BYTES, MAX_QUERY_VALUE_BYTES, MAX_RELATIVE_PATH_BYTES,
+    MAX_RESPONSE_BODY_BYTES, MAX_RESPONSE_CONTENT_TYPE_BYTES, MAX_RESPONSE_RETRY_AFTER_BYTES,
+    MAX_USER_AGENT_BYTES, MultipartBodyV1, MultipartBoundaryV1, MultipartPostRequestV1,
+    PreparationErrorV1, ProviderAuthV1, ProviderEndpointV1, QueryParameterV1, QueryStringV1,
+    RelativePathV1, STREAM_CONTRACT_VERSION, SafeHeaders, SecretHeaderV1, SignedHeaderSetErrorV1,
     SignedHeaderSetV1, SignedHeaderV1, TransportErrorV1,
 };
 
@@ -50,7 +50,7 @@ fn secret_header_all_covers_every_variant() {
 
 #[test]
 fn contract_versions_are_independently_versioned() {
-    assert_eq!(HTTP_CONTRACT_VERSION, 7);
+    assert_eq!(HTTP_CONTRACT_VERSION, 8);
     assert_eq!(AUTH_CONTRACT_VERSION, 4);
     assert_eq!(ERROR_CONTRACT_VERSION, 2);
     assert_eq!(STREAM_CONTRACT_VERSION, Some(2));
@@ -374,6 +374,151 @@ fn response_enforces_body_encoding_and_size_boundaries() {
         BufferedHttpResponseV1::try_from_parts(StatusCode::OK, vec![0xff], None, None),
         Err(TransportErrorV1::ResponseBodyNotUtf8)
     );
+}
+
+/// A byte sequence no UTF-8 decoder accepts: a lone continuation byte, then a truncated
+/// two-byte sequence. Shaped like the head of an MP3 frame rather than like text, because that
+/// is what the shape exists to carry.
+const NOT_UTF8: &[u8] = &[0xff, 0xfb, 0x90, 0x80, 0x00, 0x80];
+
+#[test]
+fn a_binary_response_carries_bytes_no_utf8_decoder_would_accept() {
+    // The one fact this whole slice exists for. Byte-identity is asserted, not just success:
+    // South must not normalise, re-encode, or truncate what the wire carried.
+    let response = BufferedBinaryResponseV1::try_from_parts(
+        StatusCode::OK,
+        NOT_UTF8.to_vec(),
+        Some("audio/mpeg".to_owned()),
+        None,
+    )
+    .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.body(), NOT_UTF8);
+    assert_eq!(response.body_len(), NOT_UTF8.len());
+    assert_eq!(response.content_type(), Some("audio/mpeg"));
+    assert_eq!(response.retry_after(), None);
+}
+
+#[test]
+fn the_utf8_response_still_refuses_the_bytes_the_binary_response_accepts() {
+    // The polarity pin. An implementation that widened the frozen text type instead of adding a
+    // new one passes every other test in this file and fails this one: consumers of
+    // `BufferedHttpResponseV1` keep the guarantee they were given, at this version and later.
+    assert_eq!(
+        BufferedHttpResponseV1::try_from_parts(StatusCode::OK, NOT_UTF8.to_vec(), None, None),
+        Err(TransportErrorV1::ResponseBodyNotUtf8)
+    );
+    assert!(
+        BufferedBinaryResponseV1::try_from_parts(StatusCode::OK, NOT_UTF8.to_vec(), None, None)
+            .is_ok()
+    );
+}
+
+#[test]
+fn a_binary_response_returns_bytes_on_a_rejection_too() {
+    // Ruled D3. An upstream answering a success with audio answers a rejection with JSON, and a
+    // type whose body shape depended on the status would be the worst of both worlds. The status
+    // is carried; deciding what the bytes mean is the host's job.
+    let response = BufferedBinaryResponseV1::try_from_parts(
+        StatusCode::TOO_MANY_REQUESTS,
+        b"{\"error\":\"limited\"}".to_vec(),
+        Some("application/json".to_owned()),
+        Some("120".to_owned()),
+    )
+    .unwrap();
+
+    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(response.retry_after(), Some("120"));
+    assert_eq!(
+        std::str::from_utf8(response.body()).expect("the host decodes an error body itself"),
+        "{\"error\":\"limited\"}"
+    );
+}
+
+#[test]
+fn the_binary_body_cap_is_its_own_number_and_larger_than_the_utf8_one() {
+    // Ruled D4. Two claims, and the first is the one a regression would break: a body between the
+    // two caps must succeed here, because reusing the 32 MiB text cap would silently push exactly
+    // the artifacts this shape exists to carry back onto a host's legacy path.
+    const { assert!(MAX_BINARY_RESPONSE_BODY_BYTES > MAX_RESPONSE_BODY_BYTES) };
+
+    let above_text_cap = vec![0x80; MAX_RESPONSE_BODY_BYTES + 1];
+    assert!(
+        BufferedBinaryResponseV1::try_from_parts(StatusCode::OK, above_text_cap, None, None)
+            .is_ok()
+    );
+
+    let at_limit = vec![0x80; MAX_BINARY_RESPONSE_BODY_BYTES];
+    assert!(BufferedBinaryResponseV1::try_from_parts(StatusCode::OK, at_limit, None, None).is_ok());
+
+    let over_limit = vec![0x80; MAX_BINARY_RESPONSE_BODY_BYTES + 1];
+    assert_eq!(
+        BufferedBinaryResponseV1::try_from_parts(StatusCode::OK, over_limit, None, None),
+        Err(TransportErrorV1::ResponseBodyTooLarge)
+    );
+}
+
+#[test]
+fn a_binary_response_refuses_a_redirect_and_out_of_bounds_metadata() {
+    // The checks the UTF-8 twin performs, performed identically. Only the encoding step differs
+    // between the two constructors, and that must stay the only difference.
+    for status in [
+        StatusCode::MOVED_PERMANENTLY,
+        StatusCode::FOUND,
+        StatusCode::SEE_OTHER,
+        StatusCode::TEMPORARY_REDIRECT,
+        StatusCode::PERMANENT_REDIRECT,
+    ] {
+        assert_eq!(
+            BufferedBinaryResponseV1::try_from_parts(status, NOT_UTF8.to_vec(), None, None),
+            Err(TransportErrorV1::RedirectDenied),
+            "a {status} must be refused before any body is exposed"
+        );
+    }
+
+    let long_content_type = "a".repeat(MAX_RESPONSE_CONTENT_TYPE_BYTES + 1);
+    assert_eq!(
+        BufferedBinaryResponseV1::try_from_parts(
+            StatusCode::OK,
+            NOT_UTF8.to_vec(),
+            Some(long_content_type),
+            None,
+        ),
+        Err(TransportErrorV1::ResponseMetadataInvalid)
+    );
+
+    let long_retry_after = "a".repeat(MAX_RESPONSE_RETRY_AFTER_BYTES + 1);
+    assert_eq!(
+        BufferedBinaryResponseV1::try_from_parts(
+            StatusCode::OK,
+            NOT_UTF8.to_vec(),
+            None,
+            Some(long_retry_after),
+        ),
+        Err(TransportErrorV1::ResponseMetadataInvalid)
+    );
+}
+
+#[test]
+fn a_binary_response_debug_reports_a_byte_count_and_never_the_bytes() {
+    // A response body can carry anything an upstream sends. The redaction the UTF-8 twin performs
+    // matters more here, not less, so it is pinned the same way.
+    let secretish = format!("{SENTINEL}-in-the-body").into_bytes();
+    let response = BufferedBinaryResponseV1::try_from_parts(
+        StatusCode::OK,
+        secretish.clone(),
+        Some(format!("{SENTINEL}/type")),
+        Some(SENTINEL.to_owned()),
+    )
+    .unwrap();
+
+    let rendered = format!("{response:?}");
+    assert!(!rendered.contains(SENTINEL), "no body or metadata value may reach Debug: {rendered}");
+    assert!(rendered.contains(&format!("body_byte_count: {}", secretish.len())));
+    assert!(rendered.contains("has_content_type: true"));
+    assert!(rendered.contains("has_retry_after: true"));
+    assert!(rendered.contains(&format!("contract_version: {HTTP_CONTRACT_VERSION}")));
 }
 
 #[test]

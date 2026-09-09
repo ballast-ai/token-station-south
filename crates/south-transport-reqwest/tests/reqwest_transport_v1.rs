@@ -7,16 +7,17 @@ use std::{
 
 use http::StatusCode;
 use south_contracts::{
-    BearerAuthV1, BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1, GetRequestV1,
-    JsonBodyV1, JsonPostRequestV1, MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES,
-    MAX_RESPONSE_BODY_BYTES, MAX_RESPONSE_CONTENT_TYPE_BYTES, MAX_RESPONSE_RETRY_AFTER_BYTES,
-    MultipartBodyV1, MultipartBoundaryV1, MultipartPostRequestV1, ProviderAuthV1,
-    ProviderEndpointV1, QueryParameterV1, QueryStringV1, RelativePathV1, SafeHeaders,
-    SecretHeaderV1, TransportErrorV1,
+    BearerAuthV1, BufferedBinaryResponseV1, BufferedHttpResponseV1, ControlledUserAgentV1,
+    CredentialSlotV1, GetRequestV1, JsonBodyV1, JsonPostRequestV1, MAX_BINARY_RESPONSE_BODY_BYTES,
+    MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES, MAX_RESPONSE_BODY_BYTES,
+    MAX_RESPONSE_CONTENT_TYPE_BYTES, MAX_RESPONSE_RETRY_AFTER_BYTES, MultipartBodyV1,
+    MultipartBoundaryV1, MultipartPostRequestV1, ProviderAuthV1, ProviderEndpointV1,
+    QueryParameterV1, QueryStringV1, RelativePathV1, SafeHeaders, SecretHeaderV1, TransportErrorV1,
 };
 use south_core::{
     CredentialResolutionFuture, CredentialResolver, ProviderBindingV1, ProviderCallErrorV1,
-    SecretValue, execute_get_call_v1, execute_multipart_call_v1, execute_provider_call_v1,
+    SecretValue, execute_binary_call_v1, execute_get_call_v1, execute_multipart_call_v1,
+    execute_provider_call_v1,
 };
 use south_transport_reqwest::{ReqwestTransportConfigV1, ReqwestTransportV1};
 use tokio::{
@@ -1153,4 +1154,158 @@ async fn sends_exact_multipart_body_under_the_rendered_media_type() {
         1
     );
     assert_eq!(result.status().as_u16(), 200);
+}
+
+/// A byte sequence no UTF-8 decoder accepts, shaped like the head of an MP3 frame.
+const BINARY_BODY_SENTINEL: &[u8] = &[0xff, 0xfb, 0x90, 0x80, 0x00, 0x80];
+
+async fn binary_call(
+    endpoint: &str,
+    transport: &ReqwestTransportV1,
+    deadline: tokio::time::Instant,
+    cancellation: &CancellationToken,
+) -> Result<BufferedBinaryResponseV1, ProviderCallErrorV1> {
+    let resolver = StaticResolver::default();
+    let binding = ProviderBindingV1::new(
+        ProviderEndpointV1::parse(endpoint).expect("loopback endpoint should be valid"),
+        CredentialSlotV1::parse("primary").expect("fixture slot should be valid"),
+    );
+    execute_binary_call_v1(&binding, &request(), &resolver, transport, deadline, cancellation).await
+}
+
+#[tokio::test]
+async fn binary_transport_returns_wire_bytes_verbatim_where_the_utf8_one_refuses_them() {
+    // Both arms are driven over the same loopback with the same response bytes, because the claim
+    // is a difference of exactly one step: the UTF-8 arm's `String::from_utf8`. Everything else —
+    // hardening, the ordered header reads, the streamed body read — is one shared function.
+    let wire = response("200 OK", &[("content-type", "audio/mpeg")], BINARY_BODY_SENTINEL);
+
+    let loopback = loopback_once(wire.clone()).await;
+    let transport = ReqwestTransportV1::new(config()).expect("transport should build");
+    let binary = binary_call(
+        &loopback.endpoint,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("a binary response body is not required to be UTF-8");
+
+    assert_eq!(binary.status(), StatusCode::OK);
+    assert_eq!(binary.body(), BINARY_BODY_SENTINEL);
+    assert_eq!(binary.content_type(), Some("audio/mpeg"));
+    loopback.request.await.expect("the loopback should report its request");
+    loopback.task.await.expect("the loopback task should finish");
+
+    let loopback = loopback_once(wire).await;
+    let error = call(
+        &loopback.endpoint,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect_err("the UTF-8 arm must keep refusing exactly these bytes");
+    assert!(matches!(error, ProviderCallErrorV1::Transport(TransportErrorV1::ResponseBodyNotUtf8)));
+    loopback.request.await.expect("the loopback should report its request");
+    loopback.task.await.expect("the loopback task should finish");
+}
+
+#[tokio::test]
+async fn binary_transport_returns_bytes_on_a_rejection_rather_than_an_error() {
+    // Ruled D3, measured at the real transport boundary rather than at the contract: a non-2xx is
+    // a normal outcome carrying its body, exactly as it is on the UTF-8 arm.
+    let body = br#"{"error":"limited"}"#;
+    let loopback = loopback_once(response(
+        "429 Too Many Requests",
+        &[("content-type", "application/json"), ("retry-after", "120")],
+        body,
+    ))
+    .await;
+    let transport = ReqwestTransportV1::new(config()).expect("transport should build");
+
+    let response = binary_call(
+        &loopback.endpoint,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("a rejection is a normal buffered outcome");
+
+    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(response.retry_after(), Some("120"));
+    assert_eq!(response.body(), body);
+    loopback.request.await.expect("the loopback should report its request");
+    loopback.task.await.expect("the loopback task should finish");
+}
+
+#[tokio::test]
+async fn the_binary_arm_admits_a_body_the_utf8_cap_would_refuse() {
+    // Ruled D4, and the reason the cap is a parameter rather than a constant in the shared fetch:
+    // a body between the two caps must reach the host, because falling back to legacy for exactly
+    // these artifacts is the coverage hole the decision exists to avoid. Sized just past the UTF-8
+    // cap rather than near the binary one, so the test stays cheap while still being decisive.
+    let oversize_for_text = vec![b'a'; MAX_RESPONSE_BODY_BYTES + 1];
+    const { assert!(MAX_RESPONSE_BODY_BYTES < MAX_BINARY_RESPONSE_BODY_BYTES) };
+    let wire =
+        response("200 OK", &[("content-type", "application/octet-stream")], &oversize_for_text);
+
+    let loopback = loopback_once(wire.clone()).await;
+    let transport = ReqwestTransportV1::new(config()).expect("transport should build");
+    let binary = binary_call(
+        &loopback.endpoint,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("a body between the two caps belongs to the binary arm");
+    assert_eq!(binary.body_len(), oversize_for_text.len());
+    loopback.request.await.expect("the loopback should report its request");
+    loopback.task.await.expect("the loopback task should finish");
+
+    let loopback = loopback_once(wire).await;
+    let error = call(
+        &loopback.endpoint,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect_err("the same body must still be too large for the UTF-8 arm");
+    assert!(matches!(
+        error,
+        ProviderCallErrorV1::Transport(TransportErrorV1::ResponseBodyTooLarge)
+    ));
+    loopback.request.await.expect("the loopback should report its request");
+    // The refusal happens on the *declared* `content-length`, before a byte of body is read, so
+    // this leg drops the connection while the fixture is still writing and the writer sees a
+    // broken pipe. That early refusal is the behaviour being asserted, so the writer task is
+    // abandoned rather than joined — joining it would assert the opposite.
+    loopback.task.abort();
+}
+
+#[tokio::test]
+async fn the_binary_arm_denies_a_redirect_exactly_as_the_utf8_arm_does() {
+    let loopback = loopback_once(response(
+        "302 Found",
+        &[("location", "https://redirect-target-sentinel.invalid/elsewhere")],
+        b"",
+    ))
+    .await;
+    let transport = ReqwestTransportV1::new(config()).expect("transport should build");
+
+    let error = binary_call(
+        &loopback.endpoint,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect_err("a redirect is refused on every buffered arm");
+
+    assert!(matches!(error, ProviderCallErrorV1::Transport(TransportErrorV1::RedirectDenied)));
+    loopback.request.await.expect("the loopback should report its request");
+    loopback.task.await.expect("the loopback task should finish");
 }

@@ -21,6 +21,7 @@ macro_rules! fixed_debug {
 mod controlled_query;
 mod controlled_user_agent;
 mod header_auth;
+mod provider_binary;
 mod provider_get;
 mod provider_multipart;
 mod quota;
@@ -42,6 +43,13 @@ pub use header_auth::{
     FAKE_HEADER_SECRET_V1, HEADER_AUTH_CONFORMANCE_SUITE_ID, HEADER_AUTH_CONFORMANCE_SUITE_VERSION,
     HeaderAuthCaseIdV1, HeaderAuthExpectedEvidenceV1, HeaderAuthExpectedOutcomeV1,
     HeaderAuthExpectedV1, HeaderAuthFixtureV1, HeaderAuthUpstreamV1, header_auth_fixtures_v1,
+};
+pub use provider_binary::{
+    PROVIDER_BINARY_CONFORMANCE_SUITE_ID, PROVIDER_BINARY_CONFORMANCE_SUITE_VERSION,
+    ProviderBinaryBodyV1, ProviderBinaryCaseIdV1, ProviderBinaryEntryArmV1,
+    ProviderBinaryExpectedEvidenceV1, ProviderBinaryExpectedOutcomeV1, ProviderBinaryExpectedV1,
+    ProviderBinaryFixtureV1, ProviderBinaryInputV1, ProviderBinaryRawResponseV1,
+    ProviderBinaryUpstreamV1, provider_binary_fixtures_v1,
 };
 pub use provider_get::{
     PROVIDER_GET_CONFORMANCE_SUITE_ID, PROVIDER_GET_CONFORMANCE_SUITE_VERSION,

@@ -49,6 +49,7 @@ mod controlled_query;
 mod controlled_user_agent;
 mod header_auth;
 mod host_signed;
+mod provider_binary;
 mod provider_get;
 mod provider_multipart;
 mod quota;
@@ -85,6 +86,14 @@ pub use header_auth::{
     HeaderAuthMismatchCategoryV1, HeaderAuthMismatchV1, HeaderAuthObservationV1,
     MAX_HEADER_AUTH_MISMATCHES_V1, ReferenceAssembledHeaderAuthExecutorV1,
     run_header_auth_conformance_v1,
+};
+pub use provider_binary::{
+    AssembledProviderBinaryExecutionFutureV1, AssembledProviderBinaryExecutorV1,
+    MAX_PROVIDER_BINARY_MISMATCHES_V1, ProviderBinaryConformanceFailureV1,
+    ProviderBinaryConformanceReportV1, ProviderBinaryEvidenceV1, ProviderBinaryMismatchCategoryV1,
+    ProviderBinaryMismatchV1, ProviderBinaryObservationV1,
+    ReferenceAssembledProviderBinaryExecutorV1, parse_reference_binary_input,
+    run_provider_binary_conformance_v1,
 };
 pub use provider_get::{
     AssembledProviderGetExecutionFutureV1, AssembledProviderGetExecutorV1,
