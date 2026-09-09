@@ -1,0 +1,113 @@
+name: Release
+
+# Publishes the three provider component packages a tag already builds.
+#
+# Each package is the exact directory shape `south-provider-runtime` loads —
+# `manifest.json` next to `component.wasm` — so a host consumes a release by
+# extracting an archive and pointing its component directory at the result.
+#
+# See docs/design/2026-09-10-released-component-artifacts.md.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  components:
+    runs-on: ubuntu-latest
+    permissions:
+      # Creating the release and attaching artifacts. Scoped to this job; the
+      # workflow default above stays read-only.
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: 1.96.0
+          # The components are wasm32-wasip2 guests built as child cargo
+          # invocations, exactly as in ci.yml.
+          targets: wasm32-wasip2
+
+      # The one check this workflow adds. Every existing test proves a shipped
+      # manifest matches *the version being built*; none proves that version
+      # matches *the tag being released*. Tagging v0.27.0 on a tree whose
+      # workspace version still reads 0.26.0 would publish three manifests
+      # declaring south_runtime "0.26.0" under a v0.27.0 release, and every
+      # test would pass, because each is individually telling the truth.
+      - name: Tag matches workspace version
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          # Read `workspace.package.version` itself. Every member inherits it,
+          # so any member would answer correctly today — but only by relying on
+          # cargo's package ordering, which would read some other crate the day
+          # a member pins its own version.
+          version="$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml","rb"))["workspace"]["package"]["version"])')"
+          if [ "$tag" != "$version" ]; then
+            echo "tag ${GITHUB_REF_NAME} does not match workspace version ${version}" >&2
+            echo "bump the workspace version, or retag; a release must not rename a build" >&2
+            exit 1
+          fi
+          echo "tag ${GITHUB_REF_NAME} matches workspace version ${version}"
+
+      # The same scripts the sandbox parity tests drive. A release must build
+      # what CI proved, not a second recipe that could diverge from it.
+      - name: Build components
+        run: |
+          set -euo pipefail
+          scripts/build-reference-component.sh
+          scripts/build-anthropic-component.sh
+          scripts/build-gemini-component.sh
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          package() {
+            component="$1"   # directory under components/
+            artifact="$2"    # .wasm basename cargo produced
+            staged="$(mktemp -d)"
+            cp "components/${component}/manifest.json" "${staged}/manifest.json"
+            cp "components/${component}/target/wasm32-wasip2/release/${artifact}" \
+               "${staged}/component.wasm"
+            # Archive root holds the two files and nothing else: extracting it
+            # yields the runtime's directory shape with no renaming step.
+            tar -czf "dist/${component}-${GITHUB_REF_NAME}.tar.gz" -C "${staged}" \
+              manifest.json component.wasm
+            rm -rf "${staged}"
+          }
+          package provider-openai-compatible provider_openai_compatible.wasm
+          package provider-anthropic provider_anthropic.wasm
+          package provider-gemini provider_gemini.wasm
+          # sha256sum output, so a host verifies with `sha256sum --check` and
+          # no bespoke tooling.
+          (cd dist && sha256sum ./*.tar.gz > SHASUMS256.txt)
+          ls -l dist
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cat > dist/NOTES.md <<'NOTES'
+          Provider component packages built from this tag.
+
+          Each archive holds `manifest.json` and `component.wasm` at its root —
+          the directory shape `south-provider-runtime` loads. Extract one and
+          point a host's component directory at the result.
+
+          Verify with `sha256sum --check SHASUMS256.txt`.
+
+          These are first-party builds identified by checksum, not signature;
+          see `docs/design/2026-09-10-released-component-artifacts.md` section 6.
+          NOTES
+          # The heredoc above is indented for readability; strip that indent so
+          # the published notes are not a Markdown code block.
+          sed -i 's/^          //' dist/NOTES.md
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --notes-file dist/NOTES.md \
+            dist/*.tar.gz dist/SHASUMS256.txt

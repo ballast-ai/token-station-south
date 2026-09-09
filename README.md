@@ -43,9 +43,10 @@ the
 [Anthropic provider component](docs/design/2026-08-22-anthropic-provider-component.md), the
 [Gemini provider component](docs/design/2026-08-22-gemini-provider-component.md), the
 [renderer refusal for unmappable blocks](docs/design/2026-08-23-renderer-refusal-for-unmappable-blocks.md),
-the [task adapter vocabulary](docs/design/2026-08-27-task-adapter-vocabulary.md) (proposed), and the
+the [task adapter vocabulary](docs/design/2026-08-27-task-adapter-vocabulary.md) (proposed), the
 [manifest schema beyond one world](docs/design/2026-08-27-manifest-schema-beyond-one-world.md)
-(proposed).
+(proposed), and the
+[released component artifacts](docs/design/2026-09-10-released-component-artifacts.md) (proposed).
 
 ## Implemented library slice
 
