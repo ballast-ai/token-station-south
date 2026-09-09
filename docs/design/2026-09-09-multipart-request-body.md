@@ -179,9 +179,15 @@ One public type changes shape beyond the additions: `ContractErrorV1` becomes
 `#[non_exhaustive]` as its three multipart variants land. Three new ways for a field to be
 invalid could not be added to a closed enum without breaking every downstream exhaustive match,
 and `PreparationErrorV1` has carried the same attribute, for the same reason, since 0.7.0. It
-breaks such matches once, at this version, and never again. Both hosts
-are annotated `provider_multipart: not_verified` until each runs the suite through its own
-adapter.
+breaks such matches once, at this version, and never again.
+
+Both hosts are annotated `provider_multipart: not_verified` until each runs the suite through
+its own adapter.
+
+> 2026-09-09: the server host ran the suite 5/5 through its production adapter (dev-v2
+> `b05d41ec`; both multipart call sites behind a `multipart` switch, default off) and is
+> annotated `verified, cases: 5`. The community host has no multipart surface and stays
+> `not_verified`.
 
 Fuzz obligations grow by one target: `MultipartBodyV1::parse` takes attacker-shaped bytes and a
 boundary, which is exactly the shape the existing `contract_parsers` target covers for the other
