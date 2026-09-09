@@ -20,8 +20,8 @@ use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use south_provider_conformance::{
     controlled_query_fixtures_v1, controlled_user_agent_fixtures_v1, header_auth_fixtures_v1,
-    provider_call_fixtures_v1, provider_get_fixtures_v1, provider_quota_metadata_fixtures_v1,
-    provider_stream_fixtures_v1,
+    provider_call_fixtures_v1, provider_get_fixtures_v1, provider_multipart_fixtures_v1,
+    provider_quota_metadata_fixtures_v1, provider_stream_fixtures_v1,
 };
 
 /// Every capability the manifest may annotate.
@@ -38,6 +38,7 @@ enum CapabilityV1 {
     ControlledUserAgent,
     ProviderQuotaMetadata,
     ProviderGet,
+    ProviderMultipart,
 }
 
 impl CapabilityV1 {
@@ -51,6 +52,7 @@ impl CapabilityV1 {
             Self::ControlledUserAgent => "controlled_user_agent",
             Self::ProviderQuotaMetadata => "provider_quota_metadata",
             Self::ProviderGet => "provider_get",
+            Self::ProviderMultipart => "provider_multipart",
         }
     }
 
@@ -64,11 +66,12 @@ impl CapabilityV1 {
             Self::ControlledUserAgent => controlled_user_agent_fixtures_v1().len(),
             Self::ProviderQuotaMetadata => provider_quota_metadata_fixtures_v1().len(),
             Self::ProviderGet => provider_get_fixtures_v1().len(),
+            Self::ProviderMultipart => provider_multipart_fixtures_v1().len(),
         }
     }
 
     /// Every capability, so the test can prove the manifest annotates exactly this set.
-    const fn all() -> [Self; 7] {
+    const fn all() -> [Self; 8] {
         [
             Self::ProviderCall,
             Self::ProviderStream,
@@ -77,6 +80,7 @@ impl CapabilityV1 {
             Self::ControlledUserAgent,
             Self::ProviderQuotaMetadata,
             Self::ProviderGet,
+            Self::ProviderMultipart,
         ]
     }
 }
