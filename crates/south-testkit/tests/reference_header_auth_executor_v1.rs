@@ -35,7 +35,8 @@ async fn reference_assembled_header_auth_conforms_under_a_structured_watchdog() 
             .expect("header-auth conformance watchdog expired")
             .expect("reference executor must conform");
 
-    assert_eq!(report.passed_case_ids().len(), 3);
+    assert_eq!(report.passed_case_ids().len(), header_auth_fixtures_v1().len());
+    assert_eq!(report.passed_case_ids().len(), 4);
 }
 
 fn assert_observation_matches(

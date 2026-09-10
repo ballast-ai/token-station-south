@@ -7,7 +7,8 @@ use std::{fmt, sync::Arc, time::Duration};
 use bytes::Bytes;
 use http::{HeaderMap, HeaderName, HeaderValue, header};
 use south_contracts::{
-    BufferedHttpResponseV1, MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES, MAX_RESPONSE_BODY_BYTES,
+    BufferedBinaryResponseV1, BufferedHttpResponseV1, MAX_BINARY_RESPONSE_BODY_BYTES,
+    MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES, MAX_RESPONSE_BODY_BYTES,
     MAX_RESPONSE_CONTENT_TYPE_BYTES, MAX_RESPONSE_DIAGNOSTIC_VALUE_BYTES,
     MAX_RESPONSE_RETRY_AFTER_BYTES, MAX_STREAM_CHUNK_BYTES, MAX_STREAM_ERROR_BODY_BYTES,
     ProviderQuotaMetadataFieldV1, ProviderQuotaMetadataV1, ResponseDiagnosticFieldV1,
@@ -15,9 +16,9 @@ use south_contracts::{
     StreamRejectedV1, StreamTransportConfigV1, StreamingResponseHeadV1, TransportErrorV1,
 };
 use south_core::{
-    AsyncHttpTransport, AsyncStreamingTransport, OpenedByteStreamV1, PreparedHttpRequestV1,
-    StreamByteSourceV1, StreamChunkFutureV1, StreamOpenErrorV1, StreamingOpenFutureV1,
-    TransportFuture,
+    AsyncBinaryHttpTransport, AsyncHttpTransport, AsyncStreamingTransport, BinaryTransportFutureV1,
+    OpenedByteStreamV1, PreparedHttpRequestV1, RequestBodyRefV1, StreamByteSourceV1,
+    StreamChunkFutureV1, StreamOpenErrorV1, StreamingOpenFutureV1, TransportFuture,
 };
 use zeroize::Zeroizing;
 
@@ -125,19 +126,85 @@ impl AsyncHttpTransport for ReqwestTransportV1 {
     }
 }
 
+impl AsyncBinaryHttpTransport for ReqwestTransportV1 {
+    fn execute_binary<'a>(
+        &'a self,
+        request: &'a PreparedHttpRequestV1<'_>,
+        remaining_timeout: Duration,
+    ) -> BinaryTransportFutureV1<'a> {
+        Box::pin(async move {
+            let parts = self
+                .fetch_buffered(request, remaining_timeout, MAX_BINARY_RESPONSE_BODY_BYTES)
+                .await?;
+            BufferedBinaryResponseV1::try_from_parts_with_response_metadata(
+                parts.status,
+                parts.body,
+                parts.content_type,
+                parts.retry_after,
+                parts.provider_quota_metadata,
+                parts.response_diagnostics,
+                parts.response_transcript,
+            )
+        })
+    }
+}
+
+/// One buffered exchange's validated parts, before a contract type is chosen for them.
+///
+/// The UTF-8 and binary arms differ only in which type they hand these to and which cap bounds
+/// the body, so everything up to that point — hardening, the `content-length` pre-check, the
+/// ordered header reads, the streamed body read — is written once in
+/// [`ReqwestTransportV1::fetch_buffered`].
+struct BufferedPartsV1 {
+    status: http::StatusCode,
+    body: Vec<u8>,
+    content_type: Option<String>,
+    retry_after: Option<String>,
+    provider_quota_metadata: ProviderQuotaMetadataV1,
+    response_diagnostics: ResponseDiagnosticsV1,
+    response_transcript: ResponseTranscriptV1,
+}
+
 impl ReqwestTransportV1 {
     async fn execute_one(
         &self,
         request: &PreparedHttpRequestV1<'_>,
         remaining_timeout: Duration,
     ) -> Result<BufferedHttpResponseV1, TransportErrorV1> {
+        let parts =
+            self.fetch_buffered(request, remaining_timeout, MAX_RESPONSE_BODY_BYTES).await?;
+
+        BufferedHttpResponseV1::try_from_parts_with_response_metadata(
+            parts.status,
+            parts.body,
+            parts.content_type,
+            parts.retry_after,
+            parts.provider_quota_metadata,
+            parts.response_diagnostics,
+            parts.response_transcript,
+        )
+    }
+
+    /// Performs one buffered exchange and returns its validated parts.
+    ///
+    /// `body_cap` is the only thing the two buffered arms disagree about: the UTF-8 arm bounds a
+    /// body at [`MAX_RESPONSE_BODY_BYTES`] and the binary arm at
+    /// [`MAX_BINARY_RESPONSE_BODY_BYTES`]. It bounds both the declared `content-length` pre-check
+    /// and the streamed read, so an oversized body is refused before it is buffered whenever the
+    /// upstream declares its length, and mid-read otherwise.
+    async fn fetch_buffered(
+        &self,
+        request: &PreparedHttpRequestV1<'_>,
+        remaining_timeout: Duration,
+        body_cap: usize,
+    ) -> Result<BufferedPartsV1, TransportErrorV1> {
         let headers = assemble_headers(request)?;
-        let response = self
+        let builder = self
             .client
             .request(request.method().clone(), request.url().clone())
             .headers(headers)
-            .body(request_body(request.body().shared_owner()))
-            .timeout(effective_timeout(remaining_timeout, self.total_timeout))
+            .timeout(effective_timeout(remaining_timeout, self.total_timeout));
+        let response = attach_body(builder, request)
             .send()
             .await
             .map_err(|error| classify_send_error(&error))?;
@@ -145,10 +212,7 @@ impl ReqwestTransportV1 {
         if response.status().is_redirection() {
             return Err(TransportErrorV1::RedirectDenied);
         }
-        if response
-            .content_length()
-            .is_some_and(|declared| declared > MAX_RESPONSE_BODY_BYTES as u64)
-        {
+        if response.content_length().is_some_and(|declared| declared > body_cap as u64) {
             return Err(TransportErrorV1::ResponseBodyTooLarge);
         }
 
@@ -168,9 +232,9 @@ impl ReqwestTransportV1 {
         // past this point the upstream's `HeaderMap` is gone.
         let response_diagnostics = response_diagnostics(response.headers())?;
         let response_transcript = response_transcript(response.headers());
-        let body = read_bounded_body(response).await?;
+        let body = read_bounded_body(response, body_cap).await?;
 
-        BufferedHttpResponseV1::try_from_parts_with_response_metadata(
+        Ok(BufferedPartsV1 {
             status,
             body,
             content_type,
@@ -178,7 +242,7 @@ impl ReqwestTransportV1 {
             provider_quota_metadata,
             response_diagnostics,
             response_transcript,
-        )
+        })
     }
 }
 
@@ -232,11 +296,10 @@ impl ReqwestStreamingTransportV1 {
         request: &PreparedHttpRequestV1<'_>,
     ) -> Result<OpenedByteStreamV1, StreamOpenErrorV1> {
         let headers = assemble_headers(request)?;
-        let mut builder = self
-            .client
-            .request(request.method().clone(), request.url().clone())
-            .headers(headers)
-            .body(request_body(request.body().shared_owner()));
+        let mut builder = attach_body(
+            self.client.request(request.method().clone(), request.url().clone()).headers(headers),
+            request,
+        );
         if let Some(total) = self.total_timeout {
             builder = builder.timeout(total);
         }
@@ -402,12 +465,48 @@ fn request_body(owner: Arc<str>) -> Bytes {
     Bytes::from_owner(JsonBodyOwner(owner))
 }
 
+struct MultipartBodyOwner(Arc<[u8]>);
+
+impl AsRef<[u8]> for MultipartBodyOwner {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+/// Shares a multipart body's contract allocation with the wire, as `request_body` does for JSON.
+///
+/// The sharing is what makes a 100 MiB upload affordable: the contract validated those bytes
+/// once, and the transport sends the same allocation rather than a copy of it.
+fn multipart_request_body(owner: Arc<[u8]>) -> Bytes {
+    Bytes::from_owner(MultipartBodyOwner(owner))
+}
+
+/// Attaches the prepared request's body exactly when it has one.
+///
+/// A body-less GET (HTTP contract version six) has no body slot at all: nothing is attached, so
+/// `reqwest` sends neither a payload nor a `content-length`, and `TRANSPORT_ADDED_HEADERS_V1`'s
+/// second name is absent from that wire by construction rather than set to zero.
+fn attach_body(
+    builder: reqwest::RequestBuilder,
+    request: &PreparedHttpRequestV1<'_>,
+) -> reqwest::RequestBuilder {
+    match request.body() {
+        Some(RequestBodyRefV1::Json(body)) => builder.body(request_body(body.shared_owner())),
+        Some(RequestBodyRefV1::Multipart(body)) => {
+            builder.body(multipart_request_body(body.shared_owner()))
+        }
+        None => builder,
+    }
+}
+
 /// Every header name this transport puts on the wire that the request did not declare.
 ///
 /// The host-signed arm makes this list load-bearing: a finalizer signs the request it was shown,
 /// so anything the transport adds afterwards is a byte outside the signature. Two of the three
 /// are pure functions of what the finalizer *did* see — `host` of the URL, `content-length` of
 /// the body — which is why a finalizer may legally include `host` in its signed-headers list.
+/// `content-length` is the one name that is conditional: a body-less GET (HTTP contract version
+/// six) carries no body, so the transport attaches none and the client emits no length for it.
 ///
 /// `accept` is the third, and it was not in the design record's promise: it arrived as a
 /// `reqwest` client default, invisible until the host-signed wire fixture counted the headers on
@@ -415,6 +514,13 @@ fn request_body(owner: Arc<str>) -> Bytes {
 /// constant and not a dependency's, and it is listed here so a signer can account for it. A
 /// scheme that must sign the *complete* header set — rather than a chosen subset, as `SigV4`
 /// does — needs this name in its calculation.
+///
+/// `content-type` is deliberately **not** on this list even though a multipart request puts one
+/// on the wire (HTTP contract version seven). The distinction this list draws is between what the
+/// transport adds on its own behalf and what it emits because a request declared it: an auth
+/// header is not listed either, for the same reason. A signer that must account for the complete
+/// header set reads the prepared request — `content_type()` and `auth_headers()` — rather than
+/// this constant, which answers only "what did the transport add that nobody asked for".
 ///
 /// Adding a name to this list is a contract change. The wire fixture compares against it exactly,
 /// so a fourth header cannot arrive quietly.
@@ -432,6 +538,20 @@ fn assemble_headers(request: &PreparedHttpRequestV1<'_>) -> Result<HeaderMap, Tr
         headers.insert(name, value);
     }
 
+    // A body that carries its own media type is the single source of `content-type`: the
+    // multipart request shape refuses to carry that name in its ordinary headers, so inserting
+    // the rendered value here is what puts it on the wire exactly once, and it cannot disagree
+    // with the bytes because both come from the boundary the contract validated. The JSON and
+    // GET shapes report `None` and are assembled exactly as they were before version seven —
+    // their `content-type`, if any, is an ordinary header the host declared. The value is
+    // rendered from a validated boundary, so encoding it cannot fail; the error arm exists
+    // because `HeaderValue::from_str` is fallible.
+    if let Some(content_type) = request.content_type() {
+        let value =
+            HeaderValue::from_str(content_type).map_err(|_| TransportErrorV1::RequestFailed)?;
+        headers.insert(header::CONTENT_TYPE, value);
+    }
+
     // The sanctioned user-agent declaration is the single source of this header: the ordinary
     // channel cannot carry the name (reserved) and the client sets no default, so inserting it
     // here is what puts it on the wire exactly once. The value grammar admits only printable
@@ -443,11 +563,12 @@ fn assemble_headers(request: &PreparedHttpRequestV1<'_>) -> Result<HeaderMap, Tr
         headers.insert(HeaderName::from_static("user-agent"), value);
     }
 
-    // The two credential arms carry exactly one auth header: `authorization` with its `Bearer `
-    // prefix, or one sanctioned secret header with the verbatim secret. The host-signed arm
-    // carries the finalizer's diffed set — one to four. Injecting only what the prepared request
-    // hands over keeps `Authorization` off the wire for header-secret exchanges, and keeps a
-    // signature's headers exactly as the signer emitted them.
+    // The Bearer and header-secret arms carry exactly one auth header: `authorization` with its
+    // `Bearer ` prefix, or one sanctioned secret header with the verbatim secret; the combined
+    // arm carries both. The host-signed arm carries the finalizer's diffed set — one to four.
+    // Injecting only what the prepared request hands over keeps `Authorization` off the wire for
+    // header-secret exchanges, and keeps a signature's headers exactly as the signer emitted
+    // them.
     //
     // Every value is marked sensitive. A signature is not a credential, but it is derived from
     // one and it is the thing a log-scraping attacker would replay.
@@ -605,12 +726,15 @@ fn optional_quota_metadata(
     value.to_str().ok().map(str::to_owned)
 }
 
-async fn read_bounded_body(mut response: reqwest::Response) -> Result<Vec<u8>, TransportErrorV1> {
+async fn read_bounded_body(
+    mut response: reqwest::Response,
+    body_cap: usize,
+) -> Result<Vec<u8>, TransportErrorV1> {
     let mut body = Vec::new();
     while let Some(chunk) = response.chunk().await.map_err(|error| classify_read_error(&error))? {
         let next_length =
             body.len().checked_add(chunk.len()).ok_or(TransportErrorV1::ResponseBodyTooLarge)?;
-        if next_length > MAX_RESPONSE_BODY_BYTES {
+        if next_length > body_cap {
             return Err(TransportErrorV1::ResponseBodyTooLarge);
         }
         body.extend_from_slice(&chunk);

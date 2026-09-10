@@ -8,10 +8,11 @@ use std::{fmt, future::Future, pin::Pin, time::Duration};
 
 use http::Method;
 use south_contracts::{
-    BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1, JsonBodyV1, JsonPostRequestV1,
-    PreparationErrorV1, ProviderAuthV1, ProviderEndpointV1, SafeHeaders, SignedHeaderSetV1,
-    SignedHeaderV1, StreamChunkV1, StreamReadErrorV1, StreamRejectedV1, StreamingResponseHeadV1,
-    TransportErrorV1,
+    BufferedBinaryResponseV1, BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1,
+    GetRequestV1, JsonBodyV1, JsonPostRequestV1, MultipartBodyV1, MultipartPostRequestV1,
+    PreparationErrorV1, ProviderAuthV1, ProviderEndpointV1, QueryStringV1, RelativePathV1,
+    SafeHeaders, SignedHeaderSetV1, SignedHeaderV1, StreamChunkV1, StreamReadErrorV1,
+    StreamRejectedV1, StreamingResponseHeadV1, TransportErrorV1,
 };
 use thiserror::Error;
 use tokio::time::{Instant, timeout_at};
@@ -237,6 +238,15 @@ pub trait RequestFinalizerV1: Send + Sync {
 /// One auth header bound to the wire: its frozen name and its zeroizing value.
 type BoundAuthHeader = (&'static str, Zeroizing<Vec<u8>>);
 
+/// `Bearer `-prefixes a resolved secret into a fresh zeroizing allocation.
+fn bearer_prefixed(secret: &SecretValue) -> Zeroizing<Vec<u8>> {
+    const BEARER_PREFIX: &[u8] = b"Bearer ";
+    let mut value = Zeroizing::new(Vec::with_capacity(BEARER_PREFIX.len() + secret.value.len()));
+    value.extend_from_slice(BEARER_PREFIX);
+    value.extend_from_slice(&secret.value);
+    value
+}
+
 /// Diffs what the finalizer emitted against what it declared.
 ///
 /// Rejection order is the design record's: an undeclared name, a declared name that never
@@ -283,37 +293,164 @@ pub struct PreparedHttpRequestV1<'request> {
     method: Method,
     url: Url,
     headers: &'request SafeHeaders,
-    body: &'request JsonBodyV1,
+    /// `None` exactly for a [`GetRequestV1`] (HTTP contract version six): a body-less request
+    /// has no body slot at all, rather than an empty one, so a transport cannot send `{}` or a
+    /// zero-length payload where the contract promised nothing. Since version seven the `Some`
+    /// arm also says *which* body shape it is, because a multipart body brings a media type the
+    /// transport must emit and a JSON one does not.
+    body: Option<RequestBodyRefV1<'request>>,
     auth_headers: Vec<BoundAuthHeader>,
     user_agent: Option<ControlledUserAgentV1>,
 }
 
+/// The body a prepared request carries, borrowed from the contract type that owns it.
+///
+/// A transport needs two things from a body — the bytes to send, and whether South renders a
+/// media type for them — and those differ per shape rather than per request. Naming the shape
+/// keeps both answers on the value itself instead of in a rule the transport has to remember.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RequestBodyRefV1<'request> {
+    /// One complete JSON value, from a [`JsonPostRequestV1`].
+    Json(&'request JsonBodyV1),
+    /// Opaque bytes under a rendered media type, from a [`MultipartPostRequestV1`].
+    Multipart(&'request MultipartBodyV1),
+}
+
+impl<'request> RequestBodyRefV1<'request> {
+    /// Returns the exact bytes a transport must send.
+    #[must_use]
+    pub fn as_bytes(self) -> &'request [u8] {
+        match self {
+            Self::Json(body) => body.as_str().as_bytes(),
+            Self::Multipart(body) => body.as_bytes(),
+        }
+    }
+
+    /// Returns the media type South renders for this body, when it renders one.
+    ///
+    /// `None` for JSON, deliberately: that shape's `content-type` travels through the ordinary
+    /// header channel and has since version one, and hosts legitimately send values South does
+    /// not get to normalize. Rendering one for them would be a wire change wearing a refactor's
+    /// clothes.
+    #[must_use]
+    pub fn content_type(self) -> Option<&'request str> {
+        match self {
+            Self::Json(_) => None,
+            Self::Multipart(body) => Some(body.content_type()),
+        }
+    }
+
+    /// Returns the body's byte length.
+    #[must_use]
+    pub fn len(self) -> usize {
+        match self {
+            Self::Json(body) => body.len(),
+            Self::Multipart(body) => body.len(),
+        }
+    }
+
+    /// Returns whether the body is empty — never true for a validated body of either shape.
+    #[must_use]
+    pub fn is_empty(self) -> bool {
+        self.len() == 0
+    }
+}
+
+/// The method-neutral projection of a request the orchestration layer prepares.
+///
+/// [`JsonPostRequestV1`], [`GetRequestV1`] and [`MultipartPostRequestV1`] are separate contract
+/// types on purpose (buffered-GET record D1, multipart record D1): the JSON shape keeps its
+/// mandatory JSON body, the GET shape has no body slot, and the multipart shape carries opaque
+/// bytes under a rendered media type. This private projection is where the three meet, so the
+/// binding check, the assembly of auth headers, and the finalizer view are written once. It owns
+/// nothing but the method — every other field borrows the request it was projected from.
+struct RequestParts<'request> {
+    method: Method,
+    relative_path: &'request RelativePathV1,
+    query: Option<&'request QueryStringV1>,
+    headers: &'request SafeHeaders,
+    body: Option<RequestBodyRefV1<'request>>,
+    auth: &'request ProviderAuthV1,
+    user_agent: Option<ControlledUserAgentV1>,
+}
+
+impl<'request> From<&'request JsonPostRequestV1> for RequestParts<'request> {
+    fn from(request: &'request JsonPostRequestV1) -> Self {
+        Self {
+            method: Method::POST,
+            relative_path: request.relative_path(),
+            query: request.query(),
+            headers: request.headers(),
+            body: Some(RequestBodyRefV1::Json(request.body())),
+            auth: request.auth(),
+            user_agent: request.user_agent(),
+        }
+    }
+}
+
+impl<'request> From<&'request GetRequestV1> for RequestParts<'request> {
+    fn from(request: &'request GetRequestV1) -> Self {
+        Self {
+            method: Method::GET,
+            relative_path: request.relative_path(),
+            query: request.query(),
+            headers: request.headers(),
+            body: None,
+            auth: request.auth(),
+            user_agent: request.user_agent(),
+        }
+    }
+}
+
+impl<'request> From<&'request MultipartPostRequestV1> for RequestParts<'request> {
+    fn from(request: &'request MultipartPostRequestV1) -> Self {
+        Self {
+            method: Method::POST,
+            relative_path: request.relative_path(),
+            query: request.query(),
+            headers: request.headers(),
+            body: Some(RequestBodyRefV1::Multipart(request.body())),
+            auth: request.auth(),
+            user_agent: request.user_agent(),
+        }
+    }
+}
+
+impl RequestParts<'_> {
+    /// Resolves the destination inside the binding, sanctioned query appended.
+    fn destination(&self, binding: &ProviderBindingV1) -> Result<Url, PreparationErrorV1> {
+        self.relative_path.resolve_against_with_query(&binding.endpoint, self.query)
+    }
+}
+
 impl<'request> PreparedHttpRequestV1<'request> {
-    /// Binds the resolved secret to the one auth header declared by the request.
+    /// Binds the resolved secret to the auth header(s) declared by the request.
     ///
     /// The Bearer arm produces `authorization` with a `Bearer `-prefixed value; the header-secret
-    /// arm produces the sanctioned header name with the verbatim secret bytes. The value lives in
-    /// a South-owned allocation that zeroizes on drop, and the original resolver allocation is
-    /// dropped (and therefore zeroized) here when a prefixed copy replaces it.
+    /// arm produces the sanctioned header name with the verbatim secret bytes; the combined arm
+    /// produces both, from the one resolved value. Every value lives in a South-owned allocation
+    /// that zeroizes on drop, and the original resolver allocation is dropped (and therefore
+    /// zeroized) here when a prefixed copy replaces it.
     ///
     /// `ProviderAuthV1` is `#[non_exhaustive]` since 0.7.0 (host-prelude D2): an arm newer than
     /// this crate fails closed as `UNSUPPORTED_AUTH_SHAPE` (the resolved secret is dropped and
     /// zeroized on that path), never panics.
     fn assemble(
-        request: &'request JsonPostRequestV1,
+        request: RequestParts<'request>,
         destination: Url,
         secret: SecretValue,
     ) -> Result<Self, PreparationErrorV1> {
-        let (auth_header_name, auth_header_value) = match request.auth() {
-            ProviderAuthV1::Bearer(_) => {
-                const BEARER_PREFIX: &[u8] = b"Bearer ";
-                let mut value =
-                    Zeroizing::new(Vec::with_capacity(BEARER_PREFIX.len() + secret.value.len()));
-                value.extend_from_slice(BEARER_PREFIX);
-                value.extend_from_slice(&secret.value);
-                ("authorization", value)
+        let auth_headers: Vec<BoundAuthHeader> = match request.auth {
+            ProviderAuthV1::Bearer(_) => vec![("authorization", bearer_prefixed(&secret))],
+            ProviderAuthV1::HeaderSecret { header, .. } => {
+                vec![(header.header_name(), secret.value)]
             }
-            ProviderAuthV1::HeaderSecret { header, .. } => (header.header_name(), secret.value),
+            // Two bindings of one secret, in a fixed order; the verbatim copy takes over the
+            // resolver allocation and the prefixed copy is a fresh zeroizing allocation.
+            ProviderAuthV1::BearerAndHeaderSecret { header, .. } => vec![
+                ("authorization", bearer_prefixed(&secret)),
+                (header.header_name(), secret.value),
+            ],
             // The host-signed arm has no secret to bind and no header to assemble here: its
             // headers exist only after the finalizer has seen the finished request. Reaching this
             // point means a caller used the unsigned entry point for a signed request, which is a
@@ -325,12 +462,12 @@ impl<'request> PreparedHttpRequestV1<'request> {
         };
 
         Ok(Self {
-            method: Method::POST,
+            method: request.method,
             url: destination,
-            headers: request.headers(),
-            body: request.body(),
-            auth_headers: vec![(auth_header_name, auth_header_value)],
-            user_agent: request.user_agent(),
+            headers: request.headers,
+            body: request.body,
+            auth_headers,
+            user_agent: request.user_agent,
         })
     }
 
@@ -338,17 +475,17 @@ impl<'request> PreparedHttpRequestV1<'request> {
     ///
     /// The result is the request the finalizer sees. `bind_finalized` completes it.
     fn assemble_unsigned(
-        request: &'request JsonPostRequestV1,
+        request: RequestParts<'request>,
         destination: Url,
     ) -> Result<Self, PreparationErrorV1> {
-        match request.auth() {
+        match request.auth {
             ProviderAuthV1::HostSigned { .. } => Ok(Self {
-                method: Method::POST,
+                method: request.method,
                 url: destination,
-                headers: request.headers(),
-                body: request.body(),
+                headers: request.headers,
+                body: request.body,
                 auth_headers: Vec::new(),
-                user_agent: request.user_agent(),
+                user_agent: request.user_agent,
             }),
             _ => Err(PreparationErrorV1::UnsupportedAuthShape),
         }
@@ -364,7 +501,12 @@ impl<'request> PreparedHttpRequestV1<'request> {
             method: &self.method,
             url: &self.url,
             headers: self.headers,
-            body: self.body.as_str().as_bytes(),
+            // A GET has no body, and the view says so with the empty slice: a payload-hashing
+            // signer (SigV4 hashes the empty payload exactly as AWS specifies) needs nothing
+            // else, and a signer that hashes nothing ignores it either way. A multipart body
+            // signs as its own bytes, exactly as a JSON one does — the view is bytes, and always
+            // was, so this seam needed nothing for version seven.
+            body: self.body.map_or(&[][..], RequestBodyRefV1::as_bytes),
             user_agent: self.user_agent,
             slot,
             emits,
@@ -396,10 +538,24 @@ impl PreparedHttpRequestV1<'_> {
         self.headers
     }
 
-    /// Returns the exact validated JSON body.
+    /// Returns the validated body and its shape, or `None` for a body-less GET.
+    ///
+    /// `Option` since HTTP contract version six, and shape-naming since version seven. A
+    /// transport attaches a body exactly when this is `Some`: a `None` here means no body slot
+    /// on the wire, not an empty one.
     #[must_use]
-    pub const fn body(&self) -> &JsonBodyV1 {
+    pub const fn body(&self) -> Option<RequestBodyRefV1<'_>> {
         self.body
+    }
+
+    /// Returns the media type the transport must emit, when South renders one.
+    ///
+    /// `Some` exactly for a multipart body, whose media type is rendered from the boundary the
+    /// contract validated. `None` for the JSON and GET shapes, whose `content-type` — if any —
+    /// is the host's to declare through the ordinary header channel.
+    #[must_use]
+    pub fn content_type(&self) -> Option<&str> {
+        self.body.and_then(RequestBodyRefV1::content_type)
     }
 
     /// Returns every auth header as its name and complete value bytes.
@@ -409,10 +565,11 @@ impl PreparedHttpRequestV1<'_> {
     /// sanctioned name, every signed name, and `authorization` itself stay on the reserved-header
     /// blacklist.
     ///
-    /// The two credential arms yield exactly one element, as the single-header accessor this
-    /// replaced always did. The host-signed arm yields the finalizer's diffed output in the
-    /// declaration's canonical order — one to four elements, never zero: a request that reached a
-    /// transport has passed the allow-list diff, and an empty declaration cannot be constructed.
+    /// The Bearer and header-secret arms yield exactly one element, as the single-header accessor
+    /// this replaced always did; the combined arm yields two (`authorization` first). The
+    /// host-signed arm yields the finalizer's diffed output in the declaration's canonical order —
+    /// one to four elements, never zero: a request that reached a transport has passed the
+    /// allow-list diff, and an empty declaration cannot be constructed.
     #[must_use]
     pub fn auth_headers(&self) -> impl ExactSizeIterator<Item = (&'static str, &[u8])> {
         self.auth_headers.iter().map(|(name, value)| (*name, value.as_slice()))
@@ -435,7 +592,9 @@ impl fmt::Debug for PreparedHttpRequestV1<'_> {
             .debug_struct("PreparedHttpRequestV1")
             .field("method", &self.method)
             .field("header_count", &self.headers.len())
-            .field("body_byte_count", &self.body.len())
+            // Zero exactly when there is no body: a validated body of either shape is never
+            // empty.
+            .field("body_byte_count", &self.body.map_or(0, RequestBodyRefV1::len))
             .finish_non_exhaustive()
     }
 }
@@ -455,6 +614,93 @@ pub trait AsyncHttpTransport: Send + Sync {
         request: &'a PreparedHttpRequestV1<'_>,
         remaining_timeout: Duration,
     ) -> TransportFuture<'a>;
+}
+
+/// A cancellation-safe asynchronous binary HTTP transport future.
+pub type BinaryTransportFutureV1<'a> =
+    Pin<Box<dyn Future<Output = Result<BufferedBinaryResponseV1, TransportErrorV1>> + Send + 'a>>;
+
+/// An injected asynchronous transport that buffers a response body without proving it is UTF-8.
+///
+/// A third trait beside [`AsyncHttpTransport`] and [`AsyncStreamingTransport`], not a method on
+/// the first. [`AsyncHttpTransport::execute`] fixes [`BufferedHttpResponseV1`] in its signature,
+/// so the response shape cannot vary at the call site; adding a required method would break every
+/// host implementation, and a defaulted one returning "unsupported" would ship a capability that
+/// silently is not there. The streaming path settled the same question the same way.
+///
+/// One implementation may serve all three traits over a single client, and the shipped reqwest
+/// transport does exactly that. The obligations are identical to [`AsyncHttpTransport`]'s:
+/// implementations must stop in-progress I/O when the returned future is dropped, and the supplied
+/// timeout is the remaining caller-owned deadline budget at the point transport begins.
+pub trait AsyncBinaryHttpTransport: Send + Sync {
+    /// Executes exactly one prepared request, buffering the response as opaque bytes.
+    fn execute_binary<'a>(
+        &'a self,
+        request: &'a PreparedHttpRequestV1<'_>,
+        remaining_timeout: Duration,
+    ) -> BinaryTransportFutureV1<'a>;
+}
+
+/// The one buffered flow's view of "hand this prepared request to a transport".
+///
+/// Private, and the reason the text and binary entry points cannot drift: everything before the
+/// terminal transport call — destination resolution, the credential-binding check, the two
+/// pre-flight guards, credential resolution, assembly, the remaining-budget computation, and the
+/// biased cancellation race — is written once in [`execute_buffered`] and shared verbatim. Only
+/// this last step differs.
+///
+/// A wrapper type per arm rather than two blanket impls over the transport traits, because one
+/// transport may implement both and blanket impls would then overlap.
+trait BufferedDispatchV1: Send + Sync {
+    /// The response shape this arm buffers.
+    ///
+    /// `Send` is load-bearing rather than incidental: without it the shared flow's future stops
+    /// being `Send`, and every host that spawns a provider call would break. The transport traits
+    /// carry the same bound for the same reason.
+    type Response: Send;
+
+    /// Executes one prepared request within the remaining timeout budget.
+    fn dispatch<'a>(
+        &'a self,
+        request: &'a PreparedHttpRequestV1<'_>,
+        remaining_timeout: Duration,
+    ) -> Pin<Box<dyn Future<Output = Result<Self::Response, TransportErrorV1>> + Send + 'a>>;
+}
+
+/// The UTF-8 arm of [`BufferedDispatchV1`].
+struct TextDispatchV1<'transport, T: ?Sized>(&'transport T);
+
+impl<T> BufferedDispatchV1 for TextDispatchV1<'_, T>
+where
+    T: AsyncHttpTransport + ?Sized,
+{
+    type Response = BufferedHttpResponseV1;
+
+    fn dispatch<'a>(
+        &'a self,
+        request: &'a PreparedHttpRequestV1<'_>,
+        remaining_timeout: Duration,
+    ) -> Pin<Box<dyn Future<Output = Result<Self::Response, TransportErrorV1>> + Send + 'a>> {
+        self.0.execute(request, remaining_timeout)
+    }
+}
+
+/// The binary arm of [`BufferedDispatchV1`].
+struct BinaryDispatchV1<'transport, T: ?Sized>(&'transport T);
+
+impl<T> BufferedDispatchV1 for BinaryDispatchV1<'_, T>
+where
+    T: AsyncBinaryHttpTransport + ?Sized,
+{
+    type Response = BufferedBinaryResponseV1;
+
+    fn dispatch<'a>(
+        &'a self,
+        request: &'a PreparedHttpRequestV1<'_>,
+        remaining_timeout: Duration,
+    ) -> Pin<Box<dyn Future<Output = Result<Self::Response, TransportErrorV1>> + Send + 'a>> {
+        self.0.execute_binary(request, remaining_timeout)
+    }
 }
 
 /// A provider call failure without request, response, endpoint, or credential context.
@@ -503,10 +749,151 @@ where
     R: CredentialResolver + ?Sized,
     T: AsyncHttpTransport + ?Sized,
 {
-    let destination =
-        request.relative_path().resolve_against_with_query(&binding.endpoint, request.query())?;
+    execute_buffered(
+        binding,
+        request.into(),
+        resolver,
+        TextDispatchV1(transport),
+        deadline,
+        cancellation,
+    )
+    .await
+}
 
-    let requested_slot = request.auth().credential_slot();
+/// Validates, authorizes, resolves, prepares, and executes one buffered body-less GET.
+///
+/// The GET twin of [`execute_provider_call_v1`] (HTTP contract version six): the same validation
+/// order, the same binding check, the same biased cancellation race, and the same three
+/// credential arms. Only the method and the absence of a body differ, and both are fixed by the
+/// request type rather than by a parameter. There is no streaming GET (buffered-GET record, D2).
+///
+/// # Errors
+///
+/// Returns [`ProviderCallErrorV1`] exactly as the POST twin does. A host-signed request is
+/// `UNSUPPORTED_AUTH_SHAPE` here; it belongs to [`execute_signed_get_call_v1`].
+pub async fn execute_get_call_v1<R, T>(
+    binding: &ProviderBindingV1,
+    request: &GetRequestV1,
+    resolver: &R,
+    transport: &T,
+    deadline: Instant,
+    cancellation: &CancellationToken,
+) -> Result<BufferedHttpResponseV1, ProviderCallErrorV1>
+where
+    R: CredentialResolver + ?Sized,
+    T: AsyncHttpTransport + ?Sized,
+{
+    execute_buffered(
+        binding,
+        request.into(),
+        resolver,
+        TextDispatchV1(transport),
+        deadline,
+        cancellation,
+    )
+    .await
+}
+
+/// Validates, authorizes, resolves, prepares, and executes one buffered multipart POST.
+///
+/// The multipart twin of [`execute_provider_call_v1`] (HTTP contract version seven): the same
+/// validation order, the same binding check, the same biased cancellation race, and the same
+/// three credential arms. Only the body shape differs, and with it one wire fact — the transport
+/// emits the media type the contract rendered from the body's boundary, rather than whatever the
+/// host put in its ordinary headers, because a `MultipartPostRequestV1` refuses to carry a
+/// `content-type` there at all. There is no streaming multipart and no host-signed twin
+/// (multipart record, D5): no host consumes either.
+///
+/// # Errors
+///
+/// Returns [`ProviderCallErrorV1`] exactly as the JSON twin does. A host-signed request is
+/// `UNSUPPORTED_AUTH_SHAPE` here, as it is on every unsigned entry point.
+pub async fn execute_multipart_call_v1<R, T>(
+    binding: &ProviderBindingV1,
+    request: &MultipartPostRequestV1,
+    resolver: &R,
+    transport: &T,
+    deadline: Instant,
+    cancellation: &CancellationToken,
+) -> Result<BufferedHttpResponseV1, ProviderCallErrorV1>
+where
+    R: CredentialResolver + ?Sized,
+    T: AsyncHttpTransport + ?Sized,
+{
+    execute_buffered(
+        binding,
+        request.into(),
+        resolver,
+        TextDispatchV1(transport),
+        deadline,
+        cancellation,
+    )
+    .await
+}
+
+/// Validates, authorizes, resolves, prepares, and executes one JSON POST whose response body is
+/// buffered as opaque bytes.
+///
+/// The binary-response twin of [`execute_provider_call_v1`] (HTTP contract version eight): the
+/// same request type, the same validation order, the same binding check, the same biased
+/// cancellation race, and the same three credential arms. Only the response shape differs, and it
+/// differs by injected transport — this entry point takes an [`AsyncBinaryHttpTransport`] and
+/// returns a [`BufferedBinaryResponseV1`], whose body was never required to be UTF-8.
+///
+/// Bytes come back on **every** status, a non-2xx included. An upstream that answers a success
+/// with audio answers a rejection with JSON; a host reading that error body calls
+/// [`str::from_utf8`] itself.
+///
+/// JSON POST only, and deliberately so. Every call site this shape exists for — synthesised speech
+/// and rendered images — is a JSON POST. There is no binary GET twin because the two host paths
+/// that read binary over a GET fetch absolute, ephemeral artifact URLs, which a
+/// [`ProviderBindingV1`] cannot address, and no binary multipart twin because no multipart call
+/// site answers in bytes. Reserving either would be a shape with no consumer.
+///
+/// # Errors
+///
+/// Returns [`ProviderCallErrorV1`] exactly as the UTF-8 twin does, minus
+/// [`TransportErrorV1::ResponseBodyNotUtf8`], which this path cannot produce. A host-signed
+/// request is `UNSUPPORTED_AUTH_SHAPE` here, as it is on every unsigned entry point.
+pub async fn execute_binary_call_v1<R, T>(
+    binding: &ProviderBindingV1,
+    request: &JsonPostRequestV1,
+    resolver: &R,
+    transport: &T,
+    deadline: Instant,
+    cancellation: &CancellationToken,
+) -> Result<BufferedBinaryResponseV1, ProviderCallErrorV1>
+where
+    R: CredentialResolver + ?Sized,
+    T: AsyncBinaryHttpTransport + ?Sized,
+{
+    execute_buffered(
+        binding,
+        request.into(),
+        resolver,
+        BinaryDispatchV1(transport),
+        deadline,
+        cancellation,
+    )
+    .await
+}
+
+/// The one buffered credential-arm flow both request shapes share.
+async fn execute_buffered<R, D>(
+    binding: &ProviderBindingV1,
+    request: RequestParts<'_>,
+    resolver: &R,
+    dispatch: D,
+    deadline: Instant,
+    cancellation: &CancellationToken,
+) -> Result<D::Response, ProviderCallErrorV1>
+where
+    R: CredentialResolver + ?Sized,
+    D: BufferedDispatchV1,
+{
+    let destination = request.destination(binding)?;
+
+    let requested_slot = request.auth.credential_slot();
     if requested_slot != &binding.credential_slot {
         return Err(PreparationErrorV1::CredentialBindingMismatch.into());
     }
@@ -528,7 +915,7 @@ where
             .checked_duration_since(Instant::now())
             .filter(|remaining| !remaining.is_zero())
             .ok_or(PreparationErrorV1::DeadlineExceeded)?;
-        transport.execute(&prepared, remaining_timeout).await.map_err(ProviderCallErrorV1::from)
+        dispatch.dispatch(&prepared, remaining_timeout).await.map_err(ProviderCallErrorV1::from)
     };
 
     tokio::select! {
@@ -570,7 +957,50 @@ where
     F: RequestFinalizerV1 + ?Sized,
     T: AsyncHttpTransport + ?Sized,
 {
-    let (destination, emits) = prepare_signed(binding, request)?;
+    execute_signed_buffered(binding, request.into(), finalizer, transport, deadline, cancellation)
+        .await
+}
+
+/// Executes one host-signed buffered body-less GET.
+///
+/// The GET twin of [`execute_signed_provider_call_v1`], and the signed twin of
+/// [`execute_get_call_v1`]. The finalizer sees a [`FinalizeViewV1`] whose method is `GET` and
+/// whose body is the empty slice — which is what a payload-hashing scheme such as `SigV4` expects
+/// for a body-less request — so a signer written for the POST arm works here unchanged.
+///
+/// # Errors
+///
+/// Returns [`ProviderCallErrorV1`] exactly as the POST twin does.
+pub async fn execute_signed_get_call_v1<F, T>(
+    binding: &ProviderBindingV1,
+    request: &GetRequestV1,
+    finalizer: &F,
+    transport: &T,
+    deadline: Instant,
+    cancellation: &CancellationToken,
+) -> Result<BufferedHttpResponseV1, ProviderCallErrorV1>
+where
+    F: RequestFinalizerV1 + ?Sized,
+    T: AsyncHttpTransport + ?Sized,
+{
+    execute_signed_buffered(binding, request.into(), finalizer, transport, deadline, cancellation)
+        .await
+}
+
+/// The one buffered host-signed flow both request shapes share.
+async fn execute_signed_buffered<F, T>(
+    binding: &ProviderBindingV1,
+    request: RequestParts<'_>,
+    finalizer: &F,
+    transport: &T,
+    deadline: Instant,
+    cancellation: &CancellationToken,
+) -> Result<BufferedHttpResponseV1, ProviderCallErrorV1>
+where
+    F: RequestFinalizerV1 + ?Sized,
+    T: AsyncHttpTransport + ?Sized,
+{
+    let (destination, emits) = prepare_signed(binding, &request)?;
 
     if cancellation.is_cancelled() {
         return Err(PreparationErrorV1::Cancelled.into());
@@ -580,8 +1010,9 @@ where
     }
 
     let execution = async {
+        let slot = request.auth.credential_slot();
         let mut prepared = PreparedHttpRequestV1::assemble_unsigned(request, destination)?;
-        finalize_into(&mut prepared, finalizer, emits, request.auth().credential_slot()).await?;
+        finalize_into(&mut prepared, finalizer, emits, slot).await?;
         let remaining_timeout = deadline
             .checked_duration_since(Instant::now())
             .filter(|remaining| !remaining.is_zero())
@@ -601,18 +1032,17 @@ where
 /// Resolves the destination and proves the request really is host-signed.
 fn prepare_signed<'request>(
     binding: &ProviderBindingV1,
-    request: &'request JsonPostRequestV1,
+    request: &RequestParts<'request>,
 ) -> Result<(Url, &'request SignedHeaderSetV1), ProviderCallErrorV1> {
-    let destination =
-        request.relative_path().resolve_against_with_query(&binding.endpoint, request.query())?;
+    let destination = request.destination(binding)?;
 
-    let ProviderAuthV1::HostSigned { emits, .. } = request.auth() else {
+    let ProviderAuthV1::HostSigned { emits, .. } = request.auth else {
         return Err(PreparationErrorV1::UnsupportedAuthShape.into());
     };
 
     // The binding check is identical to the other arms: South never resolves this slot, but the
     // binding still decides which identity a request may be signed with.
-    if request.auth().credential_slot() != &binding.credential_slot {
+    if request.auth.credential_slot() != &binding.credential_slot {
         return Err(PreparationErrorV1::CredentialBindingMismatch.into());
     }
 
@@ -813,10 +1243,10 @@ where
     R: CredentialResolver + ?Sized,
     T: AsyncStreamingTransport + ?Sized,
 {
-    let destination =
-        request.relative_path().resolve_against_with_query(&binding.endpoint, request.query())?;
+    let request = RequestParts::from(request);
+    let destination = request.destination(binding)?;
 
-    let requested_slot = request.auth().credential_slot();
+    let requested_slot = request.auth.credential_slot();
     if requested_slot != &binding.credential_slot {
         return Err(PreparationErrorV1::CredentialBindingMismatch.into());
     }
@@ -885,7 +1315,8 @@ where
     F: RequestFinalizerV1 + ?Sized,
     T: AsyncStreamingTransport + ?Sized,
 {
-    let (destination, emits) = prepare_signed(binding, request)?;
+    let request = RequestParts::from(request);
+    let (destination, emits) = prepare_signed(binding, &request)?;
 
     if cancellation.is_cancelled() {
         return Err(PreparationErrorV1::Cancelled.into());
@@ -895,9 +1326,10 @@ where
     }
 
     let open = async {
+        let slot = request.auth.credential_slot();
         let mut prepared = PreparedHttpRequestV1::assemble_unsigned(request, destination)
             .map_err(ProviderCallErrorV1::from)?;
-        finalize_into(&mut prepared, finalizer, emits, request.auth().credential_slot()).await?;
+        finalize_into(&mut prepared, finalizer, emits, slot).await?;
         transport.open(&prepared).await.map_err(|error| match error {
             StreamOpenErrorV1::Rejected(rejected) => ProviderCallErrorV1::Rejected(rejected),
             StreamOpenErrorV1::Transport(error) => error.into(),

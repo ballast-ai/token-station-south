@@ -43,22 +43,35 @@ the
 [Anthropic provider component](docs/design/2026-08-22-anthropic-provider-component.md), the
 [Gemini provider component](docs/design/2026-08-22-gemini-provider-component.md), the
 [renderer refusal for unmappable blocks](docs/design/2026-08-23-renderer-refusal-for-unmappable-blocks.md),
-the [task adapter vocabulary](docs/design/2026-08-27-task-adapter-vocabulary.md) (proposed), and the
+the [task adapter vocabulary](docs/design/2026-08-27-task-adapter-vocabulary.md) (proposed), the
 [manifest schema beyond one world](docs/design/2026-08-27-manifest-schema-beyond-one-world.md)
-(proposed).
+(proposed), and the
+[released component artifacts](docs/design/2026-09-10-released-component-artifacts.md) (proposed).
 
 ## Implemented library slice
 
-- `south-contracts` defines bounded HTTP, Bearer and sanctioned header-secret authentication,
-  stable error, byte-streaming, and closed provider quota metadata contracts — including
-  reserved-header enforcement, redacted diagnostics, and the sanctioned controlled query and
-  controlled user-agent request declarations.
+- `south-contracts` defines bounded HTTP (the JSON POST request, the body-less GET request, and
+  the multipart POST request, whose opaque bytes travel under a media type the contract renders
+  from a validated boundary),
+  Bearer, sanctioned header-secret, and combined Bearer-plus-header-secret authentication, stable
+  error, byte-streaming, and closed provider quota metadata contracts, plus a buffered binary
+  response beside the UTF-8 one, which keeps its guarantee unchanged — including reserved-header
+  enforcement, redacted diagnostics, and the sanctioned controlled query and controlled
+  user-agent request declarations.
 - `south-core` binds a validated endpoint to one credential slot, resolves the host-owned secret,
-  and applies cancellation and caller deadlines around prepared buffered and streaming calls. Its
+  and applies cancellation and caller deadlines around prepared buffered and streaming JSON POST
+  calls, buffered body-less GET calls, buffered multipart POST calls, and JSON POST calls whose
+  response is buffered as opaque bytes rather than proved to be UTF-8. Its
   `raw` module is the shared host prelude: a borrowed raw-call type, string-in contract parsing
   that names the failing field, zero-side-effect one-shot wrappers, and the pre-resolved and
-  size-bounding credential resolver adapters both hosts previously hand-rolled.
+  size-bounding credential resolver adapters both hosts previously hand-rolled — plus the
+  host-signed twin of that raw call and its wrappers, which take a host finalizer in place of a
+  credential resolver, the body-less GET twin a task poller hands over, and the multipart twin a
+  transcription or image-edit path hands over.
 - `south-transport-reqwest` executes hardened buffered and byte-streaming JSON POST requests,
+  buffered body-less GET requests, buffered multipart POST requests (emitting the media type
+  the prepared request renders, and sharing the body's allocation rather than copying it), and
+  binary-response JSON POST requests under their own larger body cap,
   applies the request's sanctioned user-agent declaration exactly once, applies every auth header
   the prepared request carries (one for the credential arms, the finalizer's diffed set for the
   host-signed arm), adds exactly `TRANSPORT_ADDED_HEADERS_V1` and nothing else, captures only the
@@ -67,8 +80,9 @@ the [task adapter vocabulary](docs/design/2026-08-27-task-adapter-vocabulary.md)
   streaming transports from one timeout configuration.
 - `south-provider-conformance` publishes immutable `south.provider-call.v1`,
   `south.provider-stream.v1`, `south.provider-quota-metadata.v1`, `south.header-auth.v1`,
-  `south.controlled-query.v1`, and `south.controlled-user-agent.v1` fixtures, while
-  `south-testkit` runs them against assembled host executors.
+  `south.controlled-query.v1`, `south.controlled-user-agent.v1`, `south.provider-get.v1`,
+  `south.provider-multipart.v1`, and `south.provider-binary.v1` fixtures, while `south-testkit`
+  runs them against assembled host executors.
 - `south-provider-api` owns the v2 provider component ABI: the WIT package
   `token-station:adapter@2.0.0` (world `provider-adapter-v2`, JSON payloads named by
   canonical type, raw-bytes stream chunks) and the component `manifest.json` schema

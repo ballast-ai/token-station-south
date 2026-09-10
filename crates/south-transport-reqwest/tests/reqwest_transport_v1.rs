@@ -7,14 +7,17 @@ use std::{
 
 use http::StatusCode;
 use south_contracts::{
-    BearerAuthV1, BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1, JsonBodyV1,
-    JsonPostRequestV1, MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES, MAX_RESPONSE_BODY_BYTES,
-    MAX_RESPONSE_CONTENT_TYPE_BYTES, MAX_RESPONSE_RETRY_AFTER_BYTES, ProviderAuthV1,
-    ProviderEndpointV1, RelativePathV1, SafeHeaders, SecretHeaderV1, TransportErrorV1,
+    BearerAuthV1, BufferedBinaryResponseV1, BufferedHttpResponseV1, ControlledUserAgentV1,
+    CredentialSlotV1, GetRequestV1, JsonBodyV1, JsonPostRequestV1, MAX_BINARY_RESPONSE_BODY_BYTES,
+    MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES, MAX_RESPONSE_BODY_BYTES,
+    MAX_RESPONSE_CONTENT_TYPE_BYTES, MAX_RESPONSE_RETRY_AFTER_BYTES, MultipartBodyV1,
+    MultipartBoundaryV1, MultipartPostRequestV1, ProviderAuthV1, ProviderEndpointV1,
+    QueryParameterV1, QueryStringV1, RelativePathV1, SafeHeaders, SecretHeaderV1, TransportErrorV1,
 };
 use south_core::{
     CredentialResolutionFuture, CredentialResolver, ProviderBindingV1, ProviderCallErrorV1,
-    SecretValue, execute_provider_call_v1,
+    SecretValue, execute_binary_call_v1, execute_get_call_v1, execute_multipart_call_v1,
+    execute_provider_call_v1,
 };
 use south_transport_reqwest::{ReqwestTransportConfigV1, ReqwestTransportV1};
 use tokio::{
@@ -85,11 +88,11 @@ async fn read_request(stream: &mut TcpStream) -> ReceivedRequest {
         .collect();
     let header_names: Vec<String> = header_pairs.iter().map(|(name, _)| name.clone()).collect();
     let headers = header_pairs.into_iter().collect::<BTreeMap<_, _>>();
-    let body_length = headers
-        .get("content-length")
-        .expect("buffered request should have content-length")
-        .parse::<usize>()
-        .expect("fixture content-length should be numeric");
+    // A JSON POST always declares its length; a body-less GET (HTTP contract v6) declares none
+    // and carries nothing, which is exactly what its wire fixture asserts.
+    let body_length = headers.get("content-length").map_or(0, |length| {
+        length.parse::<usize>().expect("fixture content-length should be numeric")
+    });
     while bytes.len() - header_end < body_length {
         let mut chunk = [0_u8; 1024];
         let count = stream.read(&mut chunk).await.expect("fixture body should read");
@@ -280,6 +283,137 @@ async fn sends_exact_post_and_preserves_created_response() {
     assert_eq!(result.body(), r#"{"ok":true}"#);
     assert_eq!(result.content_type(), Some("application/json"));
     assert_eq!(result.retry_after(), Some("7"));
+}
+
+/// HTTP contract version six: a body-less GET reaches the socket as `GET`, with the declared
+/// query on the request target, no body bytes, and no `content-length` — the one name in
+/// `TRANSPORT_ADDED_HEADERS_V1` that is a function of a body the request does not have.
+#[tokio::test]
+async fn sends_exact_body_less_get_with_the_task_id_query_and_no_content_length() {
+    let loopback = loopback_once(response(
+        "200 OK",
+        &[("content-type", "application/json")],
+        br#"{"status":"Success"}"#,
+    ))
+    .await;
+    let transport = ReqwestTransportV1::new(config()).expect("transport should build");
+    let resolver = StaticResolver::default();
+    let binding = ProviderBindingV1::new(
+        ProviderEndpointV1::parse(&loopback.endpoint).expect("loopback endpoint should be valid"),
+        CredentialSlotV1::parse("primary").expect("fixture slot should be valid"),
+    );
+    let request = GetRequestV1::new(
+        RelativePathV1::parse("v1/query/video_generation").expect("fixture path should be valid"),
+        SafeHeaders::try_from_iter([("x-test", HEADER_SENTINEL)])
+            .expect("fixture headers should be valid"),
+        BearerAuthV1::new(
+            CredentialSlotV1::parse("primary").expect("fixture slot should be valid"),
+        ),
+    )
+    .with_query(
+        QueryStringV1::try_from_iter([(QueryParameterV1::TaskId, "276843862449040")])
+            .expect("fixture query should be valid"),
+    );
+
+    let result = execute_get_call_v1(
+        &binding,
+        &request,
+        &resolver,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("a body-less GET should succeed");
+    let received = loopback.request.await.expect("server should report the request");
+    loopback.task.await.expect("server task should finish");
+
+    assert_eq!(
+        received.request_line,
+        "GET /base/v1/query/video_generation?task_id=276843862449040 HTTP/1.1"
+    );
+    assert_eq!(received.headers.get("x-test").map(String::as_str), Some(HEADER_SENTINEL));
+    assert_eq!(
+        received.headers.get("authorization").map(String::as_str),
+        Some("Bearer transport-secret-sentinel")
+    );
+    assert!(received.body.is_empty(), "a GET carries no body bytes");
+    assert!(
+        !received.header_names.iter().any(|name| name == "content-length"),
+        "no body means no content-length: {:?}",
+        received.header_names
+    );
+    assert!(
+        !received.header_names.iter().any(|name| name == "content-type"),
+        "the transport adds no content-type of its own"
+    );
+    // Everything else the transport adds is still exactly the declared set.
+    let mut names = received.header_names.clone();
+    names.sort_unstable();
+    assert_eq!(names, ["accept", "authorization", "host", "x-test"]);
+    assert_eq!(resolver.calls.load(Ordering::SeqCst), 1);
+    assert_eq!(result.status().as_u16(), 200);
+    assert_eq!(result.body(), r#"{"status":"Success"}"#);
+}
+
+/// Auth contract version four: the combined arm puts the same secret on the wire twice —
+/// `Bearer `-prefixed in `authorization` and verbatim in the sanctioned header — each exactly
+/// once.
+#[tokio::test]
+async fn bearer_and_header_secret_call_injects_both_headers_exactly_once() {
+    let loopback = loopback_once(response(
+        "200 OK",
+        &[("content-type", "application/json")],
+        br#"{"ok":true}"#,
+    ))
+    .await;
+    let transport = ReqwestTransportV1::new(config()).expect("transport should build");
+    let resolver = StaticResolver::default();
+    let binding = ProviderBindingV1::new(
+        ProviderEndpointV1::parse(&loopback.endpoint).expect("loopback endpoint should be valid"),
+        CredentialSlotV1::parse("primary").expect("fixture slot should be valid"),
+    );
+    let request = JsonPostRequestV1::new(
+        RelativePathV1::parse("v1beta/openai/chat/completions")
+            .expect("fixture path should be valid"),
+        SafeHeaders::try_from_iter([("x-test", HEADER_SENTINEL)])
+            .expect("fixture headers should be valid"),
+        JsonBodyV1::parse(&format!(r#"{{"value":"{BODY_SENTINEL}"}}"#))
+            .expect("fixture body should be valid"),
+        ProviderAuthV1::BearerAndHeaderSecret {
+            header: SecretHeaderV1::XGoogApiKey,
+            slot: BearerAuthV1::new(
+                CredentialSlotV1::parse("primary").expect("fixture slot should be valid"),
+            ),
+        },
+    );
+
+    let result = execute_provider_call_v1(
+        &binding,
+        &request,
+        &resolver,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("a combined-arm call should succeed");
+    let received = loopback.request.await.expect("server should report the request");
+    loopback.task.await.expect("server task should finish");
+
+    assert_eq!(
+        received.headers.get("authorization").map(String::as_str),
+        Some(format!("Bearer {SECRET_SENTINEL}").as_str())
+    );
+    assert_eq!(received.headers.get("x-goog-api-key").map(String::as_str), Some(SECRET_SENTINEL));
+    for name in ["authorization", "x-goog-api-key"] {
+        assert_eq!(
+            received.header_names.iter().filter(|candidate| candidate.as_str() == name).count(),
+            1,
+            "{name} must appear exactly once on the wire"
+        );
+    }
+    assert_eq!(result.status().as_u16(), 200);
 }
 
 #[tokio::test]
@@ -943,4 +1077,235 @@ async fn cancellation_drops_real_reqwest_io_without_detaching_work() {
 
     assert_eq!(result.expect_err("cancelled call should fail").code(), "CANCELLED");
     assert!(remaining.is_empty(), "cancelled request must not leave detached writes");
+}
+
+/// HTTP contract version seven: a multipart POST reaches the socket with the bytes the host
+/// encoded, under the media type South rendered from the declared boundary, and with a
+/// `content-length` matching those bytes. The host never gets to state the media type, so the
+/// wire cannot carry one that disagrees with the body.
+#[tokio::test]
+async fn sends_exact_multipart_body_under_the_rendered_media_type() {
+    const BOUNDARY: &str = "transport-test-boundary";
+    let body_bytes = format!(
+        "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\n{BODY_SENTINEL}\r\n--{BOUNDARY}--\r\n"
+    )
+    .into_bytes();
+
+    let loopback = loopback_once(response(
+        "200 OK",
+        &[("content-type", "application/json")],
+        br#"{"text":"ok"}"#,
+    ))
+    .await;
+    let transport = ReqwestTransportV1::new(config()).expect("transport should build");
+    let resolver = StaticResolver::default();
+    let binding = ProviderBindingV1::new(
+        ProviderEndpointV1::parse(&loopback.endpoint).expect("loopback endpoint should be valid"),
+        CredentialSlotV1::parse("primary").expect("fixture slot should be valid"),
+    );
+    let request = MultipartPostRequestV1::try_new(
+        RelativePathV1::parse("v1/audio/transcriptions").expect("fixture path should be valid"),
+        SafeHeaders::try_from_iter([("x-test", HEADER_SENTINEL)])
+            .expect("fixture headers should be valid"),
+        MultipartBodyV1::parse(
+            body_bytes.clone(),
+            MultipartBoundaryV1::parse(BOUNDARY).expect("fixture boundary should be valid"),
+        )
+        .expect("fixture body is delimited by its boundary"),
+        BearerAuthV1::new(
+            CredentialSlotV1::parse("primary").expect("fixture slot should be valid"),
+        ),
+    )
+    .expect("fixture headers carry no content-type");
+
+    let result = execute_multipart_call_v1(
+        &binding,
+        &request,
+        &resolver,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("a multipart call should succeed");
+    let received = loopback.request.await.expect("server should report the request");
+    loopback.task.await.expect("server task should finish");
+
+    assert_eq!(received.request_line, "POST /base/v1/audio/transcriptions HTTP/1.1");
+    assert_eq!(
+        received.headers.get("content-type").map(String::as_str),
+        Some(format!("multipart/form-data; boundary={BOUNDARY}").as_str()),
+        "the rendered media type, not one the host supplied"
+    );
+    assert_eq!(
+        received.headers.get("content-length").map(String::as_str),
+        Some(body_bytes.len().to_string().as_str())
+    );
+    assert_eq!(received.body, body_bytes, "the encoded bytes reach the wire unmodified");
+    assert_eq!(received.headers.get("x-test").map(String::as_str), Some(HEADER_SENTINEL));
+    assert_eq!(
+        received.headers.get("authorization").map(String::as_str),
+        Some("Bearer transport-secret-sentinel")
+    );
+    // Exactly one content-type on the wire: the ordinary header channel could not have carried a
+    // second, because the request shape refuses to hold one.
+    assert_eq!(
+        received.header_names.iter().filter(|name| name.as_str() == "content-type").count(),
+        1
+    );
+    assert_eq!(result.status().as_u16(), 200);
+}
+
+/// A byte sequence no UTF-8 decoder accepts, shaped like the head of an MP3 frame.
+const BINARY_BODY_SENTINEL: &[u8] = &[0xff, 0xfb, 0x90, 0x80, 0x00, 0x80];
+
+async fn binary_call(
+    endpoint: &str,
+    transport: &ReqwestTransportV1,
+    deadline: tokio::time::Instant,
+    cancellation: &CancellationToken,
+) -> Result<BufferedBinaryResponseV1, ProviderCallErrorV1> {
+    let resolver = StaticResolver::default();
+    let binding = ProviderBindingV1::new(
+        ProviderEndpointV1::parse(endpoint).expect("loopback endpoint should be valid"),
+        CredentialSlotV1::parse("primary").expect("fixture slot should be valid"),
+    );
+    execute_binary_call_v1(&binding, &request(), &resolver, transport, deadline, cancellation).await
+}
+
+#[tokio::test]
+async fn binary_transport_returns_wire_bytes_verbatim_where_the_utf8_one_refuses_them() {
+    // Both arms are driven over the same loopback with the same response bytes, because the claim
+    // is a difference of exactly one step: the UTF-8 arm's `String::from_utf8`. Everything else —
+    // hardening, the ordered header reads, the streamed body read — is one shared function.
+    let wire = response("200 OK", &[("content-type", "audio/mpeg")], BINARY_BODY_SENTINEL);
+
+    let loopback = loopback_once(wire.clone()).await;
+    let transport = ReqwestTransportV1::new(config()).expect("transport should build");
+    let binary = binary_call(
+        &loopback.endpoint,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("a binary response body is not required to be UTF-8");
+
+    assert_eq!(binary.status(), StatusCode::OK);
+    assert_eq!(binary.body(), BINARY_BODY_SENTINEL);
+    assert_eq!(binary.content_type(), Some("audio/mpeg"));
+    loopback.request.await.expect("the loopback should report its request");
+    loopback.task.await.expect("the loopback task should finish");
+
+    let loopback = loopback_once(wire).await;
+    let error = call(
+        &loopback.endpoint,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect_err("the UTF-8 arm must keep refusing exactly these bytes");
+    assert!(matches!(error, ProviderCallErrorV1::Transport(TransportErrorV1::ResponseBodyNotUtf8)));
+    loopback.request.await.expect("the loopback should report its request");
+    loopback.task.await.expect("the loopback task should finish");
+}
+
+#[tokio::test]
+async fn binary_transport_returns_bytes_on_a_rejection_rather_than_an_error() {
+    // Ruled D3, measured at the real transport boundary rather than at the contract: a non-2xx is
+    // a normal outcome carrying its body, exactly as it is on the UTF-8 arm.
+    let body = br#"{"error":"limited"}"#;
+    let loopback = loopback_once(response(
+        "429 Too Many Requests",
+        &[("content-type", "application/json"), ("retry-after", "120")],
+        body,
+    ))
+    .await;
+    let transport = ReqwestTransportV1::new(config()).expect("transport should build");
+
+    let response = binary_call(
+        &loopback.endpoint,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("a rejection is a normal buffered outcome");
+
+    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(response.retry_after(), Some("120"));
+    assert_eq!(response.body(), body);
+    loopback.request.await.expect("the loopback should report its request");
+    loopback.task.await.expect("the loopback task should finish");
+}
+
+#[tokio::test]
+async fn the_binary_arm_admits_a_body_the_utf8_cap_would_refuse() {
+    // Ruled D4, and the reason the cap is a parameter rather than a constant in the shared fetch:
+    // a body between the two caps must reach the host, because falling back to legacy for exactly
+    // these artifacts is the coverage hole the decision exists to avoid. Sized just past the UTF-8
+    // cap rather than near the binary one, so the test stays cheap while still being decisive.
+    let oversize_for_text = vec![b'a'; MAX_RESPONSE_BODY_BYTES + 1];
+    const { assert!(MAX_RESPONSE_BODY_BYTES < MAX_BINARY_RESPONSE_BODY_BYTES) };
+    let wire =
+        response("200 OK", &[("content-type", "application/octet-stream")], &oversize_for_text);
+
+    let loopback = loopback_once(wire.clone()).await;
+    let transport = ReqwestTransportV1::new(config()).expect("transport should build");
+    let binary = binary_call(
+        &loopback.endpoint,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("a body between the two caps belongs to the binary arm");
+    assert_eq!(binary.body_len(), oversize_for_text.len());
+    loopback.request.await.expect("the loopback should report its request");
+    loopback.task.await.expect("the loopback task should finish");
+
+    let loopback = loopback_once(wire).await;
+    let error = call(
+        &loopback.endpoint,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect_err("the same body must still be too large for the UTF-8 arm");
+    assert!(matches!(
+        error,
+        ProviderCallErrorV1::Transport(TransportErrorV1::ResponseBodyTooLarge)
+    ));
+    loopback.request.await.expect("the loopback should report its request");
+    // The refusal happens on the *declared* `content-length`, before a byte of body is read, so
+    // this leg drops the connection while the fixture is still writing and the writer sees a
+    // broken pipe. That early refusal is the behaviour being asserted, so the writer task is
+    // abandoned rather than joined — joining it would assert the opposite.
+    loopback.task.abort();
+}
+
+#[tokio::test]
+async fn the_binary_arm_denies_a_redirect_exactly_as_the_utf8_arm_does() {
+    let loopback = loopback_once(response(
+        "302 Found",
+        &[("location", "https://redirect-target-sentinel.invalid/elsewhere")],
+        b"",
+    ))
+    .await;
+    let transport = ReqwestTransportV1::new(config()).expect("transport should build");
+
+    let error = binary_call(
+        &loopback.endpoint,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect_err("a redirect is refused on every buffered arm");
+
+    assert!(matches!(error, ProviderCallErrorV1::Transport(TransportErrorV1::RedirectDenied)));
+    loopback.request.await.expect("the loopback should report its request");
+    loopback.task.await.expect("the loopback task should finish");
 }

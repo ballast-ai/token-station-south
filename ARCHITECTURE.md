@@ -18,11 +18,11 @@ community policy      enterprise policy
 
 | Crate | Current status and ownership |
 | --- | --- |
-| `south-contracts` | Implemented bounded HTTP, Bearer and sanctioned header-secret auth, stable error, byte-streaming, and closed quota metadata contracts, plus the sanctioned controlled query and controlled user-agent declarations |
-| `south-core` | Implemented host-neutral buffered and streaming provider-call orchestration, plus the shared host prelude (`raw` module: raw-call type, contract-parse orchestration, one-shot wrappers, resolver adapters) |
-| `south-transport-reqwest` | Implemented hardened buffered and byte-streaming JSON POST transport with bounded quota metadata capture, sanctioned user-agent application, and one-config transport-pair construction |
-| `south-provider-conformance` | Implemented immutable provider-call, provider-stream, provider-quota-metadata, header-auth, controlled-query, and controlled-user-agent v1 fixtures |
-| `south-testkit` | Implemented assembled-executor conformance runners and reference executors for all six suites, plus the owned raw-call builder for host tests |
+| `south-contracts` | Implemented bounded HTTP (JSON POST, body-less GET, and multipart POST request shapes, and a buffered binary response beside the UTF-8 one), Bearer, sanctioned header-secret, and combined Bearer-plus-header-secret auth, stable error, byte-streaming, and closed quota metadata contracts, plus the sanctioned controlled query and controlled user-agent declarations |
+| `south-core` | Implemented host-neutral buffered and streaming provider-call orchestration and its buffered body-less GET, multipart and binary-response twins, plus the shared host prelude (`raw` module: raw-call type, its host-signed, GET and multipart twins, contract-parse orchestration, one-shot wrappers for all four, resolver adapters) |
+| `south-transport-reqwest` | Implemented hardened buffered and byte-streaming JSON POST transport, the same buffered transport for body-less GET and multipart POST requests (rendering the latter's media type and sharing its allocation) and for a JSON POST whose response is buffered as opaque bytes under its own larger cap, bounded quota metadata capture, sanctioned user-agent application, and one-config transport-pair construction |
+| `south-provider-conformance` | Implemented immutable provider-call, provider-stream, provider-quota-metadata, header-auth, controlled-query, controlled-user-agent, provider-get, provider-multipart, and provider-binary v1 fixtures |
+| `south-testkit` | Implemented assembled-executor conformance runners and reference executors for all nine suites, plus the owned raw-call, host-signed raw-call, raw-GET and raw-multipart builders for host tests |
 | `south-provider-api` | Implemented v2 provider component ABI: WIT package `token-station:adapter@2.0.0` (world `provider-adapter-v2`) plus the gate-① manifest schema with the seven-field compatibility tuple; depends on no other south crate by design |
 | `south-component-conformance` | Implemented gates ① and ② (package admission + `south.provider-component.v1` behavior suite) with the native `provider-openai-compatible`, `provider-anthropic` and `provider-gemini` references and a frozen fixture pack each; the one sanctioned typed consumer of the Canonical IR, pinned to a kernel distribution tag |
 | `south-provider-runtime` | Implemented sandboxed component execution: gated loading, locked-down WASI, memory/deadline/payload/stream bounds, `host.sign` behind the manifest's secret allowlist — JSON-face only, never an IR consumer; the typed seam over it is the conformance crate's `sandbox` feature |
@@ -74,6 +74,31 @@ South does not own routing, fallback across upstreams, retry budgets, admission,
 quota ledgers, audit persistence, task persistence, credential sources, or tracing initialization.
 It never reads a database directly. Transport I/O, time, cancellation, component bytes, and runtime
 permissions must be explicit capabilities at their operational boundaries.
+
+### Where the vocabulary line runs: objective facts in, business choices out
+
+South may carry vocabulary for what an upstream *reported* and for what *happened* — never for
+what a host *decided*. The line, ruled 2026-09-08 for the task and (future) metering vocabularies:
+
+| May live in South | Stays host-side |
+| --- | --- |
+| **Metering**: tokens, seconds, images, characters, milliunits an upstream reported | **Pricing**: unit prices, tiers, discounts, rate cards |
+| **Metering uncertainty**: how "the upstream reported no usage" is expressed | **Business model**: BYOK fee splits, routing attribution, tenant policy |
+| **Settlement outcome vocabulary**: the closed set of ways a settlement can end | **Funds policy**: when to reserve, whose ledger to debit, how much to hold |
+
+A metering vocabulary is admitted only with a second consumer in sight: a shared library that
+freezes one host's persisted format is not sharing, it is exporting that host's migration burden.
+
+### What never enters South, even when it could be moved
+
+Two tests, ruled 2026-09-08. Material whose **leak impact exceeds one API key** stays host-side:
+service-account private keys, key-encryption keys, anything that decrypts every tenant's rows.
+Logic whose **wrong decision is money or an unrecoverable credential** stays host-side: BYOK wallet
+selection and its exclusivity rules, single-use rotation's concurrency guard, anything that depends
+on database semantics to be correct. Minting, OAuth refresh, and request signing therefore remain
+host code by design; South offers the finalizer seam (`RequestFinalizerV1`) for the *position* of a
+signature, never for the material. A host keeps a per-provider authentication layer above South,
+and that layer is not a gap South intends to close.
 
 During migration, `token-station-protocol` may re-export South types under old Rust paths. It must
 not define duplicate nominal types, and South must never depend back on that compatibility layer.

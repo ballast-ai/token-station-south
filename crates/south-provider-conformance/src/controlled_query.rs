@@ -49,6 +49,13 @@ pub enum ControlledQueryCaseIdV1 {
     /// carrying a declared query, because nothing was declared. A probe that hardcodes `true`
     /// reports `true` here and fails with a `WireQuery` mismatch.
     QueryFreeRequestReachesTheWire,
+    /// One successful buffered exchange carrying the sanctioned `GroupId` (contract version five).
+    ///
+    /// The first case for a parameter admitted after the initial set: it proves the new name
+    /// serializes with the upstream's exact casing and lands on the wire, so an adapter that
+    /// lower-cases names or re-validates against a stale two-parameter table fails here and
+    /// nowhere else.
+    BufferedGroupIdQuerySuccess,
 }
 
 fixed_debug!(ControlledQueryCaseIdV1 {
@@ -57,6 +64,7 @@ fixed_debug!(ControlledQueryCaseIdV1 {
     InvalidQueryValueRejected => "InvalidQueryValueRejected",
     ReversedDeclarationOrderIsCanonicalized => "ReversedDeclarationOrderIsCanonicalized",
     QueryFreeRequestReachesTheWire => "QueryFreeRequestReachesTheWire",
+    BufferedGroupIdQuerySuccess => "BufferedGroupIdQuerySuccess",
 });
 
 /// A raw upstream exchange or fake-transport behavior for a canonical controlled-query case.
@@ -321,6 +329,10 @@ const REVERSED_ORDER_QUERY: &[(QueryParameterV1, &str)] = &[
 /// No declaration at all. The request must reach the transport carrying no query, which is what
 /// makes this the one case whose probe runs and must still answer `false`.
 const QUERY_FREE_QUERY: &[(QueryParameterV1, &str)] = &[];
+/// A nineteen-digit group id, the shape the `MiniMax` platform issues today.
+const CONTROLLED_QUERY_GROUP_ID: &str = "1782000000000000000";
+const GROUP_ID_QUERY: &[(QueryParameterV1, &str)] =
+    &[(QueryParameterV1::GroupId, CONTROLLED_QUERY_GROUP_ID)];
 
 const fn query_evidence(
     resolver_calls: ProviderCallCountV1,
@@ -431,6 +443,28 @@ const CONTROLLED_QUERY_FIXTURES: &[ControlledQueryFixtureV1] = &[
             // a `WireQuery` mismatch, which is what turns the wire-query claim from a
             // review item into a machine-checkable fact.
             evidence: query_evidence(ProviderCallCountV1::One, ProviderCallCountV1::One, false),
+        },
+    },
+    ControlledQueryFixtureV1 {
+        case_id: ControlledQueryCaseIdV1::BufferedGroupIdQuerySuccess,
+        input: input(CONTROLLED_QUERY_PATH, CONTROLLED_QUERY_BOUND_SLOT),
+        declared_query: GROUP_ID_QUERY,
+        upstream: ControlledQueryUpstreamV1::Response(ProviderCallRawResponseV1 {
+            status: 200,
+            body: CONTROLLED_QUERY_RESPONSE_BODY,
+            content_type: Some(CONTROLLED_QUERY_CONTENT_TYPE),
+            retry_after: None,
+        }),
+        expected: ControlledQueryExpectedV1 {
+            outcome: ControlledQueryExpectedOutcomeV1::Response {
+                status: 200,
+                body: CONTROLLED_QUERY_RESPONSE_BODY,
+                content_type: Some(CONTROLLED_QUERY_CONTENT_TYPE),
+                retry_after: None,
+            },
+            // The wire must carry `GroupId=…` with the upstream's casing; the probe compares
+            // against the canonical serialization, so a lower-cased name fails here.
+            evidence: query_evidence(ProviderCallCountV1::One, ProviderCallCountV1::One, true),
         },
     },
 ];

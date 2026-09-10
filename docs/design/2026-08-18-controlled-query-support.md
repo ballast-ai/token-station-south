@@ -331,3 +331,12 @@ non-goal rather than a deferred feature.
   two the text surfaces need. `GroupId` and `task_id` are real but serve media surfaces this
   library's call shapes do not yet cover; admitting them now would freeze two names into the
   contract ahead of any conformance case exercising them.
+
+  > 2026-09-08: `GroupId` admitted in contract version five with its own conformance case — the
+  > consumer turned out to be a covered text surface (`MiniMax`'s China host requires it on every
+  > path). See `2026-09-08-controlled-query-group-id.md`. `task_id` remains out.
+
+  > 2026-09-08: `task_id` admitted in contract version six alongside the body-less GET request,
+  > with its own conformance case (`south.provider-get.v1`, `BufferedGetTaskIdQuerySuccess`) —
+  > the consumer is the server host's task poller, and `MiniMax` carries the id as a query. See
+  > `2026-09-08-buffered-get-request.md`. D5's set is now fully admitted.

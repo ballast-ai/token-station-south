@@ -8,18 +8,23 @@ use std::time::Duration;
 
 use http::StatusCode;
 use south_contracts::{
-    BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1, QueryParameterV1,
-    QueryStringV1, SecretHeaderV1, StreamChunkV1, StreamingResponseHeadV1, TransportErrorV1,
+    BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1, ProviderAuthV1,
+    QueryParameterV1, QueryStringV1, SecretHeaderV1, SignedHeaderSetV1, SignedHeaderV1,
+    StreamChunkV1, StreamingResponseHeadV1, TransportErrorV1,
 };
 use south_core::raw::{
-    BoundedResolverV1, PreparedSecretResolverV1, RawAuthV1, RawCallErrorV1, RawProviderCallErrorV1,
-    RawProviderCallV1, execute_raw_call_v1, open_streaming_raw_call_v1, parse_raw_call,
-    raw_call_parses,
+    BoundedResolverV1, PreparedSecretResolverV1, RawAuthV1, RawCallErrorV1, RawGetProviderCallV1,
+    RawMultipartProviderCallV1, RawProviderCallErrorV1, RawProviderCallV1, RawSignedProviderCallV1,
+    execute_get_raw_call_v1, execute_multipart_raw_call_v1, execute_raw_call_v1,
+    execute_signed_raw_call_v1, open_streaming_raw_call_v1, open_streaming_signed_raw_call_v1,
+    parse_raw_call, parse_raw_get_call, parse_raw_multipart_call, parse_raw_signed_call,
+    raw_call_parses, raw_get_call_parses, raw_multipart_call_parses, raw_signed_call_parses,
 };
 use south_core::{
-    AsyncHttpTransport, AsyncStreamingTransport, CredentialResolver, OpenedByteStreamV1,
-    PreparedHttpRequestV1, ProviderCallErrorV1, SecretValue, StreamByteSourceV1,
-    StreamChunkFutureV1, StreamOpenErrorV1, StreamingOpenFutureV1, TransportFuture,
+    AsyncHttpTransport, AsyncStreamingTransport, CredentialResolver, FinalizeFutureV1,
+    FinalizeViewV1, FinalizedHeadersV1, OpenedByteStreamV1, PreparedHttpRequestV1,
+    ProviderCallErrorV1, RequestFinalizerV1, SecretValue, StreamByteSourceV1, StreamChunkFutureV1,
+    StreamOpenErrorV1, StreamingOpenFutureV1, TransportFuture,
 };
 use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
@@ -69,15 +74,36 @@ type RecordedAuth = Arc<Mutex<Option<(String, Vec<u8>, String, Option<String>)>>
 struct RecordingTransport {
     calls: AtomicUsize,
     recorded: RecordedAuth,
+    /// The prepared method and whether a body slot existed, for the GET twin's tests.
+    shape: Mutex<Option<(String, bool)>>,
+    /// The media type South rendered and the exact bytes handed over, for the multipart tests.
+    wire: Mutex<Option<(Option<String>, Vec<u8>)>>,
 }
 
 impl RecordingTransport {
     fn new() -> Self {
-        Self { calls: AtomicUsize::new(0), recorded: Arc::new(Mutex::new(None)) }
+        Self {
+            calls: AtomicUsize::new(0),
+            recorded: Arc::new(Mutex::new(None)),
+            shape: Mutex::new(None),
+            wire: Mutex::new(None),
+        }
     }
 
     fn calls(&self) -> usize {
         self.calls.load(Ordering::SeqCst)
+    }
+
+    fn shape(&self) -> (String, bool) {
+        self.shape.lock().unwrap().clone().expect("transport must be reached")
+    }
+
+    fn content_type(&self) -> Option<String> {
+        self.wire.lock().unwrap().clone().expect("transport must be reached").0
+    }
+
+    fn body_bytes(&self) -> Vec<u8> {
+        self.wire.lock().unwrap().clone().expect("transport must be reached").1
     }
 
     fn record(&self, request: &PreparedHttpRequestV1<'_>) {
@@ -90,6 +116,12 @@ impl RecordingTransport {
             auth_value.to_vec(),
             request.url().to_string(),
             request.user_agent().map(|agent| agent.as_str().to_owned()),
+        ));
+        *self.shape.lock().unwrap() =
+            Some((request.method().to_string(), request.body().is_some()));
+        *self.wire.lock().unwrap() = Some((
+            request.content_type().map(str::to_owned),
+            request.body().map(south_core::RequestBodyRefV1::as_bytes).unwrap_or_default().to_vec(),
         ));
     }
 }
@@ -403,5 +435,725 @@ fn debug_output_redacts_the_prepared_secret() {
     let raw = valid_raw(&headers, "{\"secret-ish\":true}");
     let rendered = format!("{raw:?}");
     assert!(!rendered.contains("secret-ish"));
+    assert!(!rendered.contains("provider.invalid"));
+}
+
+// ── Host-signed twin (signed-raw-call record) ────────────────────────────────────────────────
+
+fn declared() -> SignedHeaderSetV1 {
+    SignedHeaderSetV1::new(&[
+        SignedHeaderV1::Authorization,
+        SignedHeaderV1::XAmzDate,
+        SignedHeaderV1::XAmzContentSha256,
+    ])
+    .expect("fixture declaration is valid")
+}
+
+const fn valid_signed_raw<'a>(
+    headers: &'a [(String, String)],
+    body: &'a str,
+    emits: &'a SignedHeaderSetV1,
+) -> RawSignedProviderCallV1<'a> {
+    RawSignedProviderCallV1 {
+        endpoint: "https://provider.invalid",
+        relative_path: "model/anthropic.test-v1:0/invoke",
+        bound_slot: "aws.primary",
+        requested_slot: "aws.primary",
+        headers,
+        body,
+        emits,
+        query: None,
+        user_agent: None,
+    }
+}
+
+/// Emits exactly what the view declares, with reproducible values; counts calls.
+struct CountingFinalizer {
+    calls: AtomicUsize,
+    omit_one: bool,
+}
+
+impl CountingFinalizer {
+    const fn new() -> Self {
+        Self { calls: AtomicUsize::new(0), omit_one: false }
+    }
+
+    const fn omitting_one() -> Self {
+        Self { calls: AtomicUsize::new(0), omit_one: true }
+    }
+
+    fn calls(&self) -> usize {
+        self.calls.load(Ordering::SeqCst)
+    }
+}
+
+impl RequestFinalizerV1 for CountingFinalizer {
+    fn finalize<'a>(&'a self, view: FinalizeViewV1<'a>) -> FinalizeFutureV1<'a> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        Box::pin(async move {
+            let mut headers = FinalizedHeadersV1::new();
+            for (index, header) in view.emits().headers().iter().enumerate() {
+                if self.omit_one && index == 0 {
+                    continue;
+                }
+                let value = format!("{}={}", header.header_name(), view.body().len());
+                headers.insert(*header, value.into_bytes());
+            }
+            Ok(headers)
+        })
+    }
+}
+
+type RecordedSignedWire = Arc<Mutex<Option<(Vec<(String, Vec<u8>)>, String)>>>;
+
+/// Records every auth header (name and value) the prepared request carries, plus the URL.
+struct RecordingSignedTransport {
+    calls: AtomicUsize,
+    recorded: RecordedSignedWire,
+}
+
+impl RecordingSignedTransport {
+    fn new() -> Self {
+        Self { calls: AtomicUsize::new(0), recorded: Arc::new(Mutex::new(None)) }
+    }
+
+    fn calls(&self) -> usize {
+        self.calls.load(Ordering::SeqCst)
+    }
+
+    fn record(&self, request: &PreparedHttpRequestV1<'_>) {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        let headers =
+            request.auth_headers().map(|(name, value)| (name.to_owned(), value.to_vec())).collect();
+        *self.recorded.lock().unwrap() = Some((headers, request.url().to_string()));
+    }
+}
+
+impl AsyncHttpTransport for RecordingSignedTransport {
+    fn execute<'a>(
+        &'a self,
+        request: &'a PreparedHttpRequestV1<'_>,
+        _remaining_timeout: Duration,
+    ) -> TransportFuture<'a> {
+        self.record(request);
+        Box::pin(async move {
+            BufferedHttpResponseV1::try_from_parts(
+                StatusCode::OK,
+                b"{\"ok\":true}".to_vec(),
+                Some("application/json".to_owned()),
+                None,
+            )
+        })
+    }
+}
+
+impl AsyncStreamingTransport for RecordingSignedTransport {
+    fn open<'a>(&'a self, request: &'a PreparedHttpRequestV1<'_>) -> StreamingOpenFutureV1<'a> {
+        self.record(request);
+        Box::pin(async move {
+            let head = StreamingResponseHeadV1::try_from_parts(
+                StatusCode::OK,
+                Some("application/vnd.amazon.eventstream".to_owned()),
+                None,
+            )
+            .map_err(StreamOpenErrorV1::Transport)?;
+            // Binary, non-UTF-8 bytes: the streaming twin must hand them through untouched.
+            let source = OneChunkStreamSource {
+                chunk: Some(
+                    StreamChunkV1::try_new(bytes::Bytes::from_static(&[
+                        0x00, 0x00, 0x00, 0x10, 0xff,
+                    ]))
+                    .map_err(|_| StreamOpenErrorV1::Transport(TransportErrorV1::RequestFailed))?,
+                ),
+            };
+            OpenedByteStreamV1::try_new(head, Box::new(source))
+                .map_err(StreamOpenErrorV1::Transport)
+        })
+    }
+}
+
+#[test]
+fn signed_precheck_agrees_with_parse_for_valid_and_invalid_inputs() {
+    let headers: Vec<(String, String)> = Vec::new();
+    let emits = declared();
+    let valid = valid_signed_raw(&headers, "{}", &emits);
+    assert!(raw_signed_call_parses(&valid));
+    assert!(parse_raw_signed_call(&valid).is_ok());
+
+    let invalid = RawSignedProviderCallV1 { relative_path: "/absolute", ..valid };
+    assert!(!raw_signed_call_parses(&invalid));
+    let error = parse_raw_signed_call(&invalid).unwrap_err();
+    assert_eq!(error.field(), "relative_path");
+    assert!(matches!(error, RawCallErrorV1::RelativePath(_)));
+}
+
+#[test]
+fn signed_parse_carries_the_declaration_query_and_user_agent() {
+    let headers = vec![("x-request-id".to_owned(), "req-signed".to_owned())];
+    let emits = declared();
+    let raw = RawSignedProviderCallV1 {
+        query: Some(
+            QueryStringV1::try_from_iter([(QueryParameterV1::ApiVersion, "2024-01-01")]).unwrap(),
+        ),
+        user_agent: Some(ControlledUserAgentV1::try_from_static("south-drill/1.0").unwrap()),
+        ..valid_signed_raw(&headers, "{\"model\":\"m\"}", &emits)
+    };
+
+    let (_, request) = parse_raw_signed_call(&raw).unwrap();
+
+    let ProviderAuthV1::HostSigned { slot, emits: parsed } = request.auth() else {
+        panic!("the signed raw call must parse into the host-signed arm");
+    };
+    assert_eq!(slot.credential_slot().as_str(), "aws.primary");
+    assert_eq!(parsed, &emits, "the declaration must travel verbatim");
+    assert!(request.query().is_some());
+    assert_eq!(request.user_agent().map(ControlledUserAgentV1::as_str), Some("south-drill/1.0"));
+}
+
+#[tokio::test]
+async fn signed_parse_failure_returns_before_finalizer_or_transport_is_invoked() {
+    let headers: Vec<(String, String)> = Vec::new();
+    let emits = declared();
+    let raw =
+        RawSignedProviderCallV1 { body: "not json", ..valid_signed_raw(&headers, "{}", &emits) };
+    let finalizer = CountingFinalizer::new();
+    let transport = RecordingSignedTransport::new();
+    let cancellation = CancellationToken::new();
+
+    let error =
+        execute_signed_raw_call_v1(&raw, &finalizer, &transport, far_deadline(), &cancellation)
+            .await
+            .unwrap_err();
+
+    assert!(matches!(error, RawProviderCallErrorV1::Parse(RawCallErrorV1::Body(_))));
+    assert_eq!(finalizer.calls(), 0);
+    assert_eq!(transport.calls(), 0);
+}
+
+#[tokio::test]
+async fn execute_signed_delegates_and_binds_exactly_the_declared_headers() {
+    let headers = vec![("x-request-id".to_owned(), "req-signed".to_owned())];
+    let emits = declared();
+    let raw = valid_signed_raw(&headers, "{\"model\":\"m\"}", &emits);
+    let finalizer = CountingFinalizer::new();
+    let transport = RecordingSignedTransport::new();
+    let cancellation = CancellationToken::new();
+
+    let response =
+        execute_signed_raw_call_v1(&raw, &finalizer, &transport, far_deadline(), &cancellation)
+            .await
+            .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(finalizer.calls(), 1, "the finalizer signs exactly once per call");
+    assert_eq!(transport.calls(), 1);
+    let (headers, url) = transport.recorded.lock().unwrap().clone().unwrap();
+    let mut declared_names: Vec<String> =
+        emits.headers().iter().map(|header| header.header_name().to_owned()).collect();
+    let mut bound_names: Vec<String> = headers.into_iter().map(|(name, _)| name).collect();
+    declared_names.sort();
+    bound_names.sort();
+    assert_eq!(bound_names, declared_names, "the wire carries the declaration, no more, no fewer");
+    assert!(url.starts_with("https://provider.invalid/model/anthropic.test-v1:0/invoke"));
+}
+
+/// Auth contract version four: the combined arm binds the one resolved secret twice, in a
+/// fixed order, from exactly one resolver call.
+#[tokio::test]
+async fn execute_binds_the_bearer_and_header_secret_arm_twice_from_one_resolution() {
+    let headers: Vec<(String, String)> = Vec::new();
+    let raw = RawProviderCallV1 {
+        auth: RawAuthV1::BearerAndHeaderSecret(SecretHeaderV1::XGoogApiKey),
+        ..valid_raw(&headers, "{}")
+    };
+    let resolver = CountingResolver::new();
+    let transport = RecordingSignedTransport::new();
+    let cancellation = CancellationToken::new();
+
+    let response = execute_raw_call_v1(&raw, &resolver, &transport, far_deadline(), &cancellation)
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(resolver.calls(), 1, "one slot, resolved once, bound twice");
+    let (bound, _) = transport.recorded.lock().unwrap().clone().unwrap();
+    assert_eq!(
+        bound,
+        vec![
+            ("authorization".to_owned(), format!("Bearer {SECRET}").into_bytes()),
+            ("x-goog-api-key".to_owned(), SECRET.as_bytes().to_vec()),
+        ],
+        "authorization first, then the sanctioned header, both from the same secret"
+    );
+}
+
+#[tokio::test]
+async fn signed_slot_mismatch_is_refused_before_the_finalizer_runs() {
+    let headers: Vec<(String, String)> = Vec::new();
+    let emits = declared();
+    let raw = RawSignedProviderCallV1 {
+        requested_slot: "other",
+        ..valid_signed_raw(&headers, "{}", &emits)
+    };
+    let finalizer = CountingFinalizer::new();
+    let transport = RecordingSignedTransport::new();
+    let cancellation = CancellationToken::new();
+
+    let error =
+        execute_signed_raw_call_v1(&raw, &finalizer, &transport, far_deadline(), &cancellation)
+            .await
+            .unwrap_err();
+
+    assert_eq!(error.code(), "CREDENTIAL_BINDING_MISMATCH");
+    assert_eq!(finalizer.calls(), 0);
+    assert_eq!(transport.calls(), 0);
+}
+
+#[tokio::test]
+async fn signed_declaration_mismatch_is_rejected_before_the_transport() {
+    let headers: Vec<(String, String)> = Vec::new();
+    let emits = declared();
+    let raw = valid_signed_raw(&headers, "{}", &emits);
+    let finalizer = CountingFinalizer::omitting_one();
+    let transport = RecordingSignedTransport::new();
+    let cancellation = CancellationToken::new();
+
+    let error =
+        execute_signed_raw_call_v1(&raw, &finalizer, &transport, far_deadline(), &cancellation)
+            .await
+            .unwrap_err();
+
+    assert_eq!(error.code(), "REQUEST_FINALIZATION_REJECTED");
+    assert_eq!(finalizer.calls(), 1);
+    assert_eq!(
+        transport.calls(),
+        0,
+        "a signer that breaks its declaration never reaches the network"
+    );
+}
+
+#[tokio::test]
+async fn open_streaming_signed_delegates_and_pulls_binary_chunks() {
+    let headers = vec![("accept".to_owned(), "application/vnd.amazon.eventstream".to_owned())];
+    let emits = declared();
+    let raw = valid_signed_raw(&headers, "{}", &emits);
+    let finalizer = CountingFinalizer::new();
+    let transport = RecordingSignedTransport::new();
+    let cancellation = CancellationToken::new();
+
+    let mut stream =
+        open_streaming_signed_raw_call_v1(&raw, &finalizer, &transport, None, &cancellation)
+            .await
+            .unwrap();
+
+    assert_eq!(stream.head().status(), StatusCode::OK);
+    assert_eq!(stream.head().content_type(), Some("application/vnd.amazon.eventstream"));
+    assert_eq!(finalizer.calls(), 1);
+    assert_eq!(transport.calls(), 1);
+    let chunk = stream.next_chunk().await.unwrap().unwrap();
+    assert_eq!(chunk.as_bytes(), &[0x00, 0x00, 0x00, 0x10, 0xff], "bytes are not UTF-8 checked");
+    assert!(stream.next_chunk().await.is_none());
+}
+
+// ─────────────────── the raw body-less GET (HTTP contract v6) ───────────────────
+
+const fn valid_raw_get(headers: &[(String, String)]) -> RawGetProviderCallV1<'_> {
+    RawGetProviderCallV1 {
+        endpoint: "https://provider.invalid",
+        relative_path: "v1/videos/276843862449040",
+        bound_slot: "primary",
+        requested_slot: "primary",
+        headers,
+        auth: RawAuthV1::Bearer,
+        query: None,
+        user_agent: None,
+    }
+}
+
+#[test]
+fn get_precheck_agrees_with_parse_for_valid_and_invalid_inputs() {
+    let headers = vec![("accept".to_owned(), "application/json".to_owned())];
+    let valid = valid_raw_get(&headers);
+    assert!(raw_get_call_parses(&valid));
+    assert!(parse_raw_get_call(&valid).is_ok());
+
+    let invalid = RawGetProviderCallV1 { relative_path: "../up", ..valid_raw_get(&headers) };
+    assert!(!raw_get_call_parses(&invalid));
+    assert!(parse_raw_get_call(&invalid).is_err());
+}
+
+#[test]
+fn get_parse_error_names_the_failing_field_in_the_shared_order_and_never_the_body() {
+    let headers: Vec<(String, String)> = Vec::new();
+
+    let bad_endpoint = RawGetProviderCallV1 { endpoint: "not-a-url", ..valid_raw_get(&headers) };
+    let error = parse_raw_get_call(&bad_endpoint).unwrap_err();
+    assert_eq!(error.field(), "endpoint");
+    assert_eq!(error.code(), "INVALID_ENDPOINT");
+
+    let bad_bound_slot = RawGetProviderCallV1 { bound_slot: "", ..valid_raw_get(&headers) };
+    let error = parse_raw_get_call(&bad_bound_slot).unwrap_err();
+    assert_eq!(error.field(), "bound_slot");
+
+    let bad_requested_slot = RawGetProviderCallV1 { requested_slot: "", ..valid_raw_get(&headers) };
+    let error = parse_raw_get_call(&bad_requested_slot).unwrap_err();
+    assert_eq!(error.field(), "requested_slot");
+
+    let bad_path = RawGetProviderCallV1 { relative_path: "../up", ..valid_raw_get(&headers) };
+    let error = parse_raw_get_call(&bad_path).unwrap_err();
+    assert_eq!(error.field(), "relative_path");
+    assert_eq!(error.code(), "INVALID_RELATIVE_PATH");
+
+    let reserved = vec![("authorization".to_owned(), "Bearer smuggled".to_owned())];
+    let bad_headers = valid_raw_get(&reserved);
+    let error = parse_raw_get_call(&bad_headers).unwrap_err();
+    assert_eq!(error.field(), "headers");
+    assert_eq!(error.code(), "RESERVED_HEADER_FORBIDDEN");
+    assert!(matches!(error, RawCallErrorV1::Headers(_)));
+
+    // The first failing field wins, in the POST shape's order minus the body step: a bad
+    // endpoint is reported ahead of bad headers.
+    let both = RawGetProviderCallV1 { endpoint: "not-a-url", ..valid_raw_get(&reserved) };
+    assert_eq!(parse_raw_get_call(&both).unwrap_err().field(), "endpoint");
+}
+
+#[test]
+fn get_parse_carries_auth_arm_query_and_user_agent_into_a_body_less_request() {
+    let headers: Vec<(String, String)> = Vec::new();
+    let query =
+        QueryStringV1::try_from_iter([(QueryParameterV1::TaskId, "276843862449040")]).unwrap();
+    let user_agent = ControlledUserAgentV1::try_from_static("prelude-poll/1.0").unwrap();
+    let raw = RawGetProviderCallV1 {
+        relative_path: "v1/query/video_generation",
+        auth: RawAuthV1::BearerAndHeaderSecret(SecretHeaderV1::XGoogApiKey),
+        query: Some(query.clone()),
+        user_agent: Some(user_agent),
+        ..valid_raw_get(&headers)
+    };
+
+    let (binding, request) = parse_raw_get_call(&raw).unwrap();
+    assert_eq!(request.relative_path().as_str(), "v1/query/video_generation");
+    assert_eq!(request.query().map(QueryStringV1::as_str), Some(query.as_str()));
+    assert_eq!(request.user_agent().map(ControlledUserAgentV1::as_str), Some("prelude-poll/1.0"));
+    assert!(matches!(
+        request.auth(),
+        ProviderAuthV1::BearerAndHeaderSecret { header: SecretHeaderV1::XGoogApiKey, .. }
+    ));
+    let rendered = format!("{raw:?} {binding:?}");
+    assert!(!rendered.contains("provider.invalid"));
+    assert!(!rendered.contains("video_generation"));
+    assert!(!rendered.contains("body"), "the raw GET has no body field to describe: {rendered}");
+}
+
+#[tokio::test]
+async fn get_parse_failure_returns_before_resolver_or_transport_is_invoked() {
+    let headers: Vec<(String, String)> = Vec::new();
+    let invalid = RawGetProviderCallV1 { relative_path: "../up", ..valid_raw_get(&headers) };
+    let resolver = CountingResolver::new();
+    let transport = RecordingTransport::new();
+    let cancellation = CancellationToken::new();
+
+    let error =
+        execute_get_raw_call_v1(&invalid, &resolver, &transport, far_deadline(), &cancellation)
+            .await
+            .unwrap_err();
+
+    assert!(matches!(error, RawProviderCallErrorV1::Parse(RawCallErrorV1::RelativePath(_))));
+    assert_eq!(error.code(), "INVALID_RELATIVE_PATH");
+    assert_eq!(resolver.calls(), 0);
+    assert_eq!(transport.calls(), 0);
+}
+
+#[tokio::test]
+async fn execute_get_delegates_to_orchestration_as_a_body_less_get() {
+    let headers = vec![("accept".to_owned(), "application/json".to_owned())];
+    let query =
+        QueryStringV1::try_from_iter([(QueryParameterV1::TaskId, "276843862449040")]).unwrap();
+    let raw = RawGetProviderCallV1 {
+        relative_path: "v1/query/video_generation",
+        query: Some(query),
+        ..valid_raw_get(&headers)
+    };
+    let resolver = CountingResolver::new();
+    let transport = RecordingTransport::new();
+    let cancellation = CancellationToken::new();
+
+    let response =
+        execute_get_raw_call_v1(&raw, &resolver, &transport, far_deadline(), &cancellation)
+            .await
+            .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(resolver.calls(), 1);
+    assert_eq!(transport.calls(), 1);
+    let recorded = transport.recorded.lock().unwrap().clone().unwrap();
+    assert_eq!(recorded.0, "authorization");
+    assert_eq!(recorded.1, format!("Bearer {SECRET}").into_bytes());
+    assert_eq!(
+        recorded.2,
+        "https://provider.invalid/v1/query/video_generation?task_id=276843862449040"
+    );
+    assert_eq!(transport.shape(), ("GET".to_owned(), false), "method GET, no body slot");
+}
+
+#[tokio::test]
+async fn execute_get_binds_the_header_secret_arm_verbatim() {
+    let headers: Vec<(String, String)> = Vec::new();
+    let raw = RawGetProviderCallV1 {
+        auth: RawAuthV1::HeaderSecret(SecretHeaderV1::XApiKey),
+        ..valid_raw_get(&headers)
+    };
+    let resolver = CountingResolver::new();
+    let transport = RecordingTransport::new();
+    let cancellation = CancellationToken::new();
+
+    execute_get_raw_call_v1(&raw, &resolver, &transport, far_deadline(), &cancellation)
+        .await
+        .unwrap();
+
+    let recorded = transport.recorded.lock().unwrap().clone().unwrap();
+    assert_eq!(recorded.0, "x-api-key");
+    assert_eq!(recorded.1, SECRET.as_bytes());
+    assert_eq!(transport.shape(), ("GET".to_owned(), false));
+}
+
+#[tokio::test]
+async fn get_slot_mismatch_surfaces_as_credential_binding_mismatch() {
+    let headers: Vec<(String, String)> = Vec::new();
+    let raw = RawGetProviderCallV1 { requested_slot: "other", ..valid_raw_get(&headers) };
+    let resolver = CountingResolver::new();
+    let transport = RecordingTransport::new();
+    let cancellation = CancellationToken::new();
+
+    let error = execute_get_raw_call_v1(&raw, &resolver, &transport, far_deadline(), &cancellation)
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), "CREDENTIAL_BINDING_MISMATCH");
+    assert!(matches!(error, RawProviderCallErrorV1::Call(ProviderCallErrorV1::Preparation(_))));
+    assert_eq!(resolver.calls(), 0);
+    assert_eq!(transport.calls(), 0);
+}
+
+/// The POST shape is untouched by the GET twin: its transport still sees a POST with a body.
+#[tokio::test]
+async fn the_post_shape_still_prepares_a_post_with_a_body_slot() {
+    let headers: Vec<(String, String)> = Vec::new();
+    let raw = valid_raw(&headers, "{}");
+    let resolver = CountingResolver::new();
+    let transport = RecordingTransport::new();
+
+    execute_raw_call_v1(&raw, &resolver, &transport, far_deadline(), &CancellationToken::new())
+        .await
+        .unwrap();
+
+    assert_eq!(transport.shape(), ("POST".to_owned(), true));
+}
+
+// ───────────────── the raw multipart POST (HTTP contract v7) ─────────────────
+
+const RAW_BOUNDARY: &str = "prelude-test-boundary";
+
+fn raw_multipart_body() -> Vec<u8> {
+    format!(
+        "--{RAW_BOUNDARY}\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\nm\r\n--{RAW_BOUNDARY}--\r\n"
+    )
+    .into_bytes()
+}
+
+const fn valid_raw_multipart<'a>(
+    headers: &'a [(String, String)],
+    body: &'a [u8],
+) -> RawMultipartProviderCallV1<'a> {
+    RawMultipartProviderCallV1 {
+        endpoint: "https://provider.invalid",
+        relative_path: "v1/audio/transcriptions",
+        bound_slot: "primary",
+        requested_slot: "primary",
+        headers,
+        body,
+        boundary: RAW_BOUNDARY,
+        auth: RawAuthV1::Bearer,
+        query: None,
+        user_agent: None,
+    }
+}
+
+#[test]
+fn multipart_precheck_agrees_with_parse_for_valid_and_invalid_inputs() {
+    let headers: Vec<(String, String)> = Vec::new();
+    let body = raw_multipart_body();
+    let valid = valid_raw_multipart(&headers, &body);
+    assert!(raw_multipart_call_parses(&valid));
+    assert!(parse_raw_multipart_call(&valid).is_ok());
+
+    let other = b"--other\r\nX: 1\r\n\r\nm\r\n--other--\r\n".to_vec();
+    let invalid = valid_raw_multipart(&headers, &other);
+    assert!(!raw_multipart_call_parses(&invalid));
+    assert!(parse_raw_multipart_call(&invalid).is_err());
+}
+
+#[test]
+fn multipart_parse_error_names_the_failing_field() {
+    let headers: Vec<(String, String)> = Vec::new();
+    let body = raw_multipart_body();
+
+    let bad_endpoint = RawMultipartProviderCallV1 {
+        endpoint: "not-a-url",
+        ..valid_raw_multipart(&headers, &body)
+    };
+    let error = parse_raw_multipart_call(&bad_endpoint).unwrap_err();
+    assert_eq!(error.field(), "endpoint");
+    assert_eq!(error.code(), "INVALID_ENDPOINT");
+
+    let bad_path = RawMultipartProviderCallV1 {
+        relative_path: "../up",
+        ..valid_raw_multipart(&headers, &body)
+    };
+    assert_eq!(parse_raw_multipart_call(&bad_path).unwrap_err().field(), "relative_path");
+
+    // A boundary outside the RFC grammar is its own field, distinct from the body it delimits.
+    let bad_boundary = RawMultipartProviderCallV1 {
+        boundary: "has\"quote",
+        ..valid_raw_multipart(&headers, &body)
+    };
+    let error = parse_raw_multipart_call(&bad_boundary).unwrap_err();
+    assert_eq!(error.field(), "boundary");
+    assert_eq!(error.code(), "INVALID_MULTIPART_BOUNDARY");
+
+    // A body that is not delimited by the declared boundary is a `body` failure.
+    let mismatched = b"--other\r\nX: 1\r\n\r\nm\r\n--other--\r\n".to_vec();
+    let error = parse_raw_multipart_call(&valid_raw_multipart(&headers, &mismatched)).unwrap_err();
+    assert_eq!(error.field(), "body");
+    assert_eq!(error.code(), "INVALID_MULTIPART_BODY");
+
+    // A smuggled `content-type` points the host at the field it must fix: its headers.
+    let smuggled = vec![("content-type".to_owned(), "text/plain".to_owned())];
+    let error = parse_raw_multipart_call(&valid_raw_multipart(&smuggled, &body)).unwrap_err();
+    assert_eq!(error.field(), "headers");
+    assert_eq!(error.code(), "CONTENT_TYPE_HEADER_NOT_PERMITTED");
+    assert!(matches!(error, RawCallErrorV1::ContentTypeHeader(_)));
+
+    let reserved = vec![("authorization".to_owned(), "Bearer smuggled".to_owned())];
+    let error = parse_raw_multipart_call(&valid_raw_multipart(&reserved, &body)).unwrap_err();
+    assert_eq!(error.field(), "headers");
+    assert_eq!(error.code(), "RESERVED_HEADER_FORBIDDEN");
+}
+
+#[tokio::test]
+async fn multipart_parse_failure_returns_before_resolver_or_transport_is_invoked() {
+    let headers: Vec<(String, String)> = Vec::new();
+    let mismatched = b"--other\r\nX: 1\r\n\r\nm\r\n--other--\r\n".to_vec();
+    let invalid = valid_raw_multipart(&headers, &mismatched);
+    let resolver = CountingResolver::new();
+    let transport = RecordingTransport::new();
+
+    let error = execute_multipart_raw_call_v1(
+        &invalid,
+        &resolver,
+        &transport,
+        far_deadline(),
+        &CancellationToken::new(),
+    )
+    .await
+    .unwrap_err();
+
+    assert!(matches!(error, RawProviderCallErrorV1::Parse(RawCallErrorV1::Body(_))));
+    assert_eq!(resolver.calls(), 0);
+    assert_eq!(transport.calls(), 0);
+}
+
+#[tokio::test]
+async fn execute_multipart_sends_the_declared_bytes_under_the_rendered_media_type() {
+    let headers = vec![("x-request-id".to_owned(), "req-1".to_owned())];
+    let body = raw_multipart_body();
+    let raw = valid_raw_multipart(&headers, &body);
+    let resolver = CountingResolver::new();
+    let transport = RecordingTransport::new();
+
+    let response = execute_multipart_raw_call_v1(
+        &raw,
+        &resolver,
+        &transport,
+        far_deadline(),
+        &CancellationToken::new(),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(resolver.calls(), 1);
+    assert_eq!(transport.calls(), 1);
+    let recorded = transport.recorded.lock().unwrap().clone().unwrap();
+    assert_eq!(recorded.0, "authorization");
+    assert_eq!(recorded.1, format!("Bearer {SECRET}").into_bytes());
+    assert_eq!(transport.shape(), ("POST".to_owned(), true));
+    assert_eq!(
+        transport.content_type(),
+        Some(format!("multipart/form-data; boundary={RAW_BOUNDARY}"))
+    );
+    assert_eq!(transport.body_bytes(), body);
+}
+
+#[tokio::test]
+async fn execute_multipart_binds_the_header_secret_arm_verbatim() {
+    let headers: Vec<(String, String)> = Vec::new();
+    let body = raw_multipart_body();
+    let raw = RawMultipartProviderCallV1 {
+        auth: RawAuthV1::HeaderSecret(SecretHeaderV1::ApiKey),
+        ..valid_raw_multipart(&headers, &body)
+    };
+    let resolver = CountingResolver::new();
+    let transport = RecordingTransport::new();
+
+    execute_multipart_raw_call_v1(
+        &raw,
+        &resolver,
+        &transport,
+        far_deadline(),
+        &CancellationToken::new(),
+    )
+    .await
+    .unwrap();
+
+    let recorded = transport.recorded.lock().unwrap().clone().unwrap();
+    assert_eq!(recorded.0, "api-key");
+    assert_eq!(recorded.1, SECRET.as_bytes());
+}
+
+#[tokio::test]
+async fn multipart_slot_mismatch_surfaces_as_credential_binding_mismatch() {
+    let headers: Vec<(String, String)> = Vec::new();
+    let body = raw_multipart_body();
+    let raw = RawMultipartProviderCallV1 {
+        requested_slot: "other",
+        ..valid_raw_multipart(&headers, &body)
+    };
+    let resolver = CountingResolver::new();
+    let transport = RecordingTransport::new();
+
+    let error = execute_multipart_raw_call_v1(
+        &raw,
+        &resolver,
+        &transport,
+        far_deadline(),
+        &CancellationToken::new(),
+    )
+    .await
+    .unwrap_err();
+
+    assert_eq!(error.code(), "CREDENTIAL_BINDING_MISMATCH");
+    assert_eq!(resolver.calls(), 0);
+    assert_eq!(transport.calls(), 0);
+}
+
+/// The raw multipart Debug leaks neither the body nor the boundary.
+#[test]
+fn raw_multipart_debug_shows_shape_only() {
+    let headers: Vec<(String, String)> = Vec::new();
+    let body = raw_multipart_body();
+    let rendered = format!("{:?}", valid_raw_multipart(&headers, &body));
+    assert!(rendered.starts_with("RawMultipartProviderCallV1 {"));
+    assert!(!rendered.contains(RAW_BOUNDARY));
     assert!(!rendered.contains("provider.invalid"));
 }

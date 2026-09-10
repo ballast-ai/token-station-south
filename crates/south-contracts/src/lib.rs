@@ -27,15 +27,35 @@ use url::Url;
 /// [`ResponseDiagnosticsV1`] allow-list and the bounded, display-only [`ResponseTranscriptV1`].
 /// A version-three response is exactly a version-four response with both empty, which is what the
 /// pre-existing constructors produce.
-pub const HTTP_CONTRACT_VERSION: u16 = 4;
+///
+/// Version five is additive on the request side: the sanctioned query set gains
+/// [`QueryParameterV1::GroupId`]. A version-four request is exactly a version-five request that
+/// declares no `GroupId`; every previously accepted declaration serializes byte-identically.
+///
+/// Version six is additive on the request side: it admits the body-less [`GetRequestV1`] beside
+/// the JSON POST shape, and the sanctioned query set gains [`QueryParameterV1::TaskId`]. A
+/// version-five request is exactly a version-six request that is not a `GetRequestV1` and
+/// declares no `task_id`; [`JsonPostRequestV1`] itself is untouched.
+///
+/// Version seven is additive on the request side: it admits [`MultipartPostRequestV1`], whose
+/// body is bounded opaque bytes under a media type this contract renders, beside the other two
+/// shapes. A version-six request is exactly a version-seven request that is not a
+/// `MultipartPostRequestV1`; the JSON and GET shapes are untouched.
+///
+/// Version eight is additive on the *response* side, and is the first version that is: it admits
+/// [`BufferedBinaryResponseV1`], a buffered body that was never required to be UTF-8. No request
+/// shape changes, and [`BufferedHttpResponseV1`] keeps its UTF-8 guarantee exactly as frozen — a
+/// consumer of the text response cannot be handed bytes by this version or any later one.
+pub const HTTP_CONTRACT_VERSION: u16 = 8;
 
 /// The version of the provider authentication declaration contract.
 ///
 /// Each version is additive: a version-one request is exactly a version-two request using the
 /// [`ProviderAuthV1::Bearer`] arm, version two adds the sanctioned header-secret scheme, and
 /// version three adds [`ProviderAuthV1::HostSigned`] — the arm whose credential never crosses
-/// into South at all.
-pub const AUTH_CONTRACT_VERSION: u16 = 3;
+/// into South at all. Version four adds [`ProviderAuthV1::BearerAndHeaderSecret`], the one
+/// closed shape in which a single resolved secret is bound to two headers.
+pub const AUTH_CONTRACT_VERSION: u16 = 4;
 
 /// The version of the stable provider-call error contract.
 ///
@@ -75,8 +95,30 @@ pub const MAX_CREDENTIAL_SLOT_BYTES: usize = 64;
 /// The maximum byte length of a buffered JSON request body.
 pub const MAX_JSON_REQUEST_BODY_BYTES: usize = 32 * 1024 * 1024;
 
+/// The maximum byte length of one multipart request body.
+///
+/// Deliberately larger than the JSON limit and equal to the adopting host's own media-inference
+/// cap: the bodies this admits are audio uploads and image edits, and a 32 MiB ceiling would
+/// silently push exactly the requests this shape exists to carry back onto a host's legacy path.
+/// The transport shares one allocation with the contract, so the cost is one buffer per request
+/// rather than a copy per hop.
+pub const MAX_MULTIPART_REQUEST_BODY_BYTES: usize = 100 * 1024 * 1024;
+
+/// The maximum byte length of one multipart boundary, per RFC 2046 §5.1.1.
+pub const MAX_MULTIPART_BOUNDARY_BYTES: usize = 70;
+
 /// The maximum byte length of a buffered UTF-8 response body.
 pub const MAX_RESPONSE_BODY_BYTES: usize = 32 * 1024 * 1024;
+
+/// The maximum byte length of a buffered binary response body.
+///
+/// Deliberately larger than the UTF-8 limit and equal to the adopting host's own cap on every
+/// buffered upstream success body: the bodies this admits are synthesised audio and rendered
+/// images, and a 32 MiB ceiling would silently push artifacts between the two numbers back onto a
+/// host's legacy path — a coverage hole in exactly the models this shape exists to unblock. The
+/// same reasoning that sized [`MAX_MULTIPART_REQUEST_BODY_BYTES`], applied in the other
+/// direction. The UTF-8 cap is unchanged.
+pub const MAX_BINARY_RESPONSE_BODY_BYTES: usize = 64 * 1024 * 1024;
 
 /// The maximum byte length of the response `content-type` value.
 pub const MAX_RESPONSE_CONTENT_TYPE_BYTES: usize = 256;
@@ -611,6 +653,188 @@ impl fmt::Debug for JsonBodyV1 {
     }
 }
 
+/// A validated `multipart/form-data` boundary (RFC 2046 §5.1.1).
+///
+/// The grammar is the RFC's, unwidened: one to seventy characters from `bchars`, and the last
+/// one may not be a space. The adopting host already enforces exactly this before it forwards a
+/// client body; moving it into the contract means a host that forgets cannot put a malformed
+/// `content-type` on the wire, because the media type is rendered from this value rather than
+/// supplied alongside it.
+#[derive(Clone, PartialEq, Eq)]
+pub struct MultipartBoundaryV1 {
+    value: String,
+}
+
+impl MultipartBoundaryV1 {
+    /// Validates one boundary against the RFC 2046 §5.1.1 grammar.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ContractErrorV1::InvalidMultipartBoundary`] for an empty value, one longer than
+    /// [`MAX_MULTIPART_BOUNDARY_BYTES`], one carrying a character outside `bchars`, or one
+    /// ending in a space.
+    pub fn parse(input: &str) -> Result<Self, ContractErrorV1> {
+        if input.is_empty() || input.len() > MAX_MULTIPART_BOUNDARY_BYTES {
+            return Err(ContractErrorV1::InvalidMultipartBoundary);
+        }
+        if !input.bytes().all(is_boundary_character) {
+            return Err(ContractErrorV1::InvalidMultipartBoundary);
+        }
+        // `boundary := 0*69<bchars> bcharsnospace` — a trailing space is not part of the value,
+        // so a boundary that ends in one is ambiguous on the wire rather than merely ugly.
+        if input.ends_with(' ') {
+            return Err(ContractErrorV1::InvalidMultipartBoundary);
+        }
+        Ok(Self { value: input.to_owned() })
+    }
+
+    /// Returns the exact validated boundary.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.value
+    }
+}
+
+impl fmt::Debug for MultipartBoundaryV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("MultipartBoundaryV1")
+            .field("byte_count", &self.value.len())
+            .finish_non_exhaustive()
+    }
+}
+
+/// `bchars` per RFC 2046 §5.1.1: `bcharsnospace` plus the space.
+const fn is_boundary_character(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric()
+        || matches!(
+            byte,
+            b'\''
+                | b'('
+                | b')'
+                | b'+'
+                | b'_'
+                | b','
+                | b'-'
+                | b'.'
+                | b'/'
+                | b':'
+                | b'='
+                | b'?'
+                | b' '
+        )
+}
+
+/// A bounded, opaque request body delimited by the boundary it declares.
+///
+/// This contract does not parse multipart. It carries bytes a host has already encoded, and
+/// validates only what can be checked without becoming a parser: the length, the boundary's own
+/// grammar, and that the bytes are actually delimited by that boundary. South learns nothing
+/// about parts, field names, or file contents, which is the whole point — the host's own splice
+/// discipline (replace a text field's value, never touch a binary part) stays where it works,
+/// and its bytes reach the wire unmodified.
+#[derive(PartialEq, Eq)]
+pub struct MultipartBodyV1 {
+    bytes: Arc<[u8]>,
+    boundary: MultipartBoundaryV1,
+    content_type: Arc<str>,
+}
+
+impl MultipartBodyV1 {
+    /// Validates one already-encoded multipart body against the boundary it declares.
+    ///
+    /// The two delimiter checks are deliberately the cheap ones. The opening check is what
+    /// catches the failure this type exists to prevent — a body whose boundary no longer agrees
+    /// with the media type sent beside it, which is precisely what a careless in-place splice
+    /// produces. The closing check requires the body to *end* with the closing delimiter rather
+    /// than merely contain it: a scan for an interior match is quadratic in a body this large,
+    /// and every real client encoder terminates there. A body with an RFC-legal epilogue is
+    /// therefore refused, which sends its host back to its legacy path — failing closed, the
+    /// posture every other narrowing in this contract takes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ContractErrorV1::RequestBodyTooLarge`] above
+    /// [`MAX_MULTIPART_REQUEST_BODY_BYTES`], or [`ContractErrorV1::InvalidMultipartBody`] when
+    /// the bytes are not delimited by the declared boundary.
+    pub fn parse(bytes: Vec<u8>, boundary: MultipartBoundaryV1) -> Result<Self, ContractErrorV1> {
+        if bytes.len() > MAX_MULTIPART_REQUEST_BODY_BYTES {
+            return Err(ContractErrorV1::RequestBodyTooLarge);
+        }
+        let opening = format!("--{}", boundary.as_str());
+        if !bytes.starts_with(opening.as_bytes()) {
+            return Err(ContractErrorV1::InvalidMultipartBody);
+        }
+        let closing = format!("--{}--", boundary.as_str());
+        let terminated = bytes.ends_with(closing.as_bytes())
+            || bytes.ends_with(format!("{closing}\r\n").as_bytes())
+            || bytes.ends_with(format!("{closing}\n").as_bytes());
+        if !terminated {
+            return Err(ContractErrorV1::InvalidMultipartBody);
+        }
+        let content_type = format!("multipart/form-data; boundary={}", boundary.as_str());
+        Ok(Self {
+            bytes: Arc::from(bytes),
+            boundary,
+            content_type: Arc::from(content_type.as_str()),
+        })
+    }
+
+    /// Returns the exact validated body bytes.
+    #[must_use]
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    /// Shares the validated backing allocation with an asynchronous transport.
+    ///
+    /// The byte twin of [`JsonBodyV1::shared_owner`], and the reason a 100 MiB upload is not
+    /// copied on its way to the wire.
+    #[must_use]
+    pub fn shared_owner(&self) -> Arc<[u8]> {
+        Arc::clone(&self.bytes)
+    }
+
+    /// Returns the declared boundary.
+    #[must_use]
+    pub const fn boundary(&self) -> &MultipartBoundaryV1 {
+        &self.boundary
+    }
+
+    /// Returns the rendered media type, `multipart/form-data; boundary=…`.
+    ///
+    /// Rendered once here rather than supplied by the host: with an opaque body there is no
+    /// second source to disagree with, so a `content-type` and a body cannot describe different
+    /// things.
+    #[must_use]
+    pub fn content_type(&self) -> &str {
+        &self.content_type
+    }
+
+    /// Returns the request body's byte length.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.bytes.len()
+    }
+
+    /// Returns whether the request body is empty — never true for a validated body, which
+    /// carries at least its two delimiters.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.bytes.is_empty()
+    }
+}
+
+impl fmt::Debug for MultipartBodyV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("MultipartBodyV1")
+            .field("byte_count", &self.bytes.len())
+            .field("boundary", &self.boundary)
+            .finish_non_exhaustive()
+    }
+}
+
 /// A Bearer authentication declaration containing only a host-resolved credential slot.
 #[derive(Clone, PartialEq, Eq)]
 pub struct BearerAuthV1 {
@@ -696,9 +920,17 @@ impl SecretHeaderV1 {
 /// test asserts — the plain [`SafeHeaders`] channel can never carry one, in either direction.
 ///
 /// Adding a variant is a deliberate contract bump with a conformance case.
+///
+/// The set is not AWS-specific, even though three of its four names are. What the host-signed
+/// arm fixes is *where* the finalizer runs and *which names* it may emit — never the scheme. A
+/// finalizer that computes a provider JWT over the finalised request (Kling's `HS256` token, for
+/// one) declares `Authorization` alone and is as much a host-signed call as `SigV4` is; the three
+/// `x-amz-*` names simply stay undeclared. South never learns which scheme produced the bytes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SignedHeaderV1 {
-    /// `authorization` — the AWS `SigV4` credential scope, signed headers list, and signature.
+    /// `authorization` — whatever credential the finalizer computed over the finalised request:
+    /// an AWS `SigV4` credential scope, signed headers list, and signature; a provider-specific
+    /// `Bearer` JWT signed by the host; any other scheme whose value is a function of the request.
     Authorization,
     /// `x-amz-date` — the signing timestamp the signature is bound to.
     XAmzDate,
@@ -824,6 +1056,22 @@ pub enum QueryParameterV1 {
     ApiVersion,
     /// `alt` (Gemini native streaming).
     Alt,
+    /// `GroupId` (`MiniMax` on its China host, `api.minimaxi.com`, which rejects every request
+    /// that does not carry the account's group id; the international host does not use it).
+    ///
+    /// Admitted in contract version five, after being deliberately left out of the initial set
+    /// (controlled-query record, D5) until a text-surface consumer existed: without it, every
+    /// `MiniMax` China-host text request falls back to the host's legacy path.
+    GroupId,
+    /// `task_id` (`MiniMax` asynchronous task polling, `v1/query/video_generation?task_id=…`).
+    ///
+    /// Admitted in contract version six with the body-less GET request, the second of the two
+    /// names the controlled-query record (D5) deferred. It is the only sanctioned parameter
+    /// whose value a *provider* mints: a task id is provider output echoed back on the poll. The
+    /// grammar is still digits only (buffered-GET record, D3), because the one upstream that
+    /// carries a task id in the query issues numeric ids; a host meeting another shape falls
+    /// back rather than widening the grammar.
+    TaskId,
 }
 
 impl QueryParameterV1 {
@@ -831,7 +1079,7 @@ impl QueryParameterV1 {
     ///
     /// Serialization follows this order, so a request's query is byte-identical regardless of the
     /// order the host declared its parameters in.
-    pub const ALL: [Self; 2] = [Self::ApiVersion, Self::Alt];
+    pub const ALL: [Self; 4] = [Self::ApiVersion, Self::Alt, Self::GroupId, Self::TaskId];
 
     /// Returns the wire name of the sanctioned parameter.
     #[must_use]
@@ -839,6 +1087,9 @@ impl QueryParameterV1 {
         match self {
             Self::ApiVersion => "api-version",
             Self::Alt => "alt",
+            // Mixed case on purpose: the upstream matches the name exactly.
+            Self::GroupId => "GroupId",
+            Self::TaskId => "task_id",
         }
     }
 
@@ -868,6 +1119,18 @@ impl QueryParameterV1 {
             }
             // A closed value set: the upstream accepts nothing else.
             Self::Alt => matches!(value, "sse" | "json"),
+            // A `MiniMax` group id is a decimal account identifier. Digits only: the value is
+            // operator configuration, not provider output, and nothing narrower than a digit
+            // string is ever a real group id. No leading-sign, no separators.
+            // A `MiniMax` task id is likewise a decimal identifier. Same digit grammar, and
+            // deliberately not shared with `GroupId` through one arm: the two are separate
+            // contract decisions (D3 of two records), and narrowing one must not narrow the
+            // other.
+            Self::GroupId | Self::TaskId => {
+                !value.is_empty()
+                    && value.len() <= MAX_QUERY_VALUE_BYTES
+                    && value.bytes().all(|byte| byte.is_ascii_digit())
+            }
         }
     }
 }
@@ -1045,7 +1308,7 @@ pub enum ProviderAuthV1 {
     },
     /// The host signs the finalised request and emits exactly the declared headers.
     ///
-    /// Unlike the other two arms, South never resolves this slot: the signing material stays
+    /// Unlike the credential arms, South never resolves this slot: the signing material stays
     /// entirely host-side and South sees only the emitted header values (host-signed D2). The
     /// slot still participates in the binding check, so a request cannot be signed with an
     /// identity the binding does not authorize.
@@ -1054,6 +1317,21 @@ pub enum ProviderAuthV1 {
         slot: BearerAuthV1,
         /// The headers the finalizer promises to emit, enforced in both directions.
         emits: SignedHeaderSetV1,
+    },
+    /// The secret travels twice: as `Authorization: Bearer …` **and** verbatim in one sanctioned
+    /// provider-specific header.
+    ///
+    /// One closed shape for the one upstream surface that demands both — Gemini's
+    /// `OpenAI`-compatible endpoints accept a key only when `x-goog-api-key` and the Bearer
+    /// header agree. Both names are reserved, so the plain header channel could never carry the
+    /// second copy, and a general "list of auth headers" would reopen exactly the choice this
+    /// enum exists to close. South resolves one slot, once; the two bindings are derived from the
+    /// same resolved value (auth contract version four).
+    BearerAndHeaderSecret {
+        /// The sanctioned header that carries the verbatim secret alongside the Bearer header.
+        header: SecretHeaderV1,
+        /// The credential-slot declaration resolved by the host, exactly as in the Bearer arm.
+        slot: BearerAuthV1,
     },
 }
 
@@ -1064,7 +1342,8 @@ impl ProviderAuthV1 {
         match self {
             Self::Bearer(slot)
             | Self::HeaderSecret { slot, .. }
-            | Self::HostSigned { slot, .. } => slot.credential_slot(),
+            | Self::HostSigned { slot, .. }
+            | Self::BearerAndHeaderSecret { slot, .. } => slot.credential_slot(),
         }
     }
 }
@@ -1088,6 +1367,11 @@ impl fmt::Debug for ProviderAuthV1 {
                 .debug_struct("HostSigned")
                 .field("slot", slot)
                 .field("emits", &emits.headers())
+                .finish(),
+            Self::BearerAndHeaderSecret { header, slot } => formatter
+                .debug_struct("BearerAndHeaderSecret")
+                .field("header", header)
+                .field("slot", slot)
                 .finish(),
         }
     }
@@ -1184,6 +1468,207 @@ impl fmt::Debug for JsonPostRequestV1 {
             .field("auth_contract_version", &AUTH_CONTRACT_VERSION)
             .field("header_count", &self.headers.len())
             .field("body_byte_count", &self.body.len())
+            .finish_non_exhaustive()
+    }
+}
+
+/// A bounded provider request for one body-less GET operation (HTTP contract version six).
+///
+/// [`JsonPostRequestV1`]'s field set minus the body, with the same builders and the same
+/// grammars. A separate type rather than a method field on the POST shape (buffered-GET record,
+/// D1): the POST type's name, its mandatory body, and every invariant the streaming path relies
+/// on stay exactly as frozen, and "a JSON POST request with method GET and a body" is not
+/// constructible. There is no streaming GET (D2): a poll is a bounded reply by nature.
+#[derive(PartialEq, Eq)]
+pub struct GetRequestV1 {
+    relative_path: RelativePathV1,
+    headers: SafeHeaders,
+    auth: ProviderAuthV1,
+    query: Option<QueryStringV1>,
+    user_agent: Option<ControlledUserAgentV1>,
+}
+
+impl GetRequestV1 {
+    /// Creates a request from independently validated, bounded fields.
+    ///
+    /// The auth parameter accepts a bare [`BearerAuthV1`] unchanged, as the POST constructor
+    /// does, as well as any explicit [`ProviderAuthV1`] declaration.
+    #[must_use]
+    pub fn new(
+        relative_path: RelativePathV1,
+        headers: SafeHeaders,
+        auth: impl Into<ProviderAuthV1>,
+    ) -> Self {
+        Self { relative_path, headers, auth: auth.into(), query: None, user_agent: None }
+    }
+
+    /// Attaches a sanctioned query declaration to this request.
+    ///
+    /// This is where a poll that carries its task id as a query parameter declares it:
+    /// [`QueryParameterV1::TaskId`]. A poll whose task id is a path segment declares nothing
+    /// here — the id travels in the relative path like any other segment.
+    #[must_use]
+    pub fn with_query(mut self, query: QueryStringV1) -> Self {
+        self.query = Some(query);
+        self
+    }
+
+    /// Returns the sanctioned query declaration, when one was attached.
+    #[must_use]
+    pub const fn query(&self) -> Option<&QueryStringV1> {
+        self.query.as_ref()
+    }
+
+    /// Attaches a sanctioned user-agent declaration to this request.
+    #[must_use]
+    pub const fn with_user_agent(mut self, user_agent: ControlledUserAgentV1) -> Self {
+        self.user_agent = Some(user_agent);
+        self
+    }
+
+    /// Returns the sanctioned user-agent declaration, when one was attached.
+    #[must_use]
+    pub const fn user_agent(&self) -> Option<ControlledUserAgentV1> {
+        self.user_agent
+    }
+
+    /// Returns the provider-selected relative path.
+    #[must_use]
+    pub const fn relative_path(&self) -> &RelativePathV1 {
+        &self.relative_path
+    }
+
+    /// Returns the validated ordinary request headers.
+    #[must_use]
+    pub const fn headers(&self) -> &SafeHeaders {
+        &self.headers
+    }
+
+    /// Returns the provider authentication declaration.
+    #[must_use]
+    pub const fn auth(&self) -> &ProviderAuthV1 {
+        &self.auth
+    }
+}
+
+impl fmt::Debug for GetRequestV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("GetRequestV1")
+            .field("http_contract_version", &HTTP_CONTRACT_VERSION)
+            .field("auth_contract_version", &AUTH_CONTRACT_VERSION)
+            .field("header_count", &self.headers.len())
+            .field("has_query", &self.query.is_some())
+            .field("has_user_agent", &self.user_agent.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
+/// A bounded provider request for one multipart POST (HTTP contract version seven).
+///
+/// [`JsonPostRequestV1`]'s field set with a [`MultipartBodyV1`] in place of the JSON one, and
+/// the same builders and grammars for everything else. A separate type rather than a body enum
+/// on the POST shape (multipart record, D1): the JSON type's mandatory body and every invariant
+/// the streaming path relies on stay exactly as frozen, and "a JSON POST whose body is
+/// multipart" is not constructible.
+#[derive(PartialEq, Eq)]
+pub struct MultipartPostRequestV1 {
+    relative_path: RelativePathV1,
+    headers: SafeHeaders,
+    body: MultipartBodyV1,
+    auth: ProviderAuthV1,
+    query: Option<QueryStringV1>,
+    user_agent: Option<ControlledUserAgentV1>,
+}
+
+impl MultipartPostRequestV1 {
+    /// Creates a request from independently validated, bounded fields.
+    ///
+    /// Fallible where the other two shapes' constructors are not, for one reason: this request
+    /// renders its own `content-type` from the body's boundary, so the ordinary header channel
+    /// must not also carry one. The JSON shape can safely let a host set that header — its body
+    /// is validated to be JSON, so the two cannot disagree — but an opaque body has no such
+    /// guarantee, and two sources for one header is exactly how a body and its media type come
+    /// to describe different things. The check is on this type; [`SafeHeaders`] and the shared
+    /// reserved-header list are untouched.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ContractErrorV1::ContentTypeHeaderNotPermitted`] when `headers` carries a
+    /// `content-type` under any casing.
+    pub fn try_new(
+        relative_path: RelativePathV1,
+        headers: SafeHeaders,
+        body: MultipartBodyV1,
+        auth: impl Into<ProviderAuthV1>,
+    ) -> Result<Self, ContractErrorV1> {
+        if headers.get("content-type").is_some() {
+            return Err(ContractErrorV1::ContentTypeHeaderNotPermitted);
+        }
+        Ok(Self { relative_path, headers, body, auth: auth.into(), query: None, user_agent: None })
+    }
+
+    /// Attaches a sanctioned query declaration to this request.
+    #[must_use]
+    pub fn with_query(mut self, query: QueryStringV1) -> Self {
+        self.query = Some(query);
+        self
+    }
+
+    /// Returns the sanctioned query declaration, when one was attached.
+    #[must_use]
+    pub const fn query(&self) -> Option<&QueryStringV1> {
+        self.query.as_ref()
+    }
+
+    /// Attaches a sanctioned user-agent declaration to this request.
+    #[must_use]
+    pub const fn with_user_agent(mut self, user_agent: ControlledUserAgentV1) -> Self {
+        self.user_agent = Some(user_agent);
+        self
+    }
+
+    /// Returns the sanctioned user-agent declaration, when one was attached.
+    #[must_use]
+    pub const fn user_agent(&self) -> Option<ControlledUserAgentV1> {
+        self.user_agent
+    }
+
+    /// Returns the provider-selected relative path.
+    #[must_use]
+    pub const fn relative_path(&self) -> &RelativePathV1 {
+        &self.relative_path
+    }
+
+    /// Returns the validated ordinary request headers, which never include `content-type`.
+    #[must_use]
+    pub const fn headers(&self) -> &SafeHeaders {
+        &self.headers
+    }
+
+    /// Returns the validated multipart body.
+    #[must_use]
+    pub const fn body(&self) -> &MultipartBodyV1 {
+        &self.body
+    }
+
+    /// Returns the provider authentication declaration.
+    #[must_use]
+    pub const fn auth(&self) -> &ProviderAuthV1 {
+        &self.auth
+    }
+}
+
+impl fmt::Debug for MultipartPostRequestV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("MultipartPostRequestV1")
+            .field("http_contract_version", &HTTP_CONTRACT_VERSION)
+            .field("auth_contract_version", &AUTH_CONTRACT_VERSION)
+            .field("header_count", &self.headers.len())
+            .field("body_byte_count", &self.body.len())
+            .field("has_query", &self.query.is_some())
+            .field("has_user_agent", &self.user_agent.is_some())
             .finish_non_exhaustive()
     }
 }
@@ -1439,7 +1924,7 @@ impl fmt::Debug for ResponseDiagnosticsV1 {
 /// The safety argument therefore rests on three properties rather than on a name list:
 ///
 /// 1. **Denied by kind** — credential-bearing and hop-by-hop headers never enter, whatever the
-///    upstream sends. See [`RESPONSE_TRANSCRIPT_DENIED_HEADERS`].
+///    upstream sends. See `RESPONSE_TRANSCRIPT_DENIED_HEADERS`.
 /// 2. **Bounded** — at most [`MAX_RESPONSE_TRANSCRIPT_COUNT`] headers within
 ///    [`MAX_RESPONSE_TRANSCRIPT_TOTAL_BYTES`]; a hostile or broken upstream cannot make a
 ///    transcript grow without limit. Overflow **truncates and records the fact**
@@ -1815,6 +2300,188 @@ impl fmt::Debug for BufferedHttpResponseV1 {
     }
 }
 
+/// A bounded HTTP response whose body was never required to be UTF-8.
+///
+/// The binary twin of [`BufferedHttpResponseV1`], and deliberately a separate type rather than a
+/// widening of it. Widening would have made the text body `Vec<u8>` and forced `body()` to return
+/// either an `Option<&str>`, breaking every existing call site, or a lossy conversion, silently
+/// corrupting. Worse than either: it would have stripped the UTF-8 *guarantee* from consumers that
+/// never asked for a weaker contract. Here the guarantee stays exactly where it was.
+///
+/// The body is opaque. This contract performs no media sniffing, keeps no allow-list of acceptable
+/// payload types, and never converts: what the wire carried is what the host receives. Which media
+/// types are acceptable is host policy, and an allow-list would break the first time an upstream
+/// answered `audio/mpeg;codecs=mp3`.
+///
+/// Bytes are returned for **every** status, including a non-2xx. An upstream that answers a
+/// success with audio answers a rejection with JSON, and a type whose body shape depended on the
+/// status would be the worst of both worlds. A host reading an error body calls
+/// [`str::from_utf8`] itself and owns the failure.
+#[derive(PartialEq, Eq)]
+pub struct BufferedBinaryResponseV1 {
+    status: StatusCode,
+    body: Vec<u8>,
+    content_type: Option<String>,
+    retry_after: Option<String>,
+    provider_quota_metadata: ProviderQuotaMetadataV1,
+    response_diagnostics: ResponseDiagnosticsV1,
+    response_transcript: ResponseTranscriptV1,
+}
+
+impl BufferedBinaryResponseV1 {
+    /// Validates a buffered binary response with the legacy empty quota metadata shape.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TransportErrorV1`] exactly as the UTF-8 twin does, minus
+    /// [`TransportErrorV1::ResponseBodyNotUtf8`], which this path cannot produce.
+    pub fn try_from_parts(
+        status: StatusCode,
+        body: Vec<u8>,
+        content_type: Option<String>,
+        retry_after: Option<String>,
+    ) -> Result<Self, TransportErrorV1> {
+        Self::try_from_parts_with_provider_quota_metadata(
+            status,
+            body,
+            content_type,
+            retry_after,
+            ProviderQuotaMetadataV1::default(),
+        )
+    }
+
+    /// Validates a buffered binary response and all explicitly allowed quota metadata.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TransportErrorV1`] exactly as [`Self::try_from_parts`] does.
+    pub fn try_from_parts_with_provider_quota_metadata(
+        status: StatusCode,
+        body: Vec<u8>,
+        content_type: Option<String>,
+        retry_after: Option<String>,
+        provider_quota_metadata: ProviderQuotaMetadataV1,
+    ) -> Result<Self, TransportErrorV1> {
+        Self::try_from_parts_with_response_metadata(
+            status,
+            body,
+            content_type,
+            retry_after,
+            provider_quota_metadata,
+            ResponseDiagnosticsV1::default(),
+            ResponseTranscriptV1::default(),
+        )
+    }
+
+    /// Validates a buffered binary response and every response-side metadata contract.
+    ///
+    /// The same division of labour the UTF-8 twin follows: the two newer arguments are
+    /// already-validated values and are not re-checked here.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TransportErrorV1::RedirectDenied`] for a 3xx,
+    /// [`TransportErrorV1::ResponseBodyTooLarge`] above [`MAX_BINARY_RESPONSE_BODY_BYTES`],
+    /// and [`TransportErrorV1::ResponseMetadataInvalid`] for an out-of-bounds `content-type`
+    /// or `retry-after`. It cannot return [`TransportErrorV1::ResponseBodyNotUtf8`].
+    pub fn try_from_parts_with_response_metadata(
+        status: StatusCode,
+        body: Vec<u8>,
+        content_type: Option<String>,
+        retry_after: Option<String>,
+        provider_quota_metadata: ProviderQuotaMetadataV1,
+        response_diagnostics: ResponseDiagnosticsV1,
+        response_transcript: ResponseTranscriptV1,
+    ) -> Result<Self, TransportErrorV1> {
+        if status.is_redirection() {
+            return Err(TransportErrorV1::RedirectDenied);
+        }
+        if body.len() > MAX_BINARY_RESPONSE_BODY_BYTES {
+            return Err(TransportErrorV1::ResponseBodyTooLarge);
+        }
+        validate_response_metadata(content_type.as_deref(), MAX_RESPONSE_CONTENT_TYPE_BYTES)?;
+        validate_response_metadata(retry_after.as_deref(), MAX_RESPONSE_RETRY_AFTER_BYTES)?;
+
+        Ok(Self {
+            status,
+            body,
+            content_type,
+            retry_after,
+            provider_quota_metadata,
+            response_diagnostics,
+            response_transcript,
+        })
+    }
+
+    /// Returns the upstream HTTP status.
+    #[must_use]
+    pub const fn status(&self) -> StatusCode {
+        self.status
+    }
+
+    /// Returns the bounded response body as opaque bytes.
+    ///
+    /// There is deliberately no `as_str`, `text`, or `is_utf8` companion. A host that wants text
+    /// calls [`str::from_utf8`] and owns the failure; South does not decide that a payload is
+    /// text, and never converts one lossily.
+    #[must_use]
+    pub fn body(&self) -> &[u8] {
+        &self.body
+    }
+
+    /// Returns the response body's byte length.
+    #[must_use]
+    pub const fn body_len(&self) -> usize {
+        self.body.len()
+    }
+
+    /// Returns the bounded `content-type` value when present.
+    #[must_use]
+    pub fn content_type(&self) -> Option<&str> {
+        self.content_type.as_deref()
+    }
+
+    /// Returns the bounded `retry-after` value when present.
+    #[must_use]
+    pub fn retry_after(&self) -> Option<&str> {
+        self.retry_after.as_deref()
+    }
+
+    /// Returns the bounded provider quota response metadata.
+    #[must_use]
+    pub const fn provider_quota_metadata(&self) -> &ProviderQuotaMetadataV1 {
+        &self.provider_quota_metadata
+    }
+
+    /// Returns the closed provider diagnostic response headers.
+    #[must_use]
+    pub const fn response_diagnostics(&self) -> &ResponseDiagnosticsV1 {
+        &self.response_diagnostics
+    }
+
+    /// Returns the bounded, display-only response header transcript.
+    #[must_use]
+    pub const fn response_transcript(&self) -> &ResponseTranscriptV1 {
+        &self.response_transcript
+    }
+}
+
+impl fmt::Debug for BufferedBinaryResponseV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("BufferedBinaryResponseV1")
+            .field("contract_version", &HTTP_CONTRACT_VERSION)
+            .field("status", &self.status)
+            .field("body_byte_count", &self.body.len())
+            .field("has_content_type", &self.content_type.is_some())
+            .field("has_retry_after", &self.retry_after.is_some())
+            .field("provider_quota_metadata", &self.provider_quota_metadata)
+            .field("response_diagnostics", &self.response_diagnostics)
+            .field("response_transcript", &self.response_transcript)
+            .finish_non_exhaustive()
+    }
+}
+
 /// The bounded, headers-ready metadata of one streaming HTTP exchange.
 ///
 /// The head is handed to the host before any body byte is pulled, so the host can branch on
@@ -2151,6 +2818,14 @@ impl fmt::Debug for StreamTransportConfigV1 {
 }
 
 /// A provider request contract validation failure.
+///
+/// `#[non_exhaustive]` since 0.25.0, for the reason [`PreparationErrorV1`] has carried since
+/// 0.7.0: a new request shape brings new ways for a field to be invalid, and the three multipart
+/// variants that arrived with HTTP contract version seven would otherwise have broken every
+/// downstream exhaustive match — as they will once, at this version, and never again. Downstream
+/// matches need a wildcard arm; route it through [`Self::code`] when only the stable string
+/// matters.
+#[non_exhaustive]
 #[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
 pub enum ContractErrorV1 {
     /// The trusted base endpoint is invalid.
@@ -2183,6 +2858,15 @@ pub enum ContractErrorV1 {
     /// A controlled user-agent value violates the frozen value grammar.
     #[error("user-agent value is invalid")]
     InvalidUserAgentValue,
+    /// A multipart boundary violates the RFC 2046 §5.1.1 grammar.
+    #[error("multipart boundary is invalid")]
+    InvalidMultipartBoundary,
+    /// A multipart body does not delimit itself with the boundary it declared.
+    #[error("multipart body does not match its declared boundary")]
+    InvalidMultipartBody,
+    /// A request that renders its own media type was given a `content-type` header to carry.
+    #[error("content-type header is not permitted on this request shape")]
+    ContentTypeHeaderNotPermitted,
 }
 
 impl ContractErrorV1 {
@@ -2200,6 +2884,9 @@ impl ContractErrorV1 {
             Self::EmptyQuery => "EMPTY_QUERY",
             Self::QueryTooLarge => "QUERY_TOO_LARGE",
             Self::InvalidUserAgentValue => "INVALID_USER_AGENT_VALUE",
+            Self::InvalidMultipartBoundary => "INVALID_MULTIPART_BOUNDARY",
+            Self::InvalidMultipartBody => "INVALID_MULTIPART_BODY",
+            Self::ContentTypeHeaderNotPermitted => "CONTENT_TYPE_HEADER_NOT_PERMITTED",
         }
     }
 }
@@ -2430,6 +3117,8 @@ mod query_serialization_completeness_tests {
             let value = match parameter {
                 QueryParameterV1::ApiVersion => "v1",
                 QueryParameterV1::Alt => "sse",
+                QueryParameterV1::GroupId => "19000",
+                QueryParameterV1::TaskId => "276843862449040",
             };
             let query = QueryStringV1::try_from_iter([(parameter, value)])
                 .expect("a sanctioned parameter with a valid value must construct");

@@ -185,6 +185,11 @@ host asked for, and was removed because "an empty crate did not constrain the
 transport traits either way, so the reservation cost maintenance without
 protecting anything". `AGENTS.md` says the same thing as a rule.
 
+> 2026-09-08: landed with its consumer — the server host's task poller — as HTTP contract
+> version six (0.24.0). Not as a method on the POST request: a separate body-less
+> `GetRequestV1`, buffered only, with its own `south.provider-get.v1` suite. See
+> `2026-09-08-buffered-get-request.md`.
+
 ## 6. What this record does not decide
 
 - **Whether gate ① can admit a task component at all.** It cannot today:

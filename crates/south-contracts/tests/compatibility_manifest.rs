@@ -102,6 +102,12 @@ struct Conformance {
     controlled_query_suite: u32,
     controlled_user_agent_suite_id: String,
     controlled_user_agent_suite: u32,
+    provider_get_suite_id: String,
+    provider_get_suite: u32,
+    provider_multipart_suite_id: String,
+    provider_multipart_suite: u32,
+    provider_binary_suite_id: String,
+    provider_binary_suite: u32,
     provider_component_suite_id: String,
     provider_component_suite: u32,
 }
@@ -139,7 +145,7 @@ struct ProviderRuntime {
 /// status is not `verified`.
 type ExpectedCapability = (&'static str, &'static str, Option<usize>);
 
-fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 6]> {
+fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 9]> {
     BTreeMap::from([
         (
             "token-station",
@@ -169,13 +175,24 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 6
                 // sanctioned-header injection without Authorization, and the
                 // existing production policy remains Bearer-only. See the
                 // Header Auth design for immutable evidence and scope.
-                ("header_auth", "verified", Some(3)),
+                ("header_auth", "not_verified", None),
                 // controlled_query stays not_verified until this host runs its
                 // own adoption slice against south.controlled-query.v1. The
                 // suite existing in this repository is not adoption evidence.
                 ("controlled_query", "not_verified", None),
                 // controlled_user_agent stays not_verified for the same reason.
                 ("controlled_user_agent", "not_verified", None),
+                // provider_get (the body-less GET, HTTP contract v6, 0.24.0) stays
+                // not_verified until this host runs south.provider-get.v1 through
+                // its own adapter. The community host has no task poller today.
+                ("provider_get", "not_verified", None),
+                // provider_multipart (opaque bytes under a rendered media type, HTTP contract
+                // v7, 0.25.0) stays not_verified: the community host has no multipart surface.
+                ("provider_multipart", "not_verified", None),
+                // provider_binary (a buffered body never proved UTF-8, HTTP contract v8,
+                // 0.26.0) stays not_verified: the community host has no text-to-speech or
+                // image-generation surface, so nothing there answers in bytes.
+                ("provider_binary", "not_verified", None),
             ],
         ),
         // token-station-server provider_stream verified 2026-08-17: the durable
@@ -232,7 +249,7 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 6
                 // south plan's guard admits the Chat contract alone. The
                 // adoption record is held by that host's own repository; this
                 // manifest records only the resulting status.
-                ("header_auth", "verified", Some(3)),
+                ("header_auth", "verified", Some(4)),
                 // token-station-server controlled_query verified 2026-08-18,
                 // evidence refreshed against 0.4.1 after the suite grew its
                 // fifth case. The original run passed the four-case table, but
@@ -267,13 +284,80 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 6
                 // they send two auth headers and ProviderAuthV1 is single-arm.
                 // The adoption record is held by that host's own repository;
                 // this manifest records only the resulting status.
-                ("controlled_query", "verified", Some(5)),
+                ("controlled_query", "verified", Some(6)),
                 // controlled_user_agent stays not_verified until that host runs
                 // its own adoption slice against south.controlled-user-agent.v1
                 // (its migration batches 3 and 4b are the expected consumers).
                 // The suite existing in this repository is not adoption
                 // evidence.
                 ("controlled_user_agent", "not_verified", None),
+                // token-station-server provider_get verified 2026-09-09 against
+                // the four-case table at v0.24.0: that host's task poller adopts
+                // execute_get_raw_call_v1 (dev-v2 merge 89139b4d, adoption commit
+                // e96babe2) behind a new `task_poll` kill-switch surface, and its
+                // assembled executor runs south.provider-get.v1 4/4 through the
+                // production re-export of the same prelude function, with the
+                // three wire-shape booleans (method GET, body slot absent, query
+                // exact) measured on the prepared request at the transport
+                // boundary. A loopback wire test pins the production GET entry
+                // point (GET, `task_id` query, Authorization, no body, no
+                // content-length, no content-type), and the poller's own
+                // equivalence tests prove the switched-on leg lands the same
+                // terminal row as the legacy leg, refuses a 302 the legacy client
+                // would follow, and carries MiniMax's `task_id` to the wire.
+                //
+                // Scope: the surface is switched **off** by builtin default on
+                // that host until its operator records a parity run; the status
+                // here describes the adapter's conformance, not production
+                // traffic. The adoption record is held by that host's own
+                // repository; this manifest records only the resulting status.
+                ("provider_get", "verified", Some(4)),
+                // token-station-server provider_multipart verified 2026-09-09 against the
+                // five-case table at v0.25.0: that host routes its audio-transcription and
+                // image-edit paths through the multipart shape (dev-v2 merge b05d41ec,
+                // adoption commit 269dd2fd) behind a new `multipart` kill-switch surface, and
+                // its assembled executor runs south.provider-multipart.v1 5/5 through the same
+                // core function its production entry point calls, with both wire-shape booleans
+                // measured on the prepared request at the transport boundary.
+                //
+                // What that host's own equivalence tests add beyond the suite: the switched-on
+                // ASR leg refuses a 302 its legacy client follows, and the switched-off leg
+                // proves the request still reaches the upstream — so "routed through South" is
+                // measured rather than assumed. Two of the five cases are refusals that never
+                // reach a boundary, which is what makes the presence-polarity evidence
+                // falsifiable there.
+                //
+                // Scope: the surface is switched **off** by builtin default on that host until
+                // its operator records a parity run; this status describes the adapter's
+                // conformance, not production traffic. Its ElevenLabs and Azure Speech ASR
+                // providers stay outside the host's own auth scope, so the arms this table
+                // exercises are the two it actually routes. The adoption record is held by that
+                // host's repository; this manifest records only the resulting status.
+                ("provider_multipart", "verified", Some(5)),
+                // token-station-server provider_binary verified 2026-09-10 against the
+                // six-case table at v0.26.0: that host routes the byte-answering dialects of
+                // `/v1/audio/speech` through the binary shape behind a **ninth** kill-switch
+                // surface, `binary_response`, and its assembled executor runs
+                // south.provider-binary.v1 6/6 through the same core function its production
+                // entry point calls.
+                //
+                // What that host's own equivalence tests add beyond the suite: the switched-on
+                // leg hands the client bytes that are not valid UTF-8, byte-identically — a
+                // request that could not have existed on the pre-0.26.0 contract — and the
+                // switched-off leg proves the same request still reaches the upstream with the
+                // routed counter unmoved. Two of the six cases never reach a binary transport
+                // (one is refused before it; one drives the frozen UTF-8 entry point instead
+                // and must still be refused there), which is what makes the presence-polarity
+                // evidence falsifiable on that host.
+                //
+                // Scope: the surface is switched **off** by builtin default until that host's
+                // operator records a parity run; this status describes the adapter's
+                // conformance, not production traffic. Its ElevenLabs and Azure Speech
+                // text-to-speech providers stay outside that host's own auth scope, so the arm
+                // this table exercises is the Bearer one it actually routes. The adoption
+                // record is held by that host's repository; this manifest records only the
+                // resulting status.
+                ("provider_binary", "verified", Some(6)),
             ],
         ),
     ])
@@ -390,6 +474,12 @@ fn compatibility_manifest_describes_the_library_slice() {
         "south.controlled-user-agent.v1"
     );
     assert_eq!(manifest.conformance.controlled_user_agent_suite, 1);
+    assert_eq!(manifest.conformance.provider_get_suite_id, "south.provider-get.v1");
+    assert_eq!(manifest.conformance.provider_get_suite, 1);
+    assert_eq!(manifest.conformance.provider_multipart_suite_id, "south.provider-multipart.v1");
+    assert_eq!(manifest.conformance.provider_multipart_suite, 1);
+    assert_eq!(manifest.conformance.provider_binary_suite_id, "south.provider-binary.v1");
+    assert_eq!(manifest.conformance.provider_binary_suite, 1);
     assert_eq!(manifest.conformance.provider_component_suite_id, "south.provider-component.v1");
     assert_eq!(manifest.conformance.provider_component_suite, 1);
     assert_eq!(manifest.provider_api.wit_version.as_deref(), Some("token-station:adapter@2.0.0"));
@@ -397,26 +487,26 @@ fn compatibility_manifest_describes_the_library_slice() {
     let expected_crates = BTreeMap::from([
         (
             "south-contracts",
-            "http_auth_error_stream_quota_metadata_header_auth_controlled_query_user_agent_v1",
+            "http_get_request_multipart_request_binary_response_auth_error_stream_quota_metadata_header_auth_controlled_query_user_agent_v1",
         ),
         (
             "south-core",
-            "buffered_streaming_provider_call_header_auth_controlled_query_user_agent_raw_prelude_v1",
+            "buffered_streaming_provider_call_buffered_get_call_buffered_multipart_call_buffered_binary_call_header_auth_controlled_query_user_agent_raw_prelude_signed_raw_call_get_raw_call_multipart_raw_call_v1",
         ),
         ("south-provider-api", "provider_adapter_v2_wit_manifest_v1"),
         ("south-component-conformance", "provider_component_gates_reference_v1"),
         (
             "south-provider-conformance",
-            "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_suites_v1",
+            "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_provider_get_provider_multipart_provider_binary_suites_v1",
         ),
         ("south-provider-runtime", "sandboxed_component_execution_v1"),
         (
             "south-testkit",
-            "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_runners_raw_builder_v1",
+            "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_provider_get_provider_multipart_provider_binary_runners_raw_builder_signed_raw_builder_get_raw_builder_multipart_raw_builder_v1",
         ),
         (
             "south-transport-reqwest",
-            "buffered_streaming_json_post_quota_metadata_header_auth_user_agent_transport_pair_v1",
+            "buffered_streaming_json_post_buffered_get_buffered_multipart_buffered_binary_quota_metadata_header_auth_user_agent_transport_pair_v1",
         ),
     ]);
     assert_eq!(manifest.crates.len(), expected_crates.len());
