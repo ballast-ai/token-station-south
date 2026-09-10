@@ -34,7 +34,7 @@ wasmtime = { version = "48", default-features = false, features = [
     "wat",
 ] }
 wasmtime-wasi = "48"
-wit-parser = "0.257"
+wit-parser = "0.258"
 zeroize = "1.8.2"
 
 [workspace.lints.rust]
