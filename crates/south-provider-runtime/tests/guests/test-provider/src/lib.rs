@@ -9,8 +9,12 @@
 
 use std::sync::Mutex;
 
+// The path names the single file, not the `wit/` directory: since the task
+// world arrived (2026-09-18) that directory resolves two packages, and a
+// directory path would make the generated module layout depend on which
+// packages happen to sit beside this one.
 wit_bindgen::generate!({
-    path: "../../../../south-provider-api/wit",
+    path: "../../../../south-provider-api/wit/provider-adapter.wit",
     world: "provider-adapter-v2",
 });
 
