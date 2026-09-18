@@ -12,7 +12,12 @@
     reason = "generated code is held to wasmtime's style, not ours"
 )]
 
+// The path names the single file, not the `wit/` directory: since the task
+// world arrived (2026-09-18) that directory resolves two packages, and a
+// directory path would make the generated module layout depend on which
+// packages happen to sit beside this one. The runtime instantiates the
+// provider world, so it generates from the provider world's file.
 wasmtime::component::bindgen!({
-    path: "../south-provider-api/wit",
+    path: "../south-provider-api/wit/provider-adapter.wit",
     world: "provider-adapter-v2",
 });

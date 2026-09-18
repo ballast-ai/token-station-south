@@ -1,0 +1,207 @@
+// The task adapter world: one media task's lifecycle, as pure translation.
+//
+// A chat call is one request and one response. A media task is a lifecycle —
+// submit, observe until terminal, render — with a durable row, a lease, a
+// reservation and a settlement between the steps. Those belong to the host.
+// What lives here is the dialect half: how this provider's wire expresses each
+// stage, and nothing about when to run one.
+//
+// The discipline is the provider world's, unchanged: **the component
+// describes, the host executes.** Every function is pure. A component has no
+// network, no clock and no memory across calls, so it can neither send its own
+// request nor decide that time has run out.
+//
+// Two absences are deliberate and recorded (2026-09-18 task-adapter-world
+// record, D2):
+//
+//   - no `timed-out`: a waiting budget is host policy, and neither side may
+//     synthesise a terminal from a clock (2026-08-27 vocabulary record, D3
+//     rule 5). A local deadline yields `unknown`, which is a reconciliation
+//     input and not an outcome.
+//   - no `usage-intent`: metering is the component's and pricing the host's,
+//     but a metering vocabulary is admitted only with an executing consumer.
+//     It lands with the host seam, as a later package minor.
+
+package token-station:task-adapter@1.0.0;
+
+/// Identity and liveness. Structurally identical to the provider world's, and
+/// deliberately not shared: the two packages version independently, and a
+/// shared type would couple them again through the back door.
+interface common {
+    record adapter-metadata {
+        name: string,
+        version: string,
+        /// Must equal the world this component was built against:
+        /// `task-adapter-v1`.
+        api-version: string,
+    }
+
+    enum health-status {
+        ready,
+        degraded,
+        unavailable,
+    }
+
+    record adapter-health {
+        status: health-status,
+        detail: option<string>,
+    }
+}
+
+/// Credential operations the host performs on a task component's behalf.
+///
+/// Identical in shape and in rule to the provider world's `host`: the
+/// component passes the *name* of a credential and the host resolves it;
+/// everything returned here is not a credential.
+///
+/// The task half resolves that name against a **pre-resolved** secret
+/// (`PreparedSecretResolverV1`), never a routing resolver — polling and
+/// artifact fetch must run under the credential the task was *submitted*
+/// with, and a chat-shaped resolver's weight-and-failover default is exactly
+/// the reported failure mode (2026-08-27 vocabulary record, D1). That is a
+/// host obligation; the component cannot express it and is not asked to.
+interface host {
+    /// `secret-ref` is a name declared in the component's manifest under
+    /// `permissions.secrets`. Signing a name the manifest did not declare
+    /// fails.
+    ///
+    /// The signature is not a credential, so the component may place it in an
+    /// ordinary header or the body. It may *not* place it in `authorization`
+    /// or any other credential header: the descriptor's safe-header rule
+    /// refuses those names.
+    sign: func(secret-ref: string, payload: list<u8>, algorithm: string) -> result<list<u8>, string>;
+}
+
+/// One provider family's task dialect: three stages, seven functions, all pure.
+interface task-adapter {
+    use common.{adapter-metadata, adapter-health};
+
+    /// A JSON document. The doc comment on each use names its canonical type.
+    type json = string;
+
+    metadata: func() -> adapter-metadata;
+    healthcheck: func() -> adapter-health;
+
+    // ── Stage one: submit ───────────────────────────────────────────────────
+
+    /// `provider-config`: `protocol::ProviderConfig` (the policy-fenced
+    /// four-field subset) · `task-request`: the caller's normalised request ·
+    /// `host-minted`: `south_contracts::HostMintedValuesV1`
+    /// -> `protocol::HttpRequestDescriptor`.
+    ///
+    /// `host-minted` carries the values only the host can produce and only the
+    /// dialect knows where to put: the gateway task id (Kling embeds it as
+    /// `external_task_id`, which is what makes a resubmission idempotent
+    /// upstream) and, where the provider supports one, a callback URL already
+    /// bearing the host's nonce. Three rules ride with the type
+    /// (2026-08-27 vocabulary record, D2):
+    ///
+    ///   1. **The component places them; it never invents them.** A component
+    ///      that generates its own task id destroys the host's idempotency
+    ///      anchor — the upstream accepts the resubmission as new work and the
+    ///      reservation pays for both.
+    ///   2. **They are opaque strings.** Do not parse the callback URL, derive
+    ///      anything from the id, or reorder their bytes. A dialect with no
+    ///      callback concept ignores the option.
+    ///   3. **The nonce plaintext exists only inside that URL.** Never echo it
+    ///      into an error message: the error channel is an `ErrorEnvelope`
+    ///      precisely so free text cannot leak it.
+    build-submit-request: func(
+        provider-config: json,
+        task-request: json,
+        host-minted: json,
+    ) -> result<json, json>;
+
+    /// `response-parts`: `protocol::HttpResponseParts` -> the upstream's task
+    /// id, as an opaque string the host stores on the durable row and hands
+    /// back to `build-observe-request`.
+    ///
+    /// A 2xx that carries no id is an error, not an empty success: the host
+    /// would hold a reservation against a task it can never poll.
+    parse-submit-response: func(response-parts: json) -> result<string, json>;
+
+    // ── Stage two: observe ──────────────────────────────────────────────────
+
+    /// `provider-config`: `protocol::ProviderConfig` · `upstream-task-id`: what
+    /// `parse-submit-response` returned -> `protocol::HttpRequestDescriptor`.
+    ///
+    /// A GET, buffered (`GetRequestV1`, HTTP contract six). The host owns the
+    /// polling cadence, the lease and the backoff; this function owns only
+    /// where to look.
+    build-observe-request: func(
+        provider-config: json,
+        upstream-task-id: string,
+    ) -> result<json, json>;
+
+    /// `response-parts`: `protocol::HttpResponseParts`
+    /// -> `south_contracts::TaskObservationV1`
+    /// (`running | succeeded | failed(kind) | unknown`).
+    ///
+    /// The rules are frozen (2026-08-27 vocabulary record, D3):
+    ///
+    ///   - **`provider-expired` requires an explicit upstream statement.**
+    ///     Measured across six families, only BytePlus and xAI say it on the
+    ///     wire; everything else that resembles expiry is a plain failure or
+    ///     `unknown`. There is no `expired` observation variant — expiry is a
+    ///     failure *kind*.
+    ///   - **An unrecognised status word is `unknown`**, never a synthesised
+    ///     failure. Inventing a terminal renders "we cannot tell" as "it is
+    ///     over".
+    ///   - **A non-2xx query is `unknown`.** A failed *query* is not a failed
+    ///     *task*: 429, 5xx, 404 and 401 all mean the observation did not
+    ///     happen. A family whose upstream expresses expiry only as a 404 stays
+    ///     `unknown` — a 404 is also what a wrong credential returns — and the
+    ///     host's reconciliation settles it.
+    ///   - **Retry policy is not expressed here.** The host reads it off the
+    ///     kind; there is no `retriable` flag.
+    parse-observation: func(response-parts: json) -> result<json, json>;
+
+    // ── Stage three: render ─────────────────────────────────────────────────
+
+    /// `observation`: the terminal `south_contracts::TaskObservationV1`
+    /// -> `option<protocol::HttpRequestDescriptor>`.
+    ///
+    /// **`none` means "the observation already has everything", not "not
+    /// supported".** Five of six measured families are `none`; MiniMax is the
+    /// exception, whose terminal observation carries only a `file_id` whose
+    /// download URL takes another call.
+    ///
+    /// This is the pair that keeps rendering pure. The component *declares*
+    /// where to look, the host performs the fetch, and the bytes come back
+    /// through `render-success`. A component that fetched its own artifact
+    /// would need a network, which it does not have.
+    ///
+    /// A component that can return `some` declares `artifact_fetch` in its
+    /// manifest, so a host knows before the first call whether to wire that
+    /// path.
+    build-artifact-request: func(observation: json) -> result<json, json>;
+
+    /// `observation`: the terminal `south_contracts::TaskObservationV1` ·
+    /// `fetched`: the `protocol::HttpResponseParts` of the artifact request,
+    /// or `none` when the previous function asked for nothing
+    /// -> the success body.
+    ///
+    /// Pure by construction: every input arrives as a parameter.
+    render-success: func(
+        observation: json,
+        fetched: option<json>,
+    ) -> result<json, json>;
+
+    /// `observation`: a terminal failure `south_contracts::TaskObservationV1`
+    /// -> `protocol::ErrorEnvelope`.
+    ///
+    /// Must map onto the closed `protocol::ErrorCode` catalog: the host
+    /// branches on it to decide whether another upstream may be tried. An
+    /// unmappable failure is `internal`, never an invented code. Whether to
+    /// try another upstream is the host's decision and is never expressed
+    /// here.
+    map-terminal-failure: func(observation: json) -> result<json, json>;
+}
+
+/// World name doubles as the manifest's `api_version`.
+///
+/// Imports `host` so it can name credentials. Exports no way to read one.
+world task-adapter-v1 {
+    import host;
+    export task-adapter;
+}

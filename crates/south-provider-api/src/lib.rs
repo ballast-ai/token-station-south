@@ -40,9 +40,10 @@ pub use manifest::{
     COMPONENT_BEHAVIOR_SUITE, CompatibilityDeclarationV1, CompatibilityMismatchV1,
     CompatibilityTupleV1, ComponentManifestV1, ComponentMetadataV1, ComponentPermissionsV1,
     ConformanceSpecV1, HostExpectationsV1, KNOWN_WORLDS, ManifestErrorV1, PROVIDER_AUTH_ARMS,
-    PROVIDER_CAPABILITIES, PROVIDER_WORLD, PROVIDER_WORLD_SCHEMA, SIGNED_HEADER_NAMES, WIT_PACKAGE,
-    WorldSchemaV1, compatibility_matches, known_world, validate_component_name,
-    validate_package_relative_path,
+    PROVIDER_CAPABILITIES, PROVIDER_WORLD, PROVIDER_WORLD_SCHEMA, SIGNED_HEADER_NAMES,
+    TASK_BEHAVIOR_SUITE, TASK_CAPABILITIES, TASK_REQUIRED_CAPABILITIES, TASK_WIT_PACKAGE,
+    TASK_WORLD, TASK_WORLD_SCHEMA, WIT_PACKAGE, WorldSchemaV1, compatibility_matches, known_world,
+    validate_component_name, validate_package_relative_path,
 };
 
 /// The component ABI, as WIT source.
@@ -53,3 +54,10 @@ pub use manifest::{
 /// `wasi:filesystem` / `wasi:sockets`) and the bytes-typed chunk entry point
 /// never drift from the constants the manifest validates against.
 pub const ADAPTER_WIT: &str = include_str!("../wit/provider-adapter.wit");
+
+/// The task component ABI, as WIT source.
+///
+/// Embedded for the same reason as [`ADAPTER_WIT`], and kept in its own
+/// package so the two worlds version independently (2026-09-18
+/// task-adapter-world record, D1).
+pub const TASK_ADAPTER_WIT: &str = include_str!("../wit/task-adapter.wit");
