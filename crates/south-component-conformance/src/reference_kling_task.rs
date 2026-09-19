@@ -223,19 +223,19 @@ impl TaskComponentV1 for KlingTaskReferenceV1 {
         if upstream_task_id.is_empty() {
             return Err(invalid("cannot observe a kling task without its upstream id"));
         }
-        // The query path mirrors the creation path. `has_image` is not a
-        // parameter: both image paths answer on the same route as their
-        // creation, and the model is what distinguishes motion control.
+        // V1 lacks the submitted image/context fact. This heuristic cannot
+        // recover an ordinary model submitted with an image. A host must not
+        // migrate that path until a versioned context contract is available.
         let path = create_path(upstream_model, false);
         let image_path = create_path(upstream_model, true);
-        // A task created on the image route answers there; the host hands back
-        // the id it received, and both routes accept it. Prefer the text route
-        // unless the model is image-only, which its name states.
+        // There is no evidence that both query routes accept the same id.
         let path = if upstream_model.contains("i2v") { image_path } else { path };
-        Ok(HttpRequestDescriptor::new(
+        let mut descriptor = HttpRequestDescriptor::new(
             HttpMethod::Get,
             format!("{}{path}/{upstream_task_id}", base(config)),
-        ))
+        );
+        descriptor.auth = config.auth.clone().map(Auth::bearer);
+        Ok(descriptor)
     }
 
     fn parse_observation(&self, parts: &HttpResponseParts) -> ComponentResultV1<TaskObservationV1> {
