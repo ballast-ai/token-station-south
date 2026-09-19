@@ -36,10 +36,12 @@
       "value_bytes": 4096,
       "total_bytes": 16384
     },
-    "task": 1,
+    "task": 2,
     "task_limits": {
       "task_id_bytes": 128,
-      "callback_url_bytes": 8192
+      "callback_url_bytes": 8192,
+      "artifact_urls": 16,
+      "artifact_ref_bytes": 8192
     }
   },
   "conformance": {

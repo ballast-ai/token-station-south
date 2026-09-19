@@ -27,7 +27,7 @@ use std::fmt;
 use thiserror::Error;
 
 /// The version of the task adapter vocabulary contract.
-pub const TASK_CONTRACT_VERSION: u16 = 1;
+pub const TASK_CONTRACT_VERSION: u16 = 2;
 
 /// The maximum byte length of a host-minted task identifier.
 pub const MAX_TASK_ID_BYTES: usize = 128;
@@ -50,6 +50,15 @@ pub enum TaskContractErrorV1 {
     /// the character class, not the length, does the safety work.
     #[error("host-minted task id must be printable ASCII")]
     TaskIdNotPrintableAscii,
+    /// An artifact reference is empty — an empty URL list, an empty URL, or
+    /// an empty file id. "Succeeded with nothing to point at" is a shape
+    /// error, not a success the host should try to render.
+    #[error("an artifact reference must not be empty")]
+    EmptyArtifactRef,
+    /// An artifact reference exceeds [`MAX_ARTIFACT_URLS`] entries or
+    /// [`MAX_ARTIFACT_REF_BYTES`] per entry.
+    #[error("artifact reference exceeds the boundary limit")]
+    ArtifactRefTooLarge,
     /// The callback URL is empty. A dialect with no callback concept omits
     /// the `Option`; an empty string is a declaration that says nothing.
     #[error("a host-minted callback URL must not be empty")]
@@ -153,6 +162,98 @@ impl fmt::Debug for HostMintedValuesV1 {
     }
 }
 
+/// The maximum number of artifact URLs one terminal observation may carry.
+///
+/// One family returns a small set (a video plus its cover); none returns a
+/// stream of them. A bound exists because this crosses a sandbox boundary,
+/// and an unbounded list is an unbounded allocation in the host.
+pub const MAX_ARTIFACT_URLS: usize = 16;
+
+/// The maximum byte length of one artifact URL or file id.
+pub const MAX_ARTIFACT_REF_BYTES: usize = 8 * 1024;
+
+/// Where a finished task's result is, as the dialect expresses it.
+///
+/// Two shapes because upstreams genuinely differ, and the difference is what
+/// `build-artifact-request` exists to bridge: most families hand back a URL
+/// the host can serve or transfer, while one hands back an id that must be
+/// exchanged for a download URL in a second call.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TaskArtifactRefV1 {
+    /// Direct references the host can fetch or transfer.
+    Urls(Vec<String>),
+    /// An upstream-scoped id. The host obtains the real location by running
+    /// the descriptor `build-artifact-request` returns for it.
+    FileId(String),
+    /// The upstream reported success with no artifact reference of its own —
+    /// the result travels in the terminal body the renderer already has.
+    None,
+}
+
+impl TaskArtifactRefV1 {
+    /// Builds a URL reference.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TaskContractErrorV1`] when the list is empty, longer than
+    /// [`MAX_ARTIFACT_URLS`], or carries an entry that is empty or exceeds
+    /// [`MAX_ARTIFACT_REF_BYTES`].
+    pub fn urls(urls: Vec<String>) -> Result<Self, TaskContractErrorV1> {
+        if urls.is_empty() {
+            return Err(TaskContractErrorV1::EmptyArtifactRef);
+        }
+        if urls.len() > MAX_ARTIFACT_URLS {
+            return Err(TaskContractErrorV1::ArtifactRefTooLarge);
+        }
+        for url in &urls {
+            if url.is_empty() {
+                return Err(TaskContractErrorV1::EmptyArtifactRef);
+            }
+            if url.len() > MAX_ARTIFACT_REF_BYTES {
+                return Err(TaskContractErrorV1::ArtifactRefTooLarge);
+            }
+        }
+        Ok(Self::Urls(urls))
+    }
+
+    /// Builds a file-id reference.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TaskContractErrorV1`] when the id is empty or exceeds
+    /// [`MAX_ARTIFACT_REF_BYTES`].
+    pub fn file_id(id: &str) -> Result<Self, TaskContractErrorV1> {
+        if id.is_empty() {
+            return Err(TaskContractErrorV1::EmptyArtifactRef);
+        }
+        if id.len() > MAX_ARTIFACT_REF_BYTES {
+            return Err(TaskContractErrorV1::ArtifactRefTooLarge);
+        }
+        Ok(Self::FileId(id.to_owned()))
+    }
+}
+
+/// What the upstream reported this task consumed, in the unit it reported.
+///
+/// **A closed set, deliberately not a map.** South may carry what an upstream
+/// *reported*; what a unit costs is the host's. A free map is how the first
+/// becomes the second one key at a time — the first `"price_per_second"` a
+/// component writes would be a pricing vocabulary living in South.
+///
+/// Absence is not zero: most families bill from the request, so most terminal
+/// observations carry no meter at all.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum TaskMeterV1 {
+    /// Seconds of produced media, as the upstream reported them.
+    Seconds(f64),
+    /// Tokens the upstream billed for this task.
+    Tokens(i64),
+    /// Provider-defined milliunits — a thousandth of the provider's own
+    /// billing unit, for upstreams that report an exact deduction rather
+    /// than a physical quantity.
+    Milliunits(i64),
+}
+
 /// Why a terminal observation is a failure (2026-08-27 task-adapter record,
 /// ruling D3).
 ///
@@ -219,17 +320,51 @@ impl TaskFailureKindV1 {
 /// words that must fall through to [`Unknown`].
 ///
 /// [`Unknown`]: TaskObservationV1::Unknown
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum TaskObservationV1 {
-    /// The upstream reports the task is still in progress.
-    Running,
+    /// The upstream reports the task is still in progress, in its own word.
+    ///
+    /// The word is kept verbatim for the host's snapshot and diagnosis. It is
+    /// **not** a vocabulary: the host branches on the variant, never on this
+    /// string, so a dialect inventing a new progress word changes nothing.
+    Running {
+        /// The upstream's own status word, as it appeared on the wire.
+        status_word: String,
+    },
     /// The upstream reports the task finished and its artifact is ready.
-    Succeeded,
-    /// The upstream stated a terminal failure of the carried kind.
-    Failed(TaskFailureKindV1),
+    ///
+    /// Carries what the upstream *reported* — the artifact reference, and the
+    /// meter when the upstream stated one (2026-09-19 vocabulary fit survey).
+    /// Without these the host would have to parse the dialect's terminal body
+    /// itself, which is the knowledge the component exists to hold.
+    Succeeded {
+        /// Where the result is, as this dialect expresses it.
+        artifact: TaskArtifactRefV1,
+        /// What the upstream said this cost, in the unit it said it in.
+        /// `None` when the upstream reports no meter, which is the common
+        /// case: most families bill from the request, not the result.
+        meter: Option<TaskMeterV1>,
+    },
+    /// The upstream stated a terminal failure of the carried kind, with its
+    /// own code and message where it gave them.
+    ///
+    /// The host surfaces those words and `map-terminal-failure` maps them onto
+    /// the closed `ErrorCode` catalog; neither is possible if the observation
+    /// drops them. The **kind** remains the only thing the host branches on.
+    Failed {
+        kind: TaskFailureKindV1,
+        /// The upstream's error code, verbatim, when it gave one.
+        code: Option<String>,
+        /// The upstream's message, verbatim, when it gave one.
+        message: Option<String>,
+    },
     /// The observation did not establish the task's state. Not a terminal:
     /// a reconciliation input.
-    Unknown,
+    Unknown {
+        /// Why the state could not be established — an HTTP status, an
+        /// unrecognised word, an unexpected shape. For diagnosis only.
+        reason: String,
+    },
 }
 
 impl TaskObservationV1 {
@@ -240,18 +375,18 @@ impl TaskObservationV1 {
     ///
     /// [`Unknown`]: TaskObservationV1::Unknown
     #[must_use]
-    pub const fn is_terminal(self) -> bool {
-        matches!(self, Self::Succeeded | Self::Failed(_))
+    pub const fn is_terminal(&self) -> bool {
+        matches!(self, Self::Succeeded { .. } | Self::Failed { .. })
     }
 
     /// Returns the frozen vocabulary word for this observation's state.
     #[must_use]
-    pub const fn state_word(self) -> &'static str {
+    pub const fn state_word(&self) -> &'static str {
         match self {
-            Self::Running => "running",
-            Self::Succeeded => "succeeded",
-            Self::Failed(_) => "failed",
-            Self::Unknown => "unknown",
+            Self::Running { .. } => "running",
+            Self::Succeeded { .. } => "succeeded",
+            Self::Failed { .. } => "failed",
+            Self::Unknown { .. } => "unknown",
         }
     }
 }

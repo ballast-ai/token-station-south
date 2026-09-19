@@ -85,6 +85,8 @@ struct ResponseTranscriptLimits {
 struct TaskLimits {
     task_id_bytes: usize,
     callback_url_bytes: usize,
+    artifact_urls: usize,
+    artifact_ref_bytes: usize,
 }
 
 #[derive(Debug, Deserialize)]
@@ -426,6 +428,11 @@ fn compatibility_manifest_describes_the_library_slice() {
         south_contracts::MAX_RESPONSE_TRANSCRIPT_TOTAL_BYTES
     );
     assert_eq!(manifest.contracts.task, south_contracts::TASK_CONTRACT_VERSION);
+    assert_eq!(manifest.contracts.task_limits.artifact_urls, south_contracts::MAX_ARTIFACT_URLS);
+    assert_eq!(
+        manifest.contracts.task_limits.artifact_ref_bytes,
+        south_contracts::MAX_ARTIFACT_REF_BYTES
+    );
     assert_eq!(manifest.contracts.task_limits.task_id_bytes, south_contracts::MAX_TASK_ID_BYTES);
     assert_eq!(
         manifest.contracts.task_limits.callback_url_bytes,
