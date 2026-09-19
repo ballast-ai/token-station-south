@@ -36,6 +36,7 @@ mod fixture;
 pub mod reference;
 pub mod reference_anthropic;
 pub mod reference_gemini;
+pub mod reference_kling_task;
 mod report;
 #[cfg(feature = "sandbox")]
 pub mod sandbox;
