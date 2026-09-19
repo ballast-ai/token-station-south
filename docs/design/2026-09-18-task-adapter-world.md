@@ -131,6 +131,20 @@ A world may gain an export in a minor; it may not change one. Leaving
 `usage-intent` out now costs a later package minor and protects the vocabulary
 from being frozen blind.
 
+> ⚠ **Superseded 2026-09-19 — there will be no eighth function.** The reasoning
+> above is right about a separate metering *call* and wrong about metering. The
+> vocabulary fit survey found that every family already reports its meter
+> **inside the terminal body it must return anyway**: the upstream says
+> `duration`, `completion_tokens` or its own deduction in the same response
+> that says "succeeded". A component forwarding those numbers is transcribing
+> what the upstream reported, not authoring a vocabulary, and nothing about it
+> prices anything.
+>
+> So the meter rides on `TaskObservationV1::Succeeded` as of task contract
+> version two (`2026-09-19-task-vocabulary-fit-survey.md`), and this world stays
+> at seven exports — not seven plus a pending eighth. The `ARCHITECTURE.md`
+> rule still holds; it simply never applied to transcription.
+
 ## 5. D3 — The capability vocabulary
 
 The provider world's four words mix two kinds: `chat` and `stream` name world
@@ -178,7 +192,7 @@ suite, which this slice does not author.
 ## 7. What this record does not decide
 
 - **Fixture content and per-dialect grammars** — authored per family.
-- **`usage-intent`** — §4; lands with the host seam.
+- ~~**`usage-intent`**~~ — superseded; there is no eighth function (§4 note).
 - **The host seam** (`SouthTaskAdapter`, the poller's call sites) — the
   adopting host's own slice.
 - **Whether a task component may also be a provider component.** One manifest
