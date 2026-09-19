@@ -5,7 +5,9 @@ use std::fmt;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use south_provider_api::{ComponentManifestV1, ComponentMetadataV1, HostExpectationsV1};
+use south_provider_api::{
+    ComponentManifestV1, ComponentMetadataV1, HostExpectationsV1, TASK_WORLD,
+};
 use wasmtime::Store;
 use wasmtime::component::{Component, Linker};
 
@@ -57,7 +59,32 @@ impl wit_host::Host for Ctx {
 
 struct InstanceHandle {
     store: Store<Ctx>,
-    instance: ProviderAdapterV2,
+    instance: InstanceKind,
+}
+
+/// Which world this instance exports.
+///
+/// An enum rather than a second loader: the manifest gate, the import scan,
+/// the compatibility handshake and the limiter wiring are all shared, and
+/// duplicating them to avoid two variants invites the worst kind of drift —
+/// a gate tightened in one loader and not the other, with nothing to notice
+/// (2026-09-19 runtime-second-world record, D1).
+enum InstanceKind {
+    Provider(Box<ProviderAdapterV2>),
+    Task(Box<crate::bindings::task::TaskAdapterV1>),
+}
+
+impl InstanceKind {
+    /// The provider world's accessor, or the ABI-mismatch error naming what
+    /// was actually loaded.
+    fn provider(&self) -> wasmtime::Result<&ProviderAdapterV2> {
+        match self {
+            Self::Provider(instance) => Ok(instance),
+            Self::Task(_) => Err(wasmtime::Error::msg(
+                "this component exports `task-adapter-v1`; the provider face is not on it",
+            )),
+        }
+    }
 }
 
 /// A loaded, gated provider component, exposing the world's functions as
@@ -126,9 +153,10 @@ impl LoadedComponentV1 {
         let linker = Arc::new(linker);
 
         let ctx = component_ctx(runtime, &manifest, &signer);
-        let mut handle =
-            instantiate(runtime, &component, &linker, ctx).map_err(LoadErrorV1::Probe)?;
-        let reported = call_metadata(runtime, &mut handle).map_err(LoadErrorV1::Probe)?;
+        let mut handle = instantiate(runtime, &component, &linker, ctx, &manifest.api_version)
+            .map_err(|source| LoadErrorV1::Probe { world: manifest.api_version.clone(), source })?;
+        let reported = call_metadata(runtime, &mut handle)
+            .map_err(|source| LoadErrorV1::Probe { world: manifest.api_version.clone(), source })?;
         if reported != manifest.metadata() {
             return Err(LoadErrorV1::IdentityMismatch {
                 declared: Box::new(manifest.metadata()),
@@ -169,6 +197,7 @@ impl LoadedComponentV1 {
         self.call(|handle| {
             handle
                 .instance
+                .provider()?
                 .token_station_adapter_provider_adapter()
                 .call_model_capabilities(&mut handle.store, &config_json)
         })
@@ -188,11 +217,11 @@ impl LoadedComponentV1 {
         let request_json = request_json.to_owned();
         let config_json = config_json.to_owned();
         self.call(|handle| {
-            handle.instance.token_station_adapter_provider_adapter().call_build_http_request(
-                &mut handle.store,
-                &request_json,
-                &config_json,
-            )
+            handle
+                .instance
+                .provider()?
+                .token_station_adapter_provider_adapter()
+                .call_build_http_request(&mut handle.store, &request_json, &config_json)
         })
     }
 
@@ -207,6 +236,7 @@ impl LoadedComponentV1 {
         self.call(|handle| {
             handle
                 .instance
+                .provider()?
                 .token_station_adapter_provider_adapter()
                 .call_parse_response(&mut handle.store, &parts_json)
         })
@@ -223,6 +253,7 @@ impl LoadedComponentV1 {
         self.call(|handle| {
             handle
                 .instance
+                .provider()?
                 .token_station_adapter_provider_adapter()
                 .call_map_provider_error(&mut handle.store, &parts_json)
         })
@@ -243,8 +274,14 @@ impl LoadedComponentV1 {
             return Err(CallErrorV1::StreamLimit);
         };
         let ctx = component_ctx(&self.runtime, &self.manifest, &self.signer);
-        let handle = instantiate(&self.runtime, &self.component, &self.linker, ctx)
-            .map_err(|error| classify_trap(&error))?;
+        let handle = instantiate(
+            &self.runtime,
+            &self.component,
+            &self.linker,
+            ctx,
+            &self.manifest.api_version,
+        )
+        .map_err(|error| classify_trap(&error))?;
         Ok(ComponentStreamV1 { runtime: self.runtime.clone(), handle, _permit: permit })
     }
 
@@ -299,9 +336,14 @@ impl ComponentStreamV1 {
         }
         self.handle.store.set_epoch_deadline(self.runtime.deadline_ticks());
 
-        let outcome = self
-            .handle
-            .instance
+        // Streaming is provider-only: a task lifecycle is request/response at
+        // every stage, so there is nothing to stream (the runtime-second-world
+        // record says so under "what this does not decide").
+        let instance = match self.handle.instance.provider() {
+            Ok(instance) => instance,
+            Err(error) => return finish_call(limit, Err(error)),
+        };
+        let outcome = instance
             .token_station_adapter_provider_adapter()
             .call_parse_stream_chunk(&mut self.handle.store, chunk);
         finish_call(limit, outcome)
@@ -331,12 +373,20 @@ fn instantiate(
     component: &Component,
     linker: &Linker<Ctx>,
     ctx: Ctx,
+    world: &str,
 ) -> wasmtime::Result<InstanceHandle> {
     let mut store = Store::new(runtime.engine(), ctx);
     store.limiter(|ctx| &mut ctx.limits);
     store.set_epoch_deadline(runtime.deadline_ticks());
 
-    let instance = ProviderAdapterV2::instantiate(&mut store, component, linker)?;
+    let instance = match world {
+        TASK_WORLD => InstanceKind::Task(Box::new(
+            crate::bindings::task::TaskAdapterV1::instantiate(&mut store, component, linker)?,
+        )),
+        _ => InstanceKind::Provider(Box::new(ProviderAdapterV2::instantiate(
+            &mut store, component, linker,
+        )?)),
+    };
     Ok(InstanceHandle { store, instance })
 }
 
@@ -345,15 +395,23 @@ fn call_metadata(
     handle: &mut InstanceHandle,
 ) -> wasmtime::Result<ComponentMetadataV1> {
     handle.store.set_epoch_deadline(runtime.deadline_ticks());
-    let reported = handle
-        .instance
-        .token_station_adapter_provider_adapter()
-        .call_metadata(&mut handle.store)?;
-    Ok(ComponentMetadataV1 {
-        name: reported.name,
-        version: reported.version,
-        api_version: reported.api_version,
-    })
+    // Both worlds export `metadata`, through their own accessor: the identity
+    // gate is shared in shape and specific in call.
+    let (name, version, api_version) = match &handle.instance {
+        InstanceKind::Provider(instance) => {
+            let reported = instance
+                .token_station_adapter_provider_adapter()
+                .call_metadata(&mut handle.store)?;
+            (reported.name, reported.version, reported.api_version)
+        }
+        InstanceKind::Task(instance) => {
+            let reported = instance
+                .token_station_task_adapter_task_adapter()
+                .call_metadata(&mut handle.store)?;
+            (reported.name, reported.version, reported.api_version)
+        }
+    };
+    Ok(ComponentMetadataV1 { name, version, api_version })
 }
 
 /// Maps one raw guest outcome to the runtime's stable vocabulary, bounding
