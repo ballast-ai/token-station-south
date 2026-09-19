@@ -85,6 +85,17 @@ impl InstanceKind {
             )),
         }
     }
+
+    /// The task world's accessor, or the ABI-mismatch error naming what was
+    /// actually loaded.
+    fn task(&self) -> wasmtime::Result<&crate::bindings::task::TaskAdapterV1> {
+        match self {
+            Self::Task(instance) => Ok(instance),
+            Self::Provider(_) => Err(wasmtime::Error::msg(
+                "this component exports `provider-adapter-v2`; the task face is not on it",
+            )),
+        }
+    }
 }
 
 /// A loaded, gated provider component, exposing the world's functions as
@@ -259,6 +270,183 @@ impl LoadedComponentV1 {
         })
     }
 
+    // ── The task world's JSON face ──────────────────────────────────────
+    //
+    // Seven calls mirroring the provider face's shape: bounded payloads, one
+    // instance, the guest's own error channel left opaque. Each reaches the
+    // guest through `task()`, so calling a task function on a chat component
+    // is the named ABI-mismatch error rather than a panic.
+
+    /// (`ProviderConfig`, task request, `HostMintedValuesV1`) JSON →
+    /// `HttpRequestDescriptor` JSON.
+    ///
+    /// # Errors
+    ///
+    /// See [`CallErrorV1`].
+    pub fn call_build_submit_request(
+        &self,
+        config_json: &str,
+        request_json: &str,
+        minted_json: &str,
+    ) -> Result<String, CallErrorV1> {
+        self.bounded(&[config_json, request_json, minted_json])?;
+        let config_json = config_json.to_owned();
+        let request_json = request_json.to_owned();
+        let minted_json = minted_json.to_owned();
+        self.call(|handle| {
+            handle
+                .instance
+                .task()?
+                .token_station_task_adapter_task_adapter()
+                .call_build_submit_request(
+                    &mut handle.store,
+                    &config_json,
+                    &request_json,
+                    &minted_json,
+                )
+        })
+    }
+
+    /// `HttpResponseParts` JSON → the submit outcome, rendered as JSON.
+    ///
+    /// The world models this as a variant, so the runtime renders it here
+    /// rather than handing back a guest-authored string: the four cases are
+    /// the contract, and `unknown` in particular is funds-critical — it means
+    /// the upstream may have taken the work.
+    ///
+    /// # Errors
+    ///
+    /// See [`CallErrorV1`].
+    pub fn call_parse_submit_response(&self, parts_json: &str) -> Result<String, CallErrorV1> {
+        self.bounded(&[parts_json])?;
+        let parts_json = parts_json.to_owned();
+        self.call(|handle| {
+            let outcome = handle
+                .instance
+                .task()?
+                .token_station_task_adapter_task_adapter()
+                .call_parse_submit_response(&mut handle.store, &parts_json)?;
+            // Rendered inside the call so the JSON face stays `String` like
+            // every other one; the variant is the contract, and turning it
+            // into JSON here is what keeps the guest from authoring a fifth
+            // case as a free string.
+            Ok(outcome.map(|outcome| render_submit_outcome(&outcome)))
+        })
+    }
+
+    /// (`ProviderConfig`, upstream model, upstream task id) JSON →
+    /// `HttpRequestDescriptor` JSON.
+    ///
+    /// # Errors
+    ///
+    /// See [`CallErrorV1`].
+    pub fn call_build_observe_request(
+        &self,
+        config_json: &str,
+        upstream_model: &str,
+        upstream_task_id: &str,
+    ) -> Result<String, CallErrorV1> {
+        self.bounded(&[config_json, upstream_model, upstream_task_id])?;
+        let config_json = config_json.to_owned();
+        let upstream_model = upstream_model.to_owned();
+        let upstream_task_id = upstream_task_id.to_owned();
+        self.call(|handle| {
+            handle
+                .instance
+                .task()?
+                .token_station_task_adapter_task_adapter()
+                .call_build_observe_request(
+                    &mut handle.store,
+                    &config_json,
+                    &upstream_model,
+                    &upstream_task_id,
+                )
+        })
+    }
+
+    /// `HttpResponseParts` JSON → `TaskObservationV1` JSON.
+    ///
+    /// # Errors
+    ///
+    /// See [`CallErrorV1`].
+    pub fn call_parse_observation(&self, parts_json: &str) -> Result<String, CallErrorV1> {
+        self.bounded(&[parts_json])?;
+        let parts_json = parts_json.to_owned();
+        self.call(|handle| {
+            handle
+                .instance
+                .task()?
+                .token_station_task_adapter_task_adapter()
+                .call_parse_observation(&mut handle.store, &parts_json)
+        })
+    }
+
+    /// (`ProviderConfig`, observation) JSON → `option<HttpRequestDescriptor>`
+    /// JSON, where `null` means the observation already carries everything.
+    ///
+    /// # Errors
+    ///
+    /// See [`CallErrorV1`].
+    pub fn call_build_artifact_request(
+        &self,
+        config_json: &str,
+        observation_json: &str,
+    ) -> Result<String, CallErrorV1> {
+        self.bounded(&[config_json, observation_json])?;
+        let config_json = config_json.to_owned();
+        let observation_json = observation_json.to_owned();
+        self.call(|handle| {
+            handle
+                .instance
+                .task()?
+                .token_station_task_adapter_task_adapter()
+                .call_build_artifact_request(&mut handle.store, &config_json, &observation_json)
+        })
+    }
+
+    /// (observation, optional fetched parts, `HostMintedValuesV1`) JSON → the
+    /// success body JSON.
+    ///
+    /// # Errors
+    ///
+    /// See [`CallErrorV1`].
+    pub fn call_render_success(
+        &self,
+        observation_json: &str,
+        fetched_json: Option<&str>,
+        minted_json: &str,
+    ) -> Result<String, CallErrorV1> {
+        self.bounded(&[observation_json, fetched_json.unwrap_or_default(), minted_json])?;
+        let observation_json = observation_json.to_owned();
+        let fetched_json = fetched_json.map(str::to_owned);
+        let minted_json = minted_json.to_owned();
+        self.call(|handle| {
+            handle.instance.task()?.token_station_task_adapter_task_adapter().call_render_success(
+                &mut handle.store,
+                &observation_json,
+                fetched_json.as_ref(),
+                &minted_json,
+            )
+        })
+    }
+
+    /// A terminal-failure observation JSON → `ErrorEnvelope` JSON.
+    ///
+    /// # Errors
+    ///
+    /// See [`CallErrorV1`].
+    pub fn call_map_terminal_failure(&self, observation_json: &str) -> Result<String, CallErrorV1> {
+        self.bounded(&[observation_json])?;
+        let observation_json = observation_json.to_owned();
+        self.call(|handle| {
+            handle
+                .instance
+                .task()?
+                .token_station_task_adapter_task_adapter()
+                .call_map_terminal_failure(&mut handle.store, &observation_json)
+        })
+    }
+
     /// Opens one stream on its own instance.
     ///
     /// One instance per stream: `parse-stream-chunk` holds the unparsed tail
@@ -388,6 +576,42 @@ fn instantiate(
         )?)),
     };
     Ok(InstanceHandle { store, instance })
+}
+
+/// Renders the task world's `submit-outcome` variant as JSON.
+///
+/// The host reads the outcome off this shape, and the `unknown` case is the
+/// funds-critical one: it means the upstream may have accepted the work and
+/// may be billing for it, so the host keeps the reservation rather than
+/// releasing it.
+///
+/// Built with `serde_json` rather than string formatting — the guest supplies
+/// the id and the payloads, and hand-rolled quoting is exactly where a guest
+/// string would escape its own field.
+fn render_submit_outcome(
+    outcome: &crate::bindings::task::exports::token_station::task_adapter::task_adapter::SubmitOutcome,
+) -> String {
+    use crate::bindings::task::exports::token_station::task_adapter::task_adapter::SubmitOutcome;
+
+    /// A guest-supplied JSON document, forwarded as-is when it parses and as a
+    /// string when it does not: the runtime never silently drops a payload.
+    fn opaque(raw: &str) -> serde_json::Value {
+        serde_json::from_str(raw).unwrap_or_else(|_| serde_json::Value::String(raw.to_owned()))
+    }
+
+    let value = match outcome {
+        SubmitOutcome::Accepted(id) => {
+            serde_json::json!({ "outcome": "accepted", "upstream_task_id": id })
+        }
+        SubmitOutcome::AcceptedTerminal(body) => {
+            serde_json::json!({ "outcome": "accepted-terminal", "body": opaque(body) })
+        }
+        SubmitOutcome::Rejected(envelope) => {
+            serde_json::json!({ "outcome": "rejected", "error": opaque(envelope) })
+        }
+        SubmitOutcome::Unknown => serde_json::json!({ "outcome": "unknown" }),
+    };
+    value.to_string()
 }
 
 fn call_metadata(

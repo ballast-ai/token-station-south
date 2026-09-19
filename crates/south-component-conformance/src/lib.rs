@@ -42,6 +42,7 @@ mod report;
 pub mod sandbox;
 mod suite;
 mod task_fixture;
+pub mod task_json;
 mod task_suite;
 
 pub use component::{
