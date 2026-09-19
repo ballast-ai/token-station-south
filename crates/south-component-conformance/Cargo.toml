@@ -11,6 +11,7 @@ version.workspace = true
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+south-contracts = { path = "../south-contracts", version = "0.27.1" }
 south-provider-api = { path = "../south-provider-api", version = "0.27.1" }
 south-provider-runtime = { path = "../south-provider-runtime", version = "0.27.1", optional = true }
 token-station-protocol.workspace = true
@@ -22,7 +23,6 @@ token-station-protocol.workspace = true
 sandbox = ["dep:south-provider-runtime"]
 
 [dev-dependencies]
-south-contracts = { path = "../south-contracts", version = "0.27.1" }
 
 [[test]]
 name = "sandbox_parity_v1"

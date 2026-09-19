@@ -1,0 +1,14 @@
+{
+  "provider_config": {
+    "provider": "kling",
+    "base_url": "https://api.kling.example",
+    "models": []
+  },
+  "request": {
+    "model": "kling-v3",
+    "prompt": "a cat"
+  },
+  "minted": {
+    "task_id": "task-01J9ZK3V7Q"
+  }
+}

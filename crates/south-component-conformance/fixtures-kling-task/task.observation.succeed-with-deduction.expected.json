@@ -1,0 +1,10 @@
+{
+  "state": "succeeded",
+  "urls": [
+    "https://cdn.kling.example/a.mp4"
+  ],
+  "meter": {
+    "unit": "milliunits",
+    "value": 2500
+  }
+}

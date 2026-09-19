@@ -1,0 +1,4 @@
+{
+  "status": 200,
+  "body": "{\"code\": 0, \"data\": {\"task_status\": \"succeed\", \"final_unit_deduction\": \"2.5\", \"task_result\": {\"videos\": [{\"id\": \"v1\", \"url\": \"https://cdn.kling.example/a.mp4\", \"duration\": \"5\"}]}}}"
+}
