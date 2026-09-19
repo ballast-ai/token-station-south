@@ -13,7 +13,8 @@
 //! from the adopting host's production implementation — its `normalize_kling`,
 //! `parse_kling_create` and `KlingDispatch`, together with the frozen word
 //! table its own tests pin. That code has served real traffic and carries the
-//! marks of incidents (the two defensive arms in [`parse_observation`] are
+//! marks of incidents (the two defensive arms in
+//! [`parse_observation`](TaskComponentV1::parse_observation) are
 //! shapes it was taught by failure), so it is second-hand but *evidenced*
 //! knowledge rather than a guess.
 //!
