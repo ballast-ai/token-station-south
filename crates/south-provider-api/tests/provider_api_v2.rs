@@ -5,8 +5,9 @@ use std::collections::BTreeSet;
 use south_provider_api::{
     ADAPTER_WIT, COMPONENT_BEHAVIOR_SUITE, CompatibilityDeclarationV1, CompatibilityMismatchV1,
     ComponentManifestV1, ComponentPermissionsV1, ConformanceSpecV1, HostExpectationsV1,
-    KNOWN_WORLDS, ManifestErrorV1, PROVIDER_WORLD, PROVIDER_WORLD_SCHEMA, WIT_PACKAGE,
-    compatibility_matches, known_world,
+    KNOWN_WORLDS, ManifestErrorV1, PROVIDER_AUTH_ARMS, PROVIDER_WORLD, PROVIDER_WORLD_SCHEMA,
+    TASK_ADAPTER_WIT, TASK_BEHAVIOR_SUITE, TASK_CAPABILITIES, TASK_WIT_PACKAGE, TASK_WORLD,
+    TASK_WORLD_SCHEMA, WIT_PACKAGE, compatibility_matches, known_world,
 };
 use wit_parser::{Resolve, Type, TypeDefKind};
 
@@ -180,11 +181,19 @@ fn rejects_a_credential_pasted_into_the_secrets_list() {
     );
 }
 
+/// Both worlds resolve by name, and an unknown name still resolves to nothing.
+///
+/// Until the task world shipped this test asserted `task-adapter-v1` was
+/// *unknown* — that was the state the 2026-09-18 slice exists to end. What has
+/// to stay true is narrower and is what this now pins: a name resolves to its
+/// own schema and to no other.
 #[test]
-fn the_provider_world_is_the_only_known_world_and_resolves_by_name() {
-    assert_eq!(KNOWN_WORLDS, &[PROVIDER_WORLD_SCHEMA]);
+fn every_known_world_resolves_to_its_own_schema_and_no_other() {
+    assert_eq!(KNOWN_WORLDS, &[PROVIDER_WORLD_SCHEMA, TASK_WORLD_SCHEMA]);
     assert_eq!(known_world(PROVIDER_WORLD), Some(&PROVIDER_WORLD_SCHEMA));
-    assert_eq!(known_world("task-adapter-v1"), None);
+    assert_eq!(known_world(TASK_WORLD), Some(&TASK_WORLD_SCHEMA));
+    assert_eq!(known_world("provider-adapter-v1"), None);
+    assert_eq!(known_world("task-adapter-v2"), None);
 }
 
 #[test]
@@ -499,4 +508,189 @@ fn a_component_from_the_previous_release_is_named_in_the_refusal() {
     };
     assert_eq!(declared, "0.15.0");
     assert_eq!(expected, env!("CARGO_PKG_VERSION"));
+}
+
+// ── The task adapter world (2026-09-18 record) ───────────────────────────────
+
+fn task_resolve() -> Resolve {
+    let mut resolve = Resolve::new();
+    resolve
+        .push_str("task-adapter.wit", TASK_ADAPTER_WIT)
+        .expect("wit/task-adapter.wit must parse");
+    resolve
+}
+
+/// The task world ships in its own package so a chat-side change cannot force
+/// a task-side version signal (record D1).
+#[test]
+fn the_task_wit_parses_and_names_its_own_package() {
+    let resolve = task_resolve();
+    let (_, package) = resolve.packages.iter().next().expect("one package");
+    let name = &package.name;
+    let rendered = format!(
+        "{}:{}@{}",
+        name.namespace,
+        name.name,
+        name.version.as_ref().expect("package is versioned")
+    );
+    assert_eq!(rendered, TASK_WIT_PACKAGE);
+    assert_ne!(rendered, WIT_PACKAGE, "the two worlds must not share a package version");
+}
+
+#[test]
+fn the_task_world_exists_and_is_the_only_world_in_its_package() {
+    let resolve = task_resolve();
+    let worlds: Vec<_> = resolve.worlds.iter().map(|(_, w)| w.name.clone()).collect();
+    assert_eq!(worlds, vec![TASK_WORLD.to_owned()]);
+}
+
+#[test]
+fn the_task_world_reaches_neither_the_network_nor_the_file_system() {
+    let resolve = task_resolve();
+    for (_, world) in &resolve.worlds {
+        for (key, _) in &world.imports {
+            let name = resolve.name_world_key(key);
+            assert!(
+                !name.contains("wasi:sockets") && !name.contains("wasi:filesystem"),
+                "world `{}` imports `{name}`; components have no network",
+                world.name
+            );
+        }
+    }
+}
+
+/// The seven functions of the lowered seam (record D2). `timed_out` is absent
+/// because a waiting budget is host policy, and `usage-intent` is absent
+/// because a metering vocabulary is admitted only with an executing consumer.
+#[test]
+fn the_task_world_exports_the_seven_lifecycle_functions() {
+    let resolve = task_resolve();
+    let (_, iface) = resolve
+        .interfaces
+        .iter()
+        .find(|(_, i)| i.name.as_deref() == Some("task-adapter"))
+        .expect("task-adapter interface exists");
+    let mut names: Vec<_> = iface.functions.keys().cloned().collect();
+    names.sort();
+    let mut expected = vec![
+        "build-submit-request",
+        "parse-submit-response",
+        "build-observe-request",
+        "parse-observation",
+        "build-artifact-request",
+        "render-success",
+        "map-terminal-failure",
+        "metadata",
+        "healthcheck",
+    ];
+    expected.sort_unstable();
+    assert_eq!(names, expected);
+    assert!(
+        !names.iter().any(|n| n == "usage-intent" || n == "timed-out"),
+        "neither lands in the admission slice (record D2)"
+    );
+}
+
+/// Gate ① must admit a task manifest, which today fails at `api_version`.
+#[test]
+fn the_task_world_is_known_and_carries_its_own_vocabulary() {
+    let schema = known_world(TASK_WORLD).expect("the task world is admitted");
+    assert_eq!(schema.world, TASK_WORLD);
+    assert_eq!(schema.wit_package, TASK_WIT_PACKAGE);
+    assert_eq!(schema.behavior_suite, TASK_BEHAVIOR_SUITE);
+    assert_eq!(schema.capabilities, TASK_CAPABILITIES);
+    // A task component authenticates exactly as a chat one does (record D4).
+    assert_eq!(schema.auth_arms, PROVIDER_AUTH_ARMS);
+    assert_eq!(KNOWN_WORLDS.len(), 2, "two worlds, no more");
+}
+
+fn task_manifest() -> ComponentManifestV1 {
+    ComponentManifestV1 {
+        name: "task-kling".to_owned(),
+        version: "1.0.0".to_owned(),
+        api_version: TASK_WORLD.to_owned(),
+        providers: vec!["kling".to_owned()],
+        capabilities: BTreeSet::from([
+            "submit".to_owned(),
+            "observe".to_owned(),
+            "render".to_owned(),
+        ]),
+        auth_arms: BTreeSet::from(["host_signed".to_owned()]),
+        emits: vec!["authorization".to_owned()],
+        permissions: ComponentPermissionsV1 {
+            network: false,
+            filesystem: false,
+            secrets: vec!["provider_api_key".to_owned()],
+        },
+        conformance: ConformanceSpecV1 {
+            required_suite: TASK_BEHAVIOR_SUITE.to_owned(),
+            fixtures: "fixtures/".to_owned(),
+        },
+        compatibility: CompatibilityDeclarationV1 {
+            ir_schema_id: "token-station-protocol@0.3.0/v0.2.0".to_owned(),
+            kernel_version: "0.2.0".to_owned(),
+            kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb09c".to_owned(),
+            wit_package: TASK_WIT_PACKAGE.to_owned(),
+            south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
+        },
+    }
+}
+
+#[test]
+fn a_task_manifest_validates_and_reports_its_own_tuple() {
+    let manifest = task_manifest();
+    assert_eq!(manifest.validate(), Ok(()));
+    let tuple = manifest.compatibility_tuple();
+    assert_eq!(tuple.wit_package, TASK_WIT_PACKAGE);
+    assert_eq!(tuple.wit_world, TASK_WORLD);
+    assert_eq!(tuple.conformance_suite, TASK_BEHAVIOR_SUITE);
+}
+
+/// `artifact_fetch` is the one optional word: it declares that
+/// `build-artifact-request` may return `Some` (record D3).
+#[test]
+fn a_task_component_may_declare_the_optional_artifact_fetch() {
+    let mut manifest = task_manifest();
+    manifest.capabilities.insert("artifact_fetch".to_owned());
+    assert_eq!(manifest.validate(), Ok(()));
+}
+
+/// The three lifecycle words are mandatory: a component missing one cannot
+/// complete a task, and the provider world's `chat`-only rule does not apply.
+#[test]
+fn a_task_component_missing_a_lifecycle_stage_is_refused() {
+    for missing in ["submit", "observe", "render"] {
+        let mut manifest = task_manifest();
+        manifest.capabilities.remove(missing);
+        assert!(
+            matches!(
+                manifest.validate(),
+                Err(ManifestErrorV1::TaskLifecycleCapabilityRequired { .. })
+            ),
+            "a task component without `{missing}` must be refused"
+        );
+    }
+}
+
+/// The two worlds must not be confusable: each refuses the other's suite,
+/// package and capability vocabulary.
+#[test]
+fn the_two_worlds_do_not_accept_each_others_declarations() {
+    let mut chat_suite = task_manifest();
+    chat_suite.conformance.required_suite = COMPONENT_BEHAVIOR_SUITE.to_owned();
+    assert!(matches!(
+        chat_suite.validate(),
+        Err(ManifestErrorV1::ConformanceSuiteIsNotTheWorldSuite { .. })
+    ));
+
+    let mut chat_package = task_manifest();
+    chat_package.compatibility.wit_package = WIT_PACKAGE.to_owned();
+    assert!(matches!(
+        chat_package.validate(),
+        Err(ManifestErrorV1::WitPackageIsNotTheWorldPackage { .. })
+    ));
+
+    let mut chat_word = task_manifest();
+    chat_word.capabilities.insert("stream".to_owned());
+    assert!(chat_word.validate().is_err(), "`stream` is not a task-world word");
 }

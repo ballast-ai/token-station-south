@@ -16,6 +16,27 @@ pub const PROVIDER_WORLD: &str = "provider-adapter-v2";
 /// so the manifest validates exactly; S2 builds the suite under this name.
 pub const COMPONENT_BEHAVIOR_SUITE: &str = "south.provider-component.v1";
 
+/// The task world's WIT package (compatibility tuple field 3).
+///
+/// A package of its own, not a second world inside [`WIT_PACKAGE`]: a package
+/// version is shared by every world in it, so housing both would make a
+/// chat-side change force a task-side version signal, and tuple field 3 is how
+/// a component declares which bytes it was built against (2026-09-18
+/// task-adapter-world record, D1).
+pub const TASK_WIT_PACKAGE: &str = "token-station:task-adapter@1.0.0";
+
+/// The task world name, doubling as the manifest `api_version`
+/// (compatibility tuple field 4).
+pub const TASK_WORLD: &str = "task-adapter-v1";
+
+/// The task component-behavior conformance suite name (compatibility tuple 6).
+///
+/// The *name* is frozen here because it is what a manifest declares and a
+/// manifest cannot be validated without it. Its *content* — the per-dialect
+/// fixtures, including the one 404-query row each family owes under the
+/// vocabulary record's D3 — is authored per family, as fixtures always are.
+pub const TASK_BEHAVIOR_SUITE: &str = "south.task-component.v1";
+
 /// A component world this South knows, and the properties gate ① validates a
 /// manifest against once the manifest has declared which world it is for
 /// (2026-08-27 manifest-schema record, D1).
@@ -78,9 +99,40 @@ pub const PROVIDER_WORLD_SCHEMA: WorldSchemaV1 = WorldSchemaV1 {
     auth_arms: PROVIDER_AUTH_ARMS,
 };
 
-/// Every world this South can admit. The task adapter world (#52) enters
-/// here when its vocabulary ships.
-pub const KNOWN_WORLDS: &[WorldSchemaV1] = &[PROVIDER_WORLD_SCHEMA];
+/// The task world's capability vocabulary.
+///
+/// Every word names a lifecycle stage; unlike the provider world's set, none
+/// names a request field, because a task component's request body is its
+/// dialect's own and it promises nothing about IR fields.
+///
+/// `submit`, `observe` and `render` are **mandatory** — a component missing
+/// one cannot complete a task. `artifact_fetch` is the single optional word:
+/// it declares that `build-artifact-request` may return `Some`, so a host
+/// knows before the first call whether to wire that execution path rather than
+/// having to infer the component's shape by calling it (2026-09-18
+/// task-adapter-world record, D3).
+pub const TASK_CAPABILITIES: &[&str] = &["submit", "observe", "render", "artifact_fetch"];
+
+/// The lifecycle stages every task component must declare.
+pub const TASK_REQUIRED_CAPABILITIES: &[&str] = &["submit", "observe", "render"];
+
+/// The task world, as gate ① validates it.
+///
+/// Its auth arms are [`PROVIDER_AUTH_ARMS`] unchanged: a task component
+/// authenticates exactly as a chat one does — it names a credential and never
+/// holds one. `host_signed` matters more here than in chat, since Kling's
+/// HS256 JWT and Bedrock's `SigV4` are both task-side families (2026-09-18
+/// task-adapter-world record, D4).
+pub const TASK_WORLD_SCHEMA: WorldSchemaV1 = WorldSchemaV1 {
+    world: TASK_WORLD,
+    wit_package: TASK_WIT_PACKAGE,
+    behavior_suite: TASK_BEHAVIOR_SUITE,
+    capabilities: TASK_CAPABILITIES,
+    auth_arms: PROVIDER_AUTH_ARMS,
+};
+
+/// Every world this South can admit.
+pub const KNOWN_WORLDS: &[WorldSchemaV1] = &[PROVIDER_WORLD_SCHEMA, TASK_WORLD_SCHEMA];
 
 /// Resolves a manifest's declared `api_version` to a world this South knows.
 #[must_use]
@@ -338,6 +390,21 @@ impl ComponentManifestV1 {
                 return Err(ManifestErrorV1::ProviderFamilyRequired);
             }
         }
+        if world.world == TASK_WORLD {
+            // Three stages, all required: a component missing one cannot carry
+            // a task to a terminal state. `artifact_fetch` is deliberately not
+            // here — it is the one optional word.
+            for stage in TASK_REQUIRED_CAPABILITIES {
+                if !self.capabilities.contains(*stage) {
+                    return Err(ManifestErrorV1::TaskLifecycleCapabilityRequired {
+                        missing: (*stage).to_owned(),
+                    });
+                }
+            }
+            if self.providers.is_empty() {
+                return Err(ManifestErrorV1::ProviderFamilyRequired);
+            }
+        }
         for provider in &self.providers {
             validate_component_name(provider)
                 .map_err(|_| ManifestErrorV1::InvalidProviderFamily(provider.clone()))?;
@@ -508,6 +575,11 @@ pub enum ManifestErrorV1 {
     SecretIsNotAReferenceName(String),
     #[error("every provider component must support `chat`")]
     ChatCapabilityRequired,
+    #[error(
+        "every task component must support `{missing}`; the three lifecycle \
+         stages are mandatory and only `artifact_fetch` is optional"
+    )]
+    TaskLifecycleCapabilityRequired { missing: String },
     #[error("a provider component must declare at least one provider family")]
     ProviderFamilyRequired,
     #[error("provider family `{0}` must be one lowercase kebab-case component")]
