@@ -591,6 +591,62 @@ fn the_task_world_exports_the_seven_lifecycle_functions() {
     );
 }
 
+/// The four signatures the 2026-09-19 fit survey corrected, pinned by arity.
+///
+/// The survey found them precisely because the name-only test above could not:
+/// a world whose functions are all named correctly can still be unimplementable.
+/// Each count below is a parameter a real provider family was measured to need,
+/// so a future edit that drops one has to argue with a family, not with a list.
+#[test]
+fn the_task_functions_carry_what_an_implementation_was_measured_to_need() {
+    let resolve = task_resolve();
+    let (_, iface) = resolve
+        .interfaces
+        .iter()
+        .find(|(_, i)| i.name.as_deref() == Some("task-adapter"))
+        .expect("task-adapter interface exists");
+    let arity = |name: &str| {
+        iface.functions.get(name).unwrap_or_else(|| panic!("{name} exists")).params.len()
+    };
+
+    // provider-config + task-request + host-minted.
+    assert_eq!(arity("build-submit-request"), 3);
+    // D3: provider-config + upstream-model + upstream-task-id. The model is
+    // the survey's finding — one provider serves three paths and which one a
+    // task used is per-task state.
+    assert_eq!(arity("build-observe-request"), 3);
+    // D2: provider-config + observation. The retrieve URL needs the host.
+    assert_eq!(arity("build-artifact-request"), 2);
+    // D4: observation + fetched + host-minted. Artifacts are addressed by the
+    // host's own task id, which the component places and never invents.
+    assert_eq!(arity("render-success"), 3);
+    // Unchanged by the survey.
+    assert_eq!(arity("parse-observation"), 1);
+    assert_eq!(arity("map-terminal-failure"), 1);
+    assert_eq!(arity("parse-submit-response"), 1);
+}
+
+/// D1: submit has four outcomes, not "an id or an error".
+///
+/// `unknown` is the funds-critical one — "the upstream may have accepted this
+/// and may be billing for it" is not a failure, and a host told otherwise
+/// releases a reservation against work that may be running.
+#[test]
+fn a_submit_outcome_names_the_uncertain_case_instead_of_failing_it() {
+    let resolve = task_resolve();
+    let (_, outcome) = resolve
+        .types
+        .iter()
+        .find(|(_, t)| t.name.as_deref() == Some("submit-outcome"))
+        .expect("submit-outcome exists");
+    let TypeDefKind::Variant(variant) = &outcome.kind else {
+        panic!("submit-outcome must be a variant, not {:?}", outcome.kind);
+    };
+    let mut cases: Vec<_> = variant.cases.iter().map(|c| c.name.clone()).collect();
+    cases.sort();
+    assert_eq!(cases, vec!["accepted", "accepted-terminal", "rejected", "unknown"]);
+}
+
 /// Gate ① must admit a task manifest, which today fails at `api_version`.
 #[test]
 fn the_task_world_is_known_and_carries_its_own_vocabulary() {

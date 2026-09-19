@@ -112,24 +112,59 @@ interface task-adapter {
         host-minted: json,
     ) -> result<json, json>;
 
-    /// `response-parts`: `protocol::HttpResponseParts` -> the upstream's task
-    /// id, as an opaque string the host stores on the durable row and hands
-    /// back to `build-observe-request`.
+    /// How a submit attempt ended, as the dialect reads it off the wire.
     ///
-    /// A 2xx that carries no id is an error, not an empty success: the host
-    /// would hold a reservation against a task it can never poll.
-    parse-submit-response: func(response-parts: json) -> result<string, json>;
+    /// A closed set, and deliberately **not** `result<string, _>`: two of these
+    /// four have no representation in "an id or an error", and one of the two
+    /// is funds-critical (2026-09-19 fit survey, D1).
+    variant submit-outcome {
+        /// The upstream accepted and issued a task id. The host stores it on
+        /// the durable row and hands it back to `build-observe-request`.
+        accepted(string),
+        /// Submit *was* the terminal answer. Some dialects answer a creation
+        /// synchronously and issue no pollable id at all — the payload is the
+        /// terminal body, which the host feeds straight to its terminal entry.
+        accepted-terminal(json),
+        /// HTTP 2xx carrying a business-layer refusal. The payload is a
+        /// `protocol::ErrorEnvelope`: the upstream took the call and declined
+        /// the work, so nothing is running and the host may release.
+        rejected(json),
+        /// The response shape is unrecognised. **The upstream may have
+        /// accepted the work and may be billing for it**, so the host keeps
+        /// the reservation and lets reconciliation settle it.
+        ///
+        /// This variant is why the outcome is not a `result`. "We cannot tell"
+        /// is not "it failed": folding it into the error arm tells the host to
+        /// release a reservation against work that may be running — the submit
+        /// side of the mistake D3 rule 5 forbids on the observe side.
+        unknown,
+    }
+
+    /// `response-parts`: `protocol::HttpResponseParts` -> [`submit-outcome`].
+    ///
+    /// The outer `result` means the component could not process the response
+    /// at all, which is distinct from every variant above.
+    parse-submit-response: func(response-parts: json) -> result<submit-outcome, json>;
 
     // ── Stage two: observe ──────────────────────────────────────────────────
 
-    /// `provider-config`: `protocol::ProviderConfig` · `upstream-task-id`: what
+    /// `provider-config`: `protocol::ProviderConfig` · `upstream-model`: the
+    /// model this task was submitted with · `upstream-task-id`: what
     /// `parse-submit-response` returned -> `protocol::HttpRequestDescriptor`.
     ///
     /// A GET, buffered (`GetRequestV1`, HTTP contract six). The host owns the
     /// polling cadence, the lease and the backoff; this function owns only
     /// where to look.
+    ///
+    /// **Why the model is a parameter** (2026-09-19 fit survey, D3): one
+    /// provider can serve text-to-video, image-to-video and motion control on
+    /// three different paths, and which one a task used is per-task state, not
+    /// provider configuration. A component given only the task id polls the
+    /// wrong endpoint for two of those three. `provider-config.models` cannot
+    /// answer it — it lists what the provider serves, not what this task sent.
     build-observe-request: func(
         provider-config: json,
+        upstream-model: string,
         upstream-task-id: string,
     ) -> result<json, json>;
 
@@ -158,8 +193,15 @@ interface task-adapter {
 
     // ── Stage three: render ─────────────────────────────────────────────────
 
-    /// `observation`: the terminal `south_contracts::TaskObservationV1`
+    /// `provider-config`: `protocol::ProviderConfig` · `observation`: the
+    /// terminal `south_contracts::TaskObservationV1`
     /// -> `option<protocol::HttpRequestDescriptor>`.
+    ///
+    /// **Why `provider-config`** (2026-09-19 fit survey, D2): the one family
+    /// this function exists for builds its retrieve URL from the provider's
+    /// host and API version, and decides whether a fetch is needed at all by
+    /// looking at the model generation. Without the config it cannot build the
+    /// only request it is here to build.
     ///
     /// **`none` means "the observation already has everything", not "not
     /// supported".** Five of six measured families are `none`; MiniMax is the
@@ -174,17 +216,32 @@ interface task-adapter {
     /// A component that can return `some` declares `artifact_fetch` in its
     /// manifest, so a host knows before the first call whether to wire that
     /// path.
-    build-artifact-request: func(observation: json) -> result<json, json>;
+    build-artifact-request: func(
+        provider-config: json,
+        observation: json,
+    ) -> result<json, json>;
 
     /// `observation`: the terminal `south_contracts::TaskObservationV1` ·
     /// `fetched`: the `protocol::HttpResponseParts` of the artifact request,
-    /// or `none` when the previous function asked for nothing
+    /// or `none` when the previous function asked for nothing ·
+    /// `host-minted`: `south_contracts::HostMintedValuesV1`
     /// -> the success body.
     ///
     /// Pure by construction: every input arrives as a parameter.
+    ///
+    /// **Why `host-minted` reaches the render side too** (2026-09-19 fit
+    /// survey, D4): artifacts are addressed by the host's own relative path,
+    /// built from the gateway task id, and the component must place that id in
+    /// the body it renders. It is the same "place, never invent" rule the
+    /// submit side already carries — and the same type, so no new vocabulary.
+    ///
+    /// That id is also what replaced the credential a renderer used to need:
+    /// a component that had to build an absolute artifact URL would need the
+    /// upstream's key, which it can never see.
     render-success: func(
         observation: json,
         fetched: option<json>,
+        host-minted: json,
     ) -> result<json, json>;
 
     /// `observation`: a terminal failure `south_contracts::TaskObservationV1`

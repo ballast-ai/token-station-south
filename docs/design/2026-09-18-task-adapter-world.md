@@ -1,6 +1,7 @@
 # The Task Adapter World: the second world, proposed
 
-Status: **proposed** 2026-09-18. Issue: #52's WIT lowering and #53's
+Status: **proposed** 2026-09-18; **signatures corrected 2026-09-19** by
+`2026-09-19-task-world-fit-survey.md` (§4's table carries the deltas). Issue: #52's WIT lowering and #53's
 `KNOWN_WORLDS` entry, both of which their records deferred to "the world's own
 slice". This is that slice, scoped to admission only: the world, its
 vocabulary, and gate ① learning to admit a task manifest. No component is
@@ -94,14 +95,20 @@ version signal on every release.
 The host's plan 46 §2 decomposes its proven in-binary seam into pure halves.
 Lowered, and keeping this repository's `build-*` / `parse-*` naming:
 
+> ⚠ **Signatures corrected 2026-09-19 before any tag carried them.** The table
+> below was lowered from the adopting host's plan on paper; measuring it against
+> a real family found four defects — a wrong return type and three missing
+> parameters. See `2026-09-19-task-world-fit-survey.md`. The **decomposition**
+> stands unchanged; only the signatures moved.
+
 | Host hook | World function | Returns |
 |---|---|---|
 | `submit` | `build-submit-request` | `HttpRequestDescriptor` |
-| | `parse-submit-response` | the upstream task id |
-| observe | `build-observe-request` | `HttpRequestDescriptor` (a GET) |
+| | `parse-submit-response` | **`submit-outcome`** (D1: four cases, not an id) |
+| observe | `build-observe-request` **+ `upstream-model`** (D3) | `HttpRequestDescriptor` (a GET) |
 | | `parse-observation` | `TaskObservationV1` |
-| `render_success` | `build-artifact-request` | `option<HttpRequestDescriptor>` |
-| | `render-success` | the success body |
+| `render_success` | `build-artifact-request` **+ `provider-config`** (D2) | `option<HttpRequestDescriptor>` |
+| | `render-success` **+ `host-minted`** (D4) | the success body |
 | `map_failure` | `map-terminal-failure` | `ErrorEnvelope` |
 
 `timed_out` does not lower: a waiting budget is host policy, and D3 rule 5
