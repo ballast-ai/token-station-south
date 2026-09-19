@@ -10,6 +10,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4.10"
+south-component-conformance = { path = "../crates/south-component-conformance", version = "0.28.1" }
 south-contracts = { path = "../crates/south-contracts", version = "0.28.1" }
 
 [[bin]]

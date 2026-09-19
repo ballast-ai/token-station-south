@@ -35,3 +35,11 @@ pub mod task {
         world: "task-adapter-v1",
     });
 }
+
+/// Pure task-v2 exports; no signing import is admitted by this world.
+pub mod task_v2 {
+    wasmtime::component::bindgen!({
+        path: "../south-provider-api/wit/task-adapter-v2.wit",
+        world: "task-adapter-v2",
+    });
+}

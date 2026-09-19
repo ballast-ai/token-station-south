@@ -41,8 +41,9 @@ pub use manifest::{
     CompatibilityTupleV1, ComponentManifestV1, ComponentMetadataV1, ComponentPermissionsV1,
     ConformanceSpecV1, HostExpectationsV1, KNOWN_WORLDS, ManifestErrorV1, PROVIDER_AUTH_ARMS,
     PROVIDER_CAPABILITIES, PROVIDER_WORLD, PROVIDER_WORLD_SCHEMA, SIGNED_HEADER_NAMES,
-    TASK_BEHAVIOR_SUITE, TASK_CAPABILITIES, TASK_REQUIRED_CAPABILITIES, TASK_WIT_PACKAGE,
-    TASK_WORLD, TASK_WORLD_SCHEMA, WIT_PACKAGE, WorldSchemaV1, compatibility_matches, known_world,
+    TASK_BEHAVIOR_SUITE, TASK_BEHAVIOR_SUITE_V2, TASK_CAPABILITIES, TASK_REQUIRED_CAPABILITIES,
+    TASK_WIT_PACKAGE, TASK_WIT_PACKAGE_V2, TASK_WORLD, TASK_WORLD_SCHEMA, TASK_WORLD_SCHEMA_V2,
+    TASK_WORLD_V2, WIT_PACKAGE, WorldSchemaV1, compatibility_matches, known_world,
     validate_component_name, validate_package_relative_path,
 };
 
@@ -61,3 +62,6 @@ pub const ADAPTER_WIT: &str = include_str!("../wit/provider-adapter.wit");
 /// package so the two worlds version independently (2026-09-18
 /// task-adapter-world record, D1).
 pub const TASK_ADAPTER_WIT: &str = include_str!("../wit/task-adapter.wit");
+
+/// Pure task-v2 exports with bounded recovery facts and explicit render context.
+pub const TASK_ADAPTER_V2_WIT: &str = include_str!("../wit/task-adapter-v2.wit");

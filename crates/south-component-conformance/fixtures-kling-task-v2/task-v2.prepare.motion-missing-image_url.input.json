@@ -1,0 +1,21 @@
+{
+  "provider_config": {
+    "provider": "kling",
+    "base_url": "https://api.kling.example",
+    "models": []
+  },
+  "request": {
+    "operation": "motion-control",
+    "model": "actual-model",
+    "video_url": "video",
+    "character_orientation": "video",
+    "prompt": "p",
+    "element_list": [],
+    "keep_original_sound": true,
+    "duration": 10,
+    "mode": "std"
+  },
+  "minted": {
+    "task_id": "host-1"
+  }
+}

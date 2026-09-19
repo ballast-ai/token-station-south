@@ -118,6 +118,18 @@ synchronous transport, retries, fallback, routing, persistence, database access,
 Passing a library conformance suite does not by itself verify a host integration; each verified
 capability also requires review of the real host adapter wiring.
 
+## task-v2 候选（未发布）
+
+本地候选新增 `task-adapter-v2`，与既有 provider-v2、task-v1 分别装载。
+`TaskLocatorV2` 保存有界定位；`TaskUsageFactsV2` 保留并存用量；观察保留排队／运行、
+逐产物 id/duration；渲染身份和时间由宿主显式传入。Kling 原生参考实现与
+`components/task-kling-v2` 共享代码，使用独立 fixture 和真实 Wasm 对拍。
+
+构建候选：`bash scripts/build-kling-task-v2-component.sh`。
+本批沿用本地版本号不代表已经发布，也不代表两个宿主已采用。server 的临时依赖覆盖
+只验证授权／计价接缝，生产注册表、持久执行绑定、旧包恢复与社区采用另行验收。
+边界与候选行为收紧见[候选设计](docs/design/2026-09-20-task-adapter-v2-candidate.md)。
+
 ## Local verification
 
 ```bash

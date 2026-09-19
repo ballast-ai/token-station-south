@@ -170,7 +170,7 @@ pub fn read_package(
     let wasm_path = dir.join("component.wasm");
     let wasm = read_file_limited(&wasm_path, MAX_COMPONENT_BYTES)
         .map_err(|reason| LoadErrorV1::Unreadable { path: wasm_path, reason })?;
-    let component = gate_component(runtime, &wasm)?;
+    let component = gate_component(runtime, &wasm, &manifest.api_version)?;
 
     Ok((manifest, component))
 }
@@ -189,7 +189,7 @@ pub fn parse_package(
     // component built against another host is refused before its bytes are
     // opened, so a stale package cannot reach the import scan or the engine.
     compatibility_matches(&manifest, expectations).map_err(LoadErrorV1::Incompatible)?;
-    let component = gate_component(runtime, wasm)?;
+    let component = gate_component(runtime, wasm, &manifest.api_version)?;
     Ok((manifest, component))
 }
 
@@ -205,11 +205,21 @@ fn gate_manifest(manifest_source: &str) -> Result<ComponentManifestV1, LoadError
 
 /// The import scan. Compilation is cached by the engine, so a repeated start
 /// deserializes rather than recompiling.
-fn gate_component(runtime: &ComponentRuntimeV1, wasm: &[u8]) -> Result<Component, LoadErrorV1> {
+fn gate_component(
+    runtime: &ComponentRuntimeV1,
+    wasm: &[u8],
+    world: &str,
+) -> Result<Component, LoadErrorV1> {
     let component = Component::new(runtime.engine(), wasm).map_err(LoadErrorV1::NotAComponent)?;
 
     for (name, _) in component.component_type().imports(runtime.engine()) {
-        if FORBIDDEN_IMPORTS.iter().any(|prefix| name.starts_with(prefix)) {
+        // Task-v2 has no admitted signing consumer. A guest cannot acquire
+        // that capability by importing an older world's host namespace.
+        let task_v2_signing = world == south_provider_api::TASK_WORLD_V2
+            && ["token-station:adapter/host", "token-station:task-adapter/host"]
+                .iter()
+                .any(|prefix| name.starts_with(prefix));
+        if task_v2_signing || FORBIDDEN_IMPORTS.iter().any(|prefix| name.starts_with(prefix)) {
             return Err(LoadErrorV1::ForbiddenImport(name.to_owned()));
         }
     }

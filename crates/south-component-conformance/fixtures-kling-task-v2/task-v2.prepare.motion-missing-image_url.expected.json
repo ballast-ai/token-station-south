@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "Missing 'image_url' (character/subject reference image; required for kling-v3-motion-control)"
+  }
+}

@@ -71,6 +71,20 @@ channel at a fixed revision; no production crate may gain that edge.
 
 ## Host-owned concerns
 
+### task-v2 候选边界（2026-09-20，未发布）
+
+任务词汇版本升为 3，新增独立 v2 类型，既有 v1 类型和 world 保留。
+新 `token-station:task-adapter@2.0.0` world 仍只描述纯翻译，不拥有执行时序、
+凭证读取、价格和持久化。contracts 保存有界定位、并存计量、观察与渲染上下文；
+包含 IR descriptor 的 `PreparedTaskV2` 和唯一 JSON codec 位于 conformance。
+runtime 继续仅消费 JSON，按 provider-v2／task-v1／task-v2 明确分流。
+
+Kling v2 的提交、查询、观察与渲染由同源原生／Wasm 实现承担；宿主必须保存并回传
+locator，依据用量事实应用自身计价策略，并在公开返回前实施交付授权。
+候选 manifest 当前只准入已验证的 bearer/header_secret；不新增未使用的 WIT 签名
+import，未验收的宿主签名能力也不据此宣称支持。
+详细说明和仍待完成的持久绑定／兼容恢复见[候选设计](docs/design/2026-09-20-task-adapter-v2-candidate.md)。
+
 South does not own routing, fallback across upstreams, retry budgets, admission, tenants, billing,
 quota ledgers, audit persistence, task persistence, credential sources, or tracing initialization.
 It never reads a database directly. Transport I/O, time, cancellation, component bytes, and runtime

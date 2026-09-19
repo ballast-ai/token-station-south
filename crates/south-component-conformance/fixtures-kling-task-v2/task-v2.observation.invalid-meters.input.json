@@ -1,0 +1,5 @@
+{
+  "status": 200,
+  "headers": {},
+  "body": "{\"task_status\":\"succeed\",\"final_unit_deduction\":\"NaN\",\"task_result\":{\"videos\":[{\"url\":\"https://cdn/one\",\"duration\":\"-1\"}]}}"
+}

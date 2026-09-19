@@ -1,0 +1,65 @@
+// Versioned task dialect boundary. All exports are pure translation.
+// The host owns persistence, credentials, HTTP, clock, pricing and delivery.
+package token-station:task-adapter@2.0.0;
+
+interface task-adapter {
+    record adapter-metadata {
+        name: string,
+        version: string,
+        api-version: string,
+    }
+    enum health-status { ready, degraded, unavailable }
+    record adapter-health {
+        status: health-status,
+        detail: option<string>,
+    }
+
+    type json = string;
+
+    metadata: func() -> adapter-metadata;
+    healthcheck: func() -> adapter-health;
+
+    // ProviderConfig, normalized request, HostMintedValuesV1 -> PreparedTaskV2.
+    // PreparedTaskV2 holds a descriptor and a bounded, non-secret TaskLocatorV2.
+    build-submit-request: func(
+        provider-config: json,
+        task-request: json,
+        host-minted: json,
+    ) -> result<json, json>;
+
+    // HttpResponseParts -> SubmitOutcomeV2 using the shared validated codec.
+    parse-submit-response: func(response-parts: json) -> result<json, json>;
+
+    // The saved locator selects the route; neither model nor raw task id is
+    // an encoded substitute for that recovery state.
+    build-observe-request: func(
+        provider-config: json,
+        upstream-model: string,
+        upstream-task-id: string,
+        locator: json,
+    ) -> result<json, json>;
+
+    // HttpResponseParts -> TaskObservationV2: progress, success, failure, unknown.
+    parse-observation: func(response-parts: json) -> result<json, json>;
+
+    // JSON null means the observation already contains the artifact facts.
+    build-artifact-request: func(
+        provider-config: json,
+        locator: json,
+        observation: json,
+    ) -> result<json, json>;
+
+    // Render time and identities arrive explicitly through TaskRenderContextV2.
+    render-success: func(
+        observation: json,
+        fetched: option<json>,
+        render-context: json,
+    ) -> result<json, json>;
+
+    map-terminal-failure: func(observation: json) -> result<json, json>;
+}
+
+// No host.sign import: this world has no accepted signing consumer.
+world task-adapter-v2 {
+    export task-adapter;
+}

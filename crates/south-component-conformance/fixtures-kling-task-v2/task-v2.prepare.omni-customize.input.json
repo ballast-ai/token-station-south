@@ -1,0 +1,19 @@
+{
+  "provider_config": {
+    "provider": "kling",
+    "base_url": "https://api.kling.example",
+    "models": []
+  },
+  "request": {
+    "operation": "omni",
+    "model": "real-model",
+    "mode": "pro",
+    "multi_shot": true,
+    "shot_type": "customize",
+    "multi_prompt": null,
+    "sound": "on"
+  },
+  "minted": {
+    "task_id": "host-1"
+  }
+}

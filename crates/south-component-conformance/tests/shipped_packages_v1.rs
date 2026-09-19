@@ -12,8 +12,13 @@ use south_provider_api::ComponentManifestV1;
 
 /// The official components this repository ships. Named, so that an empty or
 /// mistyped scan below cannot pass over nothing.
-const OFFICIAL_COMPONENTS: [&str; 4] =
-    ["provider-anthropic", "provider-gemini", "provider-openai-compatible", "task-kling"];
+const OFFICIAL_COMPONENTS: [&str; 5] = [
+    "provider-anthropic",
+    "provider-gemini",
+    "provider-openai-compatible",
+    "task-kling",
+    "task-kling-v2",
+];
 
 fn repo_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().and_then(Path::parent).expect("repo root")

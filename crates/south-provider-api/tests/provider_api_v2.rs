@@ -6,8 +6,9 @@ use south_provider_api::{
     ADAPTER_WIT, COMPONENT_BEHAVIOR_SUITE, CompatibilityDeclarationV1, CompatibilityMismatchV1,
     ComponentManifestV1, ComponentPermissionsV1, ConformanceSpecV1, HostExpectationsV1,
     KNOWN_WORLDS, ManifestErrorV1, PROVIDER_AUTH_ARMS, PROVIDER_WORLD, PROVIDER_WORLD_SCHEMA,
-    TASK_ADAPTER_WIT, TASK_BEHAVIOR_SUITE, TASK_CAPABILITIES, TASK_WIT_PACKAGE, TASK_WORLD,
-    TASK_WORLD_SCHEMA, WIT_PACKAGE, compatibility_matches, known_world,
+    TASK_ADAPTER_V2_WIT, TASK_ADAPTER_WIT, TASK_BEHAVIOR_SUITE, TASK_CAPABILITIES,
+    TASK_WIT_PACKAGE, TASK_WORLD, TASK_WORLD_SCHEMA, TASK_WORLD_SCHEMA_V2, TASK_WORLD_V2,
+    WIT_PACKAGE, compatibility_matches, known_world,
 };
 use wit_parser::{Resolve, Type, TypeDefKind};
 
@@ -189,11 +190,12 @@ fn rejects_a_credential_pasted_into_the_secrets_list() {
 /// own schema and to no other.
 #[test]
 fn every_known_world_resolves_to_its_own_schema_and_no_other() {
-    assert_eq!(KNOWN_WORLDS, &[PROVIDER_WORLD_SCHEMA, TASK_WORLD_SCHEMA]);
+    assert_eq!(KNOWN_WORLDS, &[PROVIDER_WORLD_SCHEMA, TASK_WORLD_SCHEMA, TASK_WORLD_SCHEMA_V2]);
     assert_eq!(known_world(PROVIDER_WORLD), Some(&PROVIDER_WORLD_SCHEMA));
     assert_eq!(known_world(TASK_WORLD), Some(&TASK_WORLD_SCHEMA));
     assert_eq!(known_world("provider-adapter-v1"), None);
-    assert_eq!(known_world("task-adapter-v2"), None);
+    assert_eq!(known_world(TASK_WORLD_V2), Some(&TASK_WORLD_SCHEMA_V2));
+    assert_eq!(known_world("task-adapter-v999"), None);
 }
 
 #[test]
@@ -657,7 +659,7 @@ fn the_task_world_is_known_and_carries_its_own_vocabulary() {
     assert_eq!(schema.capabilities, TASK_CAPABILITIES);
     // A task component authenticates exactly as a chat one does (record D4).
     assert_eq!(schema.auth_arms, PROVIDER_AUTH_ARMS);
-    assert_eq!(KNOWN_WORLDS.len(), 2, "two worlds, no more");
+    assert_eq!(KNOWN_WORLDS.len(), 3, "provider and both task versions");
 }
 
 fn task_manifest() -> ComponentManifestV1 {
@@ -749,4 +751,59 @@ fn the_two_worlds_do_not_accept_each_others_declarations() {
     let mut chat_word = task_manifest();
     chat_word.capabilities.insert("stream".to_owned());
     assert!(chat_word.validate().is_err(), "`stream` is not a task-world word");
+}
+
+#[test]
+fn task_v2_manifest_is_admitted_without_replacing_v1() {
+    let mut manifest = task_manifest();
+    manifest.api_version = "task-adapter-v2".to_owned();
+    manifest.compatibility.wit_package = "token-station:task-adapter@2.0.0".to_owned();
+    manifest.conformance.required_suite = "south.task-component.v2".to_owned();
+    manifest.auth_arms = BTreeSet::from(["bearer".to_owned()]);
+    manifest.emits.clear();
+    assert_eq!(manifest.validate(), Ok(()));
+    assert_eq!(task_manifest().validate(), Ok(()));
+    manifest.capabilities.remove("observe");
+    assert!(manifest.validate().is_err(), "v2 retains mandatory lifecycle stages");
+}
+
+#[test]
+fn task_v2_wit_has_only_pure_exports_and_explicit_recovery_inputs() {
+    let mut resolve = Resolve::new();
+    resolve.push_str("task-adapter-v2.wit", TASK_ADAPTER_V2_WIT).expect("v2 WIT parses");
+    let (_, world) =
+        resolve.worlds.iter().find(|(_, w)| w.name == TASK_WORLD_V2).expect("v2 world");
+    assert!(world.imports.is_empty(), "no unconsumed signing or WASI imports");
+    let (_, interface) = resolve
+        .interfaces
+        .iter()
+        .find(|(_, i)| i.name.as_deref() == Some("task-adapter"))
+        .expect("exports");
+    assert_eq!(interface.functions.len(), 9);
+    let observe = &interface.functions["build-observe-request"];
+    assert_eq!(
+        observe.params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(),
+        ["provider-config", "upstream-model", "upstream-task-id", "locator"]
+    );
+    let render = &interface.functions["render-success"];
+    assert_eq!(render.params.last().expect("context").name, "render-context");
+}
+
+#[test]
+fn task_v2_manifest_refuses_auth_arms_outside_the_candidate_contract() {
+    for arm in ["oauth", "host_signed"] {
+        let mut manifest = task_manifest();
+        manifest.api_version = TASK_WORLD_V2.to_owned();
+        manifest.compatibility.wit_package = "token-station:task-adapter@2.0.0".to_owned();
+        manifest.conformance.required_suite = "south.task-component.v2".to_owned();
+        manifest.auth_arms = BTreeSet::from([arm.to_owned()]);
+        manifest.emits.clear();
+        assert_eq!(
+            manifest.validate(),
+            Err(ManifestErrorV1::AuthArmIsNotInTheWorldVocabulary {
+                auth_arm: arm.to_owned(),
+                world: TASK_WORLD_V2.to_owned(),
+            })
+        );
+    }
 }

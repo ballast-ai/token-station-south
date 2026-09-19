@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "Kling omni-video: 'sound' must be \"off\" when 'video_list' is present (official spec — reference/edited videos cannot add generated audio)"
+  }
+}

@@ -6,7 +6,8 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use south_provider_api::{
-    ComponentManifestV1, ComponentMetadataV1, HostExpectationsV1, TASK_WORLD,
+    ComponentManifestV1, ComponentMetadataV1, HostExpectationsV1, PROVIDER_WORLD, TASK_WORLD,
+    TASK_WORLD_V2,
 };
 use wasmtime::Store;
 use wasmtime::component::{Component, Linker};
@@ -72,6 +73,7 @@ struct InstanceHandle {
 enum InstanceKind {
     Provider(Box<ProviderAdapterV2>),
     Task(Box<crate::bindings::task::TaskAdapterV1>),
+    TaskV2(Box<crate::bindings::task_v2::TaskAdapterV2>),
 }
 
 impl InstanceKind {
@@ -80,6 +82,9 @@ impl InstanceKind {
     fn provider(&self) -> wasmtime::Result<&ProviderAdapterV2> {
         match self {
             Self::Provider(instance) => Ok(instance),
+            Self::TaskV2(_) => Err(wasmtime::Error::msg(
+                "this component exports `task-adapter-v2`; the provider face is not on it",
+            )),
             Self::Task(_) => Err(wasmtime::Error::msg(
                 "this component exports `task-adapter-v1`; the provider face is not on it",
             )),
@@ -91,8 +96,23 @@ impl InstanceKind {
     fn task(&self) -> wasmtime::Result<&crate::bindings::task::TaskAdapterV1> {
         match self {
             Self::Task(instance) => Ok(instance),
+            Self::TaskV2(_) => Err(wasmtime::Error::msg(
+                "this component exports `task-adapter-v2`; the task-v1 face is not on it",
+            )),
             Self::Provider(_) => Err(wasmtime::Error::msg(
                 "this component exports `provider-adapter-v2`; the task face is not on it",
+            )),
+        }
+    }
+
+    fn task_v2(&self) -> wasmtime::Result<&crate::bindings::task_v2::TaskAdapterV2> {
+        match self {
+            Self::TaskV2(instance) => Ok(instance),
+            Self::Task(_) => Err(wasmtime::Error::msg(
+                "this component exports `task-adapter-v1`; the task-v2 face is not on it",
+            )),
+            Self::Provider(_) => Err(wasmtime::Error::msg(
+                "this component exports `provider-adapter-v2`; the task-v2 face is not on it",
             )),
         }
     }
@@ -159,8 +179,12 @@ impl LoadedComponentV1 {
     ) -> Result<Self, LoadErrorV1> {
         let mut linker: Linker<Ctx> = Linker::new(runtime.engine());
         wasmtime_wasi::p2::add_to_linker_sync(&mut linker).map_err(LoadErrorV1::NotAComponent)?;
-        wit_host::add_to_linker::<Ctx, wasmtime::component::HasSelf<Ctx>>(&mut linker, |ctx| ctx)
+        if manifest.api_version != TASK_WORLD_V2 {
+            wit_host::add_to_linker::<Ctx, wasmtime::component::HasSelf<Ctx>>(&mut linker, |ctx| {
+                ctx
+            })
             .map_err(LoadErrorV1::NotAComponent)?;
+        }
         let linker = Arc::new(linker);
 
         let ctx = component_ctx(runtime, &manifest, &signer);
@@ -447,6 +471,172 @@ impl LoadedComponentV1 {
         })
     }
 
+    /// Calls the pure task-v2 `build-submit-request` export.
+    ///
+    /// # Errors
+    /// Returns [`CallErrorV1`] on world mismatch, resource limit or guest failure.
+    pub fn call_build_submit_request_v2(
+        &self,
+        config_json: &str,
+        request_json: &str,
+        minted_json: &str,
+    ) -> Result<String, CallErrorV1> {
+        self.bounded(&[config_json, request_json, minted_json])?;
+        let config_json = config_json.to_owned();
+        let request_json = request_json.to_owned();
+        let minted_json = minted_json.to_owned();
+        self.call(|handle| {
+            handle
+                .instance
+                .task_v2()?
+                .token_station_task_adapter_task_adapter()
+                .call_build_submit_request(
+                    &mut handle.store,
+                    &config_json,
+                    &request_json,
+                    &minted_json,
+                )
+        })
+    }
+
+    /// Calls the pure task-v2 `parse-submit-response` export.
+    ///
+    /// # Errors
+    /// Returns [`CallErrorV1`] on world mismatch, resource limit or guest failure.
+    pub fn call_parse_submit_response_v2(&self, parts_json: &str) -> Result<String, CallErrorV1> {
+        self.bounded(&[parts_json])?;
+        let parts_json = parts_json.to_owned();
+        self.call(|handle| {
+            handle
+                .instance
+                .task_v2()?
+                .token_station_task_adapter_task_adapter()
+                .call_parse_submit_response(&mut handle.store, &parts_json)
+        })
+    }
+
+    /// Calls the pure task-v2 `build-observe-request` export.
+    ///
+    /// # Errors
+    /// Returns [`CallErrorV1`] on world mismatch, resource limit or guest failure.
+    pub fn call_build_observe_request_v2(
+        &self,
+        config_json: &str,
+        upstream_model: &str,
+        upstream_task_id: &str,
+        locator_json: &str,
+    ) -> Result<String, CallErrorV1> {
+        self.bounded(&[config_json, upstream_model, upstream_task_id, locator_json])?;
+        let config_json = config_json.to_owned();
+        let upstream_model = upstream_model.to_owned();
+        let upstream_task_id = upstream_task_id.to_owned();
+        let locator_json = locator_json.to_owned();
+        self.call(|handle| {
+            handle
+                .instance
+                .task_v2()?
+                .token_station_task_adapter_task_adapter()
+                .call_build_observe_request(
+                    &mut handle.store,
+                    &config_json,
+                    &upstream_model,
+                    &upstream_task_id,
+                    &locator_json,
+                )
+        })
+    }
+
+    /// Calls the pure task-v2 `parse-observation` export.
+    ///
+    /// # Errors
+    /// Returns [`CallErrorV1`] on world mismatch, resource limit or guest failure.
+    pub fn call_parse_observation_v2(&self, parts_json: &str) -> Result<String, CallErrorV1> {
+        self.bounded(&[parts_json])?;
+        let parts_json = parts_json.to_owned();
+        self.call(|handle| {
+            handle
+                .instance
+                .task_v2()?
+                .token_station_task_adapter_task_adapter()
+                .call_parse_observation(&mut handle.store, &parts_json)
+        })
+    }
+
+    /// Calls the pure task-v2 `build-artifact-request` export.
+    ///
+    /// # Errors
+    /// Returns [`CallErrorV1`] on world mismatch, resource limit or guest failure.
+    pub fn call_build_artifact_request_v2(
+        &self,
+        config_json: &str,
+        locator_json: &str,
+        observation_json: &str,
+    ) -> Result<String, CallErrorV1> {
+        self.bounded(&[config_json, locator_json, observation_json])?;
+        let config_json = config_json.to_owned();
+        let locator_json = locator_json.to_owned();
+        let observation_json = observation_json.to_owned();
+        self.call(|handle| {
+            handle
+                .instance
+                .task_v2()?
+                .token_station_task_adapter_task_adapter()
+                .call_build_artifact_request(
+                    &mut handle.store,
+                    &config_json,
+                    &locator_json,
+                    &observation_json,
+                )
+        })
+    }
+
+    /// Calls the pure task-v2 `render-success` export.
+    ///
+    /// # Errors
+    /// Returns [`CallErrorV1`] on world mismatch, resource limit or guest failure.
+    pub fn call_render_success_v2(
+        &self,
+        observation_json: &str,
+        fetched_json: Option<&str>,
+        context_json: &str,
+    ) -> Result<String, CallErrorV1> {
+        self.bounded(&[observation_json, fetched_json.unwrap_or_default(), context_json])?;
+        let observation_json = observation_json.to_owned();
+        let fetched_json = fetched_json.map(str::to_owned);
+        let context_json = context_json.to_owned();
+        self.call(|handle| {
+            handle
+                .instance
+                .task_v2()?
+                .token_station_task_adapter_task_adapter()
+                .call_render_success(
+                    &mut handle.store,
+                    &observation_json,
+                    fetched_json.as_ref(),
+                    &context_json,
+                )
+        })
+    }
+
+    /// Calls the pure task-v2 `map-terminal-failure` export.
+    ///
+    /// # Errors
+    /// Returns [`CallErrorV1`] on world mismatch, resource limit or guest failure.
+    pub fn call_map_terminal_failure_v2(
+        &self,
+        observation_json: &str,
+    ) -> Result<String, CallErrorV1> {
+        self.bounded(&[observation_json])?;
+        let observation_json = observation_json.to_owned();
+        self.call(|handle| {
+            handle
+                .instance
+                .task_v2()?
+                .token_station_task_adapter_task_adapter()
+                .call_map_terminal_failure(&mut handle.store, &observation_json)
+        })
+    }
+
     /// Opens one stream on its own instance.
     ///
     /// One instance per stream: `parse-stream-chunk` holds the unparsed tail
@@ -571,9 +761,13 @@ fn instantiate(
         TASK_WORLD => InstanceKind::Task(Box::new(
             crate::bindings::task::TaskAdapterV1::instantiate(&mut store, component, linker)?,
         )),
-        _ => InstanceKind::Provider(Box::new(ProviderAdapterV2::instantiate(
+        TASK_WORLD_V2 => InstanceKind::TaskV2(Box::new(
+            crate::bindings::task_v2::TaskAdapterV2::instantiate(&mut store, component, linker)?,
+        )),
+        PROVIDER_WORLD => InstanceKind::Provider(Box::new(ProviderAdapterV2::instantiate(
             &mut store, component, linker,
         )?)),
+        _ => return Err(wasmtime::Error::msg("the declared component world is not supported")),
     };
     Ok(InstanceHandle { store, instance })
 }
@@ -629,6 +823,12 @@ fn call_metadata(
             (reported.name, reported.version, reported.api_version)
         }
         InstanceKind::Task(instance) => {
+            let reported = instance
+                .token_station_task_adapter_task_adapter()
+                .call_metadata(&mut handle.store)?;
+            (reported.name, reported.version, reported.api_version)
+        }
+        InstanceKind::TaskV2(instance) => {
             let reported = instance
                 .token_station_task_adapter_task_adapter()
                 .call_metadata(&mut handle.store)?;
