@@ -21,3 +21,17 @@ wasmtime::component::bindgen!({
     path: "../south-provider-api/wit/provider-adapter.wit",
     world: "provider-adapter-v2",
 });
+
+/// The task world's bindings, in their own module.
+///
+/// A second `bindgen!` rather than a second runtime: everything before
+/// instantiation — the engine, the limiter, the WASI surface, the manifest
+/// gate — is a property of the sandbox and not of an ABI, so only the
+/// instance type and the lifecycle accessors differ
+/// (2026-09-19 runtime-second-world record, D1).
+pub mod task {
+    wasmtime::component::bindgen!({
+        path: "../south-provider-api/wit/task-adapter.wit",
+        world: "task-adapter-v1",
+    });
+}

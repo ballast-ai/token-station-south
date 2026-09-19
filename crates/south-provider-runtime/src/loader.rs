@@ -94,9 +94,10 @@ pub enum LoadErrorV1 {
     Manifest(ManifestErrorV1),
     #[error("component is not compatible with this host: {0}")]
     Incompatible(CompatibilityMismatchV1),
-    /// The bytes are not a WASM component, or do not export the provider
-    /// world — the ABI-mismatch load failure.
-    #[error("not a provider component: {0}")]
+    /// The bytes are not a WASM component at all, or the host could not build
+    /// a linker for them. Raised before the declared world is consulted, so it
+    /// deliberately names no world (2026-09-19 runtime-second-world record, D3).
+    #[error("not a wasm component: {0}")]
     NotAComponent(wasmtime::Error),
     #[error("component imports `{0}`, which the sandbox will never provide")]
     ForbiddenImport(String),
@@ -109,8 +110,14 @@ pub enum LoadErrorV1 {
         declared.version
     )]
     IdentityMismatch { declared: Box<ComponentMetadataV1>, reported: Box<ComponentMetadataV1> },
-    #[error("component failed while being probed at load: {0}")]
-    Probe(wasmtime::Error),
+    /// Instantiation or the identity probe failed.
+    ///
+    /// **Names the world the manifest declared**, because this is where a
+    /// world mismatch surfaces: bytes exporting one world cannot instantiate
+    /// as another, and a diagnostic that misnames the thing it rejected sends
+    /// the reader to the wrong place (D3).
+    #[error("component failed while being probed as `{world}`: {source}")]
+    Probe { world: String, source: wasmtime::Error },
 }
 
 /// A failure of one guest call, in the runtime's own stable vocabulary.
