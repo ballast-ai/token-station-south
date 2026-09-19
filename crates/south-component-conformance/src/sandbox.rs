@@ -19,7 +19,12 @@ use token_station_protocol::{
 };
 
 use crate::abi::parse_error_envelope;
-use crate::component::{ComponentResultV1, ProviderComponentV1, StreamParserV1};
+use south_contracts::{HostMintedValuesV1, TaskObservationV1};
+
+use crate::component::{
+    ComponentResultV1, ProviderComponentV1, StreamParserV1, SubmitOutcomeV1, TaskComponentV1,
+};
+use crate::task_json::{ObservationInput, observation_json};
 use south_provider_api::ComponentMetadataV1;
 
 /// A sandboxed component presented through the typed seam.
@@ -137,5 +142,186 @@ struct BrokenStreamParser {
 impl StreamParserV1 for BrokenStreamParser {
     fn parse_chunk(&mut self, _: &[u8]) -> ComponentResultV1<Vec<StreamEvent>> {
         Err(self.envelope.clone())
+    }
+}
+
+/// Renders host-minted values in the shape the guest parses.
+fn minted_json(minted: &HostMintedValuesV1) -> String {
+    minted
+        .callback_url()
+        .map_or_else(
+            || serde_json::json!({ "task_id": minted.task_id() }),
+            |url| serde_json::json!({ "task_id": minted.task_id(), "callback_url": url }),
+        )
+        .to_string()
+}
+
+/// Reads back an observation the guest rendered.
+fn parse_observation_json(json: &str) -> ComponentResultV1<TaskObservationV1> {
+    let wire: ObservationInput = serde_json::from_str(json).map_err(|error| {
+        internal(format_args!("component returned an observation that is not the form: {error}"))
+    })?;
+    wire.build().map_err(internal)
+}
+
+/// Reads back a submit outcome the guest rendered.
+fn parse_submit_outcome(json: &str) -> ComponentResultV1<SubmitOutcomeV1> {
+    let value: serde_json::Value = serde_json::from_str(json)
+        .map_err(|error| internal(format_args!("submit outcome is not json: {error}")))?;
+    match value.get("outcome").and_then(serde_json::Value::as_str) {
+        Some("accepted") => value
+            .get("upstream_task_id")
+            .and_then(serde_json::Value::as_str)
+            .map(|id| SubmitOutcomeV1::Accepted(id.to_owned()))
+            .ok_or_else(|| internal("an accepted outcome carries no upstream task id")),
+        Some("accepted-terminal") => Ok(SubmitOutcomeV1::AcceptedTerminal(
+            value.get("body").cloned().unwrap_or(serde_json::Value::Null),
+        )),
+        Some("rejected") => {
+            let envelope = value
+                .get("error")
+                .cloned()
+                .ok_or_else(|| internal("a rejected outcome carries no error"))?;
+            Ok(SubmitOutcomeV1::Rejected(serde_json::from_value(envelope).map_err(|error| {
+                internal(format_args!("a rejected outcome's error is not an envelope: {error}"))
+            })?))
+        }
+        Some("unknown") => Ok(SubmitOutcomeV1::Unknown),
+        other => Err(internal(format_args!("`{other:?}` is not a submit outcome"))),
+    }
+}
+
+/// A sandboxed **task** component presented through the typed seam.
+///
+/// Constructed only from a component whose declared world is the task world
+/// (2026-09-19 runtime-second-world record, D2): a wrong-world call then
+/// cannot be written, rather than failing at runtime. The manifest already
+/// refuses a world mismatch at admission; this keeps the same discipline one
+/// layer up.
+#[derive(Debug)]
+pub struct SandboxedTaskComponentV1 {
+    component: LoadedComponentV1,
+}
+
+impl SandboxedTaskComponentV1 {
+    /// Wraps a loaded component, or returns it untouched when it exports the
+    /// other world.
+    ///
+    /// # Errors
+    ///
+    /// The component itself (boxed — it is a large value, and the error path
+    /// should not widen every `Result` that carries it), so a caller that
+    /// guessed wrong can still use it as what it is.
+    pub fn new(component: LoadedComponentV1) -> Result<Self, Box<LoadedComponentV1>> {
+        if component.manifest().api_version == south_provider_api::TASK_WORLD {
+            Ok(Self { component })
+        } else {
+            Err(Box::new(component))
+        }
+    }
+
+    /// The loaded component, for callers that need the JSON face too.
+    #[must_use]
+    pub const fn inner(&self) -> &LoadedComponentV1 {
+        &self.component
+    }
+}
+
+impl TaskComponentV1 for SandboxedTaskComponentV1 {
+    fn metadata(&self) -> ComponentMetadataV1 {
+        self.component.metadata()
+    }
+
+    fn build_submit_request(
+        &self,
+        config: &ProviderConfig,
+        request: &serde_json::Value,
+        minted: &HostMintedValuesV1,
+    ) -> ComponentResultV1<HttpRequestDescriptor> {
+        let json = self
+            .component
+            .call_build_submit_request(&to_json(config)?, &to_json(request)?, &minted_json(minted))
+            .map_err(|error| seam_error(&error))?;
+        from_json(&json)
+    }
+
+    fn parse_submit_response(
+        &self,
+        parts: &HttpResponseParts,
+    ) -> ComponentResultV1<SubmitOutcomeV1> {
+        let json = self
+            .component
+            .call_parse_submit_response(&to_json(parts)?)
+            .map_err(|error| seam_error(&error))?;
+        parse_submit_outcome(&json)
+    }
+
+    fn build_observe_request(
+        &self,
+        config: &ProviderConfig,
+        upstream_model: &str,
+        upstream_task_id: &str,
+    ) -> ComponentResultV1<HttpRequestDescriptor> {
+        let json = self
+            .component
+            .call_build_observe_request(&to_json(config)?, upstream_model, upstream_task_id)
+            .map_err(|error| seam_error(&error))?;
+        from_json(&json)
+    }
+
+    fn parse_observation(&self, parts: &HttpResponseParts) -> ComponentResultV1<TaskObservationV1> {
+        let json = self
+            .component
+            .call_parse_observation(&to_json(parts)?)
+            .map_err(|error| seam_error(&error))?;
+        parse_observation_json(&json)
+    }
+
+    fn build_artifact_request(
+        &self,
+        config: &ProviderConfig,
+        observation: &TaskObservationV1,
+    ) -> ComponentResultV1<Option<HttpRequestDescriptor>> {
+        let json = self
+            .component
+            .call_build_artifact_request(
+                &to_json(config)?,
+                &observation_json(observation).to_string(),
+            )
+            .map_err(|error| seam_error(&error))?;
+        // `null` is "already have it", not "not supported".
+        if json.trim() == "null" {
+            return Ok(None);
+        }
+        from_json(&json).map(Some)
+    }
+
+    fn render_success(
+        &self,
+        observation: &TaskObservationV1,
+        fetched: Option<&HttpResponseParts>,
+        minted: &HostMintedValuesV1,
+    ) -> ComponentResultV1<serde_json::Value> {
+        let fetched = fetched.map(to_json).transpose()?;
+        let json = self
+            .component
+            .call_render_success(
+                &observation_json(observation).to_string(),
+                fetched.as_deref(),
+                &minted_json(minted),
+            )
+            .map_err(|error| seam_error(&error))?;
+        from_json(&json)
+    }
+
+    fn map_terminal_failure(
+        &self,
+        observation: &TaskObservationV1,
+    ) -> ComponentResultV1<ErrorEnvelope> {
+        let json = self
+            .component
+            .call_map_terminal_failure(&observation_json(observation).to_string())
+            .map_err(|error| seam_error(&error))?;
+        from_json(&json)
     }
 }

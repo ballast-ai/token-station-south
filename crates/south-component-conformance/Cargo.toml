@@ -36,5 +36,9 @@ required-features = ["sandbox"]
 name = "gemini_sandbox_parity_v1"
 required-features = ["sandbox"]
 
+[[test]]
+name = "kling_task_sandbox_parity_v1"
+required-features = ["sandbox"]
+
 [lints]
 workspace = true
