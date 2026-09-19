@@ -54,6 +54,7 @@ south-provider-conformance ---------------> south-contracts
 south-testkit ----------------------------> south-contracts
 south-testkit ----------------------------> south-core
 south-testkit ----------------------------> south-provider-conformance
+south-component-conformance --------------> south-contracts
 south-component-conformance --------------> south-provider-api
 south-component-conformance --------------> token-station-protocol (kernel tag)
 south-component-conformance (sandbox) ----> south-provider-runtime

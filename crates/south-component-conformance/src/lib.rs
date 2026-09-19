@@ -41,7 +41,9 @@ mod report;
 pub mod sandbox;
 mod suite;
 
-pub use component::{ComponentResultV1, ProviderComponentV1, StreamParserV1};
+pub use component::{
+    ComponentResultV1, ProviderComponentV1, StreamParserV1, SubmitOutcomeV1, TaskComponentV1,
+};
 pub use fixture::{CaseV1, FIXTURE_KIND_V1, FixtureErrorV1, FixturePackV1, ProviderFamilyV1};
 pub use report::{CheckV1, OutcomeV1, ReportV1, VerdictV1};
 pub use suite::{PROVIDER_COMPONENT_SUITE_V1, run_provider_component_suite_v1};
