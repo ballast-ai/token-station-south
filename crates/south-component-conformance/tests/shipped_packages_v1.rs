@@ -102,3 +102,53 @@ fn every_shipped_package_agrees_with_its_crate_and_names_this_release() {
         "the scan must cover every official component package"
     );
 }
+
+/// Every official component is **built and packaged by the release workflow**.
+///
+/// The guard above pins each package's version against its crate. It cannot
+/// see whether a release would actually ship the package — and that gap let
+/// `task-kling` be added, registered, tested, and then published in v0.28.0
+/// as a release that did not contain it. Nothing was red: the workflow names
+/// its components in two hardcoded lists, and a name absent from both is
+/// simply never built.
+///
+/// So this asserts the lists and the directory agree. A fifth component
+/// breaks this test until its build script and its `package` line exist,
+/// which is the only moment anyone is looking.
+#[test]
+fn the_release_workflow_ships_every_official_component() {
+    let workflow = std::fs::read_to_string(repo_root().join(".github/workflows/release.yml"))
+        .expect("the release workflow reads");
+
+    for component in OFFICIAL_COMPONENTS {
+        assert!(
+            workflow.contains(&format!("package {component} ")),
+            "`{component}` has no `package` line in release.yml, so a release would not \
+             contain it — the failure mode v0.28.0 shipped with"
+        );
+    }
+
+    // The build half, keyed off each package's own build script rather than a
+    // second list to keep in step with this one.
+    let scripts = repo_root().join("scripts");
+    let mut built = 0;
+    for entry in std::fs::read_dir(&scripts).expect("scripts/ reads") {
+        let path = entry.expect("dir entry").path();
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if name.starts_with("build-") && name.ends_with("-component.sh") {
+            assert!(
+                workflow.contains(&format!("scripts/{name}")),
+                "`{name}` builds a component the release workflow never runs"
+            );
+            built += 1;
+        }
+    }
+    assert_eq!(
+        built,
+        OFFICIAL_COMPONENTS.len(),
+        "every official component needs exactly one build script, and every build script \
+         needs an official component"
+    );
+}

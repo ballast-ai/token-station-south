@@ -61,6 +61,7 @@ jobs:
           scripts/build-reference-component.sh
           scripts/build-anthropic-component.sh
           scripts/build-gemini-component.sh
+          scripts/build-kling-task-component.sh
 
       - name: Package
         run: |
@@ -82,6 +83,7 @@ jobs:
           package provider-openai-compatible provider_openai_compatible.wasm
           package provider-anthropic provider_anthropic.wasm
           package provider-gemini provider_gemini.wasm
+          package task-kling task_kling.wasm
           # sha256sum output, so a host verifies with `sha256sum --check` and
           # no bespoke tooling.
           (cd dist && sha256sum ./*.tar.gz > SHASUMS256.txt)
@@ -93,7 +95,8 @@ jobs:
         run: |
           set -euo pipefail
           cat > dist/NOTES.md <<'NOTES'
-          Provider component packages built from this tag.
+          Component packages built from this tag — provider components for the
+          chat world, and task components for the task world.
 
           Each archive holds `manifest.json` and `component.wasm` at its root —
           the directory shape `south-provider-runtime` loads. Extract one and
