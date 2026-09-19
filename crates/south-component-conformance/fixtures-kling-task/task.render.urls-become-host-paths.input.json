@@ -1,0 +1,11 @@
+{
+  "observation": {
+    "state": "succeeded",
+    "urls": [
+      "https://cdn.kling.example/a.mp4"
+    ]
+  },
+  "minted": {
+    "task_id": "task-01J9ZK3V7Q"
+  }
+}

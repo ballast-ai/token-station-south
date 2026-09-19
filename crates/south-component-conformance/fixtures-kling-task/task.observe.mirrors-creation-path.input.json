@@ -1,0 +1,9 @@
+{
+  "provider_config": {
+    "provider": "kling",
+    "base_url": "https://api.kling.example",
+    "models": []
+  },
+  "upstream_model": "kling-v3",
+  "upstream_task_id": "up-77"
+}

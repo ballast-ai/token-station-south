@@ -41,6 +41,14 @@ pub enum CheckV1 {
     /// otherwise passes every fixture and then corrupts or drops events in
     /// production, where the split points depend on the network.
     StreamIncrementality,
+    /// A query that did not succeed never produced a terminal observation.
+    ///
+    /// Task-world only. 429, 5xx, 404 and 401 all mean the observation did
+    /// not happen — a failed *query* is not a failed *task*. A component that
+    /// reads a 404 as "gone" settles a task that may still be running, and the
+    /// host releases a reservation against live work (2026-08-27 vocabulary
+    /// record, D3 rule 2).
+    TerminalOnlyFromTheWire,
     /// Every request the component built addresses the upstream it was
     /// configured against.
     ///
@@ -64,6 +72,7 @@ impl CheckV1 {
             Self::Determinism => "determinism",
             Self::UnknownFieldTolerance => "unknown_field_tolerance",
             Self::StreamIncrementality => "stream_incrementality",
+            Self::TerminalOnlyFromTheWire => "terminal_only_from_the_wire",
             Self::EndpointConfinement => "endpoint_confinement",
             Self::AuthErrorsAreNotRetriable => "auth_errors_are_not_retriable",
         }

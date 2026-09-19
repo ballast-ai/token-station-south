@@ -41,6 +41,8 @@ mod report;
 #[cfg(feature = "sandbox")]
 pub mod sandbox;
 mod suite;
+mod task_fixture;
+mod task_suite;
 
 pub use component::{
     ComponentResultV1, ProviderComponentV1, StreamParserV1, SubmitOutcomeV1, TaskComponentV1,
@@ -48,6 +50,8 @@ pub use component::{
 pub use fixture::{CaseV1, FIXTURE_KIND_V1, FixtureErrorV1, FixturePackV1, ProviderFamilyV1};
 pub use report::{CheckV1, OutcomeV1, ReportV1, VerdictV1};
 pub use suite::{PROVIDER_COMPONENT_SUITE_V1, run_provider_component_suite_v1};
+pub use task_fixture::{TASK_FIXTURE_KIND_V1, TaskCaseV1, TaskFamilyV1, TaskFixturePackV1};
+pub use task_suite::{TASK_COMPONENT_SUITE_V1, run_task_component_suite_v1};
 
 use south_provider_api::{ComponentManifestV1, ComponentMetadataV1, ManifestErrorV1};
 
