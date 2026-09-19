@@ -2,8 +2,8 @@
 //! `docs/design/2026-08-27-task-adapter-vocabulary.md`).
 
 use south_contracts::{
-    HostMintedValuesV1, MAX_CALLBACK_URL_BYTES, MAX_TASK_ID_BYTES, TaskContractErrorV1,
-    TaskFailureKindV1, TaskObservationV1,
+    HostMintedValuesV1, MAX_CALLBACK_URL_BYTES, MAX_TASK_ID_BYTES, TaskArtifactRefV1,
+    TaskContractErrorV1, TaskFailureKindV1, TaskMeterV1, TaskObservationV1,
 };
 
 #[test]
@@ -71,10 +71,12 @@ fn debug_prints_byte_counts_and_never_a_value() {
 /// vocabulary words are frozen.
 #[test]
 fn the_observation_vocabulary_is_frozen() {
-    assert_eq!(TaskObservationV1::Running.state_word(), "running");
-    assert_eq!(TaskObservationV1::Succeeded.state_word(), "succeeded");
-    assert_eq!(TaskObservationV1::Failed(TaskFailureKindV1::Failed).state_word(), "failed");
-    assert_eq!(TaskObservationV1::Unknown.state_word(), "unknown");
+    // The four words are the frozen part. Contract version two gave three of
+    // the arms a payload; the words they answer with did not move.
+    assert_eq!(running("processing").state_word(), "running");
+    assert_eq!(succeeded_bare().state_word(), "succeeded");
+    assert_eq!(failed(TaskFailureKindV1::Failed).state_word(), "failed");
+    assert_eq!(unknown("query http 500").state_word(), "unknown");
 
     let words: Vec<&str> = TaskFailureKindV1::ALL.iter().map(|kind| kind.word()).collect();
     assert_eq!(words, ["failed", "cancelled", "provider-expired"]);
@@ -85,10 +87,111 @@ fn the_observation_vocabulary_is_frozen() {
 /// running.
 #[test]
 fn unknown_is_never_terminal() {
-    assert!(!TaskObservationV1::Running.is_terminal());
-    assert!(!TaskObservationV1::Unknown.is_terminal());
-    assert!(TaskObservationV1::Succeeded.is_terminal());
+    assert!(!running("processing").is_terminal());
+    assert!(!unknown("query http 429").is_terminal());
+    assert!(succeeded_bare().is_terminal());
     for kind in TaskFailureKindV1::ALL {
-        assert!(TaskObservationV1::Failed(kind).is_terminal());
+        assert!(failed(kind).is_terminal());
     }
+}
+
+// ── Constructors for the arms, so a payload change stays one edit ───────────
+
+fn running(word: &str) -> TaskObservationV1 {
+    TaskObservationV1::Running { status_word: word.to_owned() }
+}
+
+const fn succeeded_bare() -> TaskObservationV1 {
+    TaskObservationV1::Succeeded { artifact: TaskArtifactRefV1::None, meter: None }
+}
+
+const fn failed(kind: TaskFailureKindV1) -> TaskObservationV1 {
+    TaskObservationV1::Failed { kind, code: None, message: None }
+}
+
+fn unknown(reason: &str) -> TaskObservationV1 {
+    TaskObservationV1::Unknown { reason: reason.to_owned() }
+}
+
+// ── Contract version two: the terminal arms carry what the upstream reported
+//    (2026-09-19 vocabulary fit survey) ──────────────────────────────────────
+
+/// A component must be able to say *what* succeeded, not merely that something
+/// did. Without this the host would have to parse the dialect's terminal body
+/// itself — the exact knowledge the component exists to hold.
+#[test]
+fn a_succeeded_observation_carries_the_artifact_it_produced() {
+    let urls = TaskArtifactRefV1::urls(vec!["https://cdn.example/v/1.mp4".to_owned()])
+        .expect("one url is a valid reference");
+    let observation = TaskObservationV1::Succeeded { artifact: urls.clone(), meter: None };
+    assert!(observation.is_terminal());
+    assert_eq!(observation.state_word(), "succeeded");
+    let TaskObservationV1::Succeeded { artifact, .. } = observation else {
+        panic!("succeeded carries its artifact");
+    };
+    assert_eq!(artifact, urls);
+}
+
+/// One family answers with an id instead of a URL — the reason
+/// `build-artifact-request` exists at all.
+#[test]
+fn an_artifact_may_be_an_id_the_host_must_fetch() {
+    let by_id = TaskArtifactRefV1::file_id("file-01J9ZK").expect("a well-formed id");
+    assert!(matches!(by_id, TaskArtifactRefV1::FileId(_)));
+}
+
+/// The meter is what the upstream *reported*, in the unit it reported it.
+///
+/// A closed set on purpose: a free map is how a metering vocabulary becomes a
+/// pricing vocabulary one key at a time. Pricing stays host-side.
+#[test]
+fn a_reported_meter_is_a_closed_set_of_named_quantities() {
+    for meter in
+        [TaskMeterV1::Seconds(8.0), TaskMeterV1::Tokens(1_920), TaskMeterV1::Milliunits(4_500)]
+    {
+        let observation =
+            TaskObservationV1::Succeeded { artifact: TaskArtifactRefV1::None, meter: Some(meter) };
+        let TaskObservationV1::Succeeded { meter: Some(reported), .. } = observation else {
+            panic!("the meter round-trips");
+        };
+        assert_eq!(reported, meter);
+    }
+}
+
+/// An upstream that reports no meter is normal, not an error: most families
+/// bill from the request, not the result.
+#[test]
+fn a_missing_meter_is_absence_not_zero() {
+    let observation =
+        TaskObservationV1::Succeeded { artifact: TaskArtifactRefV1::None, meter: None };
+    let TaskObservationV1::Succeeded { meter, .. } = observation else {
+        panic!("succeeded");
+    };
+    assert_eq!(meter, None);
+}
+
+/// The host surfaces the upstream's own words; `map-terminal-failure` maps
+/// them onto the closed `ErrorCode` catalog. Neither can happen if the
+/// observation drops them.
+#[test]
+fn a_failed_observation_carries_the_upstreams_own_words() {
+    let observation = TaskObservationV1::Failed {
+        kind: TaskFailureKindV1::ProviderExpired,
+        code: Some("task_expired".to_owned()),
+        message: Some("task result expired after 24h".to_owned()),
+    };
+    assert!(observation.is_terminal());
+    assert_eq!(observation.state_word(), "failed");
+}
+
+/// Rules 1–3 are unchanged by this version: the non-terminal arms still carry
+/// only what diagnosis needs, and neither is ever terminal.
+#[test]
+fn the_non_terminal_arms_keep_their_reason_without_becoming_terminal() {
+    let running = TaskObservationV1::Running { status_word: "processing".to_owned() };
+    let unknown = TaskObservationV1::Unknown { reason: "query http 429".to_owned() };
+    assert!(!running.is_terminal());
+    assert!(!unknown.is_terminal());
+    assert_eq!(running.state_word(), "running");
+    assert_eq!(unknown.state_word(), "unknown");
 }

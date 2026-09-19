@@ -5,8 +5,9 @@
 mod task;
 
 pub use task::{
-    HostMintedValuesV1, MAX_CALLBACK_URL_BYTES, MAX_TASK_ID_BYTES, TASK_CONTRACT_VERSION,
-    TaskContractErrorV1, TaskFailureKindV1, TaskObservationV1,
+    HostMintedValuesV1, MAX_ARTIFACT_REF_BYTES, MAX_ARTIFACT_URLS, MAX_CALLBACK_URL_BYTES,
+    MAX_TASK_ID_BYTES, TASK_CONTRACT_VERSION, TaskArtifactRefV1, TaskContractErrorV1,
+    TaskFailureKindV1, TaskMeterV1, TaskObservationV1,
 };
 
 use std::{collections::BTreeMap, fmt, sync::Arc, time::Duration};
