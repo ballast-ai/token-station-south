@@ -1,0 +1,8 @@
+{
+  "outcome": "rejected",
+  "error": {
+    "code": "provider_protocol_error",
+    "http_status": 429,
+    "message": "Bailian submission rejected"
+  }
+}

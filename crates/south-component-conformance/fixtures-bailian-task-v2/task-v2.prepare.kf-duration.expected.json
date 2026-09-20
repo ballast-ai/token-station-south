@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "Bailian first-last-frame duration must be five seconds"
+  }
+}

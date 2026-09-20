@@ -1,0 +1,36 @@
+{
+  "descriptor": {
+    "method": "POST",
+    "url": "https://dashscope.example/api/v1/services/aigc/image2video/video-synthesis",
+    "headers": {
+      "content-type": "application/json",
+      "x-dashscope-async": "enable"
+    },
+    "body": {
+      "model": "wan2.2-kf2v-flash",
+      "input": {
+        "prompt": "scene",
+        "first_frame_url": "a",
+        "last_frame_url": "b",
+        "negative_prompt": "n"
+      },
+      "parameters": {
+        "resolution": "480P"
+      }
+    },
+    "auth": {
+      "scheme": "bearer",
+      "secret": "provider_api_key"
+    }
+  },
+  "locator": {
+    "schema_version": 1,
+    "route": "api/v1/tasks"
+  },
+  "request_estimate": {
+    "requested_seconds": 5.0,
+    "milliunits_per_second": null,
+    "resolution": "480P",
+    "input_image_count": 2
+  }
+}

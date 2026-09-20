@@ -12,13 +12,14 @@ use south_provider_api::ComponentManifestV1;
 
 /// The official components this repository ships. Named, so that an empty or
 /// mistyped scan below cannot pass over nothing.
-const OFFICIAL_COMPONENTS: [&str; 6] = [
+const OFFICIAL_COMPONENTS: [&str; 7] = [
     "provider-anthropic",
     "provider-gemini",
     "provider-openai-compatible",
     "task-kling",
     "task-kling-v2",
     "task-minimax-v2",
+    "task-bailian-v2",
 ];
 
 fn repo_root() -> &'static Path {
@@ -228,5 +229,31 @@ fn file_id_release_retires_the_029_runtime_and_component_identities() {
         .unwrap();
         assert_ne!(manifest.version, version);
         assert_ne!(manifest.compatibility.south_runtime, "0.29.0");
+    }
+}
+
+/// A seventh package requires a new release; published six-package identities stay immutable.
+#[test]
+fn bailian_release_retires_the_published_030_component_identities() {
+    for (name, published) in [
+        ("provider-openai-compatible", "2.1.2"),
+        ("provider-anthropic", "1.0.3"),
+        ("provider-gemini", "1.1.2"),
+        ("task-kling", "1.0.2"),
+        ("task-kling-v2", "0.30.0"),
+        ("task-minimax-v2", "0.30.0"),
+    ] {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_ne!(
+            manifest.version, published,
+            "a changed package cannot reuse its published identity"
+        );
+        assert_ne!(manifest.compatibility.south_runtime, "0.30.0");
     }
 }

@@ -95,3 +95,6 @@ pub fn reported_identity_matches(
 pub mod sandbox_task_v2;
 
 pub mod reference_minimax_task_v2;
+
+/// Managed Bailian video dialect.
+pub mod reference_bailian_task_v2;

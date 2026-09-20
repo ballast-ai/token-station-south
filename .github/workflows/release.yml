@@ -64,6 +64,7 @@ jobs:
           scripts/build-kling-task-component.sh
           scripts/build-kling-task-v2-component.sh
           scripts/build-minimax-task-v2-component.sh
+          scripts/build-bailian-task-v2-component.sh
 
       - name: Package
         run: |
@@ -88,6 +89,7 @@ jobs:
           package task-kling task_kling.wasm
           package task-kling-v2 task_kling_v2.wasm
           package task-minimax-v2 task_minimax_v2.wasm
+          package task-bailian-v2 task_bailian_v2.wasm
           # sha256sum output, so a host verifies with `sha256sum --check` and
           # no bespoke tooling.
           (cd dist && sha256sum ./*.tar.gz > SHASUMS256.txt)

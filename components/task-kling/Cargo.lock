@@ -340,7 +340,7 @@ checksum = "ba467056f1b547ed52077911161fc86985becbc60e8e1857c8a144dab0def891"
 
 [[package]]
 name = "south-component-conformance"
-version = "0.30.0"
+version = "0.31.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -351,7 +351,7 @@ dependencies = [
 
 [[package]]
 name = "south-contracts"
-version = "0.30.0"
+version = "0.31.0"
 dependencies = [
  "bytes",
  "http",
@@ -363,7 +363,7 @@ dependencies = [
 
 [[package]]
 name = "south-provider-api"
-version = "0.30.0"
+version = "0.31.0"
 dependencies = [
  "serde",
  "thiserror",
@@ -410,7 +410,7 @@ dependencies = [
 
 [[package]]
 name = "task-kling"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "serde",
  "serde_json",

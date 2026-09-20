@@ -1,0 +1,18 @@
+{
+  "state": "succeeded",
+  "artifacts": {
+    "kind": "urls",
+    "items": [
+      {
+        "url": "https://media.example/video?sig=private",
+        "id": null,
+        "duration": null
+      }
+    ]
+  },
+  "usage": {
+    "seconds": 4.5,
+    "milliunits": null,
+    "tokens": null
+  }
+}

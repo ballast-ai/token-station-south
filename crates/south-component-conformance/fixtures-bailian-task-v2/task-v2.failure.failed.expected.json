@@ -1,0 +1,5 @@
+{
+  "code": "provider_protocol_error",
+  "http_status": 400,
+  "message": "Bailian video generation FAILED: inappropriate content (DataInspectionFailed)"
+}

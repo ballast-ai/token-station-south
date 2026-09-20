@@ -1,0 +1,19 @@
+{
+  "provider_config": {
+    "provider": "bailian",
+    "base_url": "https://dashscope.example",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "model": "wan2.2-kf2v-flash",
+    "prompt": "scene",
+    "image": "a",
+    "last_frame": "b",
+    "duration": " 5 ",
+    "negative_prompt": "n",
+    "resolution": "480P"
+  },
+  "minted": {
+    "task_id": "host-1"
+  }
+}

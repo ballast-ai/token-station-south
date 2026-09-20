@@ -1,0 +1,21 @@
+{
+  "provider_config": {
+    "provider": "bailian",
+    "base_url": "https://dashscope.example",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "model": "happyhorse-1.1-i2v",
+    "prompt": "scene",
+    "image": "https://image.example/a",
+    "audio_url": "https://audio.example/a",
+    "duration": 6,
+    "resolution": "1080P",
+    "seed": 1,
+    "prompt_extend": false,
+    "watermark": true
+  },
+  "minted": {
+    "task_id": "host-1"
+  }
+}
