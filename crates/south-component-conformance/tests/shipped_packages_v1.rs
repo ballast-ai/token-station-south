@@ -157,3 +157,52 @@ fn the_release_workflow_ships_every_official_component() {
          needs an official component"
     );
 }
+
+/// Rebuilt packages must not reuse the immutable identities published in 0.28.1.
+#[test]
+fn rebuilt_packages_retire_the_previous_release_identities() {
+    let previous = [
+        ("provider-openai-compatible", "2.1.0"),
+        ("provider-anthropic", "1.0.1"),
+        ("provider-gemini", "1.1.0"),
+        ("task-kling", "1.0.0"),
+        ("task-kling-v2", "0.28.1"),
+    ];
+    for (name, old_version) in previous {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_ne!(manifest.version, old_version, "{name} reused its prior content identity");
+    }
+}
+
+/// Library suites and narrow host probes do not establish production task adoption.
+#[test]
+fn task_worlds_have_independent_unverified_host_adoption_records() {
+    let manifest: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(repo_root().join("compatibility.json")).unwrap(),
+    )
+    .unwrap();
+    let hosts =
+        manifest["task_component_capabilities"].as_object().expect("task host capability table");
+    assert_eq!(hosts.len(), 2);
+    for host in ["token-station", "token-station-server"] {
+        let capabilities = hosts[host].as_object().unwrap();
+        assert_eq!(capabilities.len(), 2);
+        for world in ["task_v1", "task_v2"] {
+            assert_eq!(capabilities[world]["status"], "not_verified");
+            assert!(capabilities[world].get("cases").is_none());
+        }
+    }
+    for (key, suite) in [
+        ("task_component_v1", "south.task-component.v1"),
+        ("task_component_v2", "south.task-component.v2"),
+    ] {
+        assert_eq!(manifest["conformance"][format!("{key}_suite_id")], suite);
+        assert_eq!(manifest["conformance"][format!("{key}_suite")], 1);
+    }
+}

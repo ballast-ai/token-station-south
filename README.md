@@ -118,7 +118,7 @@ synchronous transport, retries, fallback, routing, persistence, database access,
 Passing a library conformance suite does not by itself verify a host integration; each verified
 capability also requires review of the real host adapter wiring.
 
-## task-v2 候选（未发布）
+## task-v2 与 v0.29.0 发布准备（未发布）
 
 本地候选新增 `task-adapter-v2`，与既有 provider-v2、task-v1 分别装载。
 `TaskLocatorV2` 保存有界定位；`TaskUsageFactsV2` 保留并存用量；观察保留排队／运行、
@@ -126,15 +126,21 @@ capability also requires review of the real host adapter wiring.
 `components/task-kling-v2` 共享代码，使用独立 fixture 和真实 Wasm 对拍。
 
 构建候选：`bash scripts/build-kling-task-v2-component.sh`。
-本批沿用本地版本号不代表已经发布，也不代表两个宿主已采用。server 的临时依赖覆盖
+当前版本准备为 `0.29.0`，尚未发布，也不代表两个宿主已采用。server 的临时依赖覆盖
 只验证授权／计价接缝，生产注册表、持久执行绑定、旧包恢复与社区采用另行验收。
 边界与候选行为收紧见[候选设计](docs/design/2026-09-20-task-adapter-v2-candidate.md)。
 
 第五批候选增加独立 `TaskRequestEstimateV2`：组件给出最终请求的时长与协议单位率，
 宿主显式选择估时，再用经过范围校验的 helper 估算单位。它不能代替供应商实际用量；
 价格、加价、缺失时长的默认值和资金事务仍属于宿主。prepared JSON 新增必需字段，
-任务词汇版本为 4，旧候选 prepared JSON 不再兼容；发布版本和生产采用状态没有改变。
+任务词汇版本为 4，旧候选 prepared JSON 不再兼容；宿主生产采用仍待验证。
 详见[请求估算设计](docs/design/2026-09-20-task-request-estimate.md)。
+
+五个组件包随本次构建更换不可变身份，不能用原版本覆盖不同内容。兼容清单 schema 4
+单列 `task_component_capabilities`；两个宿主的 task-v1／v2 生产采用均为
+`not_verified`，不继承历史 provider-call 的 verified。runtime 元组继续严格匹配，
+保留旧包不等于新 runtime 能执行旧包。版本与验证范围见
+[发布准备记录](docs/design/2026-09-20-release-0.29.0.md)。
 
 ## Local verification
 
