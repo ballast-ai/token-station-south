@@ -53,7 +53,7 @@ fn canonical_submit_frame_must_fit_before_decode_succeeds() {
 
 #[test]
 fn canonical_prepared_frame_must_fit_before_decode_succeeds() {
-    let empty = r#"{"descriptor":{"method":"POST","url":"https://upstream.example/tasks","body":{"padding":"","x":1e8}},"locator":{"schema_version":1,"route":"v1/tasks"},"request_estimate":{"requested_seconds":null,"milliunits_per_second":null}}"#;
+    let empty = r#"{"descriptor":{"method":"POST","url":"https://upstream.example/tasks","body":{"padding":"","x":1e8}},"locator":{"schema_version":1,"route":"v1/tasks"},"request_estimate":{"requested_seconds":null,"milliunits_per_second":null,"resolution":null,"input_image_count":null}}"#;
     let limit = south_contracts::MAX_JSON_REQUEST_BODY_BYTES;
     let input = empty.replace(
         "\"padding\":\"\"",
@@ -192,7 +192,7 @@ fn render_context_roundtrip_requires_explicit_host_metadata() {
 
 #[test]
 fn prepared_and_rejected_ir_values_roundtrip_with_existing_extensions() {
-    let prepared = json!({"descriptor":{"method":"POST","url":"https://upstream.example/tasks", "body":{"x":1e8}},"locator":{"schema_version":1,"route":"v1/tasks"},"request_estimate":{"requested_seconds":null,"milliunits_per_second":null}});
+    let prepared = json!({"descriptor":{"method":"POST","url":"https://upstream.example/tasks", "body":{"x":1e8}},"locator":{"schema_version":1,"route":"v1/tasks"},"request_estimate":{"requested_seconds":null,"milliunits_per_second":null,"resolution":null,"input_image_count":null}});
     let prepared = parse_prepared_task_json(&prepared.to_string()).unwrap();
     assert_eq!(
         parse_prepared_task_json(&prepared_task_json(&prepared).unwrap().to_string()).unwrap(),

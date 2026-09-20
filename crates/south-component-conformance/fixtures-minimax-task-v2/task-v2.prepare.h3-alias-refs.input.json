@@ -1,0 +1,22 @@
+{
+  "provider_config": {
+    "provider": "minimax",
+    "base_url": "https://api.minimax.io",
+    "auth": "provider_api_key",
+    "upstream_model_family": "MiniMax-H3"
+  },
+  "request": {
+    "model": "minimax-h3-turbo-v4",
+    "prompt": "scene",
+    "reference_images": [
+      "https://cdn/1",
+      "https://cdn/2"
+    ],
+    "duration": " 6.0 ",
+    "resolution": " 2 K ",
+    "ratio": "9:16"
+  },
+  "minted": {
+    "task_id": "h3-fixture"
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "status": 200,
+  "headers": {},
+  "body": "{\"task\":{\"status\":\"cancelled\",\"error\":{\"code\":\"1026\",\"message\":\"untrusted secret body\"}}}"
+}

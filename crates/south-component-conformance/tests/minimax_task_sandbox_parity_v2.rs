@@ -137,7 +137,13 @@ fn request_estimates_and_authorized_queries_match_native() {
     let component = sandboxed();
     let config: ProviderConfig = serde_json::from_value(json!({"provider":"minimax","base_url":"https://api.minimaxi.com","auth":"provider_api_key","group_id":"19000"})).unwrap();
     let minted = HostMintedValuesV1::new("estimate-parity", None).unwrap();
-    for model in ["MiniMax-Hailuo-02", "MiniMax-Hailuo-2.3", "MiniMax-Hailuo-2.3-Fast"] {
+    for model in [
+        "MiniMax-Hailuo-02",
+        "MiniMax-Hailuo-2.3",
+        "MiniMax-Hailuo-2.3-Fast",
+        "MiniMax-H3",
+        "MiniMax-H3-Max",
+    ] {
         for duration in [json!(6), json!("10.0"), json!(-1), json!("NaN")] {
             let request = json!({"model":model,"prompt":"scene","duration":duration});
             let native = MiniMaxTaskReferenceV2.build_submit_request(&config, &request, &minted);
@@ -146,6 +152,8 @@ fn request_estimates_and_authorized_queries_match_native() {
             if let Ok(prepared) = guest {
                 config.authorize(&prepared.descriptor).unwrap();
                 assert_eq!(prepared.request_estimate.milliunits_per_second(), None);
+                assert_eq!(prepared.request_estimate.resolution(), Some("768P"));
+                assert_eq!(prepared.request_estimate.input_image_count(), Some(0));
                 let query = component
                     .build_observe_request(&config, model, "00123", &prepared.locator)
                     .unwrap();

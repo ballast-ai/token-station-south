@@ -22,6 +22,8 @@
   },
   "request_estimate": {
     "requested_seconds": 6.0,
-    "milliunits_per_second": null
+    "milliunits_per_second": null,
+    "resolution": "768P",
+    "input_image_count": 0
   }
 }

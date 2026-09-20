@@ -55,7 +55,7 @@ fn prepare_preserves_fields_defaults_and_normalized_estimate() {
 #[test]
 fn prepare_rejects_wrong_family_invalid_shape_and_frame_modes() {
     for value in [
-        json!({"model":"MiniMax-H3","prompt":"x"}),
+        json!({"model":"unknown-video-model","prompt":"x"}),
         json!({"model":"MiniMax-Hailuo-02"}),
         json!({"model":"MiniMax-Hailuo-2.3","last_frame":"last"}),
         json!({"model":"MiniMax-Hailuo-02","last_frame":"last","resolution":"512P"}),

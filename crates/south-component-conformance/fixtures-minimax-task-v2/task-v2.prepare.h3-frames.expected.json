@@ -1,0 +1,49 @@
+{
+  "descriptor": {
+    "method": "POST",
+    "url": "https://api.minimax.io/v2/video_generation",
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "model": "MiniMax-H3-Max",
+      "content": [
+        {
+          "type": "text",
+          "text": "scene"
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://cdn/first"
+          },
+          "role": "first_frame"
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://cdn/last"
+          },
+          "role": "last_frame"
+        }
+      ],
+      "resolution": "480P",
+      "duration": 5,
+      "ratio": "16:9"
+    },
+    "auth": {
+      "scheme": "bearer",
+      "secret": "provider_api_key"
+    }
+  },
+  "locator": {
+    "schema_version": 1,
+    "route": "v2/query/video_generation"
+  },
+  "request_estimate": {
+    "requested_seconds": 5.0,
+    "milliunits_per_second": null,
+    "resolution": "480P",
+    "input_image_count": 2
+  }
+}

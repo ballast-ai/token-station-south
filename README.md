@@ -145,10 +145,12 @@ capability also requires review of the real host adapter wiring.
 ## v0.30.0 MiniMax 候选（未发布）
 
 v0.29.0 已发布，正式内容为此前五包。本工作树准备 v0.30.0：新增
-`task-minimax-v2`、HTTP9 `file_id` 受控查询，并递增六包不可变身份。
+`task-minimax-v2`（Hailuo与H3）、HTTP9 `file_id` 受控查询、Task5规范请求输入事实，
+并递增六包不可变身份。
 构建候选：`bash scripts/build-minimax-task-v2-component.sh`。
 范围与尚未完成的宿主验收见[MiniMax设计](docs/design/2026-09-20-minimax-v1-task-component.md)
 和[下一版准备](docs/design/2026-09-20-release-0.30.0-minimax.md)。
+H3与estimate新增事实见[设计记录](docs/design/2026-09-20-minimax-h3-estimate-facts.md)。
 
 ## Local verification
 

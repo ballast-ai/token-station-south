@@ -1,0 +1,5 @@
+{
+  "status": 200,
+  "headers": {},
+  "body": "{\"task\":{\"status\":\"succeeded\",\"content\":{\"url\":\"https://cdn/result.mp4\"},\"usage\":{\"output_seconds\":\" 6.5 \"}}}"
+}

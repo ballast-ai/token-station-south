@@ -1,5 +1,9 @@
 # MiniMax v1 任务组件候选
 
+> 后续范围修订：发布前M1已包含H3与Task5请求事实，见
+> [H3记录](2026-09-20-minimax-h3-estimate-facts.md)。本文保留Hailuo阶段设计历史；
+> 下文“不做H3”只描述该阶段，不代表当前0.30候选范围。
+
 基线：South e18eeff，server a8dd0ace。新增 task-minimax-v2，复用 task-adapter-v2，
 保持 task ABI/WIT 不变，已准备 HTTP9/runtime0.30.0 与六包新身份；
 v0.29.0 已发布的五包和原发布树不变，0.30.0 尚未发布。

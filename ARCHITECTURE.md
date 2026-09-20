@@ -144,6 +144,7 @@ misread as a boundary violation.
 
 ## v0.30.0 MiniMax 候选
 
-新增同源MiniMax Hailuo v1 task-v2参考/guest与受控file_id查询，HTTP合同9。
+新增同源MiniMax Hailuo v1/H3 v2参考/guest与受控file_id查询，HTTP合同9。
+任务合同5新增有界resolution/input_image_count请求事实，供宿主既有定价函数使用。
 既有task ABI/WIT不变；宿主仍拥有凭证、配置快照、价格、恢复与交付。
 见[候选设计](docs/design/2026-09-20-minimax-v1-task-component.md)。

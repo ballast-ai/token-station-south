@@ -1,0 +1,8 @@
+{
+  "method": "GET",
+  "url": "https://api.minimax.io/v2/query/video_generation/id%3Fx%23%25",
+  "auth": {
+    "scheme": "bearer",
+    "secret": "provider_api_key"
+  }
+}

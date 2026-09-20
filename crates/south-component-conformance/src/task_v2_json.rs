@@ -252,10 +252,24 @@ pub fn submit_outcome_json(outcome: &SubmitOutcomeV2) -> Result<Value, String> {
 struct RequestEstimateWire {
     requested_seconds: Option<f64>,
     milliunits_per_second: Option<i64>,
+    #[serde(deserialize_with = "explicit_optional")]
+    resolution: Option<String>,
+    #[serde(deserialize_with = "explicit_optional")]
+    input_image_count: Option<u32>,
+}
+fn explicit_optional<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer)
 }
 impl RequestEstimateWire {
     fn build(self) -> Result<TaskRequestEstimateV2, String> {
         TaskRequestEstimateV2::new(self.requested_seconds, self.milliunits_per_second)
+            .and_then(|estimate| {
+                estimate.with_input_facts(self.resolution.as_deref(), self.input_image_count)
+            })
             .map_err(|error| error.to_string())
     }
 }
@@ -282,7 +296,7 @@ pub fn prepared_task_json(value: &PreparedTaskV2) -> Result<Value, String> {
     TaskLocatorV2::new(value.locator.schema_version(), value.locator.route())
         .map_err(|error| error.to_string())?;
     bounded(
-        json!({"descriptor":value.descriptor,"locator":locator_json(&value.locator), "request_estimate":{"requested_seconds":value.request_estimate.requested_seconds(),"milliunits_per_second":value.request_estimate.milliunits_per_second()}}),
+        json!({"descriptor":value.descriptor,"locator":locator_json(&value.locator), "request_estimate":{"requested_seconds":value.request_estimate.requested_seconds(),"milliunits_per_second":value.request_estimate.milliunits_per_second(),"resolution":value.request_estimate.resolution(),"input_image_count":value.request_estimate.input_image_count()}}),
         MAX_JSON_REQUEST_BODY_BYTES,
     )
 }
