@@ -19,5 +19,9 @@
   "locator": {
     "schema_version": 1,
     "route": "v1/videos/motion-control"
+  },
+  "request_estimate": {
+    "requested_seconds": null,
+    "milliunits_per_second": null
   }
 }

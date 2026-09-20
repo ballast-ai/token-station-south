@@ -20,7 +20,8 @@ interface task-adapter {
     healthcheck: func() -> adapter-health;
 
     // ProviderConfig, normalized request, HostMintedValuesV1 -> PreparedTaskV2.
-    // PreparedTaskV2 holds a descriptor and a bounded, non-secret TaskLocatorV2.
+    // PreparedTaskV2 holds a descriptor, bounded non-secret TaskLocatorV2, and
+    // required request-only estimation basis; it never carries actual usage.
     build-submit-request: func(
         provider-config: json,
         task-request: json,

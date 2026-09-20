@@ -15,5 +15,9 @@
   "locator": {
     "schema_version": 1,
     "route": "v1/videos/omni-video"
+  },
+  "request_estimate": {
+    "requested_seconds": 5.0,
+    "milliunits_per_second": null
   }
 }

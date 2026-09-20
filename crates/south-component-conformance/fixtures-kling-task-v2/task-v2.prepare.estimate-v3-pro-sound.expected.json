@@ -6,8 +6,10 @@
       "content-type": "application/json"
     },
     "body": {
-      "model_name": "real-model",
+      "model_name": "kling-v3",
       "prompt": "a cat",
+      "mode": "pro",
+      "sound": "on",
       "duration": "5",
       "external_task_id": "host-1"
     }
@@ -18,6 +20,6 @@
   },
   "request_estimate": {
     "requested_seconds": 5.0,
-    "milliunits_per_second": null
+    "milliunits_per_second": 1200
   }
 }

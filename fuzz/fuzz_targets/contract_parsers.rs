@@ -45,6 +45,13 @@ fuzz_target!(|data: &[u8]| {
         assert_eq!(parse_observation_json(&encoded.to_string()), Ok(observation));
     }
     if let Ok(prepared) = parse_prepared_task_json(input) {
+        let estimate = &prepared.request_estimate;
+        assert!(estimate.estimate_milliunits(f64::NAN).is_err());
+        assert!(estimate.estimate_milliunits(-1.0).is_err());
+        assert_eq!(
+            estimate.estimate_milliunits(0.0).expect("zero host time is valid"),
+            estimate.milliunits_per_second().map(|_| 0)
+        );
         let encoded = prepared_task_json(&prepared).expect("decoded request must encode");
         assert_eq!(parse_prepared_task_json(&encoded.to_string()), Ok(prepared));
     }

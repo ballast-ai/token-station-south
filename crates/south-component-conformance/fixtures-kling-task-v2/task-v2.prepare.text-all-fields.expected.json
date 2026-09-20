@@ -39,5 +39,9 @@
   "locator": {
     "schema_version": 1,
     "route": "v1/videos/image2video"
+  },
+  "request_estimate": {
+    "requested_seconds": null,
+    "milliunits_per_second": null
   }
 }

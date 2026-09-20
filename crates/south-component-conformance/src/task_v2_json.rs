@@ -4,8 +4,8 @@ use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 use south_contracts::{
     MAX_ARTIFACT_REF_BYTES, MAX_JSON_REQUEST_BODY_BYTES, TaskArtifactRefV2, TaskArtifactV2,
-    TaskFailureKindV1, TaskLocatorV2, TaskObservationV2, TaskRenderContextV2, TaskScalarV2,
-    TaskUsageFactsV2,
+    TaskFailureKindV1, TaskLocatorV2, TaskObservationV2, TaskRenderContextV2,
+    TaskRequestEstimateV2, TaskScalarV2, TaskUsageFactsV2,
 };
 use token_station_protocol::{ErrorEnvelope, HttpRequestDescriptor};
 
@@ -249,14 +249,31 @@ pub fn submit_outcome_json(outcome: &SubmitOutcomeV2) -> Result<Value, String> {
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct RequestEstimateWire {
+    requested_seconds: Option<f64>,
+    milliunits_per_second: Option<i64>,
+}
+impl RequestEstimateWire {
+    fn build(self) -> Result<TaskRequestEstimateV2, String> {
+        TaskRequestEstimateV2::new(self.requested_seconds, self.milliunits_per_second)
+            .map_err(|error| error.to_string())
+    }
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct PreparedWire {
     descriptor: HttpRequestDescriptor,
     locator: LocatorWire,
+    request_estimate: RequestEstimateWire,
 }
 /// Decodes a descriptor plus strict locator; network authorization remains host-owned.
 pub fn parse_prepared_task_json(input: &str) -> Result<PreparedTaskV2, String> {
     let value = parse::<PreparedWire>(input, MAX_JSON_REQUEST_BODY_BYTES)?;
-    let prepared = PreparedTaskV2 { descriptor: value.descriptor, locator: value.locator.build()? };
+    let prepared = PreparedTaskV2 {
+        descriptor: value.descriptor,
+        locator: value.locator.build()?,
+        request_estimate: value.request_estimate.build()?,
+    };
     prepared_task_json(&prepared)?;
     Ok(prepared)
 }
@@ -265,7 +282,7 @@ pub fn prepared_task_json(value: &PreparedTaskV2) -> Result<Value, String> {
     TaskLocatorV2::new(value.locator.schema_version(), value.locator.route())
         .map_err(|error| error.to_string())?;
     bounded(
-        json!({"descriptor":value.descriptor,"locator":locator_json(&value.locator)}),
+        json!({"descriptor":value.descriptor,"locator":locator_json(&value.locator), "request_estimate":{"requested_seconds":value.request_estimate.requested_seconds(),"milliunits_per_second":value.request_estimate.milliunits_per_second()}}),
         MAX_JSON_REQUEST_BODY_BYTES,
     )
 }

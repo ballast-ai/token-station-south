@@ -1,5 +1,10 @@
 # Architecture
 
+> 2026-09-20 第五批候选补充：task-v2 的请求估算依据与实际观察用量分开建模。
+> `PreparedTaskV2.request_estimate` 携带实际请求时长和协议单位率，纯 helper 只按
+> 宿主显式估时计算单位；宿主保留价格、加价、估时默认值及预占事务。详见
+> [请求估算设计](docs/design/2026-09-20-task-request-estimate.md)。候选尚未发布。
+
 Token Station South uses dependency inversion: it owns the provider-facing contracts and runtime,
 while community and enterprise hosts own business policy and consume South.
 

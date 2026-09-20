@@ -1,0 +1,16 @@
+{
+  "provider_config": {
+    "provider": "kling",
+    "base_url": "https://api.kling.example",
+    "models": []
+  },
+  "request": {
+    "operation": "text-or-image",
+    "model": "kling-v3",
+    "prompt": "a cat",
+    "duration": 0
+  },
+  "minted": {
+    "task_id": "host-1"
+  }
+}

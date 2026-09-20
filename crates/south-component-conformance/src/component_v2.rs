@@ -15,6 +15,8 @@ pub struct PreparedTaskV2 {
     pub descriptor: HttpRequestDescriptor,
     /// The immutable locator persisted before the first network call.
     pub locator: TaskLocatorV2,
+    /// Protocol request estimation only; host pricing and timing policy stay external.
+    pub request_estimate: south_contracts::TaskRequestEstimateV2,
 }
 
 /// Explicit submit outcomes; acceptance uncertainty is not rejection.

@@ -6,13 +6,11 @@
       "content-type": "application/json"
     },
     "body": {
-      "model_name": "real-model",
+      "model_name": "kling-v3-omni",
       "prompt": "a cat",
-      "mode": "std",
+      "mode": "pro",
       "video_list": [
-        {
-          "video_url": "base"
-        }
+        {}
       ]
     }
   },
@@ -22,6 +20,6 @@
   },
   "request_estimate": {
     "requested_seconds": null,
-    "milliunits_per_second": null
+    "milliunits_per_second": 1200
   }
 }

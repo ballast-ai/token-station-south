@@ -6,9 +6,9 @@
       "content-type": "application/json"
     },
     "body": {
-      "model_name": "real-model",
+      "model_name": "kling-v3",
       "prompt": "a cat",
-      "duration": "5",
+      "duration": 0,
       "external_task_id": "host-1"
     }
   },
@@ -17,7 +17,7 @@
     "route": "v1/videos/text2video"
   },
   "request_estimate": {
-    "requested_seconds": 5.0,
-    "milliunits_per_second": null
+    "requested_seconds": 0.0,
+    "milliunits_per_second": 600
   }
 }

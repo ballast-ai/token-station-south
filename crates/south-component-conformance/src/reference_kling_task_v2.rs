@@ -238,6 +238,46 @@ fn succeeded(data: &Value) -> TaskObservationV2 {
     };
     TaskObservationV2::Succeeded { artifacts, usage }
 }
+// Protocol resource-pack units per second, not a host monetary price. This
+// managed request basis deliberately tests field presence, including null/[];
+// submit validation separately tests whether the reference list is nonempty.
+fn request_unit_rate(model: &str, route: &str, body: &Value) -> Option<i64> {
+    let mode = field(body, "mode").unwrap_or("std");
+    let sound = field(body, "sound") == Some("on");
+    let reference = body.get("video_list").is_some();
+    match (model, route == MOTION) {
+        ("kling-v3", true) => match mode {
+            "std" => Some(900),
+            "pro" => Some(1200),
+            _ => None,
+        },
+        ("kling-v3", false) if !reference => match (mode, sound) {
+            ("std", false) => Some(600),
+            ("std", true) => Some(900),
+            ("pro", false) => Some(800),
+            ("pro", true) => Some(1200),
+            ("4k", _) => Some(3000),
+            _ => None,
+        },
+        ("kling-v3-omni", false) => match (mode, sound, reference) {
+            ("std", false, false) => Some(600),
+            ("std", true, false) | ("pro", false, false) => Some(800),
+            ("std", false, true) => Some(900),
+            ("pro", true, false) => Some(1000),
+            ("pro", false, true) => Some(1200),
+            ("4k", _, false) => Some(3000),
+            _ => None,
+        },
+        ("kling-video-o1", false) if !sound => match (mode, reference) {
+            ("std", false) => Some(600),
+            ("std", true) => Some(900),
+            ("pro", false) => Some(800),
+            ("pro", true) => Some(1200),
+            _ => None,
+        },
+        _ => None,
+    }
+}
 impl TaskComponentV2 for KlingTaskReferenceV2 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
@@ -267,11 +307,19 @@ impl TaskComponentV2 for KlingTaskReferenceV2 {
         let mut descriptor = HttpRequestDescriptor::new(HttpMethod::Post, route_url(config, route));
         descriptor.headers = SafeHeaders::try_new([("content-type", "application/json")])
             .map_err(|_| internal("invalid kling request headers"))?;
-        descriptor.body = Some(Value::Object(body));
+        let body = Value::Object(body);
+        let requested_seconds = numeric_fact(body.get("duration"))
+            .map_err(|()| invalid("invalid kling request duration"))?;
+        let request_estimate = south_contracts::TaskRequestEstimateV2::new(
+            requested_seconds,
+            request_unit_rate(model, route, &body),
+        )
+        .map_err(|_| invalid("invalid kling request estimate"))?;
+        descriptor.body = Some(body);
         descriptor.auth = config.auth.clone().map(Auth::bearer);
         let locator =
             TaskLocatorV2::new(1, route).map_err(|_| internal("invalid kling task locator"))?;
-        Ok(PreparedTaskV2 { descriptor, locator })
+        Ok(PreparedTaskV2 { descriptor, locator, request_estimate })
     }
     fn parse_submit_response(
         &self,

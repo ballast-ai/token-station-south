@@ -125,3 +125,51 @@ fn the_v1_typed_seam_refuses_a_loaded_v2_component() {
         "the refused component stays usable through its exact world"
     );
 }
+
+#[test]
+fn request_estimates_match_native_for_every_managed_rate_axis() {
+    use serde_json::{Value, json};
+    use south_component_conformance::TaskComponentV2;
+    use south_contracts::HostMintedValuesV1;
+    use token_station_protocol::ProviderConfig;
+    let component = sandboxed();
+    let config: ProviderConfig = serde_json::from_value(
+        json!({"provider":"kling","base_url":"https://api.kling.example","models":[]}),
+    )
+    .unwrap();
+    let minted = HostMintedValuesV1::new("estimate-parity", None).unwrap();
+    for (model, operation) in [
+        ("kling-v3", "text-or-image"),
+        ("kling-v3", "motion-control"),
+        ("kling-v3-omni", "omni"),
+        ("kling-video-o1", "omni"),
+        ("unknown-model", "omni"),
+    ] {
+        for mode in ["std", "pro", "4k", "unknown"] {
+            for sound in ["off", "on"] {
+                for reference in [None, Some(Value::Null), Some(json!([])), Some(json!([{}]))] {
+                    let mut request = json!({"model":model,"operation":operation,"mode":mode,"sound":sound,"duration":"2.001","prompt":"scene","image_url":"https://cdn/image","video_url":"https://cdn/video","character_orientation":"image"});
+                    if let Some(reference) = reference {
+                        request["video_list"] = reference;
+                    }
+                    let native =
+                        KlingTaskReferenceV2.build_submit_request(&config, &request, &minted);
+                    let guest = component.build_submit_request(&config, &request, &minted);
+                    assert_eq!(guest, native, "{model}/{mode}/{sound}");
+                    if let Ok(prepared) = guest {
+                        let estimate = prepared.request_estimate;
+                        let seconds = estimate.requested_seconds().unwrap_or(5.0);
+                        assert!(estimate.estimate_milliunits(seconds).is_ok());
+                        config.authorize(&prepared.descriptor).unwrap();
+                    }
+                }
+            }
+        }
+    }
+    for duration in [json!("NaN"), json!(-1), json!({})] {
+        let request = json!({"operation":"text-or-image","model":"kling-v3","prompt":"scene","duration":duration});
+        let native = KlingTaskReferenceV2.build_submit_request(&config, &request, &minted);
+        assert!(native.is_err());
+        assert_eq!(component.build_submit_request(&config, &request, &minted), native);
+    }
+}

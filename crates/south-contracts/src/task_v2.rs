@@ -31,6 +31,9 @@ pub enum TaskContractErrorV2 {
     /// The host render context is incomplete or exceeds its bounds.
     #[error("invalid task render context")]
     InvalidRenderContext,
+    /// A request estimate is invalid or cannot fit the unit range.
+    #[error("invalid task request estimate")]
+    InvalidRequestEstimate,
     /// An observation exceeds its text or artifact bounds.
     #[error("invalid task observation")]
     InvalidObservation,
@@ -309,5 +312,59 @@ impl TaskRenderContextV2 {
     #[must_use]
     pub fn upstream_task_id(&self) -> Option<&str> {
         self.upstream_task_id.as_deref()
+    }
+}
+
+/// Request-only estimation basis, independent of reported upstream usage.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct TaskRequestEstimateV2 {
+    requested_seconds: Option<f64>,
+    milliunits_per_second: Option<i64>,
+}
+impl TaskRequestEstimateV2 {
+    /// Validates protocol request duration and its optional unit rate.
+    pub fn new(
+        requested_seconds: Option<f64>,
+        milliunits_per_second: Option<i64>,
+    ) -> Result<Self, TaskContractErrorV2> {
+        if requested_seconds.is_some_and(|seconds| !seconds.is_finite() || seconds < 0.0)
+            || milliunits_per_second.is_some_and(|rate| rate < 0)
+        {
+            return Err(TaskContractErrorV2::InvalidRequestEstimate);
+        }
+        Ok(Self { requested_seconds, milliunits_per_second })
+    }
+    /// Returns the duration actually present in the prepared request.
+    #[must_use]
+    pub const fn requested_seconds(&self) -> Option<f64> {
+        self.requested_seconds
+    }
+    /// Returns the protocol unit rate, without any monetary price.
+    #[must_use]
+    pub const fn milliunits_per_second(&self) -> Option<i64> {
+        self.milliunits_per_second
+    }
+    /// Estimates units using explicit host time; never reports actual usage.
+    #[expect(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        reason = "estimation uses floating seconds; the rounded result is checked below the exclusive i64 bound before conversion"
+    )]
+    pub fn estimate_milliunits(
+        &self,
+        host_seconds: f64,
+    ) -> Result<Option<i64>, TaskContractErrorV2> {
+        if !host_seconds.is_finite() || host_seconds < 0.0 {
+            return Err(TaskContractErrorV2::InvalidRequestEstimate);
+        }
+        let Some(rate) = self.milliunits_per_second else {
+            return Ok(None);
+        };
+        let estimate = (rate as f64 * host_seconds).ceil();
+        // i64::MAX rounds up to 2^63 in f64: equality must also be rejected.
+        if !estimate.is_finite() || estimate >= 9_223_372_036_854_775_808.0 {
+            return Err(TaskContractErrorV2::InvalidRequestEstimate);
+        }
+        Ok(Some(estimate as i64))
     }
 }

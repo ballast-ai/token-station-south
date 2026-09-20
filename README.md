@@ -130,6 +130,12 @@ capability also requires review of the real host adapter wiring.
 只验证授权／计价接缝，生产注册表、持久执行绑定、旧包恢复与社区采用另行验收。
 边界与候选行为收紧见[候选设计](docs/design/2026-09-20-task-adapter-v2-candidate.md)。
 
+第五批候选增加独立 `TaskRequestEstimateV2`：组件给出最终请求的时长与协议单位率，
+宿主显式选择估时，再用经过范围校验的 helper 估算单位。它不能代替供应商实际用量；
+价格、加价、缺失时长的默认值和资金事务仍属于宿主。prepared JSON 新增必需字段，
+任务词汇版本为 4，旧候选 prepared JSON 不再兼容；发布版本和生产采用状态没有改变。
+详见[请求估算设计](docs/design/2026-09-20-task-request-estimate.md)。
+
 ## Local verification
 
 ```bash
