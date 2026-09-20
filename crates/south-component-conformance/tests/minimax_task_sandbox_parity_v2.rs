@@ -154,3 +154,47 @@ fn request_estimates_and_authorized_queries_match_native() {
         }
     }
 }
+
+#[test]
+fn artifact_fetch_behavior_has_a_matching_package_capability() {
+    use serde_json::json;
+    use south_component_conformance::TaskComponentV2;
+    use south_contracts::TaskLocatorV2;
+    use south_provider_api::ComponentManifestV1;
+    use token_station_protocol::{HttpResponseParts, ProviderConfig};
+
+    let component = sandboxed();
+    let manifest: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(repo_root().join("components/task-minimax-v2/manifest.json"))
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(component.metadata(), MiniMaxTaskReferenceV2.metadata());
+    assert_eq!(component.metadata().name, manifest.name);
+    assert_eq!(component.metadata().version, manifest.version);
+    assert_eq!(component.metadata().api_version, manifest.api_version);
+
+    let config: ProviderConfig = serde_json::from_value(json!({
+        "provider":"minimax", "base_url":"https://api.minimaxi.com",
+        "auth":"provider_api_key", "group_id":"19000"
+    }))
+    .unwrap();
+    let response: HttpResponseParts = serde_json::from_value(json!({
+        "status":200, "headers":{},
+        "body":json!({"status":"Success", "file_id":"00567"}).to_string()
+    }))
+    .unwrap();
+    let observation = component.parse_observation(&response).unwrap();
+    let locator = TaskLocatorV2::new(1, "v1/query/video_generation").unwrap();
+    let request = component.build_artifact_request(&config, &locator, &observation).unwrap();
+    assert_eq!(
+        request,
+        MiniMaxTaskReferenceV2.build_artifact_request(&config, &locator, &observation).unwrap()
+    );
+    let request = request.expect("MiniMax file IDs require a separate artifact lookup");
+    config.authorize(&request).unwrap();
+    assert!(
+        manifest.capabilities.contains("artifact_fetch"),
+        "a real artifact descriptor requires the package's artifact_fetch capability"
+    );
+}
