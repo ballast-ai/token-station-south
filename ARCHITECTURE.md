@@ -23,6 +23,8 @@ community policy      enterprise policy
 
 | Crate | Current status and ownership |
 | --- | --- |
+| `south-task-core` | 候选：独立 Rust 版本 0.1.0，无生产依赖；共享提交/观察/CAS 赢家回读/等待/取消顺序，宿主保留政策与复合原子效果 |
+| `south-task-conformance` | 候选：独立 Rust 版本 0.1.0，无生产依赖；公共原子效果故障套件，宿主适配真实 SQLite / PG 事务，无资金宿主明确不适用 |
 | `south-contracts` | Implemented bounded HTTP (JSON POST, body-less GET, and multipart POST request shapes, and a buffered binary response beside the UTF-8 one), Bearer, sanctioned header-secret, and combined Bearer-plus-header-secret auth, stable error, byte-streaming, and closed quota metadata contracts, plus the sanctioned controlled query and controlled user-agent declarations |
 | `south-core` | Implemented host-neutral buffered and streaming provider-call orchestration and its buffered body-less GET, multipart and binary-response twins, plus the shared host prelude (`raw` module: raw-call type, its host-signed, GET and multipart twins, contract-parse orchestration, one-shot wrappers for all four, resolver adapters) |
 | `south-transport-reqwest` | Implemented hardened buffered and byte-streaming JSON POST transport, the same buffered transport for body-less GET and multipart POST requests (rendering the latter's media type and sharing its allocation) and for a JSON POST whose response is buffered as opaque bytes under its own larger cap, bounded quota metadata capture, sanctioned user-agent application, and one-config transport-pair construction |
@@ -148,3 +150,17 @@ misread as a boundary violation.
 任务合同5新增有界resolution/input_image_count请求事实，供宿主既有定价函数使用。
 既有task ABI/WIT不变；宿主仍拥有凭证、配置快照、价格、恢复与交付。
 见[候选设计](docs/design/2026-09-20-minimax-v1-task-component.md)。
+
+
+## 共享任务执行核心候选
+
+新增 `south-task-core` 仅使用标准库，不依赖组件 IR、数据库或网络。宿主效果
+分成 prepare/dispatch/send/record 和 load/query/normalize/apply/reload；
+核心固定执行顺序并确保 CAS 落败返回持久赢家。宿主独占精确绑定恢复、
+凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
+inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
+
+该库独立 Rust 版本为 0.1.0；既有八个库、运行时和七个组件仍为正式 v0.31.0
+体系，Task5/HTTP9/WIT 不变。新增 Rust 编排不要求旧组件更换 runtime 或身份。
+当前为未发布候选，宿主采用须分别用真实存储通过公共故障套件；组件兼容
+状态不能代替共享核心采用证据。[设计与边界](docs/design/2026-09-20-shared-task-core.md)。

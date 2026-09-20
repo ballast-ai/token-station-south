@@ -41,10 +41,9 @@ jobs:
         run: |
           set -euo pipefail
           tag="${GITHUB_REF_NAME#v}"
-          # Read `workspace.package.version` itself. Every member inherits it,
-          # so any member would answer correctly today — but only by relying on
-          # cargo's package ordering, which would read some other crate the day
-          # a member pins its own version.
+          # Read the component runtime workspace version directly. Independently
+          # versioned Rust task libraries must not change component release identity;
+          # selecting an arbitrary package from cargo metadata would mix the two.
           version="$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml","rb"))["workspace"]["package"]["version"])')"
           if [ "$tag" != "$version" ]; then
             echo "tag ${GITHUB_REF_NAME} does not match workspace version ${version}" >&2
