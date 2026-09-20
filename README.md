@@ -118,7 +118,7 @@ synchronous transport, retries, fallback, routing, persistence, database access,
 Passing a library conformance suite does not by itself verify a host integration; each verified
 capability also requires review of the real host adapter wiring.
 
-## task-v2 与 v0.29.0 发布准备（未发布）
+## task-v2 与 v0.29.0 发布记录
 
 本地候选新增 `task-adapter-v2`，与既有 provider-v2、task-v1 分别装载。
 `TaskLocatorV2` 保存有界定位；`TaskUsageFactsV2` 保留并存用量；观察保留排队／运行、
@@ -126,7 +126,7 @@ capability also requires review of the real host adapter wiring.
 `components/task-kling-v2` 共享代码，使用独立 fixture 和真实 Wasm 对拍。
 
 构建候选：`bash scripts/build-kling-task-v2-component.sh`。
-当前版本准备为 `0.29.0`，尚未发布，也不代表两个宿主已采用。server 的临时依赖覆盖
+`0.29.0` 已发布；发布不代表两个宿主已采用。此前 server 的临时依赖覆盖
 只验证授权／计价接缝，生产注册表、持久执行绑定、旧包恢复与社区采用另行验收。
 边界与候选行为收紧见[候选设计](docs/design/2026-09-20-task-adapter-v2-candidate.md)。
 
@@ -141,6 +141,14 @@ capability also requires review of the real host adapter wiring.
 `not_verified`，不继承历史 provider-call 的 verified。runtime 元组继续严格匹配，
 保留旧包不等于新 runtime 能执行旧包。版本与验证范围见
 [发布准备记录](docs/design/2026-09-20-release-0.29.0.md)。
+
+## v0.30.0 MiniMax 候选（未发布）
+
+v0.29.0 已发布，正式内容为此前五包。本工作树准备 v0.30.0：新增
+`task-minimax-v2`、HTTP9 `file_id` 受控查询，并递增六包不可变身份。
+构建候选：`bash scripts/build-minimax-task-v2-component.sh`。
+范围与尚未完成的宿主验收见[MiniMax设计](docs/design/2026-09-20-minimax-v1-task-component.md)
+和[下一版准备](docs/design/2026-09-20-release-0.30.0-minimax.md)。
 
 ## Local verification
 

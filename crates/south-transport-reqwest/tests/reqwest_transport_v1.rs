@@ -1309,3 +1309,74 @@ async fn the_binary_arm_denies_a_redirect_exactly_as_the_utf8_arm_does() {
     loopback.request.await.expect("the loopback should report its request");
     loopback.task.await.expect("the loopback task should finish");
 }
+
+#[tokio::test]
+async fn buffered_get_file_id_and_group_query_reaches_the_wire() {
+    let loopback = loopback_once(response(
+        "200 OK",
+        &[("content-type", "application/json")],
+        br#"{"status":"Success"}"#,
+    ))
+    .await;
+    let transport = ReqwestTransportV1::new(config()).expect("transport should build");
+    let resolver = StaticResolver::default();
+    let binding = ProviderBindingV1::new(
+        ProviderEndpointV1::parse(&loopback.endpoint).expect("loopback endpoint should be valid"),
+        CredentialSlotV1::parse("primary").expect("fixture slot should be valid"),
+    );
+    let request = GetRequestV1::new(
+        RelativePathV1::parse("v1/files/retrieve").expect("fixture path should be valid"),
+        SafeHeaders::try_from_iter([("x-test", HEADER_SENTINEL)])
+            .expect("fixture headers should be valid"),
+        BearerAuthV1::new(
+            CredentialSlotV1::parse("primary").expect("fixture slot should be valid"),
+        ),
+    )
+    .with_query(
+        QueryStringV1::try_from_iter([
+            (QueryParameterV1::FileId, "00176844028768320"),
+            (QueryParameterV1::GroupId, "19000"),
+        ])
+        .expect("fixture query should be valid"),
+    );
+
+    let result = execute_get_call_v1(
+        &binding,
+        &request,
+        &resolver,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("a body-less GET should succeed");
+    let received = loopback.request.await.expect("server should report the request");
+    loopback.task.await.expect("server task should finish");
+
+    assert_eq!(
+        received.request_line,
+        "GET /base/v1/files/retrieve?GroupId=19000&file_id=00176844028768320 HTTP/1.1"
+    );
+    assert_eq!(received.headers.get("x-test").map(String::as_str), Some(HEADER_SENTINEL));
+    assert_eq!(
+        received.headers.get("authorization").map(String::as_str),
+        Some("Bearer transport-secret-sentinel")
+    );
+    assert!(received.body.is_empty(), "a GET carries no body bytes");
+    assert!(
+        !received.header_names.iter().any(|name| name == "content-length"),
+        "no body means no content-length: {:?}",
+        received.header_names
+    );
+    assert!(
+        !received.header_names.iter().any(|name| name == "content-type"),
+        "the transport adds no content-type of its own"
+    );
+    // Everything else the transport adds is still exactly the declared set.
+    let mut names = received.header_names.clone();
+    names.sort_unstable();
+    assert_eq!(names, ["accept", "authorization", "host", "x-test"]);
+    assert_eq!(resolver.calls.load(Ordering::SeqCst), 1);
+    assert_eq!(result.status().as_u16(), 200);
+    assert_eq!(result.body(), r#"{"status":"Success"}"#);
+}

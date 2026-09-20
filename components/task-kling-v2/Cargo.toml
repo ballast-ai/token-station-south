@@ -4,7 +4,7 @@
 # without wasmtime (the conformance dependency's `sandbox` feature stays off).
 [package]
 name = "task-kling-v2"
-version = "0.29.0"
+version = "0.30.0"
 edition = "2021"
 publish = false
 

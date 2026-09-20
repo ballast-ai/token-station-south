@@ -3,7 +3,7 @@
 > 2026-09-20 第五批候选补充：task-v2 的请求估算依据与实际观察用量分开建模。
 > `PreparedTaskV2.request_estimate` 携带实际请求时长和协议单位率，纯 helper 只按
 > 宿主显式估时计算单位；宿主保留价格、加价、估时默认值及预占事务。详见
-> [请求估算设计](docs/design/2026-09-20-task-request-estimate.md)。候选尚未发布。
+> [请求估算设计](docs/design/2026-09-20-task-request-estimate.md)。该接口随 v0.29.0 发布，宿主任务采用仍待验收。
 
 Token Station South uses dependency inversion: it owns the provider-facing contracts and runtime,
 while community and enterprise hosts own business policy and consume South.
@@ -76,9 +76,9 @@ channel at a fixed revision; no production crate may gain that edge.
 
 ## Host-owned concerns
 
-### task-v2 候选边界（2026-09-20，未发布）
+### task-v2 边界（v0.29.0 已发布，宿主采用待验收）
 
-任务词汇版本升为 3，新增独立 v2 类型，既有 v1 类型和 world 保留。
+任务词汇当前为 4（引入独立 v2 类型时为 3，后续增加请求估算）；既有 v1 类型和 world 保留。
 新 `token-station:task-adapter@2.0.0` world 仍只描述纯翻译，不拥有执行时序、
 凭证读取、价格和持久化。contracts 保存有界定位、并存计量、观察与渲染上下文；
 包含 IR descriptor 的 `PreparedTaskV2` 和唯一 JSON codec 位于 conformance。
@@ -141,3 +141,9 @@ elsewhere in their graph. The equivalent host-side gate, agreed during the first
 Hosts are expected to script these checks (`cargo tree` and lockfile inspection) into their own CI.
 This section records the agreed interpretation so a host failing the workspace-local script is not
 misread as a boundary violation.
+
+## v0.30.0 MiniMax 候选
+
+新增同源MiniMax Hailuo v1 task-v2参考/guest与受控file_id查询，HTTP合同9。
+既有task ABI/WIT不变；宿主仍拥有凭证、配置快照、价格、恢复与交付。
+见[候选设计](docs/design/2026-09-20-minimax-v1-task-component.md)。

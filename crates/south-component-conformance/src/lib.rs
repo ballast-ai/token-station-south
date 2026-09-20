@@ -93,3 +93,5 @@ pub fn reported_identity_matches(
 
 #[cfg(feature = "sandbox")]
 pub mod sandbox_task_v2;
+
+pub mod reference_minimax_task_v2;

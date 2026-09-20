@@ -69,3 +69,12 @@
   stop looking alike.
 - Generalisation: when a mechanical edit is going to sweep a file, the values that must *not* move
   need to be shaped differently from the values that must — not merely commented differently.
+
+## 2026-09-20：迁移前核对完整纯行为
+
+- 品牌范围不得从别家限定类推：只限制 OpenAI 官方不等于限制 MiniMax 官方。
+- 翻译迁移需同时核输入别名/trim、错误状态映射、原始型号与协议家族；
+  不得凭合理猜测加型号或时长新限制。先加可失败回归，再修源码。
+
+- 版本机械替换必须先断言精确匹配数量，再读取常量/manifest交叉核对；
+  2026-09-20把u16误写成u32匹配导致HTTP9声明与源码8不一致，由真实兼容门捕获。

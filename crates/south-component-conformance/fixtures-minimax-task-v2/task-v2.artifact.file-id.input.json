@@ -1,0 +1,24 @@
+{
+  "provider_config": {
+    "provider": "minimax",
+    "base_url": "https://api.minimaxi.com",
+    "auth": "provider_api_key",
+    "group_id": "19000"
+  },
+  "locator": {
+    "schema_version": 1,
+    "route": "v1/query/video_generation"
+  },
+  "observation": {
+    "state": "succeeded",
+    "artifacts": {
+      "kind": "file-id",
+      "file_id": "00567"
+    },
+    "usage": {
+      "seconds": null,
+      "milliunits": null,
+      "tokens": null
+    }
+  }
+}

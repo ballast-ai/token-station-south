@@ -50,7 +50,7 @@ fn secret_header_all_covers_every_variant() {
 
 #[test]
 fn contract_versions_are_independently_versioned() {
-    assert_eq!(HTTP_CONTRACT_VERSION, 8);
+    assert_eq!(HTTP_CONTRACT_VERSION, 9);
     assert_eq!(AUTH_CONTRACT_VERSION, 4);
     assert_eq!(ERROR_CONTRACT_VERSION, 2);
     assert_eq!(STREAM_CONTRACT_VERSION, Some(2));
@@ -708,14 +708,15 @@ fn debug_and_error_output_redact_all_untrusted_contract_values() {
 /// Every sanctioned query parameter, in canonical table order. The exhaustive match below fails
 /// compilation when a variant is added, so the list, the value grammar, and the conformance
 /// surface must all be updated together.
-const ALL_QUERY_PARAMETERS: [QueryParameterV1; 4] = QueryParameterV1::ALL;
+const ALL_QUERY_PARAMETERS: [QueryParameterV1; 5] = QueryParameterV1::ALL;
 
 const fn assert_query_parameter_listed(parameter: QueryParameterV1) {
     match parameter {
         QueryParameterV1::ApiVersion
         | QueryParameterV1::Alt
         | QueryParameterV1::GroupId
-        | QueryParameterV1::TaskId => (),
+        | QueryParameterV1::TaskId
+        | QueryParameterV1::FileId => (),
     }
 }
 
