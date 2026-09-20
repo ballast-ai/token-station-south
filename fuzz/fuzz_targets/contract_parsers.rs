@@ -1,15 +1,20 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
+use south_component_conformance::task_v2_json::{
+    locator_json, observation_json, parse_locator_json, parse_observation_json,
+    parse_prepared_task_json, parse_render_context_json, parse_submit_outcome_json,
+    prepared_task_json, render_context_json, submit_outcome_json,
+};
 use south_contracts::{
     CredentialSlotV1, JsonBodyV1, MAX_CREDENTIAL_SLOT_BYTES, MAX_ENDPOINT_BYTES,
     MAX_JSON_REQUEST_BODY_BYTES, MAX_PROVIDER_QUOTA_METADATA_TOTAL_BYTES,
     MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES, MAX_QUERY_TOTAL_BYTES, MAX_RELATIVE_PATH_BYTES,
     MAX_RESPONSE_DIAGNOSTIC_TOTAL_BYTES, MAX_RESPONSE_DIAGNOSTIC_VALUE_BYTES,
     MAX_RESPONSE_TRANSCRIPT_COUNT, MAX_RESPONSE_TRANSCRIPT_NAME_BYTES,
-    MAX_RESPONSE_TRANSCRIPT_TOTAL_BYTES, MAX_RESPONSE_TRANSCRIPT_VALUE_BYTES,
-    ProviderEndpointV1, ProviderQuotaMetadataFieldV1, ProviderQuotaMetadataV1, QueryParameterV1,
-    QueryStringV1, RESPONSE_DIAGNOSTIC_FIELD_COUNT, RelativePathV1, ResponseDiagnosticFieldV1,
+    MAX_RESPONSE_TRANSCRIPT_TOTAL_BYTES, MAX_RESPONSE_TRANSCRIPT_VALUE_BYTES, ProviderEndpointV1,
+    ProviderQuotaMetadataFieldV1, ProviderQuotaMetadataV1, QueryParameterV1, QueryStringV1,
+    RESPONSE_DIAGNOSTIC_FIELD_COUNT, RelativePathV1, ResponseDiagnosticFieldV1,
     ResponseDiagnosticsV1, ResponseTranscriptV1,
 };
 
@@ -29,6 +34,37 @@ fuzz_target!(|data: &[u8]| {
     let Ok(input) = std::str::from_utf8(data) else {
         return;
     };
+
+    // Persisted task-v2 frames cross a separate trust boundary from provider JSON.
+    // Accepted frames must survive the unique codec without losing typed facts.
+    if let Ok(locator) = parse_locator_json(input) {
+        assert_eq!(parse_locator_json(&locator_json(&locator).to_string()), Ok(locator));
+    }
+    if let Ok(observation) = parse_observation_json(input) {
+        let encoded = observation_json(&observation).expect("decoded facts must encode");
+        assert_eq!(parse_observation_json(&encoded.to_string()), Ok(observation));
+    }
+    if let Ok(prepared) = parse_prepared_task_json(input) {
+        let estimate = &prepared.request_estimate;
+        assert!(estimate.estimate_milliunits(f64::NAN).is_err());
+        assert!(estimate.estimate_milliunits(-1.0).is_err());
+        assert_eq!(
+            estimate.estimate_milliunits(0.0).expect("zero host time is valid"),
+            estimate.milliunits_per_second().map(|_| 0)
+        );
+        let encoded = prepared_task_json(&prepared).expect("decoded request must encode");
+        assert_eq!(parse_prepared_task_json(&encoded.to_string()), Ok(prepared));
+    }
+    if let Ok(outcome) = parse_submit_outcome_json(input) {
+        let encoded = submit_outcome_json(&outcome).expect("decoded outcome must encode");
+        assert_eq!(parse_submit_outcome_json(&encoded.to_string()), Ok(outcome));
+    }
+    if let Ok(context) = parse_render_context_json(input) {
+        assert_eq!(
+            parse_render_context_json(&render_context_json(&context).to_string()),
+            Ok(context)
+        );
+    }
 
     if let Ok(endpoint) = ProviderEndpointV1::parse(input) {
         assert!(endpoint.as_str().len() <= MAX_ENDPOINT_BYTES);
@@ -118,9 +154,7 @@ fuzz_target!(|data: &[u8]| {
         assert_eq!(present.len(), metadata.present_field_count());
         assert!(present.len() <= QUOTA_FIELDS.len());
         assert!(
-            present
-                .iter()
-                .all(|(_, value)| value.len() <= MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES)
+            present.iter().all(|(_, value)| value.len() <= MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES)
         );
         assert!(
             present.iter().map(|(_, value)| value.len()).sum::<usize>()
@@ -136,7 +170,10 @@ fuzz_target!(|data: &[u8]| {
         .split('\0')
         .enumerate()
         .map(|(index, value)| {
-            (ResponseDiagnosticFieldV1::ALL[index % RESPONSE_DIAGNOSTIC_FIELD_COUNT], value.to_owned())
+            (
+                ResponseDiagnosticFieldV1::ALL[index % RESPONSE_DIAGNOSTIC_FIELD_COUNT],
+                value.to_owned(),
+            )
         })
         .collect::<Vec<_>>();
     if let Ok(diagnostics) = ResponseDiagnosticsV1::try_from_iter(diagnostic_fields) {
@@ -146,7 +183,9 @@ fuzz_target!(|data: &[u8]| {
             .collect::<Vec<_>>();
         assert_eq!(present.len(), diagnostics.present_field_count());
         assert!(present.len() <= RESPONSE_DIAGNOSTIC_FIELD_COUNT);
-        assert!(present.iter().all(|(_, value)| value.len() <= MAX_RESPONSE_DIAGNOSTIC_VALUE_BYTES));
+        assert!(
+            present.iter().all(|(_, value)| value.len() <= MAX_RESPONSE_DIAGNOSTIC_VALUE_BYTES)
+        );
         assert!(
             present.iter().map(|(_, value)| value.len()).sum::<usize>()
                 <= MAX_RESPONSE_DIAGNOSTIC_TOTAL_BYTES
@@ -182,7 +221,11 @@ fuzz_target!(|data: &[u8]| {
         // Whatever the upstream sent, a credential-bearing header never survives capture.
         assert!(!matches!(
             name,
-            "authorization" | "proxy-authenticate" | "proxy-authorization" | "set-cookie" | "set-cookie2"
+            "authorization"
+                | "proxy-authenticate"
+                | "proxy-authorization"
+                | "set-cookie"
+                | "set-cookie2"
         ));
     }
 });

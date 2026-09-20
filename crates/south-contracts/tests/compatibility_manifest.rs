@@ -14,6 +14,7 @@ struct CompatibilityManifest {
     crates: BTreeMap<String, String>,
     hosts: BTreeMap<String, String>,
     host_capabilities: BTreeMap<String, BTreeMap<String, HostCapability>>,
+    task_component_capabilities: BTreeMap<String, BTreeMap<String, HostCapability>>,
 }
 
 /// A host's status for one capability, plus the size of the conformance table that status was
@@ -112,6 +113,10 @@ struct Conformance {
     provider_binary_suite: u32,
     provider_component_suite_id: String,
     provider_component_suite: u32,
+    task_component_v1_suite_id: String,
+    task_component_v1_suite: u32,
+    task_component_v2_suite_id: String,
+    task_component_v2_suite: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -375,7 +380,7 @@ fn compatibility_manifest_describes_the_library_slice() {
     let contents = fs::read_to_string(path).unwrap();
     let manifest: CompatibilityManifest = serde_json::from_str(&contents).unwrap();
 
-    assert_eq!(manifest.schema_version, 3);
+    assert_eq!(manifest.schema_version, 4);
     assert_eq!(manifest.release.version, env!("CARGO_PKG_VERSION"));
     assert_eq!(manifest.release.stability, "library_slice");
     assert_eq!(
@@ -489,6 +494,10 @@ fn compatibility_manifest_describes_the_library_slice() {
     assert_eq!(manifest.conformance.provider_binary_suite, 1);
     assert_eq!(manifest.conformance.provider_component_suite_id, "south.provider-component.v1");
     assert_eq!(manifest.conformance.provider_component_suite, 1);
+    assert_eq!(manifest.conformance.task_component_v1_suite_id, "south.task-component.v1");
+    assert_eq!(manifest.conformance.task_component_v1_suite, 1);
+    assert_eq!(manifest.conformance.task_component_v2_suite_id, "south.task-component.v2");
+    assert_eq!(manifest.conformance.task_component_v2_suite, 1);
     assert_eq!(manifest.provider_api.wit_version.as_deref(), Some("token-station:adapter@2.0.0"));
     assert_eq!(manifest.provider_runtime.abi_version.as_deref(), Some("provider-adapter-v2"));
     let expected_crates = BTreeMap::from([
@@ -540,6 +549,15 @@ fn compatibility_manifest_describes_the_library_slice() {
     // capability). Every newer capability is recorded independently and may
     // become verified only through its own adoption evidence. A capability
     // listed here must have a conformance suite in this manifest.
+    assert_eq!(manifest.task_component_capabilities.len(), 2);
+    for host in ["token-station", "token-station-server"] {
+        let capabilities = &manifest.task_component_capabilities[host];
+        assert_eq!(capabilities.len(), 2);
+        for world in ["task_v1", "task_v2"] {
+            assert_eq!(capabilities[world].status, "not_verified");
+            assert_eq!(capabilities[world].cases, None);
+        }
+    }
     let expected_capabilities = expected_host_capabilities();
     assert_eq!(manifest.host_capabilities.len(), expected_capabilities.len());
     for (host, capabilities) in expected_capabilities {

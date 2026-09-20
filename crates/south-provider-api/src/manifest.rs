@@ -37,6 +37,13 @@ pub const TASK_WORLD: &str = "task-adapter-v1";
 /// vocabulary record's D3 — is authored per family, as fixtures always are.
 pub const TASK_BEHAVIOR_SUITE: &str = "south.task-component.v1";
 
+/// The versioned task recovery and rendering ABI package.
+pub const TASK_WIT_PACKAGE_V2: &str = "token-station:task-adapter@2.0.0";
+/// The task-v2 world; task-v1 remains independently loadable.
+pub const TASK_WORLD_V2: &str = "task-adapter-v2";
+/// The task-v2 component behavior suite.
+pub const TASK_BEHAVIOR_SUITE_V2: &str = "south.task-component.v2";
+
 /// A component world this South knows, and the properties gate ① validates a
 /// manifest against once the manifest has declared which world it is for
 /// (2026-08-27 manifest-schema record, D1).
@@ -131,8 +138,18 @@ pub const TASK_WORLD_SCHEMA: WorldSchemaV1 = WorldSchemaV1 {
     auth_arms: PROVIDER_AUTH_ARMS,
 };
 
+/// Task-v2 currently admits the two validated descriptor credential arms.
+pub const TASK_WORLD_SCHEMA_V2: WorldSchemaV1 = WorldSchemaV1 {
+    world: TASK_WORLD_V2,
+    wit_package: TASK_WIT_PACKAGE_V2,
+    behavior_suite: TASK_BEHAVIOR_SUITE_V2,
+    capabilities: TASK_CAPABILITIES,
+    auth_arms: &["bearer", "header_secret"],
+};
+
 /// Every world this South can admit.
-pub const KNOWN_WORLDS: &[WorldSchemaV1] = &[PROVIDER_WORLD_SCHEMA, TASK_WORLD_SCHEMA];
+pub const KNOWN_WORLDS: &[WorldSchemaV1] =
+    &[PROVIDER_WORLD_SCHEMA, TASK_WORLD_SCHEMA, TASK_WORLD_SCHEMA_V2];
 
 /// Resolves a manifest's declared `api_version` to a world this South knows.
 #[must_use]
@@ -390,7 +407,7 @@ impl ComponentManifestV1 {
                 return Err(ManifestErrorV1::ProviderFamilyRequired);
             }
         }
-        if world.world == TASK_WORLD {
+        if matches!(world.world, TASK_WORLD | TASK_WORLD_V2) {
             // Three stages, all required: a component missing one cannot carry
             // a task to a terminal state. `artifact_fetch` is deliberately not
             // here — it is the one optional word.

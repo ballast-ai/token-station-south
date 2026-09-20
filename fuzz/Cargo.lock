@@ -273,6 +273,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4148590afebada386688f18773da617792bf2ef03ffc1e4cbd2b1d45b023e0ba"
 dependencies = [
  "serde_core",
+ "serde_derive",
 ]
 
 [[package]]
@@ -321,8 +322,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ed6a63f02c8539c91a8685a86f4099661ba3da017932f6ebbea6de3f0fa7c90"
 
 [[package]]
+name = "south-component-conformance"
+version = "0.29.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "south-contracts",
+ "south-provider-api",
+ "token-station-protocol",
+]
+
+[[package]]
 name = "south-contracts"
-version = "0.28.1"
+version = "0.29.0"
 dependencies = [
  "bytes",
  "http",
@@ -337,7 +349,16 @@ name = "south-contracts-fuzz"
 version = "0.0.0"
 dependencies = [
  "libfuzzer-sys",
+ "south-component-conformance",
  "south-contracts",
+]
+
+[[package]]
+name = "south-provider-api"
+version = "0.29.0"
+dependencies = [
+ "serde",
+ "thiserror",
 ]
 
 [[package]]
@@ -407,6 +428,15 @@ checksum = "b1e27c91459209c2986af3dcf603a5a74a4368754ce37414f59acc971167f643"
 dependencies = [
  "displaydoc",
  "zerovec",
+]
+
+[[package]]
+name = "token-station-protocol"
+version = "0.3.0"
+source = "git+https://github.com/ballast-ai/token-station-kernel.git?rev=ab6bb2ffaab534e6732d1bfc53d24c7caa51fa35#ab6bb2ffaab534e6732d1bfc53d24c7caa51fa35"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

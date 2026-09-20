@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "internal",
+    "http_status": 500,
+    "message": "kling rendering requires the upstream task id"
+  }
+}

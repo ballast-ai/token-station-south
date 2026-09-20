@@ -1,0 +1,47 @@
+{
+  "descriptor": {
+    "method": "POST",
+    "url": "https://api.kling.example/v1/videos/image2video",
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "model_name": "real-model",
+      "prompt": "a cat",
+      "duration": null,
+      "external_task_id": "host-1",
+      "negative_prompt": "no blur",
+      "sound": "on",
+      "multi_shot": true,
+      "shot_type": "customize",
+      "multi_prompt": null,
+      "image": "first",
+      "image_tail": "last",
+      "voice_list": [
+        {
+          "voice_id": "v"
+        }
+      ],
+      "camera_control": {
+        "type": "simple"
+      },
+      "static_mask": "mask",
+      "dynamic_masks": [
+        {
+          "mask": "m"
+        }
+      ],
+      "cfg_scale": 0.5,
+      "aspect_ratio": "16:9",
+      "mode": "pro"
+    }
+  },
+  "locator": {
+    "schema_version": 1,
+    "route": "v1/videos/image2video"
+  },
+  "request_estimate": {
+    "requested_seconds": null,
+    "milliunits_per_second": null
+  }
+}

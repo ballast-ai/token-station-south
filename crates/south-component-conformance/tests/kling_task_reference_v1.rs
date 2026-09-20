@@ -18,7 +18,7 @@ use south_component_conformance::{
 use south_contracts::{
     HostMintedValuesV1, TaskArtifactRefV1, TaskFailureKindV1, TaskMeterV1, TaskObservationV1,
 };
-use token_station_protocol::{HttpMethod, HttpResponseParts, ProviderConfig};
+use token_station_protocol::{Auth, HttpMethod, HttpResponseParts, ProviderConfig, SecretRef};
 
 fn parts(status: u16, body: &Value) -> HttpResponseParts {
     HttpResponseParts {
@@ -218,6 +218,31 @@ fn the_observe_url_mirrors_the_creation_path() {
         .expect("a well-formed query");
     assert_eq!(descriptor.method, HttpMethod::Get);
     assert!(descriptor.url.ends_with("/v1/videos/text2video/up-77"), "{}", descriptor.url);
+}
+
+#[test]
+fn an_authenticated_observation_keeps_the_bound_credential_reference() {
+    let mut config = config();
+    config.auth = Some(SecretRef::new("bound-task-slot"));
+    let descriptor = KlingTaskReferenceV1
+        .build_observe_request(&config, "kling-v3", "up-77")
+        .expect("a well-formed query");
+    config.authorize(&descriptor).expect("observation keeps the submitted credential slot");
+    assert_eq!(descriptor.auth, Some(Auth::bearer(SecretRef::new("bound-task-slot"))));
+    assert_eq!(descriptor.method, HttpMethod::Get);
+    assert!(descriptor.body.is_none());
+    assert!(!descriptor.url.contains("bound-task-slot"));
+    assert!(!serde_json::to_string(&descriptor.headers).unwrap().contains("bound-task-slot"));
+}
+
+#[test]
+fn an_unauthenticated_observation_does_not_invent_a_credential_reference() {
+    let config = config();
+    let descriptor = KlingTaskReferenceV1
+        .build_observe_request(&config, "kling-v3", "up-77")
+        .expect("a well-formed query");
+    config.authorize(&descriptor).expect("an explicitly unauthenticated deployment is allowed");
+    assert!(descriptor.auth.is_none());
 }
 
 /// Kling's terminal observation already carries its URLs, so the host is never

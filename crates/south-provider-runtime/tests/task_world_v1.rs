@@ -94,7 +94,11 @@ fn the_shipped_task_guest_loads_and_reports_its_identity() {
 /// lying about its version is still caught.
 #[test]
 fn the_identity_gate_runs_in_the_task_world_too() {
-    let lying = shipped_task_manifest().replace("\"version\": \"1.0.0\"", "\"version\": \"9.9.9\"");
+    let mut manifest: serde_json::Value =
+        serde_json::from_str(&shipped_task_manifest()).expect("valid shipped manifest");
+    assert_ne!(manifest["version"], "9.9.9");
+    manifest["version"] = "9.9.9".into();
+    let lying = manifest.to_string();
     let dir = package("lying", &lying, task_guest_wasm());
     let error = LoadedComponentV1::load(&runtime(), &dir, &expectations(), FixedSigner)
         .expect_err("a package that lies about its version is refused");

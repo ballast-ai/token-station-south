@@ -1,0 +1,18 @@
+{
+  "created": 123,
+  "model": "public-model",
+  "provider": "provider-alias",
+  "task_id": "original-id",
+  "data": [
+    {
+      "url": "https://cdn/first",
+      "id": 12,
+      "duration": "5"
+    },
+    {
+      "url": "https://cdn/second",
+      "id": "second",
+      "duration": 2.5
+    }
+  ]
+}

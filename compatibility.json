@@ -1,7 +1,7 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "release": {
-    "version": "0.28.1",
+    "version": "0.29.0",
     "stability": "library_slice"
   },
   "contracts": {
@@ -36,7 +36,7 @@
       "value_bytes": 4096,
       "total_bytes": 16384
     },
-    "task": 2,
+    "task": 4,
     "task_limits": {
       "task_id_bytes": 128,
       "callback_url_bytes": 8192,
@@ -64,7 +64,11 @@
     "provider_binary_suite_id": "south.provider-binary.v1",
     "provider_binary_suite": 1,
     "provider_component_suite_id": "south.provider-component.v1",
-    "provider_component_suite": 1
+    "provider_component_suite": 1,
+    "task_component_v1_suite_id": "south.task-component.v1",
+    "task_component_v1_suite": 1,
+    "task_component_v2_suite_id": "south.task-component.v2",
+    "task_component_v2_suite": 1
   },
   "provider_api": {
     "wit_version": "token-station:adapter@2.0.0"
@@ -153,6 +157,24 @@
       "provider_binary": {
         "status": "verified",
         "cases": 6
+      }
+    }
+  },
+  "task_component_capabilities": {
+    "token-station": {
+      "task_v1": {
+        "status": "not_verified"
+      },
+      "task_v2": {
+        "status": "not_verified"
+      }
+    },
+    "token-station-server": {
+      "task_v1": {
+        "status": "not_verified"
+      },
+      "task_v2": {
+        "status": "not_verified"
       }
     }
   }

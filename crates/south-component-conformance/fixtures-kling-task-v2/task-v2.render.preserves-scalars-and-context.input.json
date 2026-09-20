@@ -1,0 +1,32 @@
+{
+  "observation": {
+    "state": "succeeded",
+    "artifacts": {
+      "kind": "urls",
+      "items": [
+        {
+          "url": "https://cdn/first",
+          "id": 12,
+          "duration": "5"
+        },
+        {
+          "url": "https://cdn/second",
+          "id": "second",
+          "duration": 2.5
+        }
+      ]
+    },
+    "usage": {
+      "seconds": 5.0,
+      "milliunits": 1234,
+      "tokens": null
+    }
+  },
+  "context": {
+    "task_id": "host-1",
+    "created": 123,
+    "model": "public-model",
+    "provider": "provider-alias",
+    "upstream_task_id": "original-id"
+  }
+}

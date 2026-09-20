@@ -1,0 +1,23 @@
+{
+  "descriptor": {
+    "method": "POST",
+    "url": "https://api.kling.example/v1/videos/text2video",
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "model_name": "real-model",
+      "prompt": "a cat",
+      "duration": "5",
+      "external_task_id": "host-1"
+    }
+  },
+  "locator": {
+    "schema_version": 1,
+    "route": "v1/videos/text2video"
+  },
+  "request_estimate": {
+    "requested_seconds": 5.0,
+    "milliunits_per_second": null
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "multi_shot=true with shot_type=customize requires 'multi_prompt'"
+  }
+}

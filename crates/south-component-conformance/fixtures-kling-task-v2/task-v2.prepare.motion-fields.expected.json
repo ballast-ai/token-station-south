@@ -1,0 +1,27 @@
+{
+  "descriptor": {
+    "method": "POST",
+    "url": "https://api.kling.example/v1/videos/motion-control",
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "model_name": "actual-model",
+      "image_url": "preferred",
+      "video_url": "video",
+      "character_orientation": "video",
+      "prompt": "p",
+      "element_list": [],
+      "keep_original_sound": true,
+      "mode": "pro"
+    }
+  },
+  "locator": {
+    "schema_version": 1,
+    "route": "v1/videos/motion-control"
+  },
+  "request_estimate": {
+    "requested_seconds": null,
+    "milliunits_per_second": null
+  }
+}

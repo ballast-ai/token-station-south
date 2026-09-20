@@ -1,0 +1,13 @@
+{
+  "provider_config": {
+    "provider": "kling",
+    "base_url": "https://api.kling.example",
+    "models": []
+  },
+  "upstream_model": "same-real-model",
+  "upstream_task_id": "original-id",
+  "locator": {
+    "schema_version": 1,
+    "route": "v1/videos/motion-control"
+  }
+}

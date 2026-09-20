@@ -1,0 +1,4 @@
+{
+  "method": "GET",
+  "url": "https://api.kling.example/v1/videos/motion-control/original-id"
+}

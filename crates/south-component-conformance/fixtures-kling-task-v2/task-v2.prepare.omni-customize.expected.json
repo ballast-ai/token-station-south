@@ -1,0 +1,26 @@
+{
+  "descriptor": {
+    "method": "POST",
+    "url": "https://api.kling.example/v1/videos/omni-video",
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "model_name": "real-model",
+      "mode": "pro",
+      "multi_shot": true,
+      "shot_type": "customize",
+      "multi_prompt": null,
+      "sound": "on",
+      "duration": "5"
+    }
+  },
+  "locator": {
+    "schema_version": 1,
+    "route": "v1/videos/omni-video"
+  },
+  "request_estimate": {
+    "requested_seconds": 5.0,
+    "milliunits_per_second": null
+  }
+}

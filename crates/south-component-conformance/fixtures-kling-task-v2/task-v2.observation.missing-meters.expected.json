@@ -1,0 +1,18 @@
+{
+  "state": "succeeded",
+  "artifacts": {
+    "kind": "urls",
+    "items": [
+      {
+        "url": "https://cdn/one",
+        "id": null,
+        "duration": null
+      }
+    ]
+  },
+  "usage": {
+    "seconds": null,
+    "milliunits": null,
+    "tokens": null
+  }
+}

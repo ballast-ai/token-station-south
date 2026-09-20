@@ -1,0 +1,5 @@
+{
+  "status": 200,
+  "headers": {},
+  "body": "{\"data\":{\"task_status\":\"succeed\",\"final_unit_deduction\":\"1.234\",\"task_result\":{\"videos\":[{\"url\":\"https://cdn/first\",\"id\":12,\"duration\":\"5\"},{\"url\":\"https://cdn/second\",\"id\":\"second\",\"duration\":2.5}]}}}"
+}

@@ -1,0 +1,1 @@
+{"descriptor": {"method": "POST", "url": "https://example.com/tasks"}, "locator": {"schema_version": 1, "route": "v1/tasks"}, "request_estimate": {"requested_seconds": 5, "milliunits_per_second": 600}}

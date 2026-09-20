@@ -32,6 +32,15 @@
 
 pub mod abi;
 mod component;
+mod component_v2;
+pub use component_v2::{PreparedTaskV2, SubmitOutcomeV2, TaskComponentV2};
+pub mod abi_task_v2;
+pub mod reference_kling_task_v2;
+mod task_fixture_v2;
+mod task_suite_v2;
+pub mod task_v2_json;
+pub use task_fixture_v2::{TASK_FIXTURE_KIND_V2, TaskCaseV2, TaskFamilyV2, TaskFixturePackV2};
+pub use task_suite_v2::{TASK_COMPONENT_SUITE_V2, run_task_component_suite_v2};
 mod fixture;
 pub mod reference;
 pub mod reference_anthropic;
@@ -81,3 +90,6 @@ pub fn reported_identity_matches(
 ) -> bool {
     *reported == manifest.metadata()
 }
+
+#[cfg(feature = "sandbox")]
+pub mod sandbox_task_v2;

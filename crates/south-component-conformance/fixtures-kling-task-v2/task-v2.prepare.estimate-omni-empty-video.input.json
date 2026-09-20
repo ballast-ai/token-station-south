@@ -1,0 +1,17 @@
+{
+  "provider_config": {
+    "provider": "kling",
+    "base_url": "https://api.kling.example",
+    "models": []
+  },
+  "request": {
+    "operation": "omni",
+    "model": "kling-v3-omni",
+    "prompt": "a cat",
+    "mode": "std",
+    "video_list": []
+  },
+  "minted": {
+    "task_id": "host-1"
+  }
+}
