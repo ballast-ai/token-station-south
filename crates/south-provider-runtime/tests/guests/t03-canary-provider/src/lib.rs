@@ -40,6 +40,29 @@
 //! Frames are `t03-event: <json>\n\n`, not `data: `. A fragment may end
 //! mid-frame — the acceptance splits one event across two TCP writes — so the
 //! unparsed tail is held in instance state until it completes.
+//!
+//! # Rogue modes, keyed by the routed model name
+//!
+//! The acceptance also demands negative evidence: a component that declares
+//! something the host's boundary must refuse — an out-of-bounds URL, a reserved
+//! header, a credential slot it was never granted, a method the surface does
+//! not serve — must produce **zero upstream calls**, and the refusal must not
+//! be quietly replaced by a host-built request. None of that can be induced
+//! from a catalog row alone: the host hands this component only `{provider,
+//! base_url}`, and `base_url` is the very endpoint it bounds URLs against, so
+//! the well-behaved wire is always in bounds.
+//!
+//! So the rogue behaviour is keyed by the routed upstream model name, which the
+//! component already reads. A host test seeds one catalog row per sentinel and
+//! asserts on its own side. The sentinels are deliberately not real model names:
+//!
+//! - `rogue-url`    — URL on a host that is not `base_url` (and not `.invalid`,
+//!                    which some hosts special-case as a placeholder).
+//! - `rogue-header` — declares `authorization`, a reserved header.
+//! - `rogue-secret` — declares an `auth` slot the host never granted.
+//! - `rogue-method` — declares `GET` on a POST-only surface.
+//!
+//! Any other model name is the well-behaved wire above.
 
 use std::sync::Mutex;
 
@@ -52,7 +75,7 @@ wit_bindgen::generate!({
 });
 
 use exports::token_station::adapter::provider_adapter::{AdapterHealth, AdapterMetadata, Guest};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use token_station::adapter::common::HealthStatus;
 
 /// The unparsed tail of the stream this instance is holding. Instance state on
@@ -87,11 +110,9 @@ fn parse(input: &str) -> Result<Value, String> {
 fn turn_text(message: &Value) -> String {
     match &message["content"] {
         Value::String(text) => text.clone(),
-        Value::Array(parts) => parts
-            .iter()
-            .filter_map(|part| part["text"].as_str())
-            .collect::<Vec<_>>()
-            .join(""),
+        Value::Array(parts) => {
+            parts.iter().filter_map(|part| part["text"].as_str()).collect::<Vec<_>>().join("")
+        }
         _ => String::new(),
     }
 }
@@ -131,15 +152,9 @@ impl Guest for T03Canary {
         // The cap the host authorized. Absent means the host did not bound this
         // request, and this wire has no unbounded form: refusing here is louder
         // than sending a request the seal will reject.
-        let cap = request["sampling"]["max_output_tokens"]
-            .as_u64()
-            .ok_or_else(|| {
-                error_envelope(
-                    "capability",
-                    400,
-                    "t03-canary-wire requires sampling.max_output_tokens",
-                )
-            })?;
+        let cap = request["sampling"]["max_output_tokens"].as_u64().ok_or_else(|| {
+            error_envelope("capability", 400, "t03-canary-wire requires sampling.max_output_tokens")
+        })?;
 
         let turns: Vec<Value> = request["messages"]
             .as_array()
@@ -177,6 +192,26 @@ impl Guest for T03Canary {
 
         if let Some(secret) = config.get("auth").and_then(Value::as_str) {
             descriptor["auth"] = json!({ "scheme": "bearer", "secret": secret });
+        }
+
+        // Rogue modes; see the module header. Each one changes exactly one
+        // field, so a host refusal points at that field and nothing else.
+        match request["model"].as_str() {
+            Some("rogue-url") => {
+                // Port 9 is `discard`: nothing listens, so a host that wrongly
+                // sent here would fail fast instead of reaching anything real.
+                descriptor["url"] = json!("http://127.0.0.1:9/t03/infer");
+            }
+            Some("rogue-header") => {
+                descriptor["headers"]["authorization"] = json!("Bearer rogue");
+            }
+            Some("rogue-secret") => {
+                descriptor["auth"] = json!({ "scheme": "bearer", "secret": "slot-never-granted" });
+            }
+            Some("rogue-method") => {
+                descriptor["method"] = json!("GET");
+            }
+            _ => {}
         }
 
         Ok(descriptor.to_string())
