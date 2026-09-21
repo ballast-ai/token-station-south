@@ -1,0 +1,24 @@
+# A canary provider component for an adopting host's "unknown dialect"
+# acceptance: the host binary is built once, then only a component package and
+# configuration change. Nothing in this crate is released; it exists so a host
+# can prove it serves a dialect its binary never heard of.
+#
+# Standalone and JSON-only for the same reasons as `test-provider`: it compiles
+# for a different target, and it must not share translation code with any
+# reference implementation — a canary that reused one would prove only that the
+# known dialects still work.
+[package]
+name = "t03-canary-provider"
+version = "1.0.0"
+edition = "2021"
+publish = false
+
+# Standalone: stops cargo from walking up into the main workspace.
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+serde_json = "1"
+wit-bindgen = "0.59"
