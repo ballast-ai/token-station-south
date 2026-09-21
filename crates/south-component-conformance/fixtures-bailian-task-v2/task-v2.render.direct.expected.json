@@ -1,0 +1,11 @@
+{
+  "created": 123,
+  "provider": "bailian-reseller",
+  "model": "public/video",
+  "task_id": "001-original",
+  "data": [
+    {
+      "url": "https://media.example/video?sig=private"
+    }
+  ]
+}

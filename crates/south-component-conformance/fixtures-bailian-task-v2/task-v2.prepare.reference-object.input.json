@@ -1,0 +1,19 @@
+{
+  "provider_config": {
+    "provider": "bailian",
+    "base_url": "https://dashscope.example",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "model": "happyhorse-r2v",
+    "prompt": "p",
+    "reference_images": [
+      {
+        "url": "a"
+      }
+    ]
+  },
+  "minted": {
+    "task_id": "host-1"
+  }
+}

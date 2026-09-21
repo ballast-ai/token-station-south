@@ -1,0 +1,4 @@
+{
+  "status": 200,
+  "body": "{\"output\":{\"task_id\":\"001-original\",\"task_status\":\"PENDING\"}}"
+}

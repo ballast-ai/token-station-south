@@ -316,10 +316,12 @@ impl TaskRenderContextV2 {
 }
 
 /// Request-only estimation basis, independent of reported upstream usage.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct TaskRequestEstimateV2 {
     requested_seconds: Option<f64>,
     milliunits_per_second: Option<i64>,
+    resolution: Option<String>,
+    input_image_count: Option<u32>,
 }
 impl TaskRequestEstimateV2 {
     /// Validates protocol request duration and its optional unit rate.
@@ -332,7 +334,39 @@ impl TaskRequestEstimateV2 {
         {
             return Err(TaskContractErrorV2::InvalidRequestEstimate);
         }
-        Ok(Self { requested_seconds, milliunits_per_second })
+        Ok(Self {
+            requested_seconds,
+            milliunits_per_second,
+            resolution: None,
+            input_image_count: None,
+        })
+    }
+    /// Attaches normalized request facts without inferring a price or missing values.
+    pub fn with_input_facts(
+        mut self,
+        resolution: Option<&str>,
+        input_image_count: Option<u32>,
+    ) -> Result<Self, TaskContractErrorV2> {
+        if resolution.is_some_and(|value| {
+            value.is_empty()
+                || value.len() > 32
+                || !value.bytes().all(|b| b.is_ascii_alphanumeric())
+        }) {
+            return Err(TaskContractErrorV2::InvalidRequestEstimate);
+        }
+        self.resolution = resolution.map(str::to_owned);
+        self.input_image_count = input_image_count;
+        Ok(self)
+    }
+    /// Returns the component-normalized resolution, if reported.
+    #[must_use]
+    pub fn resolution(&self) -> Option<&str> {
+        self.resolution.as_deref()
+    }
+    /// Returns the actual number of input images; missing is distinct from zero.
+    #[must_use]
+    pub const fn input_image_count(&self) -> Option<u32> {
+        self.input_image_count
     }
     /// Returns the duration actually present in the prepared request.
     #[must_use]

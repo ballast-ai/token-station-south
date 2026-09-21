@@ -1,0 +1,16 @@
+{
+  "provider_config": {
+    "provider": "bailian",
+    "base_url": "https://dashscope.example",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "model": "wan-kf2v",
+    "prompt": "p",
+    "image": "a",
+    "duration": 10
+  },
+  "minted": {
+    "task_id": "host-1"
+  }
+}

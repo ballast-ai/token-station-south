@@ -1,0 +1,33 @@
+{
+  "descriptor": {
+    "method": "POST",
+    "url": "https://dashscope.example/api/v1/services/aigc/video-generation/video-synthesis",
+    "headers": {
+      "content-type": "application/json",
+      "x-dashscope-async": "enable"
+    },
+    "body": {
+      "model": "wan",
+      "input": {
+        "prompt": "scene"
+      },
+      "parameters": {
+        "size": " 01920*01080 "
+      }
+    },
+    "auth": {
+      "scheme": "bearer",
+      "secret": "provider_api_key"
+    }
+  },
+  "locator": {
+    "schema_version": 1,
+    "route": "api/v1/tasks"
+  },
+  "request_estimate": {
+    "requested_seconds": 5.0,
+    "milliunits_per_second": null,
+    "resolution": "1080P",
+    "input_image_count": 0
+  }
+}

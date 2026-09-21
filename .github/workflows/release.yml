@@ -41,10 +41,9 @@ jobs:
         run: |
           set -euo pipefail
           tag="${GITHUB_REF_NAME#v}"
-          # Read `workspace.package.version` itself. Every member inherits it,
-          # so any member would answer correctly today — but only by relying on
-          # cargo's package ordering, which would read some other crate the day
-          # a member pins its own version.
+          # Read the component runtime workspace version directly. Independently
+          # versioned Rust task libraries must not change component release identity;
+          # selecting an arbitrary package from cargo metadata would mix the two.
           version="$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml","rb"))["workspace"]["package"]["version"])')"
           if [ "$tag" != "$version" ]; then
             echo "tag ${GITHUB_REF_NAME} does not match workspace version ${version}" >&2
@@ -63,6 +62,8 @@ jobs:
           scripts/build-gemini-component.sh
           scripts/build-kling-task-component.sh
           scripts/build-kling-task-v2-component.sh
+          scripts/build-minimax-task-v2-component.sh
+          scripts/build-bailian-task-v2-component.sh
 
       - name: Package
         run: |
@@ -86,6 +87,8 @@ jobs:
           package provider-gemini provider_gemini.wasm
           package task-kling task_kling.wasm
           package task-kling-v2 task_kling_v2.wasm
+          package task-minimax-v2 task_minimax_v2.wasm
+          package task-bailian-v2 task_bailian_v2.wasm
           # sha256sum output, so a host verifies with `sha256sum --check` and
           # no bespoke tooling.
           (cd dist && sha256sum ./*.tar.gz > SHASUMS256.txt)

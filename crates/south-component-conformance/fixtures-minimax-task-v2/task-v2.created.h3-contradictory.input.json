@@ -1,0 +1,5 @@
+{
+  "status": 200,
+  "headers": {},
+  "body": "{\"task_id\":\"accepted-id\",\"base_resp\":{\"status_code\":1002,\"status_msg\":\"untrusted provider text\"}}"
+}

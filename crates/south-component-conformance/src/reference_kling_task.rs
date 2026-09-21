@@ -135,7 +135,7 @@ impl TaskComponentV1 for KlingTaskReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "task-kling".to_owned(),
-            version: "1.0.1".to_owned(),
+            version: "1.0.3".to_owned(),
             api_version: TASK_WORLD.to_owned(),
         }
     }

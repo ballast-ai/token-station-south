@@ -35,6 +35,20 @@ fuzz_target!(|data: &[u8]| {
         return;
     };
 
+    // The same public JSON ABI used by the MiniMax guest parses untrusted HTTP frames.
+    let minimax = south_component_conformance::reference_minimax_task_v2::MiniMaxTaskReferenceV2;
+    if let Ok(encoded) =
+        south_component_conformance::abi_task_v2::parse_observation_json(&minimax, input)
+    {
+        let facts = parse_observation_json(&encoded).expect("guest output must decode");
+        assert!(facts.validate().is_ok());
+    }
+    if let Ok(encoded) =
+        south_component_conformance::abi_task_v2::parse_submit_response_json(&minimax, input)
+    {
+        assert!(parse_submit_outcome_json(&encoded).is_ok());
+    }
+
     // Persisted task-v2 frames cross a separate trust boundary from provider JSON.
     // Accepted frames must survive the unique codec without losing typed facts.
     if let Ok(locator) = parse_locator_json(input) {

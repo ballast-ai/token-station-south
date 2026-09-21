@@ -197,7 +197,7 @@ fn invalid_present_duration_is_not_silently_zero_or_missing() {
 }
 #[test]
 fn prepared_codec_requires_and_roundtrips_a_strict_estimate() {
-    let wire = json!({"descriptor":{"method":"POST","url":"https://kling.example/task"},"locator":{"schema_version":1,"route":"v1/tasks"},"request_estimate":{"requested_seconds":0,"milliunits_per_second":0}});
+    let wire = json!({"descriptor":{"method":"POST","url":"https://kling.example/task"},"locator":{"schema_version":1,"route":"v1/tasks"},"request_estimate":{"requested_seconds":0,"milliunits_per_second":0,"resolution":null,"input_image_count":null}});
     let prepared = parse_prepared_task_json(&wire.to_string()).unwrap();
     assert_eq!(prepared.request_estimate.estimate_milliunits(5.0).unwrap(), Some(0));
     assert_eq!(
@@ -208,9 +208,9 @@ fn prepared_codec_requires_and_roundtrips_a_strict_estimate() {
     missing.as_object_mut().unwrap().remove("request_estimate");
     assert!(parse_prepared_task_json(&missing.to_string()).is_err());
     for invalid in [
-        json!({"requested_seconds":-1,"milliunits_per_second":1}),
-        json!({"requested_seconds":null,"milliunits_per_second":-1}),
-        json!({"requested_seconds":null,"milliunits_per_second":null,"actual_units":2}),
+        json!({"requested_seconds":-1,"milliunits_per_second":1,"resolution":null,"input_image_count":null}),
+        json!({"requested_seconds":null,"milliunits_per_second":-1,"resolution":null,"input_image_count":null}),
+        json!({"requested_seconds":null,"milliunits_per_second":null,"actual_units":2,"resolution":null,"input_image_count":null}),
     ] {
         let mut bad = wire.clone();
         bad["request_estimate"] = invalid;
@@ -222,9 +222,67 @@ proptest! {
     fn validated_estimate_roundtrips_and_calculates_without_panicking(seconds in 0_u32..1_000_000, rate in 0_i64..1_000_000) {
         let estimate=TaskRequestEstimateV2::new(Some(f64::from(seconds)),Some(rate)).unwrap();
         prop_assert_eq!(estimate.estimate_milliunits(f64::from(seconds)).unwrap(),Some(i64::from(seconds)*rate));
-        let mut wire=json!({"descriptor":{"method":"POST","url":"https://kling.example/task"},"locator":{"schema_version":1,"route":"v1/tasks"},"request_estimate":{"requested_seconds":seconds,"milliunits_per_second":rate}});
+        let mut wire=json!({"descriptor":{"method":"POST","url":"https://kling.example/task"},"locator":{"schema_version":1,"route":"v1/tasks"},"request_estimate":{"requested_seconds":seconds,"milliunits_per_second":rate,"resolution":null,"input_image_count":null}});
         let prepared=parse_prepared_task_json(&wire.to_string()).unwrap();
         wire=prepared_task_json(&prepared).unwrap();
         prop_assert_eq!(parse_prepared_task_json(&wire.to_string()).unwrap(),prepared);
+    }
+}
+
+#[test]
+fn prepared_codec_preserves_resolution_and_zero_image_facts() {
+    let wire = json!({"descriptor":{"method":"POST","url":"https://upstream.example/tasks"},"locator":{"schema_version":1,"route":"v2/query/video_generation"},"request_estimate":{"requested_seconds":5,"milliunits_per_second":null,"resolution":"768P","input_image_count":0}});
+    let prepared = parse_prepared_task_json(&wire.to_string())
+        .expect("new input facts are part of the task contract");
+    let output = prepared_task_json(&prepared).unwrap();
+    assert_eq!(output["request_estimate"]["resolution"], "768P");
+    assert_eq!(output["request_estimate"]["input_image_count"], 0);
+}
+#[test]
+fn prepared_codec_refuses_task_four_without_explicit_input_facts() {
+    let wire = json!({"descriptor":{"method":"POST","url":"https://upstream.example/tasks"},"locator":{"schema_version":1,"route":"v1/tasks"},"request_estimate":{"requested_seconds":5,"milliunits_per_second":null}});
+    assert!(parse_prepared_task_json(&wire.to_string()).is_err());
+}
+
+#[test]
+fn input_facts_are_bounded_and_never_conflate_missing_with_zero() {
+    let absent = TaskRequestEstimateV2::new(None, None).unwrap();
+    assert_eq!(absent.resolution(), None);
+    assert_eq!(absent.input_image_count(), None);
+    let zero = absent.clone().with_input_facts(Some("768P"), Some(0)).unwrap();
+    assert_eq!(zero.resolution(), Some("768P"));
+    assert_eq!(zero.input_image_count(), Some(0));
+    assert_eq!(zero.milliunits_per_second(), None);
+    for bad in ["", " 768P", "768P\n", "http://x", "分辨率", "768-P"] {
+        assert!(absent.clone().with_input_facts(Some(bad), Some(0)).is_err());
+    }
+    assert!(absent.clone().with_input_facts(Some(&"A".repeat(33)), None).is_err());
+    assert!(absent.with_input_facts(Some(&"A".repeat(32)), Some(u32::MAX)).is_ok());
+}
+#[test]
+fn input_fact_codec_requires_both_keys_and_rejects_wrong_types() {
+    let wire = json!({"descriptor":{"method":"POST","url":"https://upstream.example/tasks"},"locator":{"schema_version":1,"route":"v1/tasks"},"request_estimate":{"requested_seconds":null,"milliunits_per_second":null,"resolution":null,"input_image_count":null}});
+    for key in ["resolution", "input_image_count"] {
+        let mut missing = wire.clone();
+        missing["request_estimate"].as_object_mut().unwrap().remove(key);
+        assert!(parse_prepared_task_json(&missing.to_string()).is_err());
+    }
+    for value in [json!(-1), json!(1.5), json!(4_294_967_296_u64), json!("1"), json!(true)] {
+        let mut invalid = wire.clone();
+        invalid["request_estimate"]["input_image_count"] = value;
+        assert!(parse_prepared_task_json(&invalid.to_string()).is_err());
+    }
+    let parsed = parse_prepared_task_json(&wire.to_string()).unwrap();
+    assert_eq!(parsed.request_estimate.resolution(), None);
+    assert_eq!(parsed.request_estimate.input_image_count(), None);
+}
+proptest! {
+    #[test]
+    fn input_fact_count_roundtrips_exactly(count in any::<u32>(), resolution in "[A-Z0-9]{1,32}") {
+        let mut prepared=prepare(&request("kling-v3","text-or-image","std",false,false)).unwrap();
+        prepared.request_estimate=prepared.request_estimate.with_input_facts(Some(&resolution),Some(count)).unwrap();
+        let parsed=parse_prepared_task_json(&prepared_task_json(&prepared).unwrap().to_string()).unwrap();
+        prop_assert_eq!(parsed.request_estimate.input_image_count(),Some(count));
+        prop_assert_eq!(parsed.request_estimate.resolution(),Some(resolution.as_str()));
     }
 }

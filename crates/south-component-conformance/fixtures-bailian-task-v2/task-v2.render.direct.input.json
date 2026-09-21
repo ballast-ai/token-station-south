@@ -1,0 +1,27 @@
+{
+  "observation": {
+    "state": "succeeded",
+    "artifacts": {
+      "kind": "urls",
+      "items": [
+        {
+          "url": "https://media.example/video?sig=private",
+          "id": null,
+          "duration": null
+        }
+      ]
+    },
+    "usage": {
+      "seconds": 5,
+      "milliunits": null,
+      "tokens": null
+    }
+  },
+  "context": {
+    "task_id": "host-1",
+    "created": 123,
+    "provider": "bailian-reseller",
+    "model": "public/video",
+    "upstream_task_id": "001-original"
+  }
+}

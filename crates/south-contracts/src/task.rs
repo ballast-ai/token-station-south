@@ -27,8 +27,8 @@ use std::fmt;
 use thiserror::Error;
 
 /// The version of the task adapter vocabulary contract.
-/// Version four adds request-only v2 estimation; every v1 type remains unchanged.
-pub const TASK_CONTRACT_VERSION: u16 = 4;
+/// Version five adds normalized request input facts; every v1 type remains unchanged.
+pub const TASK_CONTRACT_VERSION: u16 = 5;
 
 /// The maximum byte length of a host-minted task identifier.
 pub const MAX_TASK_ID_BYTES: usize = 128;

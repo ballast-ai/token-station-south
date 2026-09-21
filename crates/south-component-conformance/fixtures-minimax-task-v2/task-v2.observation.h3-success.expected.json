@@ -1,0 +1,18 @@
+{
+  "state": "succeeded",
+  "artifacts": {
+    "kind": "urls",
+    "items": [
+      {
+        "url": "https://cdn/result.mp4",
+        "id": null,
+        "duration": null
+      }
+    ]
+  },
+  "usage": {
+    "seconds": 6.5,
+    "milliunits": null,
+    "tokens": null
+  }
+}

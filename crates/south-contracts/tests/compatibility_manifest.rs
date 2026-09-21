@@ -501,6 +501,8 @@ fn compatibility_manifest_describes_the_library_slice() {
     assert_eq!(manifest.provider_api.wit_version.as_deref(), Some("token-station:adapter@2.0.0"));
     assert_eq!(manifest.provider_runtime.abi_version.as_deref(), Some("provider-adapter-v2"));
     let expected_crates = BTreeMap::from([
+        ("south-task-conformance", "atomic_task_effects_suite_v1"),
+        ("south-task-core", "task_workflow_orchestration_v1"),
         (
             "south-contracts",
             "http_get_request_multipart_request_binary_response_auth_error_stream_quota_metadata_header_auth_controlled_query_user_agent_v1",

@@ -1,0 +1,35 @@
+{
+  "name": "task-minimax-v2",
+  "version": "0.31.0",
+  "api_version": "task-adapter-v2",
+  "providers": [
+    "minimax"
+  ],
+  "capabilities": [
+    "submit",
+    "observe",
+    "artifact_fetch",
+    "render"
+  ],
+  "auth_arms": [
+    "bearer"
+  ],
+  "permissions": {
+    "network": false,
+    "filesystem": false,
+    "secrets": [
+      "provider_api_key"
+    ]
+  },
+  "conformance": {
+    "required_suite": "south.task-component.v2",
+    "fixtures": "fixtures-minimax-task-v2/"
+  },
+  "compatibility": {
+    "ir_schema_id": "token-station-protocol@0.3.0/v0.2.0",
+    "kernel_version": "0.2.0",
+    "kernel_revision": "72458e3a11fe157f9ac04818c44b62a3dd2cb09c",
+    "wit_package": "token-station:task-adapter@2.0.0",
+    "south_runtime": "0.31.0"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "state": "succeeded",
+  "artifacts": {
+    "kind": "file-id",
+    "file_id": "00567"
+  },
+  "usage": {
+    "seconds": null,
+    "milliunits": null,
+    "tokens": null
+  }
+}

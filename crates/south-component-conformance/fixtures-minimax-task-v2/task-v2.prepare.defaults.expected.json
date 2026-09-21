@@ -1,0 +1,29 @@
+{
+  "descriptor": {
+    "method": "POST",
+    "url": "https://api.minimaxi.com/v1/video_generation?GroupId=19000",
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "model": "MiniMax-Hailuo-02",
+      "prompt": "scene",
+      "duration": 6,
+      "resolution": "768P"
+    },
+    "auth": {
+      "scheme": "bearer",
+      "secret": "provider_api_key"
+    }
+  },
+  "locator": {
+    "schema_version": 1,
+    "route": "v1/query/video_generation"
+  },
+  "request_estimate": {
+    "requested_seconds": 6.0,
+    "milliunits_per_second": null,
+    "resolution": "768P",
+    "input_image_count": 0
+  }
+}

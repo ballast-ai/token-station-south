@@ -1,0 +1,5 @@
+{
+  "status": 503,
+  "headers": {},
+  "body": "{\"task\":{\"status\":\"succeeded\",\"content\":{\"url\":\"https://cdn/result\"}}}"
+}
