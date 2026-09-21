@@ -1,0 +1,15 @@
+[package]
+name = "south-task-core"
+version = "0.1.0"
+description = "Explicit host-neutral task workflow orchestration."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt", "time", "test-util"] }
+
+[lints]
+workspace = true

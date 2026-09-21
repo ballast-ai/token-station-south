@@ -1,0 +1,8 @@
+{
+  "method": "GET",
+  "url": "https://dashscope.example/api/v1/tasks/001-original",
+  "auth": {
+    "scheme": "bearer",
+    "secret": "provider_api_key"
+  }
+}

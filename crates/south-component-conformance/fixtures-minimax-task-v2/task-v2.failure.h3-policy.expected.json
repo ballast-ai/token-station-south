@@ -1,0 +1,5 @@
+{
+  "code": "content_policy",
+  "http_status": 400,
+  "message": "MiniMax content policy rejected the request"
+}

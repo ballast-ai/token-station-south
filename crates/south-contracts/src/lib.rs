@@ -54,7 +54,8 @@ use url::Url;
 /// [`BufferedBinaryResponseV1`], a buffered body that was never required to be UTF-8. No request
 /// shape changes, and [`BufferedHttpResponseV1`] keeps its UTF-8 guarantee exactly as frozen — a
 /// consumer of the text response cannot be handed bytes by this version or any later one.
-pub const HTTP_CONTRACT_VERSION: u16 = 8;
+/// Version nine adds the bounded `MiniMax` file-id query; existing query bytes are unchanged.
+pub const HTTP_CONTRACT_VERSION: u16 = 9;
 
 /// The version of the provider authentication declaration contract.
 ///
@@ -1080,6 +1081,8 @@ pub enum QueryParameterV1 {
     /// carries a task id in the query issues numeric ids; a host meeting another shape falls
     /// back rather than widening the grammar.
     TaskId,
+    /// `file_id` for `MiniMax` v1 artifact retrieval; a bounded decimal identifier.
+    FileId,
 }
 
 impl QueryParameterV1 {
@@ -1087,7 +1090,8 @@ impl QueryParameterV1 {
     ///
     /// Serialization follows this order, so a request's query is byte-identical regardless of the
     /// order the host declared its parameters in.
-    pub const ALL: [Self; 4] = [Self::ApiVersion, Self::Alt, Self::GroupId, Self::TaskId];
+    pub const ALL: [Self; 5] =
+        [Self::ApiVersion, Self::Alt, Self::GroupId, Self::TaskId, Self::FileId];
 
     /// Returns the wire name of the sanctioned parameter.
     #[must_use]
@@ -1098,6 +1102,7 @@ impl QueryParameterV1 {
             // Mixed case on purpose: the upstream matches the name exactly.
             Self::GroupId => "GroupId",
             Self::TaskId => "task_id",
+            Self::FileId => "file_id",
         }
     }
 
@@ -1127,14 +1132,10 @@ impl QueryParameterV1 {
             }
             // A closed value set: the upstream accepts nothing else.
             Self::Alt => matches!(value, "sse" | "json"),
-            // A `MiniMax` group id is a decimal account identifier. Digits only: the value is
-            // operator configuration, not provider output, and nothing narrower than a digit
-            // string is ever a real group id. No leading-sign, no separators.
-            // A `MiniMax` task id is likewise a decimal identifier. Same digit grammar, and
-            // deliberately not shared with `GroupId` through one arm: the two are separate
-            // contract decisions (D3 of two records), and narrowing one must not narrow the
-            // other.
-            Self::GroupId | Self::TaskId => {
+            // These are separately named contracts sharing the currently admitted decimal
+            // grammar: configured group ids and provider-minted task/file ids. Preserve their
+            // original digits; a future parameter-specific expansion needs its own evidence.
+            Self::GroupId | Self::TaskId | Self::FileId => {
                 !value.is_empty()
                     && value.len() <= MAX_QUERY_VALUE_BYTES
                     && value.bytes().all(|byte| byte.is_ascii_digit())
@@ -3127,6 +3128,7 @@ mod query_serialization_completeness_tests {
                 QueryParameterV1::Alt => "sse",
                 QueryParameterV1::GroupId => "19000",
                 QueryParameterV1::TaskId => "276843862449040",
+                QueryParameterV1::FileId => "00176844028768320",
             };
             let query = QueryStringV1::try_from_iter([(parameter, value)])
                 .expect("a sanctioned parameter with a valid value must construct");

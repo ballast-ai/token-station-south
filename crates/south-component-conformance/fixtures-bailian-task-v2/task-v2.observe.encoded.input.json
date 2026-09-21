@@ -1,0 +1,13 @@
+{
+  "provider_config": {
+    "provider": "bailian",
+    "base_url": "https://dashscope.example",
+    "auth": "provider_api_key"
+  },
+  "upstream_model": "wan",
+  "upstream_task_id": "original?#%",
+  "locator": {
+    "schema_version": 1,
+    "route": "api/v1/tasks"
+  }
+}

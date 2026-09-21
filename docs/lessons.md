@@ -69,3 +69,23 @@
   stop looking alike.
 - Generalisation: when a mechanical edit is going to sweep a file, the values that must *not* move
   need to be shaped differently from the values that must — not merely commented differently.
+
+## 2026-09-20：迁移前核对完整纯行为
+
+- 品牌范围不得从别家限定类推：只限制 OpenAI 官方不等于限制 MiniMax 官方。
+- 翻译迁移需同时核输入别名/trim、错误状态映射、原始型号与协议家族；
+  不得凭合理猜测加型号或时长新限制。先加可失败回归，再修源码。
+
+- 版本机械替换必须先断言精确匹配数量，再读取常量/manifest交叉核对；
+  2026-09-20把u16误写成u32匹配导致HTTP9声明与源码8不一致，由真实兼容门捕获。
+
+## 2026-09-20：组件能力必须覆盖实际返回的执行请求
+
+- descriptor通过认证/端点授权不等于包级能力已获授权；返回额外取物请求的组件
+  必须声明artifact_fetch，测试须同时读取真实manifest并调用真实Wasm方法。
+- 发布审查要沿宿主实际消费门逐项核对，不能用库对拍与版本一致性代替能力检查。
+
+## 2026-09-20：路径段编码不能保护点段
+
+- 将原始任务ID放入路径前，除了编码分隔符还须拒绝独立`.`/`..`，
+  因URL规范化会消除点段；先公开负测证明零可发送descriptor，再修边界。

@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "MiniMax H3 reference image mode is incompatible with this request"
+  }
+}

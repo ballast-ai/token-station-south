@@ -1,0 +1,8 @@
+{
+  "method": "GET",
+  "url": "https://api.minimaxi.com/v1/files/retrieve?GroupId=19000&file_id=00567",
+  "auth": {
+    "scheme": "bearer",
+    "secret": "provider_api_key"
+  }
+}

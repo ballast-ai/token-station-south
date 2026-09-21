@@ -1,0 +1,44 @@
+{
+  "descriptor": {
+    "method": "POST",
+    "url": "https://dashscope.example/api/v1/services/aigc/video-generation/video-synthesis",
+    "headers": {
+      "content-type": "application/json",
+      "x-dashscope-async": "enable"
+    },
+    "body": {
+      "model": "happyhorse-1.1-i2v",
+      "input": {
+        "prompt": "scene",
+        "media": [
+          {
+            "type": "first_frame",
+            "url": "https://image.example/a"
+          }
+        ],
+        "audio_url": "https://audio.example/a"
+      },
+      "parameters": {
+        "duration": 6,
+        "resolution": "1080P",
+        "seed": 1,
+        "prompt_extend": false,
+        "watermark": true
+      }
+    },
+    "auth": {
+      "scheme": "bearer",
+      "secret": "provider_api_key"
+    }
+  },
+  "locator": {
+    "schema_version": 1,
+    "route": "api/v1/tasks"
+  },
+  "request_estimate": {
+    "requested_seconds": 6.0,
+    "milliunits_per_second": null,
+    "resolution": "1080P",
+    "input_image_count": 1
+  }
+}

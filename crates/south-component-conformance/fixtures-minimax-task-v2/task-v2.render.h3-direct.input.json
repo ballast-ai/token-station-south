@@ -1,0 +1,27 @@
+{
+  "observation": {
+    "state": "succeeded",
+    "artifacts": {
+      "kind": "urls",
+      "items": [
+        {
+          "url": "https://cdn/result.mp4",
+          "id": null,
+          "duration": null
+        }
+      ]
+    },
+    "usage": {
+      "seconds": 6.5,
+      "milliunits": null,
+      "tokens": null
+    }
+  },
+  "context": {
+    "task_id": "host-h3",
+    "created": 1800001234,
+    "model": "public-h3",
+    "provider": "minimax",
+    "upstream_task_id": "original-h3-id"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "state": "failed",
+  "kind": "cancelled",
+  "code": "DataInspectionFailed",
+  "message": "inappropriate content"
+}

@@ -12,12 +12,14 @@ use south_provider_api::ComponentManifestV1;
 
 /// The official components this repository ships. Named, so that an empty or
 /// mistyped scan below cannot pass over nothing.
-const OFFICIAL_COMPONENTS: [&str; 5] = [
+const OFFICIAL_COMPONENTS: [&str; 7] = [
     "provider-anthropic",
     "provider-gemini",
     "provider-openai-compatible",
     "task-kling",
     "task-kling-v2",
+    "task-minimax-v2",
+    "task-bailian-v2",
 ];
 
 fn repo_root() -> &'static Path {
@@ -204,5 +206,54 @@ fn task_worlds_have_independent_unverified_host_adoption_records() {
     ] {
         assert_eq!(manifest["conformance"][format!("{key}_suite_id")], suite);
         assert_eq!(manifest["conformance"][format!("{key}_suite")], 1);
+    }
+}
+
+/// `FileId` introduces a new runtime capability; no 0.29.0 content identity is reused.
+#[test]
+fn file_id_release_retires_the_029_runtime_and_component_identities() {
+    let previous = [
+        ("provider-openai-compatible", "2.1.1"),
+        ("provider-anthropic", "1.0.2"),
+        ("provider-gemini", "1.1.1"),
+        ("task-kling", "1.0.1"),
+        ("task-kling-v2", "0.29.0"),
+    ];
+    for (name, version) in previous {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_ne!(manifest.version, version);
+        assert_ne!(manifest.compatibility.south_runtime, "0.29.0");
+    }
+}
+
+/// A seventh package requires a new release; published six-package identities stay immutable.
+#[test]
+fn bailian_release_retires_the_published_030_component_identities() {
+    for (name, published) in [
+        ("provider-openai-compatible", "2.1.2"),
+        ("provider-anthropic", "1.0.3"),
+        ("provider-gemini", "1.1.2"),
+        ("task-kling", "1.0.2"),
+        ("task-kling-v2", "0.30.0"),
+        ("task-minimax-v2", "0.30.0"),
+    ] {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_ne!(
+            manifest.version, published,
+            "a changed package cannot reuse its published identity"
+        );
+        assert_ne!(manifest.compatibility.south_runtime, "0.30.0");
     }
 }

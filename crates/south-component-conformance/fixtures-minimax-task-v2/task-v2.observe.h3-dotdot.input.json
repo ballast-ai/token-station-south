@@ -1,0 +1,13 @@
+{
+  "provider_config": {
+    "provider": "minimax",
+    "base_url": "https://api.minimax.io",
+    "auth": "provider_api_key"
+  },
+  "upstream_model": "MiniMax-H3",
+  "upstream_task_id": "..",
+  "locator": {
+    "schema_version": 1,
+    "route": "v2/query/video_generation"
+  }
+}

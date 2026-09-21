@@ -1,0 +1,15 @@
+{
+  "provider_config": {
+    "provider": "minimax",
+    "base_url": "https://api.minimax.io",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "model": "MiniMax-H3",
+    "prompt": "scene",
+    "video_url": "https://secret/video"
+  },
+  "minted": {
+    "task_id": "host-h3"
+  }
+}

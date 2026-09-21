@@ -1,0 +1,29 @@
+{
+  "provider_config": {
+    "provider": "bailian",
+    "base_url": "https://dashscope.example",
+    "auth": "provider_api_key"
+  },
+  "locator": {
+    "schema_version": 1,
+    "route": "api/v1/tasks"
+  },
+  "observation": {
+    "state": "succeeded",
+    "artifacts": {
+      "kind": "urls",
+      "items": [
+        {
+          "url": "https://media.example/video?sig=private",
+          "id": null,
+          "duration": null
+        }
+      ]
+    },
+    "usage": {
+      "seconds": 5,
+      "milliunits": null,
+      "tokens": null
+    }
+  }
+}

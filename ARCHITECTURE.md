@@ -3,7 +3,7 @@
 > 2026-09-20 第五批候选补充：task-v2 的请求估算依据与实际观察用量分开建模。
 > `PreparedTaskV2.request_estimate` 携带实际请求时长和协议单位率，纯 helper 只按
 > 宿主显式估时计算单位；宿主保留价格、加价、估时默认值及预占事务。详见
-> [请求估算设计](docs/design/2026-09-20-task-request-estimate.md)。候选尚未发布。
+> [请求估算设计](docs/design/2026-09-20-task-request-estimate.md)。该接口随 v0.29.0 发布，宿主任务采用仍待验收。
 
 Token Station South uses dependency inversion: it owns the provider-facing contracts and runtime,
 while community and enterprise hosts own business policy and consume South.
@@ -23,6 +23,8 @@ community policy      enterprise policy
 
 | Crate | Current status and ownership |
 | --- | --- |
+| `south-task-core` | 候选：独立 Rust 版本 0.1.0，无生产依赖；共享提交/观察/CAS 赢家回读/等待/取消顺序，宿主保留政策与复合原子效果 |
+| `south-task-conformance` | 候选：独立 Rust 版本 0.1.0，无生产依赖；公共原子效果故障套件，宿主适配真实 SQLite / PG 事务，无资金宿主明确不适用 |
 | `south-contracts` | Implemented bounded HTTP (JSON POST, body-less GET, and multipart POST request shapes, and a buffered binary response beside the UTF-8 one), Bearer, sanctioned header-secret, and combined Bearer-plus-header-secret auth, stable error, byte-streaming, and closed quota metadata contracts, plus the sanctioned controlled query and controlled user-agent declarations |
 | `south-core` | Implemented host-neutral buffered and streaming provider-call orchestration and its buffered body-less GET, multipart and binary-response twins, plus the shared host prelude (`raw` module: raw-call type, its host-signed, GET and multipart twins, contract-parse orchestration, one-shot wrappers for all four, resolver adapters) |
 | `south-transport-reqwest` | Implemented hardened buffered and byte-streaming JSON POST transport, the same buffered transport for body-less GET and multipart POST requests (rendering the latter's media type and sharing its allocation) and for a JSON POST whose response is buffered as opaque bytes under its own larger cap, bounded quota metadata capture, sanctioned user-agent application, and one-config transport-pair construction |
@@ -76,9 +78,9 @@ channel at a fixed revision; no production crate may gain that edge.
 
 ## Host-owned concerns
 
-### task-v2 候选边界（2026-09-20，未发布）
+### task-v2 边界（v0.29.0 已发布，宿主采用待验收）
 
-任务词汇版本升为 3，新增独立 v2 类型，既有 v1 类型和 world 保留。
+任务词汇当前为 4（引入独立 v2 类型时为 3，后续增加请求估算）；既有 v1 类型和 world 保留。
 新 `token-station:task-adapter@2.0.0` world 仍只描述纯翻译，不拥有执行时序、
 凭证读取、价格和持久化。contracts 保存有界定位、并存计量、观察与渲染上下文；
 包含 IR descriptor 的 `PreparedTaskV2` 和唯一 JSON codec 位于 conformance。
@@ -141,3 +143,24 @@ elsewhere in their graph. The equivalent host-side gate, agreed during the first
 Hosts are expected to script these checks (`cargo tree` and lockfile inspection) into their own CI.
 This section records the agreed interpretation so a host failing the workspace-local script is not
 misread as a boundary violation.
+
+## v0.30.0 MiniMax 候选
+
+新增同源MiniMax Hailuo v1/H3 v2参考/guest与受控file_id查询，HTTP合同9。
+任务合同5新增有界resolution/input_image_count请求事实，供宿主既有定价函数使用。
+既有task ABI/WIT不变；宿主仍拥有凭证、配置快照、价格、恢复与交付。
+见[候选设计](docs/design/2026-09-20-minimax-v1-task-component.md)。
+
+
+## 共享任务执行核心候选
+
+新增 `south-task-core` 仅使用标准库，不依赖组件 IR、数据库或网络。宿主效果
+分成 prepare/dispatch/send/record 和 load/query/normalize/apply/reload；
+核心固定执行顺序并确保 CAS 落败返回持久赢家。宿主独占精确绑定恢复、
+凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
+inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
+
+该库独立 Rust 版本为 0.1.0；既有八个库、运行时和七个组件仍为正式 v0.31.0
+体系，Task5/HTTP9/WIT 不变。新增 Rust 编排不要求旧组件更换 runtime 或身份。
+当前为未发布候选，宿主采用须分别用真实存储通过公共故障套件；组件兼容
+状态不能代替共享核心采用证据。[设计与边界](docs/design/2026-09-20-shared-task-core.md)。

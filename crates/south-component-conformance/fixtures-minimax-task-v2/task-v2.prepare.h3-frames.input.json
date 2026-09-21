@@ -1,0 +1,17 @@
+{
+  "provider_config": {
+    "provider": "minimax",
+    "base_url": "https://api.minimax.io",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "model": "MiniMax-H3-Max",
+    "prompt": "scene",
+    "image": "https://cdn/first",
+    "last_frame": "https://cdn/last",
+    "resolution": "480p"
+  },
+  "minted": {
+    "task_id": "h3-fixture"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "outcome": "rejected",
+  "error": {
+    "code": "rate_limit",
+    "http_status": 429,
+    "message": "MiniMax upstream HTTP request failed"
+  }
+}

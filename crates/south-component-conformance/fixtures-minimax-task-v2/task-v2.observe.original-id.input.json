@@ -1,0 +1,14 @@
+{
+  "provider_config": {
+    "provider": "minimax",
+    "base_url": "https://api.minimaxi.com",
+    "auth": "provider_api_key",
+    "group_id": "19000"
+  },
+  "upstream_model": "MiniMax-Hailuo-02",
+  "upstream_task_id": "00123",
+  "locator": {
+    "schema_version": 1,
+    "route": "v1/query/video_generation"
+  }
+}

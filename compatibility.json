@@ -1,12 +1,12 @@
 {
   "schema_version": 4,
   "release": {
-    "version": "0.29.0",
+    "version": "0.31.0",
     "stability": "library_slice"
   },
   "contracts": {
     "reserved_header_policy": 1,
-    "http": 8,
+    "http": 9,
     "auth": 4,
     "error": 2,
     "stream": 2,
@@ -36,7 +36,7 @@
       "value_bytes": 4096,
       "total_bytes": 16384
     },
-    "task": 4,
+    "task": 5,
     "task_limits": {
       "task_id_bytes": 128,
       "callback_url_bytes": 8192,
@@ -77,6 +77,8 @@
     "abi_version": "provider-adapter-v2"
   },
   "crates": {
+    "south-task-core": "task_workflow_orchestration_v1",
+    "south-task-conformance": "atomic_task_effects_suite_v1",
     "south-contracts": "http_get_request_multipart_request_binary_response_auth_error_stream_quota_metadata_header_auth_controlled_query_user_agent_v1",
     "south-core": "buffered_streaming_provider_call_buffered_get_call_buffered_multipart_call_buffered_binary_call_header_auth_controlled_query_user_agent_raw_prelude_signed_raw_call_get_raw_call_multipart_raw_call_v1",
     "south-provider-api": "provider_adapter_v2_wit_manifest_v1",

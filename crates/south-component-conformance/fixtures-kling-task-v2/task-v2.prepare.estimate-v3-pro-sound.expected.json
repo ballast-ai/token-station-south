@@ -20,6 +20,8 @@
   },
   "request_estimate": {
     "requested_seconds": 5.0,
-    "milliunits_per_second": 1200
+    "milliunits_per_second": 1200,
+    "resolution": null,
+    "input_image_count": null
   }
 }

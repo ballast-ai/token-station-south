@@ -1,0 +1,11 @@
+{
+  "created": 1800001234,
+  "model": "public-h3",
+  "provider": "minimax",
+  "task_id": "original-h3-id",
+  "data": [
+    {
+      "url": "https://cdn/result.mp4"
+    }
+  ]
+}

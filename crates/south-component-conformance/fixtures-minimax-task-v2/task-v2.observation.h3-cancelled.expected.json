@@ -1,0 +1,6 @@
+{
+  "state": "failed",
+  "kind": "cancelled",
+  "code": "1026",
+  "message": "MiniMax video generation failed"
+}

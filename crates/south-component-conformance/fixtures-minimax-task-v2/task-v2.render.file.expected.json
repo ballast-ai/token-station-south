@@ -1,0 +1,11 @@
+{
+  "created": 123,
+  "model": "public-model",
+  "provider": "minimax",
+  "task_id": "00123",
+  "data": [
+    {
+      "url": "https://cdn.example/video.mp4"
+    }
+  ]
+}

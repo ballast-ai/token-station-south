@@ -1,0 +1,8 @@
+{
+  "method": "GET",
+  "url": "https://api.minimaxi.com/v1/query/video_generation?GroupId=19000&task_id=00123",
+  "auth": {
+    "scheme": "bearer",
+    "secret": "provider_api_key"
+  }
+}

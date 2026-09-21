@@ -1,0 +1,29 @@
+{
+  "provider_config": {
+    "provider": "minimax",
+    "base_url": "https://api.minimax.io",
+    "auth": "provider_api_key"
+  },
+  "locator": {
+    "schema_version": 1,
+    "route": "v2/query/video_generation"
+  },
+  "observation": {
+    "state": "succeeded",
+    "artifacts": {
+      "kind": "urls",
+      "items": [
+        {
+          "url": "https://cdn/result.mp4",
+          "id": null,
+          "duration": null
+        }
+      ]
+    },
+    "usage": {
+      "seconds": 6.5,
+      "milliunits": null,
+      "tokens": null
+    }
+  }
+}
