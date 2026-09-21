@@ -13,15 +13,27 @@
 //! unable to serve a request that any incumbent translator could have built.
 //! The response is `t03_result`, which no incumbent parser understands.
 //!
-//! # The one field that is not free
+//! # Three fields that are not free
 //!
-//! The body must carry the caller's output cap at `max_tokens`, top level.
-//! Adopting hosts bind an authorized cost ceiling to the outbound bytes and
-//! admit only a closed set of cap paths; a wire that invented its own cap field
-//! would be refused at that seal, and the refusal would look like a component
-//! failure rather than the policy it is. The cap value is copied verbatim from
-//! `sampling.max_output_tokens` — changing it is what the seal is there to
-//! catch.
+//! An adopting host seals the outbound bytes against what it authorized, so a
+//! custom wire is free everywhere except where that seal looks. Measured
+//! against a real host rather than assumed:
+//!
+//! 1. **`model`, top level, equal to the routed upstream model.** The host
+//!    authorized one model; if the identity travels in the body it checks for
+//!    it there. The IR's `model` already carries the routed name — the host
+//!    overwrites it before the component is called — so it is copied verbatim.
+//! 2. **The output cap at top-level `max_tokens`.** Hosts admit only a closed
+//!    set of cap paths, and for a chat-shaped operation that set is
+//!    `max_completion_tokens` or `max_tokens`. A wire that invented its own cap
+//!    field is refused at the seal, and the refusal reads as a component fault
+//!    rather than the policy it is. Copied verbatim from
+//!    `sampling.max_output_tokens`.
+//! 3. **`stream`, top level, agreeing with the request.** The host seals the
+//!    streaming mode too; a body that disagrees with it is refused.
+//!
+//! Everything else — the path, the header, the payload shape, the response
+//! shape — is this wire's own, which is what makes it a canary.
 //!
 //! # Streaming
 //!
@@ -154,10 +166,12 @@ impl Guest for T03Canary {
                 "t03_payload": {
                     "served_model": request["model"],
                     "turns": turns,
-                    "want_stream": request["stream"],
                 },
-                // Top level and named `max_tokens`: see the module header.
+                // The three fields the host's seal looks for; see the module
+                // header. Everything above this line is the canary's own wire.
+                "model": request["model"],
                 "max_tokens": cap,
+                "stream": request["stream"].as_bool().unwrap_or(false),
             },
         });
 
