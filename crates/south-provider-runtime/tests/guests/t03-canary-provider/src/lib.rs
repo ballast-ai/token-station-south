@@ -37,7 +37,21 @@
 //!
 //! # Streaming
 //!
-//! Frames are `t03-event: <json>\n\n`, not `data: `. A fragment may end
+//! Two frame shapes carry the same three event kinds (`say`, `meter`, `end`):
+//!
+//! - `t03-event: <json>\n\n` — this wire's own line, not SSE at all. A host
+//!   that quietly fell back to a built-in SSE parser gets no `data:` payload
+//!   and therefore no events, rather than plausible ones.
+//! - Standard SSE: `event: t03\ndata: <json>\n\n` (multiple `data:` lines join
+//!   with `\n` as the spec says; `id:`/`retry:`/comment lines are ignored).
+//!   This shape exists for the adopting host's R03 acceptance: a `data:` line
+//!   whose JSON no incumbent parser understands must still reach *this*
+//!   component, not the host's OpenAI/Anthropic/Gemini usage reader. The
+//!   event name must be `t03`; any other name, or a `data:` frame without an
+//!   event line, is refused as not this wire.
+//!
+//! Anything else is refused rather than skipped: a silently dropped frame is
+//! how a stream ends up short without anyone noticing. A fragment may end
 //! mid-frame — the acceptance splits one event across two TCP writes — so the
 //! unparsed tail is held in instance state until it completes.
 //!
@@ -82,10 +96,41 @@ use token_station::adapter::common::HealthStatus;
 /// purpose: the host promises one component instance per stream.
 static STREAM_BUFFER: Mutex<Vec<u8>> = Mutex::new(Vec::new());
 
-/// The frame prefix. Nothing else in the exchange is SSE-shaped, so a host that
-/// quietly fell back to a built-in SSE parser would produce no events at all
-/// rather than plausible ones.
+/// The wire's own frame prefix (see the module header, "Streaming").
 const FRAME_PREFIX: &str = "t03-event: ";
+
+/// The SSE event name of the standard-shaped frame. Anything else is not this
+/// wire.
+const SSE_EVENT_NAME: &str = "t03";
+
+/// The JSON payload of one complete frame, whichever of the two shapes it is
+/// in. `None` means the frame is neither — the caller refuses it.
+fn frame_payload(frame: &str) -> Option<String> {
+    let trimmed = frame.trim_end_matches(['\r', '\n']);
+    if let Some(payload) = trimmed.strip_prefix(FRAME_PREFIX) {
+        return Some(payload.to_owned());
+    }
+    // Standard SSE: `event:` names the wire, `data:` lines carry the JSON.
+    // Parsed the way the spec reads a frame — field name up to the first
+    // colon, one optional leading space stripped from the value — so a host
+    // relaying the bytes verbatim and one re-encoding them agree.
+    let mut event = None;
+    let mut data: Vec<&str> = Vec::new();
+    for line in trimmed.lines() {
+        let line = line.strip_suffix('\r').unwrap_or(line);
+        if line.starts_with(':') {
+            continue; // comment
+        }
+        let (field, value) = line.split_once(':').unwrap_or((line, ""));
+        let value = value.strip_prefix(' ').unwrap_or(value);
+        match field {
+            "event" => event = Some(value),
+            "data" => data.push(value),
+            _ => {} // id / retry / unknown fields: ignored, as the spec says
+        }
+    }
+    (event == Some(SSE_EVENT_NAME) && !data.is_empty()).then(|| data.join("\n"))
+}
 
 struct T03Canary;
 
@@ -262,13 +307,13 @@ impl Guest for T03Canary {
         while let Some(end) = buffer.windows(2).position(|window| window == b"\n\n") {
             let frame: Vec<u8> = buffer.drain(..end + 2).collect();
             let frame = String::from_utf8_lossy(&frame);
-            let Some(payload) = frame.trim_end().strip_prefix(FRAME_PREFIX) else {
+            let Some(payload) = frame_payload(&frame) else {
                 // A frame in some other shape is not this wire. Refuse rather
                 // than skip: a silently dropped frame is how a stream ends up
                 // short without anyone noticing.
                 return Err(protocol_error("stream frame is not a t03-event"));
             };
-            let parsed: Value = serde_json::from_str(payload)
+            let parsed: Value = serde_json::from_str(&payload)
                 .map_err(|error| protocol_error(&format!("t03-event is not JSON: {error}")))?;
 
             match parsed["kind"].as_str() {
@@ -311,3 +356,43 @@ impl Guest for T03Canary {
 }
 
 export!(T03Canary);
+
+#[cfg(test)]
+mod tests {
+    use super::frame_payload;
+
+    #[test]
+    fn the_wires_own_prefix_still_yields_the_payload() {
+        assert_eq!(
+            frame_payload("t03-event: {\"kind\":\"end\"}\n\n").as_deref(),
+            Some("{\"kind\":\"end\"}")
+        );
+    }
+
+    #[test]
+    fn a_standard_sse_frame_named_t03_yields_its_data_lines_joined() {
+        assert_eq!(
+            frame_payload("event: t03\ndata: {\"kind\":\"say\",\ndata: \"text\":\"hi\"}\n\n")
+                .as_deref(),
+            Some("{\"kind\":\"say\",\n\"text\":\"hi\"}")
+        );
+        assert_eq!(
+            frame_payload(": keepalive\r\nid: 7\r\nevent: t03\r\ndata:{\"kind\":\"end\"}\r\n\r\n")
+                .as_deref(),
+            Some("{\"kind\":\"end\"}"),
+            "comments, ids and CRLF line ends are tolerated; a missing space after the colon too"
+        );
+    }
+
+    #[test]
+    fn frames_that_are_not_this_wire_are_refused() {
+        assert_eq!(frame_payload("data: {\"kind\":\"end\"}\n\n"), None, "no event name");
+        assert_eq!(
+            frame_payload("event: message\ndata: {\"kind\":\"end\"}\n\n"),
+            None,
+            "another event name"
+        );
+        assert_eq!(frame_payload("event: t03\n\n"), None, "no data at all");
+        assert_eq!(frame_payload("data: [DONE]\n\n"), None, "an OpenAI sentinel is not this wire");
+    }
+}
