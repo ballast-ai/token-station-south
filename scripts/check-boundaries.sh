@@ -3,12 +3,18 @@ set -euo pipefail
 
 readonly FORBIDDEN_NAME_PATTERN='(^|-)(token-station|sqlx|rusqlite|diesel|sea-orm|redis|deadpool-redis|postgres|tokio-postgres|mysql|mysql-async|mongodb|surrealdb|clickhouse|cassandra|scylla|rocksdb|sled|redb|lmdb|heed|duckdb|memcache)(-|$)'
 readonly FORBIDDEN_SOURCE_PATTERN='GlimpseEngine/(token-station|token-station-server)(\.git)?([?#]|$)'
-# The one sanctioned typed-IR edge (S0 invariant 6): conformance gate 2 takes
-# `token-station-protocol` from the kernel distribution mirror, and nothing
-# else in this workspace may.
+# The sanctioned typed-IR edges (S0 invariant 6). `token-station-protocol` comes
+# from the kernel distribution mirror, and only the crates named here may take
+# it: conformance gate 2, and the north-bound codec whose whole job is mapping
+# client wire formats onto that IR. Nothing else in this workspace may — in
+# particular not `south-core`, `south-contracts`, the transport or the runtime,
+# which must stay free of IR types both directly and transitively.
 readonly KERNEL_SOURCE_PATTERN='ballast-ai/token-station-kernel(\.git)?([?#]|$)'
 readonly KERNEL_IR_PACKAGE='token-station-protocol'
-readonly KERNEL_IR_CONSUMER='south-component-conformance'
+readonly KERNEL_IR_CONSUMERS='["south-component-conformance", "south-north-codec"]'
+# Depending on the codec is how a crate would acquire the IR without naming it,
+# so the allowlist above governs that edge too.
+readonly CODEC_PACKAGE='south-north-codec'
 
 # The feature set is **policy, not a moving target**: south takes rustls +
 # stream and nothing else, so these two lists stay written down here. The
@@ -41,7 +47,8 @@ check_metadata() {
       --arg source_pattern "$FORBIDDEN_SOURCE_PATTERN" \
       --arg kernel_source_pattern "$KERNEL_SOURCE_PATTERN" \
       --arg kernel_ir_package "$KERNEL_IR_PACKAGE" \
-      --arg kernel_ir_consumer "$KERNEL_IR_CONSUMER" \
+      --argjson kernel_ir_consumers "$KERNEL_IR_CONSUMERS" \
+      --arg codec_package "$CODEC_PACKAGE" \
       --arg expected_req "$expected_req" \
       --arg expected_version "$expected_version" \
       --argjson declared_features "$REQWEST_DECLARED_FEATURES" \
@@ -82,13 +89,34 @@ check_metadata() {
           )
           | select(
               (
-                $package.name == $kernel_ir_consumer
+                ($kernel_ir_consumers | index($package.name)) != null
                 and .name == $kernel_ir_package
                 and ((.source // "") | test($kernel_source_pattern; "i"))
               )
               | not
             )
           | "forbidden-dependency: \($package.name) -> \(.name) (source=\(.source // .path // "local"))"
+        ),
+        (
+          (.workspace_members // []) as $workspace_members
+          | .packages[]
+          | . as $package
+          | select(
+              (
+                if ($workspace_members | length) > 0 then
+                  $workspace_members | index($package.id) != null
+                else
+                  $package.name | startswith("south-")
+                end
+              )
+              and ($kernel_ir_consumers | index($package.name)) == null
+            )
+          | $package.dependencies[]
+          | select(
+              (.name | gsub("_"; "-")) == $codec_package
+              or ((.rename // "") | gsub("_"; "-")) == $codec_package
+            )
+          | "codec-dependency: \($package.name) -> \($codec_package) (the typed IR would leak transitively)"
         ),
         (
           (.workspace_members // []) as $workspace_members

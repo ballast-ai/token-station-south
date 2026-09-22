@@ -1,0 +1,17 @@
+[package]
+description = "Pure north-bound codec: client wire (OpenAI Chat, Anthropic Messages) <-> canonical IR."
+edition.workspace = true
+license.workspace = true
+name = "south-north-codec"
+publish = false
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+serde_json.workspace = true
+thiserror.workspace = true
+token-station-protocol.workspace = true
+
+[lints]
+workspace = true

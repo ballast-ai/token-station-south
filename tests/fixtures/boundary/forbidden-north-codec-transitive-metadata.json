@@ -1,0 +1,41 @@
+{
+  "packages": [
+    {
+      "id": "path+file:///south-core#0.0.1",
+      "name": "south-core",
+      "version": "0.0.1",
+      "dependencies": [
+        {
+          "name": "south-contracts",
+          "rename": null,
+          "source": null,
+          "path": "/south-contracts"
+        }
+      ]
+    },
+    {
+      "id": "path+file:///south-contracts#0.0.1",
+      "name": "south-contracts",
+      "version": "0.0.1",
+      "dependencies": [
+        {
+          "name": "south-north-codec",
+          "rename": null,
+          "source": null,
+          "path": "/south-north-codec"
+        }
+      ]
+    },
+    {
+      "id": "path+file:///south-north-codec#0.0.1",
+      "name": "south-north-codec",
+      "version": "0.0.1",
+      "dependencies": []
+    }
+  ],
+  "workspace_members": [
+    "path+file:///south-core#0.0.1",
+    "path+file:///south-contracts#0.0.1",
+    "path+file:///south-north-codec#0.0.1"
+  ]
+}
