@@ -1,0 +1,36 @@
+{
+  "packages": [
+    {
+      "id": "path+file:///south-transport-reqwest#0.0.1",
+      "name": "south-transport-reqwest",
+      "version": "0.0.1",
+      "dependencies": [
+        {
+          "name": "codec",
+          "rename": "south_north_codec",
+          "source": null,
+          "path": "/south-north-codec"
+        },
+        {
+          "name": "reqwest",
+          "rename": null,
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "req": "=0.13.4",
+          "uses_default_features": false,
+          "features": ["rustls", "stream"],
+          "path": null
+        }
+      ]
+    },
+    {
+      "id": "path+file:///south-north-codec#0.0.1",
+      "name": "south-north-codec",
+      "version": "0.0.1",
+      "dependencies": []
+    }
+  ],
+  "workspace_members": [
+    "path+file:///south-transport-reqwest#0.0.1",
+    "path+file:///south-north-codec#0.0.1"
+  ]
+}
