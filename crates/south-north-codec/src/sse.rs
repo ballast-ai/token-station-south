@@ -27,17 +27,14 @@
 use serde_json::{Value, json};
 use token_station_protocol::{FinishReason, StreamEvent, Usage};
 
-/// One stream's north-bound render state.
+/// One stream's `OpenAI` Chat render state.
+///
+/// Neither the routed model nor a message id appears here, because this wire's
+/// chunks carry neither. The sibling state for the Anthropic wire
+/// ([`crate::AnthropicSseState`]) needs both, and holding them in one shared
+/// state would offer every host two fields that do nothing on half the routes.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct NorthSseState {
-    /// The routed model name, supplied by the host.
-    ///
-    /// IR stream events deliberately do not carry it — the model is a routing
-    /// decision, not stream content — so a renderer fed purely by component
-    /// events has no other source for it.
-    pub model: Option<String>,
-    /// The message id, minted by the host (this crate reads no randomness).
-    pub message_id: Option<String>,
+pub struct OpenAiChatSseState {
     /// Set by an `Error` event: nothing is rendered afterwards.
     ///
     /// An error is the end of the stream. Emitting a normal terminal after it
@@ -55,28 +52,13 @@ pub struct NorthSseState {
     pub usage: Usage,
 }
 
-impl NorthSseState {
-    /// A state with the routed model pre-set.
-    #[must_use]
-    pub fn for_model(model: impl Into<String>) -> Self {
-        Self { model: Some(model.into()), ..Self::default() }
-    }
-
-    /// Attach the host-minted message id.
-    #[must_use]
-    pub fn with_message_id(mut self, message_id: impl Into<String>) -> Self {
-        self.message_id = Some(message_id.into());
-        self
-    }
-}
-
 /// Canonical stream events -> `OpenAI` Chat SSE chunks (the `data:` payloads).
 ///
 /// The `[DONE]` sentinel is not produced here: it is a transport concern, and
 /// the host emits it after settlement so the client never sees the stream close
 /// before the request is accounted for.
 #[must_use]
-pub fn openai_chat_frames(events: &[StreamEvent], state: &mut NorthSseState) -> Vec<Value> {
+pub fn openai_chat_frames(events: &[StreamEvent], state: &mut OpenAiChatSseState) -> Vec<Value> {
     let mut chunks = Vec::new();
     for event in events {
         if state.terminated {
@@ -167,7 +149,7 @@ fn delta(index: u32, delta: &Value) -> Value {
 }
 
 /// Send a pending finish as its own chunk (it did not get a `Usage` to merge with).
-fn flush_pending(state: &mut NorthSseState, chunks: &mut Vec<Value>) {
+fn flush_pending(state: &mut OpenAiChatSseState, chunks: &mut Vec<Value>) {
     if let Some(reason) = state.pending_finish.take() {
         chunks.push(json!({
             "object": "chat.completion.chunk",

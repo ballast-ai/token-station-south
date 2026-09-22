@@ -8,8 +8,8 @@
 
 use serde_json::{Value, json};
 use south_north_codec::{
-    CodecError, NorthSseState, ResponseContext, chat_request_from_openai_chat, openai_chat_frames,
-    openai_chat_response,
+    CodecError, OpenAiChatSseState, ResponseContext, chat_request_from_openai_chat,
+    openai_chat_frames, openai_chat_response,
 };
 use token_station_protocol::{
     ChatResponse, Choice, Content, ContentPart, ErrorCode, ErrorEnvelope, FinishReason, Message,
@@ -339,8 +339,8 @@ fn tool_arguments_that_are_not_json_are_reported_instead_of_replaced() {
 
 // ── outbound, streaming ────────────────────────────────────────────────────
 
-fn stream_state() -> NorthSseState {
-    NorthSseState::for_model("m").with_message_id("msg_fixed")
+fn stream_state() -> OpenAiChatSseState {
+    OpenAiChatSseState::default()
 }
 
 fn terminal_sequence() -> Vec<StreamEvent> {

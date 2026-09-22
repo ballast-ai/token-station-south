@@ -39,13 +39,17 @@
 
 use serde_json::Value;
 
+pub mod anthropic;
+pub mod anthropic_sse;
 pub mod request;
 pub mod response;
 pub mod sse;
 
+pub use anthropic::{anthropic_message_response, chat_request_from_anthropic_messages};
+pub use anthropic_sse::{AnthropicFrame, AnthropicSseState, anthropic_frames};
 pub use request::chat_request_from_openai_chat;
 pub use response::{ResponseContext, openai_chat_response};
-pub use sse::{NorthSseState, openai_chat_frames};
+pub use sse::{OpenAiChatSseState, openai_chat_frames};
 
 /// Why a conversion could not be completed.
 ///
