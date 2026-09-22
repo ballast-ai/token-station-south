@@ -339,6 +339,33 @@ fn a_tool_call_with_no_id_is_derived_so_the_same_stream_renders_identically() {
 }
 
 #[test]
+fn blocks_are_closed_by_kind_rather_than_in_the_order_they_opened() {
+    let frames = anthropic_frames(
+        &[
+            StreamEvent::ToolCallDelta {
+                index: 0,
+                id: Some("toolu_1".to_owned()),
+                name: Some("f".to_owned()),
+                arguments_delta: "{}".to_owned(),
+            },
+            StreamEvent::Delta { index: 0, content: "after the call".to_owned() },
+            StreamEvent::Done { finish_reason: Some(FinishReason::ToolCalls), stop_sequence: None },
+        ],
+        &mut state(),
+    );
+    let stops: Vec<&Value> = frames
+        .iter()
+        .filter(|frame| frame.event == "content_block_stop")
+        .map(|frame| &frame.data["index"])
+        .collect();
+    assert_eq!(
+        stops,
+        vec![&json!(1), &json!(0)],
+        "the tool block opened first and closes last; a client keys a stop on the block number          it carries, not on its position among the other stops"
+    );
+}
+
+#[test]
 fn a_signature_with_no_thinking_block_renders_nothing_and_starts_no_message() {
     let mut state = state();
     let frames = anthropic_frames(

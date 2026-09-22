@@ -192,7 +192,13 @@ impl AnthropicSseState {
         index
     }
 
-    /// Close every block this message opened, in the order they were opened.
+    /// Close every block this message opened: thinking, then text, then the
+    /// tool blocks in IR slot order.
+    ///
+    /// That is not necessarily the order they opened in — a tool block can
+    /// open before the text one. It does not have to be: a client keys a
+    /// stop on the block number it carries, not on its position among the
+    /// other stops.
     fn close_open_blocks(&mut self, frames: &mut Vec<AnthropicFrame>) {
         let mut open: Vec<usize> = self.thinking_index.take().into_iter().collect();
         open.extend(self.text_index.take());
