@@ -152,11 +152,11 @@ v0.29.0 已发布五包；v0.30.0 已发布六包，新增
 和[下一版准备](docs/design/2026-09-20-release-0.30.0-minimax.md)。
 H3与estimate新增事实见[设计记录](docs/design/2026-09-20-minimax-h3-estimate-facts.md)。
 
-## 百炼 managed 视频开发候选
+## 百炼 managed 视频
 
-新增第七包 `task-bailian-v2`，覆盖 managed 视频，图片与原生透传不迁移。
-复用 Task5 / HTTP9 / Task V2 WIT，无新运行时能力。当前准备 v0.31.0 七包候选，尚未发布；
-正式 v0.30.0 已发布六包，不包含此包，旧六包内容与发布身份不覆盖。
+第七包 `task-bailian-v2`，覆盖 managed 视频，图片与原生透传不迁移。
+复用 Task5 / HTTP9 / Task V2 WIT，无新运行时能力。v0.31.0 已发布七包含此包，
+包身份 0.31.0；v0.32.0 只升运行时与 `compatibility.south_runtime`，包身份不变。
 原生入口 `reference_bailian_task_v2::BailianTaskComponentV2` 与 Wasm同源；
 构建 `bash scripts/build-bailian-task-v2-component.sh`。行为、官方差异和验收边界见
 [设计记录](docs/design/2026-09-20-bailian-video-task-component.md)。
