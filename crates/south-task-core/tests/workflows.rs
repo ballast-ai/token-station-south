@@ -431,14 +431,14 @@ fn workflow_futures_are_send_without_requiring_sync_effects() {
 #[test]
 fn rust_library_version_is_independent_of_component_runtime_identity() {
     assert_eq!(env!("CARGO_PKG_VERSION"), "0.1.0");
-    assert!(include_str!("../../../Cargo.toml").contains("version = \"0.31.0\""));
+    assert!(include_str!("../../../Cargo.toml").contains("version = \"0.32.0\""));
     assert!(
         include_str!("../../south-provider-runtime/Cargo.toml")
             .contains("version.workspace = true")
     );
     assert!(
         include_str!("../../../components/task-bailian-v2/manifest.json")
-            .contains("\"south_runtime\": \"0.31.0\"")
+            .contains("\"south_runtime\": \"0.32.0\"")
     );
 }
 
