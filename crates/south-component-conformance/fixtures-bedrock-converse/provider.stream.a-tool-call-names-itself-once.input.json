@@ -1,0 +1,9 @@
+{
+  "chunks": [
+    "event: contentBlockStart\ndata: {\"contentBlockIndex\": 1, \"start\": {\"toolUse\": {\"toolUseId\": \"tu_1\", \"name\": \"get_weather\"}}}\n\n",
+    "event: contentBlockDelta\ndata: {\"contentBlockIndex\": 1, \"delta\": {\"toolUse\": {\"input\": \"{\\\"city\\\"\"}}}\n\n",
+    "event: contentBlockDelta\ndata: {\"contentBlockIndex\": 1, \"delta\": {\"toolUse\": {\"input\": \":\\\"Beijing\\\"}\"}}}\n\n",
+    "event: messageStop\ndata: {\"stopReason\": \"tool_use\"}\n\n",
+    "event: metadata\ndata: {\"usage\": {\"inputTokens\": 20, \"outputTokens\": 8, \"totalTokens\": 28, \"cacheReadInputTokens\": 5}}\n\n"
+  ]
+}

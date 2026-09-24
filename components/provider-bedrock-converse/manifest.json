@@ -1,0 +1,38 @@
+{
+  "name": "provider-bedrock-converse",
+  "version": "1.0.0",
+  "api_version": "provider-adapter-v2",
+  "providers": [
+    "bedrock"
+  ],
+  "capabilities": [
+    "chat",
+    "stream",
+    "tool_call"
+  ],
+  "auth_arms": [
+    "host_signed"
+  ],
+  "permissions": {
+    "network": false,
+    "filesystem": false,
+    "secrets": []
+  },
+  "conformance": {
+    "required_suite": "south.provider-component.v1",
+    "fixtures": "fixtures-bedrock-converse/"
+  },
+  "compatibility": {
+    "ir_schema_id": "token-station-protocol@0.3.0/v0.2.0",
+    "kernel_version": "0.2.0",
+    "kernel_revision": "72458e3a11fe157f9ac04818c44b62a3dd2cb09c",
+    "wit_package": "token-station:adapter@2.0.0",
+    "south_runtime": "0.32.0"
+  },
+  "emits": [
+    "authorization",
+    "x-amz-date",
+    "x-amz-content-sha256",
+    "x-amz-security-token"
+  ]
+}

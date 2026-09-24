@@ -1,0 +1,37 @@
+{
+  "provider_config": {
+    "provider": "bedrock",
+    "base_url": "https://bedrock-runtime.us-east-1.amazonaws.com",
+    "models": [
+      {
+        "model": "anthropic.claude-sonnet-4-v1:0",
+        "tool": true,
+        "vision": true,
+        "json_schema": false,
+        "context_window": 200000,
+        "supported_parameters": [
+          "stop",
+          "temperature",
+          "top_p"
+        ]
+      }
+    ]
+  },
+  "chat_request": {
+    "model": "anthropic.claude-sonnet-4-v1:0",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Be terse."
+      },
+      {
+        "role": "user",
+        "content": "Weather in Beijing?"
+      }
+    ],
+    "sampling": {
+      "temperature": 0.2,
+      "max_output_tokens": 512
+    }
+  }
+}

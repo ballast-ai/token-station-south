@@ -1,0 +1,67 @@
+{
+  "method": "POST",
+  "url": "https://bedrock-runtime.us-east-1.amazonaws.com/model/anthropic.claude-sonnet-4-v1:0/converse",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": {
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "text": "weather in both?"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "toolUse": {
+              "toolUseId": "tu_1",
+              "name": "get_weather",
+              "input": {
+                "city": "Beijing"
+              }
+            }
+          },
+          {
+            "toolUse": {
+              "toolUseId": "tu_2",
+              "name": "get_weather",
+              "input": {
+                "city": "Tokyo"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "toolResult": {
+              "toolUseId": "tu_1",
+              "content": [
+                {
+                  "text": "12C"
+                }
+              ]
+            }
+          },
+          {
+            "toolResult": {
+              "toolUseId": "tu_2",
+              "content": [
+                {
+                  "text": "18C"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

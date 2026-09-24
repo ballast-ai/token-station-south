@@ -44,6 +44,7 @@ pub use task_suite_v2::{TASK_COMPONENT_SUITE_V2, run_task_component_suite_v2};
 mod fixture;
 pub mod reference;
 pub mod reference_anthropic;
+pub mod reference_bedrock_converse;
 pub mod reference_gemini;
 pub mod reference_kling_task;
 mod report;

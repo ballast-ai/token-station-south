@@ -1,0 +1,10 @@
+{
+  "chunks": [
+    "event: messageStart\ndata: {\"role\": \"assistant\"}\n\n",
+    "event: contentBlockDelta\ndata: {\"contentBlockIndex\": 0, \"delta\": {\"text\": \"Mi\"}}\n\n",
+    "event: contentBlockDelta\ndata: {\"contentBlockIndex\": 0, \"delta\": {\"text\": \"ld.\"}}\n\n",
+    "event: contentBlockStop\ndata: {\"contentBlockIndex\": 0}\n\n",
+    "event: messageStop\ndata: {\"stopReason\": \"end_turn\"}\n\n",
+    "event: metadata\ndata: {\"usage\": {\"inputTokens\": 10, \"outputTokens\": 2, \"totalTokens\": 12}}\n\n"
+  ]
+}
