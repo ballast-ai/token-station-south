@@ -229,6 +229,31 @@ fn an_assistant_turn_with_nothing_in_it_is_dropped_not_sent_empty() {
     assert_eq!(messages[0]["role"], "user");
 }
 
+#[test]
+fn reasoning_parts_are_dropped_on_the_way_out_and_never_forwarded_raw() {
+    // Converse has no request-side slot for a replayed reasoning block, and an
+    // unknown part has none by definition. Dropping is the decision; this test
+    // exists because a *silent* decision is one a later change can reverse
+    // without anything going red — and forwarding either shape would send
+    // Converse a content block it does not define.
+    let body = built(&turn(&json!([{"role":"user","content":[
+        {"type":"text","text":"hi"},
+        {"type":"thinking","thinking":"secret reasoning","signature":"sig"},
+        {"type":"redacted_thinking","data":"opaque"},
+        {"type":"some_future_part","whatever":1},
+    ]}])));
+    let blocks = body["messages"][0]["content"].as_array().unwrap();
+    assert_eq!(blocks.len(), 1, "只有 text 该活下来，其余三臂全丢：{body:#}");
+    assert_eq!(blocks[0], json!({"text": "hi"}));
+    let rendered = body.to_string();
+    for leaked in ["secret reasoning", "opaque", "some_future_part"] {
+        assert!(
+            !rendered.contains(leaked),
+            "被丢弃的部件不得以任何形式出现在请求体里：`{leaked}` 在 {body:#}"
+        );
+    }
+}
+
 // ── Images: inline bytes only ──────────────────────────────────────────────
 
 #[test]
