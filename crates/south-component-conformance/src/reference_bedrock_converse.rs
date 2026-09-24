@@ -336,11 +336,19 @@ fn tool_config(request: &ChatRequest) -> Option<Value> {
         Some(ToolChoice::Auto) => {
             config.insert("toolChoice".to_owned(), json!({"auto": {}}));
         }
-        // A provider-specific object form is passed through: this dialect's
-        // `{"tool": {"name": …}}` arrives here, and rewriting an unrecognised
-        // shape would lose the caller's intent.
+        // The object form the OpenAI wire uses for "call this one tool":
+        // `{"type":"function","function":{"name":…}}`. Converse spells the same
+        // thing `{"tool":{"name":…}}`, so it is **translated**, not passed
+        // through — forwarding the caller's shape verbatim would send Converse a
+        // `toolChoice` it does not define, and the upstream answers that with a
+        // generic validation error. A shape with no `function.name` to read is
+        // left out entirely rather than guessed at: an absent `toolChoice` means
+        // `auto`, which is the same thing an unreadable choice would have to
+        // fall back to anyway.
         Some(ToolChoice::Other(value)) => {
-            config.insert("toolChoice".to_owned(), value.clone());
+            if let Some(name) = value.get("function").and_then(|function| function.get("name")) {
+                config.insert("toolChoice".to_owned(), json!({"tool": {"name": name}}));
+            }
         }
         // Absent means `auto` in Converse, which is also what absent means in
         // IR — so nothing is written.
