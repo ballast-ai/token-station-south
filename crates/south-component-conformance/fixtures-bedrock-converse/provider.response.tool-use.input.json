@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"output\": {\"message\": {\"role\": \"assistant\", \"content\": [{\"toolUse\": {\"toolUseId\": \"tu_9\", \"name\": \"get_weather\", \"input\": {\"city\": \"Beijing\"}}}]}}, \"stopReason\": \"tool_use\", \"usage\": {\"inputTokens\": 120, \"outputTokens\": 3, \"totalTokens\": 123, \"cacheReadInputTokens\": 90, \"cacheWriteInputTokens\": 30}}"
+}

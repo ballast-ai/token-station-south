@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"output\": {\"message\": {\"role\": \"assistant\", \"content\": [{\"text\": \"\\u2026\"}]}}, \"stopReason\": \"model_context_window_exceeded\", \"usage\": {\"inputTokens\": 5, \"outputTokens\": 1, \"totalTokens\": 6}}"
+}

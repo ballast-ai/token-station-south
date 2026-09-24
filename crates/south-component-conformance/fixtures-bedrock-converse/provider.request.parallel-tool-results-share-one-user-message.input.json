@@ -1,0 +1,54 @@
+{
+  "provider_config": {
+    "provider": "bedrock",
+    "base_url": "https://bedrock-runtime.us-east-1.amazonaws.com",
+    "models": [
+      {
+        "model": "anthropic.claude-sonnet-4-v1:0",
+        "tool": true,
+        "vision": true,
+        "json_schema": false,
+        "context_window": 200000,
+        "supported_parameters": [
+          "stop",
+          "temperature",
+          "top_p"
+        ]
+      }
+    ]
+  },
+  "chat_request": {
+    "model": "anthropic.claude-sonnet-4-v1:0",
+    "messages": [
+      {
+        "role": "user",
+        "content": "weather in both?"
+      },
+      {
+        "role": "assistant",
+        "tool_calls": [
+          {
+            "id": "tu_1",
+            "name": "get_weather",
+            "arguments": "{\"city\":\"Beijing\"}"
+          },
+          {
+            "id": "tu_2",
+            "name": "get_weather",
+            "arguments": "{\"city\":\"Tokyo\"}"
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "tu_1",
+        "content": "12C"
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "tu_2",
+        "content": "18C"
+      }
+    ]
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "id": "",
+  "model": "",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "tool_calls": [
+          {
+            "id": "tu_9",
+            "name": "get_weather",
+            "arguments": "{\"city\":\"Beijing\"}"
+          }
+        ]
+      },
+      "finish_reason": "tool_calls"
+    }
+  ],
+  "usage": {
+    "input_tokens": 120,
+    "output_tokens": 3,
+    "cache_read_tokens": 90,
+    "cache_write_tokens": 30,
+    "reasoning_tokens": 0
+  }
+}
