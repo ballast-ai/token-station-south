@@ -186,6 +186,11 @@ fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<Value>, Vec<
     let mut messages: Vec<Value> = Vec::new();
     // Tool results seen since the last flush, all destined for one user message.
     let mut pending_results: Vec<Value> = Vec::new();
+    // Every `toolUseId` an assistant turn has announced so far. Converse
+    // requires a result to answer a call it can actually see; an id that names
+    // nothing is refused here because the upstream answers it with a generic
+    // validation error that says nothing about which id was wrong.
+    let mut announced_calls: Vec<&str> = Vec::new();
 
     for message in &request.messages {
         match message.role {
@@ -210,6 +215,12 @@ fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<Value>, Vec<
                          can never match a prior toolUse",
                     ));
                 }
+                if !announced_calls.contains(&tool_call_id) {
+                    return Err(capability(format!(
+                        "a Converse tool result must answer a toolUse announced earlier in the \
+                         same conversation; `{tool_call_id}` names none"
+                    )));
+                }
                 let content = text_blocks(message.content.as_ref());
                 pending_results.push(json!({
                     "toolResult": {
@@ -230,6 +241,7 @@ fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<Value>, Vec<
                 let mut content = text_blocks(message.content.as_ref());
                 for call in &message.tool_calls {
                     content.push(tool_use_block(call)?);
+                    announced_calls.push(&call.id);
                 }
                 // Bedrock 400s on an assistant turn whose content array is
                 // empty, so an empty one is dropped rather than sent.
