@@ -19,21 +19,20 @@
 //! 2. **The request this function returns is the thing that gets signed.**
 //!    There is no later opportunity to add a header or touch the URL.
 //!
-//! # Streaming is deliberately refused for now
+//! # Streaming: the host owns the frame layer, this parser reads SSE
 //!
-//! Converse streams **AWS eventstream binary frames**, not SSE: the event name
-//! lives in an `:event-type` frame header and each frame carries two CRC32s.
-//! `StreamParserV1::parse_chunk` receives raw bytes and, per its own contract,
-//! "buffers bytes and decodes only complete frames" — so framing belongs to the
-//! parser, which means this component would have to carry an eventstream
-//! decoder.
+//! Converse streams **AWS eventstream binary frames**, not SSE — the event name
+//! lives in an `:event-type` frame header and each frame carries two CRC32s. That
+//! layer stays with the host, which already decodes it: after decoding it holds
+//! `(event_type, payload_json)` and no original bytes, so it feeds components
+//! through a seam that re-encodes each event as one SSE frame. So this parser
+//! sees `event: contentBlockDelta` / `data: {…}` — exactly the shape every other
+//! provider component parses — and needs no eventstream decoder, no CRC
+//! dependency, and no arrangement private to this dialect.
 //!
-//! That decision is not this file's to make (it adds a dependency to a crate
-//! every component compiles into its wasm), so until it is taken this component
-//! **refuses streaming up front**: `build_http_request` returns a capability
-//! error for `request.stream`, rather than sending a request whose response it
-//! cannot read. Refusing at request-build time is the honest shape — the
-//! alternative is a stream that opens and then dies.
+//! `parse_chunk` still takes raw bytes and still buffers across split frames:
+//! that contract is unchanged, and a caller holding real bytes may use it
+//! directly. The two feeds are alternatives, not a conflict.
 //!
 //! # No clock, no identity
 //!
@@ -411,19 +410,195 @@ fn usage_of(raw: &Value) -> ComponentResultV1<Usage> {
     Ok(usage)
 }
 
-/// The parser this component hands out until the framing decision is taken.
-///
-/// It refuses rather than returning nothing: a parser that silently yields no
-/// events would look like a stream that produced no output, which is the one
-/// failure shape hardest to tell from a working-but-quiet upstream.
-struct UnsupportedStreamParser;
+/// Where one SSE frame's payload ends and where the frame itself ends.
+fn sse_frame_boundary(buffer: &[u8]) -> Option<(usize, usize)> {
+    let newline = buffer.windows(2).position(|pair| pair == b"\n\n").map(|at| (at, at + 2));
+    let crlf = buffer.windows(4).position(|quad| quad == b"\r\n\r\n").map(|at| (at, at + 4));
+    match (newline, crlf) {
+        (Some(newline), Some(crlf)) => Some(if newline.0 <= crlf.0 { newline } else { crlf }),
+        (found, None) | (None, found) => found,
+    }
+}
 
-impl StreamParserV1 for UnsupportedStreamParser {
-    fn parse_chunk(&mut self, _chunk: &[u8]) -> ComponentResultV1<Vec<StreamEvent>> {
-        Err(capability(
-            "this Converse component does not decode AWS eventstream frames yet; request the \
-             non-streaming surface",
-        ))
+/// The `event:` and `data:` values of one frame.
+fn frame_fields(frame: &str) -> (Option<&str>, Option<&str>) {
+    let mut event = None;
+    let mut data = None;
+    for line in frame.lines() {
+        if let Some(value) = line.strip_prefix("event:") {
+            event = Some(value.trim());
+        } else if let Some(value) = line.strip_prefix("data:") {
+            data = Some(value.trim());
+        }
+    }
+    (event, data)
+}
+
+/// The content-block index an event names, which doubles as the tool-call index.
+///
+/// Converse counts *all* blocks, so a tool call's number can skip values when a
+/// text block preceded it. That is fine: consumers only need fragments of one
+/// call to share a number and different calls to differ, which holds.
+fn block_index(data: &Value) -> u32 {
+    u32::try_from(data["contentBlockIndex"].as_u64().unwrap_or_default()).unwrap_or_default()
+}
+
+/// Converse's streaming half.
+///
+/// # Why this parses SSE and not eventstream frames
+///
+/// Converse streams AWS eventstream binary frames, but the **host** owns that
+/// layer: after decoding, it holds `(event_type, payload_json)` and no original
+/// bytes, so it feeds components through a seam that re-encodes each event as
+/// one SSE frame (`SouthStreamParser::parse_event` on the host side). That is an
+/// established path with production callers, not a private arrangement — so this
+/// parser sees exactly what every other provider component sees, and needs no
+/// eventstream decoder or CRC dependency of its own.
+///
+/// # The two-phase ending
+///
+/// Converse ends in two events, and IR has exactly that shape:
+///
+/// * `messageStop` carries `stopReason` but the stream is not over — `Finish`;
+/// * `metadata` carries `usage` and is the terminal frame — `Usage` then `Done`.
+///
+/// Emitting `Done` on `messageStop` would announce a successful terminal state
+/// before the token counts arrived, which is the failure this ordering exists to
+/// prevent. So `Done` waits for `metadata`, and an EOF that never saw `metadata`
+/// is a protocol error rather than a quiet success.
+struct ConverseSseParser {
+    tail: Vec<u8>,
+    /// The finish reason `messageStop` announced, held until `metadata` lets
+    /// `Done` go out.
+    pending_finish: Option<FinishReason>,
+    /// Whether `metadata` has already closed the stream.
+    closed: bool,
+}
+
+impl ConverseSseParser {
+    const fn new() -> Self {
+        Self { tail: Vec::new(), pending_finish: None, closed: false }
+    }
+
+    #[expect(
+        clippy::match_same_arms,
+        reason = "a known event that carries nothing and an event this dialect has not got yet \
+                  are different facts that happen to need the same handling; merging them into \
+                  the wildcard would lose the record of which names are accounted for"
+    )]
+    fn events_of(&mut self, event: &str, data: &Value) -> ComponentResultV1<Vec<StreamEvent>> {
+        match event {
+            // Both are accounted for and carry nothing this side needs:
+            // `messageStart` only announces the turn, `contentBlockStop` only
+            // closes a block whose deltas already went out. The contract says
+            // `messageStart` arrives once; a repeat is simply ignored.
+            "messageStart" | "contentBlockStop" => Ok(Vec::new()),
+            "contentBlockStart" => {
+                // Only a tool block opens with anything: `start.toolUse` carries
+                // the id and name, and IR wants them on the call's **first**
+                // fragment and never again. A text block's start says nothing.
+                let Some(use_block) = data["start"].get("toolUse") else {
+                    return Ok(Vec::new());
+                };
+                Ok(vec![StreamEvent::ToolCallDelta {
+                    index: block_index(data),
+                    id: use_block["toolUseId"].as_str().map(str::to_owned),
+                    name: use_block["name"].as_str().map(str::to_owned),
+                    arguments_delta: String::new(),
+                }])
+            }
+            "contentBlockDelta" => {
+                let delta = &data["delta"];
+                if let Some(text) = delta["text"].as_str() {
+                    // `Delta.index` is the *choice* index, not the block index:
+                    // one Converse response is one choice.
+                    return Ok(vec![StreamEvent::Delta { index: 0, content: text.to_owned() }]);
+                }
+                if let Some(fragment) = delta["toolUse"]["input"].as_str() {
+                    // A JSON *fragment*, not an object — the completed call's
+                    // input is an object, but the stream sends pieces of its
+                    // text. IR keeps arguments as a string for exactly this.
+                    return Ok(vec![StreamEvent::ToolCallDelta {
+                        index: block_index(data),
+                        id: None,
+                        name: None,
+                        arguments_delta: fragment.to_owned(),
+                    }]);
+                }
+                // `reasoningContent` is mapped when it carries plain text and
+                // dropped otherwise. The host's own translator drops it
+                // outright; carrying the text is strictly more faithful, and the
+                // `as_str` guard means an unexpected shape falls back to
+                // dropping rather than guessing. The shape itself is attested
+                // only by a fixture, never by production code, so it is read
+                // defensively on purpose.
+                if let Some(text) = delta["reasoningContent"]["text"].as_str() {
+                    return Ok(vec![StreamEvent::ThinkingDelta {
+                        index: 0,
+                        thinking_delta: text.to_owned(),
+                    }]);
+                }
+                Ok(Vec::new())
+            }
+            "messageStop" => {
+                let raw = data["stopReason"].as_str().unwrap_or("end_turn");
+                let finish = stop_reason_to_finish(raw);
+                self.pending_finish = Some(finish.clone());
+                Ok(vec![StreamEvent::Finish { finish_reason: Some(finish), stop_sequence: None }])
+            }
+            "metadata" => {
+                let usage = usage_of(&data["usage"])?;
+                self.closed = true;
+                Ok(vec![
+                    StreamEvent::Usage { usage },
+                    StreamEvent::Done {
+                        finish_reason: self.pending_finish.take(),
+                        stop_sequence: None,
+                    },
+                ])
+            }
+            // An event this dialect gains later. Ignored rather than refused:
+            // the host's own strict validator lives upstream of here and is the
+            // place that decides an unknown event is fatal.
+            _ => Ok(Vec::new()),
+        }
+    }
+}
+
+impl StreamParserV1 for ConverseSseParser {
+    fn parse_chunk(&mut self, chunk: &[u8]) -> ComponentResultV1<Vec<StreamEvent>> {
+        if chunk.is_empty() {
+            // A clean transport EOF, which the runtime spells as an empty
+            // fragment. Reaching it without `metadata` means the stream was cut
+            // before the token counts arrived — and the way to say so is to emit
+            // **no `Done`**, which is exactly what happens here.
+            //
+            // Not an error, for two reasons. The absence of a terminal event is
+            // already the contract's truncation signal, and the host settles an
+            // exchange only after one. And an empty fragment is not reliably a
+            // real EOF: the conformance suite's incrementality check re-runs a
+            // stream split at every byte boundary, so the first chunk of the
+            // split-at-zero run is empty mid-stream. A parser that treated that
+            // as a fatal truncation would fail the check without any upstream
+            // having misbehaved.
+            return Ok(Vec::new());
+        }
+        self.tail.extend_from_slice(chunk);
+        let mut events = Vec::new();
+        while let Some((payload_end, frame_end)) = sse_frame_boundary(&self.tail) {
+            let frame = self.tail.drain(..frame_end).collect::<Vec<u8>>();
+            let frame = std::str::from_utf8(&frame[..payload_end]).map_err(|_| {
+                provider_protocol_error("the upstream sent a stream frame that is not UTF-8")
+            })?;
+            let (Some(event), Some(data)) = frame_fields(frame) else {
+                continue;
+            };
+            let parsed: Value = serde_json::from_str(data).map_err(|_| {
+                provider_protocol_error("the upstream sent a stream frame with invalid JSON")
+            })?;
+            events.extend(self.events_of(event, &parsed)?);
+        }
+        Ok(events)
     }
 }
 
@@ -459,20 +634,15 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
                  target to send to",
             ));
         }
-        // See the module header: the response side cannot read eventstream
-        // frames yet, so a stream is refused before it is opened.
-        if request.stream {
-            return Err(capability(
-                "this Converse component does not decode AWS eventstream frames yet; request the \
-                 non-streaming surface",
-            ));
-        }
         // `ProviderApi::resolve` covers four canonical shapes and none of them
         // is this one — the model sits inside the path and the operation is the
         // last segment. So the URL is built from the endpoint's own text, which
         // is what `permits` authorizes against.
+        // Streaming is a different last path segment, not a body field —
+        // the same shape Gemini uses.
+        let operation = if request.stream { "converse-stream" } else { "converse" };
         let url = format!(
-            "{}/model/{}/converse",
+            "{}/model/{}/{operation}",
             config.base_url.as_str().trim_end_matches('/'),
             request.model
         );
@@ -612,6 +782,6 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
     }
 
     fn stream_parser(&self) -> Box<dyn StreamParserV1> {
-        Box::new(UnsupportedStreamParser)
+        Box::new(ConverseSseParser::new())
     }
 }

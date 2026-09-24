@@ -79,13 +79,15 @@ fn another_dialects_config_is_refused() {
 }
 
 #[test]
-fn streaming_is_refused_before_the_request_is_sent() {
-    // The response half cannot decode eventstream frames yet, so opening the
-    // stream would produce a request whose answer is unreadable. Refusing here
-    // beats a stream that opens and then dies.
+fn streaming_is_a_different_last_path_segment_not_a_body_field() {
     let mut request = turn(&json!([{"role":"user","content":"hi"}]));
     request.stream = true;
-    assert!(BedrockConverseReferenceV1.build_http_request(&request, &config()).is_err());
+    let descriptor = BedrockConverseReferenceV1.build_http_request(&request, &config()).unwrap();
+    assert_eq!(descriptor.url, format!("{BASE}/model/{MODEL}/converse-stream"));
+    // Nothing in the body says "stream": the operation is the URL's last
+    // segment, the same shape Gemini uses.
+    let body = descriptor.body.unwrap();
+    assert!(body.get("stream").is_none(), "Converse has no `stream` body field");
 }
 
 // ── The trap that silently changes meaning ─────────────────────────────────
@@ -303,4 +305,122 @@ fn the_exception_name_is_read_from_the_header_too() {
     .unwrap();
     let envelope = BedrockConverseReferenceV1.map_provider_error(&parts).unwrap();
     assert_eq!(format!("{:?}", envelope.code), "RateLimit");
+}
+
+// ── Streaming: the two-phase ending is the whole point ─────────────────────
+
+/// One decoded Converse event, re-encoded the way the host's seam does it.
+fn frame(event: &str, data: &Value) -> Vec<u8> {
+    format!("event: {event}\ndata: {data}\n\n").into_bytes()
+}
+
+#[test]
+fn done_waits_for_metadata_because_message_stop_has_no_usage_yet() {
+    let mut parser = BedrockConverseReferenceV1.stream_parser();
+    assert!(
+        parser
+            .parse_chunk(&frame("messageStart", &json!({"role":"assistant"})))
+            .unwrap()
+            .is_empty()
+    );
+    let deltas = parser
+        .parse_chunk(&frame(
+            "contentBlockDelta",
+            &json!({"contentBlockIndex":0,"delta":{"text":"Mild."}}),
+        ))
+        .unwrap();
+    assert_eq!(format!("{deltas:?}"), r#"[Delta { index: 0, content: "Mild." }]"#);
+
+    // messageStop knows the reason but not the counts, so it may only Finish.
+    let stop =
+        parser.parse_chunk(&frame("messageStop", &json!({"stopReason":"end_turn"}))).unwrap();
+    assert_eq!(stop.len(), 1, "messageStop must emit Finish alone, never Done");
+    assert!(
+        format!("{stop:?}").starts_with("[Finish"),
+        "announcing Done here would claim a complete exchange before usage arrived: {stop:?}"
+    );
+
+    // metadata carries the counts and closes the stream: Usage, then Done.
+    let end = parser
+        .parse_chunk(&frame(
+            "metadata",
+            &json!({"usage":{"inputTokens":10,"outputTokens":2,"totalTokens":12}}),
+        ))
+        .unwrap();
+    assert_eq!(end.len(), 2);
+    assert!(format!("{:?}", end[0]).starts_with("Usage"));
+    // The finish reason messageStop announced rides out on Done.
+    assert!(format!("{:?}", end[1]).contains("Stop"), "{:?}", end[1]);
+    // EOF after a closed stream is clean.
+    assert!(parser.finish().unwrap().is_empty());
+}
+
+#[test]
+fn a_stream_cut_before_metadata_emits_no_done_at_all() {
+    let mut parser = BedrockConverseReferenceV1.stream_parser();
+    parser.parse_chunk(&frame("messageStop", &json!({"stopReason":"end_turn"}))).unwrap();
+    // The reason arrived, the counts never did. The truncation is reported by
+    // the **absence** of a terminal event, which is the contract's own signal
+    // and what the host settles on — not by an error, because an empty fragment
+    // is not reliably a real EOF (the suite's incrementality check produces one
+    // mid-stream).
+    let tail = parser.finish().unwrap();
+    assert!(
+        tail.is_empty(),
+        "no Done may be emitted without usage, so a cut stream cannot settle as complete: {tail:?}"
+    );
+}
+
+#[test]
+fn a_tool_call_names_itself_on_its_first_fragment_only() {
+    let mut parser = BedrockConverseReferenceV1.stream_parser();
+    let start = parser
+        .parse_chunk(&frame(
+            "contentBlockStart",
+            &json!({"contentBlockIndex":1,"start":{"toolUse":{"toolUseId":"tu_1","name":"get_weather"}}}),
+        ))
+        .unwrap();
+    let rendered = format!("{start:?}");
+    assert!(rendered.contains("tu_1") && rendered.contains("get_weather"), "{rendered}");
+    // Converse's delta carries only `input`, and IR wants id/name absent after
+    // the first fragment — so no lookup table is needed on either side.
+    let delta = parser
+        .parse_chunk(&frame(
+            "contentBlockDelta",
+            &json!({"contentBlockIndex":1,"delta":{"toolUse":{"input":"{\"city\":"}}}),
+        ))
+        .unwrap();
+    let rendered = format!("{delta:?}");
+    assert!(rendered.contains("id: None") && rendered.contains("name: None"), "{rendered}");
+    assert!(rendered.contains(r#"{\"city\":"#), "{rendered}");
+}
+
+#[test]
+fn a_frame_split_across_chunks_is_buffered_until_it_closes() {
+    let mut parser = BedrockConverseReferenceV1.stream_parser();
+    let whole = frame("contentBlockDelta", &json!({"contentBlockIndex":0,"delta":{"text":"hi"}}));
+    let (head, tail) = whole.split_at(whole.len() / 2);
+    assert!(parser.parse_chunk(head).unwrap().is_empty(), "half a frame completes nothing");
+    let events = parser.parse_chunk(tail).unwrap();
+    assert_eq!(format!("{events:?}"), r#"[Delta { index: 0, content: "hi" }]"#);
+}
+
+#[test]
+fn a_streamed_usage_report_is_held_to_the_same_arithmetic() {
+    let mut parser = BedrockConverseReferenceV1.stream_parser();
+    assert!(
+        parser
+            .parse_chunk(&frame(
+                "metadata",
+                &json!({"usage":{"inputTokens":10,"outputTokens":2,"totalTokens":99}}),
+            ))
+            .is_err(),
+        "a total that does not add up is a protocol error in the stream too"
+    );
+}
+
+#[test]
+fn an_event_this_dialect_has_not_got_yet_is_ignored_not_fatal() {
+    let mut parser = BedrockConverseReferenceV1.stream_parser();
+    assert!(parser.parse_chunk(&frame("trace", &json!({"whatever":1}))).unwrap().is_empty());
 }
