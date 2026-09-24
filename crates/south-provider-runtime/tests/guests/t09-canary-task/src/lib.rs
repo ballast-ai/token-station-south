@@ -27,6 +27,21 @@
 //! The task request is the host's normalized request, opaque to the ABI. This
 //! component reads `prompt` (required), `model` and `duration` (optional,
 //! seconds, default 4) and ignores everything else.
+//!
+//! # Rogue modes, keyed by the routed model name
+//!
+//! The acceptance also needs negative evidence (T09.8): a component whose
+//! pricing basis the host cannot honour must be refused before any money moves,
+//! not quietly priced some other way. The host hands this component only the
+//! routed upstream model, so — as in `t03-canary-provider` — the rogue
+//! behaviour is keyed by it. The sentinels are deliberately not real model
+//! names:
+//!
+//! - `rogue-milliunits` — prices in milliunits per second (a basis the ABI
+//!   expresses but a host may not bill).
+//! - `rogue-no-seconds` — reports no requested seconds at all.
+//!
+//! Any other model name is the well-behaved wire above.
 
 wit_bindgen::generate!({
     path: "../../../../south-provider-api/wit/task-adapter-v2.wit",
@@ -175,6 +190,13 @@ impl Guest for T09Canary {
             error_envelope("internal", 500, "t09 canary: host-minted task_id missing")
         })?;
 
+        // Rogue modes (see the module header): the estimate a host must refuse.
+        let (requested_seconds, milliunits_per_second) = match model {
+            "rogue-milliunits" => (json!(reel_seconds), json!(1000)),
+            "rogue-no-seconds" => (Value::Null, Value::Null),
+            _ => (json!(reel_seconds), Value::Null),
+        };
+
         let body = json!({
             "t09_job": {
                 "reel_model": model,
@@ -189,8 +211,8 @@ impl Guest for T09Canary {
             // Every key is written, null included: the host's decoder requires
             // `resolution` and `input_image_count` to be present.
             "request_estimate": {
-                "requested_seconds": reel_seconds,
-                "milliunits_per_second": null,
+                "requested_seconds": requested_seconds,
+                "milliunits_per_second": milliunits_per_second,
                 "resolution": null,
                 "input_image_count": null,
             },
