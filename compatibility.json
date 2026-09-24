@@ -1,7 +1,7 @@
 {
   "schema_version": 4,
   "release": {
-    "version": "0.33.0",
+    "version": "0.34.0",
     "stability": "library_slice"
   },
   "contracts": {

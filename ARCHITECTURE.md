@@ -160,12 +160,12 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-该库独立 Rust 版本为 0.1.0；八个库与组件运行时随本次发布为 v0.33.0，
-**组件增至八个**——新增 `provider-bedrock-converse` 1.0.0（首个 `host_signed` 臂的
-出厂包：descriptor 不带凭证，宿主的 finalizer 在组件返回之后签名）。既有七个身份
-各自不变（`provider-openai-compatible` 2.1.3、`provider-gemini` 1.1.3、
+该库独立 Rust 版本为 0.1.0；八个库与组件运行时随本次发布为 v0.34.0，
+组件八个——`provider-bedrock-converse` **1.0.1**（首个 `host_signed` 臂的出厂包：
+descriptor 不带凭证，宿主的 finalizer 在组件返回之后签名；1.0.1 修 `tool_choice`
+对象形应翻译而非透传）。另外七个身份各自不变（`provider-openai-compatible` 2.1.3、`provider-gemini` 1.1.3、
 `provider-anthropic` 1.0.4、`task-kling` 1.0.3、三个 task-v2 均 0.31.0），
 Task5/HTTP9/WIT 不变。每个包的 `compatibility.south_runtime` 随运行时一并声明为
-0.33.0——该字段按精确串比对，声明旧版的包会被宿主按名拒绝，故运行时与八包必须
+0.34.0——该字段按精确串比对，声明旧版的包会被宿主按名拒绝，故运行时与八包必须
 同批升。宿主采用须分别用真实存储通过公共故障套件；组件兼容状态不能代替共享核心
 采用证据。[设计与边界](docs/design/2026-09-20-shared-task-core.md)。
