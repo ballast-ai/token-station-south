@@ -129,6 +129,41 @@ fn required_becomes_any_and_auto_is_written_explicitly() {
     assert_eq!(auto["toolConfig"]["tools"][0]["toolSpec"]["inputSchema"]["json"]["type"], "object");
 }
 
+#[test]
+fn the_openai_object_form_of_tool_choice_is_translated_not_forwarded() {
+    // A client naming one tool sends OpenAI's object form. Converse spells the
+    // same intent differently, and a host-side contract check refuses anything
+    // that is not `{auto:{}}` / `{any:{}}` / `{tool:{name}}` — so forwarding the
+    // caller's shape verbatim reaches the upstream as an undefined toolChoice.
+    let body = built(&request(json!({
+        "model": MODEL,
+        "messages": [{"role":"user","content":"hi"}],
+        "tools": [{"name":"lookup_weather","parameters":{"type":"object"}}],
+        "tool_choice": {"type":"function","function":{"name":"lookup_weather"}},
+    })));
+    assert_eq!(
+        body["toolConfig"]["toolChoice"],
+        json!({"tool": {"name": "lookup_weather"}}),
+        "OpenAI 的对象形必须翻成 Converse 的具名形：{body:#}"
+    );
+}
+
+#[test]
+fn an_unreadable_tool_choice_object_is_omitted_rather_than_forwarded() {
+    // No `function.name` to read. Omitting means `auto`, which is where an
+    // unreadable choice would have to land anyway — and it keeps the body legal.
+    let body = built(&request(json!({
+        "model": MODEL,
+        "messages": [{"role":"user","content":"hi"}],
+        "tools": [{"name":"t","parameters":{"type":"object"}}],
+        "tool_choice": {"type":"something_else"},
+    })));
+    assert!(
+        body["toolConfig"].get("toolChoice").is_none(),
+        "读不出名字的 choice 应当整个不发，而不是原样透传：{body:#}"
+    );
+}
+
 // ── Tool-call and tool-result shapes Bedrock rejects unhelpfully ───────────
 
 #[test]
