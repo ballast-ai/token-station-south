@@ -1,0 +1,31 @@
+{
+  "provider_config": {
+    "provider": "byteplus-video",
+    "base_url": "https://ark.byteplus.example",
+    "auth": "provider_api_key"
+  },
+  "locator": {
+    "schema_version": 1,
+    "route": "api/v3/contents/generations/tasks"
+  },
+  "observation": {
+    "state": "succeeded",
+    "artifacts": {
+      "kind": "urls",
+      "items": [
+        {
+          "url": "https://ark-cdn.example/v.mp4?sig=private",
+          "id": null,
+          "duration": null,
+          "fetch_with_credential": false
+        }
+      ]
+    },
+    "usage": {
+      "seconds": null,
+      "milliunits": null,
+      "tokens": 108900,
+      "outputs": 1
+    }
+  }
+}

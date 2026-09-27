@@ -168,6 +168,13 @@ Bearer 认证、按秒用量、直链产物，无新运行时能力；声明禁�
 与宿主原生臂的差异（输入图原样转发、越界时长组件处 400、未带时长不报申报秒数）见
 `reference_xai_task_v2` 头注与 `fixtures-xai-task-v2/README.md`。构建 `bash scripts/build-xai-task-v2-component.sh`。
 
+## BytePlus Seedance 视频（合同 6 候选，未发布）
+
+第十包 `task-byteplus-v2`（族 `byteplus-video`），覆盖 Seedance 文生 / 首尾帧 / 视频编辑 / 参考图（≤ 30）。合同 6 的第一个
+`tokens_per_second` 用户：按「宽 × 高 × 24 ÷ 1024」给出所请求分辨率的每秒 token 率，宿主不再持有第二份像素公式；结算读实报
+`completion_tokens`。声明禁改路径 `model` / `resolution` / `duration`。**能力损失**：渲染体不含上游 `last_frame_url`（见头注）。
+构建 `bash scripts/build-byteplus-task-v2-component.sh`。
+
 ## Local verification
 
 ```bash

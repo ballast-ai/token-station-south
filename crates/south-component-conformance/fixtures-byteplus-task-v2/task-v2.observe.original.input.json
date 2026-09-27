@@ -1,0 +1,13 @@
+{
+  "provider_config": {
+    "provider": "byteplus-video",
+    "base_url": "https://ark.byteplus.example",
+    "auth": "provider_api_key"
+  },
+  "upstream_model": "seedance-1-0-pro-250528",
+  "upstream_task_id": "cgt-2025-original",
+  "locator": {
+    "schema_version": 1,
+    "route": "api/v3/contents/generations/tasks"
+  }
+}

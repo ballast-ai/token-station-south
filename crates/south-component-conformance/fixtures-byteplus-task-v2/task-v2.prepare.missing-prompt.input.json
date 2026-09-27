@@ -1,0 +1,13 @@
+{
+  "provider_config": {
+    "provider": "byteplus-video",
+    "base_url": "https://ark.byteplus.example",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "model": "seedance-1-0-pro-250528"
+  },
+  "minted": {
+    "task_id": "host-1"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "method": "GET",
+  "url": "https://ark.byteplus.example/api/v3/contents/generations/tasks/cgt-2025-original",
+  "auth": {
+    "scheme": "bearer",
+    "secret": "provider_api_key"
+  }
+}

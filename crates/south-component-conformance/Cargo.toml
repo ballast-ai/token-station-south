@@ -57,5 +57,9 @@ required-features = ["sandbox"]
 name = "xai_task_sandbox_parity_v2"
 required-features = ["sandbox"]
 
+[[test]]
+name = "byteplus_task_sandbox_parity_v2"
+required-features = ["sandbox"]
+
 [lints]
 workspace = true

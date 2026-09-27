@@ -12,7 +12,7 @@ use south_provider_api::ComponentManifestV1;
 
 /// The official components this repository ships. Named, so that an empty or
 /// mistyped scan below cannot pass over nothing.
-const OFFICIAL_COMPONENTS: [&str; 9] = [
+const OFFICIAL_COMPONENTS: [&str; 10] = [
     "provider-anthropic",
     "provider-bedrock-converse",
     "provider-gemini",
@@ -22,6 +22,7 @@ const OFFICIAL_COMPONENTS: [&str; 9] = [
     "task-minimax-v2",
     "task-bailian-v2",
     "task-xai-v2",
+    "task-byteplus-v2",
 ];
 
 fn repo_root() -> &'static Path {
