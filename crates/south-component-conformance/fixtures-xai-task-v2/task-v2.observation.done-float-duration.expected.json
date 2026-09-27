@@ -1,0 +1,20 @@
+{
+  "state": "succeeded",
+  "artifacts": {
+    "kind": "urls",
+    "items": [
+      {
+        "url": "https://vidgen.x.example/v.mp4",
+        "id": null,
+        "duration": 5.5,
+        "fetch_with_credential": false
+      }
+    ]
+  },
+  "usage": {
+    "seconds": 5.5,
+    "milliunits": null,
+    "tokens": null,
+    "outputs": 1
+  }
+}

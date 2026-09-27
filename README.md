@@ -161,6 +161,13 @@ H3与estimate新增事实见[设计记录](docs/design/2026-09-20-minimax-h3-est
 构建 `bash scripts/build-bailian-task-v2-component.sh`。行为、官方差异和验收边界见
 [设计记录](docs/design/2026-09-20-bailian-video-task-component.md)。
 
+## xAI 视频（合同 6 候选，未发布）
+
+第九包 `task-xai-v2`（族 `xai-video`），覆盖 xAI Grok Imagine 视频（文生、首帧、尾帧、参考图 ≤ 7、视频编辑）。
+Bearer 认证、按秒用量、直链产物，无新运行时能力；声明禁改路径 `model` / `duration`、每次提交 1 条输出（合同 6）。
+与宿主原生臂的差异（输入图原样转发、越界时长组件处 400、未带时长不报申报秒数）见
+`reference_xai_task_v2` 头注与 `fixtures-xai-task-v2/README.md`。构建 `bash scripts/build-xai-task-v2-component.sh`。
+
 ## Local verification
 
 ```bash

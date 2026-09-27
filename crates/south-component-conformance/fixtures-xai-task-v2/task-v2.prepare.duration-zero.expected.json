@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "xAI video duration must be 1 to 15 seconds"
+  }
+}

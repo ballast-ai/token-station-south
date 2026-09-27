@@ -1,0 +1,20 @@
+{
+  "provider_config": {
+    "provider": "xai-video",
+    "base_url": "https://api.x.example",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "model": "grok-imagine-video-1.5",
+    "prompt": "a cat",
+    "image": "https://cdn.example/f.png",
+    "last_frame_url": "https://cdn.example/l.png",
+    "reference_images": [
+      "https://cdn.example/r1.png",
+      "https://cdn.example/r2.png"
+    ]
+  },
+  "minted": {
+    "task_id": "host-1"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "created": 123,
+  "model": "xai/grok-imagine-video",
+  "provider": "xai",
+  "request_id": "req-original-1",
+  "data": [
+    {
+      "url": "https://vidgen.x.example/v.mp4?sig=private",
+      "duration": 6
+    }
+  ]
+}

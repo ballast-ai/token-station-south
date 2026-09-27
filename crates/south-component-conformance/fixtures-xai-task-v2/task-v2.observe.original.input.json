@@ -1,0 +1,13 @@
+{
+  "provider_config": {
+    "provider": "xai-video",
+    "base_url": "https://api.x.example",
+    "auth": "provider_api_key"
+  },
+  "upstream_model": "grok-imagine-video",
+  "upstream_task_id": "req-original-1",
+  "locator": {
+    "schema_version": 1,
+    "route": "v1/videos"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "provider_config": {
+    "provider": "xai-video",
+    "base_url": "https://api.x.example",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "model": "grok-imagine-video",
+    "prompt": "a cat",
+    "duration": 8,
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "ignored": "x"
+  },
+  "minted": {
+    "task_id": "host-1"
+  }
+}

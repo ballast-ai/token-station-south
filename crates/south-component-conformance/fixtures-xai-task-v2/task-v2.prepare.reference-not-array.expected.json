@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "'reference_images' must be an array of image URL strings"
+  }
+}

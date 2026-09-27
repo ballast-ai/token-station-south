@@ -1,0 +1,4 @@
+{
+  "status": 200,
+  "body": "{\"status\": \"done\", \"video\": {\"url\": \"https://vidgen.x.example/v.mp4?sig=private\", \"duration\": 6}}"
+}

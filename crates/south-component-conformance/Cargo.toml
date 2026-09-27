@@ -53,5 +53,9 @@ required-features = ["sandbox"]
 name = "bailian_task_sandbox_parity_v2"
 required-features = ["sandbox"]
 
+[[test]]
+name = "xai_task_sandbox_parity_v2"
+required-features = ["sandbox"]
+
 [lints]
 workspace = true
