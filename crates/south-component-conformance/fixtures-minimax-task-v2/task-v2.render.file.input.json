@@ -8,7 +8,8 @@
     "usage": {
       "seconds": null,
       "milliunits": null,
-      "tokens": null
+      "tokens": null,
+      "outputs": null
     }
   },
   "fetched": {

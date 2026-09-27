@@ -1,0 +1,11 @@
+{
+  "created": 123,
+  "model": "byteplus/seedance",
+  "provider": "byteplus",
+  "task_id": "cgt-2025-original",
+  "data": [
+    {
+      "url": "https://ark-cdn.example/v.mp4?sig=private"
+    }
+  ]
+}

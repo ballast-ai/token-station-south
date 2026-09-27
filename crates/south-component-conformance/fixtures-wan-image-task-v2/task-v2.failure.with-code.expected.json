@@ -1,0 +1,5 @@
+{
+  "code": "provider_protocol_error",
+  "http_status": 502,
+  "message": "empty_result: bailian SUCCEEDED but delivered no image urls"
+}

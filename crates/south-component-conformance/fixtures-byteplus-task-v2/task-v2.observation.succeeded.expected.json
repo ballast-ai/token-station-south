@@ -1,0 +1,20 @@
+{
+  "state": "succeeded",
+  "artifacts": {
+    "kind": "urls",
+    "items": [
+      {
+        "url": "https://ark-cdn.example/v.mp4?sig=private",
+        "id": null,
+        "duration": null,
+        "fetch_with_credential": false
+      }
+    ]
+  },
+  "usage": {
+    "seconds": null,
+    "milliunits": null,
+    "tokens": 108900,
+    "outputs": 1
+  }
+}

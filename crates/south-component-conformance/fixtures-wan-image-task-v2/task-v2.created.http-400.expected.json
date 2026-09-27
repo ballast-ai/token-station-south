@@ -1,0 +1,8 @@
+{
+  "outcome": "rejected",
+  "error": {
+    "code": "provider_protocol_error",
+    "http_status": 400,
+    "message": "size invalid"
+  }
+}

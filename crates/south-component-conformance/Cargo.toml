@@ -53,5 +53,25 @@ required-features = ["sandbox"]
 name = "bailian_task_sandbox_parity_v2"
 required-features = ["sandbox"]
 
+[[test]]
+name = "xai_task_sandbox_parity_v2"
+required-features = ["sandbox"]
+
+[[test]]
+name = "byteplus_task_sandbox_parity_v2"
+required-features = ["sandbox"]
+
+[[test]]
+name = "veo_task_sandbox_parity_v2"
+required-features = ["sandbox"]
+
+[[test]]
+name = "wan_image_task_sandbox_parity_v2"
+required-features = ["sandbox"]
+
+[[test]]
+name = "gmi_image_task_sandbox_parity_v2"
+required-features = ["sandbox"]
+
 [lints]
 workspace = true

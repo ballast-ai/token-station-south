@@ -1,0 +1,4 @@
+{
+  "status": 200,
+  "body": "{\"status\": \"succeeded\", \"content\": {\"video_url\": \"https://ark-cdn.example/v.mp4\"}, \"usage\": {\"completion_tokens\": 0}}"
+}

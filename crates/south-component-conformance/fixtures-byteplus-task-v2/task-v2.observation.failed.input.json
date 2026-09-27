@@ -1,0 +1,4 @@
+{
+  "status": 200,
+  "body": "{\"status\": \"failed\", \"error\": {\"code\": \"OutputVideoSensitiveContentDetected\", \"message\": \"sensitive output\"}}"
+}

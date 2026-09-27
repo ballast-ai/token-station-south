@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "'n' must be in 1..=4 for Bailian Wan 2.7 image models (got 0)"
+  }
+}

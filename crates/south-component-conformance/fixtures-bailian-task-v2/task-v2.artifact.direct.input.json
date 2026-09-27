@@ -16,14 +16,16 @@
         {
           "url": "https://media.example/video?sig=private",
           "id": null,
-          "duration": null
+          "duration": null,
+          "fetch_with_credential": false
         }
       ]
     },
     "usage": {
       "seconds": 5,
       "milliunits": null,
-      "tokens": null
+      "tokens": null,
+      "outputs": null
     }
   }
 }

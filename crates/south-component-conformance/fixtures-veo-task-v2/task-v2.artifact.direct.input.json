@@ -1,0 +1,37 @@
+{
+  "provider_config": {
+    "provider": "veo-video",
+    "base_url": "https://generativelanguage.example",
+    "auth": "provider_api_key"
+  },
+  "locator": {
+    "schema_version": 1,
+    "route": "v1beta"
+  },
+  "observation": {
+    "state": "succeeded",
+    "artifacts": {
+      "kind": "urls",
+      "items": [
+        {
+          "url": "https://generativelanguage.example/v1beta/files/a:download?alt=media",
+          "id": null,
+          "duration": null,
+          "fetch_with_credential": true
+        },
+        {
+          "url": "https://generativelanguage.example/v1beta/files/b:download?alt=media",
+          "id": null,
+          "duration": null,
+          "fetch_with_credential": true
+        }
+      ]
+    },
+    "usage": {
+      "seconds": null,
+      "milliunits": null,
+      "tokens": null,
+      "outputs": 2
+    }
+  }
+}

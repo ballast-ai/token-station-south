@@ -1,0 +1,13 @@
+{
+  "provider_config": {
+    "provider": "wan-image",
+    "base_url": "https://dashscope.example",
+    "auth": "provider_api_key"
+  },
+  "upstream_model": "wan2.7-t2i-plus",
+  "upstream_task_id": "wan-task-1",
+  "locator": {
+    "schema_version": 1,
+    "route": "api/v1/tasks"
+  }
+}

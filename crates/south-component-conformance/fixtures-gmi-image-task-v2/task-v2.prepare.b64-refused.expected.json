@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "GMI media image generation returns URLs only; response_format='b64_json' is not supported"
+  }
+}

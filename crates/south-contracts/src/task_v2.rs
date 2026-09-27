@@ -37,6 +37,32 @@ pub enum TaskContractErrorV2 {
     /// An observation exceeds its text or artifact bounds.
     #[error("invalid task observation")]
     InvalidObservation,
+    /// Immutable request-body paths are malformed, duplicated or exceed their bounds.
+    #[error("invalid immutable body paths")]
+    InvalidImmutableBodyPaths,
+}
+
+/// At most this many immutable request-body paths per prepared task.
+pub const MAX_IMMUTABLE_BODY_PATHS: usize = 64;
+/// Each immutable path is at most this many bytes.
+pub const MAX_IMMUTABLE_BODY_PATH_BYTES: usize = 256;
+
+/// Validates the request-body paths a host must not rewrite (contract 6, D6).
+///
+/// Dotted object paths only: every segment is `[A-Za-z0-9_-]+`, no array indices. A host must
+/// leave each path, its ancestors and its descendants untouched when it adds its own fields.
+pub fn validate_immutable_body_paths(paths: &[String]) -> Result<(), TaskContractErrorV2> {
+    let segment_ok = |segment: &str| {
+        !segment.is_empty()
+            && segment.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+    };
+    let valid = paths.len() <= MAX_IMMUTABLE_BODY_PATHS
+        && paths.iter().enumerate().all(|(index, path)| {
+            path.len() <= MAX_IMMUTABLE_BODY_PATH_BYTES
+                && path.split('.').all(segment_ok)
+                && !paths[..index].contains(path)
+        });
+    if valid { Ok(()) } else { Err(TaskContractErrorV2::InvalidImmutableBodyPaths) }
 }
 
 /// A component-interpreted route; never a request body, secret or upstream id.
@@ -72,6 +98,7 @@ pub struct TaskUsageFactsV2 {
     seconds: Option<f64>,
     milliunits: Option<i64>,
     tokens: Option<i64>,
+    outputs: Option<u32>,
 }
 impl TaskUsageFactsV2 {
     /// Validates all present facts without conflating zero with missing.
@@ -86,7 +113,19 @@ impl TaskUsageFactsV2 {
         {
             return Err(TaskContractErrorV2::InvalidUsage);
         }
-        Ok(Self { seconds, milliunits, tokens })
+        Ok(Self { seconds, milliunits, tokens, outputs: None })
+    }
+    /// Attaches the delivered output count (contract 6); absent is distinct from zero.
+    pub fn with_outputs(mut self, outputs: Option<i64>) -> Result<Self, TaskContractErrorV2> {
+        self.outputs = outputs
+            .map(|count| u32::try_from(count).map_err(|_| TaskContractErrorV2::InvalidUsage))
+            .transpose()?;
+        Ok(self)
+    }
+    /// Returns the delivered clip or image count the upstream reported.
+    #[must_use]
+    pub const fn outputs(&self) -> Option<u32> {
+        self.outputs
     }
     /// Returns reported elapsed seconds.
     #[must_use]
@@ -138,6 +177,7 @@ pub struct TaskArtifactV2 {
     url: String,
     id: TaskScalarV2,
     duration: TaskScalarV2,
+    fetch_with_credential: bool,
 }
 impl TaskArtifactV2 {
     /// Validates a bounded URL and scalar facts without interpreting them.
@@ -151,7 +191,19 @@ impl TaskArtifactV2 {
         }
         id.validate()?;
         duration.validate()?;
-        Ok(Self { url: url.to_owned(), id, duration })
+        Ok(Self { url: url.to_owned(), id, duration, fetch_with_credential: false })
+    }
+    /// Marks the URL as fetchable only with the task's bound credential (contract 6, D5): the host
+    /// fetches it with the same authentication as the submission and never hands it to a client.
+    #[must_use]
+    pub const fn with_bound_credential(mut self) -> Self {
+        self.fetch_with_credential = true;
+        self
+    }
+    /// Whether the host must fetch this artifact with the bound credential.
+    #[must_use]
+    pub const fn fetch_with_credential(&self) -> bool {
+        self.fetch_with_credential
     }
     /// Returns the original artifact URL; callers must not log it.
     #[must_use]
@@ -322,6 +374,8 @@ pub struct TaskRequestEstimateV2 {
     milliunits_per_second: Option<i64>,
     resolution: Option<String>,
     input_image_count: Option<u32>,
+    tokens_per_second: Option<i64>,
+    requested_outputs: Option<u32>,
 }
 impl TaskRequestEstimateV2 {
     /// Validates protocol request duration and its optional unit rate.
@@ -339,7 +393,48 @@ impl TaskRequestEstimateV2 {
             milliunits_per_second,
             resolution: None,
             input_image_count: None,
+            tokens_per_second: None,
+            requested_outputs: None,
         })
+    }
+    /// Attaches the protocol token rate and the requested output count (contract 6).
+    ///
+    /// The token rate is a protocol unit rate like `milliunits_per_second`: the component derives
+    /// it from its own formula (e.g. resolution), the host multiplies time and price. The output
+    /// count is at least one; absent means the component makes no statement.
+    pub fn with_output_facts(
+        mut self,
+        tokens_per_second: Option<i64>,
+        requested_outputs: Option<i64>,
+    ) -> Result<Self, TaskContractErrorV2> {
+        if tokens_per_second.is_some_and(|rate| rate < 0) {
+            return Err(TaskContractErrorV2::InvalidRequestEstimate);
+        }
+        self.requested_outputs = requested_outputs
+            .map(|count| {
+                u32::try_from(count)
+                    .ok()
+                    .filter(|count| *count >= 1)
+                    .ok_or(TaskContractErrorV2::InvalidRequestEstimate)
+            })
+            .transpose()?;
+        self.tokens_per_second = tokens_per_second;
+        Ok(self)
+    }
+    /// Returns the protocol token rate, without any monetary price.
+    #[must_use]
+    pub const fn tokens_per_second(&self) -> Option<i64> {
+        self.tokens_per_second
+    }
+    /// Returns the requested clip or image count; missing is distinct from one.
+    #[must_use]
+    pub const fn requested_outputs(&self) -> Option<u32> {
+        self.requested_outputs
+    }
+    /// Estimates tokens using explicit host time, with the same rounding and bound as
+    /// [`Self::estimate_milliunits`]; never reports actual usage.
+    pub fn estimate_tokens(&self, host_seconds: f64) -> Result<Option<i64>, TaskContractErrorV2> {
+        estimate_at_rate(self.tokens_per_second, host_seconds)
     }
     /// Attaches normalized request facts without inferring a price or missing values.
     pub fn with_input_facts(
@@ -379,26 +474,35 @@ impl TaskRequestEstimateV2 {
         self.milliunits_per_second
     }
     /// Estimates units using explicit host time; never reports actual usage.
-    #[expect(
-        clippy::cast_precision_loss,
-        clippy::cast_possible_truncation,
-        reason = "estimation uses floating seconds; the rounded result is checked below the exclusive i64 bound before conversion"
-    )]
     pub fn estimate_milliunits(
         &self,
         host_seconds: f64,
     ) -> Result<Option<i64>, TaskContractErrorV2> {
-        if !host_seconds.is_finite() || host_seconds < 0.0 {
-            return Err(TaskContractErrorV2::InvalidRequestEstimate);
-        }
-        let Some(rate) = self.milliunits_per_second else {
-            return Ok(None);
-        };
-        let estimate = (rate as f64 * host_seconds).ceil();
-        // i64::MAX rounds up to 2^63 in f64: equality must also be rejected.
-        if !estimate.is_finite() || estimate >= 9_223_372_036_854_775_808.0 {
-            return Err(TaskContractErrorV2::InvalidRequestEstimate);
-        }
-        Ok(Some(estimate as i64))
+        estimate_at_rate(self.milliunits_per_second, host_seconds)
     }
+}
+
+/// `ceil(rate × host_seconds)`, refusing non-finite / negative time and results at or above the
+/// exclusive `i64` bound. Shared by the milliunit and token estimates so both round alike.
+#[expect(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    reason = "estimation uses floating seconds; the rounded result is checked below the exclusive i64 bound before conversion"
+)]
+fn estimate_at_rate(
+    rate: Option<i64>,
+    host_seconds: f64,
+) -> Result<Option<i64>, TaskContractErrorV2> {
+    if !host_seconds.is_finite() || host_seconds < 0.0 {
+        return Err(TaskContractErrorV2::InvalidRequestEstimate);
+    }
+    let Some(rate) = rate else {
+        return Ok(None);
+    };
+    let estimate = (rate as f64 * host_seconds).ceil();
+    // i64::MAX rounds up to 2^63 in f64: equality must also be rejected.
+    if !estimate.is_finite() || estimate >= 9_223_372_036_854_775_808.0 {
+        return Err(TaskContractErrorV2::InvalidRequestEstimate);
+    }
+    Ok(Some(estimate as i64))
 }

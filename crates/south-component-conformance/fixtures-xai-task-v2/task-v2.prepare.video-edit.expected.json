@@ -1,0 +1,34 @@
+{
+  "descriptor": {
+    "method": "POST",
+    "url": "https://api.x.example/v1/videos/generations",
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "model": "grok-imagine-video",
+      "prompt": "make it night",
+      "video_url": "https://cdn.example/in.mp4"
+    },
+    "auth": {
+      "scheme": "bearer",
+      "secret": "provider_api_key"
+    }
+  },
+  "locator": {
+    "schema_version": 1,
+    "route": "v1/videos"
+  },
+  "request_estimate": {
+    "requested_seconds": null,
+    "milliunits_per_second": null,
+    "resolution": null,
+    "input_image_count": 0,
+    "tokens_per_second": null,
+    "requested_outputs": 1
+  },
+  "immutable_body_paths": [
+    "model",
+    "duration"
+  ]
+}

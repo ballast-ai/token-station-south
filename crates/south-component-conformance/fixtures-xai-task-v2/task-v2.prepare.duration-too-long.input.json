@@ -1,0 +1,15 @@
+{
+  "provider_config": {
+    "provider": "xai-video",
+    "base_url": "https://api.x.example",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "model": "grok-imagine-video",
+    "prompt": "a cat",
+    "duration": 16
+  },
+  "minted": {
+    "task_id": "host-1"
+  }
+}

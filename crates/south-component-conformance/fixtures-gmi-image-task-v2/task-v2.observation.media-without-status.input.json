@@ -1,0 +1,4 @@
+{
+  "status": 200,
+  "body": "{\"outcome\": {\"media_urls\": [\"https://cdn.gmi.example/x.png?sig=private\", \"https://cdn.gmi.example/y.png\"]}}"
+}

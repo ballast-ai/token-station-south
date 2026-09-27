@@ -192,7 +192,7 @@ fn observation_of(body: &Value) -> Value {
                         .iter()
                         .filter_map(|reel| reel.get("href").and_then(Value::as_str))
                         .filter(|href| !href.is_empty())
-                        .map(|href| json!({ "url": href, "id": null, "duration": null }))
+                        .map(|href| json!({ "url": href, "id": null, "duration": null, "fetch_with_credential": false }))
                         .collect()
                 })
                 .unwrap_or_default();
@@ -204,7 +204,7 @@ fn observation_of(body: &Value) -> Value {
             json!({
                 "state": "succeeded",
                 "artifacts": { "kind": "urls", "items": reels },
-                "usage": { "seconds": billed, "milliunits": null, "tokens": null },
+                "usage": { "seconds": billed, "milliunits": null, "tokens": null, "outputs": null },
             })
         }
         Some("spoiled") => json!({
@@ -279,14 +279,19 @@ impl Guest for T09Canary {
         Ok(json!({
             "descriptor": descriptor("POST", format!("{base}/{ROUTE}"), Some(body), &slot, model),
             "locator": { "schema_version": 1, "route": ROUTE },
-            // Every key is written, null included: the host's decoder requires
-            // `resolution` and `input_image_count` to be present.
+            // Every key is written, null included: the host's decoder requires every
+            // estimate key to be present (task contract 6 adds the token rate and the
+            // requested output count).
             "request_estimate": {
                 "requested_seconds": requested_seconds,
                 "milliunits_per_second": milliunits_per_second,
                 "resolution": null,
                 "input_image_count": null,
+                "tokens_per_second": null,
+                "requested_outputs": null,
             },
+            // Task contract 6: this wire makes no statement about immutable body paths.
+            "immutable_body_paths": null,
         })
         .to_string())
     }

@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "upstream model 'seedream-3-0-t2i-250415' documents no reference-image input on GMI"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "provider_config": {
+    "provider": "gmi-image",
+    "base_url": "https://console.gmi.example",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "model": "seedream-4-0-250828",
+    "prompt": "a cat",
+    "image": [
+      "https://cdn.example/0.png",
+      "https://cdn.example/1.png",
+      "https://cdn.example/2.png",
+      "https://cdn.example/3.png",
+      "https://cdn.example/4.png",
+      "https://cdn.example/5.png",
+      "https://cdn.example/6.png",
+      "https://cdn.example/7.png",
+      "https://cdn.example/8.png",
+      "https://cdn.example/9.png",
+      "https://cdn.example/10.png"
+    ]
+  },
+  "minted": {
+    "task_id": "host-1"
+  }
+}

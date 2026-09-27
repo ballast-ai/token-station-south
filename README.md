@@ -161,6 +161,39 @@ H3与estimate新增事实见[设计记录](docs/design/2026-09-20-minimax-h3-est
 构建 `bash scripts/build-bailian-task-v2-component.sh`。行为、官方差异和验收边界见
 [设计记录](docs/design/2026-09-20-bailian-video-task-component.md)。
 
+## xAI 视频（合同 6 候选，未发布）
+
+第九包 `task-xai-v2`（族 `xai-video`），覆盖 xAI Grok Imagine 视频（文生、首帧、尾帧、参考图 ≤ 7、视频编辑）。
+Bearer 认证、按秒用量、直链产物，无新运行时能力；声明禁改路径 `model` / `duration`、每次提交 1 条输出（合同 6）。
+与宿主原生臂的差异（输入图原样转发、越界时长组件处 400、未带时长不报申报秒数）见
+`reference_xai_task_v2` 头注与 `fixtures-xai-task-v2/README.md`。构建 `bash scripts/build-xai-task-v2-component.sh`。
+
+## BytePlus Seedance 视频（合同 6 候选，未发布）
+
+第十包 `task-byteplus-v2`（族 `byteplus-video`），覆盖 Seedance 文生 / 首尾帧 / 视频编辑 / 参考图（≤ 30）。合同 6 的第一个
+`tokens_per_second` 用户：按「宽 × 高 × 24 ÷ 1024」给出所请求分辨率的每秒 token 率，宿主不再持有第二份像素公式；结算读实报
+`completion_tokens`。声明禁改路径 `model` / `resolution` / `duration`。**能力损失**：渲染体不含上游 `last_frame_url`（见头注）。
+构建 `bash scripts/build-byteplus-task-v2-component.sh`。
+
+## Google Veo（Gemini API 线）视频（合同 6 候选，未发布）
+
+第十一包 `task-veo-v2`（族 `veo-video`），manifest 只声明 `header_secret` 认证臂（`x-goog-api-key`，宿主以对应认证配方注入）。
+合同 6 在本族同时用到三项：产物 `fetch_with_credential`（上游 URI 须带同一把 key 才能取，宿主须把渲染体里的 URL 改写为自有代理路径）、
+`sampleCount` 即 `requested_outputs` / 交付样本数即 `usage.outputs`、回执即终态 → `accepted-terminal`。输入图须已是 `data:` URI
+（宿主预取）；Vertex 线（服务账号铸币、按 region 派生端点）不在本组件。构建 `bash scripts/build-veo-task-v2-component.sh`。
+
+## 百炼万相 2.7 图像（异步，合同 6 候选，未发布）
+
+第十二包 `task-wan-image-v2`（族 `wan-image`），首个图像模态任务组件：DashScope 异步图像生成（文生、1–3 张源图编辑）。合同 6 按张计量：
+`n`（1–4）→ `requested_outputs`；`usage.outputs` 为**结算张数**（上游正数 `image_count`、不超过交付 + 1，否则交付数，与产物 URL 数刻意分开）。
+只把具名尺寸档（`1K` / `2K` / `4K`）报为分辨率事实。构建 `bash scripts/build-wan-image-task-v2-component.sh`。
+
+## GMI Cloud media 图像（合同 6 候选，未发布）
+
+第十三包 `task-gmi-image-v2`（族 `gmi-image`），GMI request-queue 图像生成（Seedream 等，参考图按上游型号的文档上限）。回执即带产物
+→ `accepted-terminal`；`X-Organization-ID` 由宿主以 provider config 扩展 `organization_id` 传入（原生取自凭证 `account_id`）。按请求计价、
+不报用量：`n` 为 `requested_outputs`、交付数为 `usage.outputs`，计价政策归宿主。构建 `bash scripts/build-gmi-image-task-v2-component.sh`。
+
 ## Local verification
 
 ```bash

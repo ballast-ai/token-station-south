@@ -1,0 +1,48 @@
+{
+  "descriptor": {
+    "method": "POST",
+    "url": "https://dashscope.example/api/v1/services/aigc/image-generation/generation",
+    "headers": {
+      "content-type": "application/json",
+      "x-dashscope-async": "enable"
+    },
+    "body": {
+      "model": "wan2.7-t2i-plus",
+      "input": {
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "text": ""
+              }
+            ]
+          }
+        ]
+      },
+      "parameters": {}
+    },
+    "auth": {
+      "scheme": "bearer",
+      "secret": "provider_api_key"
+    }
+  },
+  "locator": {
+    "schema_version": 1,
+    "route": "api/v1/tasks"
+  },
+  "request_estimate": {
+    "requested_seconds": null,
+    "milliunits_per_second": null,
+    "resolution": null,
+    "input_image_count": 0,
+    "tokens_per_second": null,
+    "requested_outputs": 1
+  },
+  "immutable_body_paths": [
+    "model",
+    "input",
+    "parameters.n",
+    "parameters.size"
+  ]
+}

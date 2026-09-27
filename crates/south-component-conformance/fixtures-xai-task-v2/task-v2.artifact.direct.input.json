@@ -1,0 +1,31 @@
+{
+  "provider_config": {
+    "provider": "xai-video",
+    "base_url": "https://api.x.example",
+    "auth": "provider_api_key"
+  },
+  "locator": {
+    "schema_version": 1,
+    "route": "v1/videos"
+  },
+  "observation": {
+    "state": "succeeded",
+    "artifacts": {
+      "kind": "urls",
+      "items": [
+        {
+          "url": "https://vidgen.x.example/v.mp4?sig=private",
+          "id": null,
+          "duration": 6,
+          "fetch_with_credential": false
+        }
+      ]
+    },
+    "usage": {
+      "seconds": 6.0,
+      "milliunits": null,
+      "tokens": null,
+      "outputs": 1
+    }
+  }
+}

@@ -6,13 +6,15 @@
       {
         "url": "https://cdn/one",
         "id": null,
-        "duration": 0
+        "duration": 0,
+        "fetch_with_credential": false
       }
     ]
   },
   "usage": {
     "seconds": 0.0,
     "milliunits": 0,
-    "tokens": null
+    "tokens": null,
+    "outputs": null
   }
 }

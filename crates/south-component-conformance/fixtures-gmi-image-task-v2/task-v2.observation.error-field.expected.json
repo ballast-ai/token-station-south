@@ -1,0 +1,6 @@
+{
+  "state": "failed",
+  "kind": "failed",
+  "code": "error",
+  "message": "boom"
+}

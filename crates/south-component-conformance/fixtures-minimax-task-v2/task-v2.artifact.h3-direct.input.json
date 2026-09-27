@@ -16,14 +16,16 @@
         {
           "url": "https://cdn/result.mp4",
           "id": null,
-          "duration": null
+          "duration": null,
+          "fetch_with_credential": false
         }
       ]
     },
     "usage": {
       "seconds": 6.5,
       "milliunits": null,
-      "tokens": null
+      "tokens": null,
+      "outputs": null
     }
   }
 }

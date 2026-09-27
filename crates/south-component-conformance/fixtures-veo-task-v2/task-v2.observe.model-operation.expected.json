@@ -1,0 +1,9 @@
+{
+  "method": "GET",
+  "url": "https://generativelanguage.example/v1beta/models/veo-3.1-generate-preview/operations/op-original-1",
+  "auth": {
+    "scheme": "header",
+    "name": "x-goog-api-key",
+    "secret": "provider_api_key"
+  }
+}

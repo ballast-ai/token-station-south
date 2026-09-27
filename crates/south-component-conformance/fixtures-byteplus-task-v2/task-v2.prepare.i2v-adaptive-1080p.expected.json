@@ -1,0 +1,49 @@
+{
+  "descriptor": {
+    "method": "POST",
+    "url": "https://ark.byteplus.example/api/v3/contents/generations/tasks",
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "model": "seedance-1-0-pro-250528",
+      "content": [
+        {
+          "type": "text",
+          "text": "a cat"
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "https://cdn.example/f.png"
+          },
+          "role": "first_frame"
+        }
+      ],
+      "ratio": "adaptive",
+      "duration": "10",
+      "resolution": "1080p"
+    },
+    "auth": {
+      "scheme": "bearer",
+      "secret": "provider_api_key"
+    }
+  },
+  "locator": {
+    "schema_version": 1,
+    "route": "api/v3/contents/generations/tasks"
+  },
+  "request_estimate": {
+    "requested_seconds": 10.0,
+    "milliunits_per_second": null,
+    "resolution": "1080P",
+    "input_image_count": 1,
+    "tokens_per_second": 48960,
+    "requested_outputs": 1
+  },
+  "immutable_body_paths": [
+    "model",
+    "resolution",
+    "duration"
+  ]
+}

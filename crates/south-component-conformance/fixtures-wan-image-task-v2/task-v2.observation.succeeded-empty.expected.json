@@ -1,0 +1,6 @@
+{
+  "state": "failed",
+  "kind": "failed",
+  "code": "empty_result",
+  "message": "bailian SUCCEEDED but delivered no image urls"
+}

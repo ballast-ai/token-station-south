@@ -1,0 +1,11 @@
+{
+  "created": 123,
+  "data": [
+    {
+      "url": "https://generativelanguage.example/v1beta/files/a:download?alt=media"
+    },
+    {
+      "url": "https://generativelanguage.example/v1beta/files/b:download?alt=media"
+    }
+  ]
+}

@@ -197,7 +197,7 @@ fn invalid_present_duration_is_not_silently_zero_or_missing() {
 }
 #[test]
 fn prepared_codec_requires_and_roundtrips_a_strict_estimate() {
-    let wire = json!({"descriptor":{"method":"POST","url":"https://kling.example/task"},"locator":{"schema_version":1,"route":"v1/tasks"},"request_estimate":{"requested_seconds":0,"milliunits_per_second":0,"resolution":null,"input_image_count":null}});
+    let wire = json!({"descriptor":{"method":"POST","url":"https://kling.example/task"},"locator":{"schema_version":1,"route":"v1/tasks"},"request_estimate":{"requested_seconds":0,"milliunits_per_second":0,"resolution":null,"input_image_count":null,"tokens_per_second":null,"requested_outputs":null},"immutable_body_paths":null});
     let prepared = parse_prepared_task_json(&wire.to_string()).unwrap();
     assert_eq!(prepared.request_estimate.estimate_milliunits(5.0).unwrap(), Some(0));
     assert_eq!(
@@ -208,9 +208,9 @@ fn prepared_codec_requires_and_roundtrips_a_strict_estimate() {
     missing.as_object_mut().unwrap().remove("request_estimate");
     assert!(parse_prepared_task_json(&missing.to_string()).is_err());
     for invalid in [
-        json!({"requested_seconds":-1,"milliunits_per_second":1,"resolution":null,"input_image_count":null}),
-        json!({"requested_seconds":null,"milliunits_per_second":-1,"resolution":null,"input_image_count":null}),
-        json!({"requested_seconds":null,"milliunits_per_second":null,"actual_units":2,"resolution":null,"input_image_count":null}),
+        json!({"requested_seconds":-1,"milliunits_per_second":1,"resolution":null,"input_image_count":null,"tokens_per_second":null,"requested_outputs":null}),
+        json!({"requested_seconds":null,"milliunits_per_second":-1,"resolution":null,"input_image_count":null,"tokens_per_second":null,"requested_outputs":null}),
+        json!({"requested_seconds":null,"milliunits_per_second":null,"actual_units":2,"resolution":null,"input_image_count":null,"tokens_per_second":null,"requested_outputs":null}),
     ] {
         let mut bad = wire.clone();
         bad["request_estimate"] = invalid;
@@ -222,7 +222,7 @@ proptest! {
     fn validated_estimate_roundtrips_and_calculates_without_panicking(seconds in 0_u32..1_000_000, rate in 0_i64..1_000_000) {
         let estimate=TaskRequestEstimateV2::new(Some(f64::from(seconds)),Some(rate)).unwrap();
         prop_assert_eq!(estimate.estimate_milliunits(f64::from(seconds)).unwrap(),Some(i64::from(seconds)*rate));
-        let mut wire=json!({"descriptor":{"method":"POST","url":"https://kling.example/task"},"locator":{"schema_version":1,"route":"v1/tasks"},"request_estimate":{"requested_seconds":seconds,"milliunits_per_second":rate,"resolution":null,"input_image_count":null}});
+        let mut wire=json!({"descriptor":{"method":"POST","url":"https://kling.example/task"},"locator":{"schema_version":1,"route":"v1/tasks"},"request_estimate":{"requested_seconds":seconds,"milliunits_per_second":rate,"resolution":null,"input_image_count":null,"tokens_per_second":null,"requested_outputs":null},"immutable_body_paths":null});
         let prepared=parse_prepared_task_json(&wire.to_string()).unwrap();
         wire=prepared_task_json(&prepared).unwrap();
         prop_assert_eq!(parse_prepared_task_json(&wire.to_string()).unwrap(),prepared);
@@ -231,7 +231,7 @@ proptest! {
 
 #[test]
 fn prepared_codec_preserves_resolution_and_zero_image_facts() {
-    let wire = json!({"descriptor":{"method":"POST","url":"https://upstream.example/tasks"},"locator":{"schema_version":1,"route":"v2/query/video_generation"},"request_estimate":{"requested_seconds":5,"milliunits_per_second":null,"resolution":"768P","input_image_count":0}});
+    let wire = json!({"descriptor":{"method":"POST","url":"https://upstream.example/tasks"},"locator":{"schema_version":1,"route":"v2/query/video_generation"},"request_estimate":{"requested_seconds":5,"milliunits_per_second":null,"resolution":"768P","input_image_count":0,"tokens_per_second":null,"requested_outputs":null},"immutable_body_paths":null});
     let prepared = parse_prepared_task_json(&wire.to_string())
         .expect("new input facts are part of the task contract");
     let output = prepared_task_json(&prepared).unwrap();
@@ -261,7 +261,7 @@ fn input_facts_are_bounded_and_never_conflate_missing_with_zero() {
 }
 #[test]
 fn input_fact_codec_requires_both_keys_and_rejects_wrong_types() {
-    let wire = json!({"descriptor":{"method":"POST","url":"https://upstream.example/tasks"},"locator":{"schema_version":1,"route":"v1/tasks"},"request_estimate":{"requested_seconds":null,"milliunits_per_second":null,"resolution":null,"input_image_count":null}});
+    let wire = json!({"descriptor":{"method":"POST","url":"https://upstream.example/tasks"},"locator":{"schema_version":1,"route":"v1/tasks"},"request_estimate":{"requested_seconds":null,"milliunits_per_second":null,"resolution":null,"input_image_count":null,"tokens_per_second":null,"requested_outputs":null},"immutable_body_paths":null});
     for key in ["resolution", "input_image_count"] {
         let mut missing = wire.clone();
         missing["request_estimate"].as_object_mut().unwrap().remove(key);

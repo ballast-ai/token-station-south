@@ -1,0 +1,42 @@
+{
+  "descriptor": {
+    "method": "POST",
+    "url": "https://console.gmi.example/api/v1/ie/requestqueue/apikey/requests",
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "model": "seedream-3-0-t2i-250415",
+      "payload": {
+        "prompt": "a cat",
+        "size": "2048x2048",
+        "quality": "high",
+        "output_format": "png",
+        "response_format": "url",
+        "n": 2
+      }
+    },
+    "auth": {
+      "scheme": "bearer",
+      "secret": "provider_api_key"
+    }
+  },
+  "locator": {
+    "schema_version": 1,
+    "route": "api/v1/ie/requestqueue/apikey/requests"
+  },
+  "request_estimate": {
+    "requested_seconds": null,
+    "milliunits_per_second": null,
+    "resolution": null,
+    "input_image_count": 0,
+    "tokens_per_second": null,
+    "requested_outputs": 2
+  },
+  "immutable_body_paths": [
+    "model",
+    "payload.n",
+    "payload.size",
+    "payload.quality"
+  ]
+}

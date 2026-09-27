@@ -1,0 +1,4 @@
+{
+  "status": 400,
+  "body": "{\"error\": {\"code\": 400, \"message\": \"prompt blocked\", \"status\": \"INVALID_ARGUMENT\"}}"
+}

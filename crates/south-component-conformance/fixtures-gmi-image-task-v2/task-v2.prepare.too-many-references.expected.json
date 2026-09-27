@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "upstream model 'seedream-4-0-250828' accepts at most 10 reference images, got 11"
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "status": 200,
+  "body": "{\"id\": \"cgt-2025-original\", \"status\": \"succeeded\", \"content\": {\"video_url\": \"https://ark-cdn.example/v.mp4?sig=private\", \"last_frame_url\": \"https://ark-cdn.example/l.png\"}, \"usage\": {\"completion_tokens\": 108900, \"total_tokens\": 108900}}"
+}

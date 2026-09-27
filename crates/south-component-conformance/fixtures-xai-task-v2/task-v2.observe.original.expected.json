@@ -1,0 +1,8 @@
+{
+  "method": "GET",
+  "url": "https://api.x.example/v1/videos/req-original-1",
+  "auth": {
+    "scheme": "bearer",
+    "secret": "provider_api_key"
+  }
+}

@@ -148,6 +148,10 @@ misread as a boundary violation.
 
 新增同源MiniMax Hailuo v1/H3 v2参考/guest与受控file_id查询，HTTP合同9。
 任务合同5新增有界resolution/input_image_count请求事实，供宿主既有定价函数使用。
+任务合同6（`docs/design/2026-09-27-task-contract-v6-facts.md`）新增：请求估算的`tokens_per_second`（协议单位率，与
+`milliunits_per_second`对称）与`requested_outputs`（请求条数/张数，≥1）；用量的`outputs`（实报交付数）；URL产物的
+`fetch_with_credential`（须用任务钉住的凭证取回、不得把原URL交给客户端）；prepared的`immutable_body_paths`（宿主不得改写的
+请求体点号路径；null=组件不表态、宿主不得注入附加字段，[]=无保留路径）。新键一律必须出现、可为null，合同5形状拒收。
 既有task ABI/WIT不变；宿主仍拥有凭证、配置快照、价格、恢复与交付。
 见[候选设计](docs/design/2026-09-20-minimax-v1-task-component.md)。
 

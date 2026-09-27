@@ -1,0 +1,13 @@
+{
+  "created": 123,
+  "data": [
+    {
+      "url": "https://oss.example/a.png?sig=private",
+      "revised_prompt": null
+    },
+    {
+      "url": "https://oss.example/b.png",
+      "revised_prompt": null
+    }
+  ]
+}
