@@ -164,12 +164,13 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-该库独立 Rust 版本为 0.1.0；八个库与组件运行时随本次发布为 v0.34.0，
-组件八个——`provider-bedrock-converse` **1.0.1**（首个 `host_signed` 臂的出厂包：
-descriptor 不带凭证，宿主的 finalizer 在组件返回之后签名；1.0.1 修 `tool_choice`
-对象形应翻译而非透传）。另外七个身份各自不变（`provider-openai-compatible` 2.1.3、`provider-gemini` 1.1.3、
-`provider-anthropic` 1.0.4、`task-kling` 1.0.3、三个 task-v2 均 0.31.0），
-Task5/HTTP9/WIT 不变。每个包的 `compatibility.south_runtime` 随运行时一并声明为
-0.34.0——该字段按精确串比对，声明旧版的包会被宿主按名拒绝，故运行时与八包必须
+该库独立 Rust 版本为 0.1.0；八个库与组件运行时随本次发布为 v0.35.0，
+**任务合同 6**（`docs/design/2026-09-27-task-contract-v6-facts.md`：token 单位率、请求 / 交付条数、产物凭证取回、
+请求体禁改路径；合同 5 形状拒收），组件增至十三个——新增五个 task-v2 包身份均 0.35.0：`task-xai-v2`、
+`task-byteplus-v2`、`task-veo-v2`（只声明 `header_secret` 臂）、`task-wan-image-v2` 与 `task-gmi-image-v2`（首批图像任务组件）。
+既有八个身份各自不变（`provider-openai-compatible` 2.1.3、`provider-gemini` 1.1.3、`provider-anthropic` 1.0.4、
+`provider-bedrock-converse` 1.0.1、`task-kling` 1.0.3、三个既有 task-v2 均 0.31.0），HTTP9/WIT 不变。每个包的
+`compatibility.south_runtime` 随运行时一并声明为 0.35.0——该字段按精确串比对，声明旧版的包会被宿主按名拒绝，
+故运行时与十三包必须
 同批升。宿主采用须分别用真实存储通过公共故障套件；组件兼容状态不能代替共享核心
 采用证据。[设计与边界](docs/design/2026-09-20-shared-task-core.md)。
