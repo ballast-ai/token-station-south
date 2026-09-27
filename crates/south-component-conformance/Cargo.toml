@@ -61,5 +61,9 @@ required-features = ["sandbox"]
 name = "byteplus_task_sandbox_parity_v2"
 required-features = ["sandbox"]
 
+[[test]]
+name = "veo_task_sandbox_parity_v2"
+required-features = ["sandbox"]
+
 [lints]
 workspace = true

@@ -1,0 +1,46 @@
+{
+  "descriptor": {
+    "method": "POST",
+    "url": "https://generativelanguage.example/v1beta/models/veo-3.1-generate-preview:predictLongRunning",
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "instances": [
+        {
+          "prompt": "a cat"
+        }
+      ],
+      "parameters": {
+        "aspectRatio": "9:16",
+        "durationSeconds": 8,
+        "resolution": "1080p",
+        "sampleCount": 2
+      }
+    },
+    "auth": {
+      "scheme": "header",
+      "name": "x-goog-api-key",
+      "secret": "provider_api_key"
+    }
+  },
+  "locator": {
+    "schema_version": 1,
+    "route": "v1beta"
+  },
+  "request_estimate": {
+    "requested_seconds": 8.0,
+    "milliunits_per_second": null,
+    "resolution": "1080P",
+    "input_image_count": 0,
+    "tokens_per_second": null,
+    "requested_outputs": 2
+  },
+  "immutable_body_paths": [
+    "instances",
+    "parameters.durationSeconds",
+    "parameters.sampleCount",
+    "parameters.resolution",
+    "webhookConfig"
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "Veo needs 'reference_images' as inline image bytes (a data: URI); configure the host to pre-fetch this field for the model"
+  }
+}

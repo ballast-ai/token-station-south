@@ -1,0 +1,13 @@
+{
+  "provider_config": {
+    "provider": "veo-video",
+    "base_url": "https://generativelanguage.example",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "model": "veo-3.1-generate-preview"
+  },
+  "minted": {
+    "task_id": "host-1"
+  }
+}

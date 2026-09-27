@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "'reference_images' accepts at most 3 entries (got more); Veo 3.1 rejects more"
+  }
+}

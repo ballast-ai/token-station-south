@@ -1,0 +1,13 @@
+{
+  "provider_config": {
+    "provider": "veo-video",
+    "base_url": "https://generativelanguage.example",
+    "auth": "provider_api_key"
+  },
+  "upstream_model": "veo-3.1-generate-preview",
+  "upstream_task_id": "models/veo-3.1-generate-preview/operations/op-original-1",
+  "locator": {
+    "schema_version": 1,
+    "route": "v1beta"
+  }
+}

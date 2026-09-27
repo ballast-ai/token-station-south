@@ -175,6 +175,13 @@ Bearer 认证、按秒用量、直链产物，无新运行时能力；声明禁�
 `completion_tokens`。声明禁改路径 `model` / `resolution` / `duration`。**能力损失**：渲染体不含上游 `last_frame_url`（见头注）。
 构建 `bash scripts/build-byteplus-task-v2-component.sh`。
 
+## Google Veo（Gemini API 线）视频（合同 6 候选，未发布）
+
+第十一包 `task-veo-v2`（族 `veo-video`），manifest 只声明 `header_secret` 认证臂（`x-goog-api-key`，宿主以对应认证配方注入）。
+合同 6 在本族同时用到三项：产物 `fetch_with_credential`（上游 URI 须带同一把 key 才能取，宿主须把渲染体里的 URL 改写为自有代理路径）、
+`sampleCount` 即 `requested_outputs` / 交付样本数即 `usage.outputs`、回执即终态 → `accepted-terminal`。输入图须已是 `data:` URI
+（宿主预取）；Vertex 线（服务账号铸币、按 region 派生端点）不在本组件。构建 `bash scripts/build-veo-task-v2-component.sh`。
+
 ## Local verification
 
 ```bash

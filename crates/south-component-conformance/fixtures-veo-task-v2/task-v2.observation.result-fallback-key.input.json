@@ -1,0 +1,4 @@
+{
+  "status": 200,
+  "body": "{\"done\": true, \"result\": {\"generateVideoResponse\": {\"generatedSamples\": [{\"video\": {\"uri\": \"https://generativelanguage.example/v1beta/files/a:download?alt=media\"}}]}}}"
+}
