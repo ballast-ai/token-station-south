@@ -53,7 +53,7 @@ fn canonical_submit_frame_must_fit_before_decode_succeeds() {
 
 #[test]
 fn canonical_prepared_frame_must_fit_before_decode_succeeds() {
-    let empty = r#"{"descriptor":{"method":"POST","url":"https://upstream.example/tasks","body":{"padding":"","x":1e8}},"locator":{"schema_version":1,"route":"v1/tasks"},"request_estimate":{"requested_seconds":null,"milliunits_per_second":null,"resolution":null,"input_image_count":null}}"#;
+    let empty = r#"{"descriptor":{"method":"POST","url":"https://upstream.example/tasks","body":{"padding":"","x":1e8}},"locator":{"schema_version":1,"route":"v1/tasks"},"request_estimate":{"requested_seconds":null,"milliunits_per_second":null,"resolution":null,"input_image_count":null,"tokens_per_second":null,"requested_outputs":null},"immutable_body_paths":null}"#;
     let limit = south_contracts::MAX_JSON_REQUEST_BODY_BYTES;
     let input = empty.replace(
         "\"padding\":\"\"",
@@ -69,7 +69,7 @@ fn canonical_prepared_frame_must_fit_before_decode_succeeds() {
 #[test]
 fn empty_artifact_variant_still_refuses_unknown_fields() {
     let value = json!({"state":"succeeded","artifacts":{"kind":"none","secret":"PRIVATE"},
-        "usage":{"seconds":null,"milliunits":null,"tokens":null}});
+        "usage":{"seconds":null,"milliunits":null,"tokens":null,"outputs":null}});
     assert!(parse_observation_json(&value.to_string()).is_err());
 }
 
@@ -121,9 +121,9 @@ fn locator_wire_is_strict_versioned_and_bounded() {
 fn observation_roundtrip_keeps_all_usage_and_scalar_categories() {
     let input = json!({"state":"succeeded",
         "artifacts":{"kind":"urls","items":[
-            {"url":"https://media.example/1?sig=SECRET","id":18_446_744_073_709_551_615_u64,"duration":"4.50"},
-            {"url":"https://media.example/2","id":null,"duration":4.5}
-        ]}, "usage":{"seconds":4.5,"milliunits":1200,"tokens":0}});
+            {"url":"https://media.example/1?sig=SECRET","id":18_446_744_073_709_551_615_u64,"duration":"4.50","fetch_with_credential":false},
+            {"url":"https://media.example/2","id":null,"duration":4.5,"fetch_with_credential":false}
+        ]}, "usage":{"seconds":4.5,"milliunits":1200,"tokens":0,"outputs":null}});
     let observation = parse_observation_json(&input.to_string()).unwrap();
     assert_eq!(observation_json(&observation).unwrap(), input);
     assert!(!format!("{observation:?}").contains("SECRET"));
@@ -149,7 +149,7 @@ fn codec_refuses_arbitrary_artifact_objects_and_invalid_usage() {
     }
     assert!(scalar_json(&TaskScalarV2::Float(f64::NAN)).is_err());
     let input = json!({"state":"succeeded","artifacts":{"kind":"none"},
-        "usage":{"seconds":null,"milliunits":0,"tokens":null}});
+        "usage":{"seconds":null,"milliunits":0,"tokens":null,"outputs":null}});
     assert_eq!(
         observation_json(&parse_observation_json(&input.to_string()).unwrap()).unwrap(),
         input
@@ -173,7 +173,7 @@ fn scalar_numbers_do_not_round_large_integers_through_float() {
 fn submit_terminal_carries_typed_facts_and_unknown_fields_are_rejected() {
     let input = json!({"outcome":"accepted-terminal","observation":{
         "state":"succeeded","artifacts":{"kind":"none"},
-        "usage":{"seconds":null,"milliunits":null,"tokens":null}}});
+        "usage":{"seconds":null,"milliunits":null,"tokens":null,"outputs":null}}});
     let outcome = parse_submit_outcome_json(&input.to_string()).unwrap();
     assert!(matches!(outcome, SubmitOutcomeV2::AcceptedTerminal(_)));
     assert_eq!(submit_outcome_json(&outcome).unwrap(), input);
@@ -192,7 +192,7 @@ fn render_context_roundtrip_requires_explicit_host_metadata() {
 
 #[test]
 fn prepared_and_rejected_ir_values_roundtrip_with_existing_extensions() {
-    let prepared = json!({"descriptor":{"method":"POST","url":"https://upstream.example/tasks", "body":{"x":1e8}},"locator":{"schema_version":1,"route":"v1/tasks"},"request_estimate":{"requested_seconds":null,"milliunits_per_second":null,"resolution":null,"input_image_count":null}});
+    let prepared = json!({"descriptor":{"method":"POST","url":"https://upstream.example/tasks", "body":{"x":1e8}},"locator":{"schema_version":1,"route":"v1/tasks"},"request_estimate":{"requested_seconds":null,"milliunits_per_second":null,"resolution":null,"input_image_count":null,"tokens_per_second":null,"requested_outputs":null},"immutable_body_paths":null});
     let prepared = parse_prepared_task_json(&prepared.to_string()).unwrap();
     assert_eq!(
         parse_prepared_task_json(&prepared_task_json(&prepared).unwrap().to_string()).unwrap(),

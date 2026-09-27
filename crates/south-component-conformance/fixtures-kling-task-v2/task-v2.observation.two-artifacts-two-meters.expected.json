@@ -6,18 +6,21 @@
       {
         "url": "https://cdn/first",
         "id": 12,
-        "duration": "5"
+        "duration": "5",
+        "fetch_with_credential": false
       },
       {
         "url": "https://cdn/second",
         "id": "second",
-        "duration": 2.5
+        "duration": 2.5,
+        "fetch_with_credential": false
       }
     ]
   },
   "usage": {
     "seconds": 5.0,
     "milliunits": 1234,
-    "tokens": null
+    "tokens": null,
+    "outputs": null
   }
 }

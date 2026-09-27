@@ -252,6 +252,8 @@ fn prepare_h3(
         locator: TaskLocatorV2::new(1, QUERY_V2)
             .map_err(|_| protocol("invalid MiniMax locator"))?,
         request_estimate: request_estimate(duration, resolution, images)?,
+        // 合同 6(D6):本族尚未声明禁改路径——宿主不得注入附加请求体字段(同合同 5)。
+        immutable_body_paths: None,
     })
 }
 fn observe_h3(task: &Value) -> TaskObservationV2 {
@@ -406,6 +408,8 @@ impl TaskComponentV2 for MiniMaxTaskReferenceV2 {
                 resolution,
                 u32::from(image.is_some()) + u32::from(last.is_some()),
             )?,
+            // 合同 6(D6):本族尚未声明禁改路径——宿主不得注入附加请求体字段(同合同 5)。
+            immutable_body_paths: None,
         })
     }
     fn parse_submit_response(

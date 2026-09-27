@@ -17,6 +17,10 @@ pub struct PreparedTaskV2 {
     pub locator: TaskLocatorV2,
     /// Protocol request estimation only; host pricing and timing policy stay external.
     pub request_estimate: south_contracts::TaskRequestEstimateV2,
+    /// Request-body paths the host must not rewrite (contract 6, D6). `None` = the component
+    /// makes no statement, so the host must not add body fields at all; `Some(vec![])` = none
+    /// are reserved.
+    pub immutable_body_paths: Option<Vec<String>>,
 }
 
 /// Explicit submit outcomes; acceptance uncertainty is not rejection.

@@ -27,6 +27,9 @@
     "requested_seconds": 5.0,
     "milliunits_per_second": null,
     "resolution": null,
-    "input_image_count": 1
-  }
+    "input_image_count": 1,
+    "tokens_per_second": null,
+    "requested_outputs": null
+  },
+  "immutable_body_paths": null
 }

@@ -81,6 +81,8 @@ struct ArtifactWire {
     url: String,
     id: Value,
     duration: Value,
+    /// Contract 6 (D5): required, never defaulted.
+    fetch_with_credential: bool,
 }
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
@@ -100,12 +102,17 @@ impl ArtifactsWire {
                 let items = items
                     .into_iter()
                     .map(|item| {
-                        TaskArtifactV2::new(
+                        let artifact = TaskArtifactV2::new(
                             &item.url,
                             scalar_from_json(&item.id)?,
                             scalar_from_json(&item.duration)?,
                         )
-                        .map_err(|error| error.to_string())
+                        .map_err(|error| error.to_string())?;
+                        Ok(if item.fetch_with_credential {
+                            artifact.with_bound_credential()
+                        } else {
+                            artifact
+                        })
                     })
                     .collect::<Result<Vec<_>, String>>()?;
                 TaskArtifactRefV2::urls(items).map_err(|error| error.to_string())
@@ -119,10 +126,14 @@ struct UsageWire {
     seconds: Option<f64>,
     milliunits: Option<i64>,
     tokens: Option<i64>,
+    /// Contract 6: required key, `null` when the upstream reported no count.
+    #[serde(deserialize_with = "explicit_optional")]
+    outputs: Option<i64>,
 }
 impl UsageWire {
     fn build(self) -> Result<TaskUsageFactsV2, String> {
         TaskUsageFactsV2::new(self.seconds, self.milliunits, self.tokens)
+            .and_then(|usage| usage.with_outputs(self.outputs))
             .map_err(|error| error.to_string())
     }
 }
@@ -177,13 +188,14 @@ pub fn observation_json(observation: &TaskObservationV2) -> Result<Value, String
                 TaskArtifactRefV2::None => json!({"kind":"none"}),
                 TaskArtifactRefV2::FileId(id) => json!({"kind":"file-id","file_id":id}),
                 TaskArtifactRefV2::Urls(items) => {
-                    let items=items.iter().map(|item|Ok(json!({"url":item.url(),"id":scalar_json(item.id())?,"duration":scalar_json(item.duration())?})))
+                    let items=items.iter().map(|item|Ok(json!({"url":item.url(),"id":scalar_json(item.id())?,"duration":scalar_json(item.duration())?,"fetch_with_credential":item.fetch_with_credential()})))
                         .collect::<Result<Vec<Value>,String>>()?;
                     json!({"kind":"urls","items":items})
                 }
             };
             json!({"state":"succeeded","artifacts":artifacts,"usage":{
-                "seconds":usage.seconds(),"milliunits":usage.milliunits(),"tokens":usage.tokens()}})
+                "seconds":usage.seconds(),"milliunits":usage.milliunits(),"tokens":usage.tokens(),
+                "outputs":usage.outputs()}})
         }
     };
     bounded(value, MAX_TASK_V2_FACT_JSON_BYTES)
@@ -256,6 +268,11 @@ struct RequestEstimateWire {
     resolution: Option<String>,
     #[serde(deserialize_with = "explicit_optional")]
     input_image_count: Option<u32>,
+    /// Contract 6: both keys required, `null` when the component makes no statement.
+    #[serde(deserialize_with = "explicit_optional")]
+    tokens_per_second: Option<i64>,
+    #[serde(deserialize_with = "explicit_optional")]
+    requested_outputs: Option<i64>,
 }
 fn explicit_optional<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
 where
@@ -270,6 +287,9 @@ impl RequestEstimateWire {
             .and_then(|estimate| {
                 estimate.with_input_facts(self.resolution.as_deref(), self.input_image_count)
             })
+            .and_then(|estimate| {
+                estimate.with_output_facts(self.tokens_per_second, self.requested_outputs)
+            })
             .map_err(|error| error.to_string())
     }
 }
@@ -279,6 +299,9 @@ struct PreparedWire {
     descriptor: HttpRequestDescriptor,
     locator: LocatorWire,
     request_estimate: RequestEstimateWire,
+    /// Contract 6 (D6): required key; `null` = the component makes no statement.
+    #[serde(deserialize_with = "explicit_optional")]
+    immutable_body_paths: Option<Vec<String>>,
 }
 /// Decodes a descriptor plus strict locator; network authorization remains host-owned.
 pub fn parse_prepared_task_json(input: &str) -> Result<PreparedTaskV2, String> {
@@ -287,6 +310,7 @@ pub fn parse_prepared_task_json(input: &str) -> Result<PreparedTaskV2, String> {
         descriptor: value.descriptor,
         locator: value.locator.build()?,
         request_estimate: value.request_estimate.build()?,
+        immutable_body_paths: value.immutable_body_paths,
     };
     prepared_task_json(&prepared)?;
     Ok(prepared)
@@ -295,8 +319,18 @@ pub fn parse_prepared_task_json(input: &str) -> Result<PreparedTaskV2, String> {
 pub fn prepared_task_json(value: &PreparedTaskV2) -> Result<Value, String> {
     TaskLocatorV2::new(value.locator.schema_version(), value.locator.route())
         .map_err(|error| error.to_string())?;
+    if let Some(paths) = &value.immutable_body_paths {
+        south_contracts::validate_immutable_body_paths(paths).map_err(|error| error.to_string())?;
+    }
+    let estimate = &value.request_estimate;
     bounded(
-        json!({"descriptor":value.descriptor,"locator":locator_json(&value.locator), "request_estimate":{"requested_seconds":value.request_estimate.requested_seconds(),"milliunits_per_second":value.request_estimate.milliunits_per_second(),"resolution":value.request_estimate.resolution(),"input_image_count":value.request_estimate.input_image_count()}}),
+        json!({"descriptor":value.descriptor,"locator":locator_json(&value.locator),
+            "request_estimate":{"requested_seconds":estimate.requested_seconds(),
+                "milliunits_per_second":estimate.milliunits_per_second(),
+                "resolution":estimate.resolution(),"input_image_count":estimate.input_image_count(),
+                "tokens_per_second":estimate.tokens_per_second(),
+                "requested_outputs":estimate.requested_outputs()},
+            "immutable_body_paths":value.immutable_body_paths}),
         MAX_JSON_REQUEST_BODY_BYTES,
     )
 }
