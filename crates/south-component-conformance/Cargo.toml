@@ -69,5 +69,9 @@ required-features = ["sandbox"]
 name = "wan_image_task_sandbox_parity_v2"
 required-features = ["sandbox"]
 
+[[test]]
+name = "gmi_image_task_sandbox_parity_v2"
+required-features = ["sandbox"]
+
 [lints]
 workspace = true

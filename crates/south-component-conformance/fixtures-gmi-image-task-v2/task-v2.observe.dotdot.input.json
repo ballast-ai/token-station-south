@@ -1,0 +1,13 @@
+{
+  "provider_config": {
+    "provider": "gmi-image",
+    "base_url": "https://console.gmi.example",
+    "auth": "provider_api_key"
+  },
+  "upstream_model": "seedream-3-0-t2i-250415",
+  "upstream_task_id": "..",
+  "locator": {
+    "schema_version": 1,
+    "route": "api/v1/ie/requestqueue/apikey/requests"
+  }
+}

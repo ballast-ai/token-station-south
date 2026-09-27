@@ -1,0 +1,4 @@
+{
+  "status": 200,
+  "body": "{\"request_id\": \"gmi-req-1\", \"status\": \"success\", \"outcome\": {\"media_urls\": [{\"id\": \"0\", \"url\": \"https://cdn.gmi.example/x.png?sig=private\"}, {\"id\": \"1\", \"url\": \"https://cdn.gmi.example/y.png\"}]}}"
+}

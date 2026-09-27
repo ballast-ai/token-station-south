@@ -1,0 +1,13 @@
+{
+  "created": 123,
+  "data": [
+    {
+      "url": "https://cdn.gmi.example/x.png?sig=private",
+      "revised_prompt": null
+    },
+    {
+      "url": "https://cdn.gmi.example/y.png",
+      "revised_prompt": null
+    }
+  ]
+}

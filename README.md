@@ -188,6 +188,12 @@ Bearer 认证、按秒用量、直链产物，无新运行时能力；声明禁�
 `n`（1–4）→ `requested_outputs`；`usage.outputs` 为**结算张数**（上游正数 `image_count`、不超过交付 + 1，否则交付数，与产物 URL 数刻意分开）。
 只把具名尺寸档（`1K` / `2K` / `4K`）报为分辨率事实。构建 `bash scripts/build-wan-image-task-v2-component.sh`。
 
+## GMI Cloud media 图像（合同 6 候选，未发布）
+
+第十三包 `task-gmi-image-v2`（族 `gmi-image`），GMI request-queue 图像生成（Seedream 等，参考图按上游型号的文档上限）。回执即带产物
+→ `accepted-terminal`；`X-Organization-ID` 由宿主以 provider config 扩展 `organization_id` 传入（原生取自凭证 `account_id`）。按请求计价、
+不报用量：`n` 为 `requested_outputs`、交付数为 `usage.outputs`，计价政策归宿主。构建 `bash scripts/build-gmi-image-task-v2-component.sh`。
+
 ## Local verification
 
 ```bash

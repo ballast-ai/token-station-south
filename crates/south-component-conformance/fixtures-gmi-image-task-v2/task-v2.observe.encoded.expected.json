@@ -1,0 +1,8 @@
+{
+  "method": "GET",
+  "url": "https://console.gmi.example/api/v1/ie/requestqueue/apikey/requests/a%20b%2Fc",
+  "auth": {
+    "scheme": "bearer",
+    "secret": "provider_api_key"
+  }
+}

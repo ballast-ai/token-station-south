@@ -1,0 +1,6 @@
+{
+  "state": "failed",
+  "kind": "failed",
+  "code": "empty_result",
+  "message": "gmi reported 'success' but delivered no media urls"
+}
