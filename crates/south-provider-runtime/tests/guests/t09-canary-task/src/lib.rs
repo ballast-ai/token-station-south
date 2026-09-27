@@ -42,6 +42,20 @@
 //! - `rogue-no-seconds` — reports no requested seconds at all.
 //!
 //! Any other model name is the well-behaved wire above.
+//!
+//! # Capability modes (host capabilities beyond bearer and polling)
+//!
+//! Positive evidence for host capabilities added after T09 (token-station-server
+//! P13), each switched on by something the host already hands over:
+//!
+//! - model `header-auth` — every descriptor (submit and observe) asks for the
+//!   credential in the sanctioned `x-goog-api-key` header instead of a bearer
+//!   token. Proves a host serving a `header_secret` auth recipe sends the key
+//!   where the component asked and nowhere else.
+//! - a submit response that is already terminal (`t09_state: "done"` with reels,
+//!   no ticket) — the component answers `accepted-terminal` with that
+//!   observation. Proves a host settles an upstream that finishes at submit,
+//!   instead of holding the reservation for a job it can never poll.
 
 wit_bindgen::generate!({
     path: "../../../../south-provider-api/wit/task-adapter-v2.wit",
@@ -85,22 +99,35 @@ fn endpoint(config: &Value) -> Result<(String, Option<String>), String> {
     Ok((base.trim_end_matches('/').to_owned(), slot))
 }
 
+/// The upstream model that switches every descriptor to header auth.
+const HEADER_AUTH_MODEL: &str = "header-auth";
+const HEADER_AUTH_NAME: &str = "x-goog-api-key";
+
 /// The slot is copied from the config, never invented: the host authorizes the
 /// descriptor against exactly the slot it granted.
-fn auth(slot: &Option<String>) -> Value {
+fn auth(slot: &Option<String>, model: &str) -> Value {
     match slot {
+        Some(secret) if model == HEADER_AUTH_MODEL => {
+            json!({ "scheme": "header", "name": HEADER_AUTH_NAME, "secret": secret })
+        }
         Some(secret) => json!({ "scheme": "bearer", "secret": secret }),
         None => Value::Null,
     }
 }
 
-fn descriptor(method: &str, url: String, body: Option<Value>, slot: &Option<String>) -> Value {
+fn descriptor(
+    method: &str,
+    url: String,
+    body: Option<Value>,
+    slot: &Option<String>,
+    model: &str,
+) -> Value {
     let mut out = json!({ "method": method, "url": url });
     if let Some(body) = body {
         out["headers"] = json!({ "content-type": "application/json" });
         out["body"] = body;
     }
-    let auth = auth(slot);
+    let auth = auth(slot, model);
     if !auth.is_null() {
         out["auth"] = auth;
     }
@@ -144,6 +171,50 @@ fn response(parts: &str) -> Result<(u16, Option<Value>), String> {
         })?;
     let body = parts.get("body").and_then(Value::as_str).and_then(|b| serde_json::from_str(b).ok());
     Ok((status, body))
+}
+
+/// A t09 job body (poll response, or a submit response that finished at once)
+/// → task observation JSON.
+fn observation_of(body: &Value) -> Value {
+    match body.get("t09_state").and_then(Value::as_str) {
+        Some("queued") => {
+            json!({ "state": "progress", "running": false, "status_word": "queued" })
+        }
+        Some("brewing") => {
+            json!({ "state": "progress", "running": true, "status_word": "brewing" })
+        }
+        Some("done") => {
+            let reels: Vec<Value> = body
+                .get("t09_reels")
+                .and_then(Value::as_array)
+                .map(|reels| {
+                    reels
+                        .iter()
+                        .filter_map(|reel| reel.get("href").and_then(Value::as_str))
+                        .filter(|href| !href.is_empty())
+                        .map(|href| json!({ "url": href, "id": null, "duration": null }))
+                        .collect()
+                })
+                .unwrap_or_default();
+            if reels.is_empty() || reels.len() > MAX_REELS {
+                return json!({ "state": "unknown", "reason": "t09 job done without usable reels" });
+            }
+            // Absent and zero are different facts: a missing meter stays null.
+            let billed = body.get("t09_billed_seconds").and_then(seconds);
+            json!({
+                "state": "succeeded",
+                "artifacts": { "kind": "urls", "items": reels },
+                "usage": { "seconds": billed, "milliunits": null, "tokens": null },
+            })
+        }
+        Some("spoiled") => json!({
+            "state": "failed",
+            "kind": "failed",
+            "code": body.pointer("/t09_fault/code").and_then(Value::as_str),
+            "message": body.pointer("/t09_fault/reason").and_then(Value::as_str),
+        }),
+        _ => json!({ "state": "unknown", "reason": "unrecognized t09_state" }),
+    }
 }
 
 impl Guest for T09Canary {
@@ -206,7 +277,7 @@ impl Guest for T09Canary {
             }
         });
         Ok(json!({
-            "descriptor": descriptor("POST", format!("{base}/{ROUTE}"), Some(body), &slot),
+            "descriptor": descriptor("POST", format!("{base}/{ROUTE}"), Some(body), &slot, model),
             "locator": { "schema_version": 1, "route": ROUTE },
             // Every key is written, null included: the host's decoder requires
             // `resolution` and `input_image_count` to be present.
@@ -228,7 +299,19 @@ impl Guest for T09Canary {
                     Some(handle) if !handle.is_empty() => {
                         json!({ "outcome": "accepted", "upstream_task_id": handle })
                     }
-                    _ => json!({ "outcome": "unknown" }),
+                    // Finished at submit (see "Capability modes"): terminal
+                    // observations only — anything else stays unknown.
+                    _ => match observation_of(&body) {
+                        observation
+                            if matches!(
+                                observation.get("state").and_then(Value::as_str),
+                                Some("succeeded" | "failed")
+                            ) =>
+                        {
+                            json!({ "outcome": "accepted-terminal", "observation": observation })
+                        }
+                        _ => json!({ "outcome": "unknown" }),
+                    },
                 }
             }
             // A 4xx that names this wire's own fault is a definite refusal;
@@ -248,7 +331,7 @@ impl Guest for T09Canary {
 
     fn build_observe_request(
         config: String,
-        _upstream_model: String,
+        upstream_model: String,
         upstream_task_id: String,
         locator: String,
     ) -> Result<String, String> {
@@ -261,7 +344,8 @@ impl Guest for T09Canary {
         let id = path_segment(&upstream_task_id).ok_or_else(|| {
             error_envelope("internal", 500, "t09 canary: upstream task id is not a path segment")
         })?;
-        Ok(descriptor("GET", format!("{base}/{route}/{id}"), None, &slot).to_string())
+        Ok(descriptor("GET", format!("{base}/{route}/{id}"), None, &slot, &upstream_model)
+            .to_string())
     }
 
     fn parse_observation(parts: String) -> Result<String, String> {
@@ -274,46 +358,7 @@ impl Guest for T09Canary {
                 )
             }
         };
-        let observation = match body.get("t09_state").and_then(Value::as_str) {
-            Some("queued") => {
-                json!({ "state": "progress", "running": false, "status_word": "queued" })
-            }
-            Some("brewing") => {
-                json!({ "state": "progress", "running": true, "status_word": "brewing" })
-            }
-            Some("done") => {
-                let reels: Vec<Value> = body
-                    .get("t09_reels")
-                    .and_then(Value::as_array)
-                    .map(|reels| {
-                        reels
-                            .iter()
-                            .filter_map(|reel| reel.get("href").and_then(Value::as_str))
-                            .filter(|href| !href.is_empty())
-                            .map(|href| json!({ "url": href, "id": null, "duration": null }))
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                if reels.is_empty() || reels.len() > MAX_REELS {
-                    return Ok(json!({ "state": "unknown", "reason": "t09 job done without usable reels" }).to_string());
-                }
-                // Absent and zero are different facts: a missing meter stays null.
-                let billed = body.get("t09_billed_seconds").and_then(seconds);
-                json!({
-                    "state": "succeeded",
-                    "artifacts": { "kind": "urls", "items": reels },
-                    "usage": { "seconds": billed, "milliunits": null, "tokens": null },
-                })
-            }
-            Some("spoiled") => json!({
-                "state": "failed",
-                "kind": "failed",
-                "code": body.pointer("/t09_fault/code").and_then(Value::as_str),
-                "message": body.pointer("/t09_fault/reason").and_then(Value::as_str),
-            }),
-            _ => json!({ "state": "unknown", "reason": "unrecognized t09_state" }),
-        };
-        Ok(observation.to_string())
+        Ok(observation_of(&body).to_string())
     }
 
     fn build_artifact_request(
