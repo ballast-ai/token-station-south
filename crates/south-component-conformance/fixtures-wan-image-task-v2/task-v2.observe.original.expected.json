@@ -1,0 +1,8 @@
+{
+  "method": "GET",
+  "url": "https://dashscope.example/api/v1/tasks/wan-task-1",
+  "auth": {
+    "scheme": "bearer",
+    "secret": "provider_api_key"
+  }
+}

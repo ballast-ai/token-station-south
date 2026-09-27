@@ -1,0 +1,4 @@
+{
+  "status": 200,
+  "body": "{\"output\": {\"task_status\": \"SUCCEEDED\", \"choices\": [{\"message\": {\"content\": [{\"image\": \"https://oss.example/a.png?sig=private\"}, {\"image\": \"https://oss.example/b.png\"}]}}]}, \"usage\": {\"image_count\": 9}}"
+}

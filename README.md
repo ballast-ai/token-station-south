@@ -182,6 +182,12 @@ Bearer 认证、按秒用量、直链产物，无新运行时能力；声明禁�
 `sampleCount` 即 `requested_outputs` / 交付样本数即 `usage.outputs`、回执即终态 → `accepted-terminal`。输入图须已是 `data:` URI
 （宿主预取）；Vertex 线（服务账号铸币、按 region 派生端点）不在本组件。构建 `bash scripts/build-veo-task-v2-component.sh`。
 
+## 百炼万相 2.7 图像（异步，合同 6 候选，未发布）
+
+第十二包 `task-wan-image-v2`（族 `wan-image`），首个图像模态任务组件：DashScope 异步图像生成（文生、1–3 张源图编辑）。合同 6 按张计量：
+`n`（1–4）→ `requested_outputs`；`usage.outputs` 为**结算张数**（上游正数 `image_count`、不超过交付 + 1，否则交付数，与产物 URL 数刻意分开）。
+只把具名尺寸档（`1K` / `2K` / `4K`）报为分辨率事实。构建 `bash scripts/build-wan-image-task-v2-component.sh`。
+
 ## Local verification
 
 ```bash

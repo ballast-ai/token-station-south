@@ -65,5 +65,9 @@ required-features = ["sandbox"]
 name = "veo_task_sandbox_parity_v2"
 required-features = ["sandbox"]
 
+[[test]]
+name = "wan_image_task_sandbox_parity_v2"
+required-features = ["sandbox"]
+
 [lints]
 workspace = true

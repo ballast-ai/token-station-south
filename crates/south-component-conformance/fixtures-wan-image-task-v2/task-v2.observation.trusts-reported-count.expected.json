@@ -1,0 +1,26 @@
+{
+  "state": "succeeded",
+  "artifacts": {
+    "kind": "urls",
+    "items": [
+      {
+        "url": "https://oss.example/a.png?sig=private",
+        "id": null,
+        "duration": null,
+        "fetch_with_credential": false
+      },
+      {
+        "url": "https://oss.example/b.png",
+        "id": null,
+        "duration": null,
+        "fetch_with_credential": false
+      }
+    ]
+  },
+  "usage": {
+    "seconds": null,
+    "milliunits": null,
+    "tokens": null,
+    "outputs": 3
+  }
+}

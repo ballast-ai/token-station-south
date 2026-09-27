@@ -1,0 +1,29 @@
+{
+  "provider_config": {
+    "provider": "wan-image",
+    "base_url": "https://dashscope.example",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "model": "wan2.7-t2i-plus",
+    "prompt": "a cat",
+    "n": 3,
+    "size": "1024x768",
+    "seed": 7,
+    "watermark": false,
+    "prompt_extend": true,
+    "negative_prompt": "blur",
+    "bbox_list": [
+      [
+        1,
+        2,
+        3,
+        4
+      ]
+    ],
+    "ignored": 1
+  },
+  "minted": {
+    "task_id": "host-1"
+  }
+}

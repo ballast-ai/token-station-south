@@ -101,4 +101,5 @@ pub mod reference_minimax_task_v2;
 pub mod reference_bailian_task_v2;
 pub mod reference_byteplus_task_v2;
 pub mod reference_veo_task_v2;
+pub mod reference_wan_image_task_v2;
 pub mod reference_xai_task_v2;
