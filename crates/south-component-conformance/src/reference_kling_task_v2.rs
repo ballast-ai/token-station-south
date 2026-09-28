@@ -25,6 +25,12 @@ const OMNI: &str = "v1/videos/omni-video";
 const MOTION: &str = "v1/videos/motion-control";
 const MULTI_PROMPT_REQUIRED: &str =
     "multi_shot=true with shot_type=customize requires 'multi_prompt'";
+/// Request-body fields the host must not rewrite (task contract 6): the upstream model, the
+/// fields the unit-rate estimate is read from (`mode`, `sound`, `video_list`, `duration`) and the
+/// host-minted `external_task_id`. The same six fields the host-native arm protects, so request
+/// extras land identically on both arms.
+const IMMUTABLE_BODY_PATHS: [&str; 6] =
+    ["model_name", "mode", "sound", "duration", "video_list", "external_task_id"];
 
 /// Stateless reference for the candidate task-adapter-v2 world.
 #[derive(Debug, Default, Clone, Copy)]
@@ -282,7 +288,7 @@ impl TaskComponentV2 for KlingTaskReferenceV2 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "task-kling-v2".into(),
-            version: "0.31.0".into(),
+            version: "0.32.0".into(),
             api_version: "task-adapter-v2".into(),
         }
     }
@@ -323,8 +329,7 @@ impl TaskComponentV2 for KlingTaskReferenceV2 {
             descriptor,
             locator,
             request_estimate,
-            // 合同 6(D6):本族尚未声明禁改路径——宿主不得注入附加请求体字段(同合同 5)。
-            immutable_body_paths: None,
+            immutable_body_paths: Some(IMMUTABLE_BODY_PATHS.map(str::to_owned).to_vec()),
         })
     }
     fn parse_submit_response(
