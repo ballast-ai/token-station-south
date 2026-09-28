@@ -263,3 +263,18 @@ fn bailian_release_retires_the_published_030_component_identities() {
         assert_ne!(manifest.compatibility.south_runtime, "0.30.0");
     }
 }
+
+/// Declaring immutable body paths changes what `task-kling-v2` prepares (task contract 6: the
+/// host may now inject request extras outside those paths), so the published 0.31.0 identity
+/// retires with it.
+#[test]
+fn kling_immutable_paths_retire_the_published_task_kling_v2_identity() {
+    let manifest: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(
+            repo_root().join("components").join("task-kling-v2").join("manifest.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_ne!(manifest.version, "0.31.0", "a changed package cannot reuse its published identity");
+}

@@ -24,5 +24,12 @@
     "tokens_per_second": null,
     "requested_outputs": null
   },
-  "immutable_body_paths": null
+  "immutable_body_paths": [
+    "model_name",
+    "mode",
+    "sound",
+    "duration",
+    "video_list",
+    "external_task_id"
+  ]
 }
