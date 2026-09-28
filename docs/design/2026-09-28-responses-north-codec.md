@@ -26,3 +26,26 @@ A1 的宿主边界：I03/I04/I05/I06/I12/I13/I17/I19/O02/O03/O04/E04/E05/E09 的
 失败帧错误码按既有社区 Responses wire 映射枚举（如 RateLimit→rate_limit_exceeded），不直接泄漏 IR 枚举拼写。server Native 上游错误帧保留仍在宿主壳，不经此映射。
 
 逐行覆盖、行为 RED 记录和验证命令见[验收证据](2026-09-28-responses-north-codec-validation.md)。
+
+## R2：有界 Claude reasoning 回放载体
+
+R2 消费 kernel v0.3.0 的 canonical IR 2 / stream 2，但 South 不拥有 canonical IR，
+所以 `compatibility.json.contracts.canonical_ir` 保持 `null`。依赖 pin 与十三个组件的
+kernel version/revision、stream contract 共同记录消费边界；South 运行时预备升至 0.38.0。
+
+Responses `encrypted_content` 增加封闭载体 `tsr.c1.` 加 base64url-no-pad JSON。对象固定
+namespace `token-station.reasoning-replay`、version 1、family
+`claude-signed-thinking`，有序块仅允许 thinking、redacted_thinking、text_ref、
+tool_call_ref。未知字段、未知版本/族、引用不完整、超过 128 块、单 opaque 块超过
+1 MiB 或累计超过 4 MiB 均以稳定 `reasoning_replay_invalid` 拒绝且不截断。
+
+codec 将载体解析为同一 assistant 消息内的有序内容布局；输出从真实 Thinking、
+RedactedThinking、正文及工具调用重新生成同值稳定载体。流事件使用 choice `index` 与
+content `block_index` 两维身份，按块首次出现顺序聚合；断流、重复关闭、乱序或缺少
+signature 时不生成成功载体。done item 与 completed output 复用同一编码结果。
+
+载体只允许交给显式声明 `reasoning_replay.claude.v1` 的 Anthropic Messages 或
+Bedrock Converse 译器。OpenAI-compatible 与 Gemini 显式拒绝；不带 `tsr.c1.` 的
+OpenAI opaque 不由 South 跨协议解释。South 返回可由宿主稳定映射的 invalid、
+target_mismatch、target_unavailable 分类，不参与路由、凭证选择、认证、计费或验签；
+结构合法但 signature 错误由目标上游拒绝。

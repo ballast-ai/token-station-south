@@ -269,6 +269,7 @@ pub fn anthropic_frames(
                     ));
                 }
             }
+            StreamEvent::RedactedThinking { .. } => {}
             // Folded, not rendered: this wire reports usage on the frames it
             // already has. Folding rather than replacing is what keeps a
             // provider's input-up-front, output-at-the-end pair from zeroing

@@ -376,6 +376,7 @@ impl GeminiSseParser {
                 if part["thought"].as_bool() == Some(true) {
                     events.push(StreamEvent::ThinkingDelta {
                         index: 0,
+                        block_index: 0,
                         thinking_delta: text.to_owned(),
                     });
                 } else {
@@ -462,6 +463,12 @@ impl ProviderComponentV1 for GeminiReferenceV1 {
         request: &ChatRequest,
         config: &ProviderConfig,
     ) -> ComponentResultV1<HttpRequestDescriptor> {
+        if request.messages.iter().any(|message| {
+            message.extensions.get("reasoning_replay_protocol_family").and_then(Value::as_str)
+                == Some("claude-signed-thinking")
+        }) {
+            return Err(capability("the Gemini dialect cannot consume Claude reasoning replay"));
+        }
         if config.provider != "gemini" {
             return Err(capability(format!("unsupported provider dialect `{}`", config.provider)));
         }

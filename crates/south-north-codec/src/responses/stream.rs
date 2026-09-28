@@ -310,7 +310,7 @@ fn render(
                 state.slots[position].text.push_str(content);
                 state.emit("response.output_text.delta",json!({"item_id":item_id,"output_index":output_index,"content_index":0,"delta":content}),&mut out)?;
             }
-            StreamEvent::ThinkingDelta { index, thinking_delta } => {
+            StreamEvent::ThinkingDelta { index, thinking_delta, .. } => {
                 let (position, new) = state.slot(1, *index)?;
                 let item_id = state.slots[position].id.clone();
                 let output_index = state.slots[position].index;
@@ -332,7 +332,7 @@ fn render(
                 payload[field] = json!(0);
                 state.emit(raw, payload, &mut out)?;
             }
-            StreamEvent::ThinkingSignatureDelta { index, signature_delta } => {
+            StreamEvent::ThinkingSignatureDelta { index, signature_delta, .. } => {
                 if state.context.render_legacy_encrypted_reasoning {
                     let (position, new) = state.slot(1, *index)?;
                     if new {
@@ -343,6 +343,7 @@ fn render(
                     state.slots[position].signature.push_str(signature_delta);
                 }
             }
+            StreamEvent::RedactedThinking { .. } => {}
             StreamEvent::ToolCallDelta { index, id, name, arguments_delta } => {
                 render_tool(state, *index, id.as_ref(), name.as_ref(), arguments_delta, &mut out)?;
             }

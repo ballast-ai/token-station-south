@@ -98,3 +98,11 @@
 - IR 错误枚举的 serde 拼写不等于客户端 wire 错误码；迁移应逐枚举核对旧输出，不直接透传内部拼写。
 
 - 诊断脱敏不能删掉既有产品回执依赖的固定协议名称。仅白名单标准词表可回显，任意客户端字符串仍脱敏；以真实 HTTP 拒绝回执校验分类。
+
+## 2026-09-29：兼容清单只声明本仓拥有的合同
+
+- `compatibility.json.contracts.canonical_ir` 是所有权声明，不是消费版本记录。South
+  消费 kernel IR 时该槽必须保持 `null`；把 kernel 的 canonical IR 版本抄入这里会制造
+  双重所有权。
+- 消费约束应写入组件握手元组（kernel version/revision 与 stream contract）以及依赖 pin，
+  并由真实装载测试交叉核对。版本升级前先区分“拥有的合同”和“接受的合同”。

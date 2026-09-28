@@ -39,8 +39,16 @@ fn text_stream() -> Vec<StreamEvent> {
 fn the_frame_skeleton_is_pinned_frame_by_frame() {
     let frames = anthropic_frames(
         &[
-            StreamEvent::ThinkingDelta { index: 0, thinking_delta: "thi".to_owned() },
-            StreamEvent::ThinkingSignatureDelta { index: 0, signature_delta: "sig".to_owned() },
+            StreamEvent::ThinkingDelta {
+                index: 0,
+                block_index: 0,
+                thinking_delta: "thi".to_owned(),
+            },
+            StreamEvent::ThinkingSignatureDelta {
+                index: 0,
+                block_index: 0,
+                signature_delta: "sig".to_owned(),
+            },
             StreamEvent::Delta { index: 0, content: "hi".to_owned() },
             StreamEvent::ToolCallDelta {
                 index: 0,
@@ -369,7 +377,11 @@ fn blocks_are_closed_by_kind_rather_than_in_the_order_they_opened() {
 fn a_signature_with_no_thinking_block_renders_nothing_and_starts_no_message() {
     let mut state = state();
     let frames = anthropic_frames(
-        &[StreamEvent::ThinkingSignatureDelta { index: 0, signature_delta: "sig".to_owned() }],
+        &[StreamEvent::ThinkingSignatureDelta {
+            index: 0,
+            block_index: 0,
+            signature_delta: "sig".to_owned(),
+        }],
         &mut state,
     );
     assert!(

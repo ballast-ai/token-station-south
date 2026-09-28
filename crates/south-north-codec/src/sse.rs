@@ -65,10 +65,11 @@ pub fn openai_chat_frames(events: &[StreamEvent], state: &mut OpenAiChatSseState
             break;
         }
         match event {
-            StreamEvent::ThinkingDelta { index, thinking_delta } => {
+            StreamEvent::ThinkingDelta { index, thinking_delta, .. } => {
                 flush_pending(state, &mut chunks);
                 chunks.push(delta(*index, &json!({"reasoning_content": thinking_delta})));
             }
+            StreamEvent::RedactedThinking { .. } => {}
             StreamEvent::Delta { index, content } => {
                 flush_pending(state, &mut chunks);
                 chunks.push(delta(*index, &json!({"content": content})));

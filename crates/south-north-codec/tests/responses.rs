@@ -196,7 +196,7 @@ fn raw_reasoning_closes_before_tools_and_json_state_stays_local_e04_e05_e09() {
     let mut state = ResponsesSseState::new(ctx.clone());
     let mut json_state = ResponsesSseState::new(ctx);
     let events = [
-        StreamEvent::ThinkingDelta { index: 0, thinking_delta: "think".into() },
+        StreamEvent::ThinkingDelta { index: 0, block_index: 0, thinking_delta: "think".into() },
         StreamEvent::ToolCallDelta {
             index: 0,
             id: Some("c".into()),
@@ -348,9 +348,10 @@ fn missing_identity_and_signature_compatibility_are_independent_e04_o04() {
                 name: Some("f".into()),
                 arguments_delta: "}".into(),
             },
-            StreamEvent::ThinkingDelta { index: 0, thinking_delta: "think".into() },
+            StreamEvent::ThinkingDelta { index: 0, block_index: 0, thinking_delta: "think".into() },
             StreamEvent::ThinkingSignatureDelta {
                 index: 0,
+                block_index: 0,
                 signature_delta: "secret-signature".into(),
             },
             StreamEvent::Done { finish_reason: Some(FinishReason::Stop), stop_sequence: None },
@@ -411,8 +412,16 @@ fn continuation_snapshot_is_only_available_after_success_i19_e09() {
     assert!(state.terminal_response().is_none());
     checked_frames(
         &[
-            StreamEvent::ThinkingDelta { index: 0, thinking_delta: "reason".into() },
-            StreamEvent::ThinkingSignatureDelta { index: 0, signature_delta: "sig".into() },
+            StreamEvent::ThinkingDelta {
+                index: 0,
+                block_index: 0,
+                thinking_delta: "reason".into(),
+            },
+            StreamEvent::ThinkingSignatureDelta {
+                index: 0,
+                block_index: 0,
+                signature_delta: "sig".into(),
+            },
             StreamEvent::Delta { index: 0, content: "answer".into() },
             StreamEvent::ToolCallDelta {
                 index: 0,
@@ -734,9 +743,13 @@ fn reasoning_block_order_and_summary_lifecycle_e01_e03_e05() {
     let mut raw = ResponsesSseState::new(context(ResponsesReasoningMode::RawContent));
     let frames = checked_frames(
         &[
-            StreamEvent::ThinkingDelta { index: 0, thinking_delta: "first".into() },
+            StreamEvent::ThinkingDelta { index: 0, block_index: 0, thinking_delta: "first".into() },
             StreamEvent::Delta { index: 0, content: "answer".into() },
-            StreamEvent::ThinkingDelta { index: 0, thinking_delta: "second".into() },
+            StreamEvent::ThinkingDelta {
+                index: 0,
+                block_index: 0,
+                thinking_delta: "second".into(),
+            },
             StreamEvent::ToolCallDelta {
                 index: 0,
                 id: Some("c".into()),
@@ -757,7 +770,11 @@ fn reasoning_block_order_and_summary_lifecycle_e01_e03_e05() {
     let mut summary = ResponsesSseState::new(context(ResponsesReasoningMode::Summary));
     let frames = checked_frames(
         &[
-            StreamEvent::ThinkingDelta { index: 0, thinking_delta: "summary".into() },
+            StreamEvent::ThinkingDelta {
+                index: 0,
+                block_index: 0,
+                thinking_delta: "summary".into(),
+            },
             StreamEvent::Done { finish_reason: Some(FinishReason::Stop), stop_sequence: None },
         ],
         &mut summary,

@@ -1,5 +1,5 @@
 use super::tools::{restore_map, tool_item};
-use super::{ResponsesContext, ResponsesReasoningMode, invalid};
+use super::{ResponsesContext, ResponsesReasoningMode, decode_reasoning_replay_carrier, invalid};
 use crate::CodecError;
 use serde_json::{Value, json};
 use token_station_protocol::{ChatResponse, Content, ContentPart, FinishReason, Usage};
@@ -14,6 +14,11 @@ pub fn responses_response(
         let mut texts = Vec::new();
         let mut thinking = String::new();
         let mut signature = None;
+        let replay_items = choice
+            .message
+            .extensions
+            .get("responses_reasoning_replay_items")
+            .and_then(Value::as_array);
         let parts = match &choice.message.content {
             None => Vec::new(),
             Some(Content::Text(text)) => vec![ContentPart::Text { text: text.clone() }],
@@ -23,12 +28,18 @@ pub fn responses_response(
             match part {
                 ContentPart::Text { text } => texts.push(json!({"type":"output_text","text":text})),
                 ContentPart::Thinking { thinking: text, signature: part_signature } => {
-                    thinking.push_str(&text);
-                    if part_signature.is_some() {
-                        signature = part_signature;
+                    if replay_items.is_none() {
+                        thinking.push_str(&text);
+                        if part_signature.is_some() {
+                            signature = part_signature;
+                        }
                     }
                 }
-                ContentPart::RedactedThinking { data } => signature = Some(data),
+                ContentPart::RedactedThinking { data } => {
+                    if replay_items.is_none() {
+                        signature = Some(data);
+                    }
+                }
                 ContentPart::Unknown(value) => texts.push(value),
                 ContentPart::ImageUrl { .. } => {
                     return Err(super::unsupported(
@@ -36,6 +47,34 @@ pub fn responses_response(
                         "text, thinking, redacted thinking, opaque content",
                     ));
                 }
+            }
+        }
+        if let Some(items) = replay_items {
+            for item in items {
+                let encoded = item["encrypted_content"].as_str().ok_or_else(|| {
+                    CodecError::ReasoningReplayInvalid { field: "encrypted_content".to_owned() }
+                })?;
+                let carrier = decode_reasoning_replay_carrier(encoded)?;
+                let summary = carrier
+                    .blocks()
+                    .iter()
+                    .filter_map(|block| match block {
+                        super::ReasoningReplayBlock::Thinking { thinking, .. } => {
+                            Some(thinking.as_str())
+                        }
+                        _ => None,
+                    })
+                    .collect::<String>();
+                let mut replay = reasoning_item(
+                    item["id"].as_str().ok_or_else(|| CodecError::ReasoningReplayInvalid {
+                        field: "encrypted_content".to_owned(),
+                    })?,
+                    &summary,
+                    None,
+                    context,
+                );
+                replay["encrypted_content"] = json!(encoded);
+                output.push(replay);
             }
         }
         if !thinking.is_empty()

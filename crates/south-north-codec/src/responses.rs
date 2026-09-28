@@ -1,10 +1,15 @@
 //! Responses client wire mappings with explicit host facts and per-stream state.
 mod output;
+mod replay;
 mod request;
 mod stream;
 mod tools;
 use crate::CodecError;
 pub use output::responses_response;
+pub use replay::{
+    CLAUDE_REASONING_REPLAY_CAPABILITY, ReasoningReplayBlock, ReasoningReplayCarrier,
+    decode_reasoning_replay_carrier, encode_reasoning_replay_carrier,
+};
 pub use request::chat_request_from_responses;
 use serde_json::Value;
 pub use stream::{ResponsesSseState, responses_frames};

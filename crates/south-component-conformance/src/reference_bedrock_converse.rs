@@ -69,6 +69,21 @@ fn capability(detail: impl Into<String>) -> ErrorEnvelope {
     ErrorEnvelope::new(ErrorCode::Capability, 400, detail)
 }
 
+const REPLAY_CAPABILITY: &str = "reasoning_replay.claude.v1";
+
+fn requests_reasoning_replay(request: &ChatRequest) -> bool {
+    request.messages.iter().any(|message| {
+        message.extensions.get("reasoning_replay_protocol_family").and_then(Value::as_str)
+            == Some("claude-signed-thinking")
+    })
+}
+
+fn model_allows_reasoning_replay(request: &ChatRequest, config: &ProviderConfig) -> bool {
+    config.models.iter().any(|model| {
+        model.model == request.model && model.supported_parameters.contains(REPLAY_CAPABILITY)
+    })
+}
+
 fn provider_protocol_error(message: &'static str) -> ErrorEnvelope {
     ErrorEnvelope::new(ErrorCode::ProviderProtocolError, 502, message)
 }
@@ -77,12 +92,13 @@ fn provider_protocol_error(message: &'static str) -> ErrorEnvelope {
 ///
 /// Converse has no bare-string content: every block is typed, so a
 /// [`Content::Text`] becomes a one-element array.
-fn text_blocks(content: Option<&Content>) -> Vec<Value> {
+fn text_blocks(content: Option<&Content>, allow_replay: bool) -> Vec<Value> {
     match content {
         Some(Content::Text(text)) => vec![json!({"text": text})],
-        Some(Content::Parts(parts)) => {
-            parts.iter().filter_map(|part| part_to_block(part).ok().flatten()).collect()
-        }
+        Some(Content::Parts(parts)) => parts
+            .iter()
+            .filter_map(|part| part_to_block(part, allow_replay).ok().flatten())
+            .collect(),
         None => Vec::new(),
     }
 }
@@ -92,7 +108,7 @@ fn text_blocks(content: Option<&Content>) -> Vec<Value> {
 /// `Ok(None)` is a part this dialect has no block for (a thinking block on the
 /// way *out*, say): dropped, not an error. `Err` is a part Converse would
 /// reject, refused locally so the message names the part.
-fn part_to_block(part: &ContentPart) -> ComponentResultV1<Option<Value>> {
+fn part_to_block(part: &ContentPart, allow_replay: bool) -> ComponentResultV1<Option<Value>> {
     match part {
         ContentPart::Text { text } => Ok(Some(json!({"text": text}))),
         ContentPart::ImageUrl { image_url } => {
@@ -122,11 +138,18 @@ fn part_to_block(part: &ContentPart) -> ComponentResultV1<Option<Value>> {
                 "image": {"format": format, "source": {"bytes": encoded}}
             })))
         }
-        // Reasoning blocks are Converse's `reasoningContent` on the way back,
-        // but replaying one into a request has no sanctioned shape; an unknown
-        // part has none by definition. Both are dropped rather than guessed —
-        // same outcome, and deliberately one arm so a future shape for either
-        // has to be added on purpose.
+        ContentPart::Thinking { thinking, signature } if allow_replay => {
+            let Some(signature) = signature else {
+                return Err(capability("a replayed Converse thinking block requires a signature"));
+            };
+            Ok(Some(json!({"reasoningContent":{"reasoningText":{
+                "text":thinking,
+                "signature":signature,
+            }}})))
+        }
+        ContentPart::RedactedThinking { data } if allow_replay => {
+            Ok(Some(json!({"reasoningContent":{"redactedContent":data}})))
+        }
         ContentPart::Thinking { .. }
         | ContentPart::RedactedThinking { .. }
         | ContentPart::Unknown(_) => Ok(None),
@@ -196,7 +219,7 @@ fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<Value>, Vec<
             Role::System => {
                 // Converse's system slot is text-only; a non-text part has no
                 // representation and Bedrock 400s on one.
-                for block in text_blocks(message.content.as_ref()) {
+                for block in text_blocks(message.content.as_ref(), false) {
                     if block.get("text").is_some() {
                         system.push(block);
                     }
@@ -220,7 +243,7 @@ fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<Value>, Vec<
                          same conversation; `{tool_call_id}` names none"
                     )));
                 }
-                let content = text_blocks(message.content.as_ref());
+                let content = text_blocks(message.content.as_ref(), false);
                 pending_results.push(json!({
                     "toolResult": {
                         "toolUseId": tool_call_id,
@@ -237,7 +260,12 @@ fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<Value>, Vec<
             }
             Role::Assistant => {
                 flush_tool_results(&mut pending_results, &mut messages);
-                let mut content = text_blocks(message.content.as_ref());
+                let replay = message
+                    .extensions
+                    .get("reasoning_replay_protocol_family")
+                    .and_then(Value::as_str)
+                    == Some("claude-signed-thinking");
+                let mut content = text_blocks(message.content.as_ref(), replay);
                 for call in &message.tool_calls {
                     content.push(tool_use_block(call)?);
                     announced_calls.push(&call.id);
@@ -268,7 +296,7 @@ fn user_content(message: &Message) -> ComponentResultV1<Vec<Value>> {
         Some(Content::Text(text)) => content.push(json!({"text": text})),
         Some(Content::Parts(parts)) => {
             for part in parts {
-                if let Some(block) = part_to_block(part)? {
+                if let Some(block) = part_to_block(part, false)? {
                     content.push(block);
                 }
             }
@@ -543,7 +571,22 @@ impl ConverseSseParser {
                 if let Some(text) = delta["reasoningContent"]["text"].as_str() {
                     return Ok(vec![StreamEvent::ThinkingDelta {
                         index: 0,
+                        block_index: block_index(data),
                         thinking_delta: text.to_owned(),
+                    }]);
+                }
+                if let Some(signature) = delta["reasoningContent"]["signature"].as_str() {
+                    return Ok(vec![StreamEvent::ThinkingSignatureDelta {
+                        index: 0,
+                        block_index: block_index(data),
+                        signature_delta: signature.to_owned(),
+                    }]);
+                }
+                if let Some(data_value) = delta["reasoningContent"]["redactedContent"].as_str() {
+                    return Ok(vec![StreamEvent::RedactedThinking {
+                        index: 0,
+                        block_index: block_index(data),
+                        data: data_value.to_owned(),
                     }]);
                 }
                 Ok(Vec::new())
@@ -642,6 +685,11 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
                  target to send to",
             ));
         }
+        if requests_reasoning_replay(request) && !model_allows_reasoning_replay(request, config) {
+            return Err(capability(
+                "reasoning replay requires the target model capability reasoning_replay.claude.v1",
+            ));
+        }
         // `ProviderApi::resolve` covers four canonical shapes and none of them
         // is this one — the model sits inside the path and the operation is the
         // last segment. So the URL is built from the endpoint's own text, which
@@ -675,12 +723,32 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
             ));
         };
 
-        let mut text: Vec<&str> = Vec::new();
+        let mut content_parts = Vec::new();
+        let mut layout = Vec::new();
+        let mut has_reasoning = false;
         let mut tool_calls: Vec<ToolCall> = Vec::new();
         for block in blocks {
             if let Some(chunk) = block.get("text").and_then(Value::as_str) {
-                text.push(chunk);
+                layout.push(json!({"kind":"content","ordinal":content_parts.len()}));
+                content_parts.push(ContentPart::Text { text: chunk.to_owned() });
                 continue;
+            }
+            if let Some(reasoning) = block.get("reasoningContent") {
+                if let Some(reasoning_text) = reasoning.get("reasoningText") {
+                    has_reasoning = true;
+                    layout.push(json!({"kind":"content","ordinal":content_parts.len()}));
+                    content_parts.push(ContentPart::Thinking {
+                        thinking: reasoning_text["text"].as_str().unwrap_or_default().to_owned(),
+                        signature: reasoning_text["signature"].as_str().map(str::to_owned),
+                    });
+                    continue;
+                }
+                if let Some(data) = reasoning.get("redactedContent").and_then(Value::as_str) {
+                    has_reasoning = true;
+                    layout.push(json!({"kind":"content","ordinal":content_parts.len()}));
+                    content_parts.push(ContentPart::RedactedThinking { data: data.to_owned() });
+                    continue;
+                }
             }
             if let Some(use_block) = block.get("toolUse") {
                 let arguments = match use_block.get("input") {
@@ -691,18 +759,38 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
                     Some(value) => serde_json::to_string(value).map_err(internal)?,
                     None => String::new(),
                 };
+                let id = use_block["toolUseId"].as_str().unwrap_or_default().to_owned();
+                layout.push(json!({"kind":"tool_call","call_id":id}));
                 tool_calls.push(ToolCall {
-                    id: use_block["toolUseId"].as_str().unwrap_or_default().to_owned(),
+                    id,
                     name: use_block["name"].as_str().unwrap_or_default().to_owned(),
                     arguments,
                 });
             }
-            // `reasoningContent` and any block this dialect gains later are
-            // dropped: there is no IR slot that would carry them faithfully.
         }
 
         let finish_reason = stop_reason_to_finish(raw["stopReason"].as_str().unwrap_or("end_turn"));
-        let content = (!text.is_empty()).then(|| Content::Text(text.concat()));
+        let content = if content_parts.is_empty() {
+            None
+        } else if !has_reasoning {
+            Some(Content::Text(
+                content_parts
+                    .into_iter()
+                    .filter_map(|part| match part {
+                        ContentPart::Text { text } => Some(text),
+                        _ => None,
+                    })
+                    .collect(),
+            ))
+        } else {
+            Some(Content::Parts(content_parts))
+        };
+        let mut message_extensions = token_station_protocol::Extensions::new();
+        if has_reasoning {
+            message_extensions
+                .insert("reasoning_replay_protocol_family".into(), json!("claude-signed-thinking"));
+            message_extensions.insert("reasoning_replay_block_layout".into(), json!(layout));
+        }
 
         Ok(ChatResponse {
             // Converse echoes neither a response id nor the model; the host
@@ -717,7 +805,7 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
                     tool_calls,
                     tool_call_id: None,
                     name: None,
-                    extensions: token_station_protocol::Extensions::new(),
+                    extensions: message_extensions,
                 },
                 finish_reason: Some(finish_reason),
                 stop_sequence: None,

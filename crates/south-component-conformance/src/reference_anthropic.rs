@@ -47,6 +47,21 @@ fn capability(detail: impl Into<String>) -> ErrorEnvelope {
     ErrorEnvelope::new(ErrorCode::Capability, 400, detail)
 }
 
+const REPLAY_CAPABILITY: &str = "reasoning_replay.claude.v1";
+
+fn requests_reasoning_replay(request: &ChatRequest) -> bool {
+    request.messages.iter().any(|message| {
+        message.extensions.get("reasoning_replay_protocol_family").and_then(Value::as_str)
+            == Some("claude-signed-thinking")
+    })
+}
+
+fn model_allows_reasoning_replay(request: &ChatRequest, config: &ProviderConfig) -> bool {
+    config.models.iter().any(|model| {
+        model.model == request.model && model.supported_parameters.contains(REPLAY_CAPABILITY)
+    })
+}
+
 fn provider_protocol_error(message: &'static str) -> ErrorEnvelope {
     ErrorEnvelope::new(ErrorCode::ProviderProtocolError, 502, message)
 }
@@ -383,8 +398,18 @@ impl AnthropicSseParser {
             }
             "content_block_start" => {
                 let block = &data["content_block"];
-                if block["type"].as_str() != Some("tool_use") {
-                    return Vec::new();
+                match block["type"].as_str() {
+                    Some("redacted_thinking") => {
+                        return block["data"].as_str().map_or_else(Vec::new, |value| {
+                            vec![StreamEvent::RedactedThinking {
+                                index: 0,
+                                block_index: block_index(data),
+                                data: value.to_owned(),
+                            }]
+                        });
+                    }
+                    Some("tool_use") => {}
+                    _ => return Vec::new(),
                 }
                 vec![StreamEvent::ToolCallDelta {
                     index: block_index(data),
@@ -399,14 +424,19 @@ impl AnthropicSseParser {
                     Some("text_delta") => text_event(delta["text"].as_str(), |text| {
                         StreamEvent::Delta { index: 0, content: text }
                     }),
-                    Some("thinking_delta") => text_event(delta["thinking"].as_str(), |text| {
-                        StreamEvent::ThinkingDelta { index: 0, thinking_delta: text }
-                    }),
+                    Some("thinking_delta") => {
+                        text_event(delta["thinking"].as_str(), |text| StreamEvent::ThinkingDelta {
+                            index: 0,
+                            block_index: block_index(data),
+                            thinking_delta: text,
+                        })
+                    }
                     // D1: the signature arrives exactly once, in the stream.
                     Some("signature_delta") => {
                         text_event(delta["signature"].as_str(), |signature| {
                             StreamEvent::ThinkingSignatureDelta {
                                 index: 0,
+                                block_index: block_index(data),
                                 signature_delta: signature,
                             }
                         })
@@ -521,6 +551,11 @@ impl ProviderComponentV1 for AnthropicReferenceV1 {
         if config.provider != "anthropic" {
             return Err(capability(format!("unsupported provider dialect `{}`", config.provider)));
         }
+        if requests_reasoning_replay(request) && !model_allows_reasoning_replay(request, config) {
+            return Err(capability(
+                "reasoning replay requires the target model capability reasoning_replay.claude.v1",
+            ));
+        }
         let mut descriptor = HttpRequestDescriptor::new(
             HttpMethod::Post,
             config.base_url.resolve(ProviderApi::Messages),
@@ -554,27 +589,44 @@ impl ProviderComponentV1 for AnthropicReferenceV1 {
             return Err(provider_protocol_error("the upstream 2xx response has no content array"));
         };
 
-        let mut text: Vec<&str> = Vec::new();
-        let mut thinking: Vec<ContentPart> = Vec::new();
+        let mut content_parts = Vec::new();
+        let mut layout = Vec::new();
+        let mut has_reasoning = false;
         let mut tool_calls: Vec<ToolCall> = Vec::new();
         for block in blocks {
             match block["type"].as_str() {
-                Some("text") => text.push(block["text"].as_str().unwrap_or_default()),
-                Some("thinking") => thinking.push(ContentPart::Thinking {
-                    thinking: block["thinking"].as_str().unwrap_or_default().to_owned(),
-                    // D1: the replay ticket travels untouched.
-                    signature: block["signature"].as_str().map(str::to_owned),
-                }),
-                Some("redacted_thinking") => thinking.push(ContentPart::RedactedThinking {
-                    data: block["data"].as_str().unwrap_or_default().to_owned(),
-                }),
-                Some("tool_use") => tool_calls.push(ToolCall {
-                    id: block["id"].as_str().unwrap_or_default().to_owned(),
-                    name: block["name"].as_str().unwrap_or_default().to_owned(),
-                    arguments: block
-                        .get("input")
-                        .map_or_else(|| "{}".to_owned(), std::string::ToString::to_string),
-                }),
+                Some("text") => {
+                    layout.push(json!({"kind":"content","ordinal":content_parts.len()}));
+                    content_parts.push(ContentPart::Text {
+                        text: block["text"].as_str().unwrap_or_default().to_owned(),
+                    });
+                }
+                Some("thinking") => {
+                    has_reasoning = true;
+                    layout.push(json!({"kind":"content","ordinal":content_parts.len()}));
+                    content_parts.push(ContentPart::Thinking {
+                        thinking: block["thinking"].as_str().unwrap_or_default().to_owned(),
+                        signature: block["signature"].as_str().map(str::to_owned),
+                    });
+                }
+                Some("redacted_thinking") => {
+                    has_reasoning = true;
+                    layout.push(json!({"kind":"content","ordinal":content_parts.len()}));
+                    content_parts.push(ContentPart::RedactedThinking {
+                        data: block["data"].as_str().unwrap_or_default().to_owned(),
+                    });
+                }
+                Some("tool_use") => {
+                    let id = block["id"].as_str().unwrap_or_default().to_owned();
+                    layout.push(json!({"kind":"tool_call","call_id":id}));
+                    tool_calls.push(ToolCall {
+                        id,
+                        name: block["name"].as_str().unwrap_or_default().to_owned(),
+                        arguments: block
+                            .get("input")
+                            .map_or_else(|| "{}".to_owned(), std::string::ToString::to_string),
+                    });
+                }
                 _ => {}
             }
         }
@@ -582,17 +634,27 @@ impl ProviderComponentV1 for AnthropicReferenceV1 {
         // Whether the model produced text is "was there a text block", not
         // "is the joined text non-empty": a model that answered with an empty
         // string said something, and a tool-only turn did not.
-        let had_text = !text.is_empty();
-        let joined = text.concat();
-        let content = if thinking.is_empty() {
-            had_text.then_some(Content::Text(joined))
+        let content = if content_parts.is_empty() {
+            None
+        } else if !has_reasoning {
+            Some(Content::Text(
+                content_parts
+                    .into_iter()
+                    .filter_map(|part| match part {
+                        ContentPart::Text { text } => Some(text),
+                        _ => None,
+                    })
+                    .collect(),
+            ))
         } else {
-            let mut parts = thinking;
-            if had_text {
-                parts.push(ContentPart::Text { text: joined });
-            }
-            Some(Content::Parts(parts))
+            Some(Content::Parts(content_parts))
         };
+        let mut message_extensions = Extensions::new();
+        if has_reasoning {
+            message_extensions
+                .insert("reasoning_replay_protocol_family".into(), json!("claude-signed-thinking"));
+            message_extensions.insert("reasoning_replay_block_layout".into(), json!(layout));
+        }
 
         Ok(ChatResponse {
             id: raw["id"].as_str().unwrap_or_default().to_owned(),
@@ -608,7 +670,7 @@ impl ProviderComponentV1 for AnthropicReferenceV1 {
                     tool_calls,
                     tool_call_id: None,
                     name: None,
-                    extensions: Extensions::new(),
+                    extensions: message_extensions,
                 },
                 finish_reason: raw["stop_reason"].as_str().map(stop_reason_to_finish),
             }],

@@ -483,9 +483,14 @@ fn a_thinking_signature_has_no_slot_on_this_wire_and_does_not_leak() {
     let mut state = stream_state();
     let chunks = openai_chat_frames(
         &[
-            StreamEvent::ThinkingDelta { index: 0, thinking_delta: "think".to_owned() },
+            StreamEvent::ThinkingDelta {
+                index: 0,
+                block_index: 0,
+                thinking_delta: "think".to_owned(),
+            },
             StreamEvent::ThinkingSignatureDelta {
                 index: 0,
+                block_index: 0,
                 signature_delta: "sig-fragment".to_owned(),
             },
         ],

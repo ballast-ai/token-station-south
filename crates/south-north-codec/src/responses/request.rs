@@ -1,5 +1,6 @@
 use super::{
-    LOCAL_SHELL, ResponsesRequestOptions, invalid, namespace_name, required_str, tool_definitions,
+    LOCAL_SHELL, ReasoningReplayBlock, ResponsesRequestOptions, decode_reasoning_replay_carrier,
+    invalid, namespace_name, required_str, tool_definitions,
 };
 use crate::CodecError;
 use serde_json::{Value, json};
@@ -52,11 +53,14 @@ pub fn chat_request_from_responses(
             if let Some(previous) = request.messages.last_mut() {
                 merge_content(&mut previous.content, message.content.take());
                 previous.tool_calls.append(&mut message.tool_calls);
-                previous.extensions.append(&mut message.extensions);
+                merge_extensions(&mut previous.extensions, message.extensions);
             }
         } else {
             request.messages.push(message);
         }
+    }
+    for message in &mut request.messages {
+        materialize_replay_message(message)?;
     }
     let (tools, extensions) = tool_definitions(body.get("tools").unwrap_or(&Value::Null))?;
     request.tools = tools;
@@ -417,6 +421,91 @@ fn merge_content(target: &mut Option<Content>, incoming: Option<Content>) {
     });
 }
 
+fn merge_extensions(
+    target: &mut token_station_protocol::Extensions,
+    incoming: token_station_protocol::Extensions,
+) {
+    for (key, value) in incoming {
+        if key == "responses_reasoning_replay_items" {
+            let entry = target.entry(key).or_insert_with(|| json!([]));
+            if let (Some(existing), Some(mut added)) =
+                (entry.as_array_mut(), value.as_array().cloned())
+            {
+                existing.append(&mut added);
+            }
+        } else {
+            target.insert(key, value);
+        }
+    }
+}
+
+fn materialize_replay_message(message: &mut Message) -> Result<(), CodecError> {
+    let Some(items) =
+        message.extensions.get("responses_reasoning_replay_items").and_then(Value::as_array)
+    else {
+        return Ok(());
+    };
+    let texts = match message.content.take() {
+        None => Vec::new(),
+        Some(Content::Text(text)) => vec![text],
+        Some(Content::Parts(parts)) => parts
+            .into_iter()
+            .filter_map(|part| match part {
+                ContentPart::Text { text } => Some(text),
+                _ => None,
+            })
+            .collect(),
+    };
+    let mut parts = Vec::new();
+    let mut text_refs = vec![0u8; texts.len()];
+    let mut tool_refs = vec![0u8; message.tool_calls.len()];
+    for item in items {
+        let encoded = item["encrypted_content"].as_str().ok_or_else(|| {
+            CodecError::ReasoningReplayInvalid { field: "encrypted_content".to_owned() }
+        })?;
+        for block in decode_reasoning_replay_carrier(encoded)?.blocks() {
+            match block {
+                ReasoningReplayBlock::Thinking { thinking, signature } => {
+                    parts.push(ContentPart::Thinking {
+                        thinking: thinking.clone(),
+                        signature: Some(signature.clone()),
+                    });
+                }
+                ReasoningReplayBlock::RedactedThinking { data } => {
+                    parts.push(ContentPart::RedactedThinking { data: data.clone() });
+                }
+                ReasoningReplayBlock::TextRef { ordinal } => {
+                    let index = usize::try_from(*ordinal).map_err(|_| {
+                        CodecError::ReasoningReplayInvalid { field: "encrypted_content".to_owned() }
+                    })?;
+                    let Some(text) = texts.get(index) else {
+                        return Err(CodecError::ReasoningReplayInvalid {
+                            field: "encrypted_content".to_owned(),
+                        });
+                    };
+                    text_refs[index] = text_refs[index].saturating_add(1);
+                    parts.push(ContentPart::Text { text: text.clone() });
+                }
+                ReasoningReplayBlock::ToolCallRef { call_id } => {
+                    let Some(index) =
+                        message.tool_calls.iter().position(|call| &call.id == call_id)
+                    else {
+                        return Err(CodecError::ReasoningReplayInvalid {
+                            field: "encrypted_content".to_owned(),
+                        });
+                    };
+                    tool_refs[index] = tool_refs[index].saturating_add(1);
+                }
+            }
+        }
+    }
+    if text_refs.iter().any(|count| *count != 1) || tool_refs.iter().any(|count| *count != 1) {
+        return Err(CodecError::ReasoningReplayInvalid { field: "encrypted_content".to_owned() });
+    }
+    message.content = (!parts.is_empty()).then_some(Content::Parts(parts));
+    Ok(())
+}
+
 fn message_input(
     item: &Value,
     path: &str,
@@ -518,6 +607,20 @@ fn reasoning_input(item: &Value, path: &str, message: &mut Message) -> Result<()
                 .extensions
                 .insert(extension.into(), json!(required_str(v, &format!("{path}.{key}"))?));
         }
+    }
+    if let Some(encoded) = item.get("encrypted_content").and_then(Value::as_str)
+        && encoded.starts_with("tsr.c1.")
+    {
+        decode_reasoning_replay_carrier(encoded)?;
+        let id = required_str(&item["id"], &format!("{path}.id"))?;
+        message.extensions.remove("responses_reasoning_encrypted_content");
+        message.extensions.insert(
+            "responses_reasoning_replay_items".into(),
+            json!([{"id":id,"encrypted_content":encoded}]),
+        );
+        message
+            .extensions
+            .insert("reasoning_replay_protocol_family".into(), json!("claude-signed-thinking"));
     }
 
     Ok(())
