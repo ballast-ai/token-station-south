@@ -121,8 +121,8 @@ fn locator_wire_is_strict_versioned_and_bounded() {
 fn observation_roundtrip_keeps_all_usage_and_scalar_categories() {
     let input = json!({"state":"succeeded",
         "artifacts":{"kind":"urls","items":[
-            {"url":"https://media.example/1?sig=SECRET","id":18_446_744_073_709_551_615_u64,"duration":"4.50","fetch_with_credential":false},
-            {"url":"https://media.example/2","id":null,"duration":4.5,"fetch_with_credential":false}
+            {"url":"https://media.example/1?sig=SECRET","id":18_446_744_073_709_551_615_u64,"duration":"4.50","fetch_with_credential":false,"role":null},
+            {"url":"https://media.example/2","id":null,"duration":4.5,"fetch_with_credential":false,"role":null}
         ]}, "usage":{"seconds":4.5,"milliunits":1200,"tokens":0,"outputs":null}});
     let observation = parse_observation_json(&input.to_string()).unwrap();
     assert_eq!(observation_json(&observation).unwrap(), input);

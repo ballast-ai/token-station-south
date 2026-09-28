@@ -1,12 +1,13 @@
 //! Task contract 6 (docs/design/2026-09-27-task-contract-v6-facts.md): token rate and output
 //! counts, delivered outputs, artifact credential fetch and immutable body paths. Every new key
 //! must be present (null where the fact is absent); a contract-5 value is refused, not defaulted.
+//! The version assertion moved to `task_contract_v7.rs` with the contract.
 
 use serde_json::{Value, json};
 use south_component_conformance::task_v2_json::*;
 use south_contracts::{
-    TASK_CONTRACT_VERSION, TaskArtifactRefV2, TaskArtifactV2, TaskObservationV2,
-    TaskRequestEstimateV2, TaskScalarV2, TaskUsageFactsV2,
+    TaskArtifactRefV2, TaskArtifactV2, TaskObservationV2, TaskRequestEstimateV2, TaskScalarV2,
+    TaskUsageFactsV2,
 };
 
 fn estimate(extra: Value) -> Value {
@@ -30,7 +31,8 @@ fn prepared(estimate: Value, immutable: Value) -> String {
 }
 
 fn succeeded(item_extra: Value, usage: Value) -> String {
-    let mut item = json!({"url": "https://cdn.example/a.mp4", "id": null, "duration": null});
+    let mut item =
+        json!({"url": "https://cdn.example/a.mp4", "id": null, "duration": null, "role": null});
     let Value::Object(item_extra) = item_extra else { panic!("item_extra must be an object") };
     for (key, value) in item_extra {
         item[key] = value;
@@ -38,11 +40,6 @@ fn succeeded(item_extra: Value, usage: Value) -> String {
     let mut out = json!({"state": "succeeded", "artifacts": {"kind": "urls", "items": [item]}});
     out["usage"] = usage;
     out.to_string()
-}
-
-#[test]
-fn the_contract_version_is_six() {
-    assert_eq!(TASK_CONTRACT_VERSION, 6);
 }
 
 #[test]

@@ -17,13 +17,15 @@
           "url": "https://cdn/first",
           "id": 12,
           "duration": "5",
-          "fetch_with_credential": false
+          "fetch_with_credential": false,
+          "role": null
         },
         {
           "url": "https://cdn/second",
           "id": "second",
           "duration": 2.5,
-          "fetch_with_credential": false
+          "fetch_with_credential": false,
+          "role": null
         }
       ]
     },

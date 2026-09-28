@@ -7,7 +7,15 @@
         "url": "https://ark-cdn.example/v.mp4?sig=private",
         "id": null,
         "duration": null,
-        "fetch_with_credential": false
+        "fetch_with_credential": false,
+        "role": null
+      },
+      {
+        "url": "https://ark-cdn.example/l.png",
+        "id": null,
+        "duration": null,
+        "fetch_with_credential": false,
+        "role": "last_frame"
       }
     ]
   },

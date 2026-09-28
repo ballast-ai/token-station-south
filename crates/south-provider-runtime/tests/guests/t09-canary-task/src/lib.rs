@@ -74,6 +74,11 @@
 //! - a reel with `"sealed": true` → `fetch_with_credential: true`: the host
 //!   must fetch it with the task's pinned credential and never hand the raw
 //!   URL to the client.
+//! - a reel's `"role"` is copied onto the artifact verbatim (task contract 7;
+//!   absent → `null`, the primary role). A `"last_frame"` reel is rendered
+//!   into `data[0].last_frame_url` of the reel before it and never as its own
+//!   `data[]` entry: the host must leave it out of its output count, delivery
+//!   envelope and storage. Any other word is for the host's codec to refuse.
 //! - request `image` → `t09_job.still`, verbatim. A host that prefetches input
 //!   images hands the component a `data:` URI, and the upstream sees it.
 //!
@@ -230,10 +235,11 @@ fn observation_of(body: &Value) -> Value {
                         .filter_map(|reel| {
                             let href = reel.get("href").and_then(Value::as_str)?;
                             let sealed = reel.get("sealed").and_then(Value::as_bool) == Some(true);
-                            Some((href, sealed))
+                            let role = reel.get("role").cloned().unwrap_or(Value::Null);
+                            Some((href, sealed, role))
                         })
-                        .filter(|(href, _)| !href.is_empty())
-                        .map(|(href, sealed)| json!({ "url": href, "id": null, "duration": null, "fetch_with_credential": sealed }))
+                        .filter(|(href, _, _)| !href.is_empty())
+                        .map(|(href, sealed, role)| json!({ "url": href, "id": null, "duration": null, "fetch_with_credential": sealed, "role": role }))
                         .collect()
                 })
                 .unwrap_or_default();
@@ -459,13 +465,19 @@ impl Guest for T09Canary {
     ) -> Result<String, String> {
         let observation = parse_json(&observation, "observation")?;
         let context = parse_json(&context, "render context")?;
-        let data: Vec<Value> = observation
-            .pointer("/artifacts/items")
-            .and_then(Value::as_array)
-            .map(|items| {
-                items.iter().filter_map(|i| i.get("url")).map(|url| json!({ "url": url })).collect()
-            })
-            .unwrap_or_default();
+        let mut data: Vec<Value> = Vec::new();
+        for item in observation.pointer("/artifacts/items").and_then(Value::as_array).into_iter().flatten() {
+            let Some(url) = item.get("url") else { continue };
+            // Contract 7: a last frame decorates the reel before it instead of becoming a reel.
+            if item.get("role").and_then(Value::as_str) == Some("last_frame") {
+                let Some(reel) = data.last_mut() else {
+                    return Err(error_envelope("internal", 500, "t09 canary: last frame before any reel"));
+                };
+                reel["last_frame_url"] = url.clone();
+            } else {
+                data.push(json!({ "url": url }));
+            }
+        }
         if data.is_empty() {
             return Err(error_envelope("internal", 500, "t09 canary: nothing to render"));
         }

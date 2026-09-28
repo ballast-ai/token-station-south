@@ -7,7 +7,8 @@
         "url": "https://cdn/one",
         "id": null,
         "duration": null,
-        "fetch_with_credential": false
+        "fetch_with_credential": false,
+        "role": null
       }
     ]
   },

@@ -9,7 +9,8 @@
           "url": "https://cdn.gmi.example/x.png?sig=private",
           "id": null,
           "duration": null,
-          "fetch_with_credential": false
+          "fetch_with_credential": false,
+          "role": null
         }
       ]
     },

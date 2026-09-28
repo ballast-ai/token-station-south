@@ -40,6 +40,9 @@ pub enum TaskContractErrorV2 {
     /// Immutable request-body paths are malformed, duplicated or exceed their bounds.
     #[error("invalid immutable body paths")]
     InvalidImmutableBodyPaths,
+    /// An artifact role word is not in the closed vocabulary.
+    #[error("invalid task artifact role")]
+    InvalidArtifactRole,
 }
 
 /// At most this many immutable request-body paths per prepared task.
@@ -171,6 +174,43 @@ impl TaskScalarV2 {
     }
 }
 
+/// The part a direct artifact plays in a task's result (task contract 7).
+///
+/// Hosts count, deliver and store only [`Self::Primary`] artifacts; every other role is a
+/// companion the component reports beside a primary and places itself when rendering. The
+/// vocabulary is closed: a new role is a contract bump, not a new word.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TaskArtifactRoleV2 {
+    /// A deliverable output of the task. Spelled `null` on the wire.
+    Primary,
+    /// The last frame of a primary video, reported after it. Spelled `"last_frame"` on the wire.
+    LastFrame,
+}
+impl TaskArtifactRoleV2 {
+    /// Every role, in wire order.
+    pub const ALL: [Self; 2] = [Self::Primary, Self::LastFrame];
+    /// The wire spelling: `None` for the primary role, a word for every companion role.
+    #[must_use]
+    pub const fn word(self) -> Option<&'static str> {
+        match self {
+            Self::Primary => None,
+            Self::LastFrame => Some("last_frame"),
+        }
+    }
+    /// Parses the wire spelling; an unknown word is refused rather than defaulted.
+    pub fn from_word(word: Option<&str>) -> Result<Self, TaskContractErrorV2> {
+        Self::ALL
+            .into_iter()
+            .find(|role| role.word() == word)
+            .ok_or(TaskContractErrorV2::InvalidArtifactRole)
+    }
+    /// Whether the host counts and delivers an artifact of this role.
+    #[must_use]
+    pub const fn is_primary(self) -> bool {
+        matches!(self, Self::Primary)
+    }
+}
+
 /// A direct artifact URL with the upstream's scalar id and duration facts.
 #[derive(Clone, PartialEq)]
 pub struct TaskArtifactV2 {
@@ -178,9 +218,11 @@ pub struct TaskArtifactV2 {
     id: TaskScalarV2,
     duration: TaskScalarV2,
     fetch_with_credential: bool,
+    role: TaskArtifactRoleV2,
 }
 impl TaskArtifactV2 {
-    /// Validates a bounded URL and scalar facts without interpreting them.
+    /// Validates a bounded URL and scalar facts without interpreting them. The artifact is a
+    /// primary output until [`Self::with_role`] says otherwise.
     pub fn new(
         url: &str,
         id: TaskScalarV2,
@@ -191,7 +233,25 @@ impl TaskArtifactV2 {
         }
         id.validate()?;
         duration.validate()?;
-        Ok(Self { url: url.to_owned(), id, duration, fetch_with_credential: false })
+        Ok(Self {
+            url: url.to_owned(),
+            id,
+            duration,
+            fetch_with_credential: false,
+            role: TaskArtifactRoleV2::Primary,
+        })
+    }
+    /// Assigns the part this artifact plays (contract 7): a companion role keeps it out of the
+    /// host's output count, delivery envelope and storage.
+    #[must_use]
+    pub const fn with_role(mut self, role: TaskArtifactRoleV2) -> Self {
+        self.role = role;
+        self
+    }
+    /// The part this artifact plays in the task's result.
+    #[must_use]
+    pub const fn role(&self) -> TaskArtifactRoleV2 {
+        self.role
     }
     /// Marks the URL as fetchable only with the task's bound credential (contract 6, D5): the host
     /// fetches it with the same authentication as the submission and never hands it to a client.
@@ -226,6 +286,7 @@ impl fmt::Debug for TaskArtifactV2 {
         formatter
             .debug_struct("TaskArtifactV2")
             .field("url_byte_count", &self.url.len())
+            .field("role", &self.role)
             .finish_non_exhaustive()
     }
 }
@@ -253,10 +314,16 @@ impl TaskArtifactRefV2 {
         value.validate()?;
         Ok(value)
     }
-    /// Rechecks public enum construction at a component boundary.
-    pub const fn validate(&self) -> Result<(), TaskContractErrorV2> {
+    /// Rechecks public enum construction at a component boundary. A direct set must stay within
+    /// [`MAX_ARTIFACT_URLS`] (companion roles included) and carry at least one primary artifact:
+    /// a result made only of companions has nothing for the host to deliver.
+    pub fn validate(&self) -> Result<(), TaskContractErrorV2> {
         match self {
-            Self::Urls(items) if items.is_empty() || items.len() > MAX_ARTIFACT_URLS => {
+            Self::Urls(items)
+                if items.is_empty()
+                    || items.len() > MAX_ARTIFACT_URLS
+                    || !items.iter().any(|item| item.role().is_primary()) =>
+            {
                 Err(TaskContractErrorV2::InvalidArtifact)
             }
             Self::FileId(id) if id.is_empty() || id.len() > MAX_ARTIFACT_REF_BYTES => {
