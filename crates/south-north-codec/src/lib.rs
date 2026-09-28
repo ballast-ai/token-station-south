@@ -130,3 +130,9 @@ pub(crate) fn describe(value: &Value) -> String {
         Value::Object(_) => "an object".to_owned(),
     }
 }
+
+pub mod responses;
+pub use responses::{
+    ResponsesContext, ResponsesFrame, ResponsesReasoningMode, ResponsesRequestOptions,
+    ResponsesSseState, chat_request_from_responses, responses_frames, responses_response,
+};

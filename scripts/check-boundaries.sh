@@ -15,6 +15,10 @@ readonly KERNEL_IR_CONSUMERS='["south-component-conformance", "south-north-codec
 # Depending on the codec is how a crate would acquire the IR without naming it,
 # so the allowlist above governs that edge too.
 readonly CODEC_PACKAGE='south-north-codec'
+# The scheduled fuzz binary is a test-only consumer, not an additional production
+# IR edge. Identity includes its exact manifest, private publication, and bin targets.
+readonly FUZZ_MANIFEST_PATH="$(pwd -P)/fuzz/Cargo.toml"
+readonly FIXTURE_FUZZ_MANIFEST_PATH='/fixture/fuzz/Cargo.toml'
 
 # The feature set is **policy, not a moving target**: south takes rustls +
 # stream and nothing else, so these two lists stay written down here. The
@@ -40,6 +44,7 @@ check_metadata() {
   local require_resolved_graph="${2:-false}"
   local expected_req="${3:-$FIXTURE_REQWEST_REQ}"
   local expected_version="${expected_req#=}"
+  local allowed_fuzz_manifest="${4:-$FUZZ_MANIFEST_PATH}"
 
   LAST_VIOLATIONS="$(
     jq -r \
@@ -49,6 +54,7 @@ check_metadata() {
       --arg kernel_ir_package "$KERNEL_IR_PACKAGE" \
       --argjson kernel_ir_consumers "$KERNEL_IR_CONSUMERS" \
       --arg codec_package "$CODEC_PACKAGE" \
+      --arg fuzz_manifest "$allowed_fuzz_manifest" \
       --arg expected_req "$expected_req" \
       --arg expected_version "$expected_version" \
       --argjson declared_features "$REQWEST_DECLARED_FEATURES" \
@@ -110,6 +116,14 @@ check_metadata() {
                 end
               )
               and ($kernel_ir_consumers | index($package.name)) == null
+              and ((
+                $package.name == "south-contracts-fuzz"
+                and $package.source == null
+                and $package.publish == []
+                and $package.manifest_path == $fuzz_manifest
+                and (($package.targets // []) | length) > 0
+                and all($package.targets[]; .kind == ["bin"])
+              ) | not)
             )
           | $package.dependencies[]
           | select(
@@ -286,7 +300,7 @@ print_violations() {
 
 if [[ "${1:-}" == "--self-test" ]]; then
   for fixture in tests/fixtures/boundary/forbidden-*.json; do
-    if check_metadata "$fixture"; then
+    if check_metadata "$fixture" false "$FIXTURE_REQWEST_REQ" "$FIXTURE_FUZZ_MANIFEST_PATH"; then
       echo "boundary self-test failed: forbidden fixture was accepted: $fixture" >&2
       exit 1
     fi
@@ -299,7 +313,7 @@ if [[ "${1:-}" == "--self-test" ]]; then
     fi
   done
   for fixture in tests/fixtures/boundary/allowed-*.json; do
-    if ! check_metadata "$fixture"; then
+    if ! check_metadata "$fixture" false "$FIXTURE_REQWEST_REQ" "$FIXTURE_FUZZ_MANIFEST_PATH"; then
       echo "boundary self-test failed: allowed fixture was rejected: $fixture" >&2
       print_violations
       exit 1

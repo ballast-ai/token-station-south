@@ -194,6 +194,12 @@ Bearer 认证、按秒用量、直链产物，无新运行时能力；声明禁�
 → `accepted-terminal`；`X-Organization-ID` 由宿主以 provider config 扩展 `organization_id` 传入（原生取自凭证 `account_id`）。按请求计价、
 不报用量：`n` 为 `requested_outputs`、交付数为 `usage.outputs`，计价政策归宿主。构建 `bash scripts/build-gmi-image-task-v2-component.sh`。
 
+## v0.36.0 Responses 北向 codec 候选
+
+`south-north-codec` 新增 Responses 请求→IR、IR 响应→Responses、IR 流事件→SSE 三组纯映射及同源 JSON façade。宿主显式传入身份、时间、入站工具与兼容选项，并持有每流状态；准入、计费、continuation 缓存及 Native 透传留宿主。十三个组件仅更新运行时兼容元组，组件自身版本保持当前值，Kling v2 为 0.32.0。
+
+本候选尚未发布；[发行准备](docs/design/2026-09-28-release-0.36.0.md)记录完整发布门，[codec 设计](docs/design/2026-09-28-responses-north-codec.md)与[逐项证据](docs/design/2026-09-28-responses-north-codec-validation.md)记录双宿主差异及验证边界。
+
 ## Local verification
 
 ```bash
