@@ -2,6 +2,7 @@ use crate::CodecError;
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde_json::{Map, Value, json};
+use token_station_protocol::{Content, ContentPart, Message};
 
 const PREFIX: &str = "tsr.c1.";
 const NAMESPACE: &str = "token-station.reasoning-replay";
@@ -168,4 +169,61 @@ pub fn decode_reasoning_replay_carrier(value: &str) -> Result<ReasoningReplayCar
     let carrier = ReasoningReplayCarrier::claude(parsed);
     validate(&carrier)?;
     Ok(carrier)
+}
+
+pub(super) fn carrier_from_message(message: &Message) -> Result<Option<String>, CodecError> {
+    if message.extensions.get("reasoning_replay_protocol_family").and_then(Value::as_str)
+        != Some(FAMILY)
+    {
+        return Ok(None);
+    }
+    let layout = message
+        .extensions
+        .get("reasoning_replay_block_layout")
+        .and_then(Value::as_array)
+        .ok_or_else(invalid)?;
+    let parts = match message.content.as_ref() {
+        Some(Content::Parts(parts)) => parts.as_slice(),
+        _ => return Err(invalid()),
+    };
+    let mut text_ordinal = 0u32;
+    let mut blocks = Vec::new();
+    for entry in layout {
+        match entry["kind"].as_str() {
+            Some("content") => {
+                let ordinal = entry["ordinal"]
+                    .as_u64()
+                    .and_then(|value| usize::try_from(value).ok())
+                    .ok_or_else(invalid)?;
+                match parts.get(ordinal).ok_or_else(invalid)? {
+                    ContentPart::Thinking { thinking, signature: Some(signature) } => {
+                        blocks.push(ReasoningReplayBlock::Thinking {
+                            thinking: thinking.clone(),
+                            signature: signature.clone(),
+                        });
+                    }
+                    ContentPart::Thinking { signature: None, .. } => return Err(invalid()),
+                    ContentPart::RedactedThinking { data } => {
+                        blocks.push(ReasoningReplayBlock::RedactedThinking { data: data.clone() })
+                    }
+                    ContentPart::Text { .. } => {
+                        blocks.push(ReasoningReplayBlock::TextRef { ordinal: text_ordinal });
+                        text_ordinal = text_ordinal.checked_add(1).ok_or_else(invalid)?;
+                    }
+                    ContentPart::ImageUrl { .. } | ContentPart::Unknown(_) => {
+                        return Err(invalid());
+                    }
+                }
+            }
+            Some("tool_call") => {
+                let call_id = entry["call_id"].as_str().ok_or_else(invalid)?;
+                if !message.tool_calls.iter().any(|call| call.id == call_id) {
+                    return Err(invalid());
+                }
+                blocks.push(ReasoningReplayBlock::ToolCallRef { call_id: call_id.to_owned() });
+            }
+            _ => return Err(invalid()),
+        }
+    }
+    encode_reasoning_replay_carrier(&ReasoningReplayCarrier::claude(blocks)).map(Some)
 }

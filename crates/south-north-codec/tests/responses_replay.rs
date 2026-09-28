@@ -4,11 +4,11 @@ use south_north_codec::responses::{
     decode_reasoning_replay_carrier, encode_reasoning_replay_carrier,
 };
 use south_north_codec::{
-    ResponsesContext, ResponsesReasoningMode, ResponsesRequestOptions, chat_request_from_responses,
-    responses_response,
+    ResponsesContext, ResponsesReasoningMode, ResponsesRequestOptions, ResponsesSseState,
+    chat_request_from_responses, responses_frames, responses_response,
 };
 use token_station_protocol::{
-    ChatResponse, Choice, Content, ContentPart, Extensions, FinishReason, Usage,
+    ChatResponse, Choice, Content, ContentPart, Extensions, FinishReason, StreamEvent, Usage,
 };
 
 fn carrier(blocks: Vec<ReasoningReplayBlock>) -> ReasoningReplayCarrier {
@@ -146,5 +146,100 @@ fn x1_rejects_missing_or_mismatched_references_before_translation() {
         )
         .unwrap_err();
         assert_eq!(error.stable_code(), "reasoning_replay_invalid");
+    }
+}
+
+fn stream_context() -> ResponsesContext {
+    ResponsesContext {
+        response_id: "resp_stream".into(),
+        model: "m".into(),
+        created_at: 1,
+        inbound_tools: json!([{"type":"function","name":"lookup"}]),
+        reasoning: ResponsesReasoningMode::Summary,
+        allow_incomplete_tool_calls: false,
+        render_legacy_encrypted_reasoning: false,
+    }
+}
+
+#[test]
+fn x5_stream_preserves_interleaved_layout_and_reuses_the_completed_carrier() {
+    let mut state = ResponsesSseState::new(stream_context());
+    let frames = responses_frames(
+        &[
+            StreamEvent::ThinkingDelta { index: 0, block_index: 0, thinking_delta: "first".into() },
+            StreamEvent::ThinkingSignatureDelta {
+                index: 0,
+                block_index: 0,
+                signature_delta: "sig".into(),
+            },
+            StreamEvent::Delta { index: 0, content: "answer".into() },
+            StreamEvent::RedactedThinking { index: 0, block_index: 2, data: "opaque".into() },
+            StreamEvent::ToolCallDelta {
+                index: 0,
+                id: Some("call_1".into()),
+                name: Some("lookup".into()),
+                arguments_delta: "{}".into(),
+            },
+            StreamEvent::Done { finish_reason: Some(FinishReason::ToolCalls), stop_sequence: None },
+        ],
+        &mut state,
+    )
+    .unwrap();
+    let done_item = frames
+        .iter()
+        .find(|frame| {
+            frame.event == "response.output_item.done" && frame.data["item"]["type"] == "reasoning"
+        })
+        .unwrap();
+    let carrier = done_item.data["item"]["encrypted_content"].as_str().unwrap();
+    let completed = &frames.last().unwrap().data["response"]["output"];
+    assert_eq!(completed[0]["encrypted_content"], carrier);
+    assert_eq!(completed[1]["type"], "message");
+    assert_eq!(completed[2]["type"], "function_call");
+    assert_eq!(
+        decode_reasoning_replay_carrier(carrier).unwrap().blocks(),
+        &[
+            ReasoningReplayBlock::Thinking { thinking: "first".into(), signature: "sig".into() },
+            ReasoningReplayBlock::TextRef { ordinal: 0 },
+            ReasoningReplayBlock::RedactedThinking { data: "opaque".into() },
+            ReasoningReplayBlock::ToolCallRef { call_id: "call_1".into() },
+        ]
+    );
+    let terminal = state.terminal_response().unwrap();
+    assert!(matches!(
+        terminal.choices[0].message.content.as_ref(),
+        Some(Content::Parts(parts))
+            if matches!(&parts[0], ContentPart::Thinking { signature: Some(signature), .. } if signature == "sig")
+                && matches!(&parts[1], ContentPart::Text { text } if text == "answer")
+                && matches!(&parts[2], ContentPart::RedactedThinking { data } if data == "opaque")
+    ));
+}
+
+#[test]
+fn x6_stream_refuses_missing_signature_duplicate_redacted_and_out_of_order_blocks() {
+    let cases = vec![
+        vec![
+            StreamEvent::ThinkingDelta {
+                index: 0,
+                block_index: 0,
+                thinking_delta: "unsigned".into(),
+            },
+            StreamEvent::RedactedThinking { index: 0, block_index: 1, data: "opaque".into() },
+            StreamEvent::Done { finish_reason: None, stop_sequence: None },
+        ],
+        vec![
+            StreamEvent::RedactedThinking { index: 0, block_index: 0, data: "a".into() },
+            StreamEvent::RedactedThinking { index: 0, block_index: 0, data: "b".into() },
+        ],
+        vec![
+            StreamEvent::RedactedThinking { index: 0, block_index: 2, data: "a".into() },
+            StreamEvent::RedactedThinking { index: 0, block_index: 1, data: "b".into() },
+        ],
+    ];
+    for events in cases {
+        let mut state = ResponsesSseState::new(stream_context());
+        let error = responses_frames(&events, &mut state).unwrap_err();
+        assert_eq!(error.stable_code(), "reasoning_replay_invalid");
+        assert!(state.terminal_response().is_none());
     }
 }

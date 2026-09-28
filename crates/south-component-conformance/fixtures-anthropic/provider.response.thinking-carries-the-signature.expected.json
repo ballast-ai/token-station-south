@@ -20,7 +20,22 @@
             "type": "text",
             "text": "Option B."
           }
-        ]
+        ],
+        "reasoning_replay_block_layout": [
+          {
+            "kind": "content",
+            "ordinal": 0
+          },
+          {
+            "kind": "content",
+            "ordinal": 1
+          },
+          {
+            "kind": "content",
+            "ordinal": 2
+          }
+        ],
+        "reasoning_replay_protocol_family": "claude-signed-thinking"
       },
       "finish_reason": "stop"
     }

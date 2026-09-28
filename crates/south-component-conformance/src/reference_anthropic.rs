@@ -154,6 +154,26 @@ fn tool_result_text(content: Option<&Content>) -> String {
     }
 }
 
+fn tool_use_block(call: &ToolCall) -> ComponentResultV1<Value> {
+    if call.id.is_empty() {
+        return Err(capability(
+            "an assistant tool call has no id; Messages needs one to pair the result with the call",
+        ));
+    }
+    if call.name.is_empty() {
+        return Err(capability(
+            "an assistant tool call has no name; Messages needs one to name the tool",
+        ));
+    }
+    Ok(json!({
+        "type": "tool_use",
+        "id": call.id,
+        "name": call.name,
+        "input": serde_json::from_str::<Value>(&call.arguments)
+            .unwrap_or_else(|_| json!(call.arguments)),
+    }))
+}
+
 /// The `system` string and the `messages` array, which Messages models as
 /// siblings even though the IR carries system turns inside `messages`.
 fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<&str>, Vec<Value>)> {
@@ -172,6 +192,10 @@ fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<&str>, Vec<V
                 messages.push(Value::Object(turn));
             }
             Role::Assistant => {
+                let parts = match message.content.as_ref() {
+                    Some(Content::Parts(parts)) => parts.as_slice(),
+                    _ => &[],
+                };
                 let mut blocks: Vec<Value> = match message.content.as_ref() {
                     // A bare string becomes the one text block it stands for;
                     // an empty one contributes no block, because Messages
@@ -182,30 +206,43 @@ fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<&str>, Vec<V
                     Some(Content::Parts(parts)) => parts.iter().map(part_to_block).collect(),
                     _ => Vec::new(),
                 };
-                for call in &message.tool_calls {
-                    if call.id.is_empty() {
-                        return Err(capability(
-                            "an assistant tool call has no id; Messages needs one to pair the \
-                             result with the call",
-                        ));
+                if let Some(layout) = message
+                    .extensions
+                    .get("reasoning_replay_block_layout")
+                    .and_then(Value::as_array)
+                {
+                    blocks.clear();
+                    for entry in layout {
+                        match entry["kind"].as_str() {
+                            Some("content") => {
+                                let ordinal = entry["ordinal"]
+                                    .as_u64()
+                                    .and_then(|value| usize::try_from(value).ok())
+                                    .ok_or_else(|| capability("invalid reasoning replay layout"))?;
+                                blocks.push(part_to_block(parts.get(ordinal).ok_or_else(
+                                    || capability("invalid reasoning replay content reference"),
+                                )?));
+                            }
+                            Some("tool_call") => {
+                                let id = entry["call_id"].as_str().ok_or_else(|| {
+                                    capability("invalid reasoning replay tool reference")
+                                })?;
+                                let call = message
+                                    .tool_calls
+                                    .iter()
+                                    .find(|call| call.id == id)
+                                    .ok_or_else(|| {
+                                        capability("invalid reasoning replay tool reference")
+                                    })?;
+                                blocks.push(tool_use_block(call)?);
+                            }
+                            _ => return Err(capability("invalid reasoning replay layout")),
+                        }
                     }
-                    if call.name.is_empty() {
-                        return Err(capability(
-                            "an assistant tool call has no name; Messages needs one to name the \
-                             tool",
-                        ));
+                } else {
+                    for call in &message.tool_calls {
+                        blocks.push(tool_use_block(call)?);
                     }
-                    blocks.push(json!({
-                        "type": "tool_use",
-                        "id": call.id,
-                        "name": call.name,
-                        // The IR keeps arguments as the exact string the model
-                        // produced; Messages wants the parsed object. Text that
-                        // does not parse travels as a string rather than being
-                        // dropped — the upstream gets to reject it.
-                        "input": serde_json::from_str::<Value>(&call.arguments)
-                            .unwrap_or_else(|_| json!(call.arguments)),
-                    }));
                 }
                 messages.push(json!({"role": "assistant", "content": blocks}));
             }

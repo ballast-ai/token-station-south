@@ -457,6 +457,7 @@ fn materialize_replay_message(message: &mut Message) -> Result<(), CodecError> {
             .collect(),
     };
     let mut parts = Vec::new();
+    let mut layout = Vec::new();
     let mut text_refs = vec![0u8; texts.len()];
     let mut tool_refs = vec![0u8; message.tool_calls.len()];
     for item in items {
@@ -466,12 +467,14 @@ fn materialize_replay_message(message: &mut Message) -> Result<(), CodecError> {
         for block in decode_reasoning_replay_carrier(encoded)?.blocks() {
             match block {
                 ReasoningReplayBlock::Thinking { thinking, signature } => {
+                    layout.push(json!({"kind":"content","ordinal":parts.len()}));
                     parts.push(ContentPart::Thinking {
                         thinking: thinking.clone(),
                         signature: Some(signature.clone()),
                     });
                 }
                 ReasoningReplayBlock::RedactedThinking { data } => {
+                    layout.push(json!({"kind":"content","ordinal":parts.len()}));
                     parts.push(ContentPart::RedactedThinking { data: data.clone() });
                 }
                 ReasoningReplayBlock::TextRef { ordinal } => {
@@ -484,6 +487,7 @@ fn materialize_replay_message(message: &mut Message) -> Result<(), CodecError> {
                         });
                     };
                     text_refs[index] = text_refs[index].saturating_add(1);
+                    layout.push(json!({"kind":"content","ordinal":parts.len()}));
                     parts.push(ContentPart::Text { text: text.clone() });
                 }
                 ReasoningReplayBlock::ToolCallRef { call_id } => {
@@ -495,6 +499,7 @@ fn materialize_replay_message(message: &mut Message) -> Result<(), CodecError> {
                         });
                     };
                     tool_refs[index] = tool_refs[index].saturating_add(1);
+                    layout.push(json!({"kind":"tool_call","call_id":call_id}));
                 }
             }
         }
@@ -503,6 +508,7 @@ fn materialize_replay_message(message: &mut Message) -> Result<(), CodecError> {
         return Err(CodecError::ReasoningReplayInvalid { field: "encrypted_content".to_owned() });
     }
     message.content = (!parts.is_empty()).then_some(Content::Parts(parts));
+    message.extensions.insert("reasoning_replay_block_layout".into(), json!(layout));
     Ok(())
 }
 

@@ -101,6 +101,65 @@ fn x1_anthropic_and_converse_require_explicit_replay_capability() {
 }
 
 #[test]
+fn x1_anthropic_and_converse_preserve_interleaved_replay_layout() {
+    let request: ChatRequest = serde_json::from_value(json!({
+        "model": "claude-sonnet",
+        "messages": [{
+            "role": "assistant",
+            "content": [
+                {"type":"thinking","thinking":"first","signature":"sig-1"},
+                {"type":"text","text":"answer"},
+                {"type":"redacted_thinking","data":"opaque"}
+            ],
+            "tool_calls": [{"id":"call-1","name":"lookup","arguments":"{}"}],
+            "reasoning_replay_protocol_family":"claude-signed-thinking",
+            "reasoning_replay_block_layout": [
+                {"kind":"content","ordinal":0},
+                {"kind":"content","ordinal":1},
+                {"kind":"tool_call","call_id":"call-1"},
+                {"kind":"content","ordinal":2}
+            ]
+        }]
+    }))
+    .unwrap();
+
+    let anthropic = AnthropicReferenceV1
+        .build_http_request(
+            &request,
+            &config("anthropic", "https://api.anthropic.com", "claude-sonnet", true),
+        )
+        .unwrap()
+        .body
+        .unwrap();
+    let anthropic_blocks = anthropic["messages"][0]["content"].as_array().unwrap();
+    assert_eq!(
+        anthropic_blocks.iter().map(|block| block["type"].as_str().unwrap()).collect::<Vec<_>>(),
+        ["thinking", "text", "tool_use", "redacted_thinking"]
+    );
+
+    let mut converse_request = request;
+    converse_request.model = "anthropic.claude-sonnet-4-v1:0".into();
+    let converse = BedrockConverseReferenceV1
+        .build_http_request(
+            &converse_request,
+            &config(
+                "bedrock",
+                "https://bedrock-runtime.us-east-1.amazonaws.com",
+                "anthropic.claude-sonnet-4-v1:0",
+                true,
+            ),
+        )
+        .unwrap()
+        .body
+        .unwrap();
+    let converse_blocks = converse["messages"][0]["content"].as_array().unwrap();
+    assert!(converse_blocks[0].get("reasoningContent").is_some());
+    assert!(converse_blocks[1].get("text").is_some());
+    assert!(converse_blocks[2].get("toolUse").is_some());
+    assert!(converse_blocks[3].get("reasoningContent").is_some());
+}
+
+#[test]
 fn x1_converse_response_preserves_thinking_signature_and_redacted_blocks() {
     let parts: HttpResponseParts = serde_json::from_value(json!({
         "status": 200,

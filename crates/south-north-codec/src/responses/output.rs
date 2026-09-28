@@ -1,3 +1,4 @@
+use super::replay::carrier_from_message;
 use super::tools::{restore_map, tool_item};
 use super::{ResponsesContext, ResponsesReasoningMode, decode_reasoning_replay_carrier, invalid};
 use crate::CodecError;
@@ -19,6 +20,22 @@ pub fn responses_response(
             .extensions
             .get("responses_reasoning_replay_items")
             .and_then(Value::as_array);
+        let generated_carrier = carrier_from_message(&choice.message)?;
+        let generated_summary =
+            generated_carrier.as_deref().map(decode_reasoning_replay_carrier).transpose()?.map(
+                |carrier| {
+                    carrier
+                        .blocks()
+                        .iter()
+                        .filter_map(|block| match block {
+                            super::ReasoningReplayBlock::Thinking { thinking, .. } => {
+                                Some(thinking.as_str())
+                            }
+                            _ => None,
+                        })
+                        .collect::<String>()
+                },
+            );
         let parts = match &choice.message.content {
             None => Vec::new(),
             Some(Content::Text(text)) => vec![ContentPart::Text { text: text.clone() }],
@@ -28,7 +45,7 @@ pub fn responses_response(
             match part {
                 ContentPart::Text { text } => texts.push(json!({"type":"output_text","text":text})),
                 ContentPart::Thinking { thinking: text, signature: part_signature } => {
-                    if replay_items.is_none() {
+                    if replay_items.is_none() && generated_carrier.is_none() {
                         thinking.push_str(&text);
                         if part_signature.is_some() {
                             signature = part_signature;
@@ -36,7 +53,7 @@ pub fn responses_response(
                     }
                 }
                 ContentPart::RedactedThinking { data } => {
-                    if replay_items.is_none() {
+                    if replay_items.is_none() && generated_carrier.is_none() {
                         signature = Some(data);
                     }
                 }
@@ -76,6 +93,15 @@ pub fn responses_response(
                 replay["encrypted_content"] = json!(encoded);
                 output.push(replay);
             }
+        } else if let Some(encoded) = generated_carrier {
+            let mut replay = reasoning_item(
+                &format!("rs_{}_{}", context.response_id, choice.index),
+                generated_summary.as_deref().unwrap_or_default(),
+                None,
+                context,
+            );
+            replay["encrypted_content"] = json!(encoded);
+            output.push(replay);
         }
         if !thinking.is_empty()
             || (context.render_legacy_encrypted_reasoning && signature.is_some())

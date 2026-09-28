@@ -266,9 +266,54 @@ fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<Value>, Vec<
                     .and_then(Value::as_str)
                     == Some("claude-signed-thinking");
                 let mut content = text_blocks(message.content.as_ref(), replay);
-                for call in &message.tool_calls {
-                    content.push(tool_use_block(call)?);
-                    announced_calls.push(&call.id);
+                if let Some(layout) = message
+                    .extensions
+                    .get("reasoning_replay_block_layout")
+                    .and_then(Value::as_array)
+                {
+                    let parts = match message.content.as_ref() {
+                        Some(Content::Parts(parts)) => parts.as_slice(),
+                        _ => &[],
+                    };
+                    content.clear();
+                    for entry in layout {
+                        match entry["kind"].as_str() {
+                            Some("content") => {
+                                let ordinal = entry["ordinal"]
+                                    .as_u64()
+                                    .and_then(|value| usize::try_from(value).ok())
+                                    .ok_or_else(|| capability("invalid reasoning replay layout"))?;
+                                let block = part_to_block(
+                                    parts.get(ordinal).ok_or_else(|| {
+                                        capability("invalid reasoning replay content reference")
+                                    })?,
+                                    true,
+                                )?
+                                .ok_or_else(|| capability("unsupported reasoning replay block"))?;
+                                content.push(block);
+                            }
+                            Some("tool_call") => {
+                                let id = entry["call_id"].as_str().ok_or_else(|| {
+                                    capability("invalid reasoning replay tool reference")
+                                })?;
+                                let call = message
+                                    .tool_calls
+                                    .iter()
+                                    .find(|call| call.id == id)
+                                    .ok_or_else(|| {
+                                        capability("invalid reasoning replay tool reference")
+                                    })?;
+                                content.push(tool_use_block(call)?);
+                                announced_calls.push(&call.id);
+                            }
+                            _ => return Err(capability("invalid reasoning replay layout")),
+                        }
+                    }
+                } else {
+                    for call in &message.tool_calls {
+                        content.push(tool_use_block(call)?);
+                        announced_calls.push(&call.id);
+                    }
                 }
                 // Bedrock 400s on an assistant turn whose content array is
                 // empty, so an empty one is dropped rather than sent.
