@@ -55,6 +55,9 @@ fn validate(carrier: &ReasoningReplayCarrier) -> Result<(), CodecError> {
     for block in &carrier.blocks {
         let fields: &[&str] = match block {
             ReasoningReplayBlock::Thinking { thinking, signature } => {
+                if signature.is_empty() {
+                    return Err(invalid());
+                }
                 &[thinking.as_str(), signature.as_str()]
             }
             ReasoningReplayBlock::RedactedThinking { data } => &[data.as_str()],
@@ -63,7 +66,7 @@ fn validate(carrier: &ReasoningReplayCarrier) -> Result<(), CodecError> {
                 if call_id.is_empty() {
                     return Err(invalid());
                 }
-                &[]
+                &[call_id.as_str()]
             }
         };
         let block_bytes = fields
@@ -109,7 +112,11 @@ pub fn encode_reasoning_replay_carrier(
         "blocks": blocks,
     }))
     .map_err(|_| invalid())?;
-    Ok(format!("{PREFIX}{}", URL_SAFE_NO_PAD.encode(bytes)))
+    let encoded = format!("{PREFIX}{}", URL_SAFE_NO_PAD.encode(bytes));
+    if encoded.len() > PREFIX.len() + MAX_ENCODED_BYTES {
+        return Err(invalid());
+    }
+    Ok(encoded)
 }
 
 pub fn decode_reasoning_replay_carrier(value: &str) -> Result<ReasoningReplayCarrier, CodecError> {
@@ -186,7 +193,8 @@ pub(super) fn carrier_from_message(message: &Message) -> Result<Option<String>, 
         Some(Content::Parts(parts)) => parts.as_slice(),
         _ => return Err(invalid()),
     };
-    let mut text_ordinal = 0u32;
+    let mut part_refs = vec![0u8; parts.len()];
+    let mut tool_refs = vec![0u8; message.tool_calls.len()];
     let mut blocks = Vec::new();
     for entry in layout {
         match entry["kind"].as_str() {
@@ -195,6 +203,8 @@ pub(super) fn carrier_from_message(message: &Message) -> Result<Option<String>, 
                     .as_u64()
                     .and_then(|value| usize::try_from(value).ok())
                     .ok_or_else(invalid)?;
+                let count = part_refs.get_mut(ordinal).ok_or_else(invalid)?;
+                *count = count.checked_add(1).ok_or_else(invalid)?;
                 match parts.get(ordinal).ok_or_else(invalid)? {
                     ContentPart::Thinking { thinking, signature: Some(signature) } => {
                         blocks.push(ReasoningReplayBlock::Thinking {
@@ -207,8 +217,13 @@ pub(super) fn carrier_from_message(message: &Message) -> Result<Option<String>, 
                         blocks.push(ReasoningReplayBlock::RedactedThinking { data: data.clone() });
                     }
                     ContentPart::Text { .. } => {
-                        blocks.push(ReasoningReplayBlock::TextRef { ordinal: text_ordinal });
-                        text_ordinal = text_ordinal.checked_add(1).ok_or_else(invalid)?;
+                        let text_ordinal = parts[..ordinal]
+                            .iter()
+                            .filter(|part| matches!(part, ContentPart::Text { .. }))
+                            .count();
+                        blocks.push(ReasoningReplayBlock::TextRef {
+                            ordinal: u32::try_from(text_ordinal).map_err(|_| invalid())?,
+                        });
                     }
                     ContentPart::ImageUrl { .. } | ContentPart::Unknown(_) => {
                         return Err(invalid());
@@ -217,13 +232,19 @@ pub(super) fn carrier_from_message(message: &Message) -> Result<Option<String>, 
             }
             Some("tool_call") => {
                 let call_id = entry["call_id"].as_str().ok_or_else(invalid)?;
-                if !message.tool_calls.iter().any(|call| call.id == call_id) {
-                    return Err(invalid());
-                }
+                let index = message
+                    .tool_calls
+                    .iter()
+                    .position(|call| call.id == call_id)
+                    .ok_or_else(invalid)?;
+                tool_refs[index] = tool_refs[index].checked_add(1).ok_or_else(invalid)?;
                 blocks.push(ReasoningReplayBlock::ToolCallRef { call_id: call_id.to_owned() });
             }
             _ => return Err(invalid()),
         }
+    }
+    if part_refs.iter().any(|count| *count != 1) || tool_refs.iter().any(|count| *count != 1) {
+        return Err(invalid());
     }
     encode_reasoning_replay_carrier(&ReasoningReplayCarrier::claude(blocks)).map(Some)
 }

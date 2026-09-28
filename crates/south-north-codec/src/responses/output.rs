@@ -69,15 +69,18 @@ fn choice_output(
         }
     }
     if let Some(items) = replay_items {
-        output.extend(replay_items_output(items, context)?);
+        output.extend(replay_items_output(items)?);
     } else if let Some(encoded) = generated_carrier {
-        let summary = replay_summary(&encoded)?;
         let mut replay = reasoning_item(
             &format!("rs_{}_{}", context.response_id, choice.index),
-            &summary,
+            "",
             None,
             context,
         );
+        replay["summary"] = json!([]);
+        if context.reasoning == ResponsesReasoningMode::RawContent {
+            replay["content"] = json!([]);
+        }
         replay["encrypted_content"] = json!(encoded);
         output.push(replay);
     }
@@ -98,36 +101,29 @@ fn choice_output(
     Ok(output)
 }
 
-fn replay_items_output(
-    items: &[Value],
-    context: &ResponsesContext,
-) -> Result<Vec<Value>, CodecError> {
+fn replay_items_output(items: &[Value]) -> Result<Vec<Value>, CodecError> {
     items
         .iter()
         .map(|item| {
+            let mut replay = item.as_object().cloned().ok_or_else(|| {
+                CodecError::ReasoningReplayInvalid { field: "encrypted_content".to_owned() }
+            })?;
             let encoded = item["encrypted_content"].as_str().ok_or_else(|| {
                 CodecError::ReasoningReplayInvalid { field: "encrypted_content".to_owned() }
             })?;
-            let summary = replay_summary(encoded)?;
-            let id = item["id"].as_str().ok_or_else(|| CodecError::ReasoningReplayInvalid {
+            decode_reasoning_replay_carrier(encoded)?;
+            item["id"].as_str().ok_or_else(|| CodecError::ReasoningReplayInvalid {
                 field: "encrypted_content".to_owned(),
             })?;
-            let mut replay = reasoning_item(id, &summary, None, context);
-            replay["encrypted_content"] = json!(encoded);
-            Ok(replay)
+            if item["type"] != "reasoning" || !item["summary"].is_array() {
+                return Err(CodecError::ReasoningReplayInvalid {
+                    field: "encrypted_content".to_owned(),
+                });
+            }
+            replay.insert("encrypted_content".into(), json!(encoded));
+            Ok(Value::Object(replay))
         })
         .collect()
-}
-
-fn replay_summary(encoded: &str) -> Result<String, CodecError> {
-    Ok(decode_reasoning_replay_carrier(encoded)?
-        .blocks()
-        .iter()
-        .filter_map(|block| match block {
-            super::ReasoningReplayBlock::Thinking { thinking, .. } => Some(thinking.as_str()),
-            _ => None,
-        })
-        .collect())
 }
 pub(super) fn reasoning_item(
     id: &str,

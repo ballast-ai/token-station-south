@@ -6,7 +6,7 @@ use super::{
 };
 use crate::CodecError;
 use serde_json::{Value, json};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use token_station_protocol::{
     ChatResponse, Choice, Content, ContentPart, ErrorCode, Extensions, FinishReason, Message, Role,
     StreamEvent, ToolCall, Usage,
@@ -137,56 +137,72 @@ impl ResponsesSseState {
         })
     }
     fn replay_terminal_response(&self) -> Option<ChatResponse> {
-        self.replay_carrier().ok().flatten()?;
-        let choice_index = self.replay_blocks.keys().next().map_or(0, |(index, _)| *index);
-        let mut parts = Vec::new();
-        let mut tool_calls = Vec::new();
-        let mut layout = Vec::new();
-        for entry in &self.replay_layout {
-            match *entry {
-                ReplayLayout::Reasoning { index, block_index } => {
-                    let block = self.replay_blocks.get(&(index, block_index))?;
-                    layout.push(json!({"kind":"content","ordinal":parts.len()}));
-                    parts.push(match block {
-                        ReplayBlockState::Thinking { thinking, signature } => {
-                            ContentPart::Thinking {
-                                thinking: thinking.clone(),
-                                signature: Some(signature.clone()),
+        let choice_indexes = self
+            .slots
+            .iter()
+            .map(|slot| slot.source_index)
+            .chain(self.replay_blocks.keys().map(|(index, _)| *index))
+            .collect::<BTreeSet<_>>();
+        if !choice_indexes.iter().any(|index| self.replay_carrier(*index).ok().flatten().is_some())
+        {
+            return None;
+        }
+        let mut choices = Vec::with_capacity(choice_indexes.len());
+        for choice_index in choice_indexes {
+            let mut parts = Vec::new();
+            let mut tool_calls = Vec::new();
+            let mut layout = Vec::new();
+            for entry in &self.replay_layout {
+                match *entry {
+                    ReplayLayout::Reasoning { index, block_index } if index == choice_index => {
+                        let block = self.replay_blocks.get(&(index, block_index))?;
+                        layout.push(json!({"kind":"content","ordinal":parts.len()}));
+                        parts.push(match block {
+                            ReplayBlockState::Thinking { thinking, signature } => {
+                                ContentPart::Thinking {
+                                    thinking: thinking.clone(),
+                                    signature: Some(signature.clone()),
+                                }
                             }
-                        }
-                        ReplayBlockState::Redacted { data } => {
-                            ContentPart::RedactedThinking { data: data.clone() }
-                        }
-                    });
-                }
-                ReplayLayout::Text { position } => {
-                    let slot = self.slots.get(position)?;
-                    layout.push(json!({"kind":"content","ordinal":parts.len()}));
-                    parts.push(ContentPart::Text { text: slot.text.clone() });
-                }
-                ReplayLayout::Tool { position } => {
-                    let slot = self.slots.get(position)?;
-                    layout.push(json!({"kind":"tool_call","call_id":slot.call_id}));
-                    tool_calls.push(ToolCall {
-                        id: slot.call_id.clone(),
-                        name: slot.name.clone(),
-                        arguments: slot.text.clone(),
-                    });
+                            ReplayBlockState::Redacted { data } => {
+                                ContentPart::RedactedThinking { data: data.clone() }
+                            }
+                        });
+                    }
+                    ReplayLayout::Text { position }
+                        if self.slots.get(position)?.source_index == choice_index =>
+                    {
+                        let slot = self.slots.get(position)?;
+                        layout.push(json!({"kind":"content","ordinal":parts.len()}));
+                        parts.push(ContentPart::Text { text: slot.text.clone() });
+                    }
+                    ReplayLayout::Tool { position }
+                        if self.slots.get(position)?.source_index == choice_index =>
+                    {
+                        let slot = self.slots.get(position)?;
+                        layout.push(json!({"kind":"tool_call","call_id":slot.call_id}));
+                        tool_calls.push(ToolCall {
+                            id: slot.call_id.clone(),
+                            name: slot.name.clone(),
+                            arguments: slot.text.clone(),
+                        });
+                    }
+                    _ => {}
                 }
             }
-        }
-        let mut extensions = Extensions::new();
-        extensions
-            .insert("reasoning_replay_protocol_family".into(), json!("claude-signed-thinking"));
-        extensions.insert("reasoning_replay_block_layout".into(), json!(layout));
-        Some(ChatResponse {
-            id: self.context.response_id.clone(),
-            model: self.context.model.clone(),
-            choices: vec![Choice {
+            let mut extensions = Extensions::new();
+            if self.replay_carrier(choice_index).ok().flatten().is_some() {
+                extensions.insert(
+                    "reasoning_replay_protocol_family".into(),
+                    json!("claude-signed-thinking"),
+                );
+                extensions.insert("reasoning_replay_block_layout".into(), json!(layout));
+            }
+            choices.push(Choice {
                 index: choice_index,
                 message: Message {
                     role: Role::Assistant,
-                    content: Some(Content::Parts(parts)),
+                    content: (!parts.is_empty()).then_some(Content::Parts(parts)),
                     tool_calls,
                     tool_call_id: None,
                     name: None,
@@ -194,7 +210,12 @@ impl ResponsesSseState {
                 },
                 finish_reason: self.finish.clone(),
                 stop_sequence: None,
-            }],
+            });
+        }
+        Some(ChatResponse {
+            id: self.context.response_id.clone(),
+            model: self.context.model.clone(),
+            choices,
             usage: self.usage,
             extensions: Extensions::new(),
         })
@@ -262,7 +283,7 @@ impl ResponsesSseState {
                     (!slot.signature.is_empty()).then_some(slot.signature.as_str()),
                     &self.context,
                 );
-                if let Some(carrier) = self.replay_carrier()? {
+                if let Some(carrier) = self.replay_carrier(slot.source_index)? {
                     item["encrypted_content"] = json!(carrier);
                 }
                 Ok(item)
@@ -294,11 +315,14 @@ impl ResponsesSseState {
         self.replay_layout.push(ReplayLayout::Reasoning { index, block_index });
         Ok(())
     }
-    fn replay_carrier(&self) -> Result<Option<String>, CodecError> {
-        let replay_active = self.replay_blocks.values().any(|block| match block {
-            ReplayBlockState::Thinking { signature, .. } => !signature.is_empty(),
-            ReplayBlockState::Redacted { .. } => true,
-        });
+    fn replay_carrier(&self, index: u32) -> Result<Option<String>, CodecError> {
+        let replay_active =
+            self.replay_blocks.iter().filter(|((choice_index, _), _)| *choice_index == index).any(
+                |(_, block)| match block {
+                    ReplayBlockState::Thinking { signature, .. } => !signature.is_empty(),
+                    ReplayBlockState::Redacted { .. } => true,
+                },
+            );
         if !replay_active {
             return Ok(None);
         }
@@ -306,10 +330,12 @@ impl ResponsesSseState {
         let mut text_ordinal = 0u32;
         for entry in &self.replay_layout {
             match *entry {
-                ReplayLayout::Reasoning { index, block_index } => {
+                ReplayLayout::Reasoning { index: choice_index, block_index }
+                    if choice_index == index =>
+                {
                     match self
                         .replay_blocks
-                        .get(&(index, block_index))
+                        .get(&(choice_index, block_index))
                         .ok_or_else(Self::replay_invalid)?
                     {
                         ReplayBlockState::Thinking { thinking, signature } => {
@@ -325,14 +351,24 @@ impl ResponsesSseState {
                             .push(ReasoningReplayBlock::RedactedThinking { data: data.clone() }),
                     }
                 }
-                ReplayLayout::Text { position } => {
+                ReplayLayout::Text { position }
+                    if self
+                        .slots
+                        .get(position)
+                        .is_some_and(|slot| slot.kind == 0 && slot.source_index == index) =>
+                {
                     if self.slots.get(position).is_none_or(|slot| slot.kind != 0) {
                         return Err(Self::replay_invalid());
                     }
                     blocks.push(ReasoningReplayBlock::TextRef { ordinal: text_ordinal });
                     text_ordinal = text_ordinal.checked_add(1).ok_or_else(Self::replay_invalid)?;
                 }
-                ReplayLayout::Tool { position } => {
+                ReplayLayout::Tool { position }
+                    if self
+                        .slots
+                        .get(position)
+                        .is_some_and(|slot| slot.kind == 2 && slot.source_index == index) =>
+                {
                     let call_id = self
                         .slots
                         .get(position)
@@ -341,9 +377,55 @@ impl ResponsesSseState {
                         .ok_or_else(Self::replay_invalid)?;
                     blocks.push(ReasoningReplayBlock::ToolCallRef { call_id });
                 }
+                _ => {}
             }
         }
         encode_reasoning_replay_carrier(&ReasoningReplayCarrier::claude(blocks)).map(Some)
+    }
+
+    fn ensure_replay_budget(&self, index: u32) -> Result<(), CodecError> {
+        if !self.replay_blocks.keys().any(|(choice_index, _)| *choice_index == index) {
+            return Ok(());
+        }
+        let block_count = self
+            .replay_layout
+            .iter()
+            .filter(|entry| match **entry {
+                ReplayLayout::Reasoning { index: choice_index, .. } => choice_index == index,
+                ReplayLayout::Text { position } | ReplayLayout::Tool { position } => {
+                    self.slots.get(position).is_some_and(|slot| slot.source_index == index)
+                }
+            })
+            .count();
+        if block_count > 128 {
+            return Err(Self::replay_invalid());
+        }
+        let mut total = 0usize;
+        for ((choice_index, _), block) in &self.replay_blocks {
+            if *choice_index != index {
+                continue;
+            }
+            let bytes = match block {
+                ReplayBlockState::Thinking { thinking, signature } => {
+                    thinking.len().checked_add(signature.len()).ok_or_else(Self::replay_invalid)?
+                }
+                ReplayBlockState::Redacted { data } => data.len(),
+            };
+            if bytes > 1024 * 1024 {
+                return Err(Self::replay_invalid());
+            }
+            total = total.checked_add(bytes).ok_or_else(Self::replay_invalid)?;
+        }
+        for slot in self.slots.iter().filter(|slot| slot.source_index == index && slot.kind == 2) {
+            if slot.call_id.len() > 1024 * 1024 {
+                return Err(Self::replay_invalid());
+            }
+            total = total.checked_add(slot.call_id.len()).ok_or_else(Self::replay_invalid)?;
+        }
+        if total > 4 * 1024 * 1024 {
+            return Err(Self::replay_invalid());
+        }
+        Ok(())
     }
     fn close(&mut self, position: usize, out: &mut Vec<ResponsesFrame>) -> Result<(), CodecError> {
         if self.slots[position].closed {
@@ -406,7 +488,7 @@ impl ResponsesSseState {
         Ok(())
     }
     fn close_raw_reasoning(&mut self, out: &mut Vec<ResponsesFrame>) -> Result<(), CodecError> {
-        if self.replay_carrier()?.is_some() {
+        if !self.replay_blocks.is_empty() {
             return Ok(());
         }
         if self.context.reasoning == ResponsesReasoningMode::RawContent {
@@ -469,6 +551,7 @@ fn render(
                 let output_index = state.slots[position].index;
                 if new {
                     state.replay_layout.push(ReplayLayout::Text { position });
+                    state.ensure_replay_budget(*index)?;
                     state.emit("response.output_item.added",json!({"output_index":output_index,"item":{"type":"message","id":item_id,"status":"in_progress","role":"assistant","content":[]}}),&mut out)?;
                     state.emit("response.content_part.added",json!({"item_id":item_id,"output_index":output_index,"content_index":0,"part":{"type":"output_text","text":"","annotations":[]}}),&mut out)?;
                 }
@@ -490,6 +573,9 @@ fn render(
             StreamEvent::Usage { usage } => state.usage.absorb(*usage),
             StreamEvent::Finish { finish_reason, .. } => state.finish.clone_from(finish_reason),
             StreamEvent::Done { finish_reason, .. } => {
+                for index in state.replay_blocks.keys().map(|(index, _)| *index) {
+                    state.replay_carrier(index)?;
+                }
                 for position in 0..state.slots.len() {
                     state.close(position, &mut out)?;
                 }
@@ -543,6 +629,7 @@ fn render_thinking_delta(
             }
         },
     }
+    state.ensure_replay_budget(index)?;
     let (position, new) = state.slot(1, index)?;
     let item_id = state.slots[position].id.clone();
     let output_index = state.slots[position].index;
@@ -576,6 +663,7 @@ fn render_signature_delta(
         return Err(ResponsesSseState::replay_invalid());
     };
     signature.push_str(signature_delta);
+    state.ensure_replay_budget(index)?;
     let (position, new) = state.slot(1, index)?;
     if new {
         let slot = &state.slots[position];
@@ -603,6 +691,7 @@ fn render_redacted(
     {
         return Err(ResponsesSseState::replay_invalid());
     }
+    state.ensure_replay_budget(index)?;
     let (position, new) = state.slot(1, index)?;
     if new {
         let slot = &state.slots[position];
@@ -642,6 +731,7 @@ fn render_tool(
         state.slots[position].call_id.clone_from(&call_id);
         state.slots[position].name.clone_from(&call_name);
         state.slots[position].id = item_id;
+        state.ensure_replay_budget(index)?;
         if call_name != LOCAL_SHELL {
             let item = tool_item(&call_id, &call_name, "", "in_progress", map)?;
             let output_index = state.slots[position].index;

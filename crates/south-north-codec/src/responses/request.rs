@@ -623,12 +623,9 @@ fn reasoning_input(item: &Value, path: &str, message: &mut Message) -> Result<()
         && encoded.starts_with("tsr.c1.")
     {
         decode_reasoning_replay_carrier(encoded)?;
-        let id = required_str(&item["id"], &format!("{path}.id"))?;
+        required_str(&item["id"], &format!("{path}.id"))?;
         message.extensions.remove("responses_reasoning_encrypted_content");
-        message.extensions.insert(
-            "responses_reasoning_replay_items".into(),
-            json!([{"id":id,"encrypted_content":encoded}]),
-        );
+        message.extensions.insert("responses_reasoning_replay_items".into(), json!([item]));
         message
             .extensions
             .insert("reasoning_replay_protocol_family".into(), json!("claude-signed-thinking"));
