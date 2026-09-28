@@ -10,6 +10,7 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
+use serde_json::{Value, json};
 use south_component_conformance::reference_anthropic::AnthropicReferenceV1;
 use south_component_conformance::{
     FixturePackV1, PROVIDER_COMPONENT_SUITE_V1, ProviderComponentV1, accepts_manifest,
@@ -45,6 +46,54 @@ fn host_expectations() -> HostExpectationsV1 {
         kernel_version: "0.3.0".to_owned(),
         kernel_revision: "6822aab1dea54ef646cb2206595cd4955ff9764a".to_owned(),
         south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
+    }
+}
+
+fn frame(event: &str, data: &Value) -> Vec<u8> {
+    format!("event: {event}\ndata: {data}\n\n").into_bytes()
+}
+
+#[test]
+fn thinking_start_expresses_an_empty_block_and_requires_a_matching_stop() {
+    let mut parser = AnthropicReferenceV1.stream_parser();
+    let start = parser
+        .parse_chunk(&frame(
+            "content_block_start",
+            &json!({"index":0,"content_block":{"type":"thinking","thinking":""}}),
+        ))
+        .unwrap();
+    assert_eq!(
+        format!("{start:?}"),
+        r#"[ThinkingDelta { index: 0, block_index: 0, thinking_delta: "" }]"#
+    );
+    parser
+        .parse_chunk(&frame(
+            "content_block_delta",
+            &json!({"index":0,"delta":{"type":"signature_delta","signature":"sig"}}),
+        ))
+        .unwrap();
+    assert!(
+        parser
+            .parse_chunk(&frame(
+                "message_delta",
+                &json!({"delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}),
+            ))
+            .is_err(),
+        "an open thinking block must prevent a successful Done"
+    );
+}
+
+#[test]
+fn stream_block_delta_and_stop_require_a_prior_open_block() {
+    for (event, data) in [
+        (
+            "content_block_delta",
+            json!({"index":0,"delta":{"type":"thinking_delta","thinking":"x"}}),
+        ),
+        ("content_block_stop", json!({"index":0})),
+    ] {
+        let mut parser = AnthropicReferenceV1.stream_parser();
+        assert!(parser.parse_chunk(&frame(event, &data)).is_err());
     }
 }
 

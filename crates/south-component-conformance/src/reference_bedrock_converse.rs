@@ -42,6 +42,7 @@
 
 use serde_json::{Map, Value, json};
 use south_provider_api::{ComponentMetadataV1, PROVIDER_WORLD};
+use std::collections::BTreeSet;
 use token_station_protocol::{
     ChatRequest, ChatResponse, Choice, Content, ContentPart, ErrorCode, ErrorEnvelope,
     FinishReason, HttpMethod, HttpRequestDescriptor, HttpResponseParts, Message, ProviderConfig,
@@ -555,11 +556,38 @@ struct ConverseSseParser {
     pending_finish: Option<FinishReason>,
     /// Whether `metadata` has already closed the stream.
     closed: bool,
+    open_blocks: BTreeSet<u32>,
 }
 
 impl ConverseSseParser {
     const fn new() -> Self {
-        Self { tail: Vec::new(), pending_finish: None, closed: false }
+        Self { tail: Vec::new(), pending_finish: None, closed: false, open_blocks: BTreeSet::new() }
+    }
+
+    fn open_block(&mut self, index: u32) -> ComponentResultV1<()> {
+        if self.open_blocks.insert(index) {
+            Ok(())
+        } else {
+            Err(provider_protocol_error("the upstream opened a content block twice"))
+        }
+    }
+
+    fn require_open_block(&self, index: u32) -> ComponentResultV1<()> {
+        if self.open_blocks.contains(&index) {
+            Ok(())
+        } else {
+            Err(provider_protocol_error(
+                "the upstream sent a delta for a content block that is not open",
+            ))
+        }
+    }
+
+    fn close_block(&mut self, index: u32) -> ComponentResultV1<()> {
+        if self.open_blocks.remove(&index) {
+            Ok(())
+        } else {
+            Err(provider_protocol_error("the upstream stopped a content block that is not open"))
+        }
     }
 
     #[expect(
@@ -574,8 +602,14 @@ impl ConverseSseParser {
             // `messageStart` only announces the turn, `contentBlockStop` only
             // closes a block whose deltas already went out. The contract says
             // `messageStart` arrives once; a repeat is simply ignored.
-            "messageStart" | "contentBlockStop" => Ok(Vec::new()),
+            "messageStart" => Ok(Vec::new()),
+            "contentBlockStop" => {
+                self.close_block(block_index(data))?;
+                Ok(Vec::new())
+            }
             "contentBlockStart" => {
+                let index = block_index(data);
+                self.open_block(index)?;
                 // Only a tool block opens with anything: `start.toolUse` carries
                 // the id and name, and IR wants them on the call's **first**
                 // fragment and never again. A text block's start says nothing.
@@ -583,13 +617,14 @@ impl ConverseSseParser {
                     return Ok(Vec::new());
                 };
                 Ok(vec![StreamEvent::ToolCallDelta {
-                    index: block_index(data),
+                    index,
                     id: use_block["toolUseId"].as_str().map(str::to_owned),
                     name: use_block["name"].as_str().map(str::to_owned),
                     arguments_delta: String::new(),
                 }])
             }
             "contentBlockDelta" => {
+                self.require_open_block(block_index(data))?;
                 let delta = &data["delta"];
                 if let Some(text) = delta["text"].as_str() {
                     // `Delta.index` is the *choice* index, not the block index:
@@ -638,12 +673,22 @@ impl ConverseSseParser {
                 Ok(Vec::new())
             }
             "messageStop" => {
+                if !self.open_blocks.is_empty() {
+                    return Err(provider_protocol_error(
+                        "the upstream ended the message before every content block stopped",
+                    ));
+                }
                 let raw = data["stopReason"].as_str().unwrap_or("end_turn");
                 let finish = stop_reason_to_finish(raw);
                 self.pending_finish = Some(finish.clone());
                 Ok(vec![StreamEvent::Finish { finish_reason: Some(finish), stop_sequence: None }])
             }
             "metadata" => {
+                if !self.open_blocks.is_empty() {
+                    return Err(provider_protocol_error(
+                        "the upstream completed before every content block stopped",
+                    ));
+                }
                 let usage = usage_of(&data["usage"])?;
                 self.closed = true;
                 Ok(vec![

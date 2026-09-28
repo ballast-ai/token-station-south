@@ -1,6 +1,7 @@
 {
   "chunks": [
     "event: messageStart\ndata: {\"role\": \"assistant\"}\n\n",
+    "event: contentBlockStart\ndata: {\"contentBlockIndex\": 0, \"start\": {}}\n\n",
     "event: contentBlockDelta\ndata: {\"contentBlockIndex\": 0, \"delta\": {\"text\": \"Mi\"}}\n\n",
     "event: contentBlockDelta\ndata: {\"contentBlockIndex\": 0, \"delta\": {\"text\": \"ld.\"}}\n\n",
     "event: contentBlockStop\ndata: {\"contentBlockIndex\": 0}\n\n",

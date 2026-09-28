@@ -234,6 +234,8 @@ fn x5_anthropic_stream_preserves_block_identity_signature_and_redacted_data() {
     let mut parser = AnthropicReferenceV1.stream_parser();
     let events = parser
         .parse_chunk(concat!(
+            "event: content_block_start\n",
+            "data: {\"index\":2,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\"}}\n\n",
             "event: content_block_delta\n",
             "data: {\"index\":2,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"a\"}}\n\n",
             "event: content_block_delta\n",
@@ -245,6 +247,7 @@ fn x5_anthropic_stream_preserves_block_identity_signature_and_redacted_data() {
     assert_eq!(
         events,
         vec![
+            StreamEvent::ThinkingDelta { index: 0, block_index: 2, thinking_delta: String::new() },
             StreamEvent::ThinkingDelta { index: 0, block_index: 2, thinking_delta: "a".into() },
             StreamEvent::ThinkingSignatureDelta {
                 index: 0,
@@ -261,10 +264,16 @@ fn x5_converse_stream_preserves_reasoning_variants_and_block_identity() {
     let mut parser = BedrockConverseReferenceV1.stream_parser();
     let events = parser
         .parse_chunk(concat!(
+            "event: contentBlockStart\n",
+            "data: {\"contentBlockIndex\":3,\"start\":{\"reasoningContent\":{}}}\n\n",
             "event: contentBlockDelta\n",
             "data: {\"contentBlockIndex\":3,\"delta\":{\"reasoningContent\":{\"text\":\"a\"}}}\n\n",
             "event: contentBlockDelta\n",
             "data: {\"contentBlockIndex\":3,\"delta\":{\"reasoningContent\":{\"signature\":\"sig\"}}}\n\n",
+            "event: contentBlockStop\n",
+            "data: {\"contentBlockIndex\":3}\n\n",
+            "event: contentBlockStart\n",
+            "data: {\"contentBlockIndex\":5,\"start\":{\"reasoningContent\":{}}}\n\n",
             "event: contentBlockDelta\n",
             "data: {\"contentBlockIndex\":5,\"delta\":{\"reasoningContent\":{\"redactedContent\":\"opaque\"}}}\n\n"
         ).as_bytes())

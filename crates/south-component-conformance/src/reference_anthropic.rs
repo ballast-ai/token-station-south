@@ -17,6 +17,7 @@
 
 use serde_json::{Map, Value, json};
 use south_provider_api::{ComponentMetadataV1, PROVIDER_WORLD};
+use std::collections::BTreeSet;
 use token_station_protocol::{
     Auth, ChatRequest, ChatResponse, Choice, Content, ContentPart, ErrorCode, ErrorEnvelope,
     Extensions, FinishReason, HttpMethod, HttpRequestDescriptor, HttpResponseParts, Message,
@@ -381,6 +382,7 @@ struct AnthropicSseParser {
     pending_finish_reason: Option<FinishReason>,
     pending_stop_sequence: Option<String>,
     done_emitted: bool,
+    open_blocks: BTreeSet<u32>,
 }
 
 /// The end of the first complete SSE frame in `buffer`, as
@@ -411,6 +413,42 @@ fn frame_fields(frame: &str) -> (Option<&str>, Option<&str>) {
 }
 
 impl AnthropicSseParser {
+    fn open_block(&mut self, index: u32) -> ComponentResultV1<()> {
+        if self.open_blocks.insert(index) {
+            Ok(())
+        } else {
+            Err(provider_protocol_error("the upstream opened a content block twice"))
+        }
+    }
+
+    fn require_open_block(&self, index: u32) -> ComponentResultV1<()> {
+        if self.open_blocks.contains(&index) {
+            Ok(())
+        } else {
+            Err(provider_protocol_error(
+                "the upstream sent a delta for a content block that is not open",
+            ))
+        }
+    }
+
+    fn close_block(&mut self, index: u32) -> ComponentResultV1<()> {
+        if self.open_blocks.remove(&index) {
+            Ok(())
+        } else {
+            Err(provider_protocol_error("the upstream stopped a content block that is not open"))
+        }
+    }
+
+    fn require_all_blocks_closed(&self) -> ComponentResultV1<()> {
+        if self.open_blocks.is_empty() {
+            Ok(())
+        } else {
+            Err(provider_protocol_error(
+                "the upstream ended the message before every content block stopped",
+            ))
+        }
+    }
+
     const fn take_pending_finish(&mut self) -> Option<StreamEvent> {
         if !self.saw_finish {
             return None;
@@ -422,42 +460,52 @@ impl AnthropicSseParser {
         })
     }
 
-    fn events_of(&mut self, event: &str, data: &Value) -> Vec<StreamEvent> {
+    fn events_of(&mut self, event: &str, data: &Value) -> ComponentResultV1<Vec<StreamEvent>> {
         match event {
             // D2: input-side counts are reported where the upstream reported
             // them. Folding is the consumer's job.
             "message_start" => {
                 let usage = &data["message"]["usage"];
                 if usage.is_object() {
-                    return vec![StreamEvent::Usage { usage: usage_of(usage) }];
+                    return Ok(vec![StreamEvent::Usage { usage: usage_of(usage) }]);
                 }
-                Vec::new()
+                Ok(Vec::new())
             }
             "content_block_start" => {
+                let index = block_index(data);
+                self.open_block(index)?;
                 let block = &data["content_block"];
                 match block["type"].as_str() {
                     Some("redacted_thinking") => {
-                        return block["data"].as_str().map_or_else(Vec::new, |value| {
+                        return Ok(block["data"].as_str().map_or_else(Vec::new, |value| {
                             vec![StreamEvent::RedactedThinking {
                                 index: 0,
-                                block_index: block_index(data),
+                                block_index: index,
                                 data: value.to_owned(),
                             }]
-                        });
+                        }));
+                    }
+                    Some("thinking") => {
+                        return Ok(vec![StreamEvent::ThinkingDelta {
+                            index: 0,
+                            block_index: index,
+                            thinking_delta: String::new(),
+                        }]);
                     }
                     Some("tool_use") => {}
-                    _ => return Vec::new(),
+                    _ => return Ok(Vec::new()),
                 }
-                vec![StreamEvent::ToolCallDelta {
-                    index: block_index(data),
+                Ok(vec![StreamEvent::ToolCallDelta {
+                    index,
                     id: block["id"].as_str().map(str::to_owned),
                     name: block["name"].as_str().map(str::to_owned),
                     arguments_delta: String::new(),
-                }]
+                }])
             }
             "content_block_delta" => {
+                self.require_open_block(block_index(data))?;
                 let delta = &data["delta"];
-                match delta["type"].as_str() {
+                Ok(match delta["type"].as_str() {
                     Some("text_delta") => text_event(delta["text"].as_str(), |text| {
                         StreamEvent::Delta { index: 0, content: text }
                     }),
@@ -488,11 +536,16 @@ impl AnthropicSseParser {
                             .to_owned(),
                     }],
                     _ => Vec::new(),
-                }
+                })
+            }
+            "content_block_stop" => {
+                self.close_block(block_index(data))?;
+                Ok(Vec::new())
             }
             "message_delta" => {
+                self.require_all_blocks_closed()?;
                 let Some(reason) = data["delta"]["stop_reason"].as_str() else {
-                    return Vec::new();
+                    return Ok(Vec::new());
                 };
                 self.saw_finish = true;
                 self.done_emitted = false;
@@ -500,15 +553,15 @@ impl AnthropicSseParser {
                 self.pending_stop_sequence =
                     data["delta"]["stop_sequence"].as_str().map(str::to_owned);
                 if !data["usage"].is_object() {
-                    return Vec::new();
+                    return Ok(Vec::new());
                 }
                 let mut events: Vec<StreamEvent> = self.take_pending_finish().into_iter().collect();
                 events.push(StreamEvent::Usage { usage: usage_of(&data["usage"]) });
                 events.push(StreamEvent::Done { finish_reason: None, stop_sequence: None });
                 self.done_emitted = true;
-                events
+                Ok(events)
             }
-            _ => Vec::new(),
+            _ => Ok(Vec::new()),
         }
     }
 }
@@ -556,7 +609,7 @@ impl StreamParserV1 for AnthropicSseParser {
             let parsed: Value = serde_json::from_str(data).map_err(|_| {
                 provider_protocol_error("the upstream sent a stream frame with invalid JSON")
             })?;
-            events.extend(self.events_of(event, &parsed));
+            events.extend(self.events_of(event, &parsed)?);
         }
         Ok(events)
     }

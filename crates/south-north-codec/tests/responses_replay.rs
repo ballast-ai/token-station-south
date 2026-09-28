@@ -514,3 +514,37 @@ fn x6_stream_rejects_replay_budget_overflow_before_done() {
         "reasoning_replay_invalid"
     );
 }
+
+#[test]
+fn x5_stream_accepts_an_empty_thinking_block_with_a_nonempty_signature() {
+    let mut state = ResponsesSseState::new(stream_context());
+    let frames = responses_frames(
+        &[
+            StreamEvent::ThinkingDelta { index: 0, block_index: 0, thinking_delta: String::new() },
+            StreamEvent::ThinkingSignatureDelta {
+                index: 0,
+                block_index: 0,
+                signature_delta: "sig-empty".into(),
+            },
+            StreamEvent::Done { finish_reason: Some(FinishReason::Stop), stop_sequence: None },
+        ],
+        &mut state,
+    )
+    .unwrap();
+    let carrier = frames
+        .iter()
+        .find(|frame| {
+            frame.event == "response.output_item.done" && frame.data["item"]["type"] == "reasoning"
+        })
+        .unwrap()
+        .data["item"]["encrypted_content"]
+        .as_str()
+        .unwrap();
+    assert_eq!(
+        decode_reasoning_replay_carrier(carrier).unwrap().blocks(),
+        &[ReasoningReplayBlock::Thinking {
+            thinking: String::new(),
+            signature: "sig-empty".into(),
+        }]
+    );
+}
