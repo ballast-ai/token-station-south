@@ -137,7 +137,7 @@ fn the_reference_component_manifest_signs_the_contract() {
 
     let tuple = manifest.compatibility_tuple();
     assert_eq!(tuple.ir_schema_id, "token-station-protocol@0.4.0/v0.3.0");
-    assert_eq!(tuple.kernel_version, "0.2.0");
+    assert_eq!(tuple.kernel_version, "0.3.0");
     assert_eq!(tuple.wit_package, WIT_PACKAGE);
     assert_eq!(tuple.wit_world, PROVIDER_WORLD);
     assert_eq!(tuple.conformance_suite, COMPONENT_BEHAVIOR_SUITE);
