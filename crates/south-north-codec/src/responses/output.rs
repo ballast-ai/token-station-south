@@ -1,9 +1,9 @@
 use super::replay::carrier_from_message;
-use super::tools::{restore_map, tool_item};
+use super::tools::{ToolMap, restore_map, tool_item};
 use super::{ResponsesContext, ResponsesReasoningMode, decode_reasoning_replay_carrier, invalid};
 use crate::CodecError;
 use serde_json::{Value, json};
-use token_station_protocol::{ChatResponse, Content, ContentPart, FinishReason, Usage};
+use token_station_protocol::{ChatResponse, Choice, Content, ContentPart, FinishReason, Usage};
 /// Render an IR response using only host-supplied identity and time.
 pub fn responses_response(
     response: &ChatResponse,
@@ -12,113 +12,7 @@ pub fn responses_response(
     let restore = restore_map(&context.inbound_tools)?;
     let mut output = Vec::new();
     for choice in &response.choices {
-        let mut texts = Vec::new();
-        let mut thinking = String::new();
-        let mut signature = None;
-        let replay_items = choice
-            .message
-            .extensions
-            .get("responses_reasoning_replay_items")
-            .and_then(Value::as_array);
-        let generated_carrier = carrier_from_message(&choice.message)?;
-        let generated_summary =
-            generated_carrier.as_deref().map(decode_reasoning_replay_carrier).transpose()?.map(
-                |carrier| {
-                    carrier
-                        .blocks()
-                        .iter()
-                        .filter_map(|block| match block {
-                            super::ReasoningReplayBlock::Thinking { thinking, .. } => {
-                                Some(thinking.as_str())
-                            }
-                            _ => None,
-                        })
-                        .collect::<String>()
-                },
-            );
-        let parts = match &choice.message.content {
-            None => Vec::new(),
-            Some(Content::Text(text)) => vec![ContentPart::Text { text: text.clone() }],
-            Some(Content::Parts(parts)) => parts.clone(),
-        };
-        for part in parts {
-            match part {
-                ContentPart::Text { text } => texts.push(json!({"type":"output_text","text":text})),
-                ContentPart::Thinking { thinking: text, signature: part_signature } => {
-                    if replay_items.is_none() && generated_carrier.is_none() {
-                        thinking.push_str(&text);
-                        if part_signature.is_some() {
-                            signature = part_signature;
-                        }
-                    }
-                }
-                ContentPart::RedactedThinking { data } => {
-                    if replay_items.is_none() && generated_carrier.is_none() {
-                        signature = Some(data);
-                    }
-                }
-                ContentPart::Unknown(value) => texts.push(value),
-                ContentPart::ImageUrl { .. } => {
-                    return Err(super::unsupported(
-                        "choices.message.content",
-                        "text, thinking, redacted thinking, opaque content",
-                    ));
-                }
-            }
-        }
-        if let Some(items) = replay_items {
-            for item in items {
-                let encoded = item["encrypted_content"].as_str().ok_or_else(|| {
-                    CodecError::ReasoningReplayInvalid { field: "encrypted_content".to_owned() }
-                })?;
-                let carrier = decode_reasoning_replay_carrier(encoded)?;
-                let summary = carrier
-                    .blocks()
-                    .iter()
-                    .filter_map(|block| match block {
-                        super::ReasoningReplayBlock::Thinking { thinking, .. } => {
-                            Some(thinking.as_str())
-                        }
-                        _ => None,
-                    })
-                    .collect::<String>();
-                let mut replay = reasoning_item(
-                    item["id"].as_str().ok_or_else(|| CodecError::ReasoningReplayInvalid {
-                        field: "encrypted_content".to_owned(),
-                    })?,
-                    &summary,
-                    None,
-                    context,
-                );
-                replay["encrypted_content"] = json!(encoded);
-                output.push(replay);
-            }
-        } else if let Some(encoded) = generated_carrier {
-            let mut replay = reasoning_item(
-                &format!("rs_{}_{}", context.response_id, choice.index),
-                generated_summary.as_deref().unwrap_or_default(),
-                None,
-                context,
-            );
-            replay["encrypted_content"] = json!(encoded);
-            output.push(replay);
-        }
-        if !thinking.is_empty()
-            || (context.render_legacy_encrypted_reasoning && signature.is_some())
-        {
-            output.push(reasoning_item(
-                &format!("rs_{}_{}", context.response_id, choice.index),
-                &thinking,
-                signature.as_deref(),
-                context,
-            ));
-        }
-        if !texts.is_empty() {
-            output.push(json!({"type":"message","id":format!("msg_{}_{}",context.response_id,choice.index),"role":"assistant","status":"completed","content":texts}));
-        }
-        for call in &choice.message.tool_calls {
-            output.push(tool_item(&call.id, &call.name, &call.arguments, "completed", &restore)?);
-        }
+        output.extend(choice_output(choice, context, &restore)?);
     }
     let finish = response
         .choices
@@ -130,6 +24,110 @@ pub fn responses_response(
         })
         .or_else(|| response.choices.first().and_then(|c| c.finish_reason.as_ref()));
     response_object(context, &output, response.usage, finish)
+}
+
+fn choice_output(
+    choice: &Choice,
+    context: &ResponsesContext,
+    restore: &ToolMap,
+) -> Result<Vec<Value>, CodecError> {
+    let mut output = Vec::new();
+    let mut texts = Vec::new();
+    let mut thinking = String::new();
+    let mut signature = None;
+    let replay_items =
+        choice.message.extensions.get("responses_reasoning_replay_items").and_then(Value::as_array);
+    let generated_carrier = carrier_from_message(&choice.message)?;
+    let parts = match &choice.message.content {
+        None => Vec::new(),
+        Some(Content::Text(text)) => vec![ContentPart::Text { text: text.clone() }],
+        Some(Content::Parts(parts)) => parts.clone(),
+    };
+    for part in parts {
+        match part {
+            ContentPart::Text { text } => texts.push(json!({"type":"output_text","text":text})),
+            ContentPart::Thinking { thinking: text, signature: part_signature } => {
+                if replay_items.is_none() && generated_carrier.is_none() {
+                    thinking.push_str(&text);
+                    if part_signature.is_some() {
+                        signature = part_signature;
+                    }
+                }
+            }
+            ContentPart::RedactedThinking { data } => {
+                if replay_items.is_none() && generated_carrier.is_none() {
+                    signature = Some(data);
+                }
+            }
+            ContentPart::Unknown(value) => texts.push(value),
+            ContentPart::ImageUrl { .. } => {
+                return Err(super::unsupported(
+                    "choices.message.content",
+                    "text, thinking, redacted thinking, opaque content",
+                ));
+            }
+        }
+    }
+    if let Some(items) = replay_items {
+        output.extend(replay_items_output(items, context)?);
+    } else if let Some(encoded) = generated_carrier {
+        let summary = replay_summary(&encoded)?;
+        let mut replay = reasoning_item(
+            &format!("rs_{}_{}", context.response_id, choice.index),
+            &summary,
+            None,
+            context,
+        );
+        replay["encrypted_content"] = json!(encoded);
+        output.push(replay);
+    }
+    if !thinking.is_empty() || (context.render_legacy_encrypted_reasoning && signature.is_some()) {
+        output.push(reasoning_item(
+            &format!("rs_{}_{}", context.response_id, choice.index),
+            &thinking,
+            signature.as_deref(),
+            context,
+        ));
+    }
+    if !texts.is_empty() {
+        output.push(json!({"type":"message","id":format!("msg_{}_{}",context.response_id,choice.index),"role":"assistant","status":"completed","content":texts}));
+    }
+    for call in &choice.message.tool_calls {
+        output.push(tool_item(&call.id, &call.name, &call.arguments, "completed", restore)?);
+    }
+    Ok(output)
+}
+
+fn replay_items_output(
+    items: &[Value],
+    context: &ResponsesContext,
+) -> Result<Vec<Value>, CodecError> {
+    items
+        .iter()
+        .map(|item| {
+            let encoded = item["encrypted_content"].as_str().ok_or_else(|| {
+                CodecError::ReasoningReplayInvalid { field: "encrypted_content".to_owned() }
+            })?;
+            let summary = replay_summary(encoded)?;
+            let id = item["id"].as_str().ok_or_else(|| CodecError::ReasoningReplayInvalid {
+                field: "encrypted_content".to_owned(),
+            })?;
+            let mut replay = reasoning_item(id, &summary, None, context);
+            replay["encrypted_content"] = json!(encoded);
+            Ok(replay)
+        })
+        .collect()
+}
+
+fn replay_summary(encoded: &str) -> Result<String, CodecError> {
+    Ok(decode_reasoning_replay_carrier(encoded)?
+        .blocks()
+        .iter()
+        .filter_map(|block| match block {
+            super::ReasoningReplayBlock::Thinking { thinking, .. } => Some(thinking.as_str()),
+            _ => None,
+        })
+        .collect())
 }
 pub(super) fn reasoning_item(
     id: &str,

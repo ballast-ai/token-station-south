@@ -29,7 +29,7 @@ pub struct ReasoningReplayCarrier {
 
 impl ReasoningReplayCarrier {
     #[must_use]
-    pub fn claude(blocks: Vec<ReasoningReplayBlock>) -> Self {
+    pub const fn claude(blocks: Vec<ReasoningReplayBlock>) -> Self {
         Self { blocks }
     }
 
@@ -204,7 +204,7 @@ pub(super) fn carrier_from_message(message: &Message) -> Result<Option<String>, 
                     }
                     ContentPart::Thinking { signature: None, .. } => return Err(invalid()),
                     ContentPart::RedactedThinking { data } => {
-                        blocks.push(ReasoningReplayBlock::RedactedThinking { data: data.clone() })
+                        blocks.push(ReasoningReplayBlock::RedactedThinking { data: data.clone() });
                     }
                     ContentPart::Text { .. } => {
                         blocks.push(ReasoningReplayBlock::TextRef { ordinal: text_ordinal });

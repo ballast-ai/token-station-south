@@ -18,12 +18,7 @@ pub fn chat_request_from_responses(
         return Err(invalid("request", "must be an object"));
     }
     let mut request = ChatRequest::new(required_str(&body["model"], "model")?, Vec::new());
-    if let Some(previous) = body.get("previous_response_id").filter(|v| !v.is_null()) {
-        let previous = required_str(previous, "previous_response_id")?;
-        if previous.is_empty() || previous.len() > 256 {
-            return Err(invalid("previous_response_id", "must contain 1 to 256 bytes"));
-        }
-    }
+    validate_previous_response_id(body)?;
     if let Some(instructions) = body.get("instructions").filter(|v| !v.is_null()) {
         let mut message = Message::text(Role::System, required_str(instructions, "instructions")?);
         message.extensions.insert("responses_transient_instructions".into(), json!(true));
@@ -115,6 +110,16 @@ pub fn chat_request_from_responses(
         Some(v) => v.as_bool().ok_or_else(|| invalid("stream", "must be a boolean"))?,
     };
     Ok(request)
+}
+fn validate_previous_response_id(body: &Value) -> Result<(), CodecError> {
+    let Some(previous) = body.get("previous_response_id").filter(|value| !value.is_null()) else {
+        return Ok(());
+    };
+    let previous = required_str(previous, "previous_response_id")?;
+    if previous.is_empty() || previous.len() > 256 {
+        return Err(invalid("previous_response_id", "must contain 1 to 256 bytes"));
+    }
+    Ok(())
 }
 fn optional_number(body: &Value, field: &str) -> Result<Option<f64>, CodecError> {
     body.get(field)

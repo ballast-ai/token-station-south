@@ -69,7 +69,9 @@ pub fn openai_chat_frames(events: &[StreamEvent], state: &mut OpenAiChatSseState
                 flush_pending(state, &mut chunks);
                 chunks.push(delta(*index, &json!({"reasoning_content": thinking_delta})));
             }
-            StreamEvent::RedactedThinking { .. } => {}
+            StreamEvent::RedactedThinking { .. } | StreamEvent::ThinkingSignatureDelta { .. } => {
+                // No slot on this wire. Dropped here and nowhere else.
+            }
             StreamEvent::Delta { index, content } => {
                 flush_pending(state, &mut chunks);
                 chunks.push(delta(*index, &json!({"content": content})));
@@ -100,9 +102,6 @@ pub fn openai_chat_frames(events: &[StreamEvent], state: &mut OpenAiChatSseState
                 chunks.push(usage_chunk(state.pending_finish.take(), state.usage));
             }
             StreamEvent::Done { .. } => flush_pending(state, &mut chunks),
-            StreamEvent::ThinkingSignatureDelta { .. } => {
-                // No slot on this wire. Dropped here and nowhere else.
-            }
             StreamEvent::Error { .. } => state.terminated = true,
         }
     }

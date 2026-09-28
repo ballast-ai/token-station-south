@@ -11,7 +11,7 @@ use token_station_protocol::{
     ChatResponse, Choice, Content, ContentPart, Extensions, FinishReason, StreamEvent, Usage,
 };
 
-fn carrier(blocks: Vec<ReasoningReplayBlock>) -> ReasoningReplayCarrier {
+const fn carrier(blocks: Vec<ReasoningReplayBlock>) -> ReasoningReplayCarrier {
     ReasoningReplayCarrier::claude(blocks)
 }
 

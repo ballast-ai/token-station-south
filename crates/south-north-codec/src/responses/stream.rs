@@ -85,67 +85,8 @@ impl ResponsesSseState {
         if self.status != StreamStatus::Completed {
             return None;
         }
-        if self.replay_carrier().ok().flatten().is_some() {
-            let choice_index = self.replay_blocks.keys().next().map_or(0, |(index, _)| *index);
-            let mut parts = Vec::new();
-            let mut tool_calls = Vec::new();
-            let mut layout = Vec::new();
-            for entry in &self.replay_layout {
-                match *entry {
-                    ReplayLayout::Reasoning { index, block_index } => {
-                        let block = self.replay_blocks.get(&(index, block_index))?;
-                        layout.push(json!({"kind":"content","ordinal":parts.len()}));
-                        parts.push(match block {
-                            ReplayBlockState::Thinking { thinking, signature } => {
-                                ContentPart::Thinking {
-                                    thinking: thinking.clone(),
-                                    signature: Some(signature.clone()),
-                                }
-                            }
-                            ReplayBlockState::Redacted { data } => {
-                                ContentPart::RedactedThinking { data: data.clone() }
-                            }
-                        });
-                    }
-                    ReplayLayout::Text { position } => {
-                        let slot = self.slots.get(position)?;
-                        layout.push(json!({"kind":"content","ordinal":parts.len()}));
-                        parts.push(ContentPart::Text { text: slot.text.clone() });
-                    }
-                    ReplayLayout::Tool { position } => {
-                        let slot = self.slots.get(position)?;
-                        layout.push(json!({"kind":"tool_call","call_id":slot.call_id}));
-                        tool_calls.push(ToolCall {
-                            id: slot.call_id.clone(),
-                            name: slot.name.clone(),
-                            arguments: slot.text.clone(),
-                        });
-                    }
-                }
-            }
-            let mut extensions = Extensions::new();
-            extensions
-                .insert("reasoning_replay_protocol_family".into(), json!("claude-signed-thinking"));
-            extensions.insert("reasoning_replay_block_layout".into(), json!(layout));
-            return Some(ChatResponse {
-                id: self.context.response_id.clone(),
-                model: self.context.model.clone(),
-                choices: vec![Choice {
-                    index: choice_index,
-                    message: Message {
-                        role: Role::Assistant,
-                        content: Some(Content::Parts(parts)),
-                        tool_calls,
-                        tool_call_id: None,
-                        name: None,
-                        extensions,
-                    },
-                    finish_reason: self.finish.clone(),
-                    stop_sequence: None,
-                }],
-                usage: self.usage,
-                extensions: Extensions::new(),
-            });
+        if let Some(response) = self.replay_terminal_response() {
+            return Some(response);
         }
         let mut messages: BTreeMap<u32, Message> = BTreeMap::new();
         // Preserve the community continuation order: thinking, text, then calls.
@@ -191,6 +132,69 @@ impl ResponsesSseState {
                     stop_sequence: None,
                 })
                 .collect(),
+            usage: self.usage,
+            extensions: Extensions::new(),
+        })
+    }
+    fn replay_terminal_response(&self) -> Option<ChatResponse> {
+        self.replay_carrier().ok().flatten()?;
+        let choice_index = self.replay_blocks.keys().next().map_or(0, |(index, _)| *index);
+        let mut parts = Vec::new();
+        let mut tool_calls = Vec::new();
+        let mut layout = Vec::new();
+        for entry in &self.replay_layout {
+            match *entry {
+                ReplayLayout::Reasoning { index, block_index } => {
+                    let block = self.replay_blocks.get(&(index, block_index))?;
+                    layout.push(json!({"kind":"content","ordinal":parts.len()}));
+                    parts.push(match block {
+                        ReplayBlockState::Thinking { thinking, signature } => {
+                            ContentPart::Thinking {
+                                thinking: thinking.clone(),
+                                signature: Some(signature.clone()),
+                            }
+                        }
+                        ReplayBlockState::Redacted { data } => {
+                            ContentPart::RedactedThinking { data: data.clone() }
+                        }
+                    });
+                }
+                ReplayLayout::Text { position } => {
+                    let slot = self.slots.get(position)?;
+                    layout.push(json!({"kind":"content","ordinal":parts.len()}));
+                    parts.push(ContentPart::Text { text: slot.text.clone() });
+                }
+                ReplayLayout::Tool { position } => {
+                    let slot = self.slots.get(position)?;
+                    layout.push(json!({"kind":"tool_call","call_id":slot.call_id}));
+                    tool_calls.push(ToolCall {
+                        id: slot.call_id.clone(),
+                        name: slot.name.clone(),
+                        arguments: slot.text.clone(),
+                    });
+                }
+            }
+        }
+        let mut extensions = Extensions::new();
+        extensions
+            .insert("reasoning_replay_protocol_family".into(), json!("claude-signed-thinking"));
+        extensions.insert("reasoning_replay_block_layout".into(), json!(layout));
+        Some(ChatResponse {
+            id: self.context.response_id.clone(),
+            model: self.context.model.clone(),
+            choices: vec![Choice {
+                index: choice_index,
+                message: Message {
+                    role: Role::Assistant,
+                    content: Some(Content::Parts(parts)),
+                    tool_calls,
+                    tool_call_id: None,
+                    name: None,
+                    extensions,
+                },
+                finish_reason: self.finish.clone(),
+                stop_sequence: None,
+            }],
             usage: self.usage,
             extensions: Extensions::new(),
         })
@@ -472,82 +476,13 @@ fn render(
                 state.emit("response.output_text.delta",json!({"item_id":item_id,"output_index":output_index,"content_index":0,"delta":content}),&mut out)?;
             }
             StreamEvent::ThinkingDelta { index, block_index, thinking_delta } => {
-                state.ensure_replay_block_order(*index, *block_index)?;
-                match state.replay_blocks.entry((*index, *block_index)) {
-                    std::collections::btree_map::Entry::Vacant(entry) => {
-                        entry.insert(ReplayBlockState::Thinking {
-                            thinking: thinking_delta.clone(),
-                            signature: String::new(),
-                        });
-                    }
-                    std::collections::btree_map::Entry::Occupied(mut entry) => {
-                        match entry.get_mut() {
-                            ReplayBlockState::Thinking { thinking, .. } => {
-                                thinking.push_str(thinking_delta)
-                            }
-                            ReplayBlockState::Redacted { .. } => {
-                                return Err(ResponsesSseState::replay_invalid());
-                            }
-                        }
-                    }
-                }
-                let (position, new) = state.slot(1, *index)?;
-                let item_id = state.slots[position].id.clone();
-                let output_index = state.slots[position].index;
-                if new {
-                    state.emit("response.output_item.added",json!({"output_index":output_index,"item":{"type":"reasoning","id":item_id,"status":"in_progress","summary":[]}}),&mut out)?;
-                    if state.context.reasoning == ResponsesReasoningMode::Summary {
-                        state.emit("response.reasoning_summary_part.added",json!({"item_id":item_id,"output_index":output_index,"summary_index":0,"part":{"type":"summary_text","text":""}}),&mut out)?;
-                    }
-                }
-                state.slots[position].text.push_str(thinking_delta);
-                let (raw, field) = if state.context.reasoning == ResponsesReasoningMode::RawContent
-                {
-                    ("response.reasoning_text.delta", "content_index")
-                } else {
-                    ("response.reasoning_summary_text.delta", "summary_index")
-                };
-                let mut payload =
-                    json!({"item_id":item_id,"output_index":output_index,"delta":thinking_delta});
-                payload[field] = json!(0);
-                state.emit(raw, payload, &mut out)?;
+                render_thinking_delta(state, *index, *block_index, thinking_delta, &mut out)?;
             }
             StreamEvent::ThinkingSignatureDelta { index, block_index, signature_delta } => {
-                let Some(block) = state.replay_blocks.get_mut(&(*index, *block_index)) else {
-                    return Err(ResponsesSseState::replay_invalid());
-                };
-                let ReplayBlockState::Thinking { signature, .. } = block else {
-                    return Err(ResponsesSseState::replay_invalid());
-                };
-                signature.push_str(signature_delta);
-                let (position, new) = state.slot(1, *index)?;
-                if new {
-                    let slot = &state.slots[position];
-                    let payload = json!({"output_index":slot.index,"item":{"type":"reasoning","id":slot.id,"status":"in_progress","summary":[]}});
-                    state.emit("response.output_item.added", payload, &mut out)?;
-                }
-                if state.context.render_legacy_encrypted_reasoning {
-                    state.slots[position].signature.push_str(signature_delta);
-                }
+                render_signature_delta(state, *index, *block_index, signature_delta, &mut out)?;
             }
             StreamEvent::RedactedThinking { index, block_index, data } => {
-                state.ensure_replay_block_order(*index, *block_index)?;
-                if state
-                    .replay_blocks
-                    .insert(
-                        (*index, *block_index),
-                        ReplayBlockState::Redacted { data: data.clone() },
-                    )
-                    .is_some()
-                {
-                    return Err(ResponsesSseState::replay_invalid());
-                }
-                let (position, new) = state.slot(1, *index)?;
-                if new {
-                    let slot = &state.slots[position];
-                    let payload = json!({"output_index":slot.index,"item":{"type":"reasoning","id":slot.id,"status":"in_progress","summary":[]}});
-                    state.emit("response.output_item.added", payload, &mut out)?;
-                }
+                render_redacted(state, *index, *block_index, data, &mut out)?;
             }
             StreamEvent::ToolCallDelta { index, id, name, arguments_delta } => {
                 render_tool(state, *index, id.as_ref(), name.as_ref(), arguments_delta, &mut out)?;
@@ -584,6 +519,97 @@ fn render(
         }
     }
     Ok(out)
+}
+
+fn render_thinking_delta(
+    state: &mut ResponsesSseState,
+    index: u32,
+    block_index: u32,
+    thinking_delta: &str,
+    out: &mut Vec<ResponsesFrame>,
+) -> Result<(), CodecError> {
+    state.ensure_replay_block_order(index, block_index)?;
+    match state.replay_blocks.entry((index, block_index)) {
+        std::collections::btree_map::Entry::Vacant(entry) => {
+            entry.insert(ReplayBlockState::Thinking {
+                thinking: thinking_delta.to_owned(),
+                signature: String::new(),
+            });
+        }
+        std::collections::btree_map::Entry::Occupied(mut entry) => match entry.get_mut() {
+            ReplayBlockState::Thinking { thinking, .. } => thinking.push_str(thinking_delta),
+            ReplayBlockState::Redacted { .. } => {
+                return Err(ResponsesSseState::replay_invalid());
+            }
+        },
+    }
+    let (position, new) = state.slot(1, index)?;
+    let item_id = state.slots[position].id.clone();
+    let output_index = state.slots[position].index;
+    if new {
+        state.emit("response.output_item.added",json!({"output_index":output_index,"item":{"type":"reasoning","id":item_id,"status":"in_progress","summary":[]}}),out)?;
+        if state.context.reasoning == ResponsesReasoningMode::Summary {
+            state.emit("response.reasoning_summary_part.added",json!({"item_id":item_id,"output_index":output_index,"summary_index":0,"part":{"type":"summary_text","text":""}}),out)?;
+        }
+    }
+    state.slots[position].text.push_str(thinking_delta);
+    let (raw, field) = if state.context.reasoning == ResponsesReasoningMode::RawContent {
+        ("response.reasoning_text.delta", "content_index")
+    } else {
+        ("response.reasoning_summary_text.delta", "summary_index")
+    };
+    let mut payload = json!({"item_id":item_id,"output_index":output_index,"delta":thinking_delta});
+    payload[field] = json!(0);
+    state.emit(raw, payload, out)
+}
+
+fn render_signature_delta(
+    state: &mut ResponsesSseState,
+    index: u32,
+    block_index: u32,
+    signature_delta: &str,
+    out: &mut Vec<ResponsesFrame>,
+) -> Result<(), CodecError> {
+    let Some(ReplayBlockState::Thinking { signature, .. }) =
+        state.replay_blocks.get_mut(&(index, block_index))
+    else {
+        return Err(ResponsesSseState::replay_invalid());
+    };
+    signature.push_str(signature_delta);
+    let (position, new) = state.slot(1, index)?;
+    if new {
+        let slot = &state.slots[position];
+        let payload = json!({"output_index":slot.index,"item":{"type":"reasoning","id":slot.id,"status":"in_progress","summary":[]}});
+        state.emit("response.output_item.added", payload, out)?;
+    }
+    if state.context.render_legacy_encrypted_reasoning {
+        state.slots[position].signature.push_str(signature_delta);
+    }
+    Ok(())
+}
+
+fn render_redacted(
+    state: &mut ResponsesSseState,
+    index: u32,
+    block_index: u32,
+    data: &str,
+    out: &mut Vec<ResponsesFrame>,
+) -> Result<(), CodecError> {
+    state.ensure_replay_block_order(index, block_index)?;
+    if state
+        .replay_blocks
+        .insert((index, block_index), ReplayBlockState::Redacted { data: data.to_owned() })
+        .is_some()
+    {
+        return Err(ResponsesSseState::replay_invalid());
+    }
+    let (position, new) = state.slot(1, index)?;
+    if new {
+        let slot = &state.slots[position];
+        let payload = json!({"output_index":slot.index,"item":{"type":"reasoning","id":slot.id,"status":"in_progress","summary":[]}});
+        state.emit("response.output_item.added", payload, out)?;
+    }
+    Ok(())
 }
 
 fn render_tool(

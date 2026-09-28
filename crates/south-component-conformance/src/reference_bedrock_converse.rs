@@ -260,61 +260,7 @@ fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<Value>, Vec<
             }
             Role::Assistant => {
                 flush_tool_results(&mut pending_results, &mut messages);
-                let replay = message
-                    .extensions
-                    .get("reasoning_replay_protocol_family")
-                    .and_then(Value::as_str)
-                    == Some("claude-signed-thinking");
-                let mut content = text_blocks(message.content.as_ref(), replay);
-                if let Some(layout) = message
-                    .extensions
-                    .get("reasoning_replay_block_layout")
-                    .and_then(Value::as_array)
-                {
-                    let parts = match message.content.as_ref() {
-                        Some(Content::Parts(parts)) => parts.as_slice(),
-                        _ => &[],
-                    };
-                    content.clear();
-                    for entry in layout {
-                        match entry["kind"].as_str() {
-                            Some("content") => {
-                                let ordinal = entry["ordinal"]
-                                    .as_u64()
-                                    .and_then(|value| usize::try_from(value).ok())
-                                    .ok_or_else(|| capability("invalid reasoning replay layout"))?;
-                                let block = part_to_block(
-                                    parts.get(ordinal).ok_or_else(|| {
-                                        capability("invalid reasoning replay content reference")
-                                    })?,
-                                    true,
-                                )?
-                                .ok_or_else(|| capability("unsupported reasoning replay block"))?;
-                                content.push(block);
-                            }
-                            Some("tool_call") => {
-                                let id = entry["call_id"].as_str().ok_or_else(|| {
-                                    capability("invalid reasoning replay tool reference")
-                                })?;
-                                let call = message
-                                    .tool_calls
-                                    .iter()
-                                    .find(|call| call.id == id)
-                                    .ok_or_else(|| {
-                                        capability("invalid reasoning replay tool reference")
-                                    })?;
-                                content.push(tool_use_block(call)?);
-                                announced_calls.push(&call.id);
-                            }
-                            _ => return Err(capability("invalid reasoning replay layout")),
-                        }
-                    }
-                } else {
-                    for call in &message.tool_calls {
-                        content.push(tool_use_block(call)?);
-                        announced_calls.push(&call.id);
-                    }
-                }
+                let content = assistant_content(message, &mut announced_calls)?;
                 // Bedrock 400s on an assistant turn whose content array is
                 // empty, so an empty one is dropped rather than sent.
                 if !content.is_empty() {
@@ -326,6 +272,61 @@ fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<Value>, Vec<
     // A trailing tool result with no user turn after it: unusual, but legal.
     flush_tool_results(&mut pending_results, &mut messages);
     Ok((system, messages))
+}
+
+fn assistant_content<'a>(
+    message: &'a Message,
+    announced_calls: &mut Vec<&'a str>,
+) -> ComponentResultV1<Vec<Value>> {
+    let replay = message.extensions.get("reasoning_replay_protocol_family").and_then(Value::as_str)
+        == Some("claude-signed-thinking");
+    let mut content = text_blocks(message.content.as_ref(), replay);
+    let Some(layout) =
+        message.extensions.get("reasoning_replay_block_layout").and_then(Value::as_array)
+    else {
+        for call in &message.tool_calls {
+            content.push(tool_use_block(call)?);
+            announced_calls.push(&call.id);
+        }
+        return Ok(content);
+    };
+    let parts = match message.content.as_ref() {
+        Some(Content::Parts(parts)) => parts.as_slice(),
+        _ => &[],
+    };
+    content.clear();
+    for entry in layout {
+        match entry["kind"].as_str() {
+            Some("content") => {
+                let ordinal = entry["ordinal"]
+                    .as_u64()
+                    .and_then(|value| usize::try_from(value).ok())
+                    .ok_or_else(|| capability("invalid reasoning replay layout"))?;
+                let block = part_to_block(
+                    parts
+                        .get(ordinal)
+                        .ok_or_else(|| capability("invalid reasoning replay content reference"))?,
+                    true,
+                )?
+                .ok_or_else(|| capability("unsupported reasoning replay block"))?;
+                content.push(block);
+            }
+            Some("tool_call") => {
+                let id = entry["call_id"]
+                    .as_str()
+                    .ok_or_else(|| capability("invalid reasoning replay tool reference"))?;
+                let call = message
+                    .tool_calls
+                    .iter()
+                    .find(|call| call.id == id)
+                    .ok_or_else(|| capability("invalid reasoning replay tool reference"))?;
+                content.push(tool_use_block(call)?);
+                announced_calls.push(&call.id);
+            }
+            _ => return Err(capability("invalid reasoning replay layout")),
+        }
+    }
+    Ok(content)
 }
 
 /// A user turn's content blocks.
