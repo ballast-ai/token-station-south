@@ -23,6 +23,7 @@ community policy      enterprise policy
 
 | Crate | Current status and ownership |
 | --- | --- |
+| `south-north-codec` | OpenAI Chat、Anthropic Messages 与 Responses 北向纯映射；typed 与 JSON façade 同源，宿主传入时间、身份及每流状态，准入、计费和 continuation 留宿主 |
 | `south-task-core` | 候选：独立 Rust 版本 0.1.0，无生产依赖；共享提交/观察/CAS 赢家回读/等待/取消顺序，宿主保留政策与复合原子效果 |
 | `south-task-conformance` | 候选：独立 Rust 版本 0.1.0，无生产依赖；公共原子效果故障套件，宿主适配真实 SQLite / PG 事务，无资金宿主明确不适用 |
 | `south-contracts` | Implemented bounded HTTP (JSON POST, body-less GET, and multipart POST request shapes, and a buffered binary response beside the UTF-8 one), Bearer, sanctioned header-secret, and combined Bearer-plus-header-secret auth, stable error, byte-streaming, and closed quota metadata contracts, plus the sanctioned controlled query and controlled user-agent declarations |
@@ -31,7 +32,7 @@ community policy      enterprise policy
 | `south-provider-conformance` | Implemented immutable provider-call, provider-stream, provider-quota-metadata, header-auth, controlled-query, controlled-user-agent, provider-get, provider-multipart, and provider-binary v1 fixtures |
 | `south-testkit` | Implemented assembled-executor conformance runners and reference executors for all nine suites, plus the owned raw-call, host-signed raw-call, raw-GET and raw-multipart builders for host tests |
 | `south-provider-api` | Implemented v2 provider component ABI: WIT package `token-station:adapter@2.0.0` (world `provider-adapter-v2`) plus the gate-① manifest schema with the seven-field compatibility tuple; depends on no other south crate by design |
-| `south-component-conformance` | Implemented gates ① and ② (package admission + `south.provider-component.v1` behavior suite) with the native `provider-openai-compatible`, `provider-anthropic` and `provider-gemini` references and a frozen fixture pack each; the one sanctioned typed consumer of the Canonical IR, pinned to a kernel distribution tag |
+| `south-component-conformance` | Implemented gates ① and ② (package admission + `south.provider-component.v1` behavior suite) with the native `provider-openai-compatible`, `provider-anthropic` and `provider-gemini` references and a frozen fixture pack each; a sanctioned typed consumer of the Canonical IR, pinned to a kernel distribution tag |
 | `south-provider-runtime` | Implemented sandboxed component execution: gated loading, locked-down WASI, memory/deadline/payload/stream bounds, `host.sign` behind the manifest's secret allowlist — JSON-face only, never an IR consumer; the typed seam over it is the conformance crate's `sandbox` feature |
 
 ## Removed ownership markers
@@ -66,6 +67,7 @@ south-component-conformance --------------> south-provider-api
 south-component-conformance --------------> token-station-protocol (kernel tag)
 south-component-conformance (sandbox) ----> south-provider-runtime
 south-provider-runtime -------------------> south-provider-api
+south-north-codec ------------------------> token-station-protocol (kernel tag)
 ```
 
 These edges are direct Cargo dependencies. They are one-way and acyclic. Only the reqwest transport
@@ -74,7 +76,8 @@ typed seam lives behind the conformance crate's `sandbox` feature so wasm guests
 the conformance crate for the abi shims, never pull the engine into their build). No South crate owns a database, cache, migration directory,
 host repository dependency, or credential source. The kernel-tag edge is the S0-sanctioned
 exception to IR independence: conformance gate ② judges typed decode through the distribution
-channel at a fixed revision; no production crate may gain that edge.
+channel at a fixed revision; the shared north codec is the separately sanctioned pure mapping
+consumer at that same revision. Other crates may not gain that edge.
 
 ## Host-owned concerns
 
