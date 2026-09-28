@@ -1,27 +1,18 @@
 {
-  "provider_config": {
-    "provider": "gmi-image",
-    "base_url": "https://console.gmi.example",
-    "auth": "provider_api_key"
-  },
-  "locator": {
-    "schema_version": 1,
-    "route": "api/v1/ie/requestqueue/apikey/requests"
-  },
   "observation": {
     "state": "succeeded",
     "artifacts": {
       "kind": "urls",
       "items": [
         {
-          "url": "https://cdn.gmi.example/x.png?sig=private",
+          "url": "https://ark-cdn.example/l.png",
           "id": null,
           "duration": null,
           "fetch_with_credential": false,
-          "role": null
+          "role": "last_frame"
         },
         {
-          "url": "https://cdn.gmi.example/y.png",
+          "url": "https://ark-cdn.example/v.mp4?sig=private",
           "id": null,
           "duration": null,
           "fetch_with_credential": false,
@@ -32,8 +23,15 @@
     "usage": {
       "seconds": null,
       "milliunits": null,
-      "tokens": null,
-      "outputs": 2
+      "tokens": 108900,
+      "outputs": 1
     }
+  },
+  "context": {
+    "task_id": "host-1",
+    "created": 123,
+    "provider": "byteplus",
+    "model": "byteplus/seedance",
+    "upstream_task_id": "cgt-2025-original"
   }
 }

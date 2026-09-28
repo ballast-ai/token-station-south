@@ -278,3 +278,17 @@ fn kling_immutable_paths_retire_the_published_task_kling_v2_identity() {
     .unwrap();
     assert_ne!(manifest.version, "0.31.0", "a changed package cannot reuse its published identity");
 }
+
+/// Reporting the upstream's last frame as a `last_frame` artifact (task contract 7) changes what
+/// `task-byteplus-v2` observes and renders, so the published 0.35.0 identity retires with it.
+#[test]
+fn byteplus_last_frame_retires_the_published_task_byteplus_v2_identity() {
+    let manifest: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(
+            repo_root().join("components").join("task-byteplus-v2").join("manifest.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_ne!(manifest.version, "0.35.0", "a changed package cannot reuse its published identity");
+}

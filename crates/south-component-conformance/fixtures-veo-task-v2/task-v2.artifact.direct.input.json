@@ -17,13 +17,15 @@
           "url": "https://generativelanguage.example/v1beta/files/a:download?alt=media",
           "id": null,
           "duration": null,
-          "fetch_with_credential": true
+          "fetch_with_credential": true,
+          "role": null
         },
         {
           "url": "https://generativelanguage.example/v1beta/files/b:download?alt=media",
           "id": null,
           "duration": null,
-          "fetch_with_credential": true
+          "fetch_with_credential": true,
+          "role": null
         }
       ]
     },
