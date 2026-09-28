@@ -20,13 +20,15 @@
 //! The acceptance proves that a family *within* the task-adapter-v2 contract
 //! needs no host rebuild, not that any family can be served. So this wire only
 //! uses what the ABI already expresses: one submit, polling, artifact URLs in
-//! the observation itself (no `artifact_fetch`), and usage in seconds.
+//! the observation itself (no `artifact_fetch`), and the task contract 6 facts
+//! (see "Contract 6 facts" below).
 //!
 //! # Input
 //!
 //! The task request is the host's normalized request, opaque to the ABI. This
-//! component reads `prompt` (required), `model` and `duration` (optional,
-//! seconds, default 4) and ignores everything else.
+//! component reads `prompt` (required), `model`, `duration` (optional,
+//! seconds, default 4), `n` (optional output count) and `image` (optional
+//! input image, forwarded verbatim) and ignores everything else.
 //!
 //! # Rogue modes, keyed by the routed model name
 //!
@@ -56,6 +58,33 @@
 //!   no ticket) — the component answers `accepted-terminal` with that
 //!   observation. Proves a host settles an upstream that finishes at submit,
 //!   instead of holding the reservation for a job it can never poll.
+//!
+//! # Contract 6 facts (token-station-server P13 DoD #3)
+//!
+//! Each task contract 6 fact has a switch here, so a host can prove it honours
+//! the fact without a rebuild. Wire-driven facts are read from the request or
+//! the upstream and stay null when absent — absent and zero are different
+//! facts, and the existing scenarios, which send none of them, keep their
+//! contract 5 shape:
+//!
+//! - request `n` → `request_estimate.requested_outputs` (count settlement; an
+//!   image-modality host prices per image by it).
+//! - upstream `t09_billed_outputs` → `usage.outputs`; `t09_billed_tokens` →
+//!   `usage.tokens`.
+//! - a reel with `"sealed": true` → `fetch_with_credential: true`: the host
+//!   must fetch it with the task's pinned credential and never hand the raw
+//!   URL to the client.
+//! - request `image` → `t09_job.still`, verbatim. A host that prefetches input
+//!   images hands the component a `data:` URI, and the upstream sees it.
+//!
+//! Model-keyed, because the estimate and the body layout are statements the
+//! component makes, not facts the wire reports:
+//!
+//! - model `token-rate` — `tokens_per_second` is [`TOKEN_RATE`] (token
+//!   metering).
+//! - model `pinned-body` — declares `t09_job.reel_seconds` and
+//!   `t09_job.reel_model` immutable (every other model declares nothing,
+//!   `null`), so a host may inject request extras anywhere else.
 
 wit_bindgen::generate!({
     path: "../../../../south-provider-api/wit/task-adapter-v2.wit",
@@ -76,6 +105,14 @@ const API_VERSION: &str = "task-adapter-v2";
 const ROUTE: &str = "t09/render-jobs";
 const DEFAULT_SECONDS: f64 = 4.0;
 const MAX_REELS: usize = 16;
+
+/// The upstream model that reports a token estimate, and its rate.
+const TOKEN_RATE_MODEL: &str = "token-rate";
+const TOKEN_RATE: i64 = 1_000;
+/// The upstream model that declares immutable body paths, and the paths: the
+/// fields the estimate is derived from.
+const PINNED_BODY_MODEL: &str = "pinned-body";
+const PINNED_BODY_PATHS: [&str; 2] = ["t09_job.reel_seconds", "t09_job.reel_model"];
 
 struct T09Canary;
 
@@ -190,9 +227,13 @@ fn observation_of(body: &Value) -> Value {
                 .map(|reels| {
                     reels
                         .iter()
-                        .filter_map(|reel| reel.get("href").and_then(Value::as_str))
-                        .filter(|href| !href.is_empty())
-                        .map(|href| json!({ "url": href, "id": null, "duration": null, "fetch_with_credential": false }))
+                        .filter_map(|reel| {
+                            let href = reel.get("href").and_then(Value::as_str)?;
+                            let sealed = reel.get("sealed").and_then(Value::as_bool) == Some(true);
+                            Some((href, sealed))
+                        })
+                        .filter(|(href, _)| !href.is_empty())
+                        .map(|(href, sealed)| json!({ "url": href, "id": null, "duration": null, "fetch_with_credential": sealed }))
                         .collect()
                 })
                 .unwrap_or_default();
@@ -201,10 +242,12 @@ fn observation_of(body: &Value) -> Value {
             }
             // Absent and zero are different facts: a missing meter stays null.
             let billed = body.get("t09_billed_seconds").and_then(seconds);
+            let tokens = body.get("t09_billed_tokens").and_then(Value::as_i64).filter(|t| *t >= 0);
+            let outputs = body.get("t09_billed_outputs").and_then(Value::as_u64);
             json!({
                 "state": "succeeded",
                 "artifacts": { "kind": "urls", "items": reels },
-                "usage": { "seconds": billed, "milliunits": null, "tokens": null, "outputs": null },
+                "usage": { "seconds": billed, "milliunits": null, "tokens": tokens, "outputs": outputs },
             })
         }
         Some("spoiled") => json!({
@@ -257,6 +300,32 @@ impl Guest for T09Canary {
             })?,
             None => DEFAULT_SECONDS,
         };
+        let requested_outputs = match request.get("n").filter(|n| !n.is_null()) {
+            Some(raw) => {
+                let n = raw.as_u64().filter(|n| (1..=MAX_REELS as u64).contains(n)).ok_or_else(
+                    || {
+                        error_envelope(
+                            "invalid_request",
+                            400,
+                            "t09 canary: n must be an integer between 1 and 16",
+                        )
+                    },
+                )?;
+                json!(n)
+            }
+            None => Value::Null,
+        };
+        let still = match request.get("image").filter(|i| !i.is_null()) {
+            Some(Value::String(image)) => Some(image.clone()),
+            Some(_) => {
+                return Err(error_envelope(
+                    "invalid_request",
+                    400,
+                    "t09 canary: image must be a string",
+                ))
+            }
+            None => None,
+        };
         let ticket = minted.get("task_id").and_then(Value::as_str).ok_or_else(|| {
             error_envelope("internal", 500, "t09 canary: host-minted task_id missing")
         })?;
@@ -268,7 +337,12 @@ impl Guest for T09Canary {
             _ => (json!(reel_seconds), Value::Null),
         };
 
-        let body = json!({
+        let tokens_per_second =
+            if model == TOKEN_RATE_MODEL { json!(TOKEN_RATE) } else { Value::Null };
+        let immutable_body_paths =
+            if model == PINNED_BODY_MODEL { json!(PINNED_BODY_PATHS) } else { Value::Null };
+
+        let mut body = json!({
             "t09_job": {
                 "reel_model": model,
                 "storyboard": prompt,
@@ -276,6 +350,9 @@ impl Guest for T09Canary {
                 "ticket": ticket,
             }
         });
+        if let Some(still) = still {
+            body["t09_job"]["still"] = json!(still);
+        }
         Ok(json!({
             "descriptor": descriptor("POST", format!("{base}/{ROUTE}"), Some(body), &slot, model),
             "locator": { "schema_version": 1, "route": ROUTE },
@@ -287,11 +364,11 @@ impl Guest for T09Canary {
                 "milliunits_per_second": milliunits_per_second,
                 "resolution": null,
                 "input_image_count": null,
-                "tokens_per_second": null,
-                "requested_outputs": null,
+                "tokens_per_second": tokens_per_second,
+                "requested_outputs": requested_outputs,
             },
-            // Task contract 6: this wire makes no statement about immutable body paths.
-            "immutable_body_paths": null,
+            // Task contract 6: null (no statement) except in the `pinned-body` mode.
+            "immutable_body_paths": immutable_body_paths,
         })
         .to_string())
     }
