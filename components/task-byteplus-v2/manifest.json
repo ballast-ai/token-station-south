@@ -1,6 +1,6 @@
 {
   "name": "task-byteplus-v2",
-  "version": "0.35.0",
+  "version": "0.36.1",
   "api_version": "task-adapter-v2",
   "providers": [
     "byteplus-video"
@@ -25,10 +25,10 @@
     "fixtures": "fixtures-byteplus-task-v2/"
   },
   "compatibility": {
-    "ir_schema_id": "token-station-protocol@0.3.0/v0.2.0",
-    "kernel_version": "0.2.0",
-    "kernel_revision": "72458e3a11fe157f9ac04818c44b62a3dd2cb09c",
+    "ir_schema_id": "token-station-protocol@0.4.0/v0.3.0",
+    "kernel_version": "0.3.0",
+    "kernel_revision": "6822aab1dea54ef646cb2206595cd4955ff9764a",
     "wit_package": "token-station:task-adapter@2.0.0",
-    "south_runtime": "0.37.0"
+    "south_runtime": "0.39.0"
   }
 }

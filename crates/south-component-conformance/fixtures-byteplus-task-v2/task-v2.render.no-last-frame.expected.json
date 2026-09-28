@@ -5,8 +5,7 @@
   "task_id": "cgt-2025-original",
   "data": [
     {
-      "url": "https://ark-cdn.example/v.mp4?sig=private",
-      "last_frame_url": "https://ark-cdn.example/l.png"
+      "url": "https://ark-cdn.example/v.mp4?sig=private"
     }
   ]
 }

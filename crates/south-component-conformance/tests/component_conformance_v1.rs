@@ -30,7 +30,7 @@ fn the_manifest_signed_header_vocabulary_is_the_host_halfs() {
 fn reference_manifest() -> ComponentManifestV1 {
     ComponentManifestV1 {
         name: "provider-openai-compatible".to_owned(),
-        version: "2.1.3".to_owned(),
+        version: "2.1.4".to_owned(),
         api_version: PROVIDER_WORLD.to_owned(),
         providers: vec!["openai-compatible".to_owned(), "azure-openai-v1".to_owned()],
         capabilities: BTreeSet::from([
@@ -51,9 +51,9 @@ fn reference_manifest() -> ComponentManifestV1 {
             fixtures: "fixtures/".to_owned(),
         },
         compatibility: CompatibilityDeclarationV1 {
-            ir_schema_id: "token-station-protocol@0.3.0/v0.2.0".to_owned(),
-            kernel_version: "0.2.0".to_owned(),
-            kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb09c".to_owned(),
+            ir_schema_id: "token-station-protocol@0.4.0/v0.3.0".to_owned(),
+            kernel_version: "0.3.0".to_owned(),
+            kernel_revision: "6822aab1dea54ef646cb2206595cd4955ff9764a".to_owned(),
             wit_package: WIT_PACKAGE.to_owned(),
             south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
         },
@@ -143,15 +143,15 @@ fn gate_one_rejects_a_repackaged_identity() {
 fn the_tuple_handshake_refuses_any_mismatch_in_tuple_order() {
     let manifest = reference_manifest();
     let expectations = HostExpectationsV1 {
-        ir_schema_id: "token-station-protocol@0.3.0/v0.2.0".to_owned(),
-        kernel_version: "0.2.0".to_owned(),
-        kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb09c".to_owned(),
+        ir_schema_id: "token-station-protocol@0.4.0/v0.3.0".to_owned(),
+        kernel_version: "0.3.0".to_owned(),
+        kernel_revision: "6822aab1dea54ef646cb2206595cd4955ff9764a".to_owned(),
         south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
     };
     assert_eq!(compatibility_matches(&manifest, &expectations), Ok(()));
 
     let mut newer_ir = expectations.clone();
-    newer_ir.ir_schema_id = "token-station-protocol@0.4.0/v0.3.0".to_owned();
+    newer_ir.ir_schema_id = "token-station-protocol@99.99.99/v99.99.99".to_owned();
     assert!(matches!(
         compatibility_matches(&manifest, &newer_ir),
         Err(CompatibilityMismatchV1::IrSchema { .. })

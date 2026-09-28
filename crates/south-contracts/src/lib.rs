@@ -7,8 +7,8 @@ mod task_v2;
 
 pub use task_v2::{
     MAX_IMMUTABLE_BODY_PATH_BYTES, MAX_IMMUTABLE_BODY_PATHS, TASK_LOCATOR_SCHEMA_VERSION,
-    TaskArtifactRefV2, TaskArtifactV2, TaskContractErrorV2, TaskLocatorV2, TaskObservationV2,
-    TaskRenderContextV2, TaskRequestEstimateV2, TaskScalarV2, TaskUsageFactsV2,
+    TaskArtifactRefV2, TaskArtifactRoleV2, TaskArtifactV2, TaskContractErrorV2, TaskLocatorV2,
+    TaskObservationV2, TaskRenderContextV2, TaskRequestEstimateV2, TaskScalarV2, TaskUsageFactsV2,
     validate_immutable_body_paths,
 };
 

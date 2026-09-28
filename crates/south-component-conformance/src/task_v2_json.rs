@@ -3,8 +3,8 @@ use crate::{PreparedTaskV2, SubmitOutcomeV2};
 use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 use south_contracts::{
-    MAX_ARTIFACT_REF_BYTES, MAX_JSON_REQUEST_BODY_BYTES, TaskArtifactRefV2, TaskArtifactV2,
-    TaskFailureKindV1, TaskLocatorV2, TaskObservationV2, TaskRenderContextV2,
+    MAX_ARTIFACT_REF_BYTES, MAX_JSON_REQUEST_BODY_BYTES, TaskArtifactRefV2, TaskArtifactRoleV2,
+    TaskArtifactV2, TaskFailureKindV1, TaskLocatorV2, TaskObservationV2, TaskRenderContextV2,
     TaskRequestEstimateV2, TaskScalarV2, TaskUsageFactsV2,
 };
 use token_station_protocol::{ErrorEnvelope, HttpRequestDescriptor};
@@ -83,6 +83,9 @@ struct ArtifactWire {
     duration: Value,
     /// Contract 6 (D5): required, never defaulted.
     fetch_with_credential: bool,
+    /// Contract 7: required key; `null` is the primary role, a word names a companion role.
+    #[serde(deserialize_with = "explicit_optional")]
+    role: Option<String>,
 }
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
@@ -108,6 +111,9 @@ impl ArtifactsWire {
                             scalar_from_json(&item.duration)?,
                         )
                         .map_err(|error| error.to_string())?;
+                        let role = TaskArtifactRoleV2::from_word(item.role.as_deref())
+                            .map_err(|error| error.to_string())?;
+                        let artifact = artifact.with_role(role);
                         Ok(if item.fetch_with_credential {
                             artifact.with_bound_credential()
                         } else {
@@ -188,7 +194,7 @@ pub fn observation_json(observation: &TaskObservationV2) -> Result<Value, String
                 TaskArtifactRefV2::None => json!({"kind":"none"}),
                 TaskArtifactRefV2::FileId(id) => json!({"kind":"file-id","file_id":id}),
                 TaskArtifactRefV2::Urls(items) => {
-                    let items=items.iter().map(|item|Ok(json!({"url":item.url(),"id":scalar_json(item.id())?,"duration":scalar_json(item.duration())?,"fetch_with_credential":item.fetch_with_credential()})))
+                    let items=items.iter().map(|item|Ok(json!({"url":item.url(),"id":scalar_json(item.id())?,"duration":scalar_json(item.duration())?,"fetch_with_credential":item.fetch_with_credential(),"role":item.role().word()})))
                         .collect::<Result<Vec<Value>,String>>()?;
                     json!({"kind":"urls","items":items})
                 }

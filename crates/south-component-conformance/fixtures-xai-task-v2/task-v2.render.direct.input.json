@@ -8,7 +8,8 @@
           "url": "https://vidgen.x.example/v.mp4?sig=private",
           "id": null,
           "duration": 6,
-          "fetch_with_credential": false
+          "fetch_with_credential": false,
+          "role": null
         }
       ]
     },

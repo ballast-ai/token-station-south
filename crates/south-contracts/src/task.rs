@@ -31,8 +31,11 @@ use thiserror::Error;
 /// Version five added normalized request input facts. Version six adds the token rate and the
 /// requested output count to the request estimate, delivered outputs to usage, the bound-credential
 /// fetch flag to URL artifacts and immutable request-body paths to prepared tasks
-/// (docs/design/2026-09-27-task-contract-v6-facts.md). Every v1 type remains unchanged.
-pub const TASK_CONTRACT_VERSION: u16 = 6;
+/// (docs/design/2026-09-27-task-contract-v6-facts.md). Version seven gives every URL artifact a
+/// role, so a component can report a companion such as a video's last frame beside the primary
+/// output without the host counting or delivering it
+/// (docs/design/2026-09-28-task-contract-v7-artifact-role.md). Every v1 type remains unchanged.
+pub const TASK_CONTRACT_VERSION: u16 = 7;
 
 /// The maximum byte length of a host-minted task identifier.
 pub const MAX_TASK_ID_BYTES: usize = 128;

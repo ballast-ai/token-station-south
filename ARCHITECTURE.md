@@ -167,17 +167,26 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-该库独立 Rust 版本为 0.1.0；八个库与组件运行时随本次发布为 v0.36.0。
+该库独立 Rust 版本为 0.1.0；八个库与组件运行时当前为 v0.39.0。
+**v0.39.0**：消费 kernel v0.3.0 / protocol 0.4.0，并以有界 carrier 在 Responses、
+Anthropic Messages 与 Bedrock Converse 间保留 Claude reasoning 块身份、签名、脱敏块及
+text/tool 顺序。兼容元组改变十三个包的内容，因此所有包身份均递增；South 只记录消费约束，
+不取得 canonical IR 所有权。
+**v0.38.0**：**任务合同 7**（`docs/design/2026-09-28-task-contract-v7-artifact-role.md`：URL 产物必填 `role`，`null` 为主产物、
+`"last_frame"` 为伴随产物，词表封闭、缺键拒收；集合至少一个主产物），宿主只对主产物计数 / 交付 / 转存。首个消费者
+`task-byteplus-v2` 把上游尾帧作 `last_frame` 产物报出并渲染进 `data[0].last_frame_url`（与 token-station-server 原生臂同形）——
+包身份随内容变化 0.35.0 → **0.36.0**；其余十二个包只随合同重打（fixture 机械补 `role: null`），身份不变；WIT 不变。
+v0.37.0 号已被 `feature/p15-responses` 线（Responses codec）占用、未合入 main，本线不移动该 tag、直接发 0.38.0。
 **v0.36.0**：`task-kling-v2` 声明请求体禁改路径（`model_name` / `mode` / `sound` / `duration` / `video_list` /
 `external_task_id`，与宿主原生 Kling 同一张表），宿主可按任务合同 6 在其余位置注入附加请求配置——包身份随内容变化
 0.31.0 → **0.32.0**；合同、WIT 与其余十二个包身份不变。
 **v0.35.0**：**任务合同 6**（`docs/design/2026-09-27-task-contract-v6-facts.md`：token 单位率、请求 / 交付条数、产物凭证取回、
 请求体禁改路径；合同 5 形状拒收），组件增至十三个——新增五个 task-v2 包身份均 0.35.0：`task-xai-v2`、
 `task-byteplus-v2`、`task-veo-v2`（只声明 `header_secret` 臂）、`task-wan-image-v2` 与 `task-gmi-image-v2`（首批图像任务组件）。
-现行身份：`provider-openai-compatible` 2.1.3、`provider-gemini` 1.1.3、`provider-anthropic` 1.0.4、
-`provider-bedrock-converse` 1.0.1、`task-kling` 1.0.3、`task-kling-v2` 0.32.0、`task-minimax-v2` / `task-bailian-v2` 0.31.0、
-上述五个 0.35.0；HTTP9/WIT 不变。每个包的
-`compatibility.south_runtime` 随运行时一并声明为 0.36.0——该字段按精确串比对，声明旧版的包会被宿主按名拒绝，
+现行身份：`provider-openai-compatible` 2.1.4、`provider-gemini` 1.1.4、`provider-anthropic` 1.0.5、
+`provider-bedrock-converse` 1.0.2、`task-kling` 1.0.4、`task-kling-v2` 0.32.1、`task-minimax-v2` / `task-bailian-v2` 0.31.1、
+`task-byteplus-v2` 0.36.1、其余四个（`task-xai-v2` / `task-veo-v2` / `task-wan-image-v2` / `task-gmi-image-v2`）0.35.1；HTTP9/WIT 不变。每个包的
+`compatibility.south_runtime` 随运行时一并声明为 0.39.0——该字段按精确串比对，声明旧版的包会被宿主按名拒绝，
 故运行时与十三包必须
 同批升。宿主采用须分别用真实存储通过公共故障套件；组件兼容状态不能代替共享核心
 采用证据。[设计与边界](docs/design/2026-09-20-shared-task-core.md)。

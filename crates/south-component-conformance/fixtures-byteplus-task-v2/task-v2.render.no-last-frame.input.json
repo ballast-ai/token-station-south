@@ -5,26 +5,26 @@
       "kind": "urls",
       "items": [
         {
-          "url": "https://vidgen.x.example/v.mp4?sig=private",
+          "url": "https://ark-cdn.example/v.mp4?sig=private",
           "id": null,
-          "duration": 6,
+          "duration": null,
           "fetch_with_credential": false,
           "role": null
         }
       ]
     },
     "usage": {
-      "seconds": 6.0,
+      "seconds": null,
       "milliunits": null,
-      "tokens": null,
+      "tokens": 108900,
       "outputs": 1
     }
   },
   "context": {
     "task_id": "host-1",
     "created": 123,
-    "provider": "xai",
-    "model": "xai/grok-imagine-video",
-    "upstream_task_id": null
+    "provider": "byteplus",
+    "model": "byteplus/seedance",
+    "upstream_task_id": "cgt-2025-original"
   }
 }

@@ -31,7 +31,8 @@ A1 的宿主边界：I03/I04/I05/I06/I12/I13/I17/I19/O02/O03/O04/E04/E05/E09 的
 
 R2 消费 kernel v0.3.0 的 canonical IR 2 / stream 2，但 South 不拥有 canonical IR，
 所以 `compatibility.json.contracts.canonical_ir` 保持 `null`。依赖 pin 与十三个组件的
-kernel version/revision、stream contract 共同记录消费边界；South 运行时预备升至 0.38.0。
+kernel version/revision、stream contract 共同记录消费边界；由于 0.38.0 已由任务合同 7
+发布占用，South 运行时改为 0.39.0，既有标签不移动。
 
 Responses `encrypted_content` 增加封闭载体 `tsr.c1.` 加 base64url-no-pad JSON。对象固定
 namespace `token-station.reasoning-replay`、version 1、family

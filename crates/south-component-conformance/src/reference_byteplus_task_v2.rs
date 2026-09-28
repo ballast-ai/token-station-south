@@ -14,15 +14,19 @@
 //! - Reference images are capped at 30 (the most any Seedance model accepts); a host that knows a
 //!   model's lower cap enforces it before calling here, as token-station-server's capability
 //!   pre-check already does.
-//! - **Capability loss:** the native blocking body adds `last_frame_url` when the upstream returns
-//!   one (`return_last_frame`). A task observation carries only the video artifacts, so the
-//!   rendered body cannot include it. Callers that rely on it stay on the native arm until the
-//!   contract can carry a secondary artifact.
+//! - The upstream's `content.last_frame_url` (returned when the request asked for
+//!   `return_last_frame`) is reported as a second artifact with the `last_frame` role (task
+//!   contract 7) and rendered into `data[0].last_frame_url`, where the native blocking body puts
+//!   it. It is passed through as the upstream spelled it — not proxied, not stored and not
+//!   credential-gated, like the video URL itself; the host counts, delivers and stores only the
+//!   video. An absent or empty value means no frame; one the contract cannot carry (over its
+//!   byte bound) makes the observation unknown rather than silently dropping the frame.
 use crate::{ComponentResultV1, PreparedTaskV2, SubmitOutcomeV2, TaskComponentV2};
 use serde_json::{Value, json};
 use south_contracts::{
-    HostMintedValuesV1, TaskArtifactRefV2, TaskArtifactV2, TaskFailureKindV1, TaskLocatorV2,
-    TaskObservationV2, TaskRenderContextV2, TaskRequestEstimateV2, TaskScalarV2, TaskUsageFactsV2,
+    HostMintedValuesV1, TaskArtifactRefV2, TaskArtifactRoleV2, TaskArtifactV2, TaskFailureKindV1,
+    TaskLocatorV2, TaskObservationV2, TaskRenderContextV2, TaskRequestEstimateV2, TaskScalarV2,
+    TaskUsageFactsV2,
 };
 use south_provider_api::ComponentMetadataV1;
 use token_station_protocol::{
@@ -122,7 +126,7 @@ impl TaskComponentV2 for BytePlusTaskComponentV2 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "task-byteplus-v2".into(),
-            version: "0.35.0".into(),
+            version: "0.36.1".into(),
             api_version: "task-adapter-v2".into(),
         }
     }
@@ -269,10 +273,20 @@ impl TaskComponentV2 for BytePlusTaskComponentV2 {
                 let Some(url) = field(content, "video_url") else {
                     return Ok(unknown("byteplus succeeded without content.video_url"));
                 };
-                let Ok(artifact) = TaskArtifactV2::new(url, TaskScalarV2::Null, TaskScalarV2::Null)
+                let Ok(video) = TaskArtifactV2::new(url, TaskScalarV2::Null, TaskScalarV2::Null)
                 else {
                     return Ok(unknown("invalid BytePlus artifact URL"));
                 };
+                let mut artifacts = vec![video];
+                // Contract 7: the last frame rides beside the video, never as a second output.
+                if let Some(frame) = field(content, "last_frame_url").filter(|f| !f.is_empty()) {
+                    let Ok(frame) =
+                        TaskArtifactV2::new(frame, TaskScalarV2::Null, TaskScalarV2::Null)
+                    else {
+                        return Ok(unknown("invalid BytePlus last frame URL"));
+                    };
+                    artifacts.push(frame.with_role(TaskArtifactRoleV2::LastFrame));
+                }
                 let tokens = body.get("usage").and_then(|u| u.get("completion_tokens"));
                 let tokens = match tokens {
                     None | Some(Value::Null) => None,
@@ -282,7 +296,7 @@ impl TaskComponentV2 for BytePlusTaskComponentV2 {
                     },
                 };
                 TaskObservationV2::Succeeded {
-                    artifacts: TaskArtifactRefV2::urls(vec![artifact])
+                    artifacts: TaskArtifactRefV2::urls(artifacts)
                         .map_err(|_| protocol("invalid BytePlus artifacts"))?,
                     usage: TaskUsageFactsV2::new(None, None, tokens)
                         .and_then(|usage| usage.with_outputs(Some(1)))
@@ -327,12 +341,26 @@ impl TaskComponentV2 for BytePlusTaskComponentV2 {
         let id = context
             .upstream_task_id()
             .ok_or_else(|| protocol("BytePlus render requires an upstream task identifier"))?;
+        // `data` lists the videos, as the native body does; a last frame is written onto the
+        // video it follows (`data[0].last_frame_url` for Seedance's single output).
+        let mut data = Vec::new();
+        for item in items {
+            match item.role() {
+                TaskArtifactRoleV2::Primary => data.push(json!({"url": item.url()})),
+                TaskArtifactRoleV2::LastFrame => {
+                    let Some(video) = data.last_mut() else {
+                        return Err(protocol("BytePlus last frame precedes its video"));
+                    };
+                    video["last_frame_url"] = json!(item.url());
+                }
+            }
+        }
         Ok(json!({
             "created": context.created(),
             "model": context.model(),
             "provider": context.provider(),
             "task_id": id,
-            "data": items.iter().map(|item| json!({"url": item.url()})).collect::<Vec<_>>(),
+            "data": data,
         }))
     }
     fn map_terminal_failure(
