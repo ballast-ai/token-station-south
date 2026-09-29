@@ -1756,7 +1756,7 @@ impl fmt::Debug for ProviderQuotaMetadataFieldV1 {
 
 /// The closed set of provider diagnostic response header fields.
 ///
-/// Distinct from [`ProviderQuotaMetadataFieldV1`], which carries rate-limit *水位* a host reads to
+/// Distinct from [`ProviderQuotaMetadataFieldV1`], which carries rate-limit *headroom* a host reads to
 /// pace itself. These are the fields an operator quotes back to a provider's support desk when a
 /// call goes wrong: the upstream's own request id, which organisation and API build served it, how
 /// long it spent, and which edge answered. They inform a human, never the host's control flow.

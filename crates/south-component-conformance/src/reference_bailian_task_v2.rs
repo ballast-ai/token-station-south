@@ -217,7 +217,8 @@ impl TaskComponentV2 for BailianTaskComponentV2 {
             locator: TaskLocatorV2::new(1, QUERY)
                 .map_err(|_| protocol("invalid Bailian locator"))?,
             request_estimate,
-            // 合同 6(D6):本族尚未声明禁改路径——宿主不得注入附加请求体字段(同合同 5)。
+            // Contract 6 (D6): this family declares no immutable body paths yet, so a
+            // host must not inject extra request-body fields — same as contract 5.
             immutable_body_paths: None,
         })
     }

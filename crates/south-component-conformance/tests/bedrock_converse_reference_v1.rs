@@ -144,7 +144,7 @@ fn the_openai_object_form_of_tool_choice_is_translated_not_forwarded() {
     assert_eq!(
         body["toolConfig"]["toolChoice"],
         json!({"tool": {"name": "lookup_weather"}}),
-        "OpenAI 的对象形必须翻成 Converse 的具名形：{body:#}"
+        "the OpenAI object form must be translated into Converse's named form: {body:#}"
     );
 }
 
@@ -160,7 +160,8 @@ fn an_unreadable_tool_choice_object_is_omitted_rather_than_forwarded() {
     })));
     assert!(
         body["toolConfig"].get("toolChoice").is_none(),
-        "读不出名字的 choice 应当整个不发，而不是原样透传：{body:#}"
+        "a choice whose name cannot be read must be withheld entirely rather than
+         forwarded verbatim: {body:#}"
     );
 }
 
@@ -243,13 +244,13 @@ fn reasoning_parts_are_dropped_on_the_way_out_and_never_forwarded_raw() {
         {"type":"some_future_part","whatever":1},
     ]}])));
     let blocks = body["messages"][0]["content"].as_array().unwrap();
-    assert_eq!(blocks.len(), 1, "只有 text 该活下来，其余三臂全丢：{body:#}");
+    assert_eq!(blocks.len(), 1, "only text survives; the other three arms are dropped: {body:#}");
     assert_eq!(blocks[0], json!({"text": "hi"}));
     let rendered = body.to_string();
     for leaked in ["secret reasoning", "opaque", "some_future_part"] {
         assert!(
             !rendered.contains(leaked),
-            "被丢弃的部件不得以任何形式出现在请求体里：`{leaked}` 在 {body:#}"
+            "a dropped part must not appear in the request body in any form: `{leaked}` in {body:#}"
         );
     }
 }

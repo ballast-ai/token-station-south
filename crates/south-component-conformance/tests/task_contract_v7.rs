@@ -42,7 +42,10 @@ fn the_contract_version_is_seven() {
 fn a_contract_six_artifact_without_the_role_key_is_refused() {
     let mut six = item(VIDEO, &Value::Null);
     six.as_object_mut().unwrap().remove("role");
-    assert!(parse_observation_json(&succeeded(&[six], &json!(1))).is_err(), "缺 role 键必须拒");
+    assert!(
+        parse_observation_json(&succeeded(&[six], &json!(1))).is_err(),
+        "a missing role key must be refused"
+    );
 }
 
 #[test]
@@ -71,7 +74,11 @@ fn roles_round_trip_and_null_names_the_primary() {
     // Delivered outputs are the upstream's count of primaries; a companion does not raise it.
     assert_eq!(usage.outputs(), Some(1));
     let back = observation_json(&observation).unwrap();
-    assert_eq!(back, serde_json::from_str::<Value>(&wire).unwrap(), "编码后逐字节同形");
+    assert_eq!(
+        back,
+        serde_json::from_str::<Value>(&wire).unwrap(),
+        "re-encoding is byte-for-byte identical"
+    );
     assert_eq!(parse_observation_json(&back.to_string()).unwrap(), observation);
 }
 
@@ -80,14 +87,17 @@ fn a_set_made_only_of_companions_is_refused() {
     assert!(
         parse_observation_json(&succeeded(&[item(FRAME, &json!("last_frame"))], &json!(1)))
             .is_err(),
-        "只有尾帧、没有主产物:宿主无物可交付"
+        "a last frame with no primary artifact leaves the host nothing to deliver"
     );
     assert!(TaskArtifactRefV2::urls(vec![frame()]).is_err());
     let smuggled = TaskObservationV2::Succeeded {
         artifacts: TaskArtifactRefV2::Urls(vec![frame()]),
         usage: TaskUsageFactsV2::default(),
     };
-    assert!(smuggled.validate().is_err(), "绕过构造器也过不了边界校验");
+    assert!(
+        smuggled.validate().is_err(),
+        "bypassing the constructor still does not get past boundary validation"
+    );
     assert!(observation_json(&smuggled).is_err());
     // Any order is fine as long as one primary is present.
     assert!(TaskArtifactRefV2::urls(vec![frame(), video()]).is_ok());
@@ -98,12 +108,15 @@ fn a_companion_counts_toward_the_artifact_bound() {
     let mut items = vec![video(); south_contracts::MAX_ARTIFACT_URLS];
     assert!(TaskArtifactRefV2::urls(items.clone()).is_ok());
     items.push(frame());
-    assert!(TaskArtifactRefV2::urls(items).is_err(), "尾帧也计入 MAX_ARTIFACT_URLS");
+    assert!(
+        TaskArtifactRefV2::urls(items).is_err(),
+        "a last frame counts toward MAX_ARTIFACT_URLS too"
+    );
 }
 
 #[test]
 fn builders_keep_the_primary_default_and_roles_spell_themselves() {
-    assert_eq!(video().role(), TaskArtifactRoleV2::Primary, "缺省是主产物");
+    assert_eq!(video().role(), TaskArtifactRoleV2::Primary, "the default role is primary");
     assert!(video().role().is_primary());
     assert!(!frame().role().is_primary());
     assert_eq!(frame().with_bound_credential().role(), TaskArtifactRoleV2::LastFrame);

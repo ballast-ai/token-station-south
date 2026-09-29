@@ -253,7 +253,9 @@ fn input_facts_are_bounded_and_never_conflate_missing_with_zero() {
     assert_eq!(zero.resolution(), Some("768P"));
     assert_eq!(zero.input_image_count(), Some(0));
     assert_eq!(zero.milliunits_per_second(), None);
-    for bad in ["", " 768P", "768P\n", "http://x", "分辨率", "768-P"] {
+    // `résolution` is here to pin that a non-ASCII near-miss is refused; keep some
+    // non-ASCII case in this list rather than flattening it to ASCII.
+    for bad in ["", " 768P", "768P\n", "http://x", "résolution", "768-P"] {
         assert!(absent.clone().with_input_facts(Some(bad), Some(0)).is_err());
     }
     assert!(absent.clone().with_input_facts(Some(&"A".repeat(33)), None).is_err());
