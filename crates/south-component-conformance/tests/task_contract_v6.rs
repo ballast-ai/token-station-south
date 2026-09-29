@@ -49,17 +49,26 @@ fn a_contract_five_prepared_value_is_refused() {
                     "locator": {"schema_version": 1, "route": "v1/tasks"},
                     "request_estimate": {"requested_seconds": null, "milliunits_per_second": null,
                                          "resolution": null, "input_image_count": null}});
-    assert!(parse_prepared_task_json(&v5.to_string()).is_err(), "合同 5 形状必须拒");
-    // 各缺一个新键也拒:「必须出现、可为 null」。
+    assert!(
+        parse_prepared_task_json(&v5.to_string()).is_err(),
+        "a contract 5 shape must be refused"
+    );
+    // Missing any one of the new keys is refused too: "must be present, may be null".
     for missing in ["tokens_per_second", "requested_outputs"] {
         let mut value = estimate(json!({}));
         value.as_object_mut().unwrap().remove(missing);
-        assert!(parse_prepared_task_json(&prepared(value, Value::Null)).is_err(), "缺 {missing}");
+        assert!(
+            parse_prepared_task_json(&prepared(value, Value::Null)).is_err(),
+            "missing {missing}"
+        );
     }
     let mut no_paths: Value =
         serde_json::from_str(&prepared(estimate(json!({})), Value::Null)).unwrap();
     no_paths.as_object_mut().unwrap().remove("immutable_body_paths");
-    assert!(parse_prepared_task_json(&no_paths.to_string()).is_err(), "缺 immutable_body_paths");
+    assert!(
+        parse_prepared_task_json(&no_paths.to_string()).is_err(),
+        "missing immutable_body_paths"
+    );
 }
 
 #[test]
@@ -80,9 +89,9 @@ fn output_facts_round_trip_and_null_differs_from_one() {
 
     let silent = parse_prepared_task_json(&prepared(estimate(json!({})), Value::Null)).unwrap();
     assert_eq!(silent.request_estimate.requested_outputs(), None);
-    assert_eq!(silent.immutable_body_paths, None, "null = 组件不表态");
+    assert_eq!(silent.immutable_body_paths, None, "null = the component declines to state");
     let open = parse_prepared_task_json(&prepared(estimate(json!({})), json!([]))).unwrap();
-    assert_eq!(open.immutable_body_paths, Some(Vec::new()), "[] 与 null 是不同事实");
+    assert_eq!(open.immutable_body_paths, Some(Vec::new()), "[] and null are different facts");
 }
 
 #[test]
@@ -122,7 +131,7 @@ fn estimate_tokens_mirrors_the_milliunit_rule() {
         .with_output_facts(Some(1_000), Some(1))
         .unwrap();
     assert_eq!(estimate.estimate_tokens(5.0), Ok(Some(5_000)));
-    assert_eq!(estimate.estimate_tokens(0.2501), Ok(Some(251)), "向上取整");
+    assert_eq!(estimate.estimate_tokens(0.2501), Ok(Some(251)), "rounds up");
     assert!(estimate.estimate_tokens(-1.0).is_err());
     let silent = TaskRequestEstimateV2::new(Some(5.0), None).unwrap();
     assert_eq!(silent.estimate_tokens(5.0), Ok(None));
@@ -149,14 +158,14 @@ fn delivered_outputs_and_credential_fetch_are_required_facts() {
     let back = observation_json(&value).unwrap();
     assert_eq!(parse_observation_json(&back.to_string()).unwrap(), value);
 
-    // 缺 outputs / 缺 fetch_with_credential:合同 5 形状,拒。
+    // Missing outputs / missing fetch_with_credential: a contract 5 shape, refused.
     let v5_usage = json!({"seconds": 4.0, "milliunits": null, "tokens": null});
     assert!(
         parse_observation_json(&succeeded(json!({"fetch_with_credential": false}), v5_usage))
             .is_err()
     );
     assert!(parse_observation_json(&succeeded(json!({}), usage.clone())).is_err());
-    // 非法值拒。
+    // Illegal values are refused.
     assert!(
         parse_observation_json(&succeeded(json!({"fetch_with_credential": "yes"}), usage)).is_err()
     );
@@ -165,7 +174,7 @@ fn delivered_outputs_and_credential_fetch_are_required_facts() {
         parse_observation_json(&succeeded(json!({"fetch_with_credential": false}), negative))
             .is_err()
     );
-    // 缺席与 0 是不同事实。
+    // Absence and zero are different facts.
     let zero = json!({"seconds": null, "milliunits": null, "tokens": null, "outputs": 0});
     let zero =
         parse_observation_json(&succeeded(json!({"fetch_with_credential": false}), zero)).unwrap();
@@ -178,7 +187,10 @@ fn builders_keep_contract_five_defaults() {
     let artifact =
         TaskArtifactV2::new("https://cdn.example/a", TaskScalarV2::Null, TaskScalarV2::Null)
             .unwrap();
-    assert!(!artifact.fetch_with_credential(), "缺省自带访问能力");
+    assert!(
+        !artifact.fetch_with_credential(),
+        "by default an artifact needs no credential to fetch"
+    );
     assert!(artifact.with_bound_credential().fetch_with_credential());
     let usage = TaskUsageFactsV2::new(Some(1.0), None, None).unwrap();
     assert_eq!(usage.outputs(), None);

@@ -18,12 +18,16 @@ const fn carrier(blocks: Vec<ReasoningReplayBlock>) -> ReasoningReplayCarrier {
 #[test]
 fn c1_round_trips_ordered_claude_blocks_without_rewriting_opaque_values() {
     let original = carrier(vec![
+        // The payloads below are deliberately non-ASCII: this case pins that opaque
+        // values survive base64url encoding **unrewritten**, and an all-ASCII fixture
+        // would pass even if the codec mangled multi-byte text. `→` is three UTF-8
+        // bytes and `é` two, so both widths are covered.
         ReasoningReplayBlock::Thinking {
-            thinking: "思考".into(),
+            thinking: "réflexion→".into(),
             signature: "sig+/= unchanged".into(),
         },
         ReasoningReplayBlock::TextRef { ordinal: 0 },
-        ReasoningReplayBlock::RedactedThinking { data: "opaque+/= 数据".into() },
+        ReasoningReplayBlock::RedactedThinking { data: "opaque+/= données".into() },
         ReasoningReplayBlock::ToolCallRef { call_id: "call_α".into() },
     ]);
 

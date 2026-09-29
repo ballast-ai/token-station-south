@@ -11,17 +11,6 @@
 8	crates/south-component-conformance/fixtures-veo-task-v2/README.md
 7	crates/south-component-conformance/fixtures-wan-image-task-v2/README.md
 6	crates/south-component-conformance/fixtures-xai-task-v2/README.md
-1	crates/south-component-conformance/src/reference_bailian_task_v2.rs
-2	crates/south-component-conformance/src/reference_minimax_task_v2.rs
-4	crates/south-component-conformance/tests/bedrock_converse_reference_v1.rs
-11	crates/south-component-conformance/tests/task_contract_v6.rs
-6	crates/south-component-conformance/tests/task_contract_v7.rs
-1	crates/south-component-conformance/tests/task_request_estimate_v2.rs
-1	crates/south-component-conformance/tests/xai_task_sandbox_parity_v2.rs
-1	crates/south-contracts/src/lib.rs
-2	crates/south-north-codec/tests/responses_replay.rs
-12	crates/south-task-conformance/src/lib.rs
-1	crates/south-task-conformance/tests/atomic.rs
 1	docs/design/2026-08-21-component-conformance.md
 1	docs/design/2026-09-08-bearer-with-header-secret-auth.md
 1	docs/design/2026-09-08-buffered-get-request.md

@@ -144,7 +144,8 @@ fn bearer_submit_immutable_paths_and_direct_artifact_match_the_manifest_contract
     cfg.authorize(&p.descriptor).unwrap();
     assert_eq!(p.request_estimate.requested_seconds(), Some(6.0));
     assert_eq!(p.request_estimate.requested_outputs(), Some(1));
-    // 合同 6(D6):声明的禁改路径确实都在发出的请求体里——宿主据此守住计费字段。
+    // Contract 6 (D6): every declared immutable body path really is present in the
+    // request that goes out — that is what lets a host hold the billing fields.
     let body = p.descriptor.body.as_ref().unwrap();
     for path in p.immutable_body_paths.as_deref().unwrap() {
         assert!(body.get(path).is_some(), "declared immutable path `{path}` is in the body");
