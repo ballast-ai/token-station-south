@@ -292,3 +292,34 @@ fn byteplus_last_frame_retires_the_published_task_byteplus_v2_identity() {
     .unwrap();
     assert_ne!(manifest.version, "0.35.0", "a changed package cannot reuse its published identity");
 }
+
+/// The protocol-0.4 / kernel-0.3 compatibility tuple changes every package's bytes, so the
+/// immutable package identities published with runtime 0.38.0 must all retire together.
+#[test]
+fn reasoning_replay_release_retires_every_published_038_package_identity() {
+    for (name, published) in [
+        ("provider-openai-compatible", "2.1.3"),
+        ("provider-anthropic", "1.0.4"),
+        ("provider-gemini", "1.1.3"),
+        ("provider-bedrock-converse", "1.0.1"),
+        ("task-kling", "1.0.3"),
+        ("task-kling-v2", "0.32.0"),
+        ("task-minimax-v2", "0.31.0"),
+        ("task-bailian-v2", "0.31.0"),
+        ("task-xai-v2", "0.35.0"),
+        ("task-byteplus-v2", "0.36.0"),
+        ("task-veo-v2", "0.35.0"),
+        ("task-wan-image-v2", "0.35.0"),
+        ("task-gmi-image-v2", "0.35.0"),
+    ] {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_ne!(manifest.version, published, "{name} reused its published identity");
+        assert_eq!(manifest.compatibility.south_runtime, "0.39.0");
+    }
+}

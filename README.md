@@ -156,7 +156,7 @@ H3与estimate新增事实见[设计记录](docs/design/2026-09-20-minimax-h3-est
 
 第七包 `task-bailian-v2`，覆盖 managed 视频，图片与原生透传不迁移。
 复用 Task5 / HTTP9 / Task V2 WIT，无新运行时能力。v0.31.0 已发布七包含此包，
-包身份 0.31.0；v0.32.0～v0.38.0 只升运行时与 `compatibility.south_runtime`，包身份不变。
+包身份在 v0.39.0 因兼容元组内容变化升至 0.31.1。
 原生入口 `reference_bailian_task_v2::BailianTaskComponentV2` 与 Wasm同源；
 构建 `bash scripts/build-bailian-task-v2-component.sh`。行为、官方差异和验收边界见
 [设计记录](docs/design/2026-09-20-bailian-video-task-component.md)。
@@ -193,6 +193,21 @@ Bearer 认证、按秒用量、直链产物，无新运行时能力；声明禁�
 第十三包 `task-gmi-image-v2`（族 `gmi-image`），GMI request-queue 图像生成（Seedream 等，参考图按上游型号的文档上限）。回执即带产物
 → `accepted-terminal`；`X-Organization-ID` 由宿主以 provider config 扩展 `organization_id` 传入（原生取自凭证 `account_id`）。按请求计价、
 不报用量：`n` 为 `requested_outputs`、交付数为 `usage.outputs`，计价政策归宿主。构建 `bash scripts/build-gmi-image-task-v2-component.sh`。
+
+## v0.37.0 Responses 北向 codec
+
+`south-north-codec` 新增 Responses 请求→IR、IR 响应→Responses、IR 流事件→SSE 三组纯映射及同源 JSON façade。宿主显式传入身份、时间、入站工具与兼容选项，并持有每流状态；准入、计费、continuation 缓存及 Native 透传留宿主。十三个组件仅更新运行时兼容元组，组件自身版本保持当前值，Kling v2 为 0.32.0。
+
+[发行与验收](docs/design/2026-09-28-release-0.37.0.md)记录完整发布门，[codec 设计](docs/design/2026-09-28-responses-north-codec.md)与[逐项证据](docs/design/2026-09-28-responses-north-codec-validation.md)记录双宿主差异及验证边界。
+
+## v0.39.0 Responses reasoning 回放
+
+South 消费 kernel v0.3.0 / protocol 0.4.0，以 `tsr.c1.` 有界 carrier 保留 Claude
+thinking、signature、redacted thinking 与 text/tool 引用顺序。只有显式声明
+`reasoning_replay.claude.v1` 的 Anthropic Messages 和 Bedrock Converse 型号可接收该
+carrier；OpenAI-compatible 与 Gemini 拒绝。十三个组件包因兼容元组变化全部使用新包身份，
+`compatibility.south_runtime` 同批升至 0.39.0；`canonical_ir` 所有权仍归 kernel，
+South 的 `compatibility.json.contracts.canonical_ir` 保持 `null`。
 
 ## Local verification
 

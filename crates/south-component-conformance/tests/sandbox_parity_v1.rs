@@ -53,9 +53,9 @@ fn shipped_manifest() -> (String, ComponentManifestV1) {
 /// as the gate ① test below re-asserts after deliberately trying a wrong one.
 fn host_expectations() -> HostExpectationsV1 {
     HostExpectationsV1 {
-        ir_schema_id: "token-station-protocol@0.3.0/v0.2.0".to_owned(),
-        kernel_version: "0.2.0".to_owned(),
-        kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb09c".to_owned(),
+        ir_schema_id: "token-station-protocol@0.4.0/v0.3.0".to_owned(),
+        kernel_version: "0.3.0".to_owned(),
+        kernel_revision: "6822aab1dea54ef646cb2206595cd4955ff9764a".to_owned(),
         south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
     }
 }
@@ -103,8 +103,8 @@ fn the_shipped_package_passes_gate_one_and_the_tuple_handshake() {
     assert_eq!(component.metadata(), OpenAiCompatibleReferenceV1.metadata());
 
     let expectations = HostExpectationsV1 {
-        ir_schema_id: "token-station-protocol@0.3.0/v0.2.0".to_owned(),
-        kernel_version: "0.2.0".to_owned(),
+        ir_schema_id: "token-station-protocol@0.4.0/v0.3.0".to_owned(),
+        kernel_version: "0.3.0".to_owned(),
         kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb00c".to_owned(),
         south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
     };
@@ -112,7 +112,7 @@ fn the_shipped_package_passes_gate_one_and_the_tuple_handshake() {
     assert!(compatibility_matches(&manifest, &expectations).is_err());
     // … and accept the true values.
     let expectations = HostExpectationsV1 {
-        kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb09c".to_owned(),
+        kernel_revision: "6822aab1dea54ef646cb2206595cd4955ff9764a".to_owned(),
         ..expectations
     };
     assert_eq!(compatibility_matches(&manifest, &expectations), Ok(()));

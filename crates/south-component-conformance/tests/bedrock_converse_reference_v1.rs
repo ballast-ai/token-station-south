@@ -383,6 +383,9 @@ fn done_waits_for_metadata_because_message_stop_has_no_usage_yet() {
             .unwrap()
             .is_empty()
     );
+    parser
+        .parse_chunk(&frame("contentBlockStart", &json!({"contentBlockIndex":0,"start":{}})))
+        .unwrap();
     let deltas = parser
         .parse_chunk(&frame(
             "contentBlockDelta",
@@ -390,6 +393,7 @@ fn done_waits_for_metadata_because_message_stop_has_no_usage_yet() {
         ))
         .unwrap();
     assert_eq!(format!("{deltas:?}"), r#"[Delta { index: 0, content: "Mild." }]"#);
+    parser.parse_chunk(&frame("contentBlockStop", &json!({"contentBlockIndex":0}))).unwrap();
 
     // messageStop knows the reason but not the counts, so it may only Finish.
     let stop =
@@ -413,6 +417,76 @@ fn done_waits_for_metadata_because_message_stop_has_no_usage_yet() {
     assert!(format!("{:?}", end[1]).contains("Stop"), "{:?}", end[1]);
     // EOF after a closed stream is clean.
     assert!(parser.finish().unwrap().is_empty());
+}
+
+#[test]
+fn metadata_cannot_complete_while_a_content_block_is_open() {
+    let mut parser = BedrockConverseReferenceV1.stream_parser();
+    parser
+        .parse_chunk(&frame(
+            "contentBlockStart",
+            &json!({"contentBlockIndex":0,"start":{"reasoningContent":{}}}),
+        ))
+        .unwrap();
+    assert!(
+        parser
+            .parse_chunk(&frame(
+                "metadata",
+                &json!({"usage":{"inputTokens":1,"outputTokens":1,"totalTokens":2}}),
+            ))
+            .is_err(),
+        "metadata must not emit Done before contentBlockStop"
+    );
+}
+
+/// Real Converse streams announce `contentBlockStart` only for tool use; a text or reasoning
+/// block begins with its first delta and may even stop without any delta. What stays refused is a
+/// delta after the block stopped and a second stop of the same block.
+#[test]
+fn converse_text_and_reasoning_blocks_open_on_their_first_delta_and_never_reopen() {
+    for delta in [
+        json!({"contentBlockIndex":0,"delta":{"text":"x"}}),
+        json!({"contentBlockIndex":0,"delta":{"reasoningContent":{"text":"x"}}}),
+    ] {
+        let mut parser = BedrockConverseReferenceV1.stream_parser();
+        let events = parser.parse_chunk(&frame("contentBlockDelta", &delta)).unwrap();
+        assert_eq!(events.len(), 1, "the first delta opens the block: {delta}");
+        parser.parse_chunk(&frame("contentBlockStop", &json!({"contentBlockIndex":0}))).unwrap();
+        assert!(
+            parser.parse_chunk(&frame("contentBlockDelta", &delta)).is_err(),
+            "a delta after the block stopped is refused: {delta}"
+        );
+        assert!(
+            parser
+                .parse_chunk(&frame("contentBlockStop", &json!({"contentBlockIndex":0})))
+                .is_err(),
+            "a second stop is refused"
+        );
+    }
+    // An empty block: stop without any start or delta is not an error.
+    let mut parser = BedrockConverseReferenceV1.stream_parser();
+    parser.parse_chunk(&frame("contentBlockStop", &json!({"contentBlockIndex":3}))).unwrap();
+    assert!(
+        parser.parse_chunk(&frame("contentBlockStop", &json!({"contentBlockIndex":3}))).is_err()
+    );
+}
+
+#[test]
+fn converse_block_indexes_are_strict_and_closed_indexes_cannot_reopen() {
+    for data in [
+        json!({"start":{}}),
+        json!({"contentBlockIndex":-1,"start":{}}),
+        json!({"contentBlockIndex":u64::from(u32::MAX)+1,"start":{}}),
+    ] {
+        let mut parser = BedrockConverseReferenceV1.stream_parser();
+        assert!(parser.parse_chunk(&frame("contentBlockStart", &data)).is_err(), "{data}");
+    }
+
+    let mut parser = BedrockConverseReferenceV1.stream_parser();
+    let start = json!({"contentBlockIndex":7,"start":{}});
+    parser.parse_chunk(&frame("contentBlockStart", &start)).unwrap();
+    parser.parse_chunk(&frame("contentBlockStop", &json!({"contentBlockIndex":7}))).unwrap();
+    assert!(parser.parse_chunk(&frame("contentBlockStart", &start)).is_err());
 }
 
 #[test]
@@ -458,6 +532,9 @@ fn a_tool_call_names_itself_on_its_first_fragment_only() {
 #[test]
 fn a_frame_split_across_chunks_is_buffered_until_it_closes() {
     let mut parser = BedrockConverseReferenceV1.stream_parser();
+    parser
+        .parse_chunk(&frame("contentBlockStart", &json!({"contentBlockIndex":0,"start":{}})))
+        .unwrap();
     let whole = frame("contentBlockDelta", &json!({"contentBlockIndex":0,"delta":{"text":"hi"}}));
     let (head, tail) = whole.split_at(whole.len() / 2);
     assert!(parser.parse_chunk(head).unwrap().is_empty(), "half a frame completes nothing");

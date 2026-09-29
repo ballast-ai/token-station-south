@@ -1,0 +1,16 @@
+{
+  "method": "POST",
+  "url": "https://bedrock-runtime.us-east-1.amazonaws.com/model/anthropic.claude-sonnet-4-v1:0/converse",
+  "headers": {"content-type": "application/json"},
+  "body": {
+    "messages": [{
+      "role": "assistant",
+      "content": [
+        {"reasoningContent": {"reasoningText": {"text": "first", "signature": "SIG-1"}}},
+        {"reasoningContent": {"reasoningText": {"text": "", "signature": "SIG-EMPTY"}}},
+        {"reasoningContent": {"redactedContent": "OPAQUE"}},
+        {"text": "answer"}
+      ]
+    }]
+  }
+}

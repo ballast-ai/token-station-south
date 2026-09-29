@@ -473,7 +473,11 @@ fn events_of_frame(
             .or_else(|| delta["reasoning"].as_str())
             .filter(|delta| !delta.is_empty());
         if let Some(thinking) = thinking {
-            events.push(StreamEvent::ThinkingDelta { index, thinking_delta: thinking.to_owned() });
+            events.push(StreamEvent::ThinkingDelta {
+                index,
+                block_index: 0,
+                thinking_delta: thinking.to_owned(),
+            });
         }
         if let Some(text) = delta["content"].as_str().filter(|text| !text.is_empty()) {
             events.push(StreamEvent::Delta { index, content: text.to_owned() });
@@ -588,7 +592,7 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-openai-compatible".to_owned(),
-            version: "2.1.3".to_owned(),
+            version: "2.1.4".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
@@ -607,6 +611,14 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
         request: &ChatRequest,
         config: &ProviderConfig,
     ) -> ComponentResultV1<HttpRequestDescriptor> {
+        if request.messages.iter().any(|message| {
+            message.extensions.get("reasoning_replay_protocol_family").and_then(Value::as_str)
+                == Some("claude-signed-thinking")
+        }) {
+            return Err(capability(
+                "the OpenAI-compatible dialect cannot consume Claude reasoning replay",
+            ));
+        }
         let mut descriptor = HttpRequestDescriptor::new(
             HttpMethod::Post,
             config.base_url.resolve(ProviderApi::ChatCompletions),

@@ -10,6 +10,7 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
+use serde_json::{Value, json};
 use south_component_conformance::reference_anthropic::AnthropicReferenceV1;
 use south_component_conformance::{
     FixturePackV1, PROVIDER_COMPONENT_SUITE_V1, ProviderComponentV1, accepts_manifest,
@@ -41,11 +42,77 @@ fn shipped_pack() -> FixturePackV1 {
 
 fn host_expectations() -> HostExpectationsV1 {
     HostExpectationsV1 {
-        ir_schema_id: "token-station-protocol@0.3.0/v0.2.0".to_owned(),
-        kernel_version: "0.2.0".to_owned(),
-        kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb09c".to_owned(),
+        ir_schema_id: "token-station-protocol@0.4.0/v0.3.0".to_owned(),
+        kernel_version: "0.3.0".to_owned(),
+        kernel_revision: "6822aab1dea54ef646cb2206595cd4955ff9764a".to_owned(),
         south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
     }
+}
+
+fn frame(event: &str, data: &Value) -> Vec<u8> {
+    format!("event: {event}\ndata: {data}\n\n").into_bytes()
+}
+
+#[test]
+fn thinking_start_expresses_an_empty_block_and_requires_a_matching_stop() {
+    let mut parser = AnthropicReferenceV1.stream_parser();
+    let start = parser
+        .parse_chunk(&frame(
+            "content_block_start",
+            &json!({"index":0,"content_block":{"type":"thinking","thinking":""}}),
+        ))
+        .unwrap();
+    assert_eq!(
+        format!("{start:?}"),
+        r#"[ThinkingDelta { index: 0, block_index: 0, thinking_delta: "" }]"#
+    );
+    parser
+        .parse_chunk(&frame(
+            "content_block_delta",
+            &json!({"index":0,"delta":{"type":"signature_delta","signature":"sig"}}),
+        ))
+        .unwrap();
+    assert!(
+        parser
+            .parse_chunk(&frame(
+                "message_delta",
+                &json!({"delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}),
+            ))
+            .is_err(),
+        "an open thinking block must prevent a successful Done"
+    );
+}
+
+#[test]
+fn stream_block_delta_and_stop_require_a_prior_open_block() {
+    for (event, data) in [
+        (
+            "content_block_delta",
+            json!({"index":0,"delta":{"type":"thinking_delta","thinking":"x"}}),
+        ),
+        ("content_block_stop", json!({"index":0})),
+    ] {
+        let mut parser = AnthropicReferenceV1.stream_parser();
+        assert!(parser.parse_chunk(&frame(event, &data)).is_err());
+    }
+}
+
+#[test]
+fn stream_block_indexes_are_strict_and_closed_indexes_cannot_reopen() {
+    for data in [
+        json!({"content_block":{"type":"thinking","thinking":""}}),
+        json!({"index":-1,"content_block":{"type":"thinking","thinking":""}}),
+        json!({"index":u64::from(u32::MAX)+1,"content_block":{"type":"thinking","thinking":""}}),
+    ] {
+        let mut parser = AnthropicReferenceV1.stream_parser();
+        assert!(parser.parse_chunk(&frame("content_block_start", &data)).is_err(), "{data}");
+    }
+
+    let mut parser = AnthropicReferenceV1.stream_parser();
+    let start = json!({"index":7,"content_block":{"type":"thinking","thinking":""}});
+    parser.parse_chunk(&frame("content_block_start", &start)).unwrap();
+    parser.parse_chunk(&frame("content_block_stop", &json!({"index":7}))).unwrap();
+    assert!(parser.parse_chunk(&frame("content_block_start", &start)).is_err());
 }
 
 /// Gate ①: the package the component ships is admissible, and the identity it
@@ -101,9 +168,9 @@ fn the_manifest_declares_exactly_what_the_dialect_uses() {
     assert_eq!(
         manifest.compatibility,
         CompatibilityDeclarationV1 {
-            ir_schema_id: "token-station-protocol@0.3.0/v0.2.0".to_owned(),
-            kernel_version: "0.2.0".to_owned(),
-            kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb09c".to_owned(),
+            ir_schema_id: "token-station-protocol@0.4.0/v0.3.0".to_owned(),
+            kernel_version: "0.3.0".to_owned(),
+            kernel_revision: "6822aab1dea54ef646cb2206595cd4955ff9764a".to_owned(),
             wit_package: WIT_PACKAGE.to_owned(),
             south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
         },

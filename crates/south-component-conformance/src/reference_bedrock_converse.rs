@@ -42,6 +42,7 @@
 
 use serde_json::{Map, Value, json};
 use south_provider_api::{ComponentMetadataV1, PROVIDER_WORLD};
+use std::collections::BTreeSet;
 use token_station_protocol::{
     ChatRequest, ChatResponse, Choice, Content, ContentPart, ErrorCode, ErrorEnvelope,
     FinishReason, HttpMethod, HttpRequestDescriptor, HttpResponseParts, Message, ProviderConfig,
@@ -49,6 +50,7 @@ use token_station_protocol::{
 };
 
 use crate::component::{ComponentResultV1, ProviderComponentV1, StreamParserV1};
+use crate::reasoning_replay::{ReplayRef, validated_layout};
 
 /// The provider dialect this component translates.
 const DIALECT: &str = "bedrock";
@@ -69,6 +71,21 @@ fn capability(detail: impl Into<String>) -> ErrorEnvelope {
     ErrorEnvelope::new(ErrorCode::Capability, 400, detail)
 }
 
+const REPLAY_CAPABILITY: &str = "reasoning_replay.claude.v1";
+
+fn requests_reasoning_replay(request: &ChatRequest) -> bool {
+    request.messages.iter().any(|message| {
+        message.extensions.get("reasoning_replay_protocol_family").and_then(Value::as_str)
+            == Some("claude-signed-thinking")
+    })
+}
+
+fn model_allows_reasoning_replay(request: &ChatRequest, config: &ProviderConfig) -> bool {
+    config.models.iter().any(|model| {
+        model.model == request.model && model.supported_parameters.contains(REPLAY_CAPABILITY)
+    })
+}
+
 fn provider_protocol_error(message: &'static str) -> ErrorEnvelope {
     ErrorEnvelope::new(ErrorCode::ProviderProtocolError, 502, message)
 }
@@ -77,12 +94,13 @@ fn provider_protocol_error(message: &'static str) -> ErrorEnvelope {
 ///
 /// Converse has no bare-string content: every block is typed, so a
 /// [`Content::Text`] becomes a one-element array.
-fn text_blocks(content: Option<&Content>) -> Vec<Value> {
+fn text_blocks(content: Option<&Content>, allow_replay: bool) -> Vec<Value> {
     match content {
         Some(Content::Text(text)) => vec![json!({"text": text})],
-        Some(Content::Parts(parts)) => {
-            parts.iter().filter_map(|part| part_to_block(part).ok().flatten()).collect()
-        }
+        Some(Content::Parts(parts)) => parts
+            .iter()
+            .filter_map(|part| part_to_block(part, allow_replay).ok().flatten())
+            .collect(),
         None => Vec::new(),
     }
 }
@@ -92,7 +110,7 @@ fn text_blocks(content: Option<&Content>) -> Vec<Value> {
 /// `Ok(None)` is a part this dialect has no block for (a thinking block on the
 /// way *out*, say): dropped, not an error. `Err` is a part Converse would
 /// reject, refused locally so the message names the part.
-fn part_to_block(part: &ContentPart) -> ComponentResultV1<Option<Value>> {
+fn part_to_block(part: &ContentPart, allow_replay: bool) -> ComponentResultV1<Option<Value>> {
     match part {
         ContentPart::Text { text } => Ok(Some(json!({"text": text}))),
         ContentPart::ImageUrl { image_url } => {
@@ -122,11 +140,18 @@ fn part_to_block(part: &ContentPart) -> ComponentResultV1<Option<Value>> {
                 "image": {"format": format, "source": {"bytes": encoded}}
             })))
         }
-        // Reasoning blocks are Converse's `reasoningContent` on the way back,
-        // but replaying one into a request has no sanctioned shape; an unknown
-        // part has none by definition. Both are dropped rather than guessed —
-        // same outcome, and deliberately one arm so a future shape for either
-        // has to be added on purpose.
+        ContentPart::Thinking { thinking, signature } if allow_replay => {
+            let Some(signature) = signature else {
+                return Err(capability("a replayed Converse thinking block requires a signature"));
+            };
+            Ok(Some(json!({"reasoningContent":{"reasoningText":{
+                "text":thinking,
+                "signature":signature,
+            }}})))
+        }
+        ContentPart::RedactedThinking { data } if allow_replay => {
+            Ok(Some(json!({"reasoningContent":{"redactedContent":data}})))
+        }
         ContentPart::Thinking { .. }
         | ContentPart::RedactedThinking { .. }
         | ContentPart::Unknown(_) => Ok(None),
@@ -196,7 +221,7 @@ fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<Value>, Vec<
             Role::System => {
                 // Converse's system slot is text-only; a non-text part has no
                 // representation and Bedrock 400s on one.
-                for block in text_blocks(message.content.as_ref()) {
+                for block in text_blocks(message.content.as_ref(), false) {
                     if block.get("text").is_some() {
                         system.push(block);
                     }
@@ -220,7 +245,7 @@ fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<Value>, Vec<
                          same conversation; `{tool_call_id}` names none"
                     )));
                 }
-                let content = text_blocks(message.content.as_ref());
+                let content = text_blocks(message.content.as_ref(), false);
                 pending_results.push(json!({
                     "toolResult": {
                         "toolUseId": tool_call_id,
@@ -237,11 +262,7 @@ fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<Value>, Vec<
             }
             Role::Assistant => {
                 flush_tool_results(&mut pending_results, &mut messages);
-                let mut content = text_blocks(message.content.as_ref());
-                for call in &message.tool_calls {
-                    content.push(tool_use_block(call)?);
-                    announced_calls.push(&call.id);
-                }
+                let content = assistant_content(message, &mut announced_calls)?;
                 // Bedrock 400s on an assistant turn whose content array is
                 // empty, so an empty one is dropped rather than sent.
                 if !content.is_empty() {
@@ -253,6 +274,37 @@ fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<Value>, Vec<
     // A trailing tool result with no user turn after it: unusual, but legal.
     flush_tool_results(&mut pending_results, &mut messages);
     Ok((system, messages))
+}
+
+fn assistant_content<'a>(
+    message: &'a Message,
+    announced_calls: &mut Vec<&'a str>,
+) -> ComponentResultV1<Vec<Value>> {
+    let replay_layout = validated_layout(message)
+        .map_err(|()| capability("invalid reasoning replay markers or layout"))?;
+    let mut content = text_blocks(message.content.as_ref(), false);
+    let Some(layout) = replay_layout else {
+        for call in &message.tool_calls {
+            content.push(tool_use_block(call)?);
+            announced_calls.push(&call.id);
+        }
+        return Ok(content);
+    };
+    content.clear();
+    for entry in layout {
+        match entry {
+            ReplayRef::Content(part) => {
+                let block = part_to_block(part, true)?
+                    .ok_or_else(|| capability("unsupported reasoning replay block"))?;
+                content.push(block);
+            }
+            ReplayRef::Tool(call) => {
+                content.push(tool_use_block(call)?);
+                announced_calls.push(&call.id);
+            }
+        }
+    }
+    Ok(content)
 }
 
 /// A user turn's content blocks.
@@ -268,7 +320,7 @@ fn user_content(message: &Message) -> ComponentResultV1<Vec<Value>> {
         Some(Content::Text(text)) => content.push(json!({"text": text})),
         Some(Content::Parts(parts)) => {
             for part in parts {
-                if let Some(block) = part_to_block(part)? {
+                if let Some(block) = part_to_block(part, false)? {
                     content.push(block);
                 }
             }
@@ -447,8 +499,11 @@ fn frame_fields(frame: &str) -> (Option<&str>, Option<&str>) {
 /// Converse counts *all* blocks, so a tool call's number can skip values when a
 /// text block preceded it. That is fine: consumers only need fragments of one
 /// call to share a number and different calls to differ, which holds.
-fn block_index(data: &Value) -> u32 {
-    u32::try_from(data["contentBlockIndex"].as_u64().unwrap_or_default()).unwrap_or_default()
+fn block_index(data: &Value) -> ComponentResultV1<u32> {
+    data.get("contentBlockIndex")
+        .and_then(Value::as_u64)
+        .and_then(|value| u32::try_from(value).ok())
+        .ok_or_else(|| provider_protocol_error("the upstream content block index is invalid"))
 }
 
 /// Converse's streaming half.
@@ -481,11 +536,54 @@ struct ConverseSseParser {
     pending_finish: Option<FinishReason>,
     /// Whether `metadata` has already closed the stream.
     closed: bool,
+    open_blocks: BTreeSet<u32>,
+    seen_blocks: BTreeSet<u32>,
 }
 
 impl ConverseSseParser {
     const fn new() -> Self {
-        Self { tail: Vec::new(), pending_finish: None, closed: false }
+        Self {
+            tail: Vec::new(),
+            pending_finish: None,
+            closed: false,
+            open_blocks: BTreeSet::new(),
+            seen_blocks: BTreeSet::new(),
+        }
+    }
+
+    fn open_block(&mut self, index: u32) -> ComponentResultV1<()> {
+        if self.seen_blocks.insert(index) && self.open_blocks.insert(index) {
+            Ok(())
+        } else {
+            Err(provider_protocol_error("the upstream opened a content block twice"))
+        }
+    }
+
+    /// Real Converse streams announce `contentBlockStart` only for tool use (its `start`
+    /// carries the id and name); a text or reasoning block begins with its first delta. Such
+    /// a delta opens the block implicitly. A delta after the block stopped is still refused.
+    fn open_block_for_delta(&mut self, index: u32) -> ComponentResultV1<()> {
+        if self.open_blocks.contains(&index) {
+            return Ok(());
+        }
+        if self.seen_blocks.insert(index) {
+            self.open_blocks.insert(index);
+            Ok(())
+        } else {
+            Err(provider_protocol_error(
+                "the upstream sent a delta for a content block that already stopped",
+            ))
+        }
+    }
+
+    /// A block that was never announced may still stop (an empty text block); only a second
+    /// stop of the same block is an error.
+    fn close_block(&mut self, index: u32) -> ComponentResultV1<()> {
+        if self.open_blocks.remove(&index) || self.seen_blocks.insert(index) {
+            Ok(())
+        } else {
+            Err(provider_protocol_error("the upstream stopped a content block twice"))
+        }
     }
 
     #[expect(
@@ -500,8 +598,14 @@ impl ConverseSseParser {
             // `messageStart` only announces the turn, `contentBlockStop` only
             // closes a block whose deltas already went out. The contract says
             // `messageStart` arrives once; a repeat is simply ignored.
-            "messageStart" | "contentBlockStop" => Ok(Vec::new()),
+            "messageStart" => Ok(Vec::new()),
+            "contentBlockStop" => {
+                self.close_block(block_index(data)?)?;
+                Ok(Vec::new())
+            }
             "contentBlockStart" => {
+                let index = block_index(data)?;
+                self.open_block(index)?;
                 // Only a tool block opens with anything: `start.toolUse` carries
                 // the id and name, and IR wants them on the call's **first**
                 // fragment and never again. A text block's start says nothing.
@@ -509,13 +613,15 @@ impl ConverseSseParser {
                     return Ok(Vec::new());
                 };
                 Ok(vec![StreamEvent::ToolCallDelta {
-                    index: block_index(data),
+                    index,
                     id: use_block["toolUseId"].as_str().map(str::to_owned),
                     name: use_block["name"].as_str().map(str::to_owned),
                     arguments_delta: String::new(),
                 }])
             }
             "contentBlockDelta" => {
+                let index = block_index(data)?;
+                self.open_block_for_delta(index)?;
                 let delta = &data["delta"];
                 if let Some(text) = delta["text"].as_str() {
                     // `Delta.index` is the *choice* index, not the block index:
@@ -527,7 +633,7 @@ impl ConverseSseParser {
                     // input is an object, but the stream sends pieces of its
                     // text. IR keeps arguments as a string for exactly this.
                     return Ok(vec![StreamEvent::ToolCallDelta {
-                        index: block_index(data),
+                        index,
                         id: None,
                         name: None,
                         arguments_delta: fragment.to_owned(),
@@ -543,18 +649,43 @@ impl ConverseSseParser {
                 if let Some(text) = delta["reasoningContent"]["text"].as_str() {
                     return Ok(vec![StreamEvent::ThinkingDelta {
                         index: 0,
+                        block_index: index,
                         thinking_delta: text.to_owned(),
+                    }]);
+                }
+                if let Some(signature) = delta["reasoningContent"]["signature"].as_str() {
+                    return Ok(vec![StreamEvent::ThinkingSignatureDelta {
+                        index: 0,
+                        block_index: index,
+                        signature_delta: signature.to_owned(),
+                    }]);
+                }
+                if let Some(data_value) = delta["reasoningContent"]["redactedContent"].as_str() {
+                    return Ok(vec![StreamEvent::RedactedThinking {
+                        index: 0,
+                        block_index: index,
+                        data: data_value.to_owned(),
                     }]);
                 }
                 Ok(Vec::new())
             }
             "messageStop" => {
+                if !self.open_blocks.is_empty() {
+                    return Err(provider_protocol_error(
+                        "the upstream ended the message before every content block stopped",
+                    ));
+                }
                 let raw = data["stopReason"].as_str().unwrap_or("end_turn");
                 let finish = stop_reason_to_finish(raw);
                 self.pending_finish = Some(finish.clone());
                 Ok(vec![StreamEvent::Finish { finish_reason: Some(finish), stop_sequence: None }])
             }
             "metadata" => {
+                if !self.open_blocks.is_empty() {
+                    return Err(provider_protocol_error(
+                        "the upstream completed before every content block stopped",
+                    ));
+                }
                 let usage = usage_of(&data["usage"])?;
                 self.closed = true;
                 Ok(vec![
@@ -614,7 +745,7 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-bedrock-converse".to_owned(),
-            version: "1.0.1".to_owned(),
+            version: "1.0.2".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
@@ -633,6 +764,10 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
         request: &ChatRequest,
         config: &ProviderConfig,
     ) -> ComponentResultV1<HttpRequestDescriptor> {
+        for message in &request.messages {
+            validated_layout(message)
+                .map_err(|()| capability("invalid reasoning replay markers or layout"))?;
+        }
         if config.provider != DIALECT {
             return Err(capability(format!("unsupported provider dialect `{}`", config.provider)));
         }
@@ -640,6 +775,11 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
             return Err(capability(
                 "Converse addresses the model in the URL path, so a request without one has no \
                  target to send to",
+            ));
+        }
+        if requests_reasoning_replay(request) && !model_allows_reasoning_replay(request, config) {
+            return Err(capability(
+                "reasoning replay requires the target model capability reasoning_replay.claude.v1",
             ));
         }
         // `ProviderApi::resolve` covers four canonical shapes and none of them
@@ -675,12 +815,32 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
             ));
         };
 
-        let mut text: Vec<&str> = Vec::new();
+        let mut content_parts = Vec::new();
+        let mut layout = Vec::new();
+        let mut has_reasoning = false;
         let mut tool_calls: Vec<ToolCall> = Vec::new();
         for block in blocks {
             if let Some(chunk) = block.get("text").and_then(Value::as_str) {
-                text.push(chunk);
+                layout.push(json!({"kind":"content","ordinal":content_parts.len()}));
+                content_parts.push(ContentPart::Text { text: chunk.to_owned() });
                 continue;
+            }
+            if let Some(reasoning) = block.get("reasoningContent") {
+                if let Some(reasoning_text) = reasoning.get("reasoningText") {
+                    has_reasoning = true;
+                    layout.push(json!({"kind":"content","ordinal":content_parts.len()}));
+                    content_parts.push(ContentPart::Thinking {
+                        thinking: reasoning_text["text"].as_str().unwrap_or_default().to_owned(),
+                        signature: reasoning_text["signature"].as_str().map(str::to_owned),
+                    });
+                    continue;
+                }
+                if let Some(data) = reasoning.get("redactedContent").and_then(Value::as_str) {
+                    has_reasoning = true;
+                    layout.push(json!({"kind":"content","ordinal":content_parts.len()}));
+                    content_parts.push(ContentPart::RedactedThinking { data: data.to_owned() });
+                    continue;
+                }
             }
             if let Some(use_block) = block.get("toolUse") {
                 let arguments = match use_block.get("input") {
@@ -691,18 +851,38 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
                     Some(value) => serde_json::to_string(value).map_err(internal)?,
                     None => String::new(),
                 };
+                let id = use_block["toolUseId"].as_str().unwrap_or_default().to_owned();
+                layout.push(json!({"kind":"tool_call","call_id":id}));
                 tool_calls.push(ToolCall {
-                    id: use_block["toolUseId"].as_str().unwrap_or_default().to_owned(),
+                    id,
                     name: use_block["name"].as_str().unwrap_or_default().to_owned(),
                     arguments,
                 });
             }
-            // `reasoningContent` and any block this dialect gains later are
-            // dropped: there is no IR slot that would carry them faithfully.
         }
 
         let finish_reason = stop_reason_to_finish(raw["stopReason"].as_str().unwrap_or("end_turn"));
-        let content = (!text.is_empty()).then(|| Content::Text(text.concat()));
+        let content = if content_parts.is_empty() {
+            None
+        } else if !has_reasoning {
+            Some(Content::Text(
+                content_parts
+                    .into_iter()
+                    .filter_map(|part| match part {
+                        ContentPart::Text { text } => Some(text),
+                        _ => None,
+                    })
+                    .collect(),
+            ))
+        } else {
+            Some(Content::Parts(content_parts))
+        };
+        let mut message_extensions = token_station_protocol::Extensions::new();
+        if has_reasoning {
+            message_extensions
+                .insert("reasoning_replay_protocol_family".into(), json!("claude-signed-thinking"));
+            message_extensions.insert("reasoning_replay_block_layout".into(), json!(layout));
+        }
 
         Ok(ChatResponse {
             // Converse echoes neither a response id nor the model; the host
@@ -717,7 +897,7 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
                     tool_calls,
                     tool_call_id: None,
                     name: None,
-                    extensions: token_station_protocol::Extensions::new(),
+                    extensions: message_extensions,
                 },
                 finish_reason: Some(finish_reason),
                 stop_sequence: None,

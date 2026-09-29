@@ -276,7 +276,7 @@ dependencies = [
 
 [[package]]
 name = "provider-bedrock-converse"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "south-component-conformance",
  "wit-bindgen",
@@ -342,13 +342,13 @@ dependencies = [
 
 [[package]]
 name = "smallvec"
-version = "1.16.1"
+version = "1.16.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba467056f1b547ed52077911161fc86985becbc60e8e1857c8a144dab0def891"
+checksum = "f9395f0f0eee849a9b707b2f06bb92a6a422090e2123bb2ef8e87a0e61892a8e"
 
 [[package]]
 name = "south-component-conformance"
-version = "0.38.0"
+version = "0.39.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -359,7 +359,7 @@ dependencies = [
 
 [[package]]
 name = "south-contracts"
-version = "0.38.0"
+version = "0.39.0"
 dependencies = [
  "bytes",
  "http",
@@ -371,7 +371,7 @@ dependencies = [
 
 [[package]]
 name = "south-provider-api"
-version = "0.38.0"
+version = "0.39.0"
 dependencies = [
  "serde",
  "thiserror",
@@ -448,8 +448,8 @@ dependencies = [
 
 [[package]]
 name = "token-station-protocol"
-version = "0.3.0"
-source = "git+https://github.com/ballast-ai/token-station-kernel.git?rev=ab6bb2ffaab534e6732d1bfc53d24c7caa51fa35#ab6bb2ffaab534e6732d1bfc53d24c7caa51fa35"
+version = "0.4.0"
+source = "git+https://github.com/ballast-ai/token-station-kernel.git?rev=f585bc83e5f8a31fbbc6535dd17c3ac8deec6a54#f585bc83e5f8a31fbbc6535dd17c3ac8deec6a54"
 dependencies = [
  "serde",
  "serde_json",

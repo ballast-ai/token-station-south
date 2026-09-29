@@ -89,3 +89,42 @@
 
 - 将原始任务ID放入路径前，除了编码分隔符还须拒绝独立`.`/`..`，
   因URL规范化会消除点段；先公开负测证明零可发送descriptor，再修边界。
+
+## 2026-09-28：共享 codec 迁移必须沿公开宿主入口核对
+
+- 旧 helper 的错误分支不一定从入口可达；先经过的语义校验可能改变错误类别。Responses 未知 tool_choice 字符串与对象分别保持 Capability/InvalidRequest，不能只读 helper 后合并分类。
+- JSON 形状也是既有契约：纯文本数组的 Parts/Text、file_id 嵌套结构、工具结果的 null/缺字段/数值不能靠对象样例推断。对实际差异逐项建行为断言，兼容开关保持独立。
+- 映射返回错误不代表传输已经发出错误终态。宿主会补发显式 Error 时，状态机必须允许唯一失败帧，并回滚本次没有返回的帧序号；用公开宿主调用顺序验证，不能只测独立 Done/Error。
+- IR 错误枚举的 serde 拼写不等于客户端 wire 错误码；迁移应逐枚举核对旧输出，不直接透传内部拼写。
+
+- 诊断脱敏不能删掉既有产品回执依赖的固定协议名称。仅白名单标准词表可回显，任意客户端字符串仍脱敏；以真实 HTTP 拒绝回执校验分类。
+
+## 2026-09-29：兼容清单只声明本仓拥有的合同
+
+- `compatibility.json.contracts.canonical_ir` 是所有权声明，不是消费版本记录。South
+  消费 kernel IR 时该槽必须保持 `null`；把 kernel 的 canonical IR 版本抄入这里会制造
+  双重所有权。
+- 消费约束应写入组件握手元组（kernel version/revision 与 stream contract）以及依赖 pin，
+  并由真实装载测试交叉核对。版本升级前先区分“拥有的合同”和“接受的合同”。
+
+## 2026-09-29：回放载体必须按真实身份与生命周期验收
+
+- 流状态不能用全局布局拼 carrier；choice index、content block index 和终态 choice 必须
+  同时分区验证，否则单 choice 用例会掩盖跨 choice 污染。
+- “有 fixture”不等于新语义进入真实 Wasm：冻结包必须明确包含 request/response/stream、
+  多 thinking、redacted 与空 thinking，并让 sandbox gate ②实际读取这些行。
+- kernel IR 没有 block-stop 事件时，关闭完整性必须在 provider parser 消费 wire start/stop
+  时完成；文档不得声称 North 能拒绝 IR 中不存在的重复关闭事件。
+- 会话中用户明确指定文档语言时，该要求优先于仓库默认语言；修订技术失真时不得顺带改写
+  文档语言。
+
+## 2026-09-29：回放授权、预算与失败状态必须共同闭合
+
+- 协议 family 和 block layout 是一组不可拆分的授权标记；只检查其中一个会让 layout-only
+  或 family-only 请求绕过能力门。验证必须同时覆盖消息角色、完整标记和 content/tool 双射。
+- 流 block index 不得用缺省零兜底；缺失、负数、溢出以及关闭后复用都属于 provider 协议错误。
+  只跟踪当前 open 集合无法区分首次打开与关闭后重开，必须另存 seen 集合。
+- 大载体的预算检查必须先算再写，并用增量计数避免每个 delta 重扫全部块。终止时按唯一 choice
+  构造一次 carrier 并缓存，随后 item、completed 和 continuation 只能复用该结果。
+- 映射失败进入 AwaitingError 时要释放 replay/content 大缓冲；仅回滚帧序号而保留失败载荷，
+  会把已经拒绝的数据继续留在长寿命流状态中。

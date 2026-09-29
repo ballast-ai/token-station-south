@@ -1,0 +1,66 @@
+# Responses 共享北向 codec
+
+本变更承接 server P15 A1 双宿主差异表（社区基线 `8232a57e80d667a4c977c88992440fe648ef030e`），三方向直接使用既有 kernel IR，不经过 Chat wire，不改变 IR 或组件兼容元组。
+
+公共接口为 `chat_request_from_responses(body, options)`、`responses_response(ir, context)` 和 `responses_frames(events, state)`。上下文显式提供 response_id、model、created_at、入站工具定义与 RawContent/Summary 思考呈现方式。请求兼容选项分别控制既有 messages 入口、空 input、调用 ID/参数别名、未知内容保留及纯文本数组形状，不能代表某个完整宿主。codec 不拥有准入、计费、历史缓存、路由、时间、随机数或网络。
+
+首次空 batch 是显式启动调用：仅 Active 且尚未 created 时发一个 created，后续空 batch、等待错误或已终态不输出。此启动入口是 typed 批接口语义；单事件 JSON façade 没有空 batch 输入，不伪造 IR 事件，也不把该独立测试宣称为 façade 对拍。
+
+每流状态固定上下文，维护统一 output_index、单调 sequence_number、分类型增量槽、Usage::absorb、待完成原因和终态。Finish 不收尾，Done/明确 Error 仅收尾一次；映射失败转入等待 Error 状态，忽略后续正文/Done，只允许宿主明确补发一次失败终态，并回滚本次未返回帧的 sequence/created；不完整原因决定 incomplete 事件。正文补齐 added/delta/done 生命周期，raw 思考在后继正文/工具前收口。工具恢复包含 namespace/custom/tool_search/local_shell。JSON façade 复用 typed 映射；流状态只持 typed 值，不在帧间 JSON 往返。
+
+A1 的宿主边界：I03/I04/I05/I06/I12/I13/I17/I19/O02/O03/O04/E04/E05/E09 的产品选择留宿主；I07–I10/I21 的工具支持不放宽 server 准入。I13/O04 只保留既有 opaque 数据，不能将 Anthropic signature 等同于 OpenAI 密文；R 轨来源与跨家策略未完成。
+
+测试以 A1 编号覆盖输入、响应与流事件；typed/JSON 使用同一 fixture。未知项和非法形状报告字段路径、不输出原始内容。属性样本固定 32，由宿主 nextest 的 14 秒截止执行。先观察行为测试失败，再实现映射；只完成本 crate 定向验证不代表整个工作区发行验证完成。
+
+
+## 接口补充与边界
+
+`ResponsesContext.allow_incomplete_tool_calls` 单独控制首片调用身份不完整的历史兼容；默认使用处明确 false，server 兼容场景可 true。`render_legacy_encrypted_reasoning` 单独控制既有签名呈现，server false、社区既有行为可 true；Summary 不隐含打开该开关。
+
+`ResponsesSseState::terminal_response()` 仅在成功渲染 Done 后返回 canonical 快照（包含 incomplete），错误或未完成时返回 None。快照按原 IR index 分组，思考、正文、工具保持社区 continuation 的既有顺序；缓存、作用域、过期、重复请求 tombstone 仍由宿主管理。JSON façade 不序列化此状态。
+
+社区未建模顶层扩展的保留及 `token_station_private_*`／continuation scope 过滤留社区外壳，不能由客户端字段覆盖宿主可信元数据。provider-hosted / 未知协议能力用 `CodecError::UnknownValue` 表示；非法形状使用 `Unrenderable`（既有公共错误类型），路径与固定诊断不回显请求内容。
+
+`ResponsesRequestOptions` 的五个字段均默认 false；社区显式启用 `allow_empty_input` 与 `preserve_text_parts`，server 显式启用另外三项。文本数组形状保留与空历史准入相互独立，不能借其中一项推导另一项。legacy function_call_output 的非字符串结果完整 JSON 串化，缺字段为空串；默认路径保留社区 Content 解析。tool_search 流 item 固定带 `fc_<call_id>`，使参数帧引用始终指向已宣布的 item。
+
+失败帧错误码按既有社区 Responses wire 映射枚举（如 RateLimit→rate_limit_exceeded），不直接泄漏 IR 枚举拼写。server Native 上游错误帧保留仍在宿主壳，不经此映射。
+
+逐行覆盖、行为 RED 记录和验证命令见[验收证据](2026-09-28-responses-north-codec-validation.md)。
+
+## R2：有界 Claude reasoning 回放载体
+
+R2 消费 kernel v0.3.0 的 canonical IR 2 / stream 2，但 South 不拥有 canonical IR，
+所以 `compatibility.json.contracts.canonical_ir` 保持 `null`。依赖 pin 与十三个组件的
+kernel version/revision、stream contract 共同记录消费边界；由于 0.38.0 已由任务合同 7
+发布占用，South 运行时改为 0.39.0，既有标签不移动。
+
+Responses `encrypted_content` 增加封闭载体 `tsr.c1.` 加 base64url-no-pad JSON。对象固定
+namespace `token-station.reasoning-replay`、version 1、family
+`claude-signed-thinking`，有序块仅允许 thinking、redacted_thinking、text_ref、
+tool_call_ref。未知字段、未知版本/族、引用不完整、超过 128 块、单 opaque 块超过
+1 MiB、累计超过 4 MiB 或编码结果超过载体上限，均以稳定
+`reasoning_replay_invalid` 拒绝且不截断。thinking 的 signature 和 tool_call_ref 的
+call_id 都必须非空；call_id 同时计入单块与累计字节。输出端要求布局对消息中的每个
+content part 和 tool call 恰好引用一次，text_ref 的 ordinal 是正文 part 的序号，重复、
+遗漏和错引均拒绝。
+
+codec 将载体解析为同一 assistant 消息内的有序内容布局；输出从真实 Thinking、
+RedactedThinking、正文及工具调用生成载体。Responses 请求中原有的 reasoning item
+（包括空 summary、相邻 item 和未知扩展）单独保存，返回时不拿私有 thinking 文本重建
+summary。流状态按 choice `index` 分区，再以 content `block_index` 识别块；每次追加立即
+检查 128 块、1 MiB/块和 4 MiB/choice，done item、completed output 与 terminal canonical
+快照都只使用所属 choice 的载体。
+
+Anthropic Messages 解析器在 thinking block start 时发出允许空文本的 ThinkingDelta，
+Anthropic 与 Converse 解析器都核对 content block start/delta/stop，存在未关闭块时不得
+发出成功 Done。kernel stream 2 本身没有 block-stop 事件；因此生命周期完整性在 provider
+parser 消费上游 start/stop 时关闭，North 收到 IR 后不能再次区分「同一已打开块的连续
+delta」与「复用同一 block_index 的第二个已关闭块」。North 仍拒绝索引回退、重复
+redacted、signature 先于 thinking、空 signature 和 Done 时缺 signature。
+
+载体只允许交给显式声明 `reasoning_replay.claude.v1` 的 Anthropic Messages 或
+Bedrock Converse 译器。OpenAI-compatible 与 Gemini 显式拒绝；不带 `tsr.c1.` 的
+OpenAI opaque 不由 South 跨协议解释。South 返回可由宿主稳定映射的 invalid、
+其中 codec 只报告结构转换失败 `reasoning_replay_invalid`。target mismatch、当前可用性及
+HTTP 状态映射属于宿主路由与外部协议职责；South 不参与路由、凭证选择、认证、计费或验签；
+结构合法但 signature 错误由目标上游拒绝。

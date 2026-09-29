@@ -32,8 +32,8 @@
 //!
 //! # Why the errors are typed
 //!
-//! A host has to turn a conversion failure into an HTTP status, a log line and
-//! a funds decision. A string cannot be matched on, so every host ends up
+//! A host has to turn a conversion failure into its own external error, log line
+//! and funds decision. A string cannot be matched on, so every host ends up
 //! re-parsing prose. [`CodecError`] carries a stable category and the field
 //! path that failed; the host maps it, the codec never does.
 
@@ -55,10 +55,12 @@ pub use sse::{OpenAiChatSseState, openai_chat_frames};
 ///
 /// Each variant names the wire field it is about, so a host can report the
 /// offending field without re-parsing a message. Variants are added, never
-/// repurposed: a host's mapping from category to HTTP status is a contract of
-/// its own.
+/// repurposed: a host's external error mapping is a contract of its own.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum CodecError {
+    /// A marked reasoning replay carrier is malformed or exceeds its bounds.
+    #[error("{field}: invalid reasoning replay carrier")]
+    ReasoningReplayInvalid { field: String },
     /// A role, block type or enum value the protocol does not define.
     ///
     /// Refused rather than dropped: a silently discarded message is how a
@@ -84,6 +86,17 @@ pub enum CodecError {
 }
 
 impl CodecError {
+    /// Stable external code for hosts that classify codec failures.
+    #[must_use]
+    pub const fn stable_code(&self) -> &'static str {
+        match self {
+            Self::ReasoningReplayInvalid { .. } => "reasoning_replay_invalid",
+            Self::UnknownValue { .. } => "unknown_value",
+            Self::OutOfRange { .. } => "out_of_range",
+            Self::Unrenderable { .. } => "unrenderable",
+        }
+    }
+
     pub(crate) fn unknown_value(
         field: impl Into<String>,
         value: impl Into<String>,
@@ -108,7 +121,8 @@ impl CodecError {
     #[must_use]
     pub fn field(&self) -> &str {
         match self {
-            Self::UnknownValue { field, .. }
+            Self::ReasoningReplayInvalid { field }
+            | Self::UnknownValue { field, .. }
             | Self::OutOfRange { field, .. }
             | Self::Unrenderable { field, .. } => field,
         }
@@ -130,3 +144,9 @@ pub(crate) fn describe(value: &Value) -> String {
         Value::Object(_) => "an object".to_owned(),
     }
 }
+
+pub mod responses;
+pub use responses::{
+    ResponsesContext, ResponsesFrame, ResponsesReasoningMode, ResponsesRequestOptions,
+    ResponsesSseState, chat_request_from_responses, responses_frames, responses_response,
+};

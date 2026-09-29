@@ -35,6 +35,21 @@ fuzz_target!(|data: &[u8]| {
         return;
     };
 
+    // All Responses JSON facades consume untrusted bytes without ambient state.
+    let context = south_north_codec::ResponsesContext {
+        response_id: "resp_fuzz".to_owned(),
+        model: "fuzz".to_owned(),
+        created_at: 0,
+        inbound_tools: Default::default(),
+        reasoning: south_north_codec::ResponsesReasoningMode::Summary,
+        allow_incomplete_tool_calls: false,
+        render_legacy_encrypted_reasoning: false,
+    };
+    let _ = south_north_codec::responses::responses_request_json(input, &Default::default());
+    let _ = south_north_codec::responses::responses_response_json(input, &context);
+    let mut state = south_north_codec::ResponsesSseState::new(context);
+    let _ = south_north_codec::responses::responses_event_json(input, &mut state);
+
     // The same public JSON ABI used by the MiniMax guest parses untrusted HTTP frames.
     let minimax = south_component_conformance::reference_minimax_task_v2::MiniMaxTaskReferenceV2;
     if let Ok(encoded) =

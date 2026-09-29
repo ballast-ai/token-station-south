@@ -59,9 +59,9 @@ fn a_mismatched_runtime_is_named_in_the_refusal() {
     let mut manifest = shipped_manifest();
     manifest.compatibility.south_runtime = "0.15.0".to_owned();
     let expectations = HostExpectationsV1 {
-        ir_schema_id: "token-station-protocol@0.3.0/v0.2.0".to_owned(),
-        kernel_version: "0.2.0".to_owned(),
-        kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb09c".to_owned(),
+        ir_schema_id: "token-station-protocol@0.4.0/v0.3.0".to_owned(),
+        kernel_version: "0.3.0".to_owned(),
+        kernel_revision: "6822aab1dea54ef646cb2206595cd4955ff9764a".to_owned(),
         south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
     };
     assert!(compatibility_matches(&manifest, &expectations).is_err());

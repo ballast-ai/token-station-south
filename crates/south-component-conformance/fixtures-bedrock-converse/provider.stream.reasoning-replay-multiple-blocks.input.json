@@ -1,0 +1,17 @@
+{
+  "chunks": [
+    "event: contentBlockStart\ndata: {\"contentBlockIndex\":0,\"start\":{\"reasoningContent\":{}}}\n\n",
+    "event: contentBlockDelta\ndata: {\"contentBlockIndex\":0,\"delta\":{\"reasoningContent\":{\"text\":\"first\"}}}\n\n",
+    "event: contentBlockDelta\ndata: {\"contentBlockIndex\":0,\"delta\":{\"reasoningContent\":{\"signature\":\"SIG-1\"}}}\n\n",
+    "event: contentBlockStop\ndata: {\"contentBlockIndex\":0}\n\n",
+    "event: contentBlockStart\ndata: {\"contentBlockIndex\":1,\"start\":{\"reasoningContent\":{}}}\n\n",
+    "event: contentBlockDelta\ndata: {\"contentBlockIndex\":1,\"delta\":{\"reasoningContent\":{\"text\":\"\"}}}\n\n",
+    "event: contentBlockDelta\ndata: {\"contentBlockIndex\":1,\"delta\":{\"reasoningContent\":{\"signature\":\"SIG-EMPTY\"}}}\n\n",
+    "event: contentBlockStop\ndata: {\"contentBlockIndex\":1}\n\n",
+    "event: contentBlockStart\ndata: {\"contentBlockIndex\":2,\"start\":{\"reasoningContent\":{}}}\n\n",
+    "event: contentBlockDelta\ndata: {\"contentBlockIndex\":2,\"delta\":{\"reasoningContent\":{\"redactedContent\":\"OPAQUE\"}}}\n\n",
+    "event: contentBlockStop\ndata: {\"contentBlockIndex\":2}\n\n",
+    "event: messageStop\ndata: {\"stopReason\":\"end_turn\"}\n\n",
+    "event: metadata\ndata: {\"usage\":{\"inputTokens\":1,\"outputTokens\":2,\"totalTokens\":3}}\n\n"
+  ]
+}

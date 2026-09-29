@@ -1,0 +1,36 @@
+{
+  "packages": [
+    {
+      "id": "path+file:///fixture/fuzz#south-contracts-fuzz@0.0.0",
+      "name": "south-contracts-fuzz",
+      "version": "0.0.0",
+      "source": null,
+      "publish": [],
+      "manifest_path": "/fixture/fuzz/Cargo.toml",
+      "targets": [
+        {
+          "kind": [
+            "lib"
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "name": "south-north-codec",
+          "rename": null,
+          "source": null,
+          "path": "/fixture/crates/south-north-codec"
+        }
+      ]
+    },
+    {
+      "id": "path+file:///fixture/crates/south-north-codec#0.0.1",
+      "name": "south-north-codec",
+      "version": "0.0.1",
+      "dependencies": []
+    }
+  ],
+  "workspace_members": [
+    "path+file:///fixture/fuzz#south-contracts-fuzz@0.0.0"
+  ]
+}
