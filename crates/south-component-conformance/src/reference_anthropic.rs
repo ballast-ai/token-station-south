@@ -25,6 +25,7 @@ use token_station_protocol::{
 };
 
 use crate::component::{ComponentResultV1, ProviderComponentV1, StreamParserV1};
+use crate::reasoning_replay::{ReplayRef, validated_layout};
 
 /// The version of the Messages API this component speaks. A wire-protocol
 /// constant of the dialect, not an operator setting (design record D5).
@@ -119,6 +120,22 @@ fn part_to_block(part: &ContentPart) -> Value {
     }
 }
 
+fn assistant_part_to_block(part: &ContentPart, replay: bool) -> Option<Value> {
+    match part {
+        ContentPart::Thinking { thinking, signature } => {
+            let mut block = json!({"type": "thinking", "thinking": thinking});
+            if replay {
+                block["signature"] = json!(signature.as_deref()?);
+            }
+            Some(block)
+        }
+        ContentPart::RedactedThinking { data } => {
+            replay.then(|| json!({"type": "redacted_thinking", "data": data}))
+        }
+        _ => Some(part_to_block(part)),
+    }
+}
+
 /// `None` when the turn carried no content at all, so the caller can omit the
 /// field rather than invent one.
 ///
@@ -193,10 +210,8 @@ fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<&str>, Vec<V
                 messages.push(Value::Object(turn));
             }
             Role::Assistant => {
-                let parts = match message.content.as_ref() {
-                    Some(Content::Parts(parts)) => parts.as_slice(),
-                    _ => &[],
-                };
+                let replay_layout = validated_layout(message)
+                    .map_err(|()| capability("invalid reasoning replay markers or layout"))?;
                 let mut blocks: Vec<Value> = match message.content.as_ref() {
                     // A bare string becomes the one text block it stands for;
                     // an empty one contributes no block, because Messages
@@ -204,40 +219,22 @@ fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<&str>, Vec<V
                     Some(Content::Text(text)) if !text.is_empty() => {
                         vec![json!({"type": "text", "text": text})]
                     }
-                    Some(Content::Parts(parts)) => parts.iter().map(part_to_block).collect(),
+                    Some(Content::Parts(parts)) => parts
+                        .iter()
+                        .filter_map(|part| assistant_part_to_block(part, false))
+                        .collect(),
                     _ => Vec::new(),
                 };
-                if let Some(layout) = message
-                    .extensions
-                    .get("reasoning_replay_block_layout")
-                    .and_then(Value::as_array)
-                {
+                if let Some(layout) = replay_layout {
                     blocks.clear();
                     for entry in layout {
-                        match entry["kind"].as_str() {
-                            Some("content") => {
-                                let ordinal = entry["ordinal"]
-                                    .as_u64()
-                                    .and_then(|value| usize::try_from(value).ok())
-                                    .ok_or_else(|| capability("invalid reasoning replay layout"))?;
-                                blocks.push(part_to_block(parts.get(ordinal).ok_or_else(
-                                    || capability("invalid reasoning replay content reference"),
-                                )?));
+                        match entry {
+                            ReplayRef::Content(part) => {
+                                blocks.push(assistant_part_to_block(part, true).ok_or_else(
+                                    || capability("unsupported reasoning replay block"),
+                                )?);
                             }
-                            Some("tool_call") => {
-                                let id = entry["call_id"].as_str().ok_or_else(|| {
-                                    capability("invalid reasoning replay tool reference")
-                                })?;
-                                let call = message
-                                    .tool_calls
-                                    .iter()
-                                    .find(|call| call.id == id)
-                                    .ok_or_else(|| {
-                                        capability("invalid reasoning replay tool reference")
-                                    })?;
-                                blocks.push(tool_use_block(call)?);
-                            }
-                            _ => return Err(capability("invalid reasoning replay layout")),
+                            ReplayRef::Tool(call) => blocks.push(tool_use_block(call)?),
                         }
                     }
                 } else {

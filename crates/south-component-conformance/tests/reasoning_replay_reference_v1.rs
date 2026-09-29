@@ -20,10 +20,109 @@ fn request(model: &str) -> ChatRequest {
                 {"type":"text","text":"answer"},
                 {"type":"redacted_thinking","data":"opaque"}
             ],
-            "reasoning_replay_protocol_family":"claude-signed-thinking"
+            "reasoning_replay_protocol_family":"claude-signed-thinking",
+            "reasoning_replay_block_layout":[
+                {"kind":"content","ordinal":0},
+                {"kind":"content","ordinal":1},
+                {"kind":"content","ordinal":2}
+            ]
         }]
     }))
     .unwrap()
+}
+
+#[test]
+fn x1_partial_or_non_bijective_replay_markers_are_refused() {
+    for provider in ["anthropic", "bedrock"] {
+        let model = if provider == "anthropic" {
+            "claude-sonnet"
+        } else {
+            "anthropic.claude-sonnet-4-v1:0"
+        };
+        for mutation in ["layout-only", "family-only", "missing-content", "duplicate-content"] {
+            let mut request = request(model);
+            let extensions = &mut request.messages[0].extensions;
+            match mutation {
+                "layout-only" => {
+                    extensions.remove("reasoning_replay_protocol_family");
+                }
+                "family-only" => {
+                    extensions.remove("reasoning_replay_block_layout");
+                }
+                "missing-content" => {
+                    extensions.insert(
+                        "reasoning_replay_block_layout".into(),
+                        json!([
+                            {"kind":"content","ordinal":0},
+                            {"kind":"content","ordinal":1}
+                        ]),
+                    );
+                }
+                "duplicate-content" => {
+                    extensions.insert(
+                        "reasoning_replay_block_layout".into(),
+                        json!([
+                            {"kind":"content","ordinal":0},
+                            {"kind":"content","ordinal":1},
+                            {"kind":"content","ordinal":1},
+                            {"kind":"content","ordinal":2}
+                        ]),
+                    );
+                }
+                _ => unreachable!(),
+            }
+            let config = config(
+                provider,
+                if provider == "anthropic" {
+                    "https://api.anthropic.com"
+                } else {
+                    "https://bedrock-runtime.us-east-1.amazonaws.com"
+                },
+                model,
+                true,
+            );
+            let result = if provider == "anthropic" {
+                AnthropicReferenceV1.build_http_request(&request, &config)
+            } else {
+                BedrockConverseReferenceV1.build_http_request(&request, &config)
+            };
+            assert!(result.is_err(), "{provider} accepted {mutation}");
+        }
+    }
+}
+
+#[test]
+fn x1_unmarked_reasoning_never_sends_replay_secrets() {
+    for provider in ["anthropic", "bedrock"] {
+        let model = if provider == "anthropic" {
+            "claude-sonnet"
+        } else {
+            "anthropic.claude-sonnet-4-v1:0"
+        };
+        let mut request = request(model);
+        request.messages[0].extensions.clear();
+        let config = config(
+            provider,
+            if provider == "anthropic" {
+                "https://api.anthropic.com"
+            } else {
+                "https://bedrock-runtime.us-east-1.amazonaws.com"
+            },
+            model,
+            true,
+        );
+        let body = if provider == "anthropic" {
+            AnthropicReferenceV1.build_http_request(&request, &config)
+        } else {
+            BedrockConverseReferenceV1.build_http_request(&request, &config)
+        }
+        .unwrap()
+        .body
+        .unwrap()
+        .to_string();
+        assert!(!body.contains("sig-1"), "{provider} leaked a signature");
+        assert!(!body.contains("opaque"), "{provider} leaked redacted data");
+    }
 }
 
 fn config(provider: &str, base_url: &str, model: &str, enabled: bool) -> ProviderConfig {
