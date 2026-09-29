@@ -1,11 +1,14 @@
-//! 任务复合原子效果的公共履约套件。宿主适配器必须操作真实效果实现。
+//! The shared conformance suite for a task's compound atomic effect. A host
+//! adapter must drive the real effect implementation, never a stand-in.
 
 use std::{future::Future, pin::Pin};
 
-/// 测试适配器返回去敏错误，不返回凭证或数据库连接信息。
+/// A test adapter returns redacted errors: never a credential, never database
+/// connection detail.
 pub type HarnessFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, String>> + Send + 'a>>;
 
-/// 故障注入位置；提交前必须由真实事务内部失败，不能在调用前短路。
+/// Where a failure is injected. It must fail *inside* the real transaction
+/// before commit, rather than short-circuiting ahead of the call.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Fault {
     None,
@@ -15,7 +18,7 @@ pub enum Fault {
     AfterApplyCommit,
 }
 
-/// 准备事务的幂等裁决。
+/// The idempotency verdict for a prepare transaction.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Prepared {
     Created,
@@ -23,7 +26,8 @@ pub enum Prepared {
     Conflict,
 }
 
-/// 套件使用的客观结果与费用证据；宿主自己确定资源政策。
+/// The objective outcome and cost evidence the suite works from. Resource
+/// policy stays with the host.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Completion {
     Succeeded,
@@ -32,7 +36,8 @@ pub enum Completion {
     CancelledNoCharge,
 }
 
-/// 持久执行事实，不包含资源政策。成功、失败和取消不能互相替代。
+/// Durable execution facts, carrying no resource policy. Success, failure and
+/// cancellation are not substitutable for one another.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Execution {
     #[default]
@@ -45,7 +50,8 @@ pub enum Execution {
     Cancelled,
 }
 
-/// 不导出金额或账本格式。摘要仅用于证明失败没有改变宿主资源。
+/// Exports neither amounts nor ledger shape. The summary exists only to prove
+/// that a failure left the host's resources unchanged.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Probe {
     pub tasks: u32,
@@ -59,10 +65,15 @@ pub struct Probe {
     pub resource_digest: Option<[u8; 32]>,
 }
 
-/// 每个场景独立重建 fixture；必须使用生产的原子效果和真实存储。
-/// `takeover` 表示新 owner 已持久接管，不把时间流逝冒充 fencing。
+/// Every scenario rebuilds its fixture from scratch, against the production
+/// atomic effect and real storage.
+///
+/// `takeover` means a new owner has durably taken over — elapsed time is never
+/// passed off as fencing.
 pub trait AtomicHarness: Send {
-    /// 按本夹具的独立政策计算预期资源，禁止从本次实际关闭结果回读后充当预期。
+    /// Expected resources are computed from this fixture's own policy. Reading them
+    /// back out of the run's actual settlement and calling that the expectation is
+    /// forbidden — it would make the assertion unfalsifiable.
     fn expected_resource_digest(&self, completion: Completion) -> Option<[u8; 32]>;
     fn reset(&mut self) -> HarnessFuture<'_, ()>;
     fn prepare(&mut self, different_request: bool, fault: Fault) -> HarnessFuture<'_, Prepared>;
@@ -79,13 +90,14 @@ pub trait AtomicHarness: Send {
     fn snapshot(&mut self) -> HarnessFuture<'_, Probe>;
 }
 
-/// 一个独立事故场景的已通过记录。
+/// A passing record for one isolated incident scenario.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CaseReport {
     pub name: &'static str,
 }
 
-/// 运行统一故障判据；任一错误即返回其场景名，不能跳过后冒称通过。
+/// Runs the common failure criteria. The first error returns its scenario name;
+/// skipping a scenario and reporting a pass is not allowed.
 pub async fn run_atomic_suite<H: AtomicHarness>(host: &mut H) -> Result<Vec<CaseReport>, String> {
     let mut reports = Vec::new();
     for name in [

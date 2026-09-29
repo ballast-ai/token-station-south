@@ -1,4 +1,5 @@
-//! 错误实现必须被公共套件拒绝；内存参考实现不计为第二宿主。
+//! A wrong implementation must be refused by the shared suite. The in-memory
+//! reference implementation does not count as a second host.
 
 use south_task_conformance::{
     AtomicHarness, Completion, Execution, Fault, HarnessFuture, Prepared, Probe, run_atomic_suite,

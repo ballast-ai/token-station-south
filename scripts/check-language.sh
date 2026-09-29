@@ -49,14 +49,16 @@ readonly BASELINE_FILE='scripts/language-baseline.txt'
 readonly CJK_CLASS='[一-鿿㐀-䶿豈-鶴，。、；：！？「」『』（）《》【】〈〉〔〕｛｝｟｠～]'
 readonly DOUBLE_DASH='——'
 
-# Paths where CJK is **data, not prose**: a frozen upstream sample whose request
-# body legitimately contains a Chinese prompt. Empty today — every current hit is
-# prose or a diagnostic, verified 2026-09-29 — and kept as an explicit list
-# rather than a path prefix so that adding one is a reviewed decision with a
-# reason attached, not a silent widening.
+# Paths where CJK is **data, not prose** — the only sanctioned exception.
 #
-# Format: one "path<TAB>reason" per line.
-readonly DATA_ALLOWLIST=''
+# One path per line with the reason it is exempt, so that adding an entry is a
+# reviewed decision with a justification attached rather than a silent widening.
+# A path prefix would not do: `crates/**/fixtures-*` as a blanket exemption would
+# have swallowed the seven fixture READMEs, which are prose and do need fixing.
+#
+# Keep this list short. If it starts growing, the rule is being renegotiated by
+# accident.
+readonly DATA_ALLOWLIST='scripts/check-language.sh|the CJK character class this gate matches on, plus its self-test fixtures'
 
 cjk_lines_in() {
   # Counts lines, not codepoints: one line with three Chinese words is one line
@@ -66,8 +68,12 @@ cjk_lines_in() {
 }
 
 is_allowlisted() {
-  local file="$1"
-  [[ -n "$DATA_ALLOWLIST" ]] && grep -qxF "$file"$'\t'"$(printf '%s' "${DATA_ALLOWLIST}" | awk -F'\t' -v f="$file" '$1==f{print $2}')" <<<"$DATA_ALLOWLIST" 2>/dev/null
+  local file="$1" entry
+  while IFS= read -r entry; do
+    [[ -z "$entry" ]] && continue
+    [[ "${entry%%|*}" == "$file" ]] && return 0
+  done <<<"$DATA_ALLOWLIST"
+  return 1
 }
 
 # Text files git tracks. Binary files are skipped by asking git, not by guessing
@@ -287,6 +293,38 @@ self_test() {
     echo "language self-test failed: growth past the baseline was accepted" >&2
     return 1
   fi
+
+  # 4b. The data allowlist must actually exempt the path it names — and must not
+  #     exempt a path it does not. It was dead code in the first draft (an empty
+  #     list plus a lookup that never matched), and dead exemption machinery is
+  #     worse than none: the day someone needs it they get a gate that refuses
+  #     their entry for reasons nobody has debugged.
+  # Case 4 left a baseline that licenses prose.md; drop it so this case tests the
+  # allowlist rather than re-testing the baseline.
+  rm -f "$tmp/scripts/language-baseline.txt"
+  printf 'english\n中文一\n' > "$tmp/prose.md"
+  printf '中文\n' > "$tmp/exempt.txt"
+  git -C "$tmp" add -A
+  # Outside the repo tree on purpose: a copy of this checker inside `$tmp` would
+  # be picked up by `git add -A`, and it carries CJK of its own, so the fixture
+  # would fail the gate for a reason that has nothing to do with the allowlist.
+  local patched
+  patched="$(mktemp)"
+  sed "s#^readonly DATA_ALLOWLIST=.*#readonly DATA_ALLOWLIST='exempt.txt|self-test fixture'#" \
+    "$checker" > "$patched"
+  if ( cd "$tmp" && bash "$patched" >/dev/null 2>&1 ); then
+    echo "language self-test failed: an unlisted CJK file was exempted" >&2
+    return 1
+  fi
+  rm -f "$tmp/prose.md"
+  git -C "$tmp" add -A
+  if ! ( cd "$tmp" && bash "$patched" >/dev/null 2>&1 ); then
+    echo "language self-test failed: the allowlisted path was not exempted" >&2
+    return 1
+  fi
+  rm -f "$tmp/exempt.txt"
+  rm -f "$patched"
+  git -C "$tmp" add -A
 
   # 5. A CJK commit message must be rejected.
   printf 'english\n中文一\n' > "$tmp/prose.md"
