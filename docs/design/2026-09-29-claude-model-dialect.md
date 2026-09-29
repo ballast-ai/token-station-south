@@ -1,6 +1,6 @@
 # Claude model dialect: sampling, forced tool choice and reasoning effort
 
-Status: implemented on `feature/p19-anthropic-dialect`; unreleased.
+Status: released in v0.41.0 (#120); `provider-anthropic` 1.0.7, `provider-bedrock-converse` 1.0.4.
 Origin: token-station-server plan P19 (decisions DP1–DP5 taken 2026-09-29).
 
 ## Problem

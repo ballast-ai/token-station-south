@@ -344,3 +344,21 @@ fn usage_partition_retires_the_published_anthropic_and_converse_identities() {
         assert_ne!(manifest.version, published, "{name} reused its published identity");
     }
 }
+
+/// The per-model Claude dialect (#120) changes the request both packages build for a model
+/// whose host declares `anthropic.*` words, so the identities published with 0.40.0 retire.
+#[test]
+fn claude_dialect_retires_the_published_040_anthropic_and_converse_identities() {
+    for (name, published) in
+        [("provider-anthropic", "1.0.6"), ("provider-bedrock-converse", "1.0.3")]
+    {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_ne!(manifest.version, published, "{name} reused its published identity");
+    }
+}
