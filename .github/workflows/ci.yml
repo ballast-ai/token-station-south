@@ -60,6 +60,32 @@ jobs:
           cargo machete
           (cd fuzz && cargo machete)
 
+  # English-only, enforced rather than requested. CONTRIBUTING.md and AGENTS.md
+  # have both stated the rule from the start; it still drifted to ~1175 CJK lines
+  # across 46 files and six Chinese release-commit titles, because nothing ever
+  # failed. `scripts/language-baseline.txt` records the backlog so this gate
+  # blocks *growth* from day one instead of blocking every PR until the backlog
+  # is translated.
+  #
+  # Its own job, not a step in `quality`, for one reason: the commit-message half
+  # needs real history (`fetch-depth: 0`), and paying for a full clone in the
+  # build job would slow every run.
+  language:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Language gate self-test
+        run: scripts/check-language.sh --self-test
+      - name: Tracked files are English
+        run: scripts/check-language.sh
+      - name: Commit messages are English
+        if: github.event_name == 'pull_request'
+        run: |
+          scripts/check-language.sh --commits \
+            '${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}'
+
   fuzz:
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
