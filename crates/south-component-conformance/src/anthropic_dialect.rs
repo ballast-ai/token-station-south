@@ -104,6 +104,18 @@ fn forces_tool(request: &ChatRequest) -> bool {
     }
 }
 
+/// Whether a model declaring `supported_parameters` refuses this request's tool choice.
+///
+/// Hosts call it to refuse before routing under their own error code; the
+/// components refuse exactly the same requests, so the two cannot disagree.
+pub fn refuses_forced_tool<'a>(
+    supported_parameters: impl IntoIterator<Item = &'a str>,
+    request: &ChatRequest,
+) -> bool {
+    supported_parameters.into_iter().any(|word| word == TOOL_CHOICE_AUTO_ONLY)
+        && forces_tool(request)
+}
+
 impl Dialect {
     /// The dialect the host declared for `request.model`; the empty dialect
     /// when the model is not listed.
@@ -336,6 +348,21 @@ mod tests {
         assert!(dialect.refuse_forced_tool(&named).is_err());
         let auto = with_tool(request(None), ToolChoice::Auto);
         assert!(dialect.refuse_forced_tool(&auto).is_ok());
+    }
+
+    #[test]
+    fn the_published_host_check_agrees_with_the_component() {
+        let words = [TOOL_CHOICE_AUTO_ONLY];
+        let forced = with_tool(request(None), ToolChoice::Required);
+        let auto = with_tool(request(None), ToolChoice::Auto);
+        let dialect = Dialect::of(&forced, &config(&words)).unwrap();
+        for candidate in [&forced, &auto] {
+            assert_eq!(
+                refuses_forced_tool(words, candidate),
+                dialect.refuse_forced_tool(candidate).is_err()
+            );
+        }
+        assert!(!refuses_forced_tool([], &forced));
     }
 
     #[test]
