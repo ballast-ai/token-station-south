@@ -24,6 +24,7 @@ use token_station_protocol::{
     ProviderApi, ProviderConfig, Role, SafeHeaders, StreamEvent, ToolCall, ToolChoice, Usage,
 };
 
+use crate::anthropic_dialect::Dialect;
 use crate::component::{ComponentResultV1, ProviderComponentV1, StreamParserV1};
 use crate::reasoning_replay::{ReplayRef, validated_layout};
 
@@ -302,8 +303,10 @@ fn tools_of(request: &ChatRequest) -> (Option<Value>, Option<Value>) {
     (declarations, choice)
 }
 
-fn body_of(request: &ChatRequest) -> ComponentResultV1<Value> {
+fn body_of(request: &ChatRequest, dialect: Dialect) -> ComponentResultV1<Value> {
     let (system, messages) = conversation_of(request)?;
+    let max_tokens = request.sampling.max_output_tokens.map_or(DEFAULT_MAX_TOKENS, u64::from);
+    let thinking = dialect.thinking(request, Some(max_tokens))?;
     let mut body = Map::new();
     if !request.model.is_empty() {
         body.insert("model".to_owned(), json!(request.model));
@@ -312,15 +315,16 @@ fn body_of(request: &ChatRequest) -> ComponentResultV1<Value> {
         body.insert("system".to_owned(), json!(system.join("\n")));
     }
     body.insert("messages".to_owned(), Value::Array(messages));
-    body.insert(
-        "max_tokens".to_owned(),
-        json!(request.sampling.max_output_tokens.map_or(DEFAULT_MAX_TOKENS, u64::from)),
-    );
-    if let Some(temperature) = request.sampling.temperature {
-        body.insert("temperature".to_owned(), json!(temperature));
-    }
-    if let Some(top_p) = request.sampling.top_p {
-        body.insert("top_p".to_owned(), json!(top_p));
+    body.insert("max_tokens".to_owned(), json!(max_tokens));
+    // Dropped rather than approximated when the model or its thinking mode
+    // rejects them (see `anthropic_dialect`).
+    if dialect.keeps_sampling(thinking) {
+        if let Some(temperature) = request.sampling.temperature {
+            body.insert("temperature".to_owned(), json!(temperature));
+        }
+        if let Some(top_p) = request.sampling.top_p {
+            body.insert("top_p".to_owned(), json!(top_p));
+        }
     }
     if !request.sampling.stop.is_empty() {
         body.insert("stop_sequences".to_owned(), json!(request.sampling.stop));
@@ -335,6 +339,9 @@ fn body_of(request: &ChatRequest) -> ComponentResultV1<Value> {
     }
     if let Some(choice) = choice {
         body.insert("tool_choice".to_owned(), choice);
+    }
+    for (key, value) in thinking.into_iter().flat_map(crate::anthropic_dialect::Thinking::fields) {
+        body.insert(key.to_owned(), value);
     }
 
     Ok(Value::Object(body))
@@ -715,6 +722,8 @@ impl ProviderComponentV1 for AnthropicReferenceV1 {
                 "reasoning replay requires the target model capability reasoning_replay.claude.v1",
             ));
         }
+        let dialect = Dialect::of(request, config)?;
+        dialect.refuse_forced_tool(request)?;
         let mut descriptor = HttpRequestDescriptor::new(
             HttpMethod::Post,
             config.base_url.resolve(ProviderApi::Messages),
@@ -725,7 +734,7 @@ impl ProviderComponentV1 for AnthropicReferenceV1 {
             ("anthropic-version", ANTHROPIC_VERSION),
         ])
         .map_err(internal)?;
-        descriptor.body = Some(body_of(request)?);
+        descriptor.body = Some(body_of(request, dialect)?);
         // The host holds the value; this names the slot and the presentation
         // the dialect fixes.
         descriptor.auth = match config.auth.clone() {

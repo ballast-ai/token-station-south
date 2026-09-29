@@ -49,6 +49,7 @@ use token_station_protocol::{
     Role, SafeHeaders, StreamEvent, ToolCall, ToolChoice, Usage,
 };
 
+use crate::anthropic_dialect::{Dialect, Thinking};
 use crate::component::{ComponentResultV1, ProviderComponentV1, StreamParserV1};
 use crate::reasoning_replay::{ReplayRef, validated_layout};
 
@@ -331,17 +332,21 @@ fn user_content(message: &Message) -> ComponentResultV1<Vec<Value>> {
 }
 
 /// `inferenceConfig`, or `None` when the caller set nothing that belongs in it.
-fn inference_config(request: &ChatRequest) -> Option<Value> {
+fn inference_config(request: &ChatRequest, keeps_sampling: bool) -> Option<Value> {
     let sampling = &request.sampling;
     let mut config = Map::new();
     if let Some(max) = sampling.max_output_tokens {
         config.insert("maxTokens".to_owned(), json!(max));
     }
-    if let Some(temperature) = sampling.temperature {
-        config.insert("temperature".to_owned(), json!(temperature));
-    }
-    if let Some(top_p) = sampling.top_p {
-        config.insert("topP".to_owned(), json!(top_p));
+    // Dropped rather than approximated when the model or its thinking mode
+    // rejects them (see `anthropic_dialect`).
+    if keeps_sampling {
+        if let Some(temperature) = sampling.temperature {
+            config.insert("temperature".to_owned(), json!(temperature));
+        }
+        if let Some(top_p) = sampling.top_p {
+            config.insert("topP".to_owned(), json!(top_p));
+        }
     }
     if !sampling.stop.is_empty() {
         config.insert("stopSequences".to_owned(), json!(sampling.stop));
@@ -409,19 +414,31 @@ fn tool_config(request: &ChatRequest) -> Option<Value> {
     Some(Value::Object(config))
 }
 
-fn body_of(request: &ChatRequest) -> ComponentResultV1<Value> {
+fn body_of(request: &ChatRequest, dialect: Dialect) -> ComponentResultV1<Value> {
     let (system, messages) = conversation_of(request)?;
+    // Converse has no default `maxTokens` of its own to measure a budget
+    // against, so the budget form needs the caller's limit.
+    let thinking = dialect.thinking(request, request.sampling.max_output_tokens.map(u64::from))?;
     let mut body = Map::new();
     if !system.is_empty() {
         body.insert("system".to_owned(), Value::Array(system));
     }
     // Written unconditionally, even when empty: the key is required.
     body.insert("messages".to_owned(), Value::Array(messages));
-    if let Some(config) = inference_config(request) {
+    if let Some(config) = inference_config(request, dialect.keeps_sampling(thinking)) {
         body.insert("inferenceConfig".to_owned(), config);
     }
     if let Some(config) = tool_config(request) {
         body.insert("toolConfig".to_owned(), config);
+    }
+    // Claude's own thinking fields ride in `additionalModelRequestFields`, the
+    // Converse passthrough for model-specific request fields.
+    if let Some(thinking) = thinking {
+        let fields: Map<String, Value> = Thinking::fields(thinking)
+            .into_iter()
+            .map(|(key, value)| (key.to_owned(), value))
+            .collect();
+        body.insert("additionalModelRequestFields".to_owned(), Value::Object(fields));
     }
     Ok(Value::Object(body))
 }
@@ -797,6 +814,8 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
                 "reasoning replay requires the target model capability reasoning_replay.claude.v1",
             ));
         }
+        let dialect = Dialect::of(request, config)?;
+        dialect.refuse_forced_tool(request)?;
         // `ProviderApi::resolve` covers four canonical shapes and none of them
         // is this one — the model sits inside the path and the operation is the
         // last segment. So the URL is built from the endpoint's own text, which
@@ -812,7 +831,7 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
         let mut descriptor = HttpRequestDescriptor::new(HttpMethod::Post, url);
         descriptor.headers =
             SafeHeaders::try_new([("content-type", "application/json")]).map_err(internal)?;
-        descriptor.body = Some(body_of(request)?);
+        descriptor.body = Some(body_of(request, dialect)?);
         // Deliberately `None`: this is the `host_signed` arm, so the host's
         // finalizer signs the finished request afterwards. A credential value
         // never reaches this component.
