@@ -317,10 +317,12 @@ fn cache_buckets_appear_when_reported_and_an_unmodelled_stop_reason_survives() {
         &context(),
     )
     .expect("renders");
+    // The IR's 1000 is the whole prompt, partitioned by the cache buckets
+    // (kernel `Usage::total`); this wire's `input_tokens` is the uncached rest.
     assert_eq!(
         rendered["usage"],
         json!({
-            "input_tokens": 1000, "output_tokens": 20,
+            "input_tokens": 500, "output_tokens": 20,
             "cache_read_input_tokens": 300, "cache_creation_input_tokens": 200
         })
     );

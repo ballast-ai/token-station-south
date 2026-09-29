@@ -1,6 +1,6 @@
 {
   "name": "provider-bedrock-converse",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "api_version": "provider-adapter-v2",
   "providers": [
     "bedrock"

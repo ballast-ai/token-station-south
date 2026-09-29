@@ -255,8 +255,10 @@ fn usage_reported_only_at_the_end_still_reaches_the_client() {
     let terminal = frames.iter().find(|frame| frame.event == "message_delta").expect("terminal");
     assert_eq!(
         terminal.data["usage"],
+        // IR 1000 is the whole prompt; the wire's `input_tokens` is what the
+        // two cache buckets leave of it.
         json!({
-            "output_tokens": 20, "input_tokens": 1000,
+            "output_tokens": 20, "input_tokens": 500,
             "cache_read_input_tokens": 300, "cache_creation_input_tokens": 200
         }),
         "a provider that reports everything at the end would otherwise have its input count \
@@ -283,7 +285,7 @@ fn usage_reported_up_front_is_announced_and_folded_rather_than_replaced() {
     );
     assert_eq!(
         frames[0].data["message"]["usage"],
-        json!({"input_tokens": 700, "output_tokens": 0, "cache_read_input_tokens": 300}),
+        json!({"input_tokens": 400, "output_tokens": 0, "cache_read_input_tokens": 300}),
         "a usage report before any content is announced with the message it belongs to"
     );
 
@@ -297,7 +299,7 @@ fn usage_reported_up_front_is_announced_and_folded_rather_than_replaced() {
     let terminal = tail.iter().find(|frame| frame.event == "message_delta").expect("terminal");
     assert_eq!(
         terminal.data["usage"],
-        json!({"output_tokens": 500, "input_tokens": 700, "cache_read_input_tokens": 300}),
+        json!({"output_tokens": 500, "input_tokens": 400, "cache_read_input_tokens": 300}),
         "input up front and output at the end is one usage in two instalments; the second must \
          not zero the first"
     );

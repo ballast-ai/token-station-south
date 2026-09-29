@@ -323,3 +323,22 @@ fn reasoning_replay_release_retires_every_published_038_package_identity() {
         assert_eq!(manifest.compatibility.south_runtime, "0.39.0");
     }
 }
+
+/// Reporting the whole prompt as the IR's `input_tokens` (the cache buckets partition it, kernel
+/// `Usage::total`) changes what both packages parse, and the Converse package stops refusing a
+/// `totalTokens` that counts the cache buckets, so the identities published with 0.39.0 retire.
+#[test]
+fn usage_partition_retires_the_published_anthropic_and_converse_identities() {
+    for (name, published) in
+        [("provider-anthropic", "1.0.5"), ("provider-bedrock-converse", "1.0.2")]
+    {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_ne!(manifest.version, published, "{name} reused its published identity");
+    }
+}

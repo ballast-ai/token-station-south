@@ -445,8 +445,9 @@ fn stop_reason_to_finish(raw: &str) -> FinishReason {
 
 /// Converse's `usage` object as IR usage.
 ///
-/// The three token counts are required and `totalTokens` must equal their sum:
-/// a report that fails either test is a protocol error, not a zero. Billing
+/// The three token counts are required and `totalTokens` must equal the sum of
+/// input, output and both (optional) cache buckets: a report that fails either
+/// test is a protocol error, not a zero. Billing
 /// reads these, so a silently-defaulted bucket is a wrong charge.
 fn usage_of(raw: &Value) -> ComponentResultV1<Usage> {
     let field = |key: &str| -> Option<u64> { raw.get(key).and_then(Value::as_u64) };
@@ -457,17 +458,31 @@ fn usage_of(raw: &Value) -> ComponentResultV1<Usage> {
             "a Converse usage report must carry inputTokens, outputTokens and totalTokens",
         ));
     };
-    if total != input_tokens.saturating_add(output_tokens) {
+    let cache_read_tokens = field("cacheReadInputTokens").unwrap_or_default();
+    let cache_write_tokens = field("cacheWriteInputTokens").unwrap_or_default();
+    // Converse's `inputTokens` counts only the prompt tokens that neither hit
+    // nor wrote the cache; AWS defines the whole prompt as inputTokens +
+    // cacheReadInputTokens + cacheWriteInputTokens, and `totalTokens` counts
+    // it (a real cached capture: 10 + 4 + 5848 == 5862). The IR's
+    // `input_tokens` is that whole prompt, partitioned by the cache buckets.
+    let prompt = input_tokens
+        .checked_add(cache_read_tokens)
+        .and_then(|sum| sum.checked_add(cache_write_tokens))
+        .filter(|prompt| prompt.checked_add(output_tokens) == Some(total));
+    let Some(prompt) = prompt else {
         return Err(provider_protocol_error(
-            "a Converse usage report's totalTokens must equal inputTokens plus outputTokens",
+            "a Converse usage report's totalTokens must equal inputTokens, outputTokens and both cache buckets summed",
         ));
-    }
-    let mut usage = Usage { input_tokens, output_tokens, ..Usage::default() };
+    };
     // Flat buckets: Converse has no TTL tier split, so the tier fields stay
     // zero rather than repeating the total.
-    usage.cache_read_tokens = field("cacheReadInputTokens").unwrap_or_default();
-    usage.cache_write_tokens = field("cacheWriteInputTokens").unwrap_or_default();
-    Ok(usage)
+    Ok(Usage {
+        input_tokens: prompt,
+        output_tokens,
+        cache_read_tokens,
+        cache_write_tokens,
+        ..Usage::default()
+    })
 }
 
 /// Where one SSE frame's payload ends and where the frame itself ends.
@@ -745,7 +760,7 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-bedrock-converse".to_owned(),
-            version: "1.0.2".to_owned(),
+            version: "1.0.3".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }

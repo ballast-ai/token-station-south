@@ -15,7 +15,7 @@
 use serde_json::{Value, json};
 use token_station_protocol::{
     ChatRequest, ChatResponse, Content, ContentPart, Extensions, FinishReason, ImageUrl, Message,
-    Role, Sampling, ToolCall, ToolChoice, ToolDef,
+    Role, Sampling, ToolCall, ToolChoice, ToolDef, Usage,
 };
 
 use crate::{CodecError, ResponseContext, describe, response::prefixed_id};
@@ -178,7 +178,7 @@ pub fn anthropic_message_response(
     }
 
     let mut usage = json!({
-        "input_tokens": response.usage.input_tokens,
+        "input_tokens": uncached_input_tokens(&response.usage),
         "output_tokens": response.usage.output_tokens,
     });
     // Emitted only when the provider reported them, so a response without cache
@@ -416,4 +416,19 @@ fn visible_text(content: Option<&Content>) -> String {
             .concat(),
         None => String::new(),
     }
+}
+
+/// This wire's `input_tokens`: the prompt tokens that neither hit nor wrote the
+/// cache.
+///
+/// The IR's `input_tokens` is the whole prompt, partitioned by the two cache
+/// buckets (kernel `Usage::total`); Messages reports the cache buckets beside
+/// an uncached count instead, so rendering subtracts them. Saturating: a
+/// provider whose cache buckets exceed its prompt already broke the IR
+/// contract, and this wire has no negative count to carry that.
+pub(crate) const fn uncached_input_tokens(usage: &Usage) -> u64 {
+    usage
+        .input_tokens
+        .saturating_sub(usage.cache_read_tokens)
+        .saturating_sub(usage.cache_write_tokens)
 }
