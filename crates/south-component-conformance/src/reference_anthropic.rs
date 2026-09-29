@@ -322,7 +322,9 @@ fn body_of(request: &ChatRequest, dialect: Dialect) -> ComponentResultV1<Value> 
         if let Some(temperature) = request.sampling.temperature {
             body.insert("temperature".to_owned(), json!(temperature));
         }
-        if let Some(top_p) = request.sampling.top_p {
+        if let Some(top_p) = request.sampling.top_p
+            && (request.sampling.temperature.is_none() || dialect.keeps_top_p_with_temperature())
+        {
             body.insert("top_p".to_owned(), json!(top_p));
         }
     }
@@ -691,7 +693,7 @@ impl ProviderComponentV1 for AnthropicReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-anthropic".to_owned(),
-            version: "1.0.7".to_owned(),
+            version: "1.0.8".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
