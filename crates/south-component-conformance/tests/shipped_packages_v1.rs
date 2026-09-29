@@ -320,7 +320,9 @@ fn reasoning_replay_release_retires_every_published_038_package_identity() {
         )
         .unwrap();
         assert_ne!(manifest.version, published, "{name} reused its published identity");
-        assert_eq!(manifest.compatibility.south_runtime, "0.39.0");
+        // Later runtimes redeclare `south_runtime`; what this release pinned is that
+        // no package still declares the runtime it retired.
+        assert_ne!(manifest.compatibility.south_runtime, "0.38.0");
     }
 }
 
