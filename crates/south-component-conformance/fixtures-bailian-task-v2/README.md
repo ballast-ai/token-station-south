@@ -1,6 +1,11 @@
-# 百炼视频冻结样例
+# Frozen samples: Bailian managed video
 
-这些是server a4ea39cb纯函数转录、官方接口文档示例和边界合成，不是线上抓包。
-prepare/render对应旧managed视频行为；HappyHorse usage.duration与UNKNOWN过期语义来自
-2026-09-20核查的官方文档（链接见设计记录）；冲突/零/非法计量与路径异常为合成负例。
-原生与Wasm使用相同pack；不得从被测实现重新生成expected掩盖回归。
+Hand transcriptions from server `a4ea39cb`'s pure functions, from the official
+API documentation's own examples, and from synthesised boundary cases — not
+captured live traffic. `prepare`/`render` mirror the old managed-video behaviour;
+the HappyHorse `usage.duration` and the UNKNOWN-expiry semantics come from the
+official documentation as checked on 2026-09-20 (links in the design record);
+the conflicting, zero, illegal-metering and path-anomaly cases are synthesised
+negatives. The native reference and the Wasm guest share one pack, and
+expectations must never be regenerated from the implementation under test —
+doing so hides a regression instead of catching it.

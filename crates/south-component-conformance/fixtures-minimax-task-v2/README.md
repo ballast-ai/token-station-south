@@ -1,11 +1,16 @@
-# MiniMax v1 冻结样例
+# Frozen samples: MiniMax v1
 
-源自 server a8dd0ace 的 Hailuo v1 合法字段/状态转录，
-不是在线抓包；期望值独立写定，不从组件输出生成。
-覆盖 task-v2 七类方法，费用留宿主、用量缺失保持 null。
+Transcribed from server `a8dd0ace`'s legal Hailuo v1 fields and states, not
+captured live; the expectations were written independently rather than generated
+from the component's own output. They cover all seven task-v2 methods, leave cost
+to the host, and keep missing usage as `null`.
 
-## H3 扩展（未发布0.30候选）
+## H3 extension (unreleased 0.30 candidate)
 
-H3正反样例来自server现有纯协议函数转录，使用合成数据，不是上游抓包。
-覆盖规范分辨率/图片数、别名原model、固定locator、原ID编码、缺失/非法实际秒数、
-排队/运行/失败/取消、直链render与无需artifact fetch。Hailuo样例补Task5新字段。
+The H3 positive and negative samples are transcribed from the server's existing
+pure protocol functions using synthesised data, not upstream captures. They cover
+canonical resolution and image count, the aliased original `model`, the fixed
+locator, the original id encoding, missing and illegal actual seconds, the
+queued / running / failed / cancelled states, direct-link rendering, and the case
+that needs no artifact fetch. The Hailuo samples additionally carry the new
+Task 5 fields.
