@@ -499,8 +499,11 @@ fn frame_fields(frame: &str) -> (Option<&str>, Option<&str>) {
 /// Converse counts *all* blocks, so a tool call's number can skip values when a
 /// text block preceded it. That is fine: consumers only need fragments of one
 /// call to share a number and different calls to differ, which holds.
-fn block_index(data: &Value) -> u32 {
-    u32::try_from(data["contentBlockIndex"].as_u64().unwrap_or_default()).unwrap_or_default()
+fn block_index(data: &Value) -> ComponentResultV1<u32> {
+    data.get("contentBlockIndex")
+        .and_then(Value::as_u64)
+        .and_then(|value| u32::try_from(value).ok())
+        .ok_or_else(|| provider_protocol_error("the upstream content block index is invalid"))
 }
 
 /// Converse's streaming half.
@@ -534,15 +537,22 @@ struct ConverseSseParser {
     /// Whether `metadata` has already closed the stream.
     closed: bool,
     open_blocks: BTreeSet<u32>,
+    seen_blocks: BTreeSet<u32>,
 }
 
 impl ConverseSseParser {
     const fn new() -> Self {
-        Self { tail: Vec::new(), pending_finish: None, closed: false, open_blocks: BTreeSet::new() }
+        Self {
+            tail: Vec::new(),
+            pending_finish: None,
+            closed: false,
+            open_blocks: BTreeSet::new(),
+            seen_blocks: BTreeSet::new(),
+        }
     }
 
     fn open_block(&mut self, index: u32) -> ComponentResultV1<()> {
-        if self.open_blocks.insert(index) {
+        if self.seen_blocks.insert(index) && self.open_blocks.insert(index) {
             Ok(())
         } else {
             Err(provider_protocol_error("the upstream opened a content block twice"))
@@ -581,11 +591,11 @@ impl ConverseSseParser {
             // `messageStart` arrives once; a repeat is simply ignored.
             "messageStart" => Ok(Vec::new()),
             "contentBlockStop" => {
-                self.close_block(block_index(data))?;
+                self.close_block(block_index(data)?)?;
                 Ok(Vec::new())
             }
             "contentBlockStart" => {
-                let index = block_index(data);
+                let index = block_index(data)?;
                 self.open_block(index)?;
                 // Only a tool block opens with anything: `start.toolUse` carries
                 // the id and name, and IR wants them on the call's **first**
@@ -601,7 +611,8 @@ impl ConverseSseParser {
                 }])
             }
             "contentBlockDelta" => {
-                self.require_open_block(block_index(data))?;
+                let index = block_index(data)?;
+                self.require_open_block(index)?;
                 let delta = &data["delta"];
                 if let Some(text) = delta["text"].as_str() {
                     // `Delta.index` is the *choice* index, not the block index:
@@ -613,7 +624,7 @@ impl ConverseSseParser {
                     // input is an object, but the stream sends pieces of its
                     // text. IR keeps arguments as a string for exactly this.
                     return Ok(vec![StreamEvent::ToolCallDelta {
-                        index: block_index(data),
+                        index,
                         id: None,
                         name: None,
                         arguments_delta: fragment.to_owned(),
@@ -629,21 +640,21 @@ impl ConverseSseParser {
                 if let Some(text) = delta["reasoningContent"]["text"].as_str() {
                     return Ok(vec![StreamEvent::ThinkingDelta {
                         index: 0,
-                        block_index: block_index(data),
+                        block_index: index,
                         thinking_delta: text.to_owned(),
                     }]);
                 }
                 if let Some(signature) = delta["reasoningContent"]["signature"].as_str() {
                     return Ok(vec![StreamEvent::ThinkingSignatureDelta {
                         index: 0,
-                        block_index: block_index(data),
+                        block_index: index,
                         signature_delta: signature.to_owned(),
                     }]);
                 }
                 if let Some(data_value) = delta["reasoningContent"]["redactedContent"].as_str() {
                     return Ok(vec![StreamEvent::RedactedThinking {
                         index: 0,
-                        block_index: block_index(data),
+                        block_index: index,
                         data: data_value.to_owned(),
                     }]);
                 }

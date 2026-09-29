@@ -97,6 +97,24 @@ fn stream_block_delta_and_stop_require_a_prior_open_block() {
     }
 }
 
+#[test]
+fn stream_block_indexes_are_strict_and_closed_indexes_cannot_reopen() {
+    for data in [
+        json!({"content_block":{"type":"thinking","thinking":""}}),
+        json!({"index":-1,"content_block":{"type":"thinking","thinking":""}}),
+        json!({"index":u64::from(u32::MAX)+1,"content_block":{"type":"thinking","thinking":""}}),
+    ] {
+        let mut parser = AnthropicReferenceV1.stream_parser();
+        assert!(parser.parse_chunk(&frame("content_block_start", &data)).is_err(), "{data}");
+    }
+
+    let mut parser = AnthropicReferenceV1.stream_parser();
+    let start = json!({"index":7,"content_block":{"type":"thinking","thinking":""}});
+    parser.parse_chunk(&frame("content_block_start", &start)).unwrap();
+    parser.parse_chunk(&frame("content_block_stop", &json!({"index":7}))).unwrap();
+    assert!(parser.parse_chunk(&frame("content_block_start", &start)).is_err());
+}
+
 /// Gate ①: the package the component ships is admissible, and the identity it
 /// reports at runtime is the identity its manifest claims.
 #[test]

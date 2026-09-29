@@ -380,6 +380,7 @@ struct AnthropicSseParser {
     pending_stop_sequence: Option<String>,
     done_emitted: bool,
     open_blocks: BTreeSet<u32>,
+    seen_blocks: BTreeSet<u32>,
 }
 
 /// The end of the first complete SSE frame in `buffer`, as
@@ -411,7 +412,7 @@ fn frame_fields(frame: &str) -> (Option<&str>, Option<&str>) {
 
 impl AnthropicSseParser {
     fn open_block(&mut self, index: u32) -> ComponentResultV1<()> {
-        if self.open_blocks.insert(index) {
+        if self.seen_blocks.insert(index) && self.open_blocks.insert(index) {
             Ok(())
         } else {
             Err(provider_protocol_error("the upstream opened a content block twice"))
@@ -469,7 +470,7 @@ impl AnthropicSseParser {
                 Ok(Vec::new())
             }
             "content_block_start" => {
-                let index = block_index(data);
+                let index = block_index(data)?;
                 self.open_block(index)?;
                 let block = &data["content_block"];
                 match block["type"].as_str() {
@@ -500,7 +501,8 @@ impl AnthropicSseParser {
                 }])
             }
             "content_block_delta" => {
-                self.require_open_block(block_index(data))?;
+                let index = block_index(data)?;
+                self.require_open_block(index)?;
                 let delta = &data["delta"];
                 Ok(match delta["type"].as_str() {
                     Some("text_delta") => text_event(delta["text"].as_str(), |text| {
@@ -509,7 +511,7 @@ impl AnthropicSseParser {
                     Some("thinking_delta") => {
                         text_event(delta["thinking"].as_str(), |text| StreamEvent::ThinkingDelta {
                             index: 0,
-                            block_index: block_index(data),
+                            block_index: index,
                             thinking_delta: text,
                         })
                     }
@@ -518,13 +520,13 @@ impl AnthropicSseParser {
                         text_event(delta["signature"].as_str(), |signature| {
                             StreamEvent::ThinkingSignatureDelta {
                                 index: 0,
-                                block_index: block_index(data),
+                                block_index: index,
                                 signature_delta: signature,
                             }
                         })
                     }
                     Some("input_json_delta") => vec![StreamEvent::ToolCallDelta {
-                        index: block_index(data),
+                        index,
                         id: None,
                         name: None,
                         arguments_delta: delta["partial_json"]
@@ -536,7 +538,7 @@ impl AnthropicSseParser {
                 })
             }
             "content_block_stop" => {
-                self.close_block(block_index(data))?;
+                self.close_block(block_index(data)?)?;
                 Ok(Vec::new())
             }
             "message_delta" => {
@@ -563,8 +565,11 @@ impl AnthropicSseParser {
     }
 }
 
-fn block_index(data: &Value) -> u32 {
-    u32::try_from(data["index"].as_u64().unwrap_or(0)).unwrap_or(0)
+fn block_index(data: &Value) -> ComponentResultV1<u32> {
+    data.get("index")
+        .and_then(Value::as_u64)
+        .and_then(|value| u32::try_from(value).ok())
+        .ok_or_else(|| provider_protocol_error("the upstream content block index is invalid"))
 }
 
 /// An empty delta carries nothing; emitting an event for it would put an empty

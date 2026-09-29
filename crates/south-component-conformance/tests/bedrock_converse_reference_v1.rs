@@ -454,6 +454,24 @@ fn converse_delta_and_stop_require_a_prior_open_block() {
 }
 
 #[test]
+fn converse_block_indexes_are_strict_and_closed_indexes_cannot_reopen() {
+    for data in [
+        json!({"start":{}}),
+        json!({"contentBlockIndex":-1,"start":{}}),
+        json!({"contentBlockIndex":u64::from(u32::MAX)+1,"start":{}}),
+    ] {
+        let mut parser = BedrockConverseReferenceV1.stream_parser();
+        assert!(parser.parse_chunk(&frame("contentBlockStart", &data)).is_err(), "{data}");
+    }
+
+    let mut parser = BedrockConverseReferenceV1.stream_parser();
+    let start = json!({"contentBlockIndex":7,"start":{}});
+    parser.parse_chunk(&frame("contentBlockStart", &start)).unwrap();
+    parser.parse_chunk(&frame("contentBlockStop", &json!({"contentBlockIndex":7}))).unwrap();
+    assert!(parser.parse_chunk(&frame("contentBlockStart", &start)).is_err());
+}
+
+#[test]
 fn a_stream_cut_before_metadata_emits_no_done_at_all() {
     let mut parser = BedrockConverseReferenceV1.stream_parser();
     parser.parse_chunk(&frame("messageStop", &json!({"stopReason":"end_turn"}))).unwrap();
