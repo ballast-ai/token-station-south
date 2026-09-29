@@ -3,14 +3,6 @@
 # or a new file appears; --regen refuses to raise a count, so this file
 # is a ratchet that only tightens. Translate, then regen.
 56	ARCHITECTURE.md
-67	README.md
-5	crates/south-component-conformance/fixtures-bailian-task-v2/README.md
-8	crates/south-component-conformance/fixtures-byteplus-task-v2/README.md
-6	crates/south-component-conformance/fixtures-gmi-image-task-v2/README.md
-8	crates/south-component-conformance/fixtures-minimax-task-v2/README.md
-8	crates/south-component-conformance/fixtures-veo-task-v2/README.md
-7	crates/south-component-conformance/fixtures-wan-image-task-v2/README.md
-6	crates/south-component-conformance/fixtures-xai-task-v2/README.md
 1	docs/design/2026-08-21-component-conformance.md
 1	docs/design/2026-09-08-bearer-with-header-secret-auth.md
 1	docs/design/2026-09-08-buffered-get-request.md

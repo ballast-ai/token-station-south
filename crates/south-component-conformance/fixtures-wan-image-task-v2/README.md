@@ -1,9 +1,18 @@
-# 百炼万相 2.7 图像（异步）冻结样例
+# Frozen samples: Bailian Wanxiang 2.7 images (asynchronous)
 
-期望按 token-station-server 原生万相图像臂（`handler/images/bailian.rs` 的 `build_bailian_image_body` / `validate_bailian_image_n` /
-`openai_size_to_wan_size` / `extract_bailian_image_urls` / `trusted_image_count` / `bailian_image_result_to_openai`，
-`images/durable.rs::parse_wan_create`，`images/observe.rs::normalize_bailian_wan`，阻塞面的 `code: detail` 失败文案）手写转录，
-**不从被测实现重新生成 expected**。不是线上抓包。
+Expectations are hand-transcribed from token-station-server's native Wanxiang
+image arm (`handler/images/bailian.rs` — `build_bailian_image_body`,
+`validate_bailian_image_n`, `openai_size_to_wan_size`,
+`extract_bailian_image_urls`, `trusted_image_count`,
+`bailian_image_result_to_openai`; `images/durable.rs::parse_wan_create`;
+`images/observe.rs::normalize_bailian_wan`; and the blocking surface's
+`code: detail` failure wording). **Expectations are never regenerated from the
+implementation under test.** Not captured live traffic.
 
-合同 6 在本族的落点：`n` → `requested_outputs`；`usage.outputs` 是**结算张数**（上游正数 `usage.image_count`、不超过交付 + 1，否则交付数），
-与产物 URL 数刻意分开——上游报数比抽到的 URL 多一张时按报数结算，这是宿主既有的「信上游计数」契约。SUCCEEDED 零产物判终态失败。
+Where contract 6 lands in this family: `n` becomes `requested_outputs`, while
+`usage.outputs` is the **billed image count** — the upstream's positive
+`usage.image_count`, capped at delivered + 1, and otherwise the delivered count.
+That is deliberately separate from the number of artifact URLs: when the upstream
+reports one more image than the URLs we could extract, the billed count is the
+reported one, which is the host's existing "trust the upstream's count" contract.
+A SUCCEEDED state carrying zero artifacts is a terminal failure.

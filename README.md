@@ -118,96 +118,44 @@ synchronous transport, retries, fallback, routing, persistence, database access,
 Passing a library conformance suite does not by itself verify a host integration; each verified
 capability also requires review of the real host adapter wiring.
 
-## task-v2 与 v0.29.0 发布记录
+## Release notes
 
-本地候选新增 `task-adapter-v2`，与既有 provider-v2、task-v1 分别装载。
-`TaskLocatorV2` 保存有界定位；`TaskUsageFactsV2` 保留并存用量；观察保留排队／运行、
-逐产物 id/duration；渲染身份和时间由宿主显式传入。Kling 原生参考实现与
-`components/task-kling-v2` 共享代码，使用独立 fixture 和真实 Wasm 对拍。
+Each release has a design record; those records are the detail, and this table is
+the index. A published tag does **not** mean either host has adopted the packages
+it carries — adoption is recorded per host in `compatibility.json`.
 
-构建候选：`bash scripts/build-kling-task-v2-component.sh`。
-`0.29.0` 已发布；发布不代表两个宿主已采用。此前 server 的临时依赖覆盖
-只验证授权／计价接缝，生产注册表、持久执行绑定、旧包恢复与社区采用另行验收。
-边界与候选行为收紧见[候选设计](docs/design/2026-09-20-task-adapter-v2-candidate.md)。
+| Release | What it added | Record |
+|---|---|---|
+| `0.29.0` | The `task-adapter-v2` world alongside provider-v2 and task-v1: `TaskLocatorV2` for bounded locators, `TaskUsageFactsV2` for coexisting usage, observation keeping queued/running and per-artifact id and duration, and rendering identity and time passed in explicitly by the host. Also the separate `TaskRequestEstimateV2`: the component states the final request's duration and protocol unit rate, the host chooses the estimate, and price, markup, missing-duration defaults and the funding transaction all stay with the host. | [candidate](docs/design/2026-09-20-task-adapter-v2-candidate.md), [request estimate](docs/design/2026-09-20-task-request-estimate.md), [release](docs/design/2026-09-20-release-0.29.0.md) |
+| `0.30.0` | `task-minimax-v2` (Hailuo and H3), the HTTP9 `file_id` controlled query, and the Task 5 canonical request-input facts. | [component](docs/design/2026-09-20-minimax-v1-task-component.md), [H3 facts](docs/design/2026-09-20-minimax-h3-estimate-facts.md), [release](docs/design/2026-09-20-release-0.30.0-minimax.md) |
+| `0.31.0` | `task-bailian-v2`, covering managed video; images and native pass-through are not migrated. Reuses the Task 5 / HTTP9 / Task V2 WIT with no new runtime capability. | [component](docs/design/2026-09-20-bailian-video-task-component.md), [release](docs/design/2026-09-20-release-0.31.0.md) |
+| `0.32.0`–`0.36.0` | Runtime and `compatibility.south_runtime` only; package identities unchanged except where a component's own behaviour changed. | — |
+| `0.37.0` | Responses in `south-north-codec`: request→IR, IR response→Responses, and IR stream events→SSE, plus the same-source JSON façade. The host passes identity, time, inbound tools and compatibility options and holds the per-stream state; admission, billing, the continuation cache and Native pass-through stay with the host. | [release](docs/design/2026-09-28-release-0.37.0.md), [design](docs/design/2026-09-28-responses-north-codec.md), [evidence](docs/design/2026-09-28-responses-north-codec-validation.md) |
+| `0.39.0` | Responses reasoning replay on kernel v0.3.0 / protocol 0.4.0: a bounded `tsr.c1.` carrier preserves Claude thinking, signature, redacted thinking, and text/tool reference order. Only Anthropic Messages and Bedrock Converse models that explicitly declare `reasoning_replay.claude.v1` may receive it; OpenAI-compatible and Gemini refuse. `canonical_ir` ownership stays with the kernel, so South's `compatibility.json.contracts.canonical_ir` remains `null`. | [release](docs/design/2026-09-29-release-0.39.0.md) |
 
-第五批候选增加独立 `TaskRequestEstimateV2`：组件给出最终请求的时长与协议单位率，
-宿主显式选择估时，再用经过范围校验的 helper 估算单位。它不能代替供应商实际用量；
-价格、加价、缺失时长的默认值和资金事务仍属于宿主。prepared JSON 新增必需字段，
-任务词汇版本为 4，旧候选 prepared JSON 不再兼容；宿主生产采用仍待验证。
-详见[请求估算设计](docs/design/2026-09-20-task-request-estimate.md)。
+## Component packages
 
-五个组件包随本次构建更换不可变身份，不能用原版本覆盖不同内容。兼容清单 schema 4
-单列 `task_component_capabilities`；两个宿主的 task-v1／v2 生产采用均为
-`not_verified`，不继承历史 provider-call 的 verified。runtime 元组继续严格匹配，
-保留旧包不等于新 runtime 能执行旧包。版本与验证范围见
-[发布准备记录](docs/design/2026-09-20-release-0.29.0.md)。
+Every official component is built by its own script, and each ships as the exact
+directory shape the runtime loads — `manifest.json` beside `component.wasm`.
 
-## v0.30.0 MiniMax 发布记录
+| Component | Family | Build | Status |
+|---|---|---|---|
+| `task-kling-v2` | kling | `bash scripts/build-kling-task-v2-component.sh` | released |
+| `task-minimax-v2` | minimax | `bash scripts/build-minimax-task-v2-component.sh` | released |
+| `task-bailian-v2` | bailian | `bash scripts/build-bailian-task-v2-component.sh` | released |
+| `task-xai-v2` | `xai-video` | `bash scripts/build-xai-task-v2-component.sh` | contract 6 candidate, unreleased |
+| `task-byteplus-v2` | `byteplus-video` | `bash scripts/build-byteplus-task-v2-component.sh` | contract 6 candidate, unreleased |
+| `task-veo-v2` | `veo-video` | `bash scripts/build-veo-task-v2-component.sh` | contract 6 candidate, unreleased |
+| `task-wan-image-v2` | `wan-image` | `bash scripts/build-wan-image-task-v2-component.sh` | contract 6 candidate, unreleased |
+| `task-gmi-image-v2` | `gmi-image` | `bash scripts/build-gmi-image-task-v2-component.sh` | contract 6 candidate, unreleased |
 
-v0.29.0 已发布五包；v0.30.0 已发布六包，新增
-`task-minimax-v2`（Hailuo与H3）、HTTP9 `file_id` 受控查询、Task5规范请求输入事实，
-并递增六包不可变身份。
-构建候选：`bash scripts/build-minimax-task-v2-component.sh`。
-范围与尚未完成的宿主验收见[MiniMax设计](docs/design/2026-09-20-minimax-v1-task-component.md)
-和[下一版准备](docs/design/2026-09-20-release-0.30.0-minimax.md)。
-H3与estimate新增事实见[设计记录](docs/design/2026-09-20-minimax-h3-estimate-facts.md)。
+Each pack's `README.md` records how its expectations were derived and how the
+component differs from the host's native arm — read that before changing a
+fixture. The shared facts the contract-6 families rely on, and the artifact roles
+contract 7 added, have their own records:
+[contract 6 facts](docs/design/2026-09-27-task-contract-v6-facts.md),
+[contract 7 artifact roles](docs/design/2026-09-28-task-contract-v7-artifact-role.md).
 
-## 百炼 managed 视频
-
-第七包 `task-bailian-v2`，覆盖 managed 视频，图片与原生透传不迁移。
-复用 Task5 / HTTP9 / Task V2 WIT，无新运行时能力。v0.31.0 已发布七包含此包，
-包身份在 v0.39.0 因兼容元组内容变化升至 0.31.1。
-原生入口 `reference_bailian_task_v2::BailianTaskComponentV2` 与 Wasm同源；
-构建 `bash scripts/build-bailian-task-v2-component.sh`。行为、官方差异和验收边界见
-[设计记录](docs/design/2026-09-20-bailian-video-task-component.md)。
-
-## xAI 视频（合同 6 候选，未发布）
-
-第九包 `task-xai-v2`（族 `xai-video`），覆盖 xAI Grok Imagine 视频（文生、首帧、尾帧、参考图 ≤ 7、视频编辑）。
-Bearer 认证、按秒用量、直链产物，无新运行时能力；声明禁改路径 `model` / `duration`、每次提交 1 条输出（合同 6）。
-与宿主原生臂的差异（输入图原样转发、越界时长组件处 400、未带时长不报申报秒数）见
-`reference_xai_task_v2` 头注与 `fixtures-xai-task-v2/README.md`。构建 `bash scripts/build-xai-task-v2-component.sh`。
-
-## BytePlus Seedance 视频（合同 6 候选，未发布）
-
-第十包 `task-byteplus-v2`（族 `byteplus-video`），覆盖 Seedance 文生 / 首尾帧 / 视频编辑 / 参考图（≤ 30）。合同 6 的第一个
-`tokens_per_second` 用户：按「宽 × 高 × 24 ÷ 1024」给出所请求分辨率的每秒 token 率，宿主不再持有第二份像素公式；结算读实报
-`completion_tokens`。声明禁改路径 `model` / `resolution` / `duration`。上游 `last_frame_url` 按任务合同 7 作 `last_frame` 角色的产物报出、渲染进 `data[0].last_frame_url`（与原生同形；宿主只计 / 交付 / 转存视频）——包身份 0.36.0。
-构建 `bash scripts/build-byteplus-task-v2-component.sh`。
-
-## Google Veo（Gemini API 线）视频（合同 6 候选，未发布）
-
-第十一包 `task-veo-v2`（族 `veo-video`），manifest 只声明 `header_secret` 认证臂（`x-goog-api-key`，宿主以对应认证配方注入）。
-合同 6 在本族同时用到三项：产物 `fetch_with_credential`（上游 URI 须带同一把 key 才能取，宿主须把渲染体里的 URL 改写为自有代理路径）、
-`sampleCount` 即 `requested_outputs` / 交付样本数即 `usage.outputs`、回执即终态 → `accepted-terminal`。输入图须已是 `data:` URI
-（宿主预取）；Vertex 线（服务账号铸币、按 region 派生端点）不在本组件。构建 `bash scripts/build-veo-task-v2-component.sh`。
-
-## 百炼万相 2.7 图像（异步，合同 6 候选，未发布）
-
-第十二包 `task-wan-image-v2`（族 `wan-image`），首个图像模态任务组件：DashScope 异步图像生成（文生、1–3 张源图编辑）。合同 6 按张计量：
-`n`（1–4）→ `requested_outputs`；`usage.outputs` 为**结算张数**（上游正数 `image_count`、不超过交付 + 1，否则交付数，与产物 URL 数刻意分开）。
-只把具名尺寸档（`1K` / `2K` / `4K`）报为分辨率事实。构建 `bash scripts/build-wan-image-task-v2-component.sh`。
-
-## GMI Cloud media 图像（合同 6 候选，未发布）
-
-第十三包 `task-gmi-image-v2`（族 `gmi-image`），GMI request-queue 图像生成（Seedream 等，参考图按上游型号的文档上限）。回执即带产物
-→ `accepted-terminal`；`X-Organization-ID` 由宿主以 provider config 扩展 `organization_id` 传入（原生取自凭证 `account_id`）。按请求计价、
-不报用量：`n` 为 `requested_outputs`、交付数为 `usage.outputs`，计价政策归宿主。构建 `bash scripts/build-gmi-image-task-v2-component.sh`。
-
-## v0.37.0 Responses 北向 codec
-
-`south-north-codec` 新增 Responses 请求→IR、IR 响应→Responses、IR 流事件→SSE 三组纯映射及同源 JSON façade。宿主显式传入身份、时间、入站工具与兼容选项，并持有每流状态；准入、计费、continuation 缓存及 Native 透传留宿主。十三个组件仅更新运行时兼容元组，组件自身版本保持当前值，Kling v2 为 0.32.0。
-
-[发行与验收](docs/design/2026-09-28-release-0.37.0.md)记录完整发布门，[codec 设计](docs/design/2026-09-28-responses-north-codec.md)与[逐项证据](docs/design/2026-09-28-responses-north-codec-validation.md)记录双宿主差异及验证边界。
-
-## v0.39.0 Responses reasoning 回放
-
-South 消费 kernel v0.3.0 / protocol 0.4.0，以 `tsr.c1.` 有界 carrier 保留 Claude
-thinking、signature、redacted thinking 与 text/tool 引用顺序。只有显式声明
-`reasoning_replay.claude.v1` 的 Anthropic Messages 和 Bedrock Converse 型号可接收该
-carrier；OpenAI-compatible 与 Gemini 拒绝。十三个组件包因兼容元组变化全部使用新包身份，
-`compatibility.south_runtime` 同批升至 0.39.0；`canonical_ir` 所有权仍归 kernel，
-South 的 `compatibility.json.contracts.canonical_ir` 保持 `null`。
 
 ## Local verification
 
@@ -223,6 +171,8 @@ RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features
 rustup run 1.96.0 cargo check --workspace --all-targets
 scripts/check-boundaries.sh --self-test
 scripts/check-boundaries.sh
+scripts/check-language.sh --self-test
+scripts/check-language.sh
 cargo deny check
 cargo deny --manifest-path fuzz/Cargo.toml --config deny.toml --locked check
 cargo audit
@@ -232,4 +182,7 @@ cargo machete
 ```
 
 All source code, documentation, diagnostics, logs, and commit messages in this repository are
-written in English.
+written in English, and `scripts/check-language.sh` enforces it rather than leaving it to
+recollection. `scripts/language-baseline.txt` records the CJK still left in the design records so
+the gate blocks growth today instead of waiting for the backlog; translate, then run
+`scripts/check-language.sh --regen`, which only ever lowers a count.
