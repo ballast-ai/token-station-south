@@ -1,6 +1,7 @@
 # Claude model dialect: sampling, forced tool choice and reasoning effort
 
-Status: released in v0.41.0 (#120); `provider-anthropic` 1.0.7, `provider-bedrock-converse` 1.0.4.
+Status: released in v0.41.0 (#120); `anthropic.sampling.exclusive` added in v0.42.0 (`provider-anthropic` 1.0.8,
+`provider-bedrock-converse` 1.0.5).
 Origin: token-station-server plan P19 (decisions DP1–DP5 taken 2026-09-29).
 
 ## Problem
@@ -19,7 +20,9 @@ is a hard 400. Measured against the Messages API on 2026-09-29:
 | `claude-haiku-4-5-20251001` | — | — | — | 200 | 400 |
 
 With thinking on, `temperature` must be 1 or unset and `top_p` at least 0.95 or
-unset, and the budget form rejects a forced `tool_choice` (all measured).
+unset, and the budget form rejects a forced `tool_choice` (all measured). Opus 4.5 through Sonnet 4.6
+reject `temperature` and `top_p` together while accepting either alone (measured; handled by
+`anthropic.sampling.exclusive` since v0.42.0: `temperature` is the knob callers set far more often, so it is kept).
 
 The components also ignored `extensions.reasoning_effort`, which the shared
 north codec fills from Responses `reasoning.effort` and Chat `reasoning_effort`,
@@ -40,6 +43,7 @@ shape byte-for-byte as before.
 | `anthropic.thinking.adaptive` | A caller's effort becomes `thinking: {type: adaptive}` + `output_config.effort`. |
 | `anthropic.thinking.budget` | A caller's effort becomes `thinking: {type: enabled, budget_tokens}`. |
 | `anthropic.effort.xhigh` | `xhigh` is sent as `xhigh`; otherwise as `high`. |
+| `anthropic.sampling.exclusive` | When a request carries both `temperature` and `top_p`, `top_p` is dropped and `temperature` kept (v0.42.0). |
 
 The two thinking words are exclusive; declaring both is refused.
 

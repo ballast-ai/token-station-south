@@ -32,6 +32,6 @@
     "kernel_version": "0.3.0",
     "kernel_revision": "6822aab1dea54ef646cb2206595cd4955ff9764a",
     "wit_package": "token-station:adapter@2.0.0",
-    "south_runtime": "0.41.0"
+    "south_runtime": "0.42.0"
   }
 }

@@ -332,7 +332,11 @@ fn user_content(message: &Message) -> ComponentResultV1<Vec<Value>> {
 }
 
 /// `inferenceConfig`, or `None` when the caller set nothing that belongs in it.
-fn inference_config(request: &ChatRequest, keeps_sampling: bool) -> Option<Value> {
+fn inference_config(
+    request: &ChatRequest,
+    dialect: Dialect,
+    keeps_sampling: bool,
+) -> Option<Value> {
     let sampling = &request.sampling;
     let mut config = Map::new();
     if let Some(max) = sampling.max_output_tokens {
@@ -344,7 +348,9 @@ fn inference_config(request: &ChatRequest, keeps_sampling: bool) -> Option<Value
         if let Some(temperature) = sampling.temperature {
             config.insert("temperature".to_owned(), json!(temperature));
         }
-        if let Some(top_p) = sampling.top_p {
+        if let Some(top_p) = sampling.top_p
+            && (sampling.temperature.is_none() || dialect.keeps_top_p_with_temperature())
+        {
             config.insert("topP".to_owned(), json!(top_p));
         }
     }
@@ -425,7 +431,7 @@ fn body_of(request: &ChatRequest, dialect: Dialect) -> ComponentResultV1<Value> 
     }
     // Written unconditionally, even when empty: the key is required.
     body.insert("messages".to_owned(), Value::Array(messages));
-    if let Some(config) = inference_config(request, dialect.keeps_sampling(thinking)) {
+    if let Some(config) = inference_config(request, dialect, dialect.keeps_sampling(thinking)) {
         body.insert("inferenceConfig".to_owned(), config);
     }
     if let Some(config) = tool_config(request) {
@@ -777,7 +783,7 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-bedrock-converse".to_owned(),
-            version: "1.0.4".to_owned(),
+            version: "1.0.5".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }

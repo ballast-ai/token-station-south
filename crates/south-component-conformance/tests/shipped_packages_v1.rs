@@ -362,3 +362,21 @@ fn claude_dialect_retires_the_published_040_anthropic_and_converse_identities() 
         assert_ne!(manifest.version, published, "{name} reused its published identity");
     }
 }
+
+/// Exclusive sampling (P19 DP6) changes the request both packages build for a model whose
+/// host declares `anthropic.sampling.exclusive`, so the identities published with 0.41.0 retire.
+#[test]
+fn exclusive_sampling_retires_the_published_041_anthropic_and_converse_identities() {
+    for (name, published) in
+        [("provider-anthropic", "1.0.7"), ("provider-bedrock-converse", "1.0.4")]
+    {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_ne!(manifest.version, published, "{name} reused its published identity");
+    }
+}

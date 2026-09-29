@@ -14,6 +14,8 @@
 //! - `effort: xhigh` exists on Opus 4.7 and later but not on Sonnet 4.6.
 //! - With thinking on, `temperature` must be 1 or unset and `top_p` at least
 //!   0.95 or unset; the budget form also rejects a forced `tool_choice`.
+//! - Opus 4.5 through Sonnet 4.6 accept `temperature` or `top_p` but reject
+//!   both in one request.
 //!
 //! The component cannot tell these apart from the model name — hosts route
 //! aliases, Bedrock IDs and private deployments — so the host declares the
@@ -36,10 +38,19 @@ pub const THINKING_ADAPTIVE: &str = "anthropic.thinking.adaptive";
 pub const THINKING_BUDGET: &str = "anthropic.thinking.budget";
 /// The model accepts `effort: xhigh`; without it `xhigh` is sent as `high`.
 pub const EFFORT_XHIGH: &str = "anthropic.effort.xhigh";
+/// The model accepts `temperature` or `top_p` but not both; when a request
+/// carries both, `top_p` is dropped and `temperature` kept.
+pub const SAMPLING_EXCLUSIVE: &str = "anthropic.sampling.exclusive";
 
 /// Every dialect word, for hosts that validate the reserved namespace.
-pub const DIALECT_PARAMETERS: [&str; 5] =
-    [SAMPLING_NONE, TOOL_CHOICE_AUTO_ONLY, THINKING_ADAPTIVE, THINKING_BUDGET, EFFORT_XHIGH];
+pub const DIALECT_PARAMETERS: [&str; 6] = [
+    SAMPLING_NONE,
+    TOOL_CHOICE_AUTO_ONLY,
+    THINKING_ADAPTIVE,
+    THINKING_BUDGET,
+    EFFORT_XHIGH,
+    SAMPLING_EXCLUSIVE,
+];
 
 /// The budget sent for each budget-form effort level. Anthropic's minimum
 /// budget is 1024 tokens.
@@ -77,10 +88,22 @@ enum Shape {
     Budget,
 }
 
+/// Which sampling parameters the model accepts.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum Sampling {
+    /// `temperature` and `top_p`, together or alone.
+    #[default]
+    Any,
+    /// Either one, but not both in one request.
+    Exclusive,
+    /// Neither.
+    None,
+}
+
 /// What the host declared about the target model.
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct Dialect {
-    sampling_none: bool,
+    sampling: Sampling,
     auto_only: bool,
     shape: Option<Shape>,
     xhigh: bool,
@@ -135,7 +158,13 @@ impl Dialect {
             (false, false) => None,
         };
         Ok(Self {
-            sampling_none: declared(SAMPLING_NONE),
+            sampling: if declared(SAMPLING_NONE) {
+                Sampling::None
+            } else if declared(SAMPLING_EXCLUSIVE) {
+                Sampling::Exclusive
+            } else {
+                Sampling::Any
+            },
             auto_only: declared(TOOL_CHOICE_AUTO_ONLY),
             shape,
             xhigh: declared(EFFORT_XHIGH),
@@ -218,7 +247,14 @@ impl Dialect {
     /// them outright, and with thinking on a non-default value is rejected
     /// too; either way they are dropped rather than approximated.
     pub(crate) const fn keeps_sampling(self, thinking: Option<Thinking>) -> bool {
-        !self.sampling_none && thinking.is_none()
+        !matches!(self.sampling, Sampling::None) && thinking.is_none()
+    }
+
+    /// Whether `top_p` may be sent next to a `temperature`. A model that takes
+    /// only one of them keeps `temperature`, the knob callers set far more
+    /// often, and drops `top_p` rather than refusing the request.
+    pub(crate) const fn keeps_top_p_with_temperature(self) -> bool {
+        !matches!(self.sampling, Sampling::Exclusive)
     }
 }
 
@@ -334,6 +370,16 @@ mod tests {
         let adaptive = Dialect::of(&request, &config(&[THINKING_ADAPTIVE])).unwrap();
         assert!(adaptive.keeps_sampling(None));
         assert!(!adaptive.keeps_sampling(Some(Thinking::Adaptive { effort: "low" })));
+    }
+
+    #[test]
+    fn exclusive_sampling_keeps_temperature_over_top_p() {
+        let request = request(None);
+        let exclusive = Dialect::of(&request, &config(&[SAMPLING_EXCLUSIVE])).unwrap();
+        assert!(exclusive.keeps_sampling(None));
+        assert!(!exclusive.keeps_top_p_with_temperature());
+        let plain = Dialect::of(&request, &config(&[])).unwrap();
+        assert!(plain.keeps_top_p_with_temperature());
     }
 
     #[test]

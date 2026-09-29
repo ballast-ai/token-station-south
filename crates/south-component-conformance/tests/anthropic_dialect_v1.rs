@@ -100,6 +100,7 @@ fn every_dialect_word_is_published_for_hosts() {
             "anthropic.thinking.adaptive",
             "anthropic.thinking.budget",
             "anthropic.effort.xhigh",
+            "anthropic.sampling.exclusive",
         ]
     );
 }
