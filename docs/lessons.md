@@ -106,3 +106,14 @@
   双重所有权。
 - 消费约束应写入组件握手元组（kernel version/revision 与 stream contract）以及依赖 pin，
   并由真实装载测试交叉核对。版本升级前先区分“拥有的合同”和“接受的合同”。
+
+## 2026-09-29：回放载体必须按真实身份与生命周期验收
+
+- 流状态不能用全局布局拼 carrier；choice index、content block index 和终态 choice 必须
+  同时分区验证，否则单 choice 用例会掩盖跨 choice 污染。
+- “有 fixture”不等于新语义进入真实 Wasm：冻结包必须明确包含 request/response/stream、
+  多 thinking、redacted 与空 thinking，并让 sandbox gate ②实际读取这些行。
+- kernel IR 没有 block-stop 事件时，关闭完整性必须在 provider parser 消费 wire start/stop
+  时完成；文档不得声称 North 能拒绝 IR 中不存在的重复关闭事件。
+- 会话中用户明确指定文档语言时，该要求优先于仓库默认语言；修订技术失真时不得顺带改写
+  文档语言。

@@ -69,6 +69,18 @@ fn c2_enforces_per_block_and_total_opaque_bounds() {
         encode_reasoning_replay_carrier(&total).unwrap_err().stable_code(),
         "reasoning_replay_invalid"
     );
+
+    let exactly_four_mib = carrier(
+        (0..4).map(|_| ReasoningReplayBlock::RedactedThinking { data: one_mib.clone() }).collect(),
+    );
+    assert!(encode_reasoning_replay_carrier(&exactly_four_mib).is_ok());
+    let four_mib_plus_one = carrier(
+        (0..4)
+            .map(|_| ReasoningReplayBlock::RedactedThinking { data: one_mib.clone() })
+            .chain(std::iter::once(ReasoningReplayBlock::RedactedThinking { data: "x".into() }))
+            .collect(),
+    );
+    assert!(encode_reasoning_replay_carrier(&four_mib_plus_one).is_err());
 }
 
 #[test]
@@ -511,6 +523,20 @@ fn x6_stream_rejects_replay_budget_overflow_before_done() {
         )
         .unwrap_err()
         .stable_code(),
+        "reasoning_replay_invalid"
+    );
+
+    let mut over_total = (0..4)
+        .map(|block_index| StreamEvent::RedactedThinking {
+            index: 0,
+            block_index,
+            data: "x".repeat(1024 * 1024),
+        })
+        .collect::<Vec<_>>();
+    over_total.push(StreamEvent::RedactedThinking { index: 0, block_index: 4, data: "x".into() });
+    let mut state = ResponsesSseState::new(stream_context());
+    assert_eq!(
+        responses_frames(&over_total, &mut state).unwrap_err().stable_code(),
         "reasoning_replay_invalid"
     );
 }

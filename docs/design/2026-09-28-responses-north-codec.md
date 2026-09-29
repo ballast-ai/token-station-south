@@ -38,15 +38,29 @@ Responses `encrypted_content` 增加封闭载体 `tsr.c1.` 加 base64url-no-pad 
 namespace `token-station.reasoning-replay`、version 1、family
 `claude-signed-thinking`，有序块仅允许 thinking、redacted_thinking、text_ref、
 tool_call_ref。未知字段、未知版本/族、引用不完整、超过 128 块、单 opaque 块超过
-1 MiB 或累计超过 4 MiB 均以稳定 `reasoning_replay_invalid` 拒绝且不截断。
+1 MiB、累计超过 4 MiB 或编码结果超过载体上限，均以稳定
+`reasoning_replay_invalid` 拒绝且不截断。thinking 的 signature 和 tool_call_ref 的
+call_id 都必须非空；call_id 同时计入单块与累计字节。输出端要求布局对消息中的每个
+content part 和 tool call 恰好引用一次，text_ref 的 ordinal 是正文 part 的序号，重复、
+遗漏和错引均拒绝。
 
 codec 将载体解析为同一 assistant 消息内的有序内容布局；输出从真实 Thinking、
-RedactedThinking、正文及工具调用重新生成同值稳定载体。流事件使用 choice `index` 与
-content `block_index` 两维身份，按块首次出现顺序聚合；断流、重复关闭、乱序或缺少
-signature 时不生成成功载体。done item 与 completed output 复用同一编码结果。
+RedactedThinking、正文及工具调用生成载体。Responses 请求中原有的 reasoning item
+（包括空 summary、相邻 item 和未知扩展）单独保存，返回时不拿私有 thinking 文本重建
+summary。流状态按 choice `index` 分区，再以 content `block_index` 识别块；每次追加立即
+检查 128 块、1 MiB/块和 4 MiB/choice，done item、completed output 与 terminal canonical
+快照都只使用所属 choice 的载体。
+
+Anthropic Messages 解析器在 thinking block start 时发出允许空文本的 ThinkingDelta，
+Anthropic 与 Converse 解析器都核对 content block start/delta/stop，存在未关闭块时不得
+发出成功 Done。kernel stream 2 本身没有 block-stop 事件；因此生命周期完整性在 provider
+parser 消费上游 start/stop 时关闭，North 收到 IR 后不能再次区分「同一已打开块的连续
+delta」与「复用同一 block_index 的第二个已关闭块」。North 仍拒绝索引回退、重复
+redacted、signature 先于 thinking、空 signature 和 Done 时缺 signature。
 
 载体只允许交给显式声明 `reasoning_replay.claude.v1` 的 Anthropic Messages 或
 Bedrock Converse 译器。OpenAI-compatible 与 Gemini 显式拒绝；不带 `tsr.c1.` 的
 OpenAI opaque 不由 South 跨协议解释。South 返回可由宿主稳定映射的 invalid、
-target_mismatch、target_unavailable 分类，不参与路由、凭证选择、认证、计费或验签；
+其中 codec 只报告结构转换失败 `reasoning_replay_invalid`。target mismatch、当前可用性及
+HTTP 状态映射属于宿主路由与外部协议职责；South 不参与路由、凭证选择、认证、计费或验签；
 结构合法但 signature 错误由目标上游拒绝。

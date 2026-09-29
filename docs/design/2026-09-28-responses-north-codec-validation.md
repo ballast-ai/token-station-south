@@ -89,3 +89,21 @@ git diff --check
 补充托管工具白名单、启动与 malformed 内容兼容后 Responses 为 37 个用例，最终发布门结果另见 v0.36.0 发行记录。
 
 未进行 fuzz 长跑，不把已挂入既有 scheduled `contract_parsers` 目标等同于 fuzz 覆盖完成；未运行完整 South 工作区发布矩阵，不据此宣称可以发布。
+
+## R2 reasoning replay 补充证据
+
+- `responses_replay` 覆盖 carrier 封闭 schema、空 signature、call_id 计量、编码上限、
+  1 MiB/块及 4 MiB±1 字节；输出端覆盖 content/tool 引用双射和真实 text ordinal。
+- 同文件覆盖两个 choice 的不同 carrier、completed output 与两个 terminal choice，流式
+  预算在追加第 129 块、1 MiB+1 单块或 4 MiB+1 累计时立即失败，不等待 Done。
+- Responses 入站的两个相邻 reasoning item 保留各自 ID、空 summary 和未知扩展；输出不从
+  carrier 内的私有 thinking 文本合成 summary。
+- Anthropic 与 Bedrock Converse 的官方 fixture pack 均包含 replay 请求、响应和流；覆盖
+  多 thinking、redacted thinking 与空 thinking。两包由官方脚本重建后，真实 Wasm sandbox
+  使用同一冻结 fixture pack 做逐字节 gate ② 对拍。
+- 两个 provider parser 均拒绝无 start 的 delta/stop 和带未关闭块的成功终态。Anthropic
+  block start 会为零长度 thinking 发出空 ThinkingDelta；North 接受空 thinking 加非空
+  signature。kernel stream 2 没有 block-stop 事件，North 无法在 IR 层重复验证 provider
+  parser 已消费的关闭边界。
+- `CodecError` 只保留结构转换失败 `reasoning_replay_invalid`；target mismatch、当前可用性及
+  HTTP 状态映射属于宿主路由与外部协议职责，South codec 不声明这些状态。
