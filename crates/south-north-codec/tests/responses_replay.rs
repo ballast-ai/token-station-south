@@ -44,6 +44,14 @@ fn c2_refuses_unknown_fields_and_block_count_without_truncating() {
         carrier((0..129).map(|ordinal| ReasoningReplayBlock::TextRef { ordinal }).collect());
     let error = encode_reasoning_replay_carrier(&too_many).unwrap_err();
     assert_eq!(error.stable_code(), "reasoning_replay_invalid");
+
+    let maximum =
+        carrier((0..128).map(|ordinal| ReasoningReplayBlock::TextRef { ordinal }).collect());
+    assert_eq!(
+        decode_reasoning_replay_carrier(&encode_reasoning_replay_carrier(&maximum).unwrap())
+            .unwrap(),
+        maximum
+    );
 }
 
 #[test]
@@ -539,6 +547,20 @@ fn x6_stream_rejects_replay_budget_overflow_before_done() {
         responses_frames(&over_total, &mut state).unwrap_err().stable_code(),
         "reasoning_replay_invalid"
     );
+}
+
+#[test]
+fn x5_stream_accepts_exact_four_mib_before_done() {
+    let events = (0..4)
+        .map(|block_index| StreamEvent::RedactedThinking {
+            index: 0,
+            block_index,
+            data: "x".repeat(1024 * 1024),
+        })
+        .collect::<Vec<_>>();
+    let mut state = ResponsesSseState::new(stream_context());
+    assert!(responses_frames(&events, &mut state).is_ok());
+    assert!(state.terminal_response().is_none());
 }
 
 #[test]

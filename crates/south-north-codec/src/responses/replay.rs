@@ -2,6 +2,7 @@ use crate::CodecError;
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde_json::{Map, Value, json};
+use std::collections::HashMap;
 use token_station_protocol::{Content, ContentPart, Message};
 
 const PREFIX: &str = "tsr.c1.";
@@ -179,22 +180,36 @@ pub fn decode_reasoning_replay_carrier(value: &str) -> Result<ReasoningReplayCar
 }
 
 pub(super) fn carrier_from_message(message: &Message) -> Result<Option<String>, CodecError> {
-    if message.extensions.get("reasoning_replay_protocol_family").and_then(Value::as_str)
-        != Some(FAMILY)
-    {
-        return Ok(None);
+    let family = message.extensions.get("reasoning_replay_protocol_family");
+    let layout = message.extensions.get("reasoning_replay_block_layout");
+    let (Some(family), Some(layout)) = (family, layout) else {
+        return if family.is_none() && layout.is_none() { Ok(None) } else { Err(invalid()) };
+    };
+    if family.as_str() != Some(FAMILY) {
+        return Err(invalid());
     }
-    let layout = message
-        .extensions
-        .get("reasoning_replay_block_layout")
-        .and_then(Value::as_array)
-        .ok_or_else(invalid)?;
+    let layout =
+        layout.as_array().filter(|layout| layout.len() <= MAX_BLOCKS).ok_or_else(invalid)?;
     let parts = match message.content.as_ref() {
         Some(Content::Parts(parts)) => parts.as_slice(),
         _ => return Err(invalid()),
     };
     let mut part_refs = vec![0u8; parts.len()];
     let mut tool_refs = vec![0u8; message.tool_calls.len()];
+    let mut text_ordinals = vec![None; parts.len()];
+    let mut next_text_ordinal = 0u32;
+    for (index, part) in parts.iter().enumerate() {
+        if matches!(part, ContentPart::Text { .. }) {
+            text_ordinals[index] = Some(next_text_ordinal);
+            next_text_ordinal = next_text_ordinal.checked_add(1).ok_or_else(invalid)?;
+        }
+    }
+    let mut tool_indexes = HashMap::with_capacity(message.tool_calls.len());
+    for (index, call) in message.tool_calls.iter().enumerate() {
+        if call.id.is_empty() || tool_indexes.insert(call.id.as_str(), index).is_some() {
+            return Err(invalid());
+        }
+    }
     let mut blocks = Vec::new();
     for entry in layout {
         match entry["kind"].as_str() {
@@ -217,12 +232,8 @@ pub(super) fn carrier_from_message(message: &Message) -> Result<Option<String>, 
                         blocks.push(ReasoningReplayBlock::RedactedThinking { data: data.clone() });
                     }
                     ContentPart::Text { .. } => {
-                        let text_ordinal = parts[..ordinal]
-                            .iter()
-                            .filter(|part| matches!(part, ContentPart::Text { .. }))
-                            .count();
                         blocks.push(ReasoningReplayBlock::TextRef {
-                            ordinal: u32::try_from(text_ordinal).map_err(|_| invalid())?,
+                            ordinal: text_ordinals[ordinal].ok_or_else(invalid)?,
                         });
                     }
                     ContentPart::ImageUrl { .. } | ContentPart::Unknown(_) => {
@@ -232,11 +243,7 @@ pub(super) fn carrier_from_message(message: &Message) -> Result<Option<String>, 
             }
             Some("tool_call") => {
                 let call_id = entry["call_id"].as_str().ok_or_else(invalid)?;
-                let index = message
-                    .tool_calls
-                    .iter()
-                    .position(|call| call.id == call_id)
-                    .ok_or_else(invalid)?;
+                let index = *tool_indexes.get(call_id).ok_or_else(invalid)?;
                 tool_refs[index] = tool_refs[index].checked_add(1).ok_or_else(invalid)?;
                 blocks.push(ReasoningReplayBlock::ToolCallRef { call_id: call_id.to_owned() });
             }
