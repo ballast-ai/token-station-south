@@ -487,13 +487,17 @@ impl ResponsesSseState {
         self.slots[position].closed = true;
         Ok(())
     }
-    fn close_raw_reasoning(&mut self, out: &mut Vec<ResponsesFrame>) -> Result<(), CodecError> {
-        if !self.replay_blocks.is_empty() {
+    fn close_raw_reasoning(
+        &mut self,
+        index: u32,
+        out: &mut Vec<ResponsesFrame>,
+    ) -> Result<(), CodecError> {
+        if self.replay_carrier(index)?.is_some() {
             return Ok(());
         }
         if self.context.reasoning == ResponsesReasoningMode::RawContent {
             for position in 0..self.slots.len() {
-                if self.slots[position].kind == 1 {
+                if self.slots[position].kind == 1 && self.slots[position].source_index == index {
                     self.close(position, out)?;
                 }
             }
@@ -545,7 +549,7 @@ fn render(
         state.start(&mut out)?;
         match event {
             StreamEvent::Delta { index, content } => {
-                state.close_raw_reasoning(&mut out)?;
+                state.close_raw_reasoning(*index, &mut out)?;
                 let (position, new) = state.slot(0, *index)?;
                 let item_id = state.slots[position].id.clone();
                 let output_index = state.slots[position].index;
@@ -709,7 +713,7 @@ fn render_tool(
     arguments_delta: &str,
     out: &mut Vec<ResponsesFrame>,
 ) -> Result<(), CodecError> {
-    state.close_raw_reasoning(out)?;
+    state.close_raw_reasoning(index, out)?;
     let (position, new) = state.slot(2, index)?;
     if new {
         state.replay_layout.push(ReplayLayout::Tool { position });
