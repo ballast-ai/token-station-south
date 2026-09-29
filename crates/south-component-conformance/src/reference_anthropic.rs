@@ -354,15 +354,64 @@ fn stop_reason_to_finish(raw: &str) -> FinishReason {
     }
 }
 
-fn usage_of(raw: &Value) -> Usage {
-    let count = |name: &str| raw[name].as_u64().unwrap_or(0);
-    Usage {
-        input_tokens: count("input_tokens"),
-        output_tokens: count("output_tokens"),
-        cache_read_tokens: count("cache_read_input_tokens"),
-        cache_write_tokens: count("cache_creation_input_tokens"),
-        ..Usage::default()
+/// Messages' own usage buckets, as the wire reports them.
+///
+/// Messages' `input_tokens` counts only the prompt tokens that neither hit nor
+/// wrote the cache; the two cache buckets sit beside it. The IR's
+/// `input_tokens` is the whole prompt with the cache buckets partitioning it
+/// (kernel `Usage::total`), so the IR count is the sum of the three.
+#[derive(Debug, Clone, Copy, Default)]
+struct WireUsage {
+    uncached_input: u64,
+    output: u64,
+    cache_read: u64,
+    cache_write: u64,
+}
+
+impl WireUsage {
+    fn of(raw: &Value) -> Self {
+        let count = |name: &str| raw[name].as_u64().unwrap_or(0);
+        Self {
+            uncached_input: count("input_tokens"),
+            output: count("output_tokens"),
+            cache_read: count("cache_read_input_tokens"),
+            cache_write: count("cache_creation_input_tokens"),
+        }
     }
+
+    /// Fold a later report in, last-nonzero-wins per wire field.
+    ///
+    /// The fold happens on the wire buckets, not on the IR sum: a
+    /// `message_delta` that repeats `input_tokens` without the cache fields
+    /// would otherwise shrink the prompt total it reports.
+    const fn absorb(&mut self, later: Self) {
+        const fn keep(slot: &mut u64, later: u64) {
+            if later != 0 {
+                *slot = later;
+            }
+        }
+        keep(&mut self.uncached_input, later.uncached_input);
+        keep(&mut self.output, later.output);
+        keep(&mut self.cache_read, later.cache_read);
+        keep(&mut self.cache_write, later.cache_write);
+    }
+
+    fn to_ir(self) -> Usage {
+        Usage {
+            input_tokens: self
+                .uncached_input
+                .saturating_add(self.cache_read)
+                .saturating_add(self.cache_write),
+            output_tokens: self.output,
+            cache_read_tokens: self.cache_read,
+            cache_write_tokens: self.cache_write,
+            ..Usage::default()
+        }
+    }
+}
+
+fn usage_of(raw: &Value) -> Usage {
+    WireUsage::of(raw).to_ir()
 }
 
 // -- stream ------------------------------------------------------------------
@@ -381,6 +430,8 @@ struct AnthropicSseParser {
     done_emitted: bool,
     open_blocks: BTreeSet<u32>,
     seen_blocks: BTreeSet<u32>,
+    /// Every usage report so far, folded on the wire buckets.
+    usage: WireUsage,
 }
 
 /// The end of the first complete SSE frame in `buffer`, as
@@ -458,14 +509,26 @@ impl AnthropicSseParser {
         })
     }
 
+    /// One usage report, carrying the whole usage so far.
+    ///
+    /// Design record D2 left folding to the consumer, and consumers still fold
+    /// (kernel `Usage::absorb`). But the IR's `input_tokens` is a sum of three
+    /// wire buckets, and a sum cannot be folded field-wise: a later frame
+    /// repeating `input_tokens` without the cache fields would report a smaller
+    /// prompt and win. So the wire buckets are folded here and every report
+    /// carries the whole-so-far usage, which a last-nonzero-wins consumer
+    /// absorbs to the same result.
+    fn report_usage(&mut self, raw: &Value) -> StreamEvent {
+        self.usage.absorb(WireUsage::of(raw));
+        StreamEvent::Usage { usage: self.usage.to_ir() }
+    }
+
     fn events_of(&mut self, event: &str, data: &Value) -> ComponentResultV1<Vec<StreamEvent>> {
         match event {
-            // D2: input-side counts are reported where the upstream reported
-            // them. Folding is the consumer's job.
             "message_start" => {
                 let usage = &data["message"]["usage"];
                 if usage.is_object() {
-                    return Ok(vec![StreamEvent::Usage { usage: usage_of(usage) }]);
+                    return Ok(vec![self.report_usage(usage)]);
                 }
                 Ok(Vec::new())
             }
@@ -555,7 +618,7 @@ impl AnthropicSseParser {
                     return Ok(Vec::new());
                 }
                 let mut events: Vec<StreamEvent> = self.take_pending_finish().into_iter().collect();
-                events.push(StreamEvent::Usage { usage: usage_of(&data["usage"]) });
+                events.push(self.report_usage(&data["usage"]));
                 events.push(StreamEvent::Done { finish_reason: None, stop_sequence: None });
                 self.done_emitted = true;
                 Ok(events)
@@ -621,7 +684,7 @@ impl ProviderComponentV1 for AnthropicReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-anthropic".to_owned(),
-            version: "1.0.5".to_owned(),
+            version: "1.0.6".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }

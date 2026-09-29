@@ -5,6 +5,6 @@
     "event: contentBlockDelta\ndata: {\"contentBlockIndex\": 1, \"delta\": {\"toolUse\": {\"input\": \":\\\"Beijing\\\"}\"}}}\n\n",
     "event: contentBlockStop\ndata: {\"contentBlockIndex\": 1}\n\n",
     "event: messageStop\ndata: {\"stopReason\": \"tool_use\"}\n\n",
-    "event: metadata\ndata: {\"usage\": {\"inputTokens\": 20, \"outputTokens\": 8, \"totalTokens\": 28, \"cacheReadInputTokens\": 5}}\n\n"
+    "event: metadata\ndata: {\"usage\": {\"inputTokens\": 20, \"outputTokens\": 8, \"totalTokens\": 33, \"cacheReadInputTokens\": 5}}\n\n"
   ]
 }

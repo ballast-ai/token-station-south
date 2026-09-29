@@ -32,7 +32,7 @@ use std::collections::BTreeMap;
 use serde_json::{Value, json};
 use token_station_protocol::{ErrorCode, FinishReason, StreamEvent, Usage};
 
-use crate::anthropic::stop_reason;
+use crate::anthropic::{stop_reason, uncached_input_tokens};
 
 /// One SSE frame: this wire names its event type as well as carrying a payload.
 ///
@@ -108,7 +108,8 @@ impl AnthropicSseState {
         // input buckets up front (this protocol's own upstreams do) gets them
         // announced here; one that reports everything at the end gets zeros
         // here and the real numbers on `message_delta`.
-        let mut usage = json!({"input_tokens": self.usage.input_tokens, "output_tokens": 0});
+        let mut usage =
+            json!({"input_tokens": uncached_input_tokens(&self.usage), "output_tokens": 0});
         if self.usage.cache_read_tokens > 0 {
             usage["cache_read_input_tokens"] = json!(self.usage.cache_read_tokens);
         }
@@ -339,7 +340,7 @@ pub fn anthropic_frames(
 fn terminal_usage(usage: Usage) -> Value {
     let mut reported = json!({"output_tokens": usage.output_tokens});
     if usage.input_tokens > 0 {
-        reported["input_tokens"] = json!(usage.input_tokens);
+        reported["input_tokens"] = json!(uncached_input_tokens(&usage));
     }
     if usage.cache_read_tokens > 0 {
         reported["cache_read_input_tokens"] = json!(usage.cache_read_tokens);
