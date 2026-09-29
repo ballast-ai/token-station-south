@@ -41,6 +41,7 @@ mod task_suite_v2;
 pub mod task_v2_json;
 pub use task_fixture_v2::{TASK_FIXTURE_KIND_V2, TaskCaseV2, TaskFamilyV2, TaskFixturePackV2};
 pub use task_suite_v2::{TASK_COMPONENT_SUITE_V2, run_task_component_suite_v2};
+pub mod anthropic_dialect;
 mod fixture;
 mod reasoning_replay;
 pub mod reference;
