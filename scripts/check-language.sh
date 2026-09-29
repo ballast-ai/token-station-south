@@ -35,19 +35,40 @@ set -euo pipefail
 
 readonly BASELINE_FILE='scripts/language-baseline.txt'
 
-# CJK ideographs plus the punctuation that exists **only** in CJK text.
+# The pattern, written as **codepoints** and matched by perl rather than as a
+# literal character range matched by grep.
 #
-# What is deliberately NOT in here, after the first run of this gate flagged 60+
-# lines of correct English: `—` (em dash), `…` (ellipsis) and `·` (middle dot).
-# Those are standard English typography and this repo uses them heavily —
-# including in the sentence you are reading. A gate that flags correct prose gets
-# switched off, which would leave the repo exactly as unguarded as before.
+# That is not style. `grep -cE '[<CJK>-<CJK>]'` is what the first draft used, and
+# it is unportable in a way that cost a CI round to find:
 #
-# The Chinese dash is still caught, because Chinese uses **two** em dashes as one
-# mark: `DOUBLE_DASH` below matches `——` without touching a single `—`. That is
-# what makes "0.34.0 —— Bedrock 包身份升 1.0.1" fail on two independent counts.
-readonly CJK_CLASS='[一-鿿㐀-䶿豈-鶴，。、；：！？「」『』（）《》【】〈〉〔〕｛｝｟｠～]'
-readonly DOUBLE_DASH='——'
+#   * GNU grep 3.11 on Linux, LC_ALL unset / C / en_US.UTF-8 — **over-matches**,
+#     flagging any line with a single em dash as CJK. Correct English prose fails.
+#   * GNU grep 3.11, LC_ALL=C.UTF-8 — `grep: Invalid collation character`, i.e.
+#     the gate does not run at all.
+#   * ugrep and BSD grep on macOS — correct, which is exactly why the bug was
+#     invisible locally and only appeared on the runner.
+#
+# `perl -CSD` decodes UTF-8 itself and matches on codepoints, so it behaves the
+# same on both platforms and needs no modules beyond perl-base (verified on a bare
+# ubuntu:24.04 image, which has neither `Encode` nor python3). Invalid UTF-8 is
+# skipped rather than fatal.
+#
+# Ranges: CJK symbols and punctuation, CJK Extension A, CJK Unified Ideographs,
+# CJK compatibility ideographs, and fullwidth forms. `—` on its own is deliberately
+# absent — see the note above — while `——`, the Chinese dash, is two of them.
+#
+# Fullwidth **digits** (U+FF10-U+FF19) are excluded, so the fullwidth range is
+# split in two. This gate is about Chinese *prose*, and the only fullwidth digits
+# in the repo are rejected-input fixtures (`１９`, `１２`) pinning that a pasted
+# fullwidth number is refused — real coverage that an ASCII rewrite would delete.
+# Nothing is lost by the exclusion: a genuine Chinese sentence carries ideographs
+# or fullwidth punctuation too, and both are still matched.
+readonly CJK_PATTERN='[\x{3000}-\x{303F}\x{3400}-\x{4DBF}\x{4E00}-\x{9FFF}\x{F900}-\x{FAFF}\x{FF01}-\x{FF0F}\x{FF1A}-\x{FF60}]|\x{2014}{2}'
+
+# Lines matching the pattern, prefixed with their line number.
+cjk_lines_of() {
+  perl -CSD -ne 'BEGIN{$p=shift} print "$.:$_" if /$p/' "$CJK_PATTERN" -- "$1" 2>/dev/null
+}
 
 # Paths where CJK is **data, not prose** — the only sanctioned exception.
 #
@@ -62,9 +83,9 @@ readonly DATA_ALLOWLIST='scripts/check-language.sh|the CJK character class this 
 
 cjk_lines_in() {
   # Counts lines, not codepoints: one line with three Chinese words is one line
-  # to fix. `grep -c` returns 1 on no-match, hence the `|| true`.
+  # to fix.
   local file="$1"
-  grep -cE "$CJK_CLASS|$DOUBLE_DASH" -- "$file" 2>/dev/null || true
+  cjk_lines_of "$file" | wc -l | tr -d ' '
 }
 
 is_allowlisted() {
@@ -126,7 +147,7 @@ gate() {
         echo "language: new CJK in $f ($n line(s))" >&2
         echo "  This repo is English-only — see CONTRIBUTING.md 'Language and design'." >&2
         echo "  Offending lines:" >&2
-        grep -nE "$CJK_CLASS|$DOUBLE_DASH" -- "$f" | head -5 | sed 's/^/    /' >&2
+        cjk_lines_of "$f" | head -5 | sed 's/^/    /' >&2
       else
         echo "language: CJK grew in $f ($allowed -> $n line(s))" >&2
       fi
@@ -198,7 +219,13 @@ check_commits() {
   local range="$1" failed=0 sha subject
   while read -r sha; do
     [[ -z "$sha" ]] && continue
-    if git log -1 --pretty=%B "$sha" | grep -qE "$CJK_CLASS|$DOUBLE_DASH"; then
+    # Counted in bash rather than signalled by perl's exit status: `exit` inside a
+    # perl one-liner still runs its END block, so an `exit 0`/`END{exit 1}` pair
+    # silently reports the opposite of what it found.
+    local hits
+    hits="$(git log -1 --pretty=%B "$sha" \
+      | perl -CSD -ne 'BEGIN{$p=shift} print if /$p/' "$CJK_PATTERN" | wc -l | tr -d ' ')"
+    if [[ "$hits" != 0 ]]; then
       subject="$(git log -1 --pretty=%s "$sha")"
       echo "language: CJK in commit message $sha" >&2
       echo "    $subject" >&2
