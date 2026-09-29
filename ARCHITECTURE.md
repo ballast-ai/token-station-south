@@ -167,7 +167,14 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-该库独立 Rust 版本为 0.1.0；八个库与组件运行时当前为 v0.40.0。
+该库独立 Rust 版本为 0.1.0；八个库与组件运行时当前为 v0.41.0。
+**v0.41.0**: per-model Claude request dialect (#120). The host declares the dialect in `supported_parameters`
+(`anthropic.sampling.none`, `anthropic.tool_choice.auto_only`, `anthropic.thinking.adaptive`, `anthropic.thinking.budget`,
+`anthropic.effort.xhigh`); `provider-anthropic` and `provider-bedrock-converse` drop rejected sampling parameters, refuse a
+forced tool choice the model cannot honor, and carry the caller's reasoning effort as adaptive thinking or a bounded budget.
+Declaring nothing keeps every request unchanged. Identities: `provider-anthropic` 1.0.6 → **1.0.7**,
+`provider-bedrock-converse` 1.0.3 → **1.0.4**; the other eleven packages are unchanged. Design record:
+`docs/design/2026-09-29-claude-model-dialect.md`.
 **v0.40.0**: IR usage follows the kernel partition contract (`input_tokens` is the whole prompt; the cache
 buckets are subsets). `provider-anthropic` and `provider-bedrock-converse` now sum their uncached count with both
 cache buckets, Converse accepts the `totalTokens` AWS actually sends (cache counted), and the Anthropic north
@@ -188,10 +195,10 @@ v0.37.0 号已被 `feature/p15-responses` 线（Responses codec）占用、未�
 **v0.35.0**：**任务合同 6**（`docs/design/2026-09-27-task-contract-v6-facts.md`：token 单位率、请求 / 交付条数、产物凭证取回、
 请求体禁改路径；合同 5 形状拒收），组件增至十三个——新增五个 task-v2 包身份均 0.35.0：`task-xai-v2`、
 `task-byteplus-v2`、`task-veo-v2`（只声明 `header_secret` 臂）、`task-wan-image-v2` 与 `task-gmi-image-v2`（首批图像任务组件）。
-现行身份：`provider-openai-compatible` 2.1.4、`provider-gemini` 1.1.4、`provider-anthropic` 1.0.6、
-`provider-bedrock-converse` 1.0.3、`task-kling` 1.0.4、`task-kling-v2` 0.32.1、`task-minimax-v2` / `task-bailian-v2` 0.31.1、
+现行身份：`provider-openai-compatible` 2.1.4、`provider-gemini` 1.1.4、`provider-anthropic` 1.0.7、
+`provider-bedrock-converse` 1.0.4、`task-kling` 1.0.4、`task-kling-v2` 0.32.1、`task-minimax-v2` / `task-bailian-v2` 0.31.1、
 `task-byteplus-v2` 0.36.1、其余四个（`task-xai-v2` / `task-veo-v2` / `task-wan-image-v2` / `task-gmi-image-v2`）0.35.1；HTTP9/WIT 不变。每个包的
-`compatibility.south_runtime` 随运行时一并声明为 0.40.0——该字段按精确串比对，声明旧版的包会被宿主按名拒绝，
+`compatibility.south_runtime` 随运行时一并声明为 0.41.0——该字段按精确串比对，声明旧版的包会被宿主按名拒绝，
 故运行时与十三包必须
 同批升。宿主采用须分别用真实存储通过公共故障套件；组件兼容状态不能代替共享核心
 采用证据。[设计与边界](docs/design/2026-09-20-shared-task-core.md)。
