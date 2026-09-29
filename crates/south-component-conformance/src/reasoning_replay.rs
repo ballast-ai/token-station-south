@@ -1,6 +1,6 @@
 use serde_json::Value;
 use std::collections::HashMap;
-use token_station_protocol::{Content, ContentPart, Message, ToolCall};
+use token_station_protocol::{Content, ContentPart, Message, Role, ToolCall};
 
 const FAMILY: &str = "claude-signed-thinking";
 const MAX_BLOCKS: usize = 128;
@@ -17,6 +17,9 @@ pub fn validated_layout(message: &Message) -> Result<Option<Vec<ReplayRef<'_>>>,
         return if family.is_none() && layout.is_none() { Ok(None) } else { Err(()) };
     };
     if family.as_str() != Some(FAMILY) {
+        return Err(());
+    }
+    if message.role != Role::Assistant {
         return Err(());
     }
     let layout = layout.as_array().filter(|layout| layout.len() <= MAX_BLOCKS).ok_or(())?;

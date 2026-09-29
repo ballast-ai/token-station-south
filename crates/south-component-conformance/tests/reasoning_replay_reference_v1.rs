@@ -39,7 +39,9 @@ fn x1_partial_or_non_bijective_replay_markers_are_refused() {
         } else {
             "anthropic.claude-sonnet-4-v1:0"
         };
-        for mutation in ["layout-only", "family-only", "missing-content", "duplicate-content"] {
+        for mutation in
+            ["layout-only", "family-only", "missing-content", "duplicate-content", "marker-on-user"]
+        {
             let mut request = request(model);
             let extensions = &mut request.messages[0].extensions;
             match mutation {
@@ -68,6 +70,9 @@ fn x1_partial_or_non_bijective_replay_markers_are_refused() {
                             {"kind":"content","ordinal":2}
                         ]),
                     );
+                }
+                "marker-on-user" => {
+                    request.messages[0].role = token_station_protocol::Role::User;
                 }
                 _ => unreachable!(),
             }

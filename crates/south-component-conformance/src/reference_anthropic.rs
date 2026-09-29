@@ -149,9 +149,9 @@ fn content_to_blocks(content: Option<&Content>) -> Option<Value> {
         // Messages accepts a bare string as well as a block array, and a bare
         // string is what a plain turn should stay.
         Some(Content::Text(text)) => Some(json!(text)),
-        Some(Content::Parts(parts)) => {
-            Some(Value::Array(parts.iter().map(part_to_block).collect()))
-        }
+        Some(Content::Parts(parts)) => Some(Value::Array(
+            parts.iter().filter_map(|part| assistant_part_to_block(part, false)).collect(),
+        )),
         None => None,
     }
 }
@@ -640,6 +640,10 @@ impl ProviderComponentV1 for AnthropicReferenceV1 {
         request: &ChatRequest,
         config: &ProviderConfig,
     ) -> ComponentResultV1<HttpRequestDescriptor> {
+        for message in &request.messages {
+            validated_layout(message)
+                .map_err(|()| capability("invalid reasoning replay markers or layout"))?;
+        }
         if config.provider != "anthropic" {
             return Err(capability(format!("unsupported provider dialect `{}`", config.provider)));
         }

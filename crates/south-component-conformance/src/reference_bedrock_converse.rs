@@ -755,6 +755,10 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
         request: &ChatRequest,
         config: &ProviderConfig,
     ) -> ComponentResultV1<HttpRequestDescriptor> {
+        for message in &request.messages {
+            validated_layout(message)
+                .map_err(|()| capability("invalid reasoning replay markers or layout"))?;
+        }
         if config.provider != DIALECT {
             return Err(capability(format!("unsupported provider dialect `{}`", config.provider)));
         }
