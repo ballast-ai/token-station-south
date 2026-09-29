@@ -439,18 +439,36 @@ fn metadata_cannot_complete_while_a_content_block_is_open() {
     );
 }
 
+/// Real Converse streams announce `contentBlockStart` only for tool use; a text or reasoning
+/// block begins with its first delta and may even stop without any delta. What stays refused is a
+/// delta after the block stopped and a second stop of the same block.
 #[test]
-fn converse_delta_and_stop_require_a_prior_open_block() {
-    for (event, data) in [
-        (
-            "contentBlockDelta",
-            json!({"contentBlockIndex":0,"delta":{"reasoningContent":{"text":"x"}}}),
-        ),
-        ("contentBlockStop", json!({"contentBlockIndex":0})),
+fn converse_text_and_reasoning_blocks_open_on_their_first_delta_and_never_reopen() {
+    for delta in [
+        json!({"contentBlockIndex":0,"delta":{"text":"x"}}),
+        json!({"contentBlockIndex":0,"delta":{"reasoningContent":{"text":"x"}}}),
     ] {
         let mut parser = BedrockConverseReferenceV1.stream_parser();
-        assert!(parser.parse_chunk(&frame(event, &data)).is_err());
+        let events = parser.parse_chunk(&frame("contentBlockDelta", &delta)).unwrap();
+        assert_eq!(events.len(), 1, "the first delta opens the block: {delta}");
+        parser.parse_chunk(&frame("contentBlockStop", &json!({"contentBlockIndex":0}))).unwrap();
+        assert!(
+            parser.parse_chunk(&frame("contentBlockDelta", &delta)).is_err(),
+            "a delta after the block stopped is refused: {delta}"
+        );
+        assert!(
+            parser
+                .parse_chunk(&frame("contentBlockStop", &json!({"contentBlockIndex":0})))
+                .is_err(),
+            "a second stop is refused"
+        );
     }
+    // An empty block: stop without any start or delta is not an error.
+    let mut parser = BedrockConverseReferenceV1.stream_parser();
+    parser.parse_chunk(&frame("contentBlockStop", &json!({"contentBlockIndex":3}))).unwrap();
+    assert!(
+        parser.parse_chunk(&frame("contentBlockStop", &json!({"contentBlockIndex":3}))).is_err()
+    );
 }
 
 #[test]

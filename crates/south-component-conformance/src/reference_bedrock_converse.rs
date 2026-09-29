@@ -559,21 +559,30 @@ impl ConverseSseParser {
         }
     }
 
-    fn require_open_block(&self, index: u32) -> ComponentResultV1<()> {
+    /// Real Converse streams announce `contentBlockStart` only for tool use (its `start`
+    /// carries the id and name); a text or reasoning block begins with its first delta. Such
+    /// a delta opens the block implicitly. A delta after the block stopped is still refused.
+    fn open_block_for_delta(&mut self, index: u32) -> ComponentResultV1<()> {
         if self.open_blocks.contains(&index) {
+            return Ok(());
+        }
+        if self.seen_blocks.insert(index) {
+            self.open_blocks.insert(index);
             Ok(())
         } else {
             Err(provider_protocol_error(
-                "the upstream sent a delta for a content block that is not open",
+                "the upstream sent a delta for a content block that already stopped",
             ))
         }
     }
 
+    /// A block that was never announced may still stop (an empty text block); only a second
+    /// stop of the same block is an error.
     fn close_block(&mut self, index: u32) -> ComponentResultV1<()> {
-        if self.open_blocks.remove(&index) {
+        if self.open_blocks.remove(&index) || self.seen_blocks.insert(index) {
             Ok(())
         } else {
-            Err(provider_protocol_error("the upstream stopped a content block that is not open"))
+            Err(provider_protocol_error("the upstream stopped a content block twice"))
         }
     }
 
@@ -612,7 +621,7 @@ impl ConverseSseParser {
             }
             "contentBlockDelta" => {
                 let index = block_index(data)?;
-                self.require_open_block(index)?;
+                self.open_block_for_delta(index)?;
                 let delta = &data["delta"];
                 if let Some(text) = delta["text"].as_str() {
                     // `Delta.index` is the *choice* index, not the block index:
