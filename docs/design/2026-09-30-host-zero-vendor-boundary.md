@@ -21,10 +21,10 @@ others — were approved as recommended on 2026-09-30, as relayed by the host te
 `2026-09-30-embeddings-contract.md`.
 
 Rulings: on 2026-09-30 the host owner (lv) ruled on the questions tagged L in §16 — Q1, Q3, Q7, Q10 and Q12; each
-ruling is recorded under its question. On 2026-10-01 lv ruled the host side of Q18. Q13 still awaits a measurement.
-Questions tagged S or K remain open for the south and kernel maintainers. Two rulings made in sibling records bind this
-one and are quoted where they apply: Responses R-Q5 / Kiro K-Q1 (families that cannot send the output cap, §6.3) and
-image Q7 (`rejected` releases the reservation, §6.4).
+ruling is recorded under its question. On 2026-10-01 lv ruled the host side of Q18, and Q13 was answered by
+measurement (§16 Q13). Questions tagged S or K remain open for the south and kernel maintainers. Two rulings made in
+sibling records bind this one and are quoted where they apply: Responses R-Q5 / Kiro K-Q1 (families that cannot send
+the output cap, §6.3) and image Q7 (`rejected` releases the reservation, §6.4).
 
 Baseline: south `origin/main` = v0.42.0 (`3135e36`); kernel `f585bc83` (protocol 0.4.0 / kernel v0.3.0); host
 `a82c852b`. South line numbers refer to this baseline. Host line numbers refer to token-station-server `a82c852b`
@@ -675,8 +675,8 @@ executor, kept in the host and selected by declaration — and `aws_sigv4` among
      convention (ARCHITECTURE.md:182-186). The Gemini reference implementation maps `candidatesTokenCount` to output
      and `thoughtsTokenCount` to reasoning (reference_gemini.rs:292-301), yet in its own fixture the two are 5 and 40
      (fixtures-gemini/provider.response.thought-parts-and-token-buckets.input.json) — reasoning larger than output,
-     contradicting "subset". Per the composition of `totalTokenCount` that Google publishes, thoughts are not
-     included in candidates (to be rechecked against the documentation).
+     contradicting "subset". A measurement on 2026-10-01 settles it (§16 Q13): thoughts are not included in
+     candidates, and `totalTokenCount = promptTokenCount + candidatesTokenCount + thoughtsTokenCount`.
 - P21 §3.2 S5 says the conformance tests contain "not a single usage sample", which is inaccurate: there are some,
   and there is a documentation-derived judge; what is missing is **enforcement** and **strictness**.
 
@@ -685,8 +685,8 @@ executor, kept in the host and selected by declaration — and `aws_sigv4` among
 1. **Make the reference implementations strict**, with the same convention as Converse: a non-streaming 2xx that
    lacks the usage object or a count this dialect requires → `provider_protocol_error`; a verifiable relationship
    given by the upstream (e.g. OpenAI's `total_tokens == prompt_tokens + completion_tokens`) that does not hold →
-   protocol error. For Gemini the total relation is checked only once Q13 settles which counts `totalTokenCount`
-   sums; checking `prompt + candidates` before that would refuse every real thinking response.
+   protocol error. For Gemini the relation is `total = prompt (+ tool-use prompt) + candidates + thoughts` (Q13,
+   measured); checking `prompt + candidates` alone would refuse every real thinking response.
 2. **gate ② requires usage rows by name** (provider world): `response.usage`, `response.missing-usage` (expects a
    protocol error), `response.cached-usage` (partition convention), `stream.usage-terminal`, `stream.no-usage`.
    Packages declaring `usage_evidence: absent` (item 4) instead require the rows that show they never produce usage
@@ -713,10 +713,14 @@ executor, kept in the host and selected by declaration — and `aws_sigv4` among
    not go into gate ② — a third-party package author cannot vouch for documentation semantics on south's behalf —
    it is south's commitment for its own released packages.
 6. **Freeze the reasoning convention**: following how v0.40.0 handled the cache buckets, write "`reasoning_tokens`
-   ⊂ `output_tokens`" into the IR usage contract and add reasoning rows to the judges; if the documentation recheck
-   confirms that thoughts are not within candidates, change the Gemini reference implementation to
-   `output_tokens = candidatesTokenCount + thoughtsTokenCount`. This changes amounts charged by output and must be
-   confirmed by a host dual run (§16 Q13).
+   ⊂ `output_tokens`" into the IR usage contract and add reasoning rows to the judges, and change the Gemini
+   reference implementation to `output_tokens = candidatesTokenCount + thoughtsTokenCount` (with `reasoning_tokens =
+   thoughtsTokenCount`), since the measurement shows thoughts are not within candidates (§16 Q13). The host's
+   settlement already counts output this way (server:crates/gateway-provider-protocol/src/usage_evidence.rs,
+   `parse_gemini_usage`: output = candidates + thoughts, checked against the total), so the amounts the host charges
+   do not change. What changes is the usage a component reports, which is what clients see today (the host's gap
+   ledger #65) and what the host settles on once usage moves to components; left unchanged, thinking tokens would go
+   unbilled after that move. A dual run confirms the component's IR usage equals the host's evidence.
 
 ### 6.3 Bounds the host checks, the funds outcome, and the undetectable zone
 
@@ -1328,6 +1332,14 @@ Tags: S = south maintainers, L = lv, K = kernel.
   `thoughtsTokenCount` lies outside `candidatesTokenCount`; if it does, the Gemini reference implementation's
   `output_tokens` must change, and the host's amounts charged by output change with it, which needs lv's
   confirmation and a dual run.
+  Note (2026-10-01), measured at lv's request on Vertex AI (`global`, `:generateContent`, `thinkingBudget: 512`):
+  `gemini-2.5-flash` prompt 32 / candidates 6 / thoughts 286 / total 324; `gemini-3.5-flash` 32 / 7 / 208 / 247;
+  `gemini-2.5-pro` 32 / 7 / 323 / 362. In every case `total = prompt + candidates + thoughts`, and candidates count
+  only the visible answer: **thoughts lie outside candidates**. The Gemini API (`generativelanguage`) was not enabled
+  in the measuring project; the Vertex result is taken as the dialect's convention. The second half of the question
+  turns out not to hold: the host already settles output as candidates + thoughts, so no amount changes and there is
+  nothing left for lv to confirm. What remains is the south half — the reference implementation change in §6.2
+  item 6.
 - **Q14 (S, K)** The channel for values the component needs that the fence does not admit. S0 §6 and D5 forbid a
   component from behaving on an `extensions` key. Two cases:
   - **per provider**: credential attributes (§3.3) and `config_schema` keys the component itself reads (§7.3);
