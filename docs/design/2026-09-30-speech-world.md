@@ -266,11 +266,12 @@ conditions become generic facts:
 OpenAI-compatible component uses it to decide whether to ask the upstream for `stream_format: "sse"` — today the host
 does this by rewriting the request body according to the pricing form (`tts.rs:628-637`); after migration the host
 only says "I need token evidence", and how to get it is the component's business. A component that cannot report the
-required form refuses in `prepare`. This turns a configuration that silently works today into a failure before
-admission: a row on a non-OpenAI-compatible arm configured with only a token price (character price 0) passes the
-listing check (`tts_uses_token_pricing` looks only at the model row, not at the arm), but settlement uses the
-character price (`tts.rs:1106-1109`) and so settles at $0 — itself a defect, which after migration becomes a refusal
-before admission.
+required form refuses in `prepare`. One configuration is affected: a row on a non-OpenAI-compatible arm configured
+with only a token price (character price 0) passes the listing check (`tts_uses_token_pricing` looks only at the
+model row, not at the arm), but those arms compute the reservation upper bound from the character price
+(`tts.rs:760-773`), get 0, and the host refuses every request at admission with a "no price configured" 400 — the
+row can be listed but never served, and no funds move (host P21 §9, P23-F7; verified 2026-09-30). After migration it
+is still a refusal before admission, now raised by `prepare` and naming the real cause.
 
 ## 9. D7 — Metering units and host generic checks
 
@@ -291,8 +292,8 @@ What is missing is characters, and a set of fact types belonging to the speech w
 
 - `tokens` declared in `metering_forms` but no `usage` in the SSE → outcome `unknown`, **not 0**. Today, when
   `speech.audio.done` lacks the `usage` object, the host takes 0 for both counts (`tts_providers.rs:37-46`:
-  `unwrap_or(0)`), and token-priced rows settle at $0 — a defect newly found in this survey, of the same kind as
-  P22-F2, which must be fixed in V0 before the dual run.
+  `unwrap_or(0)`), and token-priced rows settled at $0 — a defect found in this survey, of the same kind as
+  P22-F2; fixed in the host on 2026-09-30 (P21 §9, P23-F6: missing usage now ends in `delivery_unknown`).
 - `seconds` missing: the component decides per dialect. If the upstream **may legitimately not report** it for this
   response format (e.g. srt / vtt), report `seconds: null`, and the host applies the generic rule of a 60-second
   fallback and marks `quantity_estimated = 1` (`audio.rs:535-540`, DV3's interim scheme); if the dialect **always
@@ -393,9 +394,10 @@ behaviour is for lv to decide (Q7).
 
 ## 13. Migration order and dual-run acceptance
 
-**Prerequisite (V0, host)**: fix the two $0 settlements newly found in this record — §9's "SSE missing `usage` counts
-as 0" and §8's "a non-compatible arm configured with only a token price settles at $0"; the other V0 items (the F1
-interim scheme, F3, F4, adding handler-level cases) are listed in P23 and mostly landed.
+**Prerequisite (V0, host)**: done as of 2026-09-30. The $0 settlement found in this record — §9's "SSE missing
+`usage` counts as 0" — is fixed (P23-F6); §8's "a non-compatible arm configured with only a token price" turned out
+on verification to be refused at admission, not settled at $0, and is left to this migration (P23-F7). The other V0
+items (the F1 interim scheme, F3, F4, handler-level cases) have landed.
 
 **Order** (P23 V3–V4; on the south side, in the same batch as the image world's first minor or right after it):
 1. **V3-1, the binary-returning arms**: xAI, Groq, OpenAI-compatible (including the SSE path), ElevenLabs (waits for
@@ -468,5 +470,5 @@ A South **minor**, sharing `contracts.media` with the image world:
 | Q7 | Vertex silently downgrading mp3 and others to wav: copy it, or refuse in `prepare` | Copy it during the dual run; refuse afterwards | lv |
 | Q8 | Two separate worlds for image and speech, or one synchronous media world (image record Q4) | Separate | lv + south maintainers |
 | Q9 | A second consumer of the metering vocabulary: the community host today has no multipart surface and no byte-returning surface (`2026-09-09-multipart-request-body.md:189`, `2026-09-09-buffered-binary-response.md:302`), so per `ARCHITECTURE.md:114-115` the admission condition is not met at present. The same question is open as the image record Q5, the boundary record Q9 and the embeddings record E-Q5 | Take P21 §7's "synchronous implementation recommended" as the written commitment; otherwise do not admit for now | lv + south maintainers |
-| Q10 | Rows on non-OpenAI-compatible arms configured with only a token price: they settle at $0 today and become a refusal before admission after migration (§8) | Accept; fix it as a defect first in V0, and list the affected rows with a read-only query | lv |
+| Q10 | Rows on non-OpenAI-compatible arms configured with only a token price: today they can be listed but every request is refused at admission with a "no price configured" 400 (no funds move); after migration the refusal comes from `prepare` and names the cause (§8) | Accept; list the affected rows with a read-only query before cutting over | lv |
 | Q11 | If P25 chooses A for the native ElevenLabs route, does it reuse this world's components and immutability declaration directly | Reuse | lv (P25) |
