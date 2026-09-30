@@ -865,19 +865,35 @@ Evidence is the cited code only; no impact is claimed.
 Tags: S = south maintainers, L = lv, K = kernel. Boundary Q13 (reasoning-token convention) remains open and is not
 repeated; this package's mapping does not depend on it (§7.1).
 
+On 2026-09-30 lv ruled on the L-tagged questions: as recommended, on condition that each recommendation fits the
+final goal DP0 (no provider-specific logic in the host). One recommendation was adjusted to meet that condition
+(R-Q5); the rulings are recorded under each question.
+
 - **R-Q1 (S, L)** Delivery on the Responses surface: north-identical bytes by declaration (recommended, §8.2), or
   always re-render and accept §8.3's losses.
+  **Ruled for the host side (lv, 2026-09-30): north-identical delivery, by declaration.** The south maintainers'
+  half remains open.
 - **R-Q2 (L)** Does a generation truncated at the cap (`response.incomplete` with usage) settle as a success with
   finish reason `length` (recommended: yes, as on every other wire), or stay in `delivery_unknown` as the native leg
   does today?
+  **Ruled (lv, 2026-09-30): it settles as a success with finish reason `length`.**
 - **R-Q3 (L)** Hosted-tool usage (`tool_usage.image_gen`): refuse any non-zero value (recommended for v1; the host
   admits no hosted tool today), or model a second meter — a south-local response extension plus host pricing.
+  **Ruled (lv, 2026-09-30): version 1 refuses any non-zero value.**
 - **R-Q4 (L)** Stateful Responses (`store: true`, `previous_response_id`): refuse (recommended for v1), or support
   with a redesign of the input bound.
+  **Ruled (lv, 2026-09-30): version 1 refuses.**
 - **R-Q5 (L, S)** Codex and the output cap: first measure whether the backend accepts `max_output_tokens`. If it does
   not, accept that this family cannot be told the cap and that over-cap responses go to manual review (recommended:
   accept; it is today's behavior), which needs `request_facts.output_cap: []` in south. Same question for
   non-streaming Codex callers: refuse at build time (recommended) or have the host aggregate.
+  **Ruled for the host side (lv, 2026-09-30), adjusted for DP0:** measure first. If the backend does not accept the
+  field, one rule for every family that declares `output_cap: []`, keyed on declarations and
+  never on provider identity. With `usage_evidence: absent` the host enforces the authorized cap on its own output
+  meter and ends the answer with `length` (after cutover; today's behavior during the dual run). With reported usage
+  the host does not cut, because cutting would discard the upstream's usage report; a settlement above the
+  reservation goes to manual review, which is the existing generic path.
+  The same rule as the Kiro record's K-Q1. Non-streaming Codex callers are refused at build time.
 - **R-Q6 (S)** A package-declared `user-agent` instance (§10.4): add it to boundary §10 now, since DP7 providers other
   than Codex already need one, or leave it until a package needs it.
 - **R-Q7 (S)** Recipe details (§10.2): persistence and fallback of exported attributes; `jwt_exp` on a non-JWT token;
@@ -892,8 +908,12 @@ repeated; this package's mapping does not depend on it (§7.1).
 - **R-Q11 (S, K)** `block_index` for a wire with two-level indices: first-seen counter (this record) or another rule.
 - **R-Q12 (L)** How a "Responses only" model on a mixed provider is declared in the host: a second provider row (no
   new mechanism) or a generic model-row family override (recommended if such providers are common; host work only).
+  **Ruled (lv, 2026-09-30): a second provider row.** It is operator data and needs no new host mechanism; a generic
+  model-row family override is reconsidered only if such providers turn out to be common.
 - **R-Q13 (S)** Where shared Responses vocabulary constants live (§9), given that guests depend on the conformance
   crate and the north codec may depend only on the kernel IR (ARCHITECTURE.md:70-80).
 - **R-Q14 (L)** Cutover order: may the Responses surface be cut over before NC-1, losing encrypted reasoning replay
   for clients that use it (recommended: no for Codex rows; yes for rows with no such clients), and which upstreams of
   §3.3 (Azure, Bedrock with SigV4) are in production use and must be covered before R4.
+  **Ruled (lv, 2026-09-30): as recommended.** Which upstreams are in production use is answered by a read-only query
+  before R4.

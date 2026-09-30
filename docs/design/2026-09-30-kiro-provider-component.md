@@ -166,7 +166,7 @@ The WIT is sufficient (§3.2). Five things outside the WIT are not:
 - **D9 The upstream has no cap and no stream switch, and the manifest says so** (§8). What the host does about an
   upstream it cannot cap is host policy, surfaced as K-Q1.
 - **D10 Every northbound surface the host's generic component path serves becomes available**; nothing in the
-  package is surface-specific. Whether to switch Messages and Responses on for this provider is K-Q3.
+  package is surface-specific. The host keeps no per-provider switch for surfaces (K-Q3, ruled 2026-09-30).
 
 ## 3. Package identity, world and manifest
 
@@ -1048,20 +1048,38 @@ They matter here because a dual run pins whatever the native arm does as "correc
 
 Tags: S = south maintainers, L = lv, K = kernel. Each carries this record's recommendation.
 
+On 2026-09-30 lv ruled on the L-tagged questions: as recommended, on condition that each recommendation fits the
+final goal DP0 (no provider-specific logic in the host). Two recommendations were adjusted to meet that condition
+(K-Q1, K-Q3); the rulings are recorded under each question.
+
 - **K-Q1 (L) An upstream the host cannot cap** (§8.3). Recommendation: keep today's behavior for the dual run;
   after cutover the host enforces the authorized cap itself and ends the answer with `length` (option A). This
   changes what a caller sees on a long answer, so it needs a ruling and a notice.
+  **Ruled (lv, 2026-09-30), adjusted for DP0:** one rule for every family that declares `output_cap: []`, keyed on
+  declarations and never on provider identity. With `usage_evidence: absent` the host enforces the authorized cap on its own output
+  meter and ends the answer with `length` (after cutover; today's behavior during the dual run). With reported usage
+  the host does not cut, because cutting would discard the upstream's usage report; a settlement above the
+  reservation goes to manual review, which is the existing generic path.
+  This family is the first case; the Codex family of the Responses record is the second (its R-Q5).
 - **K-Q2 (L) Aligning the estimate before the dual run** (§6.2). Moving to the generic estimator changes the
   billed token counts of existing traffic. Recommendation: move the native arm to the generic estimator first, as
   its own reviewed change, then dual-run for byte-equal settlement; the alternative is a dual run that records a
   per-row delta and proves nothing about amounts.
+  **Ruled (lv, 2026-09-30): as recommended.** Moving the native arm to the generic estimator removes
+  provider-specific estimation from the host; it changes billed token counts and ships as its own reviewed change.
 - **K-Q3 (L) Messages and Responses for this provider** (§1.5, D10). Recommendation: keep them off until the Chat
   dual run passes, then switch them on with their own acceptance; they are a product change, not a migration.
+  **Ruled (lv, 2026-09-30), adjusted for DP0:** the host keeps no per-provider switch for northbound surfaces. Once
+  a row is routed to this package every surface the generic component path serves is available (D10). Staging is
+  done by acceptance, not by a gate in the host: the Chat dual run, plus acceptance of Messages and Responses against
+  the conformance fixtures, all pass before the row is switched.
 - **K-Q4 (L) Dropping `extras.refreshUrl`** (§7.4). Recommendation: drop it; first query production for
   credentials that set it.
+  **Ruled (lv, 2026-09-30): drop it**, after a read-only query of production for credentials that set it.
 - **K-Q5 (S, L) `meteringEvent` as required terminal evidence** (§5.3). Recommendation: require it if the
   dual-run captures show it on every completed answer; it turns a silently truncated answer into a detected one,
   at the cost of `delivery_unknown` if the upstream ever omits it.
+  **Ruled for the host side (lv, 2026-09-30): as recommended.** The south maintainers' half remains open.
 - **K-Q6 (S) The exception and status vocabulary of this upstream** (§9), including what an exhausted allowance
   looks like. To be settled by capture; until then the status column alone is authoritative.
 - **K-Q7 (S) The non-streaming path**: buffered deframe into `parse-response` (P-5, recommended — no new suite
@@ -1079,6 +1097,7 @@ Tags: S = south maintainers, L = lv, K = kernel. Each carries this record's reco
   unnecessary for this package; the proposal stands on its own for any dialect that needs a client-generated id.
 - **K-Q12 (S, L) Images.** Version 1 refuses them, as the host does. Whether the wire carries images is not known
   from the host's code; adding them later is a package change plus a capability declaration.
+  **Ruled for the host side (lv, 2026-09-30): version 1 refuses images.**
 - **K-Q13 (S) The model catalog for this family** (boundary §7.5, ruled a south data artifact). The ids named in
   the host's comments and tests (server:translate_kiro.rs:28-33, 843-856) are a starting list, not a verified one.
 - **K-Q14 (K) A tool-result error flag in the IR** (§4.3). `Message` has no field for it; carrying one needs an

@@ -378,17 +378,25 @@ About 310 lines of production code besides the dead file. The case for this reco
 
 S = south maintainers, L = lv, C = community host.
 
+On 2026-09-30 lv ruled on the L-tagged questions as recommended; the rulings are recorded under each question. The
+halves tagged S or C remain open.
+
 - **N-Q1 (L)** Which `model` string do Chat chunks carry: the upstream model id (today, at every site) or the name
   the client requested? The codec renders what it is given. Recommended: no change in this migration.
+  **Ruled (lv, 2026-09-30): no change in this migration.**
 - **N-Q2 (L, C)** Should `OpenAiChatStream` fold early `Usage` events instead of emitting an empty-`choices` chunk
   mid-stream (§3)? Recommended: yes — fold until the terminal chunk; honouring `stream_options.include_usage` is a
   later product decision. The old function keeps its behaviour.
+  **Ruled for the closed host (lv, 2026-09-30): fold.**
 - **N-Q3 (L, S)** Gateway-originated failures on the Responses surface: (a) `response.failed`, the codec's shape,
   or a top-level `error` event — and if the latter, nested as the host writes it today or flat (the public API
   reference was not checked for this record); (b) on every provider's stream, or only Codex as today; (c) a fixed
   public message, or the internal reason as today. Recommended: `response.failed`, every provider, fixed message.
+  **Ruled for the closed host (lv, 2026-09-30): `response.failed`, on every provider's stream, with a fixed public
+  message.** This also removes a per-provider branch the host has today (recovery only for one provider).
 - **N-Q4 (L, C)** Should the first delta of each choice carry `role: "assistant"`? The burst does today, streamed
   chunks do not, and G4 needs one rule. Recommended: yes, in the new wrapper only.
+  **Ruled for the closed host (lv, 2026-09-30): yes, in the new wrapper only.**
 - **N-Q5 (S)** Is JSON-value equality (D7) enough, or should the codec own key order — typed serializers for the
   new frames, or enabling `preserve_order` itself?
 - **N-Q6 (S, C)** Tighten `chat_request_from_responses` to refuse unknown `tsr.` versions and mixed carriers (§4)?
@@ -398,3 +406,4 @@ S = south maintainers, L = lv, C = community host.
 - **N-Q8 (C)** Does the community host put identity fields on Chat chunks today, and does it enable `preserve_order`?
 - **N-Q9 (C, L)** Does the community host have, or plan, a consumer for `forwarded_text`? Recommended: G5 stays in
   the host until one appears.
+  **Ruled for the closed host (lv, 2026-09-30): G5 stays in the host until a second consumer appears.**
