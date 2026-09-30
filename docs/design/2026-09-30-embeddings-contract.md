@@ -10,7 +10,7 @@ hosting several worlds), `2026-09-27-task-contract-v6-facts.md` (request estimat
 separately; `immutable_body_paths`), `2026-09-30-host-zero-vendor-boundary.md` (this record depends on its §3
 credential recipes, §4 descriptor auth admission, §6 usage discipline and §8 compatibility range).
 
-Origin: token-station-server `docs/product-review-v2/plans/2026-09-30-P24-embeddings与同步音乐迁组件.md`, items E1,
+Origin: token-station-server plan P24 (`docs/product-review-v2/plans/2026-09-30-P24-*.md`), items E1,
 DE1 (the contract lives south-local, not in the kernel IR) and DE2 (a new world rather than raising the provider
 world to v3) — both approved as recommended on 2026-09-30, as relayed by the host team; DE3 (whether Gemini
 responses carry token counts) awaits measurement. The umbrella plan is P21 in the same directory (DP0, DP1).

@@ -10,7 +10,7 @@ are bytes), `2026-08-27-manifest-schema-beyond-one-world.md` (manifest validated
 `2026-09-20-task-adapter-v2-candidate.md` (task-v2 admits only bearer / header_secret);
 `ARCHITECTURE.md` "What never enters South" (ruled 2026-09-08).
 
-Origin: token-station-server `docs/product-review-v2/plans/2026-09-29-P21-供应商接入只动South.md`
+Origin: token-station-server plan P21 (`docs/product-review-v2/plans/2026-09-29-P21-*.md`)
 (DP0 and DP1 decided; the decisions of P21 §8.3 "before stage 2 starts" — DP3, DP4, DP5, DP9, DE1, DE2 and
 others — were approved as recommended on 2026-09-30, as relayed by the host team), P24 in the same directory
 (DE1, DE2), and the red items measured in the P21 §5 S0 pilot. The embeddings contract is in
