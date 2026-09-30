@@ -11,10 +11,10 @@ its §11 and depends on its §3 credential recipe v1, §4 descriptor auth admiss
 `2026-08-20-controlled-user-agent.md` (the `user-agent` value is a host compile-time literal),
 `2026-09-30-embeddings-contract.md` (the sibling record whose structure this one follows).
 
-Origin: token-station-server `docs/product-review-v2/plans/2026-09-29-P21-供应商接入只动South.md` — §2.5 (the
+Origin: token-station-server plan P21 (`docs/product-review-v2/plans/2026-09-29-P21-*.md`) — §2.5 (the
 three-hop translation), §5 S3–S5, §8.4 DP6 ("migrate Kiro into south", approved 2026-09-30) and DP7, §8.5 (the
 owner's rulings on the boundary record's Q1, Q10 and Q12), Appendix B.2 / B.4; and
-`2026-09-24-P9-南向翻译扩面.md` T2 ("Kiro stays out of south", ruled 2026-09-24, reopened by DP6).
+plan P9 (`2026-09-24-P9-*.md`, the main plan) T2 ("Kiro stays out of south", ruled 2026-09-24, reopened by DP6).
 
 Baseline: south `origin/main` = v0.42.0 (`3135e36`); kernel `f585bc83` (protocol 0.4.0); host `4d5bb4e5` for every
 code citation. The owner rulings of 2026-09-30 cited below are recorded in host `c4bd45e5`, a docs-only commit on
@@ -1056,10 +1056,10 @@ final goal DP0 (no provider-specific logic in the host). Two recommendations wer
   after cutover the host enforces the authorized cap itself and ends the answer with `length` (option A). This
   changes what a caller sees on a long answer, so it needs a ruling and a notice.
   **Ruled (lv, 2026-09-30), adjusted for DP0:** one rule for every family that declares `output_cap: []`, keyed on
-  declarations and never on provider identity. With `usage_evidence: absent` the host enforces the authorized cap on its own output
-  meter and ends the answer with `length` (after cutover; today's behavior during the dual run). With reported usage
-  the host does not cut, because cutting would discard the upstream's usage report; a settlement above the
-  reservation goes to manual review, which is the existing generic path.
+  declarations and never on provider identity. With `usage_evidence: absent` the host enforces the authorized cap on
+  its own output meter and ends the answer with `length` (after cutover; today's behavior during the dual run). With
+  reported usage the host does not cut, because cutting would discard the upstream's usage report; a settlement above
+  the reservation goes to manual review, which is the existing generic path.
   This family is the first case; the Codex family of the Responses record is the second (its R-Q5).
 - **K-Q2 (L) Aligning the estimate before the dual run** (§6.2). Moving to the generic estimator changes the
   billed token counts of existing traffic. Recommendation: move the native arm to the generic estimator first, as

@@ -11,9 +11,9 @@ carrier"; its line 26 leaves the server's Native upstream error frames in the ho
 ("Host-owned concerns"). Sibling, drafted in parallel: `2026-09-30-openai-responses-upstream-component.md` — it owns
 the southbound half of §5 and produces the input of §6; this record refers to it by name and does not design it.
 
-Origin: token-station-server `docs/product-review-v2/plans/2026-09-29-P21-供应商接入只动South.md` — §3.2 (the
+Origin: token-station-server plan P21 (`docs/product-review-v2/plans/2026-09-29-P21-*.md`) — §3.2 (the
 "north codec" row), Appendix B.2 (the paragraph after the table) and Appendix B.4 ("no design and no plan"); P15
-in the same directory (`2026-09-28-P15-Responses北向并入共享codec.md`) with annexes A1–A3.
+in the same directory (`2026-09-28-P15-Responses*.md`) with annexes A1–A3.
 
 Baseline: south `origin/main` = v0.42.0 (`3135e36`); host `4d5bb4e5` (the docs-only commit `c4bd45e5` on top of it
 was read for P21 §1.3 and §8.5). `codec:` abbreviates `crates/south-north-codec/src/`; `server:…/` abbreviates

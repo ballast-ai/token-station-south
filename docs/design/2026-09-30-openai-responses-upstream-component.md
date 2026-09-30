@@ -16,9 +16,9 @@ Sibling, drafted in parallel: `2026-09-30-north-codec-render-gaps.md` — northb
 failure event (its G3) and the single-burst Chat stream (its G4), while this record owns recognising the upstream's
 failure frames (§6.4) and produces the IR both consume.
 
-Origin: token-station-server `docs/product-review-v2/plans/2026-09-29-P21-供应商接入只动South.md` (§2.5, §5 S3–S5,
-Appendix B.2 and B.4: "OpenAI Responses 上游方言组件 … 只列了范围，没有设计"), and
-`2026-09-28-P15-Responses北向并入共享codec.md` with annexes A1 (I12–I19, O03–O06) and A2 (§4 target matrix).
+Origin: token-station-server plan P21 (`docs/product-review-v2/plans/2026-09-29-P21-*.md`) (§2.5, §5 S3–S5,
+Appendix B.2 and B.4, where this component is listed as scope only, with no design), and
+plan P15 (`2026-09-28-P15-Responses*.md`) with annexes A1 (I12–I19, O03–O06) and A2 (§4 target matrix).
 Owner rulings applied here, as relayed by the host team on 2026-09-30:
 **DP7 / boundary Q10** — south takes in client-identification headers, the host keeps no special case; **boundary Q1**
 — bumping the south or kernel pin counts as modifying the host; **boundary Q12 / embeddings E-Q3** — the two estimate
@@ -236,9 +236,9 @@ Copied from the host's normalization (leaf:translate_responses.rs:10-35) and its
 
 Whether the backend really rejects `max_output_tokens` is asserted by the host's normalizer and its test
 (server:…/text_admission/sender/responses.rs:2197-2213) but contradicted by another host comment
-(server:…/text_admission.rs:1201-1203: "codex responses 面照收"). It must be measured before implementation; if the
-backend accepts the field, `openai-codex` declares `output_cap: ["/max_output_tokens"]` and the empty-list proposal is
-not needed for this package (R-Q5).
+(server:…/text_admission.rs:1201-1203, which says the Codex Responses surface accepts the field as is). It must be
+measured before implementation; if the backend accepts the field, `openai-codex` declares `output_cap:
+["/max_output_tokens"]` and the empty-list proposal is not needed for this package (R-Q5).
 
 ### 4.4 State: `store` and `previous_response_id`
 
@@ -295,7 +295,7 @@ component's side of the boundary to restore; each is either a north codec follow
 | `message` with a `refusal` part | assistant text (lossy: the IR has no refusal marker; R-Q10) |
 | `function_call` | `ToolCall { id: call_id, name, arguments }`; `call_id`, `name` and a string `arguments` are required |
 | `reasoning` | one `ContentPart::Thinking { signature: None }` per `summary_text` / `reasoning_text` part, placed before the text; `id` and `encrypted_content` are not carried in v1 (§8.3) |
-| anything else | `provider_protocol_error` — the item cannot be represented, and dropping it would hide content or cost. The host refuses the same set today ("未经成本准入", leaf:usage_evidence.rs:868-892) |
+| anything else | `provider_protocol_error` — the item cannot be represented, and dropping it would hide content or cost. The host refuses the same set today (with a message meaning "not admitted for cost", leaf:usage_evidence.rs:868-892) |
 
 Result: one `Choice` with index 0. `finish_reason`: `ToolCalls` if any `function_call` item is present; otherwise
 `Stop` for `completed`; for `incomplete`, `Length` when `incomplete_details.reason` is `max_output_tokens`,
