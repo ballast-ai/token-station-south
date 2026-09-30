@@ -4,6 +4,10 @@ Status: **proposed — drafted for review by the host team (token-station-server
 
 Date: 2026-09-30
 
+Rulings: on 2026-09-30 the host owner (lv) ruled on Q4, Q7, Q10 and Q13 (§17), each as recommended. Q4 also needs
+the south maintainers. Questions decided by the south maintainers remain open.
+
+
 Baseline: south `origin/main` = `3135e36` (v0.42.0). Server line numbers come from the local checkout `8b2a1976`
 (dev-v2 merged in up to `5e7816a3`); P22 / P18 were written at `d672b945` / `b660ea3f`, so their line numbers have
 drifted — re-verify in place before citing. Kernel line numbers come from the `token-station-protocol` revision south
@@ -127,8 +131,9 @@ does for task-v2 (the embeddings record §4 does the same).
 
 **Not recommended, but awaiting a ruling: one "synchronous media world" holding both image and speech (and even
 embeddings).** This is the alternative that P22 / P23 / P24 never compared against one another when each decided to
-"open a new world"; it is listed in §16 and §17 Q4 for lv and the south maintainers to rule on together. This record
-is written as separate worlds; the only thing shared is §6's JSON vocabulary.
+"open a new world"; it is listed in §16 and §17 Q4. lv ruled on 2026-09-30 for separate worlds; the south
+maintainers' ruling is still needed. This record is written as separate worlds; the only thing shared is §6's JSON
+vocabulary.
 
 ## 5. Additional reasoning for DI2: why not reuse the task world's "terminal on submit"
 
@@ -353,7 +358,7 @@ bytes within the northbound limit (100 MiB, `core/limits.rs:12`).
 a per-image-priced row, if a tier word reported by `prepare` has no price in that row's price list, 400 before
 admission". The host no longer needs to know which model is Nano Banana. **Cost**: the refusal text becomes generic
 host text, and today's text mentioning "Gemini image token pricing" (`precheck.rs:53-58`) cannot be kept verbatim;
-P22 I4's "400 texts identical item by item" has to give way here (§17 Q10).
+P22 I4's "400 texts identical item by item" gives way here (accepted by lv on 2026-09-30, §17 Q10).
 
 **Upstream refused before producing output**: this is not a pre-dispatch fact but an outcome in §9.2, judged by the
 component per dialect. It replaces the host's status-code heuristic of today: `DispatchProbe::upstream_rejected`
@@ -414,8 +419,8 @@ generation `gemini.rs:406` and edit `:778`, has a gate).
 Telling `rejected` from `unknown` is left to the component, but **whether the synchronous path refunds on it is host
 funds policy**. Today the synchronous path records any error after sending as `delivery_unknown`
 (`handlers.rs:662-672`), while the held path releases the reservation on 4xx — the two paths already disagree. This
-world only supplies the facts; during the dual run each path keeps today's behaviour; whether to unify them is lv's
-call (§17 Q7).
+world only supplies the facts; during the dual run each path keeps today's behaviour, and afterwards the two are
+unified as "`rejected` releases the reservation" (ruled by lv on 2026-09-30, §17 Q7).
 
 ### 9.3 Pricing form: the component declares "what it will report", the host keeps a single decision point
 
@@ -713,7 +718,8 @@ A South **minor**. Released worlds and contracts are unchanged:
   each need one copy fewer. **Why it is not recommended**: P21 S2 / DP5 plans to relax the version gate from "exactly
   equal" to a compatibility range (boundary record §8); once relaxed, world version coupling becomes a real cost again
   — when speech adds a streaming export (DV4, a separate project), it would force every image component to be rebuilt.
-  lv and the south maintainers are asked to make this trade-off explicitly (§17 Q4).
+  lv accepted this trade-off on 2026-09-30 in favour of separate worlds; the south maintainers are asked to rule on
+  it as well (§17 Q4).
 
 ## 17. Open questions
 
@@ -722,13 +728,13 @@ A South **minor**. Released worlds and contracts are unchanged:
 | Q1 | Multipart encoder and byte transforms as south host-side pure functions, or written by each host (§6.7) | South provides them; revise the "no encoder" half-sentence of 0.25.0 §2 | south maintainers |
 | Q2 | Elision rules: declared paths + fallback threshold; the threshold value; `unknown` when the `$south.` namespace collides with the upstream | As in §6.2, threshold 1 MiB | south maintainers |
 | Q3 | First-version contents of the closed transform table (§6.4 + the three speech items) | As listed in the two records, nothing reserved | south maintainers |
-| Q4 | Two worlds, or one synchronous media world (§16) | Separate, sharing `contracts.media` | lv + south maintainers |
+| Q4 | Two worlds, or one synchronous media world (§16) | Separate, sharing `contracts.media` | lv — **ruled by lv, 2026-09-30: as recommended**; south maintainers — open |
 | Q5 | ARCHITECTURE.md's "a metering vocabulary must have a second consumer in sight" (`ARCHITECTURE.md:114-115`). **Not met today**: the release notes of 0.25.0 / 0.26.0 both state that the community host has no multipart surface and no byte-returning surface (`2026-09-09-multipart-request-body.md:189`, `2026-09-09-buffered-binary-response.md:302`). The same question is open as the boundary record Q9, the speech record Q9 and the embeddings record E-Q5 | Write P21 §7's "synchronous implementation recommended" into the release record as a written commitment, and mark `media_component_capabilities` `not_verified` until the community host lands; otherwise this vocabulary serves only one host and, under the current rules, should not be admitted | lv + south maintainers |
 | Q6 | Safe fetch: South provides the URL / address pure functions and the `south.safe-fetch.v1` host suite (§11 D8b) | Provide them | south maintainers |
-| Q7 | Does the synchronous path release the reservation on `rejected` (today the synchronous path is always `delivery_unknown`, while held releases on 4xx) | Keep the status quo during the dual run; afterwards unify as "`rejected` releases" | lv |
+| Q7 | Does the synchronous path release the reservation on `rejected` (today the synchronous path is always `delivery_unknown`, while held releases on 4xx) | Keep the status quo during the dual run; afterwards unify as "`rejected` releases" | lv — **ruled by lv, 2026-09-30: as recommended** |
 | Q8 | Are the tier word dimensions (`resolution` / `quality` / `speed`) closed; host price lists keyed by component tier words (a host schema change) | Three closed dimensions; a new dimension goes through a `contracts.image` version | south maintainers + server |
 | Q9 | "Settled count ≤ delivered + 1" stays in the host; the released `task-wan-image-v2` writes it into the component — reclaim it? | The image world keeps it in the host; the task side reclaims it at the next contract upgrade | south maintainers |
-| Q10 | The generalised 400 text differs from native (the Nano Banana tier gate) | Accept; P22 I4 acceptance compares status code and timing instead | lv |
+| Q10 | The generalised 400 text differs from native (the Nano Banana tier gate) | Accept; P22 I4 acceptance compares status code and timing instead | lv — **ruled by lv, 2026-09-30: as recommended** |
 | Q11 | Vertex authentication is settled by the boundary record §3 (credential recipe; the `minted` slot is presented as `bearer`; this world admits no `oauth` arm, §4). What remains: is `host_signed` never admitted in this world | `host_signed` has no consumer and is not admitted | south maintainers |
 | Q12 | Is the OpenAI-compatible fallback one component covering OpenAI / Azure OpenAI / DeepInfra / BytePlus / GLM, or one per provider | One component; differences via `supported_parameters` words | server + south |
-| Q13 | Streaming image output (partial images) | Not included; a separate world version later | lv |
+| Q13 | Streaming image output (partial images) | Not included; a separate world version later | lv — **ruled by lv, 2026-09-30: as recommended** |

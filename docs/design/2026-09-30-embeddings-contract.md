@@ -15,6 +15,10 @@ DE1 (the contract lives south-local, not in the kernel IR) and DE2 (a new world 
 world to v3) — both approved as recommended on 2026-09-30, as relayed by the host team; DE3 (whether Gemini
 responses carry token counts) awaits measurement. The umbrella plan is P21 in the same directory (DP0, DP1).
 
+Rulings: on 2026-09-30 the host owner (lv) ruled on E-Q2, E-Q3 and E-Q6 (§14); each ruling is recorded under its
+question. Questions tagged S remain open for the south maintainers.
+
+
 Baseline: south `origin/main` = v0.42.0 (`3135e36`); kernel `f585bc83` (protocol 0.4.0). Host line numbers refer
 to token-station-server `8b2a1976` and carry a `server:` prefix; kernel line numbers carry `kernel:` and refer to
 `crates/protocol/src/`.
@@ -268,8 +272,8 @@ constant per MIME top-level type — audio 512, video 1024, everything else 258 
 the component, the host no longer holds them.
 
 If DE3 (whether Gemini native responses carry token counts) measures "yes", the component switches to reporting
-`Reported`, and whether the fallback value is kept as a backstop for missing reports or removed is for lv to decide
-(§14 E-Q2).
+`Reported`, and the fallback estimate is removed: a missing report then goes to `delivery_unknown` (ruled by lv on
+2026-09-30, §14 E-Q2).
 
 ### 7.3 Reservation upper bound (host, provider-agnostic)
 
@@ -445,8 +449,11 @@ stopgap, but that is a J1 red item and must be cleared before E3.
 - **E-Q2 (L)** DE3: if Gemini native responses carry token counts, switch to reporting `Reported`; is the fallback
   estimate then kept as a backstop for missing reports, or removed so that a missing report goes to
   `delivery_unknown`?
+  **Ruled (lv, 2026-09-30): removed.** If DE3 measures that token counts are reported, a missing report goes to
+  `delivery_unknown`; if DE3 measures that they are not, the estimate stays and is labeled as an estimate.
 - **E-Q3 (L)** Is it acceptable for two conventions to coexist — the estimate given by the component at build time
   (this record's approach) and, per the boundary record's Q12, a generic host estimate on the chat side?
+  **Ruled (lv, 2026-09-30): acceptable**; see the boundary record §16 Q12.
 - **E-Q4 (S)** Package granularity: three packages (recommended), or one package with three families.
 - **E-Q5 (S, community host)** ARCHITECTURE.md:114-115 requires a metering vocabulary to have "a second consumer in
   sight": does the community host have, or will it have, an embeddings surface? If not, this contract's usage
@@ -454,6 +461,7 @@ stopgap, but that is a J1 red item and must be cleared before E3.
 - **E-Q6 (L)** `per_input_tokens` has no host consumer today (the host uses only the sum). Keep it optional
   (recommended; zero cost, and it gives Vertex's consistency check something to hold on to), or leave it unmodeled
   in v1?
+  **Ruled (lv, 2026-09-30): keep it optional.**
 - **E-Q7 (S)** `NorthIdentical` makes the host return the upstream bytes unchanged, which also passes the upstream's
   `model` field through unchanged (as the host does today); whether the host should instead uniformly rewrite it to
   the northbound model name must be settled consistently with the host's northbound conventions.

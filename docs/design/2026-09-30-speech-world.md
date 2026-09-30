@@ -4,6 +4,10 @@ Status: **proposed — drafted for review by the host team (token-station-server
 
 Date: 2026-09-30
 
+Rulings: on 2026-09-30 the host owner (lv) ruled on Q3, Q4, Q5, Q6, Q7 and Q8 (§16), each as recommended. Q3 and Q8
+also need the south maintainers. Q10 and Q11 depend on other host plans and stay open.
+
+
 Baseline: south `origin/main` = `3135e36` (v0.42.0). Server line numbers come from the local checkout `8b2a1976`; P23
 was written at `d672b945`, so its line numbers have drifted — re-verify in place before citing.
 
@@ -72,7 +76,7 @@ same `token-station:*-adapter@1.0.0` / `*-adapter-v1` naming as `image-adapter-v
 reasoning is the same as the image record's D2 (§4 there): adapter@2 is not touched (adding an export is a major); the
 task world cannot hold audio bytes; and the package version does not become entangled with the image world's. The
 alternative "one synchronous media world holding both image and speech" and its trade-offs are in the image record
-§16; please decide it together with Q4 there.
+§16. lv ruled on 2026-09-30 for separate worlds (Q8 here, Q4 there); the south maintainers' ruling is still needed.
 
 **No `host` import**: there is no signing consumer (precedent: `task-adapter-v2.wit:63-66`). Host-import linking and
 the import scan follow the image record §4.
@@ -389,8 +393,8 @@ looks at row names or model names):
 | Azure fast transcription | multipart `file → audio` + `definition` part; `api-version` query (already sanctioned) | `header_secret` `ocp-apim-subscription-key` | json / verbose_json / text; srt and vtt refused in `prepare` | `durationMilliseconds`; missing → `unknown` | V3-3 |
 
 Vertex today silently downgrades mp3 / opus / aac / flac to wav (`tts_providers.rs:902-919`): the client asks for mp3,
-gets wav, status 200. For dual-run agreement the component would copy this, but whether it is the desired product
-behaviour is for lv to decide (Q7).
+gets wav, status 200. For dual-run agreement the component copies this; after the dual run it refuses the
+unsupported formats in `prepare` instead (ruled by lv on 2026-09-30, Q7).
 
 ## 13. Migration order and dual-run acceptance
 
@@ -463,12 +467,12 @@ A South **minor**, sharing `contracts.media` with the image world:
 |---|---|---|---|
 | Q1 | SSML: add `TextPostRequestV1` (HTTP contract 10), or the host sends it itself (D3a) | Add it | south maintainers |
 | Q2 | Add the sanctioned query parameter `output_format` (D3b) | Add it; if the boundary record §10 lands first, declare it in the component's manifest instead | south maintainers |
-| Q3 | Decoding and container wrapping executed by host closed transforms, rather than P23 V1's "pure functions inside the component" (§6) | The host executes them | lv (amend P23 V1's text) + south maintainers (transform table) |
-| Q4 | When the ASR client asks for srt / vtt: `seconds: null` with estimation, or the end time of the last subtitle (which slightly undercounts silence) | Estimate, visibly in the ledger | lv |
-| Q5 | "Character count" defined as the number of Unicode scalar values in the northbound `input`; the host checks `source = request` for exact equality | As stated | lv + server |
-| Q6 | Azure missing duration: keep `unknown` (502 today), or fold it into the generic estimation | Keep `unknown` | lv |
-| Q7 | Vertex silently downgrading mp3 and others to wav: copy it, or refuse in `prepare` | Copy it during the dual run; refuse afterwards | lv |
-| Q8 | Two separate worlds for image and speech, or one synchronous media world (image record Q4) | Separate | lv + south maintainers |
+| Q3 | Decoding and container wrapping executed by host closed transforms, rather than P23 V1's "pure functions inside the component" (§6) | The host executes them | lv — **ruled by lv, 2026-09-30: as recommended** (P23 V1's text is amended accordingly); south maintainers (transform table) — open |
+| Q4 | When the ASR client asks for srt / vtt: `seconds: null` with estimation, or the end time of the last subtitle (which slightly undercounts silence) | Estimate, visibly in the ledger | lv — **ruled by lv, 2026-09-30: as recommended** |
+| Q5 | "Character count" defined as the number of Unicode scalar values in the northbound `input`; the host checks `source = request` for exact equality | As stated | lv — **ruled by lv, 2026-09-30: as recommended** |
+| Q6 | Azure missing duration: keep `unknown` (502 today), or fold it into the generic estimation | Keep `unknown` | lv — **ruled by lv, 2026-09-30: as recommended** |
+| Q7 | Vertex silently downgrading mp3 and others to wav: copy it, or refuse in `prepare` | Copy it during the dual run; refuse afterwards | lv — **ruled by lv, 2026-09-30: as recommended** |
+| Q8 | Two separate worlds for image and speech, or one synchronous media world (image record Q4) | Separate | lv — **ruled by lv, 2026-09-30: as recommended**; south maintainers — open |
 | Q9 | A second consumer of the metering vocabulary: the community host today has no multipart surface and no byte-returning surface (`2026-09-09-multipart-request-body.md:189`, `2026-09-09-buffered-binary-response.md:302`), so per `ARCHITECTURE.md:114-115` the admission condition is not met at present. The same question is open as the image record Q5, the boundary record Q9 and the embeddings record E-Q5 | Take P21 §7's "synchronous implementation recommended" as the written commitment; otherwise do not admit for now | lv + south maintainers |
 | Q10 | Rows on non-OpenAI-compatible arms configured with only a token price: today they can be listed but every request is refused at admission with a "no price configured" 400 (no funds move); after migration the refusal comes from `prepare` and names the cause (§8) | Accept; list the affected rows with a read-only query before cutting over | lv |
 | Q11 | If P25 chooses A for the native ElevenLabs route, does it reuse this world's components and immutability declaration directly | Reuse | lv (P25) |

@@ -16,6 +16,10 @@ others — were approved as recommended on 2026-09-30, as relayed by the host te
 (DE1, DE2), and the red items measured in the P21 §5 S0 pilot. The embeddings contract is in
 `2026-09-30-embeddings-contract.md`.
 
+Rulings: on 2026-09-30 the host owner (lv) ruled on the questions tagged L in §16 — Q1, Q3, Q7, Q10 and Q12; each
+ruling is recorded under its question. Q13 still awaits a measurement. Questions tagged S or K remain open for the
+south and kernel maintainers.
+
 Baseline: south `origin/main` = v0.42.0 (`3135e36`); kernel `f585bc83` (protocol 0.4.0 / kernel v0.3.0).
 South line numbers refer to this baseline. Host line numbers refer to token-station-server `8b2a1976` and carry a
 `server:` prefix; kernel line numbers carry `kernel:` and refer to `crates/protocol/src/`.
@@ -42,7 +46,7 @@ gives a revision for each:
 | h | Follow-on components and non-chat operations | None | Scope and dependencies listed | §11 |
 
 §12 lists what the synthetic unseen-provider guest (T21) must prove, §13 gives the phasing, and §16 lists the
-questions that need a ruling from the south maintainers or lv.
+questions that need a ruling from the south maintainers or lv; lv's rulings of 2026-09-30 are recorded there.
 
 ## 1. Problem
 
@@ -83,7 +87,8 @@ South hands the host two kinds of things:
 DP0 holds only when "the new provider lands entirely in the package layer". Any change that needs the link layer
 extended — even adding a single value to an enum — means the host re-pins, rebuilds and releases, and J2 is red at
 that moment. P21 §1.3 lists "loading a newly released south component package" as not counting as modifying the
-host, but does not say whether a link-layer upgrade counts. Every proposal in this record states whether a new
+host, but does not say whether a link-layer upgrade counts; lv ruled on 2026-09-30 that it does (§16 Q1). Every
+proposal in this record states whether a new
 provider still touches the link layer afterwards; §10 deals specifically with the category most likely to trip on
 this.
 
@@ -801,8 +806,9 @@ ordinary header channel (lib.rs:877-883); the query is the part of a request mos
   merged with §4.3.
 
 Without this step, the accurate statement of DP0 is: "If a new provider uses only existing instances, the host
-needs zero changes; otherwise the host must bump its south pin." §16 Q1 asks lv whether that statement is
-acceptable.
+needs zero changes; otherwise the host must bump its south pin." lv ruled on 2026-09-30 (§16 Q1) that this
+statement is not acceptable: bumping the pin counts as modifying the host. This step is therefore a necessary
+condition of DP0, not an improvement.
 
 ## 11. Follow-on components and non-chat operations (problem h)
 
@@ -869,7 +875,8 @@ undetectable zone of §6.3), or anything outside the link layer.
 | B7 | §10 instance declaration; kernel chain (`Auth` combined arm, credential header catalog, cache buckets) | P21 S7 | New instances no longer touch the link layer | minor + kernel |
 
 B1, B2 and B3 are independent of one another and can proceed in parallel; B4 depends on B2's descriptor auth
-admission; B6 depends on B1–B4.
+admission; B6 depends on B1–B4. B7 comes last only because it goes through the kernel chain; after the Q1 ruling
+it is required for DP0 and is not optional.
 
 ## 14. Existing text to revise in step
 
@@ -906,9 +913,14 @@ Tags: S = south maintainers, L = lv, K = kernel.
 
 - **Q1 (L) Link layer**: does DP0 count "bumping the south / kernel pin" as modifying the host? If it does, §10's
   instance declaration is a necessary condition for DP0, not an improvement.
+  **Ruled (lv, 2026-09-30): it counts.** A new provider that needs a secret header name, query name or quota header
+  outside the compiled-in sets would otherwise force both hosts to re-pin, rebuild and release. §10 is a necessary
+  condition of DP0 and phase B7 is required.
 - **Q2 (S)** Accept revising the concluding sentence of ARCHITECTURE.md:117-126 (§3.4).
 - **Q3 (S, L)** Credential recipes as a closed data vocabulary (recommended) or as WIT functions; and accept the DP0
   boundary that "a new flow outside the vocabulary requires a contract upgrade".
+  **Ruled for the host side (lv, 2026-09-30): a closed data vocabulary; the contract-upgrade boundary is accepted.**
+  The south maintainers' half remains open.
 - **Q4 (S, K)** The combined arm: add a variant to the kernel's `Auth` (recommended), or an interim manifest
   family-level mirror (§4.3).
 - **Q5 (S)** Refining DP5: a `runtime_abi` epoch (recommended) or south going straight to 1.0; how the IR
@@ -917,6 +929,8 @@ Tags: S = south maintainers, L = lv, K = kernel.
   (§5.2)?
 - **Q7 (L, S)** Model catalog: a south data artifact (recommended), built into the components, or pure operator
   data; if it belongs to south, who keeps up with providers' new models (§7.5)?
+  **Ruled for the host side (lv, 2026-09-30): a south data artifact.** Who maintains it remains open for the south
+  maintainers.
 - **Q8 (S)** Do the native reference implementations remain a supported production engine? If so, J3 needs the
   host to disable fallback explicitly (§8.5).
 - **Q9 (S, community host)** Reference-implementation strictness is a behavior change for the community host
@@ -925,12 +939,20 @@ Tags: S = south maintainers, L = lv, K = kernel.
   recommends implementing in step).
 - **Q10 (L)** DP7: does south take in Copilot's editor headers, Claude Code's impersonation headers and Codex's
   client-identification headers? They would appear in both recipes and components.
+  **Ruled (lv, 2026-09-30): south takes them in; the host keeps no special case.** Headers on the inference request
+  are written by the component; headers on the exchange request are written by the credential recipe; names outside
+  the compiled-in sets are declared per §10. The per-provider lists are specified in the component records
+  (`2026-09-30-kiro-provider-component.md`, `2026-09-30-openai-responses-upstream-component.md`; Claude Code and
+  Copilot to follow).
 - **Q11 (S)** Must artifact signing be completed before third-party packages are loaded through the index (§9.3)?
 - **Q12 (L)** Is the estimate for `usage_evidence: absent` made by the host's generic estimator (this record's
   recommendation, by characters), or reported by the component as an estimate when it builds the request (the
   embeddings record takes the latter; see `2026-09-30-embeddings-contract.md` §7)? Chat goes through the kernel IR,
   which has no place for a component estimate; the embeddings contract is south-local and can hold one. Is it
   acceptable for the two worlds to follow different conventions?
+  **Ruled (lv, 2026-09-30): the two conventions may coexist.** On the chat family the estimate for
+  `usage_evidence: absent` is the host's generic estimator; in south-local contracts that can hold one, the component
+  reports the estimate at build time. Both are labeled as estimates in the ledger.
 - **Q13 (S, L)** The reasoning-token convention (§6.1 item 5, §6.2 item 6): confirm whether Gemini's
   `thoughtsTokenCount` lies outside `candidatesTokenCount`; if it does, the Gemini reference implementation's
   `output_tokens` must change, and the host's amounts charged by output change with it, which needs lv's
