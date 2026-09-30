@@ -563,10 +563,11 @@ south's reading of this package:
   frames and feeds mid-stream checkpoint evidence, not settlement; nothing yet counts a non-streaming answer by the
   same rule. The first draft called it a meter "of exactly this kind"; it is a starting point, and the settlement
   meter gets its own gate ③ suite (§11.3).
-- **Produced or delivered.** The native arm counts what the upstream produced, as it decodes it (server:sender.rs:
+- **Produced, not delivered.** The native arm counts what the upstream produced, as it decodes it (server:sender.rs:
   4896); a meter over forwarded frames counts what the client received. They differ when a client disconnects.
-  This record recommends counting the IR events the component emitted — independent of the northbound surface and
-  of the client's reading — and asks lv to rule (K-Q19), since the choice moves billed amounts.
+  Output is counted as produced: the settlement meter counts the IR events the component emitted from the
+  upstream's answer — independent of the northbound surface and of the client's reading — not the frames delivered
+  to the client (K-Q19, ruled by lv on 2026-10-01).
 
 ### 6.3 The host's generic checks that still apply
 
@@ -925,7 +926,7 @@ captures, which the release must archive as redacted fixtures with their capture
 | Eventstream deframer adoption (boundary §5.2, §5.4) | Frames split across chunks, both CRC errors, an oversized frame, an `exception` frame, an `error` frame, **leftover bytes at end of body**, and the buffered whole-body form of P-5 |
 | Attempt id (P-4) | Present on every provider-world call; fresh per attempt; a UUID; a client-supplied key colliding with a reserved name never reaches the component |
 | Declared user agent (P-3) | The wire carries exactly one `user-agent`, equal to the manifest value; the host has no per-provider table |
-| Absent usage (§6) | A settled row carries both estimated flags; streaming and non-streaming answers to the same upstream bytes settle to the same token counts, by the rule K-Q19 selects; a package that emits `Usage` despite `absent` goes to manual review |
+| Absent usage (§6) | A settled row carries both estimated flags; streaming and non-streaming answers to the same upstream bytes settle to the same token counts, output counted as the IR events produced (K-Q19, ruled 2026-10-01); a package that emits `Usage` despite `absent` goes to manual review |
 | Refusal before admission | A capability error from `build-http-request` produces a 400, zero upstream calls, zero token refreshes beyond the one already needed, and no credential failover |
 | Probe rules (P-8) | A probe of a rotating recipe with an unexpired token forces no refresh; a package without a catalog world gets no liveness request |
 | Host-enforced cap (K-Q1, ruled) | Streaming: the cut at an event boundary, `length`, a partial tool call delivered as streamed. Non-streaming: text cut at the cap, an incomplete tool call removed, `length`; settlement counts what was delivered |
@@ -1065,8 +1066,8 @@ Tags: S = south maintainers, L = lv, K = kernel. Each carries this record's reco
 
 On 2026-09-30 lv ruled on the L-tagged questions: as recommended, on condition that each recommendation fits the
 final goal DP0 (no provider-specific logic in the host). Two recommendations were adjusted to meet that condition
-(K-Q1, K-Q3); the rulings are recorded under each question. K-Q16 to K-Q19 were added by the 2026-10-01 revision
-and are not ruled.
+(K-Q1, K-Q3); the rulings are recorded under each question. K-Q16 to K-Q19 were added by the 2026-10-01 revision;
+of these, lv ruled K-Q19 on 2026-10-01.
 
 - **K-Q1 (L) An upstream the host cannot cap** (§8.3). Recommendation: keep today's behavior for the dual run;
   after cutover the host enforces the authorized cap itself and ends the answer with `length` (option A). This
@@ -1146,6 +1147,8 @@ and are not ruled.
   events the component emitted — what the upstream produced, as today — so that a client disconnect does not lower
   the bill below the upstream spend and the count does not depend on the northbound surface. Counting forwarded
   frames would bill only what the client received.
+  **Ruled (lv, 2026-10-01): count output as produced** — the IR events the upstream produced, not what was delivered
+  to the client.
 
 ## Appendix A. The native arm today (host material)
 
@@ -1248,8 +1251,8 @@ reference to the provider, so a Responses target falls into that same refusal).
    normalized it, or the IR request. Then a package cannot move the input figure at all. The host already has
    this quantity for mid-stream checkpoints (`checkpoint_input_estimate`, server:sender.rs:1489-1504).
 2. **Output is counted by one rule for streaming and non-streaming answers** — text, reasoning text, tool name and
-   tool arguments. Whether it counts the IR events the component emitted (produced, recommended) or the frames
-   forwarded to the client (delivered) is K-Q19. The existing `ForwardedOutputMeter` (server:checkpoint.rs:1-20,
+   tool arguments. It counts the IR events the component emitted (produced), not the frames forwarded to the client
+   (delivered) (K-Q19, ruled by lv on 2026-10-01). The existing `ForwardedOutputMeter` (server:checkpoint.rs:1-20,
    41-100) counts forwarded SSE frames for mid-stream checkpoints only; the settlement meter is new and needs a
    non-streaming counterpart.
 3. **The row is labeled**: `tokens_estimated = 1` and `quantity_estimated = 1`, chosen by the manifest's
@@ -1303,7 +1306,7 @@ and the header constants (Appendix C.2).
 
 | Step | Side | Content | Acceptance |
 |---|---|---|---|
-| K0 | Host | Correct the native arm where Appendix D marks a defect that would otherwise be pinned as "correct" by the dual run (at least N-2, N-3 and N-8; N-1 per K-Q1); move the native arm to the generic estimator (K-Q2, ruled; the output rule per K-Q19); rewrite dashed model ids on the model rows with the native function's output (§4.4); rename the native refresh lock prefix to the executor's name (§7.6) | Native tests green; rulings recorded |
+| K0 | Host | Correct the native arm where Appendix D marks a defect that would otherwise be pinned as "correct" by the dual run (at least N-2, N-3 and N-8; N-1 per K-Q1); move the native arm to the generic estimator (K-Q2, ruled; output counted as the IR events produced, K-Q19, ruled 2026-10-01); rewrite dashed model ids on the model rows with the native function's output (§4.4); rename the native refresh lock prefix to the executor's name (§7.6) | Native tests green; rulings recorded |
 | K1 | South | Boundary phases B1, B2, B3, B4 and B7a, and the answer to boundary Q14; the reference implementation, the package, the fixture pack | The package passes gates ① and ②; a south minor release lists it in the release index |
 | K2 | Host | The generic path of Appendix B.3 for this family; model rows routed to the package; the dual run of §12.2 on the replaying harness | §12.2 |
 | K3 | Host | Delete Appendix C.2 | The J1 count falls; removing the package and its rows leaves the host compiling, testing and starting (J3) |
@@ -1426,3 +1429,8 @@ They matter here because a dual run pins whatever the native arm does as "correc
 - Round 2, §12.1 / Appendix C.1: K1 adds boundary phase B3 (`runtime_abi`, release index).
 - Round 2, throughout: citations of review-process labels replaced by the boundary sections that state each
   rule (§3.4, §3.5, §5.2, §6.3, §10, §13, §14, Q14).
+- Rulings of 2026-10-01:
+  - K-Q19 ruled by lv: output is counted as produced (the IR events the upstream produced), not as delivered to the
+    client. §6.2 and Appendix B.1 state it.
+  - The §11 absent-usage fixture row and the Appendix C K0 row state the ruled rule (output counted as the IR events
+    produced) instead of referring to K-Q19 as a choice.

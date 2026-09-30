@@ -85,15 +85,14 @@ Two consequences of the host owning this dialect are visible in code today:
 - **D5 Usage is strict**: `usage_evidence: reported`, declared once for the package (umbrella R6); a terminal without
   exact usage is an error, never a zero; a non-zero `tool_usage` is an error because the IR has no bucket for it (§7).
 - **D6 `response.incomplete` with usage settles as a success only for a closed set of reasons**: by the owner's
-  ruling R-Q2, `max_output_tokens` gives finish reason `length`. Every other reason is `provider_protocol_error`
-  (§5, §6.3). This record also **proposes** settling `content_filter` as finish reason `content_filter`; that awaits
-  the owner (R-Q2 note), and until it is ruled `content_filter` is handled like any other reason.
+  ruling R-Q2, `max_output_tokens` gives finish reason `length`, and by its extension of 2026-10-01, `content_filter`
+  gives finish reason `content_filter`. Every other reason is `provider_protocol_error` (§5, §6.3).
 - **D7 On the Responses northbound surface the host may deliver the upstream's own bytes** ("pass-through"), per the
   owner's ruling R-Q1, when the family declares `north_passthrough` and the request mapped losslessly (§8.2). The
   component's IR events stay the only evidence; the terminal frame is withheld by northbound type and `Done`
-  together; upstream failure frames are replaced by the host's own failure event (a proposal awaiting the owner,
-  §8.2). Re-rendering through the north codec is the fallback and is what the Chat and Messages surfaces get by
-  construction.
+  together; upstream failure frames are replaced by the host's fixed-message failure event (the owner's ruling of
+  2026-10-01 extending N-Q3 to relayed failures, §8.2). Re-rendering through the north codec is the fallback and is
+  what the Chat and Messages surfaces get by construction.
 - **D8 Codex credentials use credential recipe v1** (umbrella §3.3), and the client-identification material the
   backend is sent today is designed in: the OAuth client id and scope in the recipe, the account header in the
   component (DP7, ruled 2026-09-30: south takes them in; the host keeps no special case) (§10). Under the umbrella's
@@ -406,12 +405,10 @@ delivery cannot hand it to the client either.
 
 Result: one `Choice` with index 0. `finish_reason`: `ToolCalls` if any `function_call` item is present; otherwise
 `Stop` for `completed`; for `incomplete`, `Length` when `incomplete_details.reason` is `max_output_tokens` (owner
-ruling R-Q2). Any other reason, or a missing one, is `provider_protocol_error`: the first draft mapped it to
+ruling R-Q2) and `ContentFilter` when it is `content_filter` (the ruling's extension of 2026-10-01, as every other
+dialect does). Any other reason, or a missing one, is `provider_protocol_error`: the first draft mapped it to
 `Other(reason)` and so settled it as a success, which is wider than the owner's ruling and would charge for an
-outcome nobody has classified. **Proposal awaiting the owner** (R-Q2 note): also settle `content_filter` as
-`ContentFilter`, as every other dialect does. Until the owner rules, `content_filter` is a protocol error like any
-other reason — the same funds outcome as the native leg, which parks it today. `ChatResponse.id` and `.model` are the
-upstream's.
+outcome nobody has classified. `ChatResponse.id` and `.model` are the upstream's.
 
 `openai-codex` never takes this path (§4.3).
 
@@ -488,12 +485,13 @@ produced by:
 
 - `response.completed` whose `response.status` is `completed`;
 - `response.incomplete`, **if** it carries a usage object that passes §7 and an `incomplete_details.reason` in the
-  closed set of §5 (`max_output_tokens`; `content_filter` only if the owner accepts the proposal under R-Q2); any
-  other reason is `provider_protocol_error`.
+  closed set of §5 (`max_output_tokens` and `content_filter`, R-Q2 and its 2026-10-01 extension); any other reason
+  is `provider_protocol_error`.
 
-The second case is a change from the host, made by the owner's ruling R-Q2. Today a non-streaming body whose status is
-not `completed` is refused (leaf:usage_evidence.rs:547-549) and a `response.incomplete` frame poisons the stream
-(:2035-2041), so a generation truncated at the cap is parked in `delivery_unknown`; the converter's `incomplete →
+The second case is a change from the host, made by the owner's ruling R-Q2 and its extension. Today a
+non-streaming body whose status is not `completed` is refused (leaf:usage_evidence.rs:547-549) and a
+`response.incomplete` frame poisons the stream (:2035-2041), so a generation truncated at the cap is parked in
+`delivery_unknown`; the converter's `incomplete →
 length` branch (leaf:translate_responses.rs:683-686) sits behind that check — the usage parse at
 server:…/text_admission/sender.rs:3736-3766 runs before the conversion at :3779-3784 — and so is not reached (code
 reading, not run). Every other dialect, and the north codec's own renderer
@@ -656,17 +654,14 @@ When pass-through applies:
   terminal-type frame whose call did not return `Done`, or a `Done` from a call whose frame is not of a terminal type
   — the host forwards nothing more and parks the stream. This keeps the settlement-before-visibility guarantee even if
   the component misbehaves.
-- **Upstream failure frames are not relayed (proposal awaiting the owner).** When a call returns `Error`, the host
-  does not forward the upstream frame. It ends the stream with its own failure event — the stateless
+- **Upstream failure frames are not relayed** (owner ruling of 2026-10-01, extending the sibling's N-Q3 ruling from
+  failures the gateway originates to relayed upstream failures; recorded under R-Q1 here). When a call returns
+  `Error`, the host does not forward the upstream frame. It ends the stream with its own failure event — the stateless
   `responses_error_event` of the sibling record (its §5), with a fixed public message — and settles the exchange as a
-  failure. The owner's ruling on the sibling's N-Q3 covers failures the gateway originates, on every provider's
-  stream; extending it to a relayed upstream failure is this record's proposal, not a decision, and is put to the
-  owner with the sibling's N-Q3 and under R-Q1 here. This record also proposes, for the owner to rule, that no host
-  enable pass-through until that proposal is ruled, because this case is part of the pass-through gate ③ suite
-  (§12.4). The reason for the proposal: the first draft forwarded the
-  upstream frame, as the host does for Codex today (:1666-1676), which exposed the upstream's own text on this path
-  while the rendered path shows only the envelope's fixed message (§6.4), so the two delivery paths disagreed about
-  what a client may see.
+  failure. This is one of the conditions of pass-through, enabled by declaration as ruled under R-Q1, and is part of
+  the pass-through gate ③ suite (§12.4). The reason: the first draft forwarded the upstream frame, as the host does
+  for Codex today (:1666-1676), which exposed the upstream's own text on this path while the rendered path shows only
+  the envelope's fixed message (§6.4), so the two delivery paths disagreed about what a client may see.
 - A call that fails forwards nothing and parks the stream; the client is shown the same host failure event.
 - Evidence is the component's IR events and nothing else.
 
@@ -931,7 +926,7 @@ boundary's B1 work, which gives fixtures an expected-error form.
 | `response.usage` ★, `response.cached-usage` ★, `response.reasoning-usage` | §7.1 mapping, every bucket |
 | `response.missing-usage` ★, `response.total-mismatch`, `response.subset-violation`, `response.nonzero-tool-usage` | Protocol errors |
 | `response.tool-call`, `response.reasoning-summary`, `response.refusal` | §5 mapping |
-| `response.incomplete-max-output`, `response.incomplete-content-filter`, `response.incomplete-unknown-reason`, `response.failed-status`, `response.unmapped-output-item` | `Length` with usage; `content-filter` expects a protocol error until the owner rules on the R-Q2 proposal (then `ContentFilter` with usage); three protocol errors |
+| `response.incomplete-max-output`, `response.incomplete-content-filter`, `response.incomplete-unknown-reason`, `response.failed-status`, `response.unmapped-output-item` | `Length` with usage; `ContentFilter` with usage (R-Q2, extended 2026-10-01); three protocol errors |
 | `stream.usage-terminal` ★, `stream.no-usage` ★ | Terminal with usage; `response.completed` without usage is an error |
 | `stream.text`, `stream.tool-call`, `stream.tool-call-prebuffered-arguments`, `stream.reasoning-summary` | §6.1 |
 | `stream.incomplete`, `stream.incomplete-unknown-reason` | §6.3 |
@@ -982,7 +977,7 @@ Two additions this package needs from those checks:
 | Credential recipe execution | `south.credential-recipe.v1` (umbrella §3.7) | Required before `openai-codex` |
 | Descriptor auth admission | Covered by the boundary's gate ② check plus T21 `rogue-arm` | Required |
 | `request_facts` seal, including the empty cap | T21 `rogue-cap`, plus one case for a family declaring no cap | Required |
-| Pass-through delivery | New: `south.north-passthrough-delivery.v1` — a fake upstream stream; asserts frames split by `decode_sse_v1` and forwarded unchanged, one frame per call with no partial frame held after it, the terminal frame withheld until settlement and only when its northbound type and `Done` agree (both mismatch directions park), an upstream failure frame replaced by the host's fixed-message failure event and never forwarded, a component failure forwards nothing, a request with a non-identity tool restore map rendered instead, the non-streaming body forwarded only after a successful parse | Required before any host passes bytes through (owner ruling R-Q1; the south half of R-Q1 and the failure-frame proposal of §8.2 are still open) |
+| Pass-through delivery | New: `south.north-passthrough-delivery.v1` — a fake upstream stream; asserts frames split by `decode_sse_v1` and forwarded unchanged, one frame per call with no partial frame held after it, the terminal frame withheld until settlement and only when its northbound type and `Done` agree (both mismatch directions park), an upstream failure frame replaced by the host's fixed-message failure event and never forwarded, a component failure forwards nothing, a request with a non-identity tool restore map rendered instead, the non-streaming body forwarded only after a successful parse | Required before any host passes bytes through (owner ruling R-Q1, with the failure-frame replacement of §8.2 ruled on 2026-10-01; the south half of R-Q1 is still open) |
 | Operator extras vs `immutable_body_paths` | New case in the same suite family: an extra touching a declared path is refused at save time | Required |
 
 Per boundary R4, each is marked `verified` under `host_capabilities` only once both hosts pass it.
@@ -993,7 +988,7 @@ Per boundary R4, each is marked `verified` under `host_capabilities` only once b
 
 | Step | Side | Content | Acceptance |
 |---|---|---|---|
-| R0 | Host | Owner rulings R-Q1 to R-Q5 are recorded (§16); the south halves of R-Q1 and R-Q5 and the owner's answer to the proposal under R-Q2 remain. Fix or accept the suspected defects of §13.5 in the native leg first (P21 §9 practice) | — |
+| R0 | Host | Owner rulings R-Q1 to R-Q5 are recorded (§16), including the 2026-10-01 extensions under R-Q1 (relayed failure frames) and R-Q2 (`content_filter`); the south halves of R-Q1 and R-Q5 remain. Fix or accept the suspected defects of §13.5 in the native leg first (P21 §9 practice) | — |
 | R1 | South | Package with `openai-responses`: reference implementation, fixtures, judges, wasm build. Needs umbrella B1 (usage strictness), B2 (`request_facts`, descriptor auth admission) and B3 (the package declares `runtime_abi` and must be listed in the release index), and `decode_sse_v1` from the image world's minor | Suite green; listed in the release index with the upstreams that have a fixture pack (§3.3) |
 | R2 | Host | Route provider rows to the family, one upstream at a time and only upstreams with a fixture pack; refuse `previous_response_id` on the northbound side; dual run; remove `supports_responses` / `upstream_requires_responses` branching for covered rows | §13.2 |
 | R3 | South + host | `openai-codex`: needs boundary B4 (recipes) and the host's recipe executor | Credential fixtures and gate ③ suite green; §13.2 on Codex rows |
@@ -1024,9 +1019,9 @@ differently (§13.3). Compared:
 
 ### 13.3 Intentional differences (on record, not reconciliation failures)
 
-- **Truncated generations settle** (§6.3): native parks `incomplete`; the component reports `Length` with usage, per
-  the owner's ruling R-Q2. Other `incomplete` reasons, `content_filter` included until the owner rules on the
-  proposal under R-Q2, stay errors.
+- **Truncated and filtered generations settle** (§6.3): native parks `incomplete`; the component reports `Length`
+  with usage for `max_output_tokens`, per the owner's ruling R-Q2, and `ContentFilter` with usage for
+  `content_filter`, per its extension of 2026-10-01. Other `incomplete` reasons stay errors.
 - **Non-zero `image_gen` tool usage is refused** (§7.3): native admits and prices it. Owner ruling R-Q3.
 - **`store`**: always `false`; native forwards a client's `store: true`, including to Codex, because the normalizer
   only inserts the key when absent (leaf:translate_responses.rs:27). The fields of §4.6 are not forwarded.
@@ -1158,7 +1153,8 @@ repeated; this package's mapping does not depend on it (§7.1).
 
 On 2026-09-30 lv ruled on the L-tagged questions: as recommended, on condition that each recommendation fits the
 final goal DP0 (no provider-specific logic in the host). One recommendation was adjusted to meet that condition
-(R-Q5); the rulings are recorded under each question.
+(R-Q5); the rulings are recorded under each question. On 2026-10-01 lv extended the rulings under R-Q1 (relayed
+failure frames) and R-Q2 (`content_filter`).
 
 - **R-Q1 (S, L)** Delivery on the Responses surface: north-identical bytes by declaration (recommended, §8.2), or
   always re-render and accept §8.3's losses.
@@ -1167,17 +1163,21 @@ final goal DP0 (no provider-specific logic in the host). One recommendation was 
   Note (2026-10-01): the ruling stands; the declaration is renamed `north_passthrough`, and review added conditions that
   narrow it without reversing it — pass-through only when the request mapped losslessly, terminal withholding by
   northbound type and `Done` together (§8.2). Its v1 benefit is also smaller than
-  first stated: no `encrypted_content` until NC-1 (§8.3). **Proposal awaiting the owner, not decided:** replace a
-  relayed upstream failure frame with the host's fixed-message failure event, extending the sibling's N-Q3 ruling
-  from gateway-originated failures to relayed ones (§8.2), and holding pass-through back until that is ruled.
+  first stated: no `encrypted_content` until NC-1 (§8.3). Review also proposed replacing a relayed upstream failure
+  frame with the host's fixed-message failure event, extending the sibling's N-Q3 ruling from gateway-originated
+  failures to relayed ones (§8.2); that is ruled below.
+  **Ruled (lv, 2026-10-01): a relayed upstream failure frame is replaced by the host's fixed-message failure
+  event**, extending the N-Q3 ruling to relayed failures. Pass-through is enabled by declaration as ruled above, with
+  this replacement as one of its conditions (§8.2).
 - **R-Q2 (L)** Does a generation truncated at the cap (`response.incomplete` with usage) settle as a success with
   finish reason `length` (recommended: yes, as on every other wire), or stay in `delivery_unknown` as the native leg
   does today?
   **Ruled (lv, 2026-09-30): it settles as a success with finish reason `length`.**
   Note (2026-10-01): the ruling names `length` only; every other reason is now a protocol error rather than
-  `Other(reason)` (§5). **Proposal awaiting the owner, not decided:** also settle `incomplete_details.reason =
-  content_filter` as a success with finish reason `content_filter`, as every other dialect does. Until the owner
-  rules, it is a protocol error.
+  `Other(reason)` (§5). Review also proposed settling `incomplete_details.reason = content_filter` as a success with
+  finish reason `content_filter`, as every other dialect does; that is ruled below.
+  **Ruled (lv, 2026-10-01): `incomplete_details.reason = content_filter` also settles as a success, with finish
+  reason `content_filter`**, in addition to `max_output_tokens` → `length`; any other reason stays a protocol error.
 - **R-Q3 (L)** Hosted-tool usage (`tool_usage.image_gen`): refuse any non-zero value (recommended for v1; the host
   admits no hosted tool today), or model a second meter — a south-local response extension plus host pricing.
   **Ruled (lv, 2026-09-30): version 1 refuses any non-zero value.**
@@ -1284,3 +1284,11 @@ final goal DP0 (no provider-specific logic in the host). One recommendation was 
 - Round 2: §2 D7, §8.2 and the R-Q1 note present replacing relayed upstream failure frames as a proposal awaiting
   the owner (an extension of the sibling's N-Q3 ruling); pass-through waits for that ruling.
 - Round 2: §4.3 no longer suggests Codex could reuse the buffered path (Codex is SSE `bytes`; umbrella §5.2).
+- Rulings of 2026-10-01:
+  - R-Q2 extension ruled by lv: `incomplete_details.reason = content_filter` also settles as a success with finish
+    reason `content_filter`; any other reason stays a protocol error. D6, §5, §6.3, §12.1, §13.1, §13.3 and the
+    R-Q2 note state it.
+  - Relayed upstream failure frames ruled by lv (under R-Q1, extending the sibling's N-Q3): replaced by the host's
+    fixed-message failure event. The condition that no host enables pass-through until this is ruled is dropped;
+    pass-through is enabled by declaration as ruled under R-Q1, with the replacement as one of its conditions. D7,
+    §8.2, §12.4, §13.1 and the R-Q1 note state it.
