@@ -8,7 +8,8 @@ Revised: 2026-10-01 after independent review (see the revision note at the end).
 
 Rulings: on 2026-09-30 the host owner (lv) ruled on Q3, Q4, Q5, Q6, Q7 and Q8 (§16), each as recommended. Q3 and Q8
 also need the south maintainers. On 2026-10-01 lv ruled that the ASR missing-duration fix goes into the component
-(§9; recorded under Q4). Q10 and Q11 depend on other host plans and stay open.
+(§9; recorded under Q4), and that an ElevenLabs duration taken from the last timestamp is labeled estimated (Q12).
+Q10 and Q11 depend on other host plans and stay open.
 
 
 Baseline: south `origin/main` = `3135e36` (v0.42.0). Server line numbers come from host `a82c852b`; P23 was written at
@@ -386,8 +387,9 @@ for the richest format that carries a duration and renders the client's format i
   `usage.type = "duration"` as OpenAI documents it, **to be measured**), that counts as `reported` too.
 - **ElevenLabs**: the component guarantees that word-level timestamps are requested (`timestamps_granularity` is
   already a field the host treats as owned, `audio.rs:71-78`) and reports the end of the last word as
-  `basis = last_timestamp`. If the upstream response carries an explicit duration field (**to be measured**), that is
-  used instead as `reported`. The component also renders the client's format from the words (json stays `{"text"}`,
+  `basis = last_timestamp`, which the ledger labels as estimated (Q12, ruled by lv on 2026-10-01; see **Labels**
+  below). If the upstream response carries an explicit duration field (**to be measured**), that is used instead as
+  `reported`. The component also renders the client's format from the words (json stays `{"text"}`,
   equal to today; text / srt / vtt are new, §13).
 - **Azure fast transcription**: always reports `durationMilliseconds`; missing → `unknown` (Q6). srt / vtt stay
   refused in `prepare`, as today (`multipart.rs:356-402`).
@@ -420,9 +422,11 @@ boundary record §6.3; every bound here is the **host** bound of §8, not the re
 These out-of-bound and internal-consistency checks can only find values outside the bounds, not under-reporting
 within them (accepted by DP1; the same undetectable zone as the boundary record §6.3).
 
-**Labels.** `quantity_estimated = 1` when the host applied the 60-second fallback. Whether `basis = last_timestamp`
-should also set it is open (Q12): today the ElevenLabs duration is recorded as a measurement, while the same method
-(the end of the last timestamp) was judged an undercounting estimate when Q4 weighed it for subtitles.
+**Labels.** `quantity_estimated = 1` when the host applied the 60-second fallback, and also when
+`seconds.basis = last_timestamp` (Q12, ruled by lv on 2026-10-01): the end of the last timestamp undercounts trailing
+silence, the reason Q4 gave against the same method for subtitles, so the ElevenLabs duration is no longer recorded
+as a measurement. The amount is unchanged; only the ledger mark moves. `basis = reported` keeps
+`quantity_estimated = 0`.
 
 ## 10. D8 — Second-hop audio (DV2) and verify-before-settle
 
@@ -497,7 +501,7 @@ looks at row names or model names):
 |---|---|---|---|---|---|
 | OpenAI-compatible | multipart part list, each part `as_is`, only `model` changed; `response_format=verbose_json` when the row declares `speech.verbose_json` (§9) | `bearer` | the component renders json / text / verbose_json / srt / vtt | `duration` or usage seconds (`reported`); otherwise `null` (§9 case 1) | V3-3 |
 | xAI | multipart `/v1/stt`, `model` removed; `response_format=verbose_json` as above | `bearer` | the component renders the client format | `duration` (`reported`); otherwise `null` (§9 case 1) | V3-3 |
-| ElevenLabs | multipart `/v1/speech-to-text`, `model → model_id`, `language → language_code`, word timestamps requested | `header_secret` `xi-api-key` | json `{"text"}`; text / srt / vtt rendered from words | `words[-1].end` (`last_timestamp`), or an explicit duration if measured; otherwise `null` (§9 case 2) | V3-3 |
+| ElevenLabs | multipart `/v1/speech-to-text`, `model → model_id`, `language → language_code`, word timestamps requested | `header_secret` `xi-api-key` | json `{"text"}`; text / srt / vtt rendered from words | `words[-1].end` (`last_timestamp`, labeled estimated per Q12), or an explicit duration if measured (`reported`); otherwise `null` (§9 case 2) | V3-3 |
 | Azure fast transcription | multipart `file → audio` + `definition` part; `api-version` query (already sanctioned) | `header_secret` `ocp-apim-subscription-key` | json / verbose_json / text; srt and vtt refused in `prepare` | `durationMilliseconds` (`reported`); missing → `unknown` | V3-3 |
 
 Vertex today silently downgrades mp3 / opus / aac / flac to wav (`tts_providers.rs:904-921`): the client asks for mp3,
@@ -534,6 +538,9 @@ handler-level cases) have landed.
   duration comes from the upstream's report with `quantity_estimated = 0`; json and text responses equal by value;
   srt / vtt equal by cue (index, start, end, text), not by bytes; ElevenLabs text / srt / vtt are new behaviour and
   are accepted against fixtures, not against the old path;
+- **Intentional difference** (on record, not a reconciliation failure): ElevenLabs ASR rows whose duration has
+  `basis = last_timestamp` carry `quantity_estimated = 1` where the native path records 0; the duration and the
+  amount are unchanged (Q12, ruled by lv on 2026-10-01, §9);
 - In addition, run J2 end to end with a synthetic provider: a speech component the host has never seen, which the
   host can use to synthesize and transcribe with zero changes (the speech-world counterpart of the boundary record's
   unseen-provider guest (T21), §12 there).
@@ -602,7 +609,7 @@ A South **minor**, sharing `contracts.media` with the image world:
 | Q9 | A second consumer of the metering vocabulary: the community host today has no multipart surface and no byte-returning surface (`2026-09-09-multipart-request-body.md:189`, `2026-09-09-buffered-binary-response.md:302`), so per `ARCHITECTURE.md:114-115` the admission condition is not met at present. The same question is open as the image record Q5, the boundary record Q9 and the embeddings record E-Q5 | Take P21 §7's "synchronous implementation recommended" as the written commitment; otherwise do not admit for now | lv + south maintainers |
 | Q10 | Rows on non-OpenAI-compatible arms configured with only a token price: today they can be listed but every request is refused at admission with a "no price configured" 400 (no funds move); after migration the refusal comes from `prepare` and names the cause (§8) | Accept; list the affected rows with a read-only query before cutting over | lv |
 | Q11 | If P25 chooses A for the native ElevenLabs route, does it reuse this world's components and immutability declaration directly | Reuse | lv (P25) |
-| Q12 | ASR duration with `basis = last_timestamp` (ElevenLabs): record it as a measurement (as today) or set `quantity_estimated = 1` (it undercounts trailing silence, the reason Q4 gave against the same method for subtitles) | Label it estimated; the amount is unchanged, only the ledger mark moves | lv |
+| Q12 | ASR duration with `basis = last_timestamp` (ElevenLabs): record it as a measurement (as today) or set `quantity_estimated = 1` (it undercounts trailing silence, the reason Q4 gave against the same method for subtitles) | Label it estimated; the amount is unchanged, only the ledger mark moves | lv — **ruled by lv, 2026-10-01: as recommended** (label it estimated, `quantity_estimated = 1`; the amount is unchanged; §9) |
 | Q13 | South supplies `decode_sse_v1` (rules in §6) as a pure function with golden vectors in `south-contracts`, which both hosts call | Supply it; place it in `south-contracts` under the fuzz obligation | south maintainers |
 | Q14 | The speech dialect words `speech.translate` and `speech.verbose_json` (§4): defined by this world's contract, or free-form words each component documents | Defined by the contract (closed, two words), so catalog data can set them without knowing the component | south maintainers |
 
@@ -639,3 +646,9 @@ A South **minor**, sharing `contracts.media` with the image world:
 - Round 2, §8 / §9 / §11: reserve at the minimum; every check compares against the host bound only; the speech
   instance of the bound rule has no media-part allowance.
 - Round 2, §13 / §14 / Q1: `TextPostRequestV1` committed to the single HTTP contract 10 bump in the image minor.
+- Rulings of 2026-10-01:
+  - Q12 ruled by lv: an ASR duration with `basis = last_timestamp` (ElevenLabs) is labeled estimated
+    (`quantity_estimated = 1`); the amount is unchanged. §9 (ElevenLabs bullet, **Labels**) and the §12 ASR table
+    state it.
+  - §13 dual-run reconciliation records the resulting intentional difference: ElevenLabs rows carry
+    `quantity_estimated = 1` where the native path records 0, the amount unchanged (Q12).

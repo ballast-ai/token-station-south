@@ -21,10 +21,10 @@ others — were approved as recommended on 2026-09-30, as relayed by the host te
 `2026-09-30-embeddings-contract.md`.
 
 Rulings: on 2026-09-30 the host owner (lv) ruled on the questions tagged L in §16 — Q1, Q3, Q7, Q10 and Q12; each
-ruling is recorded under its question. Q13 still awaits a measurement. Questions tagged S or K remain open for the
-south and kernel maintainers. Two rulings made in sibling records bind this one and are quoted where they apply:
-Responses R-Q5 / Kiro K-Q1 (families that cannot send the output cap, §6.3) and image Q7 (`rejected` releases the
-reservation, §6.4).
+ruling is recorded under its question. On 2026-10-01 lv ruled the host side of Q18. Q13 still awaits a measurement.
+Questions tagged S or K remain open for the south and kernel maintainers. Two rulings made in sibling records bind this
+one and are quoted where they apply: Responses R-Q5 / Kiro K-Q1 (families that cannot send the output cap, §6.3) and
+image Q7 (`rejected` releases the reservation, §6.4).
 
 Baseline: south `origin/main` = v0.42.0 (`3135e36`); kernel `f585bc83` (protocol 0.4.0 / kernel v0.3.0); host
 `a82c852b`. South line numbers refer to this baseline. Host line numbers refer to token-station-server `a82c852b`
@@ -348,8 +348,9 @@ there — a leak whose impact exceeds one key, the first 2026-09-08 test. So:
 
 1. **Endpoints are confirmed, not declared.** Every endpoint a recipe can reach (constants and the host part of
    templates) is shown to the operator when a credential of that kind is created, and the operator confirms the
-   list for that package digest; or the endpoint is on a host-side allowlist. A package update that changes the list
-   needs a new confirmation. Which of the two is the default is §16 Q18.
+   list for that package digest. A package update that changes the list needs a new confirmation. On the host side
+   this is the only mechanism: a host-side allowlist is rejected, because it would make a new provider endpoint a
+   host change, against DP0 (§15; ruled under §16 Q18).
 2. **Assertions are bound to their destination.** A signed assertion that is sent to a step must carry
    `aud` = that step's endpoint (`{"endpoint_of": step}` is the only admitted `aud` source when the output is sent
    anywhere); gate ① refuses anything else.
@@ -1262,6 +1263,8 @@ release, and a provider needing one is outside DP0.
 - **Settling a bound hit at `min(reported, bound)` automatically** (considered in review): it would change lv's
   ruling that such cases go to the manual-review path; §6.3 keeps that path and only fixes that the reservation
   stays held and nothing settles to zero.
+- **A host-side allowlist of recipe endpoints** (§3.4 rule 1): a new provider endpoint would then require a host
+  change, against DP0; the host relies on operator confirmation per package digest only (Q18).
 
 ## 16. Open questions
 
@@ -1348,6 +1351,9 @@ Tags: S = south maintainers, L = lv, K = kernel.
   a cheap self-consistency check, with the record stating plainly that it is not evidence of correct usage.
 - **Q18 (S, L)** Recipe endpoint confirmation (§3.4 rule 1): operator confirmation per package digest (recommended
   as the default), a host-side allowlist, or both.
+  **Ruled for the host side (lv, 2026-10-01): operator confirmation per package digest only; a host-side allowlist
+  is rejected**, because a host allowlist means a new provider endpoint requires a host change, against DP0. The
+  south maintainers' half remains open.
 
 ## 17. Amendments found while drafting the component records (2026-09-30) — change log
 
@@ -1434,3 +1440,6 @@ into the body. Where each landed:
   content-type sniffing.
 - Round 2, §6.4: `rejected` widened to "an upstream answer that proves nothing was produced (a 4xx, or a 2xx the
   component shows produced nothing)", classified by the component per dialect, matching image §9.2.
+- Rulings of 2026-10-01:
+  - Q18 ruled for the host side: operator confirmation per package digest only; the host-side allowlist is rejected
+    under DP0. §3.4 rule 1 states the ruled mechanism; §15 lists the allowlist as a rejected alternative.

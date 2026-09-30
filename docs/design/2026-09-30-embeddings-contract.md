@@ -19,8 +19,8 @@ DE1 (the contract lives south-local, not in the kernel IR) and DE2 (a new world 
 world to v3) — both approved as recommended on 2026-09-30, as relayed by the host team; DE3 (whether Gemini
 responses carry token counts) awaits measurement. The umbrella plan is P21 in the same directory (DP0, DP1).
 
-Rulings: on 2026-09-30 the host owner (lv) ruled on E-Q2, E-Q3 and E-Q6 (§14); each ruling is recorded under its
-question. Questions tagged S remain open for the south maintainers.
+Rulings: on 2026-09-30 the host owner (lv) ruled on E-Q2, E-Q3 and E-Q6 (§14), and on 2026-10-01 on E-Q10 and
+E-Q11; each ruling is recorded under its question. Questions tagged S remain open for the south maintainers.
 
 
 Baseline: south `origin/main` = v0.42.0 (`3135e36`); kernel `f585bc83` (protocol 0.4.0). Host line numbers refer
@@ -342,8 +342,9 @@ type (§1). After migration each is a family that declares its own authenticatio
 | GitHub Copilot (minted token, seven editor headers) | not served on this surface today (§1) | a recipe mints the token; the family declares the editor headers | boundary record §3 (recipe with `http_exchange`), §10, Q10 |
 | Azure OpenAI (`api-key` header, `api-version` query) | auth and URL chosen by type (:266-279, :224) | `header_secret` and the query declared by the family | already sanctioned today; boundary record §10 once it lands |
 
-Whether Copilot rows should be served on `/v1/embeddings` at all after migration is a product decision (E-Q11); the
-point here is that serving or not serving them no longer needs host code.
+The host has no special case for Copilot (E-Q11, ruled by lv on 2026-10-01): whether Copilot rows are served on
+`/v1/embeddings` after migration follows from whether the Copilot component declares embeddings support, and serving
+or not serving them needs no host code.
 
 Vertex responses also carry `metadata.billableCharacterCount` (used by older models priced by character); the host
 does not read it today, and v1 of this contract does not model it.
@@ -634,8 +635,12 @@ stopgap, but that is a J1 red item and must be cleared before E3.
   alternative is a host suite that only tests each host's own implementation.
 - **E-Q10 (L)** The bounds on unmodelled northbound fields (32 keys, 16 KiB) and the rule that a component may
   refuse such a field only with a fixture: acceptable?
+  **Ruled (lv, 2026-10-01): accepted as proposed** — 32 keys, 16 KiB, and a component may refuse an unmodelled field
+  only with a fixture (§3).
 - **E-Q11 (L)** GitHub Copilot is not served on `/v1/embeddings` today (§1). After migration it could be, once its
   family declares its recipe and headers: serve it, or keep refusing?
+  **Ruled (lv, 2026-10-01): the host has no special case for Copilot; whether Copilot rows are served on
+  `/v1/embeddings` follows from whether the Copilot component declares embeddings support** (§6).
 
 ## Revision note (2026-10-01)
 
@@ -665,3 +670,7 @@ stopgap, but that is a J1 red item and must be cleared before E3.
   bytes not counted, 64 per input); the reservation is the minimum, and every check uses the host bound only.
 - Round 2, §4 / §11: `rejected` cited to the boundary record §6.4; releasing it is no longer listed as a dual-run
   difference, since during the dual run both arms park every non-2xx.
+- Rulings of 2026-10-01:
+  - E-Q10 ruled by lv: accepted as proposed (32 keys, 16 KiB, refusal of an unmodelled field only with a fixture).
+  - E-Q11 ruled by lv: no host special case for Copilot; serving Copilot rows on `/v1/embeddings` follows from the
+    Copilot component's embeddings declaration. §6 states it in place of the open product decision.
