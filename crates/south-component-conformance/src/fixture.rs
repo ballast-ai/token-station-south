@@ -20,6 +20,13 @@
 //! rather than reports zeros (B1, `docs/design/2026-09-30-host-zero-vendor-boundary.md`
 //! §6.2).
 //!
+//! The same directory may hold `credential.<family>.<case>` pairs: gate ②'s credential-recipe
+//! samples (B4, host-zero-vendor-boundary §3.7). They feed no component function — south's
+//! reference recipe interpreter runs them against the manifest's `credentials` section — and
+//! their shape, families and coverage rule are documented in `credential_fixture.rs`. Both this
+//! loader and the task-v2 loader read them into [`FixturePackV1::credentials`] and its task-v2
+//! counterpart; the suites run them only for a manifest that declares `credentials`.
+//!
 //! Inputs are the Canonical IR, not the provider's wire format. A fixture that
 //! could hold a credential would be a way to smuggle one past the type system,
 //! so the IR's own boundaries — `SafeHeaders`, `ProviderEndpoint` — re-apply
@@ -32,6 +39,8 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
+
+use crate::credential_fixture::CredentialFixturePackV1;
 
 const MAX_FIXTURE_FILE_BYTES: u64 = 2 * 1024 * 1024;
 
@@ -110,6 +119,7 @@ pub struct CaseV1 {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FixturePackV1 {
     cases: Vec<CaseV1>,
+    credentials: CredentialFixturePackV1,
 }
 
 impl FixturePackV1 {
@@ -168,12 +178,25 @@ impl FixturePackV1 {
             });
         }
 
-        Ok(Self { cases })
+        Ok(Self { cases, credentials: CredentialFixturePackV1::load(directory)? })
     }
 
     #[must_use]
     pub const fn from_cases(cases: Vec<CaseV1>) -> Self {
-        Self { cases }
+        Self { cases, credentials: CredentialFixturePackV1::from_cases(Vec::new()) }
+    }
+
+    /// The same pack with these credential cases.
+    #[must_use]
+    pub fn with_credentials(mut self, credentials: CredentialFixturePackV1) -> Self {
+        self.credentials = credentials;
+        self
+    }
+
+    /// The `credential.*` cases in the same directory.
+    #[must_use]
+    pub const fn credentials(&self) -> &CredentialFixturePackV1 {
+        &self.credentials
     }
 
     #[must_use]
@@ -239,7 +262,7 @@ fn family_of(stem: &str) -> Result<Option<ProviderFamilyV1>, FixtureErrorV1> {
         .map(Some)
 }
 
-fn read_json(path: &Path, case: &str) -> Result<Value, FixtureErrorV1> {
+pub fn read_json(path: &Path, case: &str) -> Result<Value, FixtureErrorV1> {
     let file = fs::File::open(path).map_err(|source| FixtureErrorV1::Unreadable {
         path: path.to_path_buf(),
         detail: source.to_string(),

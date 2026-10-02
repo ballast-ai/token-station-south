@@ -1,9 +1,13 @@
 //! Public behavior gate for the candidate task-v2 world.
 use crate::task_v2_json as wire;
-use crate::{CheckV1, OutcomeV1, ReportV1, TaskComponentV2, TaskFamilyV2, TaskFixturePackV2};
+use crate::{
+    CheckV1, OutcomeV1, ReportV1, TaskComponentV2, TaskFamilyV2, TaskFixturePackV2,
+    credential_recipe_checks_v1,
+};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use south_contracts::{HostMintedValuesV1, TaskObservationV2};
+use south_provider_api::ComponentManifestV1;
 use token_station_protocol::{ErrorEnvelope, HttpResponseParts, ProviderConfig};
 
 /// Independently versioned suite; v1 fixtures remain frozen.
@@ -213,6 +217,25 @@ pub fn run_task_component_suite_v2(
             TASK_COMPONENT_SUITE_V2,
             "no fixture offers a failed query",
         ));
+    }
+    ReportV1::new(TASK_COMPONENT_SUITE_V2, outcomes)
+}
+
+/// Runs the suite for a task component with its manifest.
+///
+/// Everything [`run_task_component_suite_v2`] runs, and, when the manifest
+/// declares `credentials`, the credential-recipe checks over the pack's
+/// `credential.*` cases (B4, host-zero-vendor-boundary §3.7). This is the
+/// entry point an admitting host and a release's gate ② report use.
+#[must_use]
+pub fn run_task_component_suite_v2_for_manifest(
+    component: &dyn TaskComponentV2,
+    pack: &TaskFixturePackV2,
+    manifest: &ComponentManifestV1,
+) -> ReportV1 {
+    let mut outcomes = run_task_component_suite_v2(component, pack).outcomes().to_vec();
+    if let Some(credentials) = &manifest.credentials {
+        outcomes.extend(credential_recipe_checks_v1(credentials, pack.credentials()));
     }
     ReportV1::new(TASK_COMPONENT_SUITE_V2, outcomes)
 }
