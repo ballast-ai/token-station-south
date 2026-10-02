@@ -4,11 +4,15 @@ Status: proposed — drafted for review by the host team (token-station-server P
 
 Date: 2026-09-30
 
+Revised: 2026-10-01 after independent review (see the revision note at the end).
+
 Predecessors: `2026-08-21-canonical-ir-inventory.md` (S0: D1 usage extraction belongs to the component, D2 chunks
-are bytes), `2026-08-27-manifest-schema-beyond-one-world.md` (manifest validated per world; `host_signed` and
-`emits`), `2026-09-10-released-component-artifacts.md` (release artifacts and `SHASUMS256.txt`),
-`2026-09-20-task-adapter-v2-candidate.md` (task-v2 admits only bearer / header_secret);
-`ARCHITECTURE.md` "What never enters South" (ruled 2026-09-08).
+are bytes, §6 the `ProviderConfig` policy fence, D5 `extensions` are data),
+`2026-08-27-manifest-schema-beyond-one-world.md` (manifest validated per world; `host_signed` and `emits`),
+`2026-09-10-released-component-artifacts.md` (release artifacts and `SHASUMS256.txt`),
+`2026-09-20-task-adapter-v2-candidate.md` (task-v2 admits only bearer / header_secret),
+`2026-08-20-controlled-user-agent.md` (the `'static` user-agent ruling); `ARCHITECTURE.md` "What never enters
+South" (ruled 2026-09-08).
 
 Origin: token-station-server plan P21 (`docs/product-review-v2/plans/2026-09-29-P21-*.md`)
 (DP0 and DP1 decided; the decisions of P21 §8.3 "before stage 2 starts" — DP3, DP4, DP5, DP9, DE1, DE2 and
@@ -17,12 +21,14 @@ others — were approved as recommended on 2026-09-30, as relayed by the host te
 `2026-09-30-embeddings-contract.md`.
 
 Rulings: on 2026-09-30 the host owner (lv) ruled on the questions tagged L in §16 — Q1, Q3, Q7, Q10 and Q12; each
-ruling is recorded under its question. Q13 still awaits a measurement. Questions tagged S or K remain open for the
-south and kernel maintainers.
+ruling is recorded under its question. On 2026-10-01 lv ruled the host side of Q18, and Q13 was answered by
+measurement (§16 Q13). Questions tagged S or K remain open for the south and kernel maintainers. Two rulings made in
+sibling records bind this one and are quoted where they apply: Responses R-Q5 / Kiro K-Q1 (families that cannot send
+the output cap, §6.3) and image Q7 (`rejected` releases the reservation, §6.4).
 
-Baseline: south `origin/main` = v0.42.0 (`3135e36`); kernel `f585bc83` (protocol 0.4.0 / kernel v0.3.0).
-South line numbers refer to this baseline. Host line numbers refer to token-station-server `8b2a1976` and carry a
-`server:` prefix; kernel line numbers carry `kernel:` and refer to `crates/protocol/src/`.
+Baseline: south `origin/main` = v0.42.0 (`3135e36`); kernel `f585bc83` (protocol 0.4.0 / kernel v0.3.0); host
+`a82c852b`. South line numbers refer to this baseline. Host line numbers refer to token-station-server `a82c852b`
+and carry a `server:` prefix; kernel line numbers carry `kernel:` and refer to `crates/protocol/src/` at `f585bc83`.
 
 ## 0. Summary
 
@@ -30,23 +36,23 @@ The host's standard, DP0: adding or removing a provider changes only south, with
 boundary as it stands cannot deliver that — not because components cannot be written to do the translation, but
 because south **leaves the host to know** a set of facts that differ per provider: how to mint credentials,
 whether the auth arm in a descriptor counts, how the upstream frames its stream, whether usage can be trusted,
-where the cap field is, whether a package works across versions, which packages exist to install. This record
-gives a revision for each:
+where the cap field is, where the endpoint lives, whether a package works across versions, which packages exist to
+install. This record gives a revision for each:
 
 | # | Problem | South today | Proposal | Section |
 |---|---|---|---|---|
-| a | Credential minting | Minting, OAuth refresh and JWT signing are host code, "not a gap South intends to close" (ARCHITECTURE.md:117-126) | The component **describes** the recipe in the manifest with a closed step vocabulary; material, locks, CAS and storage stay in the host; Kling uses the same recipe mechanism rather than `HostSigned` | §3 |
-| b | Auth arm | `auth_arms` only validates the vocabulary (manifest.rs:346-364); nothing checks the descriptor's `auth` against it | South provides a descriptor auth admission function; gate ② adds a matching check | §4 |
-| c | Framing / signing | Components split SSE themselves; only AWS eventstream is split and re-encoded by the host (reference_bedrock_converse.rs:21-35); the host infers the signing scheme from the type | The manifest declares `stream_framing` per family and `signing.scheme` for `host_signed` (both closed sets); south provides one eventstream deframer | §5 |
-| d | Usage | Already ruled to belong to the component (canonical-ir-inventory.md:187-203), but three reference implementations fill missing fields with 0 and gate ② does not require usage samples | Make the reference implementations strict; gate ② requires usage rows and a "delete the usage" mutation check; the manifest declares `usage_evidence`; the host does only out-of-bound and internal-consistency checks | §6 |
-| e | Request facts / capabilities | The manifest has no location declarations; `model-capabilities` only echoes what the operator declared | The manifest declares the locations of cap, model and stream and the non-secret config keys; per-model differences go through dialect words; the model catalog becomes a south data artifact | §7 |
-| f | Compatibility | The four tuple items must be exactly equal (manifest.rs:657-694) | `runtime_abi` epoch + range + explicit contract numbers; per-package admission report | §8 |
+| a | Credential minting | Minting, OAuth refresh and JWT signing are host code, "not a gap South intends to close" (ARCHITECTURE.md:117-126) | The component **describes** the recipe in the manifest with a closed step vocabulary; the recipe is untrusted input, so its endpoints are operator-confirmed and third-party recipes wait for package signing; material, locks, CAS and a no-wipe invariant stay in the host; Kling uses the same recipe mechanism rather than `HostSigned` | §3 |
+| b | Auth arm | `auth_arms` only validates the vocabulary (manifest.rs:346-364); nothing checks the descriptor's `auth` against it | South provides a descriptor auth admission function; gate ② adds a matching check; the host must pass the slot to the component | §4 |
+| c | Framing / signing | Components split SSE themselves; only AWS eventstream is split and re-encoded by the host (reference_bedrock_converse.rs:21-35); the host infers the signing scheme from the type | The manifest declares `stream_framing` per package and `signing.scheme` for `host_signed` (both closed sets); south provides one eventstream deframer with a canonical re-encoding, in `south-contracts` | §5 |
+| d | Usage | Already ruled to belong to the component (canonical-ir-inventory.md:187-203), but three reference implementations fill missing fields with 0 and gate ② does not require usage samples | Make the reference implementations strict; gate ② requires usage rows and a "delete the usage" mutation check; the manifest declares `usage_evidence`; the host checks only bounds it computes itself and internal consistency, with a defined funds outcome | §6 |
+| e | Request facts / endpoint / capabilities | The manifest has no location declarations; the host builds region- and project-bearing URLs; `model-capabilities` only echoes what the operator declared | The manifest declares cap, model and stream locations and an endpoint template per family; per-model differences go through dialect words; the model catalog becomes a south data artifact | §7 |
+| f | Compatibility | The four tuple items must be exactly equal (manifest.rs:657-694) | `runtime_abi` epoch + south runtime range + exact kernel contract numbers + explicit south contract numbers; per-package admission report | §8 |
 | g | Package discovery | A release carries only archives and `SHASUMS256.txt` (release.yml:98-106) | Publish a machine-readable index, `south-release-index.json` | §9 |
-| — | Provider instances in closed vocabularies | Secret header names, query names and quota header names are enums compiled into the host | "Closed mechanisms, declared instances" | §10 |
+| — | Provider instances in closed vocabularies | Secret header names, query names, quota header names and the user-agent value are compiled into the host | "Closed mechanisms, declared instances" | §10 |
 | h | Follow-on components and non-chat operations | None | Scope and dependencies listed | §11 |
 
-§12 lists what the synthetic unseen-provider guest (T21) must prove, §13 gives the phasing, and §16 lists the
-questions that need a ruling from the south maintainers or lv; lv's rulings of 2026-09-30 are recorded there.
+§12 lists what the synthetic unseen-provider guests (T21) must prove, §13 gives the phasing, and §16 lists the
+questions that need a ruling from the south maintainers, the kernel maintainers or lv.
 
 ## 1. Problem
 
@@ -67,7 +73,7 @@ south's boundary or release artifacts, not only in the host:
 
 | Red item | Host symptom | Root on the south side |
 |---|---|---|
-| J2b① auth | The manifest declares only `header_secret`, yet the upstream still receives Bearer | `auth_arms` is only a vocabulary (manifest.rs:234-238, 355-362); south has no public "descriptor auth → contract auth" function, and the raw prelude states that the host picks the auth arm (raw.rs:107), so the host builds a table by type (server:gateway/src/modules/inference/engine/south_adapter.rs:157) |
+| J2b① auth | The manifest declares only `header_secret`, yet the upstream still receives Bearer | `auth_arms` is only a vocabulary (manifest.rs:234-238, 355-362); south has no public "descriptor auth → contract auth" function, and the raw prelude states that the host picks the auth arm (raw.rs:107), so the host builds a table by type (server:gateway/src/modules/inference/engine/south_adapter.rs:157). Half of the root is host-side: the text seam hands the component `auth: None` (server:…/south_component.rs:735, 746), so the component names no slot and the host's table decides (§4.1) |
 | J2b③ version gate | Dropping in a package declaring `south_runtime=0.42.1` stops the whole process from starting | Exact tuple equality (manifest.rs:657-694); the host aggregated per-package errors into a process failure |
 | J2b④ fetch list | A component name outside the list gets `exit 2` | Releases have no machine-readable index (release.yml:60-133) |
 | J2b⑤ cap contract | A nested cap field is refused | The manifest has no cap-location declaration; T03 itself states "Hosts admit only a closed set of cap paths" (crates/south-provider-runtime/tests/guests/t03-canary-provider/src/lib.rs:16-37) |
@@ -88,18 +94,18 @@ DP0 holds only when "the new provider lands entirely in the package layer". Any 
 extended — even adding a single value to an enum — means the host re-pins, rebuilds and releases, and J2 is red at
 that moment. P21 §1.3 lists "loading a newly released south component package" as not counting as modifying the
 host, but does not say whether a link-layer upgrade counts; lv ruled on 2026-09-30 that it does (§16 Q1). Every
-proposal in this record states whether a new
-provider still touches the link layer afterwards; §10 deals specifically with the category most likely to trip on
-this.
+proposal in this record states whether a new provider still touches the link layer afterwards; §10 deals
+specifically with the category most likely to trip on this.
 
 ## 2. General rules
 
 **R1 Closed mechanisms, declared instances.** Closed sets are used only to name **mechanisms**: auth arms, framing
-forms, signing schemes, token-exchange step kinds, JWT algorithms — they correspond to public standards or to
-south's own protocol (P21 §1.1, DP4, DP9). **Instances** specific to one provider — header names, query names,
-endpoints, field pointers, dialect words — are declared by the component in the manifest, and south validates them
-at gate ① against syntax and safety rules. A new mechanism is a south contract upgrade plus one host link-layer
-upgrade (what P21 §1.4 calls "a new public-standard executor"); a new instance is just a new package.
+forms, signing schemes, token-exchange step kinds, JWT algorithms, value syntaxes — they correspond to public
+standards or to south's own protocol (P21 §1.1, DP4, DP9). **Instances** specific to one provider — header names,
+query names, endpoints, field pointers, dialect words, user-agent values — are declared by the component in the
+manifest, and south validates them at gate ① against syntax and safety rules. A new mechanism is a south contract
+upgrade plus one host link-layer upgrade (what P21 §1.4 calls "a new public-standard executor"); a new instance is
+just a new package.
 
 **R2 The component declares, the host executes, and the host never chooses by provider identity.** The host writes
 one generic executor per mechanism; which executor to use, and with what parameters, is decided only by the
@@ -111,7 +117,9 @@ carries only a `SecretRef`, kernel:http.rs:150-166); the funds discipline — re
 withholding, settlement, `delivery_unknown` — stays in the host (canonical-ir-inventory.md:187-203); material whose
 leak impact exceeds one key (service-account private keys, KEKs) and logic whose "wrong decision is money or an
 unrecoverable credential" (rotation concurrency guards, CAS) stay in the host (ARCHITECTURE.md:117-123). What this
-record moves out of the host is only **per-provider description** — not material, and not guards.
+record moves out of the host is only **per-provider description** — not material, and not guards. A manifest is
+untrusted third-party input (manifest.rs:212-216), so every declaration that steers material or money is either
+bounded by something the operator or the host controls, or listed in an undetectable zone (§3.4, §6.3, §7.2).
 
 **R4 Every new host execution mechanism gets a gate ③ host suite.** The same approach as header-auth and
 controlled-query: the mechanism's fixtures are frozen in south, and only once both hosts pass them is the
@@ -122,6 +130,23 @@ closed-source hosts share southbound work" holds for only one host (P21 §7).
 (manifest.rs:212-219), so a new field is itself a south-minor wire-format change
 (2026-08-27-manifest-schema-beyond-one-world.md:147-160). When a new field is absent, the semantics must equal
 today's behavior, or the package must be refused at load; there is no third outcome.
+
+**R6 Request-side declarations are per family; response-side declarations are per package.** `build-http-request`
+receives `ProviderConfig`, whose `provider` names the family, so a package can serve several request shapes. But
+`parse-response`, `parse-stream-chunk` and `map-provider-error` receive no configuration
+(provider-adapter.wit:110-132; the native trait likewise, component.rs:90-103): one package parses one response
+wire. So `request_facts`, the endpoint template and the config schema (§7) are keyed by family, while
+`stream_framing` (§5.2) and `usage_evidence` (§6.2) are package-level, and a family whose response wire differs
+belongs to its own package (§7.4, §11). `auth_arms` and `emits` are already package-level (manifest.rs:234-245) and
+`host_signed` must stand alone (manifest.rs:385-387), so a family that needs a different auth arm from its siblings
+also belongs to its own package.
+
+**R7 Gate ② is evidence only when someone other than the author runs it.** For south's own packages gate ② proves
+"wasm ≡ native reference" (tests/usage_ir_contract_v1.rs:5-8) and runs in south's CI. For a package south did not
+build there is no native reference and the expected outputs are the author's own; the host does not run the suite
+at admission. Every claim in this record of the form "gate ② guarantees X" therefore holds for first-party packages
+only, unless gate ② is run by the installer (§9.3, §16 Q17). A tightened gate ② binds a package only if the host
+refuses packages built before the tightening (§8.6).
 
 ## 3. Credential minting: the component describes, the host executes (S3; problem a)
 
@@ -141,13 +166,17 @@ today's behavior, or the package must be refused at load; there is no third outc
   imports any `host` namespace (loader.rs:216-224).
 - The host today: token exchange for the five families Codex, Claude Code, Copilot, Kiro and Vertex has converged
   on one skeleton plus one `MintStrategy` trait
-  (server:gateway/src/modules/inference/engine/token_refresh.rs:387-476; the five implementations start at :120,
-  :719, :914, :1279 and :1561; the seven skeleton steps are at :477-493). The trait methods are exactly "everything
-  that differs for one family": endpoint and request, response parsing, clock convention, whether it rotates, what
-  to do without refresh material, error classification, and Copilot's "404 is another kind of success". Kling's JWT
-  sits outside the skeleton (server:gateway/src/modules/inference/engine/upstream.rs:435-460); on the task side
-  there are also binding auth recipes named after vendors, `KlingJwt` / `VertexSa`
-  (server:gateway/src/core/task_execution.rs:25-38).
+  (server:gateway/src/modules/inference/engine/token_refresh.rs:387-493; the five implementations start at :120,
+  :719, :914, :1302 and :1584; the seven skeleton steps are at :477-493). The trait methods are exactly "everything
+  that differs for one family": endpoint and request, response parsing, clock convention, whether it rotates, which
+  material to preserve on write-back (Copilot overrides it, :439-449), what to do without refresh material, error
+  classification, and Copilot's "404 is another kind of success". Kling's JWT sits outside the skeleton
+  (server:gateway/src/modules/inference/engine/upstream.rs:435-460); on the task side there are also binding auth
+  recipes named after vendors, `KlingJwt` / `VertexSa` (server:gateway/src/core/task_execution.rs:25-38).
+- The host's token endpoints are vendor constants in reviewed host code; the trait says so (token_refresh.rs:413-415).
+  Test seams let credential extras override them (`extras.tokenUrl`, :179-180, :696-698; Kiro `refreshUrl`,
+  :1171, :1231-1234). Kiro's region, which is substituted into its refresh host, has been validated as a region
+  label since `a82c852b` (:1221-1230).
 
 ### 3.2 Can Kling simply use the existing `HostSigned`?
 
@@ -177,14 +206,19 @@ So Kling belongs to the recipes of §3.3 (a single `jwt_sign` step whose output 
 
 ### 3.3 Proposal: a `credentials` section in the manifest (credential recipe v1)
 
-Four parts:
+This subsection is the one recipe v1 vocabulary; the component records (Kiro, OpenAI Responses) use exactly these
+names. Four parts:
 
 - **`fields`**: which fields this kind of credential consists of — name, whether it is secret, value syntax,
-  whether it is required, media type (e.g. service-account JSON). The host renders the credential form, stores and
-  redacts from this, replacing the per-family credential pages (the 260 lines of D2 in P21 Appendix B.3).
+  whether it is required, an optional `default`, media type (e.g. service-account JSON). `require_one_of` (a list
+  of field groups) states that at least one field of each group must be present. The host renders the credential
+  form, stores and redacts from this, replacing the per-family credential pages (the 260 lines of D2 in P21
+  Appendix B.3).
 - **`import`**: an optional import mapping — which JSON Pointer in which kind of file lands in which field (Codex's
-  `auth.json`, Claude Code's credential file, service-account JSON). The host no longer guesses the family from what
-  a file looks like.
+  `auth.json`, Claude Code's credential file, Kiro's sign-in file, service-account JSON). A field may list
+  **ordered candidate pointers**; the first present one wins. An optional `seed` names a usable minted value in the
+  file (marked secret) and its expiry, so the first request needs no exchange. The host no longer guesses the
+  family from what a file looks like.
 - **`slots`**: each slot in `permissions.secrets` is either `static` (the operator-entered value is used as is;
   this is what absence means, R5) or `minted` (minted by a recipe). The descriptor still names only the slot;
   **neither the IR nor the WIT changes**.
@@ -193,39 +227,74 @@ Four parts:
 
 | Step kind | Standard | Covers |
 |---|---|---|
-| `oauth2_token` | RFC 6749 §6 (refresh_token), §4.4 | Codex, Claude Code, Kiro (social / IdC forms selected by field) |
+| `oauth2_token` | RFC 6749 §6 (refresh_token), §4.4; parameter names as the RFC defines them, form or JSON encoding | Codex, Claude Code |
 | `oauth2_token` + `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer` | RFC 7523 §2.1 | Vertex service account exchanged for an access token |
 | `jwt_sign`, algorithms from the closed set HS256 / RS256 / ES256 | RFC 7519 / 7515 / 7518 | Kling (output used directly as the bearer); the Vertex assertion |
-| `http_exchange` | Plain GET / POST, presenting a field or a previous step's output under the declared auth-scheme (RFC 7235 syntax) | Copilot's second hop (GitHub token → Copilot token) |
+| `http_exchange` | Plain GET / POST with **declared** parameter names, form or JSON encoding, presenting a field or a previous step's output under the declared auth-scheme (RFC 7235 syntax) | Copilot's second hop (GitHub token → Copilot token); Kiro's social and IdC refreshes, which send camelCase JSON and, in the social form, no grant type at all (server:…/token_refresh.rs:1277-1291) |
 | `http_probe` | As above, but looks only at the status | Seat re-verification on Copilot's direct-use flow |
 
-Each step may declare:
+`oauth2_token` keeps the RFC parameter names; a token endpoint that does not speak RFC 6749 is an `http_exchange`
+step. That keeps the RFC-named step honest instead of turning it into a generic POST with an OAuth label.
 
-- **Endpoint**: only a constant in the manifest, or a template with restricted parameters (parameters take only
-  non-secret fields and are validated against a closed syntax set, e.g. `aws_region`). The host is never taken from
-  credential contents or operator extra configuration — the host's existing rule (the SSRF comment at
-  server:…/token_refresh.rs:413-414) is promoted to contract.
-- **Parameters**: `{"const": …}`, `{"field": name, "pointer": …}`, `{"output": "step.name"}`,
-  `{"now_plus": seconds}`; encoding `form` / `json`; ordinary headers (the same safe-header rules as descriptors).
-- **`on_status`**: a mapping from status code to `reauth_required` / `transient` / `{"goto": step}`; defaults are
-  4xx→`reauth_required` and 5xx→`transient`. Copilot's "404 is another kind of success"
-  (server:…/token_refresh.rs:1006-1041) is `"404": {"goto": "direct"}`.
-- **`extract`**: extraction by JSON Pointer; a clock convention, one of four: `relative_seconds` /
-  `epoch_seconds` / `epoch_millis` / `jwt_exp`; `jwt_claim` (decodes the payload only, no signature verification —
-  e.g. Codex taking the account id from `id_token`). Each extracted value is marked `secret` or `export`.
+The complete vocabulary:
 
-At recipe level: `present` (which output becomes the slot value), `rotates_refresh_material` (**required, no
-default**), `refresh_margin_seconds`, `without_refresh_material` (`use_stored` / `fail`), `select` (choose a recipe
-by a non-secret field, e.g. Kiro's `auth_method`). Making the clock convention and rotation "no default" copies the
-host's lessons: getting either backwards raises no error — the former makes tokens never expire or always expire,
-the latter wipes out the minting key (server:…/token_refresh.rs:399-437). Absence means gate ① refuses.
+| Level | Form | Meaning |
+|---|---|---|
+| field | `secret`, `required`, `syntax`, `media`, `default` | As above; `default` is a non-secret value used when the field is empty |
+| credential | `require_one_of: [[field, …], …]` | Each group needs at least one present field; checked when the credential is saved |
+| import | `pointers: [pointer, …]` | Ordered candidates; first present wins |
+| import | `seed: { present: {pointer, secret: true}, expires_at: {<clock>: pointer} }` | A minted value already in the file; clock forms as in `extract`, plus `rfc3339_or_epoch_seconds` (import only) |
+| step | `endpoint` | A constant or a template (§3.4 applies to both) |
+| step | `endpoint_params: { name: {field: name} }` | Fills the template; each field's value syntax is checked before substitution |
+| step | `requires: [field, …]` | Fields that must be present before the step runs; absence is a configuration error with no network call |
+| step | `params` | `{"const": …}`, `{"field": name, "pointer": …}`, `{"output": "step.name"}`, `{"now_plus": seconds}`; encoding `form` / `json` |
+| step | `headers` | Ordinary headers under the descriptor safe-header rules; editor and client-identification headers on exchange requests go here (Q10 ruling) |
+| step | `on_status` | Exact codes and the class keys `4xx` / `5xx` map to `reauth_required` / `transient` / `{"goto": step}`; an exact code wins over its class; with no entry, 4xx → `reauth_required`, 5xx → `transient` |
+| step | `extract: { name: { pointer, secret, optional } }` | Extraction by JSON Pointer; an `optional` extraction may be absent without failing the step |
+| step | clock forms in `extract` | `relative_seconds` / `epoch_seconds` / `epoch_millis` / `jwt_exp` / `fixed_window` |
+| step | `jwt_claim: { token, pointer }` | Decodes a JWT payload without verifying the signature |
+| step | `must_equal_field: field` | On an extracted value: when both it and the named stored field are present and differ, the refresh fails as `reauth_required` and nothing is written back |
+| recipe | `present` | Which output becomes the slot value |
+| recipe | `rotates_refresh_material` | **Required, no default** |
+| recipe | `write_back: { field: "step.output" }` | Where rotated refresh material goes; **required whenever the recipe rotates**; an absent output keeps the stored value (§3.5) |
+| recipe | `refresh_margin_seconds`, `without_refresh_material` (`use_stored` / `fail`) | As in the host skeleton |
+| recipe | `default_seconds`, `fixed_validity_seconds` | Expiry fallback, and the window of `fixed_window` |
+| recipe | `min_ttl_seconds`, `max_ttl_seconds` | Optional; may only narrow the host's clamp (§3.5) |
+| recipe | `select: [ { when: <predicate>, recipe }, …, { recipe } ]` | Ordered rules, first match wins, the last rule has no test; predicates `field_present`, `all_present`, `field_in` (ASCII case-insensitive). Presence predicates may test secret fields — presence only, never the value; `field_in` only non-secret fields |
+| recipe | a recipe holding only `select` | A selector: no steps, no `present`, no `rotates_refresh_material`; the slot may name it, and every recipe it names must itself be complete |
+| recipe | `attributes: { name: { field, export: true, persist } }` | Exported non-secret values (below) |
+| value syntax | `aws_region`, `aws_arn`, `gcp_project_id`, `api_version_date`, `digits`, `token`, `printable_ascii` (bounded length), `enum[…]` | The closed set shared by credential fields, config keys (§7.3) and template parameters |
 
-**Exported attributes.** Some minted outputs are not secret but the component needs them: Codex's account id (goes
-into a request header), Vertex's project id (goes into the URL). The recipe marks such values `export`, and before
-calling the component the host puts them into the reserved key `south_credential_attributes` of
-`ProviderConfig.extensions` (the kernel's `ProviderConfig` has flattened `extensions`, kernel:provider.rs:334-335);
-the component reads them as ordinary non-secret configuration. The IR does not change, and the component still sees
-no credential value.
+Notes on the forms:
+
+- **Endpoint**: a template's parameters take only non-secret fields validated against their value syntax (e.g.
+  `aws_region`, the rule the host already applies to Kiro at server:…/token_refresh.rs:1221-1230). The host is
+  never taken from credential contents or operator extra configuration. Every endpoint — constant or template — is
+  subject to the trust rules of §3.4.
+- **`on_status`**: Copilot's "404 is another kind of success" (server:…/token_refresh.rs:1006-1041) is
+  `"404": {"goto": "direct"}`; Kiro, where only 400 and 401 are terminal today, is
+  `{"400": "reauth_required", "401": "reauth_required", "4xx": "transient"}`.
+- **Clocks**: `fixed_window` ignores any expiry in the response and uses `fixed_validity_seconds` (the host does this
+  for Codex today with a fixed 50-minute window after refresh). `jwt_exp` on a value that is not a JWT, or any
+  convention whose field is missing, falls back to `default_seconds` when declared and is otherwise a `transient`
+  failure. Every expiry then goes through the host's clamp (§3.5).
+- **`jwt_claim` is a check, not a source of exports.** Codex's `id_token` claim is compared with the stored
+  `account_id` through `must_equal_field`; the exported account id comes from the stored field.
+
+Making the clock convention and rotation "no default" copies the host's lessons: getting either backwards raises no
+error — the former makes tokens never expire or always expire, the latter wipes out the minting key
+(server:…/token_refresh.rs:399-437). Absence means gate ① refuses.
+
+**Exported attributes.** Some values are not secret but the component needs them: Codex's account id (goes into a
+request header), Vertex's project id (goes into the URL), Kiro's profile ARN (goes into the body; a non-secret field
+with syntax `aws_arn`). A recipe lists them under `attributes`; each takes its value **only from a field declared
+non-secret** — never from a secret field and never from an exchange response, because secrecy of a response value
+is the author's claim and gate ① cannot check it. An attribute may declare `persist: true` (the host stores the last
+value and keeps using it when it is later absent). How the attribute reaches the component is open: the current
+`ProviderConfig` fence admits no such channel (canonical-ir-inventory.md:155-164 and D5 at :249-255;
+provider-adapter.wit:89-90). §16 Q14 asks for the route; the recommendation is a typed field through the kernel
+chain (D5's own promotion path), the alternative an explicit, argued amendment of the fence. Either way the host
+strips any client-supplied key that collides with a reserved name.
 
 Sketch (field names are a draft):
 
@@ -233,8 +302,11 @@ Sketch (field names are a draft):
 "credentials": {
   "schema": "south.credential-recipe.v1",
   "fields": {
-    "service_account": { "secret": true, "required": true, "media": "application/json" }
+    "service_account": { "secret": true, "required": true, "media": "application/json" },
+    "project_id":      { "secret": false, "required": true, "syntax": "gcp_project_id" }
   },
+  "import": { "service_account": { "file": "service-account-json", "pointers": [""] },
+              "project_id":      { "file": "service-account-json", "pointers": ["/project_id"] } },
   "slots": { "provider_api_key": { "minted": "vertex_sa" } },
   "recipes": {
     "vertex_sa": {
@@ -243,7 +315,7 @@ Sketch (field names are a draft):
           "key":    { "field": "service_account", "pointer": "/private_key" },
           "claims": { "iss":   { "field": "service_account", "pointer": "/client_email" },
                       "scope": { "const": "https://www.googleapis.com/auth/cloud-platform" },
-                      "aud":   { "const": "https://oauth2.googleapis.com/token" },
+                      "aud":   { "endpoint_of": "token" },
                       "iat":   { "now_plus": 0 }, "exp": { "now_plus": 3600 } } },
         { "id": "token", "kind": "oauth2_token", "encoding": "form",
           "endpoint": "https://oauth2.googleapis.com/token",
@@ -254,53 +326,107 @@ Sketch (field names are a draft):
       ],
       "present": "token.access_token",
       "rotates_refresh_material": false,
-      "attributes": { "project_id": { "field": "service_account", "pointer": "/project_id", "export": true } }
+      "attributes": { "project_id": { "field": "project_id", "export": true } }
     }
   }
 }
 ```
 
 Kling, by contrast, is a single `jwt_sign` step (HS256; key from `secret_key`; claims `iss`←`access_key`,
-`exp`←now+1800, `nbf`←now−5), with `present` pointing at that step's JWT.
+`exp`←now+1800, `nbf`←now−5), with `present` pointing at that step's JWT. Its JWT is presented to the inference
+upstream, not sent to a token endpoint, so the `aud` rule of §3.4 does not apply; the presentation is confined by
+`ProviderConfig::authorize` like any bearer (kernel:provider.rs:363-378).
 
-### 3.4 Why this does not violate the two 2026-09-08 tests
+### 3.4 Trust model for recipes
+
+A recipe decides where derived credential material goes: a refresh token is sent to the step's endpoint, a signed
+assertion is sent to the next step's endpoint. For the inference request the only anchor is the operator's
+`base_url` (`ProviderConfig::authorize` requires the same origin, kernel:provider.rs:65-84, 363-378); a recipe has
+no such anchor unless this record gives it one. Without the rules below, a package could, for example, sign a
+Google assertion with `aud` = the Google token endpoint and full scope, send it to its own endpoint, and redeem it
+there — a leak whose impact exceeds one key, the first 2026-09-08 test. So:
+
+1. **Endpoints are confirmed, not declared.** Every endpoint a recipe can reach (constants and the host part of
+   templates) is shown to the operator when a credential of that kind is created, and the operator confirms the
+   list for that package digest. A package update that changes the list needs a new confirmation. On the host side
+   this is the only mechanism: a host-side allowlist is rejected, because it would make a new provider endpoint a
+   host change, against DP0 (§15; ruled under §16 Q18).
+2. **Assertions are bound to their destination.** A signed assertion that is sent to a step must carry
+   `aud` = that step's endpoint (`{"endpoint_of": step}` is the only admitted `aud` source when the output is sent
+   anywhere); gate ① refuses anything else.
+3. **No constant `sub`.** A recipe may not set `sub` (or any claim that selects a principal other than the key's
+   own) to a constant; if a future flow needs delegation, `sub` comes from an operator-entered field.
+4. **Export only from non-secret fields** (§3.3). A recipe cannot move a secret into the component by labelling
+   it.
+5. **Third-party recipes wait for signing.** Until package signing exists (§9.3, §16 Q11), the host enables
+   recipes only for packages it verifies as south first-party releases by digest against the release index;
+   a third-party package that declares `credentials.recipes` is admitted with every slot treated as `static`, or
+   refused, at the operator's choice.
+6. **Test endpoints are a build feature, not configuration.** The host's generic executor needs a fake token
+   endpoint for gate ③ (§3.7). That override is compiled only into test builds; the production executor has no
+   configuration or credential field that replaces an endpoint. This retires the `extras.tokenUrl` / `refreshUrl`
+   seams of §3.1 rather than inheriting them.
+
+### 3.5 Host invariants, and why this does not violate the two 2026-09-08 tests
+
+The host executor keeps two invariants that hold whatever a recipe declares:
+
+- **No wipe.** It never overwrites non-empty refresh material with an empty value, and it keeps the previous
+  generation so that a wrong rotation can be rolled back. An absent `write_back` output therefore keeps the stored
+  value.
+- **TTL clamp.** Every expiry, whatever its source, is clamped to a provider-agnostic host range of 60 seconds to
+  24 hours. A recipe may declare `min_ttl_seconds` / `max_ttl_seconds` only to narrow that range; gate ① does not
+  require a recipe clamp.
+
+Against the two tests:
+
 
 - **Leak impact**: private keys, service-account JSON and refresh tokens remain only in host storage and the host
-  process; the component receives only slot names and the non-secret attributes marked `export`. South's crates do
-  not touch these values either — the recipe is data, and the executor is in the host.
+  process; the component receives only slot names and attributes taken from non-secret fields. South's crates do
+  not touch these values either — the recipe is data, and the executor is in the host. Where the material is
+  **sent** is bounded by §3.4 rules 1–3, not by the recipe alone.
 - **Money and unrecoverable credentials**: named locks, re-reading after taking the lock, CAS write-back, and CAS
   losers re-reading the authoritative new generation (the seven steps at server:…/token_refresh.rs:477-493) all
-  stay in the host's generic executor. A recipe only answers "what the request looks like, where the token is in
-  the response, whether it rotates", which is exactly what each family's `MintStrategy` implementation contains
-  today — and the skeleton was never in those implementations to begin with.
+  stay in the host's generic executor. The rotation flag is different: it is exactly a "wrong decision is an
+  unrecoverable credential" item (token_refresh.rs:431-437), and a recipe is the author's decision. The no-wipe
+  invariant above is what makes that acceptable: a mis-declared recipe costs a failed refresh, not the
+  credential. The same invariant covers what Copilot's
+  `preserved_refresh_material` override protects today (token_refresh.rs:439-449).
 
 So what needs revising is the **concluding sentence** of ARCHITECTURE.md:123-126, not the two tests: the
 "per-provider authentication layer" changes from host code to data declared by the component, and "remain host
-code" becomes "its **execution** and its **material** belong to the host".
+code" becomes "their **execution**, their **material**, the **destinations** they may reach and the **host
+invariants** belong to the host".
 
-### 3.5 Host counterpart
+### 3.6 Host counterpart
 
 One generic recipe executor, replacing the five `MintStrategy` implementations, Kling's JWT minting and the
 vendor-named recipes in task bindings; the skeleton is unchanged. The timing follows raw.rs:737-745: minting
 completes before the funds marker, a failure is a pre-admission error that moves no money, and taking values after
 resolution cannot fail. Token-exchange egress uses the same guard as webhooks (https only, pinned address, no
-redirects, no system proxy — P21 §9 E-1), with a bounded response body.
+redirects, no system proxy — P21 §9 E-1), with a bounded response body, and only to confirmed endpoints (§3.4).
+A health probe never forces a refresh on a recipe that declares `rotates_refresh_material: true` (a probe that
+rotates can burn the chain; Kiro record P-8).
 
-### 3.6 Conformance
+### 3.7 Conformance
 
-- **gate ①**: recipe structure validation — step kinds and algorithms are in the closed sets; endpoints are
-  constants or restricted templates; both no-default fields are present; `present` is reachable; `goto` is acyclic
-  with at most 4 steps; `export` may be attached only to non-secret values.
+- **gate ①**: recipe structure validation — step kinds and algorithms are in the closed sets; endpoints are constants
+  or restricted templates; both no-default fields are present (a selector recipe, which holds only `select`, is exempt
+  and each recipe it names is checked instead), and `write_back` whenever the recipe rotates; `present` is reachable;
+  `goto` is acyclic with at most 4 steps; the §3.4 rules (`aud` binding, no constant `sub`, export only from
+  non-secret fields); a declared clamp lies within the host range; `select` predicates test only presence of secret
+  fields; `requires` and `must_equal_field` name declared fields.
 - **gate ②**: a new fixture family `credential.*`: given fake field values and fake responses, assert the rendered
   exchange request (method, URL, encoded body, headers) and the extraction results; it must include one rotation
   sample, one `on_status` transition sample and one clock-convention sample. Executing these fixtures needs a
   south-provided **reference recipe interpreter**, which runs only in tests and sees only fixture fake values; the
-  production executor is the host's.
-- **gate ③**: host suite `south.credential-recipe.v1`: a fake token endpoint, covering exchange failure, concurrent
-  refresh (two requests hit the upstream only once), expiry, rotation write-back, CAS loser re-read, and no retry on
-  `reauth_required`.
+  production executor is the host's. Per R7 this is evidence for first-party packages.
+- **gate ③**: host suite `south.credential-recipe.v1`: a fake token endpoint (test builds only, §3.4 rule 6),
+  covering exchange failure, concurrent refresh (two requests hit the upstream only once), expiry and clamping,
+  rotation write-back, a rotation that returns empty material (must not wipe; §3.5), CAS loser re-read, no retry on
+  `reauth_required`, and a probe that must not rotate.
 
-### 3.7 Versioning
+### 3.8 Versioning
 
 A new optional manifest section: south minor (R5: absent means every slot is `static`, which equals today). Once
 recipes land, the `oauth` arm and the kernel's `Auth::OAuth` become redundant: keep parsing them, mark them
@@ -308,17 +434,18 @@ deprecated, stop recommending them; removing them would have to go through the k
 Host link layer: the recipe executor is a one-time new generic mechanism (P21 §1.4); after that, an OAuth family
 that fits within the step vocabulary is a package-layer change. **A new flow outside the vocabulary** (a sixth step
 kind) is a south contract upgrade plus a host executor upgrade — this is the edge of DP0's coverage under this
-proposal; see §16 Q3.
+proposal; see §16 Q3. A third-party provider that needs a recipe is also outside DP0 until signing exists (§3.4
+rule 5).
 
-### 3.8 Coverage check
+### 3.9 Coverage check
 
 | Family | In the host today | Recipe expression |
 |---|---|---|
-| Codex | JSON refresh_token grant; falls back to decoding the JWT `exp` when `expires_at` is missing; takes the account id from `id_token`; rotates | `oauth2_token` + `jwt_exp` + `jwt_claim` (export); rotates = true |
-| Claude Code | JSON refresh_token grant; millisecond clock; rotates | `oauth2_token` + `relative_seconds` (the stored convention is normalized by the host); rotates = true |
-| Copilot | GET + `Authorization: token …` + editor headers; a 404 switches to the direct-use flow and re-verifies the seat; does not rotate | `http_exchange` + `on_status` 404→`goto` + `http_probe`; rotates = false; the editor headers belong to DP7 |
-| Kiro | Social / IdC forms, endpoint built from a region template; rotates | `select` + two `oauth2_token` recipes; the endpoint template parameter uses the `aws_region` syntax |
-| Vertex service account | RS256 assertion exchanged for a token; project id goes into the URL; does not rotate | The §3.3 sketch |
+| Codex | JSON refresh_token grant; a fixed 50-minute window after refresh; stored account id, refusing a refresh whose `id_token` names another account; rotates | `oauth2_token` (json) + `fixed_window` (`fixed_validity_seconds` 3000); `account_id` exported only from the stored non-secret field; the `id_token` claim only as a `must_equal_field` check; rotates = true, `write_back` = `refresh_token`; `without_refresh_material: use_stored` (Responses record §10.2 is the full recipe) |
+| Claude Code | JSON refresh_token grant; millisecond clock; rotates | `oauth2_token` + `relative_seconds` (the stored convention is normalized by the host); rotates = true, `write_back` to `refresh_token` |
+| Copilot | GET + `Authorization: token …` + editor headers; a 404 switches to the direct-use flow and re-verifies the seat; does not rotate | `http_exchange` + `on_status` 404→`goto` + `http_probe`; rotates = false; the editor headers are declared on the step (Q10) |
+| Kiro | Social / IdC forms, camelCase JSON bodies, endpoint built from a region template; only 400 / 401 terminal; rotates | `select` (`field_in` / `field_present` / `all_present`) + two `http_exchange` recipes with `endpoint_params` (`aws_region`), `requires`, `on_status` class keys, import `seed`; profile ARN a non-secret `aws_arn` field exported as an attribute; rotates = true, `write_back` = `refresh_token` |
+| Vertex service account | RS256 assertion exchanged for a token; project id goes into the URL; does not rotate | The §3.3 sketch; the project id is a non-secret field imported from the same file |
 | Kling | HS256 JWT used directly as the bearer | A single `jwt_sign` step |
 
 ## 4. Making the descriptor's auth actually take effect (problem b)
@@ -340,6 +467,10 @@ proposal; see §16 Q3.
   checks `descriptor.auth` against `auth_arms`
   (server:gateway/src/modules/inference/engine/south_task_component.rs:137-162) — the precedent is in the host, not
   in south.
+- The host's text seam builds `ProviderConfig` with `auth: None` (server:…/south_component.rs:735; the comment at
+  :746 says so). The references derive the descriptor's auth from `config.auth`, so they name no slot, `authorize`
+  admits `(None, None)` (kernel:provider.rs:380), and the host's table decides. A south function alone cannot
+  flip J2b①.
 
 ### 4.2 Proposal
 
@@ -350,35 +481,44 @@ proposal; see §16 Q3.
    Rules:
    - `Auth::Bearer` → the manifest must contain `bearer` → `RawAuthV1::Bearer`;
    - `Auth::Header { name }` → the manifest must contain `header_secret`, and `name` must be an admitted secret
-     header (today the five of `SecretHeaderV1`; §10 proposes making them manifest-declared) →
-     `RawAuthV1::HeaderSecret`;
-   - `Auth::OAuth` → the slot must be `minted` in a §3 recipe, and is presented as bearer;
+     header (today the five of `SecretHeaderV1`; §10 makes them manifest-declared) → `RawAuthV1::HeaderSecret`;
+   - `Auth::OAuth` → the slot must be `minted` in a §3 recipe, and is presented as bearer (this rule lands with
+     recipes in B4; until then `Auth::OAuth` is refused, as it is today on the task path);
    - `None` → only when `ProviderConfig.auth` is also empty (the kernel's `ProviderConfig::authorize` already judges
      this pair, kernel:provider.rs:361-378);
    - the manifest is `host_signed` → the descriptor must carry no `auth`, and the signing scheme follows §5.3.
    Any mismatch is refused before admission, with zero upstream calls.
-2. Both the host's text path and its task path switch to calling it; the host's per-type auth tables (P21 §2.5,
-   "two to three tables from the same source") are deleted along with it.
+2. The host passes the provider row's slot in `ProviderConfig.auth` for every package whose arms are not
+   `host_signed`, and passes `None` for `host_signed` packages (otherwise `authorize` returns `MissingCredential`,
+   kernel:provider.rs:373). Only then does the component's presentation reach the wire.
+3. Both the host's text path and its task path switch to calling the admission function; the host's per-type auth
+   tables (P21 §2.5, "two to three tables from the same source") are deleted along with it.
 
 ### 4.3 Gap: the combined arm cannot be expressed by a component
 
 The contract has `BearerAndHeaderSecret` (south-contracts/src/lib.rs:1331-1346, auth contract 4), which the host
-uses to serve Gemini's OpenAI-compatible endpoint; but the manifest vocabulary has no corresponding arm
-(manifest.rs:89), and the kernel's `Auth` has no corresponding variant (kernel:http.rs:150-166). `provider-gemini`'s
-manifest declares only `header_secret`. Once the host presents strictly according to the descriptor, this path
-loses any way to be expressed. Options:
+uses for Gemini's OpenAI-compatible surface, which requires the key twice
+(2026-09-08-bearer-with-header-secret-auth.md:12-15). That surface takes an OpenAI-shaped request: the host
+selects the combined arm when a Gemini row uses a transport other than the native one
+(server:…/text_admission/sender.rs:944-955). The package that serves it is therefore
+`provider-openai-compatible` (arms `bearer`, `header_secret`), not `provider-gemini`, which only builds native
+Gemini URLs (reference_gemini.rs:483-494). The manifest vocabulary has no combined arm (manifest.rs:89) and the
+kernel's `Auth` has no corresponding variant (kernel:http.rs:150-166). Once the host presents strictly according
+to the descriptor, this path loses any way to be expressed. Options:
 
 - **A (recommended)**: go through the kernel chain to add `BearerAndHeader { name, secret }` to `Auth`, and add
-  `bearer_and_header_secret` to the manifest vocabulary. P21 §7 has to go through the kernel chain anyway (`Usage`
-  cache buckets); batch the two together.
-- **B (interim)**: the manifest declares at family level that "this family's header_secret is also mirrored as
-  Bearer". The kernel is left alone, but the same descriptor then means different things under different families;
-  interim only.
+  `bearer_and_header_secret` to the manifest vocabulary; the OpenAI-compatible package gains a family (for example
+  `gemini-openai-compatible`) that presents it. P21 §7 has to go through the kernel chain anyway (`Usage` cache
+  buckets); batch the two together (B7b).
+- **B (interim)**: the OpenAI-compatible package declares for that family that "its header_secret is also mirrored
+  as Bearer". The kernel is left alone, but the same descriptor then means different things under different
+  families; interim only.
 
 ### 4.4 Conformance and versioning
 
 A new gate ② check, `DescriptorAuthWithinManifest`: run the §4.2 admission on the descriptor produced by every
-request fixture. T21 adds a `rogue-arm` mode (§12). A new public function and one check: south minor. The four
+request fixture. T21 adds a `rogue-arm` mode (§12). The host-side admission (§4.2 item 3) is what binds third-party
+packages; the gate ② check is early warning (R7). A new public function and one check: south minor. The four
 reference implementations spot-checked all present according to their own `auth_arms`, so none of the thirteen
 packages is expected to need changes; if a package turns red once the check lands, that is a package defect.
 
@@ -393,11 +533,13 @@ packages is expected to need changes; if a package turns red once the check land
   (provider-adapter.wit:118-125).
 - The only thing the host deframes is AWS eventstream: the Converse reference implementation states "the host owns
   that layer"; the host deframes (CRC, 16 MiB bound) and then **re-encodes each event as one SSE frame** before
-  feeding the component (reference_bedrock_converse.rs:21-35, 549-557). This is an agreement between one reference
-  implementation and the host, not a south ruling: the WIT chose byte chunks precisely so that eventstream could go
-  into the component (provider-adapter.wit:20-25), the plan line that S0 D2 cites is exactly "eventstream decode
-  goes in the component" (canonical-ir-inventory.md:223-233), and framing syntax was left to gate ② fixtures (same
-  record, :277-278).
+  feeding the component (reference_bedrock_converse.rs:21-35, 549-557). The host re-encodes the **parsed** payload,
+  `event: {event_type}\ndata: {json}\n\n` with `json` a `serde_json::Value` (server:…/south_component.rs:849-857),
+  so the component sees compact re-serialized JSON, not the upstream payload bytes. This is an agreement between one
+  reference implementation and the host, not a south ruling: the WIT chose byte chunks precisely so that eventstream
+  could go into the component (provider-adapter.wit:20-25), the plan line that S0 D2 cites is exactly "eventstream
+  decode goes in the component" (canonical-ir-inventory.md:223-233), and framing syntax was left to gate ② fixtures
+  (same record, :277-278).
 - So P21 §3.1, citing reference_bedrock_converse.rs:22 as south's position that "the framing layer belongs to the
   host", overstates its scope: that holds only for eventstream.
 - Signing: the `host_signed` arm declares only `emits` (manifest.rs:239-245); the contract deliberately does not
@@ -406,55 +548,95 @@ packages is expected to need changes; if a package turns red once the check land
 
 ### 5.2 Proposal: `stream_framing`
 
-Declared per family in the manifest; absent = `bytes` (today's behavior for the three SSE dialects, R5):
+Declared **per package** (R6: the parser receives no configuration, so it cannot be told which framing a family
+used); absent = `bytes` (today's behavior for the three SSE dialects, R5):
 
 | Value | What the host feeds to `parse-stream-chunk` | What the host must implement |
 |---|---|---|
 | `bytes` | Upstream bytes unchanged | Nothing |
-| `aws-eventstream` | The canonical re-encoding of each message frame: `event: <:event-type>\ndata: <payload>\n\n`; a frame whose `:message-type` is `exception` is encoded as `event: exception:<:exception-type>` | One deframer (prelude, two CRC32s, frame-length bound) |
+| `aws-eventstream` | The canonical re-encoding of each message (below) | Call south's deframer |
 
-The message-frame encoding is byte-for-byte the same as the host's seam today (`parse_event` at
-server:gateway/src/modules/inference/engine/south_component.rs:849-857), so the existing Converse fixtures do not
-change. The exception-frame encoding is new: today the Converse stream parser ignores every unknown event, on the
-grounds that "the host's own strict validator lives upstream of here" (reference_bedrock_converse.rs:736-739) — and
-that upstream validator is precisely the dialect knowledge being moved out of the host. Instead, the host passes
-exception frames through unchanged, the component maps them to `StreamEvent::Error` (kernel:stream.rs:99-101), and
-fixtures pin this.
+**Canonical re-encoding** (`reencode_eventstream_v1`), one SSE frame per eventstream message, with the payload
+parsed as JSON and re-serialized compactly (no insignificant whitespace, so no CR or LF can reach the SSE line; a
+payload that is not UTF-8 JSON is a deframer error, never passed through):
+
+- `:message-type` `event`: `event: <:event-type>` / `data: <compact payload>`;
+- `:message-type` `exception`: `event: exception:<:exception-type>` / `data: <compact payload>`;
+- `:message-type` `error`: `event: error:<:error-code>` / `data: {"message":<:error-message as a JSON string>}`
+  (these frames carry their detail in headers, not in the payload).
+
+The `event` form equals what the host's seam produces today for Converse's JSON payloads (§5.1), so the existing
+Converse fixtures keep their meaning; key order of re-serialized objects is not part of the contract (components
+parse JSON), and south's golden vectors pin the exact bytes so both hosts produce the same ones. The `exception` and
+`error` forms are new: today the Converse stream parser ignores every unknown event, on the grounds that "the host's
+own strict validator lives upstream of here" (reference_bedrock_converse.rs:736-739) — and that upstream validator
+is precisely the dialect knowledge being moved out of the host. Instead, the host passes these frames through in
+canonical form, the component maps them to `StreamEvent::Error` (kernel:stream.rs:99-101), and fixtures pin this.
+The Converse package gains that mapping and an identity bump.
+
+**Non-streaming responses in eventstream.** Some upstreams answer every request with an eventstream body, including
+requests the client made without streaming (Kiro has no stream switch; its record, P-5). The **buffered path** is
+triggered by declarations only, and only by both together: the package declares `stream_framing: aws-eventstream`
+**and** the family declares `request_facts.stream: "none"` (§7.2). For a non-streaming client request to such a
+family the host buffers the whole 2xx body, deframes it, and hands `parse-response` the concatenated canonical
+re-encoding; the host never chooses this path by sniffing a content type. `HttpResponseParts.body` stays text, since
+the re-encoding is UTF-8; the kernel's comment that a binary body "would need a `-v2` field" (kernel:http.rs:379-382)
+still holds but should say that eventstream reaches the component re-encoded (§14). Codex is different on purpose:
+its upstream has a stream switch and its stream is SSE under `bytes` framing, and lv ruled that non-streaming Codex
+callers are refused at build time (Responses R-Q5); a package whose upstream has a switch does not declare
+`stream: "none"`.
 
 The `sse` / `ndjson` / `json` values in DP4's recommendation are not added: their splitting already lives in the
 components and the host has nothing to do; putting them in the set would only give the host a branch that "picks,
-by declaration, a decoder it does not actually use". If the host needs to know the upstream format for
-diagnostics, a separate read-only informational field is enough.
+by declaration, a decoder it does not actually use". In the provider world the host never picks an SSE decoder to
+parse a provider's stream for the component. If the host needs to know the upstream format for diagnostics, a
+separate read-only informational field is enough.
 
-**South provides one deframer.** A pure, bounded, fuzzed function in `south-core` (which already hosts the prelude
-shared by both hosts). That way "each form is implemented once" holds for both hosts at the same time, and the
-host's roughly 235 lines of deframing code (P21 §2.5) retire. A component may still declare `bytes` and split
-eventstream itself — the WIT allows it and DP4 does not forbid it; what is forbidden is the host choosing a decoder
-by provider identity. Kiro is also eventstream (P21 §2.5) and is covered by the same declaration.
+**South provides the deframer** (`deframe_aws_eventstream_v1`: prelude, two CRC32s, frame-length bound) and the
+re-encoding, as pure, bounded functions with golden vectors in **`south-contracts`** — the crate where south's
+parsing grammars live under a fuzz obligation (fuzz/fuzz_targets/contract_parsers.rs); raw.rs:11-12 states that the
+host prelude in `south-core` introduces no grammar. That way "each form is implemented once" holds for both hosts at
+the same time, and the host's roughly 235 lines of deframing code (P21 §2.5) retire. A component may still declare
+`bytes` and split eventstream itself — the WIT allows it and DP4 does not forbid it; what is forbidden is the host
+choosing a decoder by provider identity. Kiro is also eventstream (P21 §2.5) and is covered by the same declaration.
+
+**Its SSE sibling, `decode_sse_v1`**, also lives in `south-contracts`, with golden vectors and a fuzz target, and is
+released with the image world's minor. It has two uses outside the provider-world rule above: the media worlds,
+whose `response_body_form` declares an SSE body and where the host builds the component's view (speech record), and
+`north_passthrough`, where the host splits the northbound frames only to find the terminal frame (Responses
+record). Both hosts call the same function, so the split is identical.
 
 ### 5.3 Proposal: `signing` for `host_signed`
 
 ```json
 "auth_arms": ["host_signed"],
 "emits": ["authorization", "x-amz-date", "x-amz-content-sha256", "x-amz-security-token"],
-"signing": { "scheme": "aws-sigv4", "service": "bedrock", "region": { "config": "region" } }
+"signing": { "scheme": "aws-sigv4", "service": "bedrock",
+             "region": { "template_param": "region" },
+             "credentials": { "access_key_id": "access_key_id", "secret_access_key": "secret_access_key",
+                              "session_token": "session_token" } }
 ```
 
-`scheme` is a closed set (today only `aws-sigv4`), `service` is component data, and `region` points at a
-non-secret config key declared per §7.3. The host picks the finalizer by `scheme` — DP9: SigV4 is handled as a
-public-standard executor, kept in the host and selected by declaration. The credential fields (access key, secret,
-session token) are declared through §3.3's `fields`, and `aws_sigv4` among the host's credential kinds (P21 §2.6)
-becomes a generic field set. The contract-level `SignedHeaderSetV1` stays scheme-agnostic and does not change.
+`signing` is package-level, like `auth_arms` and `emits` (R6). `scheme` is a closed set (today only `aws-sigv4`),
+`service` is component data, and `region` names the endpoint-template parameter of §7.3, so the region the host signs
+for is the region in the origin it sends to — they cannot disagree. `credentials` maps each input the scheme needs
+to a field declared through §3.3's `fields`; `aws-sigv4` requires `access_key_id` and `secret_access_key` and
+admits `session_token`. The host picks the finalizer by `scheme` — DP9: SigV4 is handled as a public-standard
+executor, kept in the host and selected by declaration — and `aws_sigv4` among the host's credential kinds (P21
+§2.6) becomes a generic field set. The contract-level `SignedHeaderSetV1` stays scheme-agnostic and does not change.
 
 ### 5.4 Conformance and versioning
 
-- Deframer: property tests and a fuzz target (CONTRIBUTING's requirement for untrusted parsers); fixtures include
-  frames split across chunks, CRC errors, oversized frames and exception frames.
-- gate ②: stream fixtures for `aws-eventstream` families are written in the canonical re-encoding (consistent with
+- Deframer and re-encoding: property tests, a fuzz target (CONTRIBUTING's requirement for untrusted parsers) and
+  golden vectors; fixtures include frames split across chunks, CRC errors, oversized frames, non-JSON payloads,
+  exception frames and error frames.
+- gate ②: stream fixtures for `aws-eventstream` packages are written in the canonical re-encoding (consistent with
   today's Converse fixtures); gate ① validates that `signing` and `emits` are compatible (`aws-sigv4` requires at
-  least `authorization`, `x-amz-date` and `x-amz-content-sha256`).
-- New manifest fields: south minor. `provider-bedrock-converse` needs `stream_framing` and `signing` added, with an
-  identity bump. The deframer is a new link-layer API, recorded under `host_capabilities` once the host adopts it.
+  least `authorization`, `x-amz-date` and `x-amz-content-sha256`) and that every `signing.credentials` entry names a
+  declared field.
+- New manifest fields: south minor. `provider-bedrock-converse` needs `stream_framing`, `signing` and the
+  exception / error mapping added, with an identity bump. The deframer is a new link-layer API, recorded under
+  `host_capabilities` once the host adopts it.
 
 ## 6. Usage belongs to the component (problem d; DP1)
 
@@ -493,8 +675,8 @@ becomes a generic field set. The contract-level `SignedHeaderSetV1` stays scheme
      convention (ARCHITECTURE.md:182-186). The Gemini reference implementation maps `candidatesTokenCount` to output
      and `thoughtsTokenCount` to reasoning (reference_gemini.rs:292-301), yet in its own fixture the two are 5 and 40
      (fixtures-gemini/provider.response.thought-parts-and-token-buckets.input.json) — reasoning larger than output,
-     contradicting "subset". Per the composition of `totalTokenCount` that Google publishes, thoughts are not
-     included in candidates (to be rechecked against the documentation).
+     contradicting "subset". A measurement on 2026-10-01 settles it (§16 Q13): thoughts are not included in
+     candidates, and `totalTokenCount = promptTokenCount + candidatesTokenCount + thoughtsTokenCount`.
 - P21 §3.2 S5 says the conformance tests contain "not a single usage sample", which is inaccurate: there are some,
   and there is a documentation-derived judge; what is missing is **enforcement** and **strictness**.
 
@@ -503,67 +685,120 @@ becomes a generic field set. The contract-level `SignedHeaderSetV1` stays scheme
 1. **Make the reference implementations strict**, with the same convention as Converse: a non-streaming 2xx that
    lacks the usage object or a count this dialect requires → `provider_protocol_error`; a verifiable relationship
    given by the upstream (e.g. OpenAI's `total_tokens == prompt_tokens + completion_tokens`) that does not hold →
-   protocol error.
+   protocol error. For Gemini the relation is `total = prompt (+ tool-use prompt) + candidates + thoughts` (Q13,
+   measured); checking `prompt + candidates` alone would refuse every real thinking response.
 2. **gate ② requires usage rows by name** (provider world): `response.usage`, `response.missing-usage` (expects a
    protocol error), `response.cached-usage` (partition convention), `stream.usage-terminal`, `stream.no-usage`.
-   Families declaring `usage_evidence: absent` (item 4 below) instead require a sample showing they "never produce
-   Usage".
+   Packages declaring `usage_evidence: absent` (item 4) instead require the rows that show they never produce usage
+   (`AbsentFamilyEmitsNoUsage`, item 4).
 3. **An automatic mutation check, `UsageNeverDefaulted`**: response fixtures carry `usage_pointer` metadata (where
    the usage object sits in the upstream body); the suite deletes that object and calls again, requiring the
    component to report an error rather than produce zeros — the same technique as `unknown_field_tolerance`
    (suite.rs:387-420). The three lenient reference implementations would turn red on this today, which is exactly
-   what it is meant to prove.
-4. **A manifest `usage_evidence`** (per family): `reported` (default) | `absent`. `absent` means the upstream never
-   reports tokens — e.g. Kiro, which lv ruled on 2026-09-22 is billed by estimate and labeled truthfully
-   (server:crates/gateway-provider-protocol/src/usage_types.rs:131-147). For `absent` families the host uses a
-   provider-agnostic estimator and writes `tokens_estimated = 1`, `quantity_estimated = 1`, no longer judging by
-   family name.
-5. **Documentation-derived judges become part of south's release discipline**: every provider package south
-   publishes must have a `usage_ir_contract`-style judge (expectations derived from provider documentation, not from
-   the reference implementation). It does not go into gate ② — a third-party package author cannot vouch for
-   documentation semantics on south's behalf — it is south's commitment for its own released packages.
+   what it is meant to prove. The pointer is written by the fixture author, so for a third-party package the check
+   proves only what the author chose to point at (R7).
+4. **A manifest `usage_evidence`**, package-level (R6): `reported` (default) | `absent`. `absent` means the
+   upstream never reports tokens — e.g. Kiro, which lv ruled on 2026-09-22 is billed by estimate and labeled
+   truthfully (server:crates/gateway-provider-protocol/src/usage_types.rs:131-147). For an `absent` package:
+   `parse-response` returns `usage` all zero (the IR field is not optional), the component never emits
+   `StreamEvent::Usage`, and the host never reads either. The host uses a provider-agnostic estimator and writes
+   `tokens_estimated = 1`, `quantity_estimated = 1`, no longer judging by family name (Q12 ruling). Gate ② checks
+   this as `AbsentFamilyEmitsNoUsage`. A package whose families differ on this is two packages. The all-zero usage
+   contradicts the WIT's "a 2xx whose body cannot yield exact usage is an error, never a zero"
+   (provider-adapter.wit:110-116), which must be amended for `absent` packages (§14).
+5. **Usage judges become part of south's release discipline**: every provider package south publishes must have a
+   `usage_ir_contract`-style judge with expectations **not derived from the reference implementation** — from
+   provider documentation where it exists, otherwise from captured upstream traffic archived with the fixtures
+   (Kiro has no public documentation; its record §11.2), and for `absent` packages the property of item 4. It does
+   not go into gate ② — a third-party package author cannot vouch for documentation semantics on south's behalf —
+   it is south's commitment for its own released packages.
 6. **Freeze the reasoning convention**: following how v0.40.0 handled the cache buckets, write "`reasoning_tokens`
-   ⊂ `output_tokens`" into the IR usage contract and add reasoning rows to the `usage_ir_contract`-style judges; if
-   the documentation recheck confirms that thoughts are not within candidates, change the Gemini reference
-   implementation to `output_tokens = candidatesTokenCount + thoughtsTokenCount`. This changes amounts charged by
-   output and must be confirmed by a host dual run (§16 Q13).
+   ⊂ `output_tokens`" into the IR usage contract and add reasoning rows to the judges, and change the Gemini
+   reference implementation to `output_tokens = candidatesTokenCount + thoughtsTokenCount` (with `reasoning_tokens =
+   thoughtsTokenCount`), since the measurement shows thoughts are not within candidates (§16 Q13). The host's
+   settlement already counts output this way (server:crates/gateway-provider-protocol/src/usage_evidence.rs,
+   `parse_gemini_usage`: output = candidates + thoughts, checked against the total), so the amounts the host charges
+   do not change. What changes is the usage a component reports, which is what clients see today (the host's gap
+   ledger #65) and what the host settles on once usage moves to components; left unchanged, thinking tokens would go
+   unbilled after that move. A dual run confirms the component's IR usage equals the host's evidence.
 
-### 6.3 The host's generic checks and the undetectable zone
+### 6.3 Bounds the host checks, the funds outcome, and the undetectable zone
 
-The host performs two kinds of checks at the IR layer, independent of dialect; a hit sends the call to manual
-review instead of settling it as a success:
+**Bounds come from the host.** Every bound the host checks is computed by the host from the **northbound
+request**, with no provider knowledge. The shared rule for all worlds (image, speech and embeddings reference this
+section instead of defining their own):
 
-- **Out-of-bound checks**: `output_tokens ≤ authorized output cap × number of choices`;
-  `reasoning_tokens ≤ output_tokens` (must wait for §6.2 item 6 to land, otherwise today's Gemini mapping raises
-  false positives); `input_tokens ≤ g(request)`, where the host computes g from the outbound descriptor body's byte
-  count plus a fixed allowance per media part (images referenced by URL are few bytes but many tokens, so counting
-  bytes alone raises false positives); settled amount ≤ reservation (exists today).
+- Input bound (chat instance): the northbound request's bytes plus a fixed, host-configured allowance per media part
+  (an image or document referenced by URL is a few bytes but many tokens, so bytes alone would misfire). The
+  allowance is host configuration, the same for every provider.
+- Output bound: the authorized output cap × number of choices.
+- **Reservation** uses `min(host bound, component bound)`: a component may supply a bound only to tighten what is
+  reserved.
+- **Every check compares against the host bound only.** A component-supplied number never checks the component that
+  supplied it.
+- Each world may state its own **instance** of the host rule, provided it stays provider-agnostic and says whether
+  media bytes count (for example, embeddings counts no media bytes and adds a per-input allowance). Image, speech and
+  embeddings state their instances in their own records.
+
+**Checks.** Independent of dialect:
+
+- **Out-of-bound checks**: `output_tokens ≤ output bound`; `reasoning_tokens ≤ output_tokens` (must wait for §6.2
+  item 6 to land, otherwise today's Gemini mapping raises false positives); `input_tokens ≤ input bound`; settled
+  amount ≤ reservation (exists today).
 - **Internal-consistency checks**: `cache_read_tokens + cache_write_tokens ≤ input_tokens` (the kernel partition
   contract, kernel:usage.rs:52-61); `cache_write_5m_tokens + cache_write_1h_tokens ≤ cache_write_tokens`; exactly
-  one streaming terminal state and no `Usage` after `Done`; a `reported` family with no `Usage` at all cannot be
+  one streaming terminal state and no `Usage` after `Done`; a `reported` package with no `Usage` at all cannot be
   settled.
 
-**The undetectable zone, written into acceptance: under-reporting, and over-reporting or deviation that falls
-within bounds, cannot be detected by the host.** The only thing the host can compare against is an upper bound it
-can compute itself; any number below that bound is equally credible to the host. Trust comes from only three
-places: pinned package digests (§9), gate ② usage samples and documentation-derived judges (§6.2 items 2, 3 and
-5), and dual-run reconciliation against the native arm before cutover (host P21 S5). If the "lower-bound signal"
-that P21 S5 envisions is to be established, it is host policy; south neither provides nor blocks it.
+**Funds outcome of a hit.** A hit never settles as zero and never releases the reservation. The call is recorded
+with the reported usage and a review flag; the reservation stays held while the flag is open; review resolves it to
+the reported amount or to the bound. This is the existing generic manual-review path that lv's ruling on Responses
+R-Q5 / Kiro K-Q1 already sends "settlement above the reservation" to; this record extends it to every bound hit and
+does not change that ruling. The input allowance is expected to misfire on inputs the northbound request does not
+show — server-side tool results, grounding, prompts the upstream injects — so the host should size the allowance
+and watch the flag rate before cutover rather than treat each hit as fraud.
+
+**Families that cannot send the cap.** A family that declares `output_cap: []` (§7.2) gives the upstream no cap.
+Per the ruling above: with `usage_evidence: absent` the host enforces the authorized cap on its own output meter and
+ends the answer with `length` (after cutover; today's behavior during the dual run); with reported usage the host
+does not cut, and a settlement above the reservation goes to manual review.
+
+**The undetectable zone, written into acceptance.** The host cannot detect:
+
+- under-reporting, and over-reporting or deviation that falls within bounds — the only thing the host can compare
+  against is an upper bound it computes itself, and any number below it is equally credible;
+- a cap written where the upstream does not read it, while a larger value sits where it does (§7.2): the seal
+  checks consistency with the declaration, not what the upstream honors;
+- for URL-form model placement, anything beyond the path template check of §7.2.
+
+Trust comes from only these places: pinned package digests (§9), gate ② usage samples and usage judges (§6.2 items
+2, 3 and 5) **for first-party packages** (R7), and dual-run reconciliation against the native arm before cutover
+(host P21 S5). If the "lower-bound signal" that P21 S5 envisions is to be established, it is host policy; south
+neither provides nor blocks it.
 
 Unchanged: `Usage::absorb`'s folding semantics (kernel:usage.rs:63-85); S0 D3, "do not add provenance to
 `StreamEvent`" (canonical-ir-inventory.md:235-243); the derivation rules for thinking markers (same record,
 :215-221).
 
-### 6.4 Versioning
+### 6.4 Settlement outcomes shared by every world
+
+In every world that has a `rejected` outcome — an upstream answer that proves nothing was produced (a 4xx, or a 2xx
+the component shows produced nothing, such as the image world's all-filtered result, image §9.2) — **`rejected`
+releases the reservation**. Which answers qualify is classified by the component per dialect, not by the host. This
+is lv's ruling on image Q7, stated once here; it applies after the dual run, and until then each path keeps its
+current behavior. Embeddings adopts a `rejected` outcome for an upstream 4xx that proves nothing was produced.
+The image, speech and embeddings records point here rather than restating it.
+
+### 6.5 Versioning
 
 Making the reference implementations strict is a behavior change: for a host that links the reference
 implementations directly (the community host), responses previously treated as zero-usage successes become
 protocol errors, which needs the community host's confirmation (§16 Q9). Three package identities bump. The new
-gate ② check and by-name enforcement: south minor; third-party packages need to add fixtures. Normalization of
-quota headers (`ProviderQuotaMetadataFieldV1` enumerates header names per provider,
-south-contracts/src/lib.rs:1686-1706) is covered in §10 and §11.
+gate ② checks and by-name enforcement: south minor; third-party packages need to add fixtures, and they are bound by
+it only through the runtime floor of §8.6. Normalization of quota headers (`ProviderQuotaMetadataFieldV1`
+enumerates header names per provider, south-contracts/src/lib.rs:1686-1706) is covered in §10.
 
-## 7. Request facts, non-secret configuration and capability metadata (problem e)
+## 7. Request facts, endpoints, non-secret configuration and capability metadata (problem e)
 
 ### 7.1 Today
 
@@ -572,10 +807,18 @@ south-contracts/src/lib.rs:1686-1706) is covered in §10 and §11.
   fields that are not free" (t03-canary-provider/src/lib.rs:16-37). Real dialects do not look like this: Gemini's
   cap is at `generationConfig.maxOutputTokens` (reference_gemini.rs:224), Converse's at `inferenceConfig.maxTokens`
   (reference_bedrock_converse.rs:343), and both put model and stream in the URL. So the host wrote a location table
-  keyed by `provider_type` (server:gateway/src/modules/inference/engine/text_admission.rs:1030 onward). The manifest
-  has no place to declare any of this.
+  keyed by `provider_type`, which also refuses cap fields at unexpected locations
+  (server:gateway/src/modules/inference/engine/text_admission.rs:1030 onward). The manifest has no place to declare
+  any of this.
+- URLs: the host takes only the **body** from the component; URL and auth stay host-owned
+  (server:…/south_component.rs:777). For AWS and Vertex rows the component receives a placeholder endpoint
+  (`HOST_OWNS_THE_URL`, :298, :731) and the host builds the region- or project-bearing URL itself. A component
+  cannot put a region into the origin: `ProviderEndpoint::permits` requires the descriptor's origin to equal the
+  configured one (kernel:provider.rs:65-84). The Gemini and Converse references append only a path to `base_url`
+  (reference_gemini.rs:483-494, reference_bedrock_converse.rs:825-834).
 - Non-secret configuration: the kernel's `ProviderConfig` has only `provider` / `base_url` / `auth` / `models` and
-  the flattened `extensions` (kernel:provider.rs:318-336). Vertex's project, Bedrock's region and Azure's
+  the flattened `extensions` (kernel:provider.rs:318-336), and S0 fences the component to the first four
+  (canonical-ir-inventory.md:155-164; provider-adapter.wit:89-90). Vertex's project, Bedrock's region and Azure's
   api-version are assembled by the host per type (P21 §2.5; S1, "take region / project from the URL template";
   `form_preset`).
 - Capabilities: the provider world has `model-capabilities` (provider-adapter.wit:89-98), but all four reference
@@ -591,36 +834,63 @@ south-contracts/src/lib.rs:1686-1706) is covered in §10 and §11.
 
 ```json
 "request_facts": {
-  "gemini": { "output_cap": ["/generationConfig/maxOutputTokens"], "model": "url", "stream": "url" }
+  "gemini": { "output_cap": ["/generationConfig/maxOutputTokens"],
+              "model": { "url": "/models/{model}:" }, "stream": "url" },
+  "kiro":   { "output_cap": [], "model": { "body": "/modelId" }, "stream": "none" }
 }
 ```
 
-- `output_cap`: JSON Pointers into the descriptor body where the component may write the cap (at most 4). The
-  host's generic seal check: the host always writes the authorized cap into the IR's `sampling.max_output_tokens`;
-  in the body the component produces, **exactly one** declared location has a value and it equals that cap, and the
-  other declared locations are absent. This replaces the per-type location table and also removes T03's constraint
-  2.
-- `model`: `{"body": "/model"}` or `"url"`; `stream`: `{"body": "/stream"}` or `"url"`. For the body form the host
-  checks value by value; the `url` form relies on endpoint confinement (`ProviderConfig::authorize`) and gate ②
-  checks.
+- `output_cap`: JSON Pointers into the descriptor body where the component may write the cap (at most 4), or `[]`
+  for a wire that has no cap field (Kiro; the Codex family unless measurement shows otherwise — Responses R-Q5).
+  The host always writes the authorized cap into the IR's `sampling.max_output_tokens`. When the list is non-empty,
+  the generic seal check requires **exactly one** declared location to hold a value equal to that cap and the
+  others to be absent. When it is empty, no location may be checked and §6.3's rule for families that cannot send
+  the cap applies. This replaces the per-type location table and removes T03's constraint 2.
+- `model`: `{"body": pointer}` — the host checks the value; or `{"url": template}` — a path template containing
+  exactly one `{model}` placeholder, which the host checks against the descriptor URL's path: the authorized model,
+  percent-encoded as one segment, must sit exactly where the placeholder is. Endpoint confinement alone checks only
+  the origin and a path prefix, which would let a component send the request to a different model than the one
+  reserved for.
+- `stream`: `{"body": pointer}` (the host checks the value), `"url"` (the host checks only that the response's
+  content type matches the IR's stream flag), or `"none"` — the upstream always streams and has no switch; the
+  host takes the buffered path of §5.2 for non-streaming callers.
 - Absent = today's three top-level fields (R5).
 
-### 7.3 Proposal: `config_schema` (per family)
+**Limits of the seal.** These are the component's own declarations. The seal proves the descriptor is consistent
+with them; it cannot prove the upstream reads the cap where the component wrote it. That gap is in §6.3's
+undetectable zone; T21's `rogue-cap-twice` mode (§12) documents it rather than claiming the host catches it.
 
-Declares the non-secret keys the component reads from `ProviderConfig.extensions`: name, value syntax (from a
-closed syntax set, e.g. `aws_region`, `gcp_project_id`, `api_version_date`, `digits`, `token`, `enum[…]`), whether
-required, and a one-line description. The host renders the operator form from this and validates the values before
-handing them to the component, replacing `form_preset` and the per-type "required extra fields". The URL is built
-by the component from `base_url` and these keys — Gemini and Converse already build it themselves today (the
-comments at reference_gemini.rs:483 onward and reference_bedrock_converse.rs:825 onward); the host does no URL
-templating.
+### 7.3 Proposal: `endpoint` and `config_schema` (per family)
 
-### 7.4 Per-model differences: dialect words
+- **`endpoint`**: an origin (and optional path) template, e.g.
+  `"https://bedrock-runtime.{region}.amazonaws.com"` or
+  `"https://{region}-aiplatform.googleapis.com/v1/projects/{project}/locations/{region}"`, whose parameters are
+  `config_schema` keys. The host fills it from validated values and passes the result as `ProviderConfig.base_url`;
+  confinement then applies to the filled origin, and the component only appends paths as it does today. The operator
+  may still enter a full `base_url` instead; the host then checks it against the template. The template is the
+  per-family default the host seeds today by type (`form_preset`). Host part and parameters follow the same rules
+  as recipe endpoint templates (§3.3).
+- **`config_schema`**: the non-secret keys of this family: name, value syntax (from the closed set of §3.3), whether
+  required, and a one-line description. Kiro's profile ARN is not a config key: it belongs to the credential, so it
+  is a non-secret credential field with syntax `aws_arn` (which admits the `:` and `/` an ARN needs), exported as an
+  attribute (§3.3). The host renders the
+  operator form from this and validates the values, replacing `form_preset` and the per-type "required extra
+  fields".
 
-Model-level differences such as "is the cap field called `max_tokens` or `max_completion_tokens`", "Responses
-only" or "supports countTokens" are all expressed as `supported_parameters` dialect words and interpreted by the
-component — the same mechanism as the Claude dialect words. A new word is a package-layer change; the host only
-passes the words declared on the model row to the component unchanged.
+Keys consumed by the endpoint template never reach the component. Keys the component itself needs (for example Azure's
+api-version as a query value) need a channel into the component, and the current fence admits none (§7.1); Kiro's
+profile ARN is a credential attribute (§3.3), not a config key, and needs the same channel. That channel is §16 Q14,
+the same question as §3.3's attributes; the host strips any client-supplied key that collides with a reserved name.
+
+### 7.4 Per-model differences: dialect words; different response wires: separate packages
+
+Model-level differences **in the request** — "is the cap field called `max_tokens` or `max_completion_tokens`",
+"supports countTokens" — are expressed as `supported_parameters` dialect words and interpreted by the component —
+the same mechanism as the Claude dialect words. A new word is a package-layer change; the host only passes the
+words declared on the model row to the component unchanged. A difference in the **response** wire cannot be a
+dialect word, because the response-side functions receive no configuration (R6). "Responses only" is therefore
+expressed by the provider row belonging to a family of a separate package (the Responses upstream package, §11),
+not by a word.
 
 ### 7.5 Model catalog
 
@@ -629,21 +899,26 @@ translation logic. Three possible homes:
 
 - **A Built into the component**: `model-capabilities` returns the merge of a built-in catalog and the operator's
   declarations. Every new model means a package release, and the package digest changes with the data.
-- **B Catalog data published by south (recommended)**: JSON in `south.model-catalog.v1` format, published per
-  family and listed in the §9 index; the host loads it as data, with operator rows overriding it;
-  `model-capabilities` stays as a hook for "supplementing from the upstream".
+- **B Catalog data published by south (recommended; ruled by lv for the host side, §16 Q7)**: JSON in
+  `south.model-catalog.v1` format, published per family and listed in the §9 index; the host loads it as data, with
+  operator rows overriding it; `model-capabilities` stays as a hook for "supplementing from the upstream". For
+  families whose upstream cannot send a cap (§7.2), the catalog's maximum output is what the host reserves against.
 - **C Pure operator data**: south defines only the vocabulary (capability fields, dialect words), and each host's
   operators maintain the catalog.
 
 B lets the two hosts share the catalog but turns "keeping up with providers' new models" into a south maintenance
 burden; C costs south the least, but each host maintains its own copy, which contradicts DP0's rationale (sharing
-southbound work). See §16 Q7. Prices do not enter south (ARCHITECTURE.md:108-112).
+southbound work). Prices do not enter south (ARCHITECTURE.md:108-112).
 
 ### 7.6 Conformance and versioning
 
 A new gate ② check, `RequestFactsHonoured`: every request fixture asserts that the IR cap appears in exactly one
-declared location, and that body-form model and stream agree with the IR; fixtures missing a required
-`config_schema` key expect a capability error. New manifest fields: south minor; the catalog format is a new
+declared location, that body-form model and stream agree with the IR, and that URL-form model matches the template.
+For a family that declares `output_cap: []` it is a **mutation check**: the suite changes the IR's
+`sampling.max_output_tokens` and builds again, and the built body must be byte-identical — a body that changes with
+the cap has put it somewhere undeclared. The Kiro and Responses records point here for this definition. Fixtures
+missing a required `config_schema` key expect a capability error. The host's seal (§7.2) is what binds third-party
+packages; the gate ② check is early warning (R7). New manifest fields: south minor; the catalog format is a new
 release artifact (§9).
 
 ## 8. Compatibility range and per-package isolation (problem f; DP5)
@@ -658,6 +933,9 @@ release artifact (§9).
 - Loading itself is **per package**: `read_package` / `parse_package` return one `LoadErrorV1` per directory
   (loader.rs:154-194). S0 J2b③'s "one package takes down the whole text surface" is the host's choice to aggregate
   per-package errors into a process failure, not the shape of south's API.
+- The kernel makes no compatibility promise below 1.0: "The API surface … may change between minor versions … nothing
+  here is a stability promise until 1.0" (kernel README.md:10-13). It does publish contract numbers in its
+  `compatibility.json` (`canonical_ir` 2, `stream` 2, `error_catalog` 1 at `f585bc83`).
 
 ### 8.2 Three places where DP5's wording needs refining
 
@@ -679,11 +957,19 @@ requires".
 | Tuple item | Today | Proposal |
 |---|---|---|
 | world / WIT package / suite name | Exact (`validate`) | Unchanged |
-| `ir_schema_id` (protocol crate version) | Exact | Component ≤ host, and on the same compatibility line (same minor under 0.x); the kernel promises additions only within a line |
+| IR (`ir_schema_id`) | Exact | The component declares the kernel's contract numbers it was built against (`canonical_ir`, `stream`, `error_catalog`); each must **equal** the host's. `ir_schema_id` is kept for provenance |
 | `kernel_version` / `kernel_revision` | Exact | Recorded for provenance only; not part of the decision |
 | `south_runtime` | Exact | `host.minimum ≤ component declaration ≤ host.runtime` |
 | New `runtime_abi` (integer epoch) | — | Equal; incremented only on incompatible changes to loader, sandbox or WIT semantics; recorded in `compatibility.json` |
 | New `contracts` (e.g. `{"task": 7}`) | Implicit | Declared by the component; the host accepts a set; south's codecs can decode every version in the set |
+
+Why equality on the kernel numbers rather than a range: the kernel promises nothing within a minor line, and a
+newer host sending a newer IR to an older component is not refused — gate ② requires the component to ignore
+fields it does not model (`unknown_field_tolerance`, suite.rs:381-414) — so a range would turn "a field the caller
+relies on" into a silently dropped field, which the tuple exists to prevent (manifest.rs:197-203). The kernel's
+contract numbers change far less often than crate versions, so equality on them still removes the per-release
+re-stamp. A range on the IR becomes possible only if the kernel publishes, per contract increment, what was added,
+and the host refuses a request that uses an addition newer than the component's number; that is §16 Q5.
 
 `runtime_abi` is the operational stand-in for DP5's "runtime major version" under 0.x; when south reaches 1.0 it can
 merge with the major version.
@@ -691,8 +977,8 @@ merge with the major version.
 ### 8.4 API
 
 Add `compatibility_admits(manifest, &HostRangeV1) -> Result<(), CompatibilityMismatchV2>`, with
-`HostRangeV1 { runtime_abi, south_runtime_min, south_runtime, ir_line, contracts }`; the loader switches to taking
-`HostRangeV1`. `compatibility_matches` is kept for one version and marked deprecated.
+`HostRangeV1 { runtime_abi, south_runtime_min, south_runtime, kernel_contracts, contracts }`; the loader switches to
+taking `HostRangeV1`. `compatibility_matches` is kept for one version and marked deprecated.
 
 ### 8.5 Per-package isolation
 
@@ -704,7 +990,8 @@ one package failed. Accompanying rules, written into ARCHITECTURE:
 - A refused package makes only the families it declares unavailable; startup continues, and the readiness probe
   reports truthfully.
 - **No fallback to native reference implementations** (J3①): the reference implementations are gate ②'s judges
-  and an optional native engine for the community host, not stand-ins for missing or refused packages.
+  and an optional native engine for the community host, not stand-ins for missing or refused packages. This is the
+  recommendation of §16 Q8, not yet its ruling.
 - If two admitted packages in the same world declare the same family, both are unavailable and the operator is
   required to pin one by digest (the task side already selects packages by pin today); **ties are never broken by
   load order**.
@@ -712,18 +999,26 @@ one package failed. Accompanying rules, written into ARCHITECTURE:
 ### 8.6 Changes to release discipline
 
 - No more re-stamping every package on every release; if a package's content is unchanged, its identity and digest
-  are unchanged.
+  are unchanged. This needs a mechanism, because release.yml rebuilds every package from source on every tag
+  (release.yml:57-103) and a component's wasm also contains shared crates (the conformance references, the kernel
+  types): release CI builds each package, compares the `component.wasm` digest with the previous release's for any
+  package whose version did not change, and fails on a difference (the version must bump) — or, equivalently,
+  carries the previous release's bytes forward. A reproducible build is therefore a release requirement, checked,
+  not assumed.
 - Contract changes must be additive (new keys have defaults, old shapes still decode), or the codecs must also
   accept the older versions in the declared set. "Reject when the new key is missing; it will be re-stamped anyway"
   (2026-09-27-task-contract-v6-facts.md:22-23) no longer holds.
+- **A tightened gate ② binds only through the floor.** Each release that tightens gate ① or ② (B1's usage rows,
+  `DescriptorAuthWithinManifest`, `RequestFactsHonoured`) states so, and a host that wants the tightening enforced
+  raises `south_runtime_min` to that release; packages declaring an older runtime are then refused (R7).
 - Incrementing `runtime_abi` is a breaking event and requires a design record.
 
 ### 8.7 Conformance and versioning
 
 `crates/south-contracts/tests/compatibility_manifest.rs` and `crates/south-provider-api/tests/provider_api_v2.rs`
-gain range cases (upper and lower bounds, a different epoch, a different IR line, a contract not in the set); T21's
-skew package (§12) gets only itself refused. South minor; the manifest's `compatibility` gains `runtime_abi` and
-`contracts`.
+gain range cases (upper and lower bounds, a different epoch, a different kernel contract number, a contract not in
+the set); T21's skew package (§12) gets only itself refused. South minor; the manifest's `compatibility` gains
+`runtime_abi`, `kernel_contracts` and `contracts`.
 
 ## 9. A machine-readable release index (problem g)
 
@@ -751,26 +1046,33 @@ manifest (never hand-written) and listed in `SHASUMS256.txt`:
     "name": "provider-gemini", "version": "1.1.5",
     "world": "provider-adapter-v2", "wit_package": "token-station:adapter@2.0.0",
     "providers": ["gemini"], "capabilities": ["chat", "json_schema", "stream", "tool_call"],
-    "auth_arms": ["header_secret"], "stream_framing": { "gemini": "bytes" },
+    "auth_arms": ["header_secret"], "stream_framing": "bytes", "usage_evidence": "reported",
+    "credential_recipes": false,
     "compatibility": { "south_runtime": "0.43.0", "runtime_abi": 1,
-                       "ir_schema_id": "token-station-protocol@0.4.0/v0.3.0", "contracts": {} },
+                       "kernel_contracts": { "canonical_ir": 2, "stream": 2, "error_catalog": 1 },
+                       "contracts": {} },
     "archive": "provider-gemini-v0.43.0.tar.gz",
-    "archive_sha256": "…", "manifest_sha256": "…", "component_sha256": "…"
+    "archive_sha256": "…", "manifest_sha256": "…", "component_sha256": "…",
+    "gate2_report_sha256": "…"
   }],
   "catalogs": [{ "family": "gemini", "file": "catalog-gemini-v0.43.0.json", "sha256": "…" }]
 }
 ```
 
 The host's fetch script and startup gate discover packages through the index and verify them by digest; operators
-still pin packages by digest. The index's `providers` can also serve as a lower-bound source for the J1 vocabulary
+still pin packages by digest. `gate2_report_sha256` names the gate ② report south's CI produced for that exact
+`component_sha256`, published beside the archives, so a host can show that a first-party package passed gate ② at
+the release it came from (R7). The index's `providers` can also serve as a lower-bound source for the J1 vocabulary
 (P21 S0 has already pointed out that family names are not vendor names and cannot replace the vendor list).
 
 ### 9.3 Trust and versioning
 
 Like the archives, the index has only checksums and no signature (released-artifacts §6 lists signing as the next
-slice). While only south's first-party packages are installed, the root of trust is the tag and the CI build;
-before **third-party packages** are loaded through the index, signing is a prerequisite (§16 Q11). This is a
-release-behavior change (CONTRIBUTING requires a design record — this one) and does not touch contract numbers.
+slice). While only south's first-party packages are installed, the root of trust is the tag and the CI build. Two
+things wait for signing (§16 Q11): loading **third-party packages** through the index, and enabling **credential
+recipes** in any package that is not a verified first-party release (§3.4 rule 5). For third-party packages, who
+runs gate ② and whether its result means anything beyond self-consistency is §16 Q17. This is a release-behavior
+change (CONTRIBUTING requires a design record — this one) and does not touch contract numbers.
 
 ## 10. Provider instances in closed vocabularies
 
@@ -782,18 +1084,20 @@ belong to specific providers:
 | `SecretHeaderV1` | south-contracts/src/lib.rs:877-923 | `api-key` (Azure, Ideogram), `x-api-key` (Anthropic), `x-goog-api-key`, `xi-api-key` (ElevenLabs), `ocp-apim-subscription-key` (Azure Speech) |
 | `QueryParameterV1` | south-contracts/src/lib.rs:1051-1095 | `api-version`, `alt`, `GroupId` / `task_id` / `file_id` (MiniMax) |
 | `ProviderQuotaMetadataFieldV1` | south-contracts/src/lib.rs:1686-1706 | OpenAI-style and Anthropic-style rate-limit headers |
+| `ControlledUserAgentV1` | south-contracts/src/lib.rs:1229-1246 | Any value, but only a `&'static str` that "must exist in host program text" — so every provider's value is a host literal |
 | `CREDENTIAL_HEADERS` | kernel:lib.rs:86-96 | Corresponds to `SecretHeaderV1`, plus `authorization`, `cookie` and others; both construction and deserialization of `Auth::header` consult it (kernel:http.rs:182-188, 209-218) |
 
-As soon as a new provider uses a secret header name or query name that is not in these tables, south (and even the
-kernel) must release and the host must re-pin and rebuild — J2 is red. These sets were closed for real security
-reasons: a secret header must also be on the reserved-header denylist so that it cannot be smuggled through the
-ordinary header channel (lib.rs:877-883); the query is the part of a request most often logged
-(lib.rs:1051-1062). Per R1, separate the mechanism from the instances:
+As soon as a new provider uses a secret header name, query name or user-agent value that is not in these sets,
+south (and even the kernel) must release and the host must re-pin and rebuild — J2 is red. These sets were closed
+for real security reasons: a secret header must also be on the reserved-header denylist so that it cannot be
+smuggled through the ordinary header channel (lib.rs:877-883); the query is the part of a request most often logged
+(lib.rs:1051-1062); the user-agent value was closed so that no path leads from configuration or request data to it
+(lib.rs:1233-1243; 2026-08-20-controlled-user-agent.md). Per R1, separate the mechanism from the instances:
 
 - **Secret headers**: the manifest declares `secret_headers` (name syntax restricted; no hop-by-hop headers, no
-  `host`, no framing headers); for that package's requests the runtime merges these names into the reserved set
-  (the ordinary header channel refuses them), and transcripts and logs always redact them. What is closed is the
-  "secret header" mechanism and its safety rules, not the list.
+  `host`, no framing headers, no name already reserved for another purpose); for that package's requests the
+  runtime merges these names into the reserved set (the ordinary header channel refuses them), and transcripts and
+  logs always redact them. What is closed is the "secret header" mechanism and its safety rules, not the list.
 - **Query parameters**: the manifest declares `query_parameters`, each choosing one entry from a closed set of
   **value syntaxes** (`digits`, `token`, `enum[…]`, `date`), with restricted parameter-name syntax. `ProviderAuthV1`
   remains the only channel through which secrets go on the wire; query values never come from credential
@@ -801,111 +1105,170 @@ ordinary header channel (lib.rs:877-883); the query is the part of a request mos
 - **Quota headers**: the component normalizes its dialect's rate-limit headers in `parse-response` /
   `map-provider-error` and hands them over (a south-local response extension); which headers the transport captures
   is declared by the package (P21 S5).
-- **Kernel catalog**: the `Auth::header` check needs the kernel to open up to "a declared set supplied by the
-  caller", or to be performed instead by the §4.2 descriptor auth admission; this goes through the kernel chain,
-  merged with §4.3.
+- **User-agent**: the manifest declares a `user_agent` value per family, and gate ① validates it against the
+  existing value grammar of `ControlledUserAgentV1`. South adds a new owned type, `DeclaredUserAgentV1`, constructed
+  only from a manifest value that passed gate ①, with a fuzz obligation on its parser; `ControlledUserAgentV1` keeps
+  its `'static` constructor for host literals. The header name stays fixed and reserved, so "exactly one
+  `user-agent` on the wire" still holds. This explicitly reopens the 2026-08-20 ruling that the value must come from
+  host program text (§16 Q15), and it means south would publish impersonation values in its packages (§16 Q16). The
+  Kiro record (P-3) and the Responses record (R-Q6) point here instead of carrying their own versions.
+- **Kernel catalog**: `Auth::header` checks the name inside serde (`try_from` → `Auth::header` →
+  `is_credential_header`, kernel:http.rs:182-188, 209-218) against a static list, so a caller-supplied set cannot be
+  threaded through deserialization. Either `Auth`'s wire type changes so that the name is checked after
+  deserialization against a set the caller supplies, or the kernel drops the check and the §4.2 admission (which has
+  the manifest) performs it. Both go through the kernel chain, merged with §4.3 (B7b).
+
+**Contract changes this implies** (south side, B7a):
+
+| Contract / artefact | Change |
+|---|---|
+| auth (4 → 5) | `ProviderAuthV1::HeaderSecret(SecretHeaderV1)` is a closed enum; add a variant carrying a declared, validated header name (the closed variant stays) |
+| reserved header policy (1 → 2) | The request-side reserved check (`RESERVED_HEADERS`, lib.rs:232; applied when the raw prelude parses ordinary headers, raw.rs:103-104) and its response-side transcript mirror (lib.rs:182) accept a per-package addition |
+| controlled query | `QueryParameterV1` gains a declared-name form with a value syntax |
+| quota metadata | Captured header names become a per-package declaration; the normalized field set stays closed |
+| user-agent | New `DeclaredUserAgentV1` beside `ControlledUserAgentV1` |
+| conformance | `south.header-auth.v1`, `south.controlled-query.v1` and `south.controlled-user-agent.v1` gain declared-instance cases, run by both hosts (R4) |
+| manifest | `secret_headers`, `query_parameters`, `quota_headers`, per-family `user_agent` |
 
 Without this step, the accurate statement of DP0 is: "If a new provider uses only existing instances, the host
 needs zero changes; otherwise the host must bump its south pin." lv ruled on 2026-09-30 (§16 Q1) that this
 statement is not acceptable: bumping the pin counts as modifying the host. This step is therefore a necessary
-condition of DP0, not an improvement.
+condition of DP0, not an improvement, and its south part comes before the follow-on components that need it (§13
+B7a).
 
 ## 11. Follow-on components and non-chat operations (problem h)
 
 | Work item | Scope | Depends on |
 |---|---|---|
-| OpenAI Responses upstream dialect component (Codex and others) | New provider package, family `openai-responses`: IR → Responses request (instructions, input items, tools, reasoning effort, `store`); Responses response and `response.*` stream events → IR; strict usage (`input_tokens`, `input_tokens_details.cached_tokens`, `output_tokens`, `output_tokens_details.reasoning_tokens`, terminal frame `response.completed`). `south-north-codec` already has a Responses northbound mapping (2026-09-28-responses-north-codec.md); the direction is opposite, so wire types can be shared but the mapping cannot. "Responses only" uses a model dialect word (§7.4); client-identification request headers the backend requires belong to DP7 | §3 (Codex recipe), §6, §7 |
-| Kiro component (DP6, migration recommended) | New provider package: conversationState request shape, `aws-eventstream` (§5.2), `usage_evidence: absent` (§6.2), social / IdC recipes (§3.8). The host's three-hop translation and the Kiro part of the leaf crate retire with it (P21 §2.5) | §3, §5, §6 |
-| The Anthropic variant of Bedrock InvokeModel | `provider-anthropic` adds a family (e.g. `anthropic-bedrock-invoke`): the body carries `anthropic_version` and the model is in the URL; the stream is eventstream, and the `bytes` in the payload is base64-wrapped Anthropic event JSON; signing is `aws-sigv4` | §5 |
+| OpenAI Responses upstream dialect component (Codex and others) | New provider package, family `openai-responses` (a separate package, because its response wire differs from Chat Completions, R6): IR → Responses request (instructions, input items, tools, reasoning effort); Responses response and `response.*` stream events → IR; strict usage (`input_tokens`, `input_tokens_details.cached_tokens`, `output_tokens`, `output_tokens_details.reasoning_tokens`). Terminal frames: `response.completed`, and `response.incomplete` with usage, which settles as a success only for a closed set of reasons (owner ruling, Responses R-Q2); any other reason is a protocol error. The request is always stateless: the IR and `south-north-codec` carry neither `store` nor `previous_response_id` nor `include`; a client's `previous_response_id` is refused on the host's northbound side, before translation (Responses record §4.4). Nothing on the wire is shared with `south-north-codec`, whose Responses module works on `serde_json::Value`; what can be shared is the event vocabulary, extension key names, fixtures and the round-trip judge. "Responses only" is the row's family, not a dialect word (§7.4); client-identification headers are declared per the Q10 ruling and §10 | §3 (Codex recipe), §6, §7, §10 (B7a) |
+| Kiro component (DP6, migration recommended) | New provider package: conversationState request shape, `aws-eventstream` (§5.2) including non-streaming bodies, `request_facts` with `output_cap: []` and `stream: "none"` (§7.2), `usage_evidence: absent` (§6.2), social / IdC `http_exchange` recipes (§3.9), the profile ARN as a non-secret credential field with syntax `aws_arn` exported as an attribute (§3.3), a declared user-agent (§10). The host's three-hop translation and the Kiro part of the leaf crate retire with it (P21 §2.5) | §3, §5, §6, §7, §10 (B7a) |
+| The Anthropic variant of Bedrock InvokeModel | A **separate package** (e.g. `provider-anthropic-bedrock-invoke`) sharing source with `provider-anthropic`: `host_signed` must stand alone (manifest.rs:385-387) while `provider-anthropic` uses `header_secret`, so it cannot be a family of that package (R6). The body carries `anthropic_version` and the model is in the URL; the stream is eventstream, and the `bytes` in the payload is base64-wrapped Anthropic event JSON; signing is `aws-sigv4` | §5 |
 | Non-chat operations such as model listing | The kernel has `ProviderApi::Models` (kernel:provider.rs:137-143); the provider world has no corresponding function. A WIT world cannot have optional exports, so adding a function to v2 makes a new world; recommended is a separate small world (e.g. `provider-catalog-v1`: build a list request, parse a list response), used by the host for health probing and model discovery, replacing the per-type probe fallback table (P21 Appendix B.3) | §8 (multiple worlds coexisting) |
-| Quota header normalization | §10 | — |
-| IR explicit / implicit cache buckets | Kernel chain (P21 §7) | kernel |
+| Quota header normalization | §10 | B7a |
+| IR explicit / implicit cache buckets | Kernel chain (P21 §7) | kernel (B7b) |
 | Task estimate in "whole-order milliunits" | An additive change to the task contract (P21 S5) | §8.6 |
 
-## 12. The synthetic unseen-provider guest (T21)
+## 12. The synthetic unseen-provider guests (T21)
 
-Location and form follow T03: `crates/south-provider-runtime/tests/guests/t21-unseen-provider/`, not published with
-releases; a host script outside the commit gate builds it from a local south checkout. T03 is not extended
-directly: the host's T03 canary has already pinned its wire format and its "three fields that are not free" as
-acceptance facts (t03-canary-provider/src/lib.rs:16-37), and changing it would change the meaning of existing
-acceptance. What T21 must prove, each item mapping to a host red item:
+Location and form follow T03: `crates/south-provider-runtime/tests/guests/t21-unseen-provider/` (and siblings named
+below), not published with releases; a host script outside the commit gate builds them from a local south checkout.
+T03 is not extended directly: the host's T03 canary has already pinned its wire format and its "three fields that
+are not free" as acceptance facts (t03-canary-provider/src/lib.rs:16-37), and changing it would change the meaning
+of existing acceptance. Because response-side declarations are per package (R6), T21 is three packages. What they
+must prove, each item mapping to a host red item:
 
-1. The family name is `t21-unseen-wire`, with a wire format unlike every known dialect (as with T03: a known parser
-   handed it can only fail).
-2. **Auth**: the manifest declares only `header_secret`, and the descriptor presents an admitted secret header;
-   another model mode uses a `minted` slot — a single-step `jwt_sign` (HS256) recipe, with the fake upstream
-   verifying the signature against a known key. → J2b①, §3, §4.
-3. The **cap** is written at the nested location `/t21/limits/max_out`, declared by `request_facts`; the model is in
-   the URL. → J2b⑤, §7.2.
-4. It needs one non-secret config key (declared by `config_schema`, syntax `token`) and uses it to build the URL.
-   → §7.3.
-5. **Streaming** in two model modes: `bytes` (reusing T03's non-SSE line format) and `aws-eventstream` (the fake
-   upstream sends real eventstream frames). → §5.
+1. `t21-unseen-provider`, family `t21-unseen-wire`, with a wire format unlike every known dialect (as with T03: a
+   known parser handed it can only fail), `stream_framing: bytes` (reusing T03's non-SSE line format).
+2. **Auth**: the manifest declares only `header_secret` with a secret header name outside the compiled-in set
+   (§10), and the descriptor presents it; another model mode uses a `minted` slot — a single-step `jwt_sign`
+   (HS256) recipe, with the fake upstream verifying the signature against a known key. → J2b①, §3, §4, §10.
+3. The **cap** is written at the nested location `/t21/limits/max_out`, declared by `request_facts`; the model is
+   in the URL under a declared `{model}` template. → J2b⑤, §7.2.
+4. It needs one non-secret config key (declared by `config_schema`, syntax `token`) consumed by its `endpoint`
+   template, and declares a user-agent value. → §7.3, §10.
+5. `t21-unseen-eventstream`: `stream_framing: aws-eventstream`, `stream: "none"`; the fake upstream sends real
+   eventstream frames, including an `exception` and an `error` frame, and answers non-streaming requests with an
+   eventstream body. → §5.2.
 6. **Usage** has its own shape, including cache buckets; the fixtures carry every required usage row and
-   `usage_pointer`; there is also a family with `usage_evidence: absent`. → §6.
-7. A two-model **catalog** ships with the package, one model carrying a new dialect word; the host's admission
+   `usage_pointer`. `t21-unseen-absent`: `usage_evidence: absent`, `output_cap: []`; it never emits usage and the
+   host estimates and enforces the cap on its own meter. → §6.
+7. A two-model **catalog** ships with the first package, one model carrying a new dialect word; the host's admission
    results change when the catalog changes. → §7.5, P21 S6 acceptance.
 8. **Compatibility**: `south_runtime` takes an older value within the range and loads normally; a separate skew
    package with a different `runtime_abi` is also prepared, and only it is refused, with other packages and the
    known dialects unaffected. → J2b③, §8.
-9. It appears in a test **release index**, and the fetch script needs no list. → J2b④, §9.
+9. They appear in a test **release index**, and the fetch script needs no list. → J2b④, §9.
 10. **Rogue modes** (triggered by model name, as T03 does): T03's four, plus `rogue-arm` (the descriptor's auth arm
-    is not in the manifest), `rogue-cap` (the cap is written at an undeclared location) and `rogue-zero-usage` (a
-    2xx without usage that still produces zeros); plus a recipe whose endpoint points at an undeclared host, as a
-    gate ① counterexample. The host must refuse T03's four, `rogue-arm` and `rogue-cap` with zero upstream calls;
-    `rogue-zero-usage` must turn red at gate ②.
+    is not in the manifest), `rogue-cap` (the cap only at an undeclared location), `rogue-model-url` (the URL names
+    a different model than the template allows) and `rogue-zero-usage` (a 2xx without usage that still produces
+    zeros). The host must refuse T03's four, `rogue-arm`, `rogue-cap` and `rogue-model-url` with zero upstream
+    calls; `rogue-zero-usage` must turn red at gate ②. Plus `rogue-cap-twice` (the authorized cap at the declared
+    location and a larger one elsewhere), which the host is **expected to pass** — it documents the undetectable
+    zone (§6.3). Gate ① counterexamples: a recipe whose endpoint is not on the confirmed list, an assertion whose
+    `aud` is not its destination, a constant `sub`, and an attribute exported from a secret field (§3.4).
 
-The J3 counterpart: delete the T21 package but keep its catalog rows → startup reports the family unavailable,
-requests fail fast as "not served", and no built-in implementation takes over (§8.5).
+The J3 counterpart: delete the T21 packages but keep their catalog rows → startup reports the families
+unavailable, requests fail fast as "not served", and no built-in implementation takes over (§8.5).
 
-**What T21 cannot prove**: that a component reports usage faithfully according to the upstream documentation (the
-undetectable zone of §6.3), or anything outside the link layer.
+**What T21 cannot prove**: that a component reports usage faithfully according to the upstream documentation, or
+that the upstream reads the cap where the component wrote it (the undetectable zone of §6.3), or anything outside
+the link layer.
 
 ## 13. Phasing
 
 | Phase | South delivers | Unlocks in the host | Red items flipped | Release |
 |---|---|---|---|---|
 | B0 | This record ruled on by the south maintainers; existing text revised per §14 | — | — | Docs |
-| B1 | Usage strictness: the three reference implementations, gate ② by-name enforcement, `UsageNeverDefaulted`, `usage_evidence`, documentation judges in the release discipline, the reasoning convention (once Q13 is settled) | P21 S5 (and T-7) | Prerequisite for S5 acceptance | minor; three package identities bump |
-| B2 | Descriptor auth admission and `DescriptorAuthWithinManifest`; `request_facts`, `config_schema`, `stream_framing`, `signing`; the south-provided eventstream deframer | P21 S1, S4 | J2b① (static slots), ⑤ (J2b② is purely host-side: descriptors carry the URL today, and gate ②'s `EndpointConfinement` already guards it) | minor |
-| B3 | `runtime_abi` and ranges, `load_package_set`, release index | P21 S2 | J2b③④, J3③ | minor + release behavior |
-| B4 | Credential recipe v1: manifest section, reference interpreter, gate ② fixtures, gate ③ host suite | P21 S3; P22 Vertex, P23 Vertex TTS | J2b① (minting part) | minor |
-| B5 | T21 guest, gaining modes phase by phase alongside B1–B4 | J2 standing pilot | All of J2b | Not published |
+| B1 | Usage strictness: the three reference implementations, gate ② by-name enforcement, `UsageNeverDefaulted`, `AbsentFamilyEmitsNoUsage`, `usage_evidence`, usage judges in the release discipline, the reasoning convention and Gemini total relation (Q13 measured 2026-10-01) | P21 S5 (and T-7) | Prerequisite for S5 acceptance | minor; three package identities bump |
+| B2 | Descriptor auth admission (static slots) and `DescriptorAuthWithinManifest`; `request_facts`, `endpoint`, `config_schema`, `stream_framing`, `signing`; the eventstream deframer and re-encoding in `south-contracts` | P21 S1, S4 (host passes the slot in `ProviderConfig.auth`, §4.2) | J2b① (static slots), ⑤ (J2b② is purely host-side: descriptors carry the URL today, and gate ②'s `EndpointConfinement` already guards it) | minor |
+| B3 | `runtime_abi`, ranges and kernel contract numbers, `load_package_set`, release index with gate ② report digests, digest-stability check in release CI | P21 S2 | J2b③④, J3③ | minor + release behavior |
+| B4 | Credential recipe v1: manifest section, trust rules, reference interpreter, gate ② fixtures, gate ③ host suite; the `Auth::OAuth` admission rule | P21 S3; P22 Vertex, P23 Vertex TTS | J2b① (minting part, first-party packages) | minor |
+| B7a | §10 instance declarations on the south side: declared secret headers, query parameters, quota headers, `DeclaredUserAgentV1`; the contract changes of §10 | P21 S7 | New instances no longer touch the south link layer | minor |
+| B5 | T21 guests, gaining modes phase by phase alongside B1–B4 and B7a | J2 standing pilot | All of J2b | Not published |
 | B6 | Responses upstream, Kiro, InvokeModel-Anthropic, catalog data, catalog world | P21 S6, S7 | J1 keeps falling | minor each |
-| B7 | §10 instance declaration; kernel chain (`Auth` combined arm, credential header catalog, cache buckets) | P21 S7 | New instances no longer touch the link layer | minor + kernel |
+| B7b | Kernel chain: `Auth` combined arm, credential header catalog (§10), cache buckets | P21 S7 | New secret header names no longer touch the kernel | minor + kernel |
 
 B1, B2 and B3 are independent of one another and can proceed in parallel; B4 depends on B2's descriptor auth
-admission; B6 depends on B1–B4. B7 comes last only because it goes through the kernel chain; after the Q1 ruling
-it is required for DP0 and is not optional.
+admission; B7a depends only on B0 and, after the Q1 and Q10 rulings, is required for DP0; B6 depends on B1–B4 and
+on B7a because the Kiro component needs a declared user-agent (the Responses component needs no new instance: its
+headers are ordinary descriptor headers). B7b comes last
+only because it goes through the kernel chain; until it lands, a new secret header name still needs a kernel
+release, and a provider needing one is outside DP0.
 
 ## 14. Existing text to revise in step
 
-- ARCHITECTURE.md:117-126: change the concluding sentence to "execution and material belong to the host;
-  per-provider description belongs to the component" (§3.4).
+- ARCHITECTURE.md:117-126: change the concluding sentence to "execution, material, reachable destinations and the
+  host invariants belong to the host; per-provider description belongs to the component" (§3.5).
 - ARCHITECTURE.md:205-207: "the runtime and the thirteen packages must be upgraded in one batch" lapses with §8.
 - The Kling comment at manifest.rs:128-132: point it to task-v2's bearer approach and §3.
-- reference_bedrock_converse.rs:21-35, 549-557: restate as "this family declares `stream_framing: aws-eventstream`".
+- reference_bedrock_converse.rs:21-35, 549-557, 736-739: restate as "this package declares
+  `stream_framing: aws-eventstream`", and replace "ignored because the host validates upstream" with the exception /
+  error mapping.
 - 2026-09-10-released-component-artifacts.md:152-154: native reference implementations are not stand-ins for
-  missing packages (§8.5).
+  missing packages (§8.5), subject to Q8.
 - The rationale at 2026-09-27-task-contract-v6-facts.md:22-23 lapses with §8.6; later contracts follow the additive
   rule.
+- Depending on Q14: `2026-08-21-canonical-ir-inventory.md` §6 and D5 and the `provider-config` doc comments in
+  provider-adapter.wit:89-90 and task-adapter.wit:87-88 (if the fence is amended), or nothing (if a typed kernel
+  field is added).
+- Depending on Q15: `2026-08-20-controlled-user-agent.md` and the `ControlledUserAgentV1` documentation
+  (lib.rs:1229-1243).
+- The kernel's `HttpResponseParts` comment (kernel:http.rs:379-382, "binary responses would need a `-v2` field"):
+  add that an eventstream body reaches the component as the UTF-8 canonical re-encoding on the buffered path (§5.2).
+- The WIT's `parse-response` rule "a 2xx whose body cannot yield exact usage is an error … never a zero"
+  (provider-adapter.wit:110-116): except for an `absent` package, whose usage is all zero and never read (§6.2
+  item 4).
 
 ## 15. Rejected alternatives
 
 - **Kling via `HostSigned`** (§3.2): the provider knowledge merely moves to another place in the host.
 - **Token exchange as a WIT function, with component code generating the exchange request**: the component would
   either touch secret values such as refresh tokens, or need a "placeholder substitution + response redaction"
-  protocol to keep secrets out of the component; a data recipe can be validated as a whole at gate ① and read line
-  by line in review, and its expressiveness suffices for the six known families. The cost is that a flow outside the
-  vocabulary requires a contract upgrade (§3.7).
-- **The host choosing an `sse` / `ndjson` decoder by declaration**: the components already split these two
-  themselves, so the host would gain a useless branch (§5.2).
+  protocol to keep secrets out of the component; a data recipe can be validated as a whole at gate ①, read line
+  by line in review, and its destinations shown to the operator; its expressiveness suffices for the six known
+  families. The cost is that a flow outside the vocabulary requires a contract upgrade (§3.8).
+- **Trusting recipe endpoints because they are constants**: a constant in an untrusted manifest is the author's
+  choice, not a vendor fact (§3.4).
+- **The host choosing an `sse` / `ndjson` decoder by declaration to parse a provider's stream for the
+  component**: the components already split these themselves, so the host would gain a useless branch (§5.2). This
+  does not reject `decode_sse_v1` itself, which the media worlds and `north_passthrough` use for their own purposes
+  (§5.2).
+- **Putting the deframer in `south-core`** (this record's first draft): parsing grammars live in `south-contracts`
+  with their fuzz obligation; `south-core`'s prelude introduces none (raw.rs:11-12).
+- **Per-family `stream_framing` / `usage_evidence`**: the response-side functions cannot tell families apart (R6).
+- **An IR compatibility range on the protocol crate version**: the kernel promises nothing within a minor line, and
+  additions would be dropped silently by older components (§8.3).
 - **Keeping the exact tuple and automating "re-stamp everything"**: the collateral damage of J2b③ would not go away
   — any package from a different batch still would not load.
 - **Compiling the capability catalog into each package's wasm** (§7.5 A): models move far faster than dialects, so
   package digests would change frequently because of data, diluting the point of pinning digests.
 - **The host inferring the credential kind from what files such as `auth.json` look like**: judging by what a file
   looks like is judging by provider; declare it through the manifest's `import` instead.
+- **Settling a bound hit at `min(reported, bound)` automatically** (considered in review): it would change lv's
+  ruling that such cases go to the manual-review path; §6.3 keeps that path and only fixes that the reservation
+  stays held and nothing settles to zero.
+- **A host-side allowlist of recipe endpoints** (§3.4 rule 1): a new provider endpoint would then require a host
+  change, against DP0; the host relies on operator confirmation per package digest only (Q18).
 
 ## 16. Open questions
 
@@ -916,17 +1279,22 @@ Tags: S = south maintainers, L = lv, K = kernel.
   **Ruled (lv, 2026-09-30): it counts.** A new provider that needs a secret header name, query name or quota header
   outside the compiled-in sets would otherwise force both hosts to re-pin, rebuild and release. §10 is a necessary
   condition of DP0 and phase B7 is required.
-- **Q2 (S)** Accept revising the concluding sentence of ARCHITECTURE.md:117-126 (§3.4).
+  Note (2026-10-01): B7 is now split into B7a (south) and B7b (kernel) (§13); the ruling covers both.
+- **Q2 (S)** Accept revising the concluding sentence of ARCHITECTURE.md:117-126 (§3.5), including the destination
+  rules and the host invariants.
 - **Q3 (S, L)** Credential recipes as a closed data vocabulary (recommended) or as WIT functions; and accept the DP0
   boundary that "a new flow outside the vocabulary requires a contract upgrade".
   **Ruled for the host side (lv, 2026-09-30): a closed data vocabulary; the contract-upgrade boundary is accepted.**
   The south maintainers' half remains open.
-- **Q4 (S, K)** The combined arm: add a variant to the kernel's `Auth` (recommended), or an interim manifest
-  family-level mirror (§4.3).
-- **Q5 (S)** Refining DP5: a `runtime_abi` epoch (recommended) or south going straight to 1.0; how the IR
-  compatibility line is determined; contracts made additive, or multi-version decoding (§8.2, §8.6).
-- **Q6 (S)** Does the eventstream deframer go into `south-core` (recommended), or does each host implement its own
-  (§5.2)?
+  Note (2026-10-01): that half now includes the §3.4 trust rules and the §3.5 host invariants.
+- **Q4 (S, K)** The combined arm: add a variant to the kernel's `Auth` (recommended), or an interim family-level
+  mirror in the OpenAI-compatible package (§4.3).
+- **Q5 (S, K)** Refining DP5: a `runtime_abi` epoch (recommended) or south going straight to 1.0; the IR line as
+  exact equality on the kernel's published contract numbers (recommended), or a range once the kernel publishes what
+  each contract increment added and the host refuses requests using newer additions; contracts made additive, or
+  multi-version decoding (§8.2, §8.3, §8.6).
+- **Q6 (S)** Does the eventstream deframer go into `south-contracts` (recommended; where grammars and fuzz targets
+  live), or does each host implement its own (§5.2)?
 - **Q7 (L, S)** Model catalog: a south data artifact (recommended), built into the components, or pure operator
   data; if it belongs to south, who keeps up with providers' new models (§7.5)?
   **Ruled for the host side (lv, 2026-09-30): a south data artifact.** Who maintains it remains open for the south
@@ -934,7 +1302,7 @@ Tags: S = south maintainers, L = lv, K = kernel.
 - **Q8 (S)** Do the native reference implementations remain a supported production engine? If so, J3 needs the
   host to disable fallback explicitly (§8.5).
 - **Q9 (S, community host)** Reference-implementation strictness is a behavior change for the community host
-  (§6.4); in addition, ARCHITECTURE.md:114-115 requires a metering vocabulary to have "a second consumer in sight" —
+  (§6.5); in addition, ARCHITECTURE.md:114-115 requires a metering vocabulary to have "a second consumer in sight" —
   both `usage_evidence` and the recipes need the community host to confirm its intent to adopt them (P21 §7
   recommends implementing in step).
 - **Q10 (L)** DP7: does south take in Copilot's editor headers, Claude Code's impersonation headers and Codex's
@@ -944,7 +1312,12 @@ Tags: S = south maintainers, L = lv, K = kernel.
   the compiled-in sets are declared per §10. The per-provider lists are specified in the component records
   (`2026-09-30-kiro-provider-component.md`, `2026-09-30-openai-responses-upstream-component.md`; Claude Code and
   Copilot to follow).
+  Note (2026-10-01): the user-agent part of this ruling depends on Q15 and Q16, which the south maintainers may
+  answer differently; if they decline, DP0 cannot be met for providers that need a client user-agent, and that
+  conflict goes back to lv.
 - **Q11 (S)** Must artifact signing be completed before third-party packages are loaded through the index (§9.3)?
+  This record additionally makes signing a prerequisite for credential recipes in any package that is not a verified
+  first-party release (§3.4 rule 5).
 - **Q12 (L)** Is the estimate for `usage_evidence: absent` made by the host's generic estimator (this record's
   recommendation, by characters), or reported by the component as an estimate when it builds the request (the
   embeddings record takes the latter; see `2026-09-30-embeddings-contract.md` §7)? Chat goes through the kernel IR,
@@ -953,31 +1326,132 @@ Tags: S = south maintainers, L = lv, K = kernel.
   **Ruled (lv, 2026-09-30): the two conventions may coexist.** On the chat family the estimate for
   `usage_evidence: absent` is the host's generic estimator; in south-local contracts that can hold one, the component
   reports the estimate at build time. Both are labeled as estimates in the ledger.
-- **Q13 (S, L)** The reasoning-token convention (§6.1 item 5, §6.2 item 6): confirm whether Gemini's
+  Note (2026-10-01): a component estimate may tighten only the reservation; every check compares against the host
+  bound (§6.3).
+- **Q13 (S, L)** The reasoning-token convention (§6.1 item 5, §6.2 items 1 and 6): confirm whether Gemini's
   `thoughtsTokenCount` lies outside `candidatesTokenCount`; if it does, the Gemini reference implementation's
   `output_tokens` must change, and the host's amounts charged by output change with it, which needs lv's
   confirmation and a dual run.
+  Note (2026-10-01), measured at lv's request on Vertex AI (`global`, `:generateContent`, `thinkingBudget: 512`):
+  `gemini-2.5-flash` prompt 32 / candidates 6 / thoughts 286 / total 324; `gemini-3.5-flash` 32 / 7 / 208 / 247;
+  `gemini-2.5-pro` 32 / 7 / 323 / 362. In every case `total = prompt + candidates + thoughts`, and candidates count
+  only the visible answer: **thoughts lie outside candidates**. The Gemini API (`generativelanguage`) was not enabled
+  in the measuring project; the Vertex result is taken as the dialect's convention. The second half of the question
+  turns out not to hold: the host already settles output as candidates + thoughts, so no amount changes and there is
+  nothing left for lv to confirm. What remains is the south half — the reference implementation change in §6.2
+  item 6.
+- **Q14 (S, K)** The channel for values the component needs that the fence does not admit. S0 §6 and D5 forbid a
+  component from behaving on an `extensions` key. Two cases:
+  - **per provider**: credential attributes (§3.3) and `config_schema` keys the component itself reads (§7.3);
+  - **per request**: a host-minted value such as the Kiro record's attempt id (P-4), and the Responses record's
+    request extension keys (R-Q15).
+  Recommended: typed fields through the kernel chain (D5's own promotion path) — for the per-provider case e.g.
+  `ProviderConfig.declared: BTreeMap<String, String>` whose keys must be declared by the package and whose values
+  the host validates; for the per-request case a typed `ChatRequest` field. Alternative: an explicit, argued
+  amendment of the fence and D5 admitting one nested reserved key per type. Either way the host strips
+  client-supplied keys that collide with a reserved name. Keys the compatible reference already reads are existing
+  precedent, recorded as such by the Responses record, not a ruling on this question.
+- **Q15 (S)** Reopen the 2026-08-20 controlled-user-agent ruling: may a user-agent value come from a manifest value
+  validated at gate ① (`DeclaredUserAgentV1`, §10) rather than only from host program text? Recommended: yes, with
+  the value grammar unchanged and a fuzz obligation on the new parser.
+- **Q16 (S)** Does south accept publishing impersonation values (client user-agents and client-identification
+  headers of third-party tools) inside its packages? lv's Q10 ruling requires it for DP0 on those providers; the
+  south maintainers decide whether the repository carries them.
+- **Q17 (S)** Who runs gate ② for a package south did not build: nobody (it is the author's self-attestation, and
+  the host relies only on its own seals and bounds), the installer (the host runs the suite at admission on the
+  package's own fixtures, proving self-consistency only), or a registry run by south? Recommended: the installer, as
+  a cheap self-consistency check, with the record stating plainly that it is not evidence of correct usage.
+- **Q18 (S, L)** Recipe endpoint confirmation (§3.4 rule 1): operator confirmation per package digest (recommended
+  as the default), a host-side allowlist, or both.
+  **Ruled for the host side (lv, 2026-10-01): operator confirmation per package digest only; a host-side allowlist
+  is rejected**, because a host allowlist means a new provider endpoint requires a host change, against DP0. The
+  south maintainers' half remains open.
 
-## 17. Amendments found while drafting the component records (2026-09-30)
+## 17. Amendments found while drafting the component records (2026-09-30) — change log
 
-Three follow-on records were drafted after this one — `2026-09-30-kiro-provider-component.md`,
-`2026-09-30-openai-responses-upstream-component.md` and `2026-09-30-north-codec-render-gaps.md` (follow-on PR).
-Working two real components through the proposals above showed where this record is wrong or incomplete. The
-sections above are left as written so the review thread stays readable; each item below says what changes and
-where the argument is. Items marked *verified* were re-checked against code by the host team; the rest rest on the
-component records' own citations.
+The amendments found while drafting `2026-09-30-kiro-provider-component.md`,
+`2026-09-30-openai-responses-upstream-component.md` and `2026-09-30-north-codec-render-gaps.md` are now folded
+into the body. Where each landed:
 
-| # | Section | What this record says | What changes | Argued in |
-|---|---|---|---|---|
-| A1 | §7.4, §11 | A "Responses only" model is expressed by a model dialect word | It is expressed by the provider row belonging to a family of a separate package. A dialect word can change the request shape inside one package's wire, but `parse-response`, `parse-stream-chunk` and `map-provider-error` receive no provider config (`provider-adapter.wit:116-132`, *verified*), so every family in a package must share one response wire | Responses record §3.1, §3.2 |
-| A2 | §11 | Wire types can be shared with `south-north-codec`; only the mapping cannot | `south-north-codec` has no Responses wire types — its Responses module works on `serde_json::Value` (*verified*: only options / context / frame / state structs exist). What can be shared is the event vocabulary, extension key names, fixtures and the round-trip judge | Responses record §9 |
-| A3 | §7.2, §6.3 | `request_facts` has exactly one location carrying the output cap, and a stream switch in the body or the URL | Both must admit "none". Kiro has neither a cap field nor a stream switch; the Codex family has no cap field. §6.3's check `output_tokens ≤ cap` assumes the cap was sent upstream and needs a stated rule for families that cannot send it | Kiro record §8.2 (P-1), §8.3 (P-2); Responses record §4.3 |
-| A4 | §10 | The closed sets with provider instances are secret headers, query parameters, quota headers and the kernel's credential header catalog | Add the `user-agent` value. `ControlledUserAgentV1` takes a `&'static str` that "must exist in host program text" (`south-contracts/src/lib.rs:1233-1246`, *verified*). After the rulings on Q1 (a pin bump counts) and Q10 (south takes in client-identification headers) a new provider's user-agent cannot stay a host literal; it has to be declared per family and validated by gate ① against the existing value grammar. This reopens a deliberate safety property of that type and needs the maintainers' ruling | Kiro record §3.3 (P-3), §4.6; Responses record §10.4 |
-| A5 | §3.3, §3.8 | Kiro's two forms are `oauth2_token` recipes; `select` picks by one non-secret field | Kiro's exchanges are not RFC 6749 shaped: both send camelCase JSON, and the social form sends only `{refreshToken}` with no grant type (`server:…/token_refresh.rs:1254-1268`, *verified*). Either `oauth2_token` stops prescribing RFC parameter names, or these are `http_exchange` steps. `select` needs ordered rules that may test the presence of several fields | Kiro record §7.2, §7.3 (P-6) |
-| A6 | §3.3 | The recipe sketch covers expiry from the response or the JWT | Missing: a default and clamp when the response gives no expiry; a fixed validity window after refresh (the host uses 50 minutes for Codex); what `jwt_exp` does with a non-JWT token; exported attributes that persist across requests and fall back to a stored field; import with several candidate pointers; which field a rotated token is written back to | Kiro record §7.3; Responses record §10.2 |
-| A7 | §5.2 | `stream_framing` defines what `parse-stream-chunk` is fed | It must also cover upstreams that answer a non-stream request with an eventstream body (Kiro): the host deframes the whole body and hands `parse-response` the same canonical re-encoding | Kiro record §5.4 (P-5) |
-| A8 | §6.2 item 4 | `usage_evidence: absent` — the component emits no usage | It does not say what `parse-response` returns: `usage` is not optional in the IR and the WIT text says it is never zero. State that for an `absent` family the field is zero and the host must not read it, and check it with a conformance property | Kiro record §6.1 |
-| A9 | §6.2 item 5 | Usage criteria are derived from the provider's official documentation | Kiro has no public documentation. For such providers the criterion is captured traffic archived with the fixtures, plus the property that an `absent` family never emits usage | Kiro record §11.2 |
-| A10 | §7.3 | Non-secret config values choose from the closed value syntaxes | None of them admits an ARN (`:` and `/`), which Kiro's profile needs | Kiro record §7.5 |
-| A11 | §6.1, §11 | `response.completed` is the terminal frame of the Responses wire | `response.incomplete` also carries usage and is rendered as a terminal by `south-north-codec` itself; whether it is complete evidence is an open question in the Responses record | Responses record §6.3 |
-| A12 | §11 | The component maps `store` from the IR | The IR and `south-north-codec` carry neither `store` nor `previous_response_id` nor `include`; the component always sends a stateless request, and refusing (rather than dropping) a client's `previous_response_id` needs the codec to carry it | Responses record §4.4 |
+| # | Amendment | Now in |
+|---|---|---|
+| A1 | A response-side difference cannot be a dialect word; "Responses only" is a separate package | R6, §7.4, §11 |
+| A2 | `south-north-codec` has no Responses wire types to share | §11 |
+| A3 | `output_cap` and `stream` admit "none" (`[]`, `"none"`); the rule for families that cannot send the cap | §7.2, §6.3 |
+| A4 | The user-agent value is a closed instance set too | §10, Q15, Q16 |
+| A5 | Kiro's exchanges are `http_exchange` steps; `select` is an ordered rule list | §3.3, §3.9 |
+| A6 | Default and clamp for expiry, fixed validity window, `jwt_exp` on a non-JWT, persisted attributes, ordered import pointers, rotation write-back target | §3.3, §3.5 |
+| A7 | Non-streaming requests answered with an eventstream body | §5.2 |
+| A8 | What `parse-response` returns for an `absent` package | §6.2 item 4 |
+| A9 | Usage judges for providers without public documentation | §6.2 item 5 |
+| A10 | An ARN value syntax; Kiro's profile ARN is a non-secret credential field, not a config key | §3.3, §7.3 |
+| A11 | `response.incomplete` as a terminal: ruled (Responses R-Q2), settles only for a closed set of reasons | §11 |
+| A12 | The Responses request is stateless; `previous_response_id` is refused on the host's northbound side | §11 |
+
+## Revision note (2026-10-01)
+
+- Header: host baseline moved to `a82c852b`; host line numbers re-derived (Kiro and Vertex mint implementations
+  moved to :1302 / :1584; Kiro's region validation cited).
+- §2: added R6 (request-side declarations per family, response-side per package) and R7 (gate ② is evidence only
+  when someone other than the author runs it); R3 now names the manifest as untrusted input.
+- §3: recipe trust model (§3.4: operator-confirmed endpoints, `aud` bound to destination, no constant `sub`, export
+  only from non-secret fields, third-party recipes wait for signing, test endpoints only in test builds); host
+  no-wipe invariant and previous-generation rollback (§3.5); A5, A6 and Kiro P-6 / P-8 folded in; the attribute
+  channel became Q14.
+- §4: the host must pass the slot in `ProviderConfig.auth`; the `Auth::OAuth` rule lands with B4; §4.3 names the
+  OpenAI-compatible package as the one serving Gemini's OpenAI-compatible surface.
+- §5: `stream_framing` is package-level; canonical re-encoding re-serializes compact JSON and covers `exception` and
+  `error` frames; buffered path for always-streaming upstreams (A7); deframer placed in `south-contracts`; SigV4
+  region tied to the endpoint template and credential fields mapped explicitly.
+- §6: `usage_evidence` package-level with A8 / A9 folded in; the bound rule shared by every world (host-computed,
+  component may only tighten); funds outcome of a hit; undetectable zone extended to cap and URL-model placement;
+  trust statements limited to first-party packages; new §6.4 states once that `rejected` releases the reservation.
+- §7: `output_cap: []`, `stream: "none"`, URL-form model checked against a `{model}` template; new per-family
+  `endpoint` template so region and project reach the origin; `aws_arn` syntax; the config channel became Q14;
+  response-side differences are separate packages.
+- §8: removed the claimed kernel promise; IR line is exact equality on kernel contract numbers; digest stability
+  checked in release CI; gate tightenings bind through `south_runtime_min`.
+- §9: index carries package-level framing / usage fields, recipe presence and a gate ② report digest; signing also
+  gates recipes.
+- §10: user-agent added (`DeclaredUserAgentV1`); kernel catalog options spelled out; table of contract changes.
+- §11: InvokeModel-Anthropic is a separate package; Responses and Kiro rows updated with A1, A2, A11, A12.
+- §12: T21 split into three packages; `rogue-model-url` and the expected-to-pass `rogue-cap-twice` added; recipe
+  counterexamples follow §3.4.
+- §13: B7 split into B7a (south instance declarations, before B6) and B7b (kernel); B4 owns the OAuth admission
+  rule.
+- §14–§16: texts to revise extended (fence / D5, controlled-user-agent); rejected alternatives extended; Q5 tagged
+  K; new Q14–Q18; conflicts with lv's Q10 ruling stated under Q10.
+- §17: amendments folded into the body; kept as a change log.
+- Round 2, §7.6: `RequestFactsHonoured` for `output_cap: []` defined once, as a mutation check (changing the IR cap
+  leaves the built body byte-identical).
+- Round 2, §3.3 / §3.9: the `id_token` export example removed (it broke §3.4); the Codex row now matches the
+  Responses record §10.2 (stored `account_id` export, claim only as `must_equal_field`, `fixed_window` 3000 s,
+  `write_back`).
+- Round 2, §6.3: reservation uses `min(host bound, component bound)`; every check compares against the host bound
+  only; each world may state a provider-agnostic instance of the host rule.
+- Round 2, §3.3: one complete recipe vocabulary table listing every form the component records use, under one set
+  of names (`write_back`, `requires`, `on_status` class keys, `select` predicates, import `seed` with
+  `rfc3339_or_epoch_seconds`, field `default`, `endpoint_params`, `optional`, `require_one_of`, `must_equal_field`,
+  `printable_ascii`, `aws_arn`).
+- Round 2, §3.5 / §3.7: the TTL clamp (60 s to 24 h) is a host invariant; a recipe may only narrow it and gate ① no
+  longer requires one; `write_back` is required whenever a recipe rotates. §3.5 retitled "Host invariants"; no
+  section renumbered.
+- Round 2, §7.3 / §11 / §17 A10: Kiro's profile ARN is a non-secret credential field with syntax `aws_arn`,
+  exported as an attribute, not a `config_schema` key.
+- Round 2, §11 / §17 A11–A12: `response.incomplete` is ruled (Responses R-Q2); `previous_response_id` is refused on
+  the host's northbound side.
+- Round 2, §14 / §5.2 / §6.2: the kernel `HttpResponseParts` comment and the WIT "never a zero" rule are listed as
+  normative text to amend.
+- Round 2, Q14: covers both the per-provider and the per-request case and names Responses R-Q15.
+- Round 2, §5.2 / §15: `decode_sse_v1` placed in `south-contracts` beside the deframer; the rejected alternative is
+  narrowed to "the host decodes a provider's stream for the component".
+- Round 2, §13: B6 depends on B7a because Kiro needs a declared user-agent; the Responses component needs no new
+  instance.
+- Round 2, Q1 / Q3 / Q10 / Q12: the ruling paragraphs restored verbatim; additions moved into "Note (2026-10-01)".
+- Round 2, §5.2: the buffered-path trigger pinned to `aws-eventstream` framing and `stream: "none"` together, with no
+  content-type sniffing.
+- Round 2, §6.4: `rejected` widened to "an upstream answer that proves nothing was produced (a 4xx, or a 2xx the
+  component shows produced nothing)", classified by the component per dialect, matching image §9.2.
+- Rulings of 2026-10-01:
+  - Q18 ruled for the host side: operator confirmation per package digest only; the host-side allowlist is rejected
+    under DP0. §3.4 rule 1 states the ruled mechanism; §15 lists the allowlist as a rejected alternative.
