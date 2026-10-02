@@ -159,6 +159,15 @@ contract 7 added, have their own records:
 [contract 6 facts](docs/design/2026-09-27-task-contract-v6-facts.md),
 [contract 7 artifact roles](docs/design/2026-09-28-task-contract-v7-artifact-role.md).
 
+Every release also attaches `south-release-index.json` (schema `south.release-index.v1`): each
+package's world, families, capabilities, auth arms, compatibility declaration and the digests of
+its archive, `manifest.json` and `component.wasm`, plus the digest of the gate ② report
+(`<package>-<tag>.gate2.json`) CI produced for that exact `component.wasm`.
+`scripts/release_index.py` generates it from the archived manifests, and the release fails when a
+package keeps its version but its `component.wasm` digest differs from the previous release's
+index. See [released component artifacts](docs/design/2026-09-10-released-component-artifacts.md)
+§8.
+
 
 ## Local verification
 
@@ -174,6 +183,7 @@ RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features
 rustup run 1.96.0 cargo check --workspace --all-targets
 scripts/check-boundaries.sh --self-test
 scripts/check-boundaries.sh
+python3 -m unittest discover -s scripts -p 'test_*.py'  # release index and digest-stability check
 scripts/check-language.sh --self-test
 scripts/check-language.sh
 cargo deny check

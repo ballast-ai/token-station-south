@@ -214,3 +214,94 @@ D4. Signing is out of scope for this slice, and named in §6 as the next one rat
 unstated.
 
 D5. The release reuses `scripts/build-*-component.sh` rather than defining its own build recipe.
+
+## 8. Addendum (2026-10-02): the release index, gate ② reports and digest stability
+
+Phase B3 of `2026-09-30-host-zero-vendor-boundary.md` extends this record's release with three things. That
+record (§8.6, §9) is the design; this section records how the release implements it.
+
+### 8.1 What a release carries now
+
+Beside the archives:
+
+- `south-release-index.json`, schema `south.release-index.v1`, in the shape the boundary record's §9.2 shows;
+- `<package>-<tag>.gate2.json`, one gate ② report per package (§8.3);
+- `SHASUMS256.txt`, now covering the archives, the reports and the index.
+
+### 8.2 The index
+
+`scripts/release_index.py generate` writes the index from the staged `dist/` directory. It is Python with the
+standard library only, because the workspace is library-only and its release tooling should not add a binary. It
+reads `manifest.json` and `component.wasm` from inside each archive and refuses the release when:
+
+- an archive is missing for a `components/<name>/` directory, or an archive has no such directory;
+- an archive holds anything but those two regular files;
+- the archived manifest differs from `components/<name>/manifest.json`, or its `name` differs from the directory;
+- the tag differs from the workspace version;
+- a gate ② report is missing, failing, or describes other bytes (§8.3).
+
+Field derivation, where §9.2 leaves it implicit:
+
+| Index field | Source |
+|---|---|
+| `south_release` | The workspace version in `Cargo.toml` |
+| `runtime_abi` (top level) | `compatibility.json`'s top-level `runtime_abi`; `null` while it is absent |
+| `world` | The manifest's `api_version` |
+| `wit_package` | The manifest's `compatibility.wit_package` |
+| `providers`, `capabilities`, `auth_arms` | Copied in manifest order |
+| `stream_framing`, `usage_evidence` | The manifest's value; else the provider-world defaults `bytes` and `reported`; `null` in other worlds, whose manifests may not declare either |
+| `credential_recipes` | `true` when the manifest has a non-empty `credentials.recipes` |
+| `compatibility` | `south_runtime`, `runtime_abi`, `kernel_contracts`, `contracts` copied from the manifest; `null` while a key is absent |
+| `archive_sha256`, `manifest_sha256`, `component_sha256` | SHA-256 of the archive and of the two files inside it |
+| `gate2_report_sha256` | SHA-256 of the report file published beside the archive |
+
+Packages are sorted by name, keys keep the order §9.2 shows, and the file ends with a newline, so the same inputs
+give the same bytes. `catalogs` is `[]` until the catalog data of B6 exists.
+
+### 8.3 Gate ② reports
+
+The release runs the thirteen sandbox parity tests' gate ② case
+(`the_sandboxed_component_passes_gate_two_byte_for_byte`) after the build step, with `SOUTH_GATE2_REPORT_DIR`
+set. Each test runs the package's required suite against its built `component.wasm` in the sandbox, as CI does on
+every pull request, and a test-only helper (`crates/south-component-conformance/tests/support/gate2_report.rs`)
+writes `<package>.gate2.json`:
+
+- `schema` (`south.gate2-report.v1`), `suite`, `south_release`, `name`, `version`, `world`;
+- `manifest_sha256` and `component_sha256`;
+- `passed`, `checks`, `failed`, and every outcome (check, case, verdict, and the detail of a failure), sorted.
+
+The helper digests the component before the sandbox loads it and again after the suite has run, and fails if the
+two differ, so the recorded digest is the digest of the bytes the suite judged. The index step then refuses a report
+whose `component_sha256`, `manifest_sha256`, name, version or suite differs from the archived package, or that did
+not pass. The only Rust change is that helper and its `sha2` dev-dependency, which wasmtime already brings into
+the graph; no library code changes.
+
+A report shows that south's CI ran the named suite against those exact bytes at this release, and that it passed.
+Like the archives, it is identified by checksum, not signature (§6; boundary record §9.3).
+
+The index does not carry the report's file name: §9.2's shape has only its digest, so the name is the convention
+`<package>-<tag>.gate2.json`, matching the archive's.
+
+### 8.4 Digest stability
+
+The `Digest stability` step finds the latest `vX.Y.Z` release earlier than the tag (`gh release list`; pre-release
+tags are ignored). It skips with a log line when there is none, or when that release has no
+`south-release-index.json`, which holds for every release cut before this change. Otherwise it downloads that
+index, checks it against that release's `SHASUMS256.txt`, and runs `scripts/release_index.py compare`. That fails,
+naming each package, when a package keeps its version but its `component_sha256` changed: bump the version.
+
+Only `component.wasm` is compared, as §8.6 states. A manifest still changes on every release while
+`south_runtime` must equal the host's exactly (boundary record §8.3 replaces that with a range), so comparing
+manifests would fail every release.
+
+The check makes the reproducible build a checked requirement rather than an assumption. The component builds are
+locked (each `components/*/Cargo.lock` is committed), the toolchain is pinned, and the runner's checkout path is
+fixed. But a component links the shared crates by path, so any change to code a component compiles, including
+shared conformance references, changes its bytes and needs a version bump. A difference with no source change
+would show a build that is not reproducible. The step fails in that case too, and the cause has to be found before
+the release can go out.
+
+### 8.5 Tests
+
+`python3 -m unittest discover -s scripts -p 'test_*.py'` covers the generator, the comparison and the
+previous-tag choice. CI's `quality` job runs it.
