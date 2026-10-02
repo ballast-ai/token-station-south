@@ -34,7 +34,10 @@
 //! `-v3` world alongside `-v2`; it never edits `-v2` in place, because
 //! installed components are compiled artifacts that cannot be migrated.
 
+mod config;
 mod manifest;
+
+pub use config::{ConfigErrorV1, ConfigKeyV1, ValueSyntaxV1};
 
 pub use manifest::{
     COMPONENT_BEHAVIOR_SUITE, CompatibilityDeclarationV1, CompatibilityMismatchV1,

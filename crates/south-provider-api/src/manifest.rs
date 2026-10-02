@@ -252,6 +252,13 @@ pub struct ComponentManifestV1 {
     /// [`RequestFactsV1::top_level`]. Provider world only.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub request_facts: BTreeMap<String, RequestFactsV1>,
+    /// Each family's `https` endpoint template, whose parameters are its
+    /// `config_schema` keys (§7.3). Provider world only.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub endpoint: BTreeMap<String, String>,
+    /// Each family's non-secret configuration keys (§7.3). Provider world only.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub config_schema: BTreeMap<String, BTreeMap<String, crate::ConfigKeyV1>>,
     pub permissions: ComponentPermissionsV1,
     pub conformance: ConformanceSpecV1,
     pub compatibility: CompatibilityDeclarationV1,
@@ -528,6 +535,9 @@ impl ComponentManifestV1 {
                 return Err(ManifestErrorV1::ProviderFamilyRequired);
             }
             self.validate_request_facts()?;
+            self.validate_endpoints()?;
+        } else if !self.endpoint.is_empty() || !self.config_schema.is_empty() {
+            return Err(ManifestErrorV1::EndpointIsAProviderWorldDeclaration);
         } else if !self.usage_evidence.is_reported() {
             return Err(ManifestErrorV1::UsageEvidenceIsAProviderWorldDeclaration);
         } else if !self.request_facts.is_empty() {
@@ -777,6 +787,10 @@ pub enum ManifestErrorV1 {
     RequestFactsIsAProviderWorldDeclaration,
     #[error("request_facts for family `{family}`: {detail}")]
     InvalidRequestFacts { family: String, detail: String },
+    #[error("endpoint and config_schema are provider-world declarations")]
+    EndpointIsAProviderWorldDeclaration,
+    #[error("endpoint or config_schema for family `{family}`: {detail}")]
+    InvalidEndpoint { family: String, detail: String },
     #[error("a provider component must declare at least one provider family")]
     ProviderFamilyRequired,
     #[error("provider family `{0}` must be one lowercase kebab-case component")]

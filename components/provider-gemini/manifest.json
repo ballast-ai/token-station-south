@@ -24,6 +24,9 @@
       "stream": "url"
     }
   },
+  "endpoint": {
+    "gemini": "https://generativelanguage.googleapis.com"
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

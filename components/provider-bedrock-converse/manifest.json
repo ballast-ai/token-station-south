@@ -13,6 +13,18 @@
   "auth_arms": [
     "host_signed"
   ],
+  "endpoint": {
+    "bedrock": "https://bedrock-runtime.{region}.amazonaws.com"
+  },
+  "config_schema": {
+    "bedrock": {
+      "region": {
+        "syntax": "aws_region",
+        "required": true,
+        "description": "The AWS region the Bedrock runtime is called in."
+      }
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,
