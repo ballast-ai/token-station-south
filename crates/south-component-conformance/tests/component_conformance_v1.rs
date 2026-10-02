@@ -7,7 +7,7 @@ use std::path::Path;
 use south_component_conformance::reference::OpenAiCompatibleReferenceV1;
 use south_component_conformance::{
     FixturePackV1, PROVIDER_COMPONENT_SUITE_V1, ProviderComponentV1, accepts_manifest,
-    reported_identity_matches, run_provider_component_suite_v1,
+    reported_identity_matches, run_provider_component_suite_v1_for_manifest,
 };
 use south_provider_api::{
     COMPONENT_BEHAVIOR_SUITE, CompatibilityDeclarationV1, ComponentManifestV1,
@@ -97,7 +97,11 @@ fn the_shipped_pack_still_carries_every_host_parity_case() {
 /// fixture table. Every failure is printed so a drift names its case.
 #[test]
 fn the_reference_implementation_passes_the_component_behavior_suite() {
-    let report = run_provider_component_suite_v1(&OpenAiCompatibleReferenceV1, &shipped_pack());
+    let report = run_provider_component_suite_v1_for_manifest(
+        &OpenAiCompatibleReferenceV1,
+        &shipped_pack(),
+        &reference_manifest(),
+    );
     for failure in report.failures() {
         eprintln!("{failure}");
     }

@@ -15,13 +15,14 @@
 
 use serde::Deserialize;
 use serde_json::Value;
-use south_provider_api::UsageEvidenceV1;
+use south_provider_api::{ComponentManifestV1, UsageEvidenceV1};
 use token_station_protocol::{
     ChatRequest, ErrorEnvelope, HttpRequestDescriptor, HttpResponseParts, ProviderConfig,
     StreamEvent,
 };
 
 use crate::component::{ProviderComponentV1, StreamParserV1};
+use crate::descriptor_auth::admit_descriptor_auth;
 use crate::fixture::{CaseV1, FixturePackV1, ProviderFamilyV1};
 use crate::report::{CheckV1, OutcomeV1, ReportV1};
 
@@ -131,16 +132,28 @@ pub fn run_provider_component_suite_v1(
     component: &dyn ProviderComponentV1,
     pack: &FixturePackV1,
 ) -> ReportV1 {
-    run_provider_component_suite_v1_with_usage_evidence(component, pack, UsageEvidenceV1::Reported)
+    run_suite(component, pack, UsageEvidenceV1::Reported, None)
 }
 
-/// Runs `south.provider-component.v1` against a provider component, holding it
-/// to the usage checks its manifest's `usage_evidence` selects.
+/// Runs `south.provider-component.v1` against a provider component with its manifest.
+///
+/// The manifest selects the usage checks (`usage_evidence`) and is what
+/// `DescriptorAuthWithinManifest` judges descriptors against (`auth_arms`).
+/// This is the entry point an admitting host uses.
 #[must_use]
-pub fn run_provider_component_suite_v1_with_usage_evidence(
+pub fn run_provider_component_suite_v1_for_manifest(
+    component: &dyn ProviderComponentV1,
+    pack: &FixturePackV1,
+    manifest: &ComponentManifestV1,
+) -> ReportV1 {
+    run_suite(component, pack, manifest.usage_evidence, Some(manifest))
+}
+
+fn run_suite(
     component: &dyn ProviderComponentV1,
     pack: &FixturePackV1,
     usage_evidence: UsageEvidenceV1,
+    manifest: Option<&ComponentManifestV1>,
 ) -> ReportV1 {
     let mut outcomes = coverage(pack, usage_evidence);
     let mut a_credential_was_rejected_somewhere = false;
@@ -152,7 +165,11 @@ pub fn run_provider_component_suite_v1_with_usage_evidence(
 
         match case.family {
             ProviderFamilyV1::Request => {
-                outcomes.push(endpoint_confinement(case, &invoke(&case.input)));
+                let built = invoke(&case.input);
+                outcomes.push(endpoint_confinement(case, &built));
+                if let Some(manifest) = manifest {
+                    outcomes.push(descriptor_auth_within_manifest(case, &built, manifest));
+                }
             }
             ProviderFamilyV1::Error => {
                 if let Some(outcome) = auth_errors_are_not_retriable(case, &invoke(&case.input)) {
@@ -281,6 +298,35 @@ fn endpoint_confinement(case: &CaseV1, built: &Invoked) -> OutcomeV1 {
 
     match input.provider_config.authorize(&descriptor) {
         Ok(()) => OutcomeV1::passed(check, &case.name),
+        Err(refusal) => OutcomeV1::failed(check, &case.name, refusal.to_string()),
+    }
+}
+
+/// The descriptor presents its credential only through an arm the manifest
+/// declares (B2, host-zero-vendor-boundary §4.4).
+///
+/// Run on what the component built. A host that presents strictly what the
+/// descriptor says relies on this; the host-side admission is what binds a
+/// third-party package, and this check is its early warning.
+fn descriptor_auth_within_manifest(
+    case: &CaseV1,
+    built: &Invoked,
+    manifest: &ComponentManifestV1,
+) -> OutcomeV1 {
+    let check = CheckV1::DescriptorAuthWithinManifest;
+    let input: RequestInput = match parse(&case.input) {
+        Ok(input) => input,
+        Err(failure) => return OutcomeV1::failed(check, &case.name, failure.detail()),
+    };
+    let descriptor: HttpRequestDescriptor = match built {
+        Ok(built) => match parse(built) {
+            Ok(descriptor) => descriptor,
+            Err(failure) => return OutcomeV1::failed(check, &case.name, failure.detail()),
+        },
+        Err(failure) => return OutcomeV1::failed(check, &case.name, failure.detail()),
+    };
+    match admit_descriptor_auth(manifest, &input.provider_config, &descriptor) {
+        Ok(_) => OutcomeV1::passed(check, &case.name),
         Err(refusal) => OutcomeV1::failed(check, &case.name, refusal.to_string()),
     }
 }

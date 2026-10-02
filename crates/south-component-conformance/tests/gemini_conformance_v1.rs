@@ -13,7 +13,7 @@ use std::path::Path;
 use south_component_conformance::reference_gemini::GeminiReferenceV1;
 use south_component_conformance::{
     FixturePackV1, PROVIDER_COMPONENT_SUITE_V1, ProviderComponentV1, accepts_manifest,
-    reported_identity_matches, run_provider_component_suite_v1,
+    reported_identity_matches, run_provider_component_suite_v1_for_manifest,
 };
 use south_provider_api::{
     COMPONENT_BEHAVIOR_SUITE, CompatibilityDeclarationV1, ComponentManifestV1,
@@ -113,7 +113,11 @@ fn the_manifest_declares_exactly_what_the_dialect_uses() {
 /// Gate ②: the reference passes its own frozen pack.
 #[test]
 fn gate_two_passes_over_the_shipped_pack() {
-    let report = run_provider_component_suite_v1(&GeminiReferenceV1, &shipped_pack());
+    let report = run_provider_component_suite_v1_for_manifest(
+        &GeminiReferenceV1,
+        &shipped_pack(),
+        &shipped_manifest(),
+    );
     for failure in report.failures() {
         eprintln!("{failure}");
     }

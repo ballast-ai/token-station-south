@@ -84,6 +84,13 @@ pub enum CheckV1 {
     /// and write within input, the cache-write tiers within cache write, and
     /// reasoning within output (§6.2 item 6; kernel `Usage`).
     UsagePartition,
+    /// Every request the component built presents its credential through an
+    /// arm its manifest declares (B2, host-zero-vendor-boundary §4.4).
+    ///
+    /// A host presents strictly what the descriptor says, so an arm the
+    /// manifest never declared would put the credential somewhere the operator
+    /// was not told about.
+    DescriptorAuthWithinManifest,
 }
 
 impl CheckV1 {
@@ -102,6 +109,7 @@ impl CheckV1 {
             Self::UsageNeverDefaulted => "usage_never_defaulted",
             Self::AbsentFamilyEmitsNoUsage => "absent_family_emits_no_usage",
             Self::UsagePartition => "usage_partition",
+            Self::DescriptorAuthWithinManifest => "descriptor_auth_within_manifest",
         }
     }
 }
