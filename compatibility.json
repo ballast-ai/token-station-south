@@ -149,8 +149,7 @@
         "cases": 3
       },
       "header_auth": {
-        "status": "verified",
-        "cases": 4
+        "status": "not_verified"
       },
       "controlled_query": {
         "status": "verified",

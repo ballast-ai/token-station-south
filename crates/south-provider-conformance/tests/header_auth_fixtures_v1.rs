@@ -3,15 +3,15 @@ use std::fmt::Display;
 use bytes::Bytes;
 use http::StatusCode;
 use south_contracts::{
-    BufferedHttpResponseV1, CredentialSlotV1, JsonBodyV1, MAX_STREAM_CHUNK_BYTES,
-    ProviderEndpointV1, RelativePathV1, SafeHeaders, SecretHeaderV1, StreamChunkV1,
-    StreamingResponseHeadV1,
+    BufferedHttpResponseV1, CredentialSlotV1, DeclaredSecretHeaderV1, DeclaredSecretHeadersV1,
+    HeaderPolicyError, JsonBodyV1, MAX_STREAM_CHUNK_BYTES, ProviderEndpointV1, RelativePathV1,
+    ResponseTranscriptV1, SafeHeaders, SecretHeaderV1, StreamChunkV1, StreamingResponseHeadV1,
 };
 use south_provider_conformance::{
     FAKE_HEADER_SECRET_V1, HEADER_AUTH_CONFORMANCE_SUITE_ID, HEADER_AUTH_CONFORMANCE_SUITE_VERSION,
-    HeaderAuthCaseIdV1, HeaderAuthExpectedOutcomeV1, HeaderAuthFixtureV1, HeaderAuthUpstreamV1,
-    ProviderCallCaseIdV1, ProviderCallCountV1, ProviderCallFailureCodeV1, ProviderStreamTerminalV1,
-    header_auth_fixtures_v1,
+    HeaderAuthCaseIdV1, HeaderAuthExpectedOutcomeV1, HeaderAuthFixtureV1, HeaderAuthHeaderV1,
+    HeaderAuthUpstreamV1, ProviderCallCaseIdV1, ProviderCallCountV1, ProviderCallFailureCodeV1,
+    ProviderStreamTerminalV1, header_auth_fixtures_v1,
 };
 use static_assertions::assert_not_impl_any;
 
@@ -32,6 +32,10 @@ const SENTINELS: &[&str] = &[
     "header-auth-chunk-two-debug-sentinel",
     "content-type-debug-sentinel",
     "retry-after-debug-sentinel",
+    "smuggled-value-debug-sentinel",
+    "echoed-declared-secret-debug-sentinel",
+    "echoed-sanctioned-secret-debug-sentinel",
+    "transcript-control-debug-sentinel",
 ];
 
 #[test]
@@ -48,6 +52,9 @@ fn suite_identity_and_canonical_case_order_are_frozen() {
             HeaderAuthCaseIdV1::StreamingHeaderSecretSuccess,
             HeaderAuthCaseIdV1::HeaderSecretSlotMismatch,
             HeaderAuthCaseIdV1::BufferedBearerAndHeaderSecretSuccess,
+            HeaderAuthCaseIdV1::BufferedDeclaredHeaderSecretSuccess,
+            HeaderAuthCaseIdV1::DeclaredHeaderSmuggledThroughOrdinaryChannel,
+            HeaderAuthCaseIdV1::DeclaredHeaderRedactedFromTranscript,
         ]
     );
 }
@@ -59,7 +66,7 @@ fn the_combined_arm_case_declares_both_bindings_and_expects_authorization_on_the
     let fixtures = header_auth_fixtures_v1();
     let fixture = &fixtures[3];
     assert_eq!(fixture.case_id(), HeaderAuthCaseIdV1::BufferedBearerAndHeaderSecretSuccess);
-    assert_eq!(fixture.secret_header(), SecretHeaderV1::XGoogApiKey);
+    assert_eq!(fixture.header(), HeaderAuthHeaderV1::Sanctioned(SecretHeaderV1::XGoogApiKey));
     assert!(fixture.bearer_alongside());
     assert!(matches!(fixture.upstream(), HeaderAuthUpstreamV1::Response(_)));
     let evidence = fixture.expected().evidence();
@@ -68,17 +75,94 @@ fn the_combined_arm_case_declares_both_bindings_and_expects_authorization_on_the
         !evidence.authorization_header_absent(),
         "the combined arm puts authorization on the wire"
     );
-    // Every frozen case keeps the single-header shape.
-    assert!(fixtures[..3].iter().all(|frozen| !frozen.bearer_alongside()));
+    // Every other case keeps the single-header shape.
+    assert!(
+        fixtures
+            .iter()
+            .filter(|other| other.case_id() != fixture.case_id())
+            .all(|other| { !other.bearer_alongside() })
+    );
+}
+
+/// Auth contract version five and reserved-header policy version two: three declared-instance
+/// cases, appended after the four so no existing case moves.
+#[test]
+fn the_declared_cases_attach_refuse_and_redact_one_declared_name() {
+    let fixtures = header_auth_fixtures_v1();
+    let declared = &fixtures[4..];
+    assert_eq!(declared.len(), 3);
+    for fixture in declared {
+        let HeaderAuthHeaderV1::Declared(name) = fixture.header() else {
+            panic!("{:?} must present a declared header", fixture.case_id());
+        };
+        assert_eq!(fixture.declared_secret_headers(), [name]);
+        let parsed = DeclaredSecretHeaderV1::parse(name).expect("the name must be declarable");
+        assert!(SecretHeaderV1::ALL.iter().all(|sanctioned| sanctioned.header_name() != name));
+        assert_eq!(parsed.as_str(), name);
+    }
+    // The sanctioned cases declare nothing.
+    assert!(fixtures[..4].iter().all(|fixture| fixture.declared_secret_headers().is_empty()));
+    assert!(
+        fixtures
+            .iter()
+            .filter(|fixture| fixture.case_id()
+                != HeaderAuthCaseIdV1::DeclaredHeaderRedactedFromTranscript)
+            .all(|fixture| fixture.upstream_response_headers().is_empty()
+                && fixture.expected().transcript().is_none())
+    );
+
+    // 5. Attached as the secret, alone.
+    assert!(matches!(declared[0].upstream(), HeaderAuthUpstreamV1::Response(_)));
+
+    // 6. The same name on the ordinary channel: valid without the declaration, refused under it.
+    let smuggling = &declared[1];
+    let name = smuggling.header().header_name();
+    assert!(smuggling.input().headers().iter().any(|(header, _)| *header == name));
+    SafeHeaders::try_from_iter(smuggling.input().headers().iter().copied())
+        .expect("without the declaration the name is an ordinary header");
+    let declaration = DeclaredSecretHeadersV1::try_from_names(
+        smuggling.declared_secret_headers().iter().copied(),
+    )
+    .unwrap();
+    assert_eq!(
+        SafeHeaders::try_from_iter_with_secret_headers(
+            smuggling.input().headers().iter().copied(),
+            &declaration
+        ),
+        Err(HeaderPolicyError::ReservedHeader)
+    );
+    assert!(matches!(smuggling.upstream(), HeaderAuthUpstreamV1::NotReached));
+    assert!(matches!(
+        smuggling.expected().outcome(),
+        HeaderAuthExpectedOutcomeV1::Failure { code: ProviderCallFailureCodeV1::RequestFailed }
+    ));
+
+    // 7. Echoed by the upstream: the expectation is exactly what the contract's capture yields.
+    let echoing = &declared[2];
+    let transcript = echoing.expected().transcript().expect("the transcript case expects one");
+    let declaration =
+        DeclaredSecretHeadersV1::try_from_names(echoing.declared_secret_headers().iter().copied())
+            .unwrap();
+    let captured = ResponseTranscriptV1::capture_redacting(
+        echoing.upstream_response_headers().iter().map(|(name, value)| (*name, Some(*value))),
+        &declaration,
+    );
+    let captured: Vec<(&str, &str)> = captured.iter().collect();
+    assert_eq!(captured, transcript.retained());
+    for name in transcript.redacted() {
+        assert!(echoing.upstream_response_headers().iter().any(|(echoed, _)| echoed == name));
+    }
+    assert!(transcript.redacted().contains(&echoing.header().header_name()));
+    assert!(transcript.redacted().contains(&SecretHeaderV1::XApiKey.header_name()));
 }
 
 #[test]
 fn canonical_table_freezes_headers_upstreams_outcomes_and_evidence() {
     let fixtures = header_auth_fixtures_v1();
-    assert_eq!(fixtures.len(), 4);
+    assert_eq!(fixtures.len(), 7);
 
     // 1. BufferedHeaderSecretSuccess: one buffered exchange under the sanctioned header.
-    assert_eq!(fixtures[0].secret_header(), SecretHeaderV1::XApiKey);
+    assert_eq!(fixtures[0].header(), HeaderAuthHeaderV1::Sanctioned(SecretHeaderV1::XApiKey));
     let HeaderAuthUpstreamV1::Response(raw) = fixtures[0].upstream() else {
         panic!("the buffered case must respond");
     };
@@ -92,7 +176,7 @@ fn canonical_table_freezes_headers_upstreams_outcomes_and_evidence() {
     assert_eq!(*body, raw.body());
 
     // 2. StreamingHeaderSecretSuccess: headers-ready, byte-identical chunks, clean EOF.
-    assert_eq!(fixtures[1].secret_header(), SecretHeaderV1::XGoogApiKey);
+    assert_eq!(fixtures[1].header(), HeaderAuthHeaderV1::Sanctioned(SecretHeaderV1::XGoogApiKey));
     let HeaderAuthUpstreamV1::Stream(raw) = fixtures[1].upstream() else {
         panic!("the streaming case must stream");
     };
@@ -107,7 +191,7 @@ fn canonical_table_freezes_headers_upstreams_outcomes_and_evidence() {
     assert_eq!(*chunks, raw.chunks());
 
     // 3. HeaderSecretSlotMismatch: refused before resolver and transport under the header arm.
-    assert_eq!(fixtures[2].secret_header(), SecretHeaderV1::ApiKey);
+    assert_eq!(fixtures[2].header(), HeaderAuthHeaderV1::Sanctioned(SecretHeaderV1::ApiKey));
     assert_ne!(
         fixtures[2].input().requested_credential_slot(),
         fixtures[2].input().bound_credential_slot()
@@ -129,8 +213,12 @@ fn canonical_table_freezes_the_expected_wire_shape_evidence() {
         (ProviderCallCountV1::One, ProviderCallCountV1::One, true, true),
         (ProviderCallCountV1::One, ProviderCallCountV1::One, true, true),
         (ProviderCallCountV1::Zero, ProviderCallCountV1::Zero, false, true),
-        // Auth contract version four: the combined arm, appended last.
+        // Auth contract version four: the combined arm.
         (ProviderCallCountV1::One, ProviderCallCountV1::One, true, false),
+        // Auth contract version five: the declared arm, then its smuggled and echoed shapes.
+        (ProviderCallCountV1::One, ProviderCallCountV1::One, true, true),
+        (ProviderCallCountV1::Zero, ProviderCallCountV1::Zero, false, true),
+        (ProviderCallCountV1::One, ProviderCallCountV1::One, true, true),
     ];
     assert_eq!(fixtures.len(), expected_evidence.len());
     for (fixture, expected) in fixtures.iter().zip(expected_evidence) {
@@ -156,9 +244,22 @@ fn every_raw_fixture_field_is_checked_through_the_production_contract() {
         SafeHeaders::try_from_iter(input.headers().iter().copied())
             .expect("canonical headers must parse");
 
-        // The sanctioned header itself must never be constructible as a plain header.
-        SafeHeaders::try_from_iter([(fixture.secret_header().header_name(), "value")])
-            .expect_err("the sanctioned header must stay reserved");
+        // The presented header itself must never be constructible as a plain header of the
+        // request's package: a sanctioned name is reserved everywhere, a declared one under its
+        // declaration.
+        let declaration = DeclaredSecretHeadersV1::try_from_names(
+            fixture.declared_secret_headers().iter().copied(),
+        )
+        .expect("canonical declarations must parse");
+        SafeHeaders::try_from_iter_with_secret_headers(
+            [(fixture.header().header_name(), "value")],
+            &declaration,
+        )
+        .expect_err("the presented header must stay reserved");
+        for (name, value) in fixture.upstream_response_headers() {
+            assert!(name.bytes().all(|byte| byte.is_ascii_lowercase() || byte == b'-'));
+            assert!(http::HeaderValue::from_str(value).is_ok());
+        }
 
         match fixture.upstream() {
             HeaderAuthUpstreamV1::Response(raw) => {

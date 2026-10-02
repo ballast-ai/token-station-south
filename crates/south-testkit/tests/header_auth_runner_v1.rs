@@ -8,7 +8,10 @@ use std::{
 
 use bytes::Bytes;
 use http::StatusCode;
-use south_contracts::{BufferedHttpResponseV1, StreamChunkV1, StreamingResponseHeadV1};
+use south_contracts::{
+    BufferedHttpResponseV1, ProviderQuotaMetadataV1, ResponseDiagnosticsV1, ResponseTranscriptV1,
+    StreamChunkV1, StreamingResponseHeadV1,
+};
 use south_provider_conformance::{
     HEADER_AUTH_CONFORMANCE_SUITE_ID, HEADER_AUTH_CONFORMANCE_SUITE_VERSION, HeaderAuthCaseIdV1,
     HeaderAuthExpectedOutcomeV1, HeaderAuthFixtureV1, ProviderCallCountV1,
@@ -118,6 +121,18 @@ async fn each_single_difference_reports_exactly_its_one_case_and_category() {
             HeaderAuthCaseIdV1::StreamingHeaderSecretSuccess,
             HeaderAuthMismatchCategoryV1::AuthorizationPresence,
         ),
+        (
+            HeaderAuthCaseIdV1::DeclaredHeaderRedactedFromTranscript,
+            HeaderAuthMismatchCategoryV1::Transcript,
+        ),
+        (
+            HeaderAuthCaseIdV1::DeclaredHeaderSmuggledThroughOrdinaryChannel,
+            HeaderAuthMismatchCategoryV1::TransportCallCount,
+        ),
+        (
+            HeaderAuthCaseIdV1::BufferedDeclaredHeaderSecretSuccess,
+            HeaderAuthMismatchCategoryV1::SanctionedHeader,
+        ),
     ];
 
     for (case_id, category) in isolated_mismatches {
@@ -126,7 +141,7 @@ async fn each_single_difference_reports_exactly_its_one_case_and_category() {
             .expect_err("one deliberate difference must fail conformance");
         assert_eq!(failure.suite_id(), HEADER_AUTH_CONFORMANCE_SUITE_ID);
         assert_eq!(failure.suite_version(), HEADER_AUTH_CONFORMANCE_SUITE_VERSION);
-        assert_eq!(failure.evaluated_case_count(), 4);
+        assert_eq!(failure.evaluated_case_count(), 7);
         assert!(failure.mismatches().len() <= MAX_HEADER_AUTH_MISMATCHES_V1);
         assert_eq!(failure.mismatches().len(), 1, "category {category:?} must isolate");
         let mismatch = &failure.mismatches()[0];
@@ -166,7 +181,8 @@ async fn a_fully_wrong_executor_reports_every_case_without_failing_fast() {
     let failure = run_header_auth_conformance_v1(&WrongExecutor)
         .await
         .expect_err("deliberate mismatches must fail");
-    assert_eq!(failure.evaluated_case_count(), 4);
+    assert_eq!(failure.evaluated_case_count(), 7);
+    assert!(failure.mismatches().len() <= MAX_HEADER_AUTH_MISMATCHES_V1);
 
     let categories: BTreeSet<_> =
         failure.mismatches().iter().map(south_testkit::HeaderAuthMismatchV1::category).collect();
@@ -296,7 +312,13 @@ fn observation_matching(fixture: &HeaderAuthFixtureV1) -> HeaderAuthObservationV
     match fixture.expected().outcome() {
         HeaderAuthExpectedOutcomeV1::Response { status, body, content_type, retry_after } => {
             HeaderAuthObservationV1::response(
-                response(*status, body, *content_type, *retry_after),
+                response_transcribing(
+                    *status,
+                    body,
+                    *content_type,
+                    *retry_after,
+                    &expected_transcript(fixture, false),
+                ),
                 evidence,
             )
         }
@@ -315,21 +337,6 @@ fn observation_matching(fixture: &HeaderAuthFixtureV1) -> HeaderAuthObservationV
             HeaderAuthObservationV1::failure(*code, evidence)
         }
     }
-}
-
-fn response(
-    status: u16,
-    body: &str,
-    content_type: Option<&str>,
-    retry_after: Option<&str>,
-) -> BufferedHttpResponseV1 {
-    BufferedHttpResponseV1::try_from_parts(
-        StatusCode::from_u16(status).expect("expected status should be valid"),
-        body.as_bytes().to_vec(),
-        content_type.map(str::to_owned),
-        retry_after.map(str::to_owned),
-    )
-    .expect("expected response should be valid")
 }
 
 fn observation_with_single_mismatch(
@@ -380,11 +387,15 @@ fn observation_with_single_mismatch(
                 *retry_after
             };
             HeaderAuthObservationV1::response(
-                response(
+                response_transcribing(
                     observed_status,
                     observed_body,
                     observed_content_type,
                     observed_retry_after,
+                    &expected_transcript(
+                        fixture,
+                        category == HeaderAuthMismatchCategoryV1::Transcript,
+                    ),
                 ),
                 evidence,
             )
@@ -424,6 +435,41 @@ fn observation_with_single_mismatch(
             }
         }
     }
+}
+
+/// The transcript a matching adapter reports: exactly the retained pairs. With `leak`, the first
+/// name the fixture expects redacted is transcribed too.
+fn expected_transcript(
+    fixture: &HeaderAuthFixtureV1,
+    leak: bool,
+) -> Vec<(&'static str, &'static str)> {
+    let Some(expected) = fixture.expected().transcript() else {
+        return Vec::new();
+    };
+    let mut transcript = expected.retained().to_vec();
+    if leak {
+        transcript.push((expected.redacted()[0], "isolated-leaked-secret"));
+    }
+    transcript
+}
+
+fn response_transcribing(
+    status: u16,
+    body: &str,
+    content_type: Option<&str>,
+    retry_after: Option<&str>,
+    transcript: &[(&str, &str)],
+) -> BufferedHttpResponseV1 {
+    BufferedHttpResponseV1::try_from_parts_with_response_metadata(
+        StatusCode::from_u16(status).expect("expected status should be valid"),
+        body.as_bytes().to_vec(),
+        content_type.map(str::to_owned),
+        retry_after.map(str::to_owned),
+        ProviderQuotaMetadataV1::default(),
+        ResponseDiagnosticsV1::default(),
+        ResponseTranscriptV1::capture(transcript.iter().map(|(name, value)| (*name, Some(*value)))),
+    )
+    .expect("expected response should be valid")
 }
 
 const fn observed_status(expected: u16, category: HeaderAuthMismatchCategoryV1) -> u16 {
