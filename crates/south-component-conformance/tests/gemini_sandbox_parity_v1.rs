@@ -16,11 +16,13 @@ use south_component_conformance::{
     run_provider_component_suite_v1_for_manifest,
 };
 use south_provider_api::ComponentManifestV1;
-use south_provider_api::{HostExpectationsV1, compatibility_matches};
+use south_provider_api::{HostExpectationsV1, compatibility_admits, compatibility_matches};
 use south_provider_runtime::{ComponentRuntimeV1, NoSecretsV1, RuntimeLimitsV1};
 
 #[path = "support/gate2_report.rs"]
 mod gate2_report;
+#[path = "support/host_range.rs"]
+mod host_range;
 
 fn repo_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().and_then(Path::parent).expect("repo root")
@@ -53,17 +55,6 @@ fn shipped_manifest() -> (String, ComponentManifestV1) {
     (source, manifest)
 }
 
-/// The host expectations this package was verified against — the true values,
-/// as the gate ① test below re-asserts after deliberately trying a wrong one.
-fn host_expectations() -> HostExpectationsV1 {
-    HostExpectationsV1 {
-        ir_schema_id: "token-station-protocol@0.4.0/v0.3.0".to_owned(),
-        kernel_version: "0.3.0".to_owned(),
-        kernel_revision: "6822aab1dea54ef646cb2206595cd4955ff9764a".to_owned(),
-        south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
-    }
-}
-
 fn sandboxed() -> SandboxedComponentV1 {
     let runtime = ComponentRuntimeV1::new(RuntimeLimitsV1::default()).expect("engine builds");
     let wasm = std::fs::read(component_wasm()).expect("the component reads");
@@ -72,7 +63,7 @@ fn sandboxed() -> SandboxedComponentV1 {
         &runtime,
         &source,
         &wasm,
-        &host_expectations(),
+        &host_range::host_range(),
         NoSecretsV1,
     )
     .expect("the shipped package passes every load gate");
@@ -104,7 +95,8 @@ fn the_sandboxed_component_passes_gate_two_byte_for_byte() {
 }
 
 /// Gate ① against the shipped package: manifest, identity (native and
-/// sandboxed agree, both with the manifest), and the tuple handshake.
+/// sandboxed agree, both with the manifest), the range handshake, and the
+/// exact tuple handshake.
 #[test]
 fn the_shipped_package_passes_gate_one_and_the_tuple_handshake() {
     let (_, manifest) = shipped_manifest();
@@ -114,19 +106,19 @@ fn the_shipped_package_passes_gate_one_and_the_tuple_handshake() {
     assert!(reported_identity_matches(&component.metadata(), &manifest));
     assert_eq!(component.metadata(), GeminiReferenceV1.metadata());
 
-    let expectations = HostExpectationsV1 {
-        ir_schema_id: "token-station-protocol@0.4.0/v0.3.0".to_owned(),
-        kernel_version: "0.3.0".to_owned(),
+    // The range handshake a host linking this release uses admits the package.
+    assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
+
+    // The exact handshake, still supported for one release. Its true values come from the
+    // manifest's own runtime declaration, which may lag this release (§8.6).
+    let expectations = host_range::exact_expectations_for(&manifest);
+    let off_by_one_digit = HostExpectationsV1 {
         kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb00c".to_owned(),
-        south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
+        ..expectations.clone()
     };
     // Deliberately one hex digit off first: the handshake must refuse …
-    assert!(compatibility_matches(&manifest, &expectations).is_err());
+    assert!(compatibility_matches(&manifest, &off_by_one_digit).is_err());
     // … and accept the true values.
-    let expectations = HostExpectationsV1 {
-        kernel_revision: "6822aab1dea54ef646cb2206595cd4955ff9764a".to_owned(),
-        ..expectations
-    };
     assert_eq!(compatibility_matches(&manifest, &expectations), Ok(()));
 }
 

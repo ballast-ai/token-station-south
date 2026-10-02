@@ -15,11 +15,14 @@ use south_component_conformance::{
     FixturePackV1, PROVIDER_COMPONENT_SUITE_V1, ProviderComponentV1, accepts_manifest,
     reported_identity_matches, run_provider_component_suite_v1_for_manifest,
 };
+use south_provider_api::compatibility_admits;
 use south_provider_api::{
     COMPONENT_BEHAVIOR_SUITE, CompatibilityDeclarationV1, ComponentManifestV1,
     ComponentPermissionsV1, ConformanceSpecV1, PROVIDER_WORLD, WIT_PACKAGE,
 };
-use south_provider_api::{HostExpectationsV1, compatibility_matches};
+
+#[path = "support/host_range.rs"]
+mod host_range;
 
 fn repo_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().and_then(Path::parent).expect("repo root")
@@ -39,15 +42,6 @@ fn shipped_pack() -> FixturePackV1 {
     FixturePackV1::load(&directory).expect("the shipped fixture pack loads")
 }
 
-fn host_expectations() -> HostExpectationsV1 {
-    HostExpectationsV1 {
-        ir_schema_id: "token-station-protocol@0.4.0/v0.3.0".to_owned(),
-        kernel_version: "0.3.0".to_owned(),
-        kernel_revision: "6822aab1dea54ef646cb2206595cd4955ff9764a".to_owned(),
-        south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
-    }
-}
-
 /// Gate ①: the package the component ships is admissible, and the identity it
 /// reports at runtime is the identity its manifest claims.
 #[test]
@@ -59,9 +53,9 @@ fn gate_one_admits_the_shipped_package_and_its_reported_identity() {
         "the reference reports the identity its manifest claims"
     );
     assert_eq!(
-        compatibility_matches(&manifest, &host_expectations()),
+        compatibility_admits(&manifest, &host_range::host_range()),
         Ok(()),
-        "the shipped compatibility tuple matches this host's pins"
+        "the shipped compatibility declaration falls inside this host's range"
     );
     assert_eq!(
         manifest.conformance.required_suite, PROVIDER_COMPONENT_SUITE_V1,
@@ -98,6 +92,9 @@ fn the_manifest_declares_exactly_what_the_dialect_uses() {
         },
     );
     assert_eq!(manifest.api_version, PROVIDER_WORLD);
+    // `south_runtime` may lag this release (§8.6); it is held to the shipped-package rule rather
+    // than to the workspace version.
+    host_range::assert_released_runtime(&manifest);
     assert_eq!(
         manifest.compatibility,
         CompatibilityDeclarationV1 {
@@ -105,7 +102,7 @@ fn the_manifest_declares_exactly_what_the_dialect_uses() {
             kernel_version: "0.3.0".to_owned(),
             kernel_revision: "6822aab1dea54ef646cb2206595cd4955ff9764a".to_owned(),
             wit_package: WIT_PACKAGE.to_owned(),
-            south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
+            south_runtime: manifest.compatibility.south_runtime.clone(),
             runtime_abi: Some(south_provider_api::RUNTIME_ABI),
             kernel_contracts: std::collections::BTreeMap::from([
                 ("canonical_ir".to_owned(), 2),

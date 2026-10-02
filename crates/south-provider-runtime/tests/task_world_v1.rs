@@ -12,10 +12,12 @@ use std::process::Command;
 use std::sync::OnceLock;
 use std::time::Duration;
 
-use south_provider_api::HostExpectationsV1;
 use south_provider_runtime::{
     ComponentRuntimeV1, LoadedComponentV1, RuntimeLimitsV1, SecretSignerV1,
 };
+
+#[path = "support/host_range.rs"]
+mod host_range;
 
 fn repo_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().and_then(Path::parent).expect("repo root")
@@ -70,20 +72,11 @@ impl SecretSignerV1 for FixedSigner {
     }
 }
 
-fn expectations() -> HostExpectationsV1 {
-    HostExpectationsV1 {
-        ir_schema_id: "token-station-protocol@0.4.0/v0.3.0".to_owned(),
-        kernel_version: "0.3.0".to_owned(),
-        kernel_revision: "6822aab1dea54ef646cb2206595cd4955ff9764a".to_owned(),
-        south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
-    }
-}
-
 /// The gap #83 stopped at: the guest it ships can now be loaded.
 #[test]
 fn the_shipped_task_guest_loads_and_reports_its_identity() {
     let dir = package("ok", &shipped_task_manifest(), task_guest_wasm());
-    let loaded = LoadedComponentV1::load(&runtime(), &dir, &expectations(), FixedSigner)
+    let loaded = LoadedComponentV1::load(&runtime(), &dir, &host_range::host_range(), FixedSigner)
         .expect("the shipped task package loads");
     assert_eq!(loaded.manifest().api_version, "task-adapter-v1");
     assert_eq!(loaded.manifest().name, "task-kling");
@@ -100,7 +93,7 @@ fn the_identity_gate_runs_in_the_task_world_too() {
     manifest["version"] = "9.9.9".into();
     let lying = manifest.to_string();
     let dir = package("lying", &lying, task_guest_wasm());
-    let error = LoadedComponentV1::load(&runtime(), &dir, &expectations(), FixedSigner)
+    let error = LoadedComponentV1::load(&runtime(), &dir, &host_range::host_range(), FixedSigner)
         .expect_err("a package that lies about its version is refused");
     assert!(
         format!("{error}").contains("not what it claims"),
@@ -118,7 +111,7 @@ fn a_task_guest_declaring_the_chat_world_is_refused() {
         .replace("south.task-component.v1", "south.provider-component.v1")
         .replace("\"submit\",\n    \"observe\",\n    \"render\"", "\"chat\"");
     let dir = package("mislabelled", &mislabelled, task_guest_wasm());
-    let error = LoadedComponentV1::load(&runtime(), &dir, &expectations(), FixedSigner)
+    let error = LoadedComponentV1::load(&runtime(), &dir, &host_range::host_range(), FixedSigner)
         .expect_err("bytes and manifest must agree about the world");
     let rendered = format!("{error}");
     assert!(

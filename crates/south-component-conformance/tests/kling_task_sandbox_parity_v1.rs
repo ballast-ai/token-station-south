@@ -18,13 +18,15 @@ use south_component_conformance::sandbox::SandboxedTaskComponentV1;
 use south_component_conformance::{
     TaskFixturePackV1, reference_kling_task::KlingTaskReferenceV1, run_task_component_suite_v1,
 };
-use south_provider_api::{ComponentManifestV1, HostExpectationsV1};
+use south_provider_api::ComponentManifestV1;
 use south_provider_runtime::{
     ComponentRuntimeV1, LoadedComponentV1, RuntimeLimitsV1, SecretSignerV1,
 };
 
 #[path = "support/gate2_report.rs"]
 mod gate2_report;
+#[path = "support/host_range.rs"]
+mod host_range;
 
 fn repo_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().and_then(Path::parent).expect("repo root")
@@ -44,15 +46,6 @@ fn component_wasm() -> &'static Path {
         );
         repo_root().join("components/task-kling/target/wasm32-wasip2/release/task_kling.wasm")
     })
-}
-
-fn expectations() -> HostExpectationsV1 {
-    HostExpectationsV1 {
-        ir_schema_id: "token-station-protocol@0.4.0/v0.3.0".to_owned(),
-        kernel_version: "0.3.0".to_owned(),
-        kernel_revision: "6822aab1dea54ef646cb2206595cd4955ff9764a".to_owned(),
-        south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
-    }
 }
 
 struct FixedSigner;
@@ -85,7 +78,7 @@ fn sandboxed() -> SandboxedTaskComponentV1 {
         max_payload_bytes: 4 * 1024 * 1024,
     })
     .expect("engine builds");
-    let loaded = LoadedComponentV1::load(&runtime, &dir, &expectations(), FixedSigner)
+    let loaded = LoadedComponentV1::load(&runtime, &dir, &host_range::host_range(), FixedSigner)
         .expect("the shipped package loads");
     SandboxedTaskComponentV1::new(loaded).map_err(|_| ()).expect("it declares the task world")
 }

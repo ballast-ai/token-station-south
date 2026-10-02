@@ -18,9 +18,11 @@ use south_component_conformance::{
     run_provider_component_suite_v1_for_manifest,
 };
 use south_provider_api::{
-    ComponentManifestV1, HostExpectationsV1, PROVIDER_WORLD, SIGNED_HEADER_NAMES,
-    compatibility_matches,
+    ComponentManifestV1, PROVIDER_WORLD, SIGNED_HEADER_NAMES, compatibility_admits,
 };
+
+#[path = "support/host_range.rs"]
+mod host_range;
 
 fn repo_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().and_then(Path::parent).expect("repo root")
@@ -41,15 +43,6 @@ fn shipped_pack() -> FixturePackV1 {
     FixturePackV1::load(&directory).expect("the shipped fixture pack loads")
 }
 
-fn host_expectations() -> HostExpectationsV1 {
-    HostExpectationsV1 {
-        ir_schema_id: "token-station-protocol@0.4.0/v0.3.0".to_owned(),
-        kernel_version: "0.3.0".to_owned(),
-        kernel_revision: "6822aab1dea54ef646cb2206595cd4955ff9764a".to_owned(),
-        south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
-    }
-}
-
 /// Gate ①: the package the component ships is admissible, and the identity it
 /// reports at runtime is the identity its manifest claims.
 #[test]
@@ -57,8 +50,8 @@ fn gate_one_admits_the_shipped_package_and_its_reported_identity() {
     let manifest = shipped_manifest();
     assert!(accepts_manifest(&manifest).is_ok(), "the shipped manifest must pass gate ①");
     assert!(
-        compatibility_matches(&manifest, &host_expectations()).is_ok(),
-        "the shipped manifest must satisfy this release's compatibility tuple"
+        compatibility_admits(&manifest, &host_range::host_range()).is_ok(),
+        "the shipped manifest must fall inside this release's compatibility range"
     );
     assert!(
         reported_identity_matches(&BedrockConverseReferenceV1.metadata(), &manifest),
