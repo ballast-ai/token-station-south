@@ -48,8 +48,13 @@
 mod bindings;
 mod component;
 mod loader;
+mod package_set;
 mod runtime;
 
 pub use component::{ComponentStreamV1, LoadedComponentV1, NoSecretsV1, SecretSignerV1};
-pub use loader::{CallErrorV1, LoadErrorV1, UnreadableReasonV1};
+pub use loader::{CallErrorV1, HostCompatibilityV1, LoadErrorV1, UnreadableReasonV1};
+pub use package_set::{
+    AdmittedPackageV1, ContestedFamilyV1, PackageRefusalV1, PackageSetReportV1, RefusedPackageV1,
+    load_package_set,
+};
 pub use runtime::{ComponentRuntimeV1, RuntimeLimitsV1};

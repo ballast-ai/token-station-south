@@ -173,6 +173,13 @@ fn the_manifest_declares_exactly_what_the_dialect_uses() {
             kernel_revision: "6822aab1dea54ef646cb2206595cd4955ff9764a".to_owned(),
             wit_package: WIT_PACKAGE.to_owned(),
             south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
+            runtime_abi: Some(south_provider_api::RUNTIME_ABI),
+            kernel_contracts: std::collections::BTreeMap::from([
+                ("canonical_ir".to_owned(), 2),
+                ("error_catalog".to_owned(), 1),
+                ("stream".to_owned(), 2),
+            ]),
+            contracts: std::collections::BTreeMap::new(),
         },
     );
 }

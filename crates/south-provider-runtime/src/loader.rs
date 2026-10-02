@@ -7,8 +7,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use south_provider_api::{
-    CompatibilityMismatchV1, ComponentManifestV1, ComponentMetadataV1, HostExpectationsV1,
-    ManifestErrorV1, compatibility_matches,
+    CompatibilityMismatchV1, CompatibilityMismatchV2, ComponentManifestV1, ComponentMetadataV1,
+    HostExpectationsV1, HostRangeV1, ManifestErrorV1, compatibility_admits, compatibility_matches,
 };
 use thiserror::Error;
 use wasmtime::component::{Component, ResourceTable};
@@ -18,8 +18,33 @@ use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 use crate::component::SecretSignerV1;
 use crate::runtime::ComponentRuntimeV1;
 
-const MAX_MANIFEST_BYTES: u64 = 256 * 1024;
-const MAX_COMPONENT_BYTES: u64 = 64 * 1024 * 1024;
+pub const MAX_MANIFEST_BYTES: u64 = 256 * 1024;
+pub const MAX_COMPONENT_BYTES: u64 = 64 * 1024 * 1024;
+
+/// How an admitting host decides that a package was built for it.
+///
+/// Either the exact tuple ([`HostExpectationsV1`], superseded) or the range
+/// ([`HostRangeV1`], B3, `docs/design/2026-09-30-host-zero-vendor-boundary.md`
+/// §8.4). Every load path takes either, so a host moves from one to the other
+/// without changing its call sites.
+pub trait HostCompatibilityV1 {
+    /// # Errors
+    ///
+    /// The refusal, as the load error the package is reported with.
+    fn admit(&self, manifest: &ComponentManifestV1) -> Result<(), LoadErrorV1>;
+}
+
+impl HostCompatibilityV1 for HostExpectationsV1 {
+    fn admit(&self, manifest: &ComponentManifestV1) -> Result<(), LoadErrorV1> {
+        compatibility_matches(manifest, self).map_err(LoadErrorV1::Incompatible)
+    }
+}
+
+impl HostCompatibilityV1 for HostRangeV1 {
+    fn admit(&self, manifest: &ComponentManifestV1) -> Result<(), LoadErrorV1> {
+        compatibility_admits(manifest, self).map_err(LoadErrorV1::OutsideRange)
+    }
+}
 
 /// Interface prefixes no component may import.
 ///
@@ -94,6 +119,8 @@ pub enum LoadErrorV1 {
     Manifest(ManifestErrorV1),
     #[error("component is not compatible with this host: {0}")]
     Incompatible(CompatibilityMismatchV1),
+    #[error("component is outside the range this host admits: {0}")]
+    OutsideRange(CompatibilityMismatchV2),
     /// The bytes are not a WASM component at all, or the host could not build
     /// a linker for them. Raised before the declared world is consulted, so it
     /// deliberately names no world (2026-09-19 runtime-second-world record, D3).
@@ -154,7 +181,7 @@ pub enum CallErrorV1 {
 pub fn read_package(
     runtime: &ComponentRuntimeV1,
     dir: &Path,
-    expectations: &HostExpectationsV1,
+    expectations: &(impl HostCompatibilityV1 + ?Sized),
 ) -> Result<(ComponentManifestV1, Component), LoadErrorV1> {
     let manifest_path = dir.join("manifest.json");
     let manifest_bytes = read_file_limited(&manifest_path, MAX_MANIFEST_BYTES)
@@ -165,7 +192,7 @@ pub fn read_package(
     let manifest = gate_manifest(&manifest_source)?;
     // Refused here the component's bytes are never even read, which is the
     // cheapest possible answer to "this package was built for another host".
-    compatibility_matches(&manifest, expectations).map_err(LoadErrorV1::Incompatible)?;
+    expectations.admit(&manifest)?;
 
     let wasm_path = dir.join("component.wasm");
     let wasm = read_file_limited(&wasm_path, MAX_COMPONENT_BYTES)
@@ -182,13 +209,13 @@ pub fn parse_package(
     runtime: &ComponentRuntimeV1,
     manifest_source: &str,
     wasm: &[u8],
-    expectations: &HostExpectationsV1,
+    expectations: &(impl HostCompatibilityV1 + ?Sized),
 ) -> Result<(ComponentManifestV1, Component), LoadErrorV1> {
     let manifest = gate_manifest(manifest_source)?;
     // The tuple handshake sits between the manifest and the Wasm on purpose: a
     // component built against another host is refused before its bytes are
     // opened, so a stale package cannot reach the import scan or the engine.
-    compatibility_matches(&manifest, expectations).map_err(LoadErrorV1::Incompatible)?;
+    expectations.admit(&manifest)?;
     let component = gate_component(runtime, wasm, &manifest.api_version)?;
     Ok((manifest, component))
 }
@@ -196,7 +223,7 @@ pub fn parse_package(
 /// Gate ①, judged before any wasm is even opened. The compatibility-tuple
 /// handshake against host expectations is the admitting layer's job (it holds
 /// the expected values); this gate covers everything manifest-local.
-fn gate_manifest(manifest_source: &str) -> Result<ComponentManifestV1, LoadErrorV1> {
+pub fn gate_manifest(manifest_source: &str) -> Result<ComponentManifestV1, LoadErrorV1> {
     let manifest: ComponentManifestV1 =
         serde_json::from_str(manifest_source).map_err(LoadErrorV1::ManifestSyntax)?;
     manifest.validate().map_err(LoadErrorV1::Manifest)?;
@@ -227,7 +254,7 @@ fn gate_component(
     Ok(component)
 }
 
-fn read_file_limited(path: &Path, limit: u64) -> Result<Vec<u8>, UnreadableReasonV1> {
+pub fn read_file_limited(path: &Path, limit: u64) -> Result<Vec<u8>, UnreadableReasonV1> {
     let file = fs::File::open(path).map_err(UnreadableReasonV1::Io)?;
     let metadata = file.metadata().map_err(UnreadableReasonV1::Io)?;
     if metadata.len() > limit {

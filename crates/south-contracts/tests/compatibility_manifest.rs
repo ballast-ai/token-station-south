@@ -7,6 +7,8 @@ use serde::Deserialize;
 struct CompatibilityManifest {
     schema_version: u16,
     release: Release,
+    runtime_abi: u32,
+    kernel_contracts: BTreeMap<String, u32>,
     contracts: Contracts,
     conformance: Conformance,
     provider_api: ProviderApi,
@@ -380,7 +382,19 @@ fn compatibility_manifest_describes_the_library_slice() {
     let contents = fs::read_to_string(path).unwrap();
     let manifest: CompatibilityManifest = serde_json::from_str(&contents).unwrap();
 
-    assert_eq!(manifest.schema_version, 4);
+    assert_eq!(manifest.schema_version, 5);
+    // The range handshake's epoch and the kernel contract numbers this release distributes
+    // (docs/design/2026-09-30-host-zero-vendor-boundary.md §8.3); every shipped manifest declares
+    // the same, which the conformance crate's shipped-package tests check.
+    assert_eq!(manifest.runtime_abi, 1);
+    assert_eq!(
+        manifest.kernel_contracts,
+        BTreeMap::from([
+            ("canonical_ir".to_owned(), 2),
+            ("error_catalog".to_owned(), 1),
+            ("stream".to_owned(), 2),
+        ])
+    );
     assert_eq!(manifest.release.version, env!("CARGO_PKG_VERSION"));
     assert_eq!(manifest.release.stability, "library_slice");
     assert_eq!(

@@ -206,3 +206,19 @@ v0.37.0 号已被 `feature/p15-responses` 线（Responses codec）占用、未�
 故运行时与十三包必须
 同批升。宿主采用须分别用真实存储通过公共故障套件；组件兼容状态不能代替共享核心
 采用证据。[设计与边界](docs/design/2026-09-20-shared-task-core.md)。
+
+**Package admission by range (B3).** The paragraph above describes the exact-tuple handshake, which is superseded.
+A package now declares `runtime_abi`, the kernel contract numbers and the south contracts it speaks, and a host
+admits it with `compatibility_admits` against a `HostRangeV1`: the same epoch, the same kernel contract numbers, a
+contract version the host decodes, and `south_runtime` between the host's floor and its own runtime. So a release no
+longer re-stamps every package, and a package whose content is unchanged keeps its identity. A host loading a
+directory with `load_package_set` judges each package on its own and follows three rules:
+
+- a refused package makes only its own families unavailable, and startup continues;
+- a refused or missing package never falls back to a native reference implementation, which is gate ②'s judge and
+  not a stand-in;
+- when two admitted packages of one world declare the same family, neither serves it unless the operator pins one
+  by its `component.wasm` digest. Load order never breaks the tie.
+
+A release that tightens gate ① or ② says so, and a host enforces the tightening by raising its floor. Design record:
+`docs/design/2026-09-30-host-zero-vendor-boundary.md` §8.
