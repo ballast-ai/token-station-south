@@ -550,6 +550,16 @@ impl CredentialsV1 {
         {
             return Err("min_ttl_seconds exceeds max_ttl_seconds".to_owned());
         }
+        // A margin at or above the shortest validity a minted value can have makes every freshly
+        // minted value already due for refresh, so the host would exchange on every request.
+        if let Some(margin) = recipe.refresh_margin_seconds
+            && margin >= recipe.min_ttl_seconds.unwrap_or(HOST_MIN_TTL_SECONDS)
+        {
+            return Err(
+                "refresh_margin_seconds must be shorter than the shortest validity after the clamp"
+                    .to_owned(),
+            );
+        }
         for ttl in [recipe.min_ttl_seconds, recipe.max_ttl_seconds].into_iter().flatten() {
             if !(HOST_MIN_TTL_SECONDS..=HOST_MAX_TTL_SECONDS).contains(&ttl) {
                 return Err("a TTL bound may only narrow the host's 60 s to 24 h clamp".to_owned());

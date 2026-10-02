@@ -304,13 +304,6 @@ fn structural_rules_refuse_what_they_guard() {
             json!("nobody"),
         );
     });
-    refuses("a TTL bound outside the host clamp", package, codex(), |c| {
-        set(c, &format!("{codex_recipe}/max_ttl_seconds"), json!(172_800));
-    });
-    refuses("min above max", package, codex(), |c| {
-        set(c, &format!("{codex_recipe}/min_ttl_seconds"), json!(600));
-        set(c, &format!("{codex_recipe}/max_ttl_seconds"), json!(300));
-    });
     refuses("five steps", package, codex(), |c| {
         let step = c.pointer(&format!("{codex_recipe}/steps/0")).unwrap().clone();
         let steps: Vec<Value> = (0..5)
@@ -353,6 +346,27 @@ fn structural_rules_refuse_what_they_guard() {
     });
     refuses("an unknown step kind", package, codex(), |c| {
         set(c, &format!("{codex_recipe}/steps/0/kind"), json!("ssh_exchange"));
+    });
+}
+
+#[test]
+fn clock_rules_refuse_what_they_guard() {
+    let codex_recipe = "/recipes/codex";
+    let set = insert;
+    let package = "provider-openai-compatible";
+    refuses("a TTL bound outside the host clamp", package, codex(), |c| {
+        set(c, &format!("{codex_recipe}/max_ttl_seconds"), json!(172_800));
+    });
+    refuses("a margin no shorter than the host floor", package, codex(), |c| {
+        set(c, &format!("{codex_recipe}/refresh_margin_seconds"), json!(60));
+    });
+    refuses("a margin no shorter than the recipe floor", package, codex(), |c| {
+        set(c, &format!("{codex_recipe}/min_ttl_seconds"), json!(300));
+        set(c, &format!("{codex_recipe}/refresh_margin_seconds"), json!(300));
+    });
+    refuses("min above max", package, codex(), |c| {
+        set(c, &format!("{codex_recipe}/min_ttl_seconds"), json!(600));
+        set(c, &format!("{codex_recipe}/max_ttl_seconds"), json!(300));
     });
 }
 
