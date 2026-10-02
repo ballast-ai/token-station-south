@@ -232,17 +232,31 @@ at most `MAX_TASK_ID_BYTES` (128, task.rs:41) bytes drawn from `[A-Za-z0-9_-]` a
 `Unknown` at submit; base64url characters are admitted because the measured ids look like base64url (inferred). The
 id is persisted and rendered verbatim (2026-09-20-task-adapter-v2-candidate.md, "Kling input").
 
-### 4.5 Open measurement: `background: true` alone
+### 4.5 `background: true` alone (measured by O0-c)
 
 O0-b measured `stream: true` (SSE) and `stream: true` with `background: true` (accepted; a paid generation), and
 GET by id. It did **not** measure `background: true` without `stream`. This record assumes it answers promptly with
 a JSON interaction carrying `id` and `status: in_progress` (inferred from the SSE `interaction.created` event, which
 carries the same fields). The submit table tolerates an SSE answer (decoded with `decode_sse_v1`, umbrella §5.2),
 but a submit that streams until completion would make the host's buffered submit wait ~40 s and read the clip
-through the submit path. So one sample (O0-c, §12) is a gate before implementation; if `background` alone is
-refused, the fallback is `background: true, stream: true` with the component taking the id from the first event —
-which requires the host to stop reading after the first event, a new generic transport behavior that this record
-does not propose (Q-L1).
+through the submit path. So one sample (O0-c, §12) was made a gate before implementation.
+
+**O0-c result (2026-10-02, Vertex AI, one paid generation).** `background: true` without `stream` answers in about
+4 s with HTTP 200 and a plain JSON body `{"id", "status": "in_progress", "object": "interaction", "model"}` — the
+assumption above holds, so the SSE fallback is not needed. Polling `GET …/interactions/{id}` then returned
+`in_progress` until the interaction was `completed` about 45 s after submit. Two further facts matter for the
+design:
+
+- **A poll response already carries `steps` while `in_progress`, and echoes every input part.** With twenty
+  reference images the in-progress poll body was 3.7 MB and the final one 7.3 MB; each input image comes back as
+  its own `user_input` step. The host must apply `elide_v1` (umbrella §5.2, image §6.2) to every poll response, not
+  only the final one, and the component's pointers must skip the echoed inputs (the video pointer is not at a
+  fixed step index).
+- **Stored interactions outlive two days.** Both O0-b interactions (created 2026-09-30) were still retrievable,
+  complete, on 2026-10-02 (Q-L5: retention is at least that; the documented limit is still to be found).
+
+O0-c also measured the request side (§5.1, §5.3): `response_format.aspect_ratio` accepts only `16:9` and `9:16`
+(any other value is a 400 before billing), and image parts are accepted as written below.
 
 ## 5. Request mapping
 
@@ -268,8 +282,11 @@ writes `model` = the upstream model before calling the component).
 DO6 takes the native surface offline only after this component accepts image input. The Interactions `input` field
 takes either a string (measured) or a list of content parts; the GET-by-id body echoes the prompt as a `user_input`
 step with `content: [{type: "text", text}]` (O0-b), and the output video part is `{type: "video", mime_type, data}`.
-By analogy the image part is `{type: "image", mime_type, data}` with standard base64 — **inferred, not measured**,
-so image input ships only after an O0-c sample of an image-to-video request (§12). Images come from the host's
+The image part is `{type: "image", mime_type, data}` with standard base64 — **measured by O0-c** (2026-10-02): a
+request whose `input` was one text part plus twenty PNG parts (640 px wide) was accepted and completed, billing
+`input_tokens_by_modality` text 6 and **image 22,000** (about 1,100 tokens per image at that size) alongside the
+same 57,920 video tokens. Twenty images were accepted, so Omni's limit is at least twenty; the documented limit is
+still to be found (Q-L3). Images come from the host's
 existing prefetch as `data:` URIs inside the task request, so their bytes do cross the sandbox, exactly as for Veo
 today; moving task-world request media to blob references (image record §6.1) is a separate change (Q-S4). The
 runtime's 16 MiB payload limit bounds the total.
@@ -287,8 +304,8 @@ needs reserving beyond these.
 ### 5.3 Refusals
 
 All refusals happen in `build-submit-request`, before admission, with zero upstream calls: a missing prompt, a
-`duration` other than 10, `n` other than 1, a frame or video input, an image that is not a `data:` URI, more
-reference images than the bound. Messages name the unsupported field and never echo the input.
+`duration` other than 10, `n` other than 1, an aspect ratio other than `16:9` or `9:16` (the only values the upstream
+accepts, O0-c), a frame or video input, an image that is not a `data:` URI, more reference images than the bound. Messages name the unsupported field and never echo the input.
 
 ## 6. Artifacts: inline bytes held by the host (contract 8, part 1)
 
@@ -783,18 +800,30 @@ Tags: S = south maintainers, L = lv, K = kernel. No kernel change is proposed; n
   an explicit exemption (the embeddings record's E-Q5 asks the same)?
 - **Q-L1** Run O0-c (one to three paid generations: `background` alone, image-to-video, a refusal) before O2b?
   Recommended: yes — submit shape and image input are guesses without it.
+  **Ruled (lv, 2026-10-02): as recommended.** O0-c is run on 2026-10-02; its results are recorded in §4.5.
 - **Q-L2** Until a failure or content-policy sample exists, every non-`completed` terminal word and every
   `completed` interaction without a video is `Unknown` → manual review. Accept that conservative default for v1?
   Recommended: yes.
+  **Ruled (lv, 2026-10-02): as recommended.** Every non-`completed` terminal word and every `completed` interaction
+  without a video is `Unknown` in v1.
 - **Q-L3** Reference-image count: Omni's limit is unknown; take it from O0-c or documentation, and refuse above it.
+  **Ruled (lv, 2026-10-02): as recommended.** The limit comes from O0-c or documentation; requests above it are
+  refused before admission.
 - **Q-L4** `gcs_uri` delivery: not in v1 (recommended). Revisit only if a clip size or a customer requirement makes
   inline unusable.
+  **Ruled (lv, 2026-10-02): as recommended.** No `gcs_uri` delivery in v1.
 - **Q-L5** Upstream retention of stored interactions is unknown; it bounds how long §6.4's re-observe recovery
   works. Measure or find documentation before cutover.
+  **Ruled (lv, 2026-10-02): as recommended.** Retention is measured or documented before cutover.
 - **Q-L6** DO4 changes the blocking response shape. O0-a found no callers (no `gemini` rows), so no deprecation
   window seems needed; confirm.
+  **Ruled (lv, 2026-10-02): as recommended.** No deprecation window for the blocking-response shape change.
 - **Q-L7** Ship v1 on the §9.3 stopgap (`task_component` row + `VertexSa`, J1 items) before umbrella phases B2 / B4,
   or wait for the endpoint template and recipes? Recommended: stopgap for the component leg and dual run only;
   cutover after B2 / B4 so no new J1 item reaches production.
+  **Ruled (lv, 2026-10-02): as recommended.** The stopgap serves the component leg and the dual run only; cutover
+  waits for umbrella B2 / B4.
 - **Q-L8** Catalog data for the bound: `video_output` 57,920 and `reasoning_output` 4,096 per output. Accept these
   values, with a bound hit parking for review?
+  **Ruled (lv, 2026-10-02): as recommended.** `video_output` 57,920 and `reasoning_output` 4,096 per output as catalog
+  data; a bound hit parks for review.
