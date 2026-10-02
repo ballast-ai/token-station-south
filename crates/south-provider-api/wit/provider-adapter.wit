@@ -113,6 +113,9 @@ interface provider-adapter {
     /// normalizes the dialect's complete report — every bucket, in the
     /// dialect's native cache convention — and a 2xx whose body cannot yield
     /// exact usage is an error (`provider_protocol_error`), never a zero.
+    /// The one exception is a package whose manifest declares
+    /// `usage_evidence: absent` (its upstream never reports tokens): its usage
+    /// is all zero, it emits no usage event, and the host never reads either.
     parse-response: func(response-parts: json) -> result<json, json>;
 
     /// `chunk`: raw bounded body bytes -> `list<protocol::StreamEvent>` (json).

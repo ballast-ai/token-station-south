@@ -11,7 +11,7 @@ use south_component_conformance::{
 };
 use south_provider_api::{
     COMPONENT_BEHAVIOR_SUITE, CompatibilityDeclarationV1, ComponentManifestV1,
-    ComponentPermissionsV1, ConformanceSpecV1, PROVIDER_WORLD, WIT_PACKAGE,
+    ComponentPermissionsV1, ConformanceSpecV1, PROVIDER_WORLD, UsageEvidenceV1, WIT_PACKAGE,
 };
 use south_provider_api::{CompatibilityMismatchV1, HostExpectationsV1, compatibility_matches};
 use token_station_protocol::{Auth, SecretRef};
@@ -30,7 +30,7 @@ fn the_manifest_signed_header_vocabulary_is_the_host_halfs() {
 fn reference_manifest() -> ComponentManifestV1 {
     ComponentManifestV1 {
         name: "provider-openai-compatible".to_owned(),
-        version: "2.1.4".to_owned(),
+        version: "2.1.5".to_owned(),
         api_version: PROVIDER_WORLD.to_owned(),
         providers: vec!["openai-compatible".to_owned(), "azure-openai-v1".to_owned()],
         capabilities: BTreeSet::from([
@@ -41,6 +41,7 @@ fn reference_manifest() -> ComponentManifestV1 {
         ]),
         auth_arms: BTreeSet::from(["bearer".to_owned(), "header_secret".to_owned()]),
         emits: Vec::new(),
+        usage_evidence: UsageEvidenceV1::Reported,
         permissions: ComponentPermissionsV1 {
             network: false,
             filesystem: false,

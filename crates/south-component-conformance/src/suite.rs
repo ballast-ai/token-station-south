@@ -6,9 +6,16 @@
 //! Only the questions that need a *typed* view of the input or the output —
 //! endpoint confinement, auth-error retriability, stream incrementality —
 //! reach past that closure.
+//!
+//! Usage is funds evidence, so a package whose manifest declares the default
+//! `usage_evidence: reported` must ship five usage rows by name and pass
+//! `UsageRows`, `UsageNeverDefaulted` and `UsagePartition`; a package declaring
+//! `absent` is held to `AbsentFamilyEmitsNoUsage` instead (B1,
+//! `docs/design/2026-09-30-host-zero-vendor-boundary.md` §6.2).
 
 use serde::Deserialize;
 use serde_json::Value;
+use south_provider_api::UsageEvidenceV1;
 use token_station_protocol::{
     ChatRequest, ErrorEnvelope, HttpRequestDescriptor, HttpResponseParts, ProviderConfig,
     StreamEvent,
@@ -31,8 +38,9 @@ type Invoked = Result<Value, Failure>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Failure {
-    /// The component answered with an error.
-    Component(String),
+    /// The component answered with an error: a readable detail, and the
+    /// envelope as JSON for a case that expects this error.
+    Component { detail: String, envelope: Value },
     /// The fixture did not deserialize into what the family feeds the
     /// component. Not the component's fault, and reported as its own reason.
     Fixture(String),
@@ -41,14 +49,37 @@ enum Failure {
 impl Failure {
     fn detail(&self) -> String {
         match self {
-            Self::Component(detail) => format!("component returned an error: {detail}"),
+            Self::Component { detail, .. } => format!("component returned an error: {detail}"),
             Self::Fixture(detail) => format!("fixture is not valid input: {detail}"),
         }
     }
 }
 
 fn component_error(error: &ErrorEnvelope) -> Failure {
-    Failure::Component(format!("{:?}: {}", error.code, error.message))
+    Failure::Component {
+        detail: format!("{:?}: {}", error.code, error.message),
+        envelope: serde_json::to_value(error).unwrap_or(Value::Null),
+    }
+}
+
+/// The usage rows a `reported` package ships by name (B1,
+/// host-zero-vendor-boundary §6.2 item 2).
+const USAGE_ROWS: [&str; 5] = [
+    "provider.response.usage",
+    "provider.response.missing-usage",
+    "provider.response.cached-usage",
+    "provider.stream.usage-terminal",
+    "provider.stream.no-usage",
+];
+
+/// The error a response case expects, when its expected file is
+/// `{"error": <envelope>}` rather than a chat response.
+fn expected_error(case: &CaseV1) -> Option<&Value> {
+    if case.family != ProviderFamilyV1::Response {
+        return None;
+    }
+    let map = case.expected.as_object()?;
+    if map.len() == 1 { map.get("error") } else { None }
 }
 
 fn parse<T: for<'de> Deserialize<'de>>(input: &Value) -> Result<T, Failure> {
@@ -89,7 +120,8 @@ impl StreamInput {
     }
 }
 
-/// Runs `south.provider-component.v1` against a provider component.
+/// Runs `south.provider-component.v1` against a provider component whose
+/// manifest declares the default `usage_evidence: reported`.
 ///
 /// Never panics on a bad component or a bad fixture: both become failures in
 /// the report, because a host running this at admission time must not be
@@ -99,7 +131,18 @@ pub fn run_provider_component_suite_v1(
     component: &dyn ProviderComponentV1,
     pack: &FixturePackV1,
 ) -> ReportV1 {
-    let mut outcomes = coverage(pack);
+    run_provider_component_suite_v1_with_usage_evidence(component, pack, UsageEvidenceV1::Reported)
+}
+
+/// Runs `south.provider-component.v1` against a provider component, holding it
+/// to the usage checks its manifest's `usage_evidence` selects.
+#[must_use]
+pub fn run_provider_component_suite_v1_with_usage_evidence(
+    component: &dyn ProviderComponentV1,
+    pack: &FixturePackV1,
+    usage_evidence: UsageEvidenceV1,
+) -> ReportV1 {
+    let mut outcomes = coverage(pack, usage_evidence);
     let mut a_credential_was_rejected_somewhere = false;
 
     for case in pack.cases() {
@@ -122,6 +165,8 @@ pub fn run_provider_component_suite_v1(
             }
             ProviderFamilyV1::Capabilities | ProviderFamilyV1::Response => {}
         }
+
+        outcomes.extend(usage_checks(case, usage_evidence, &invoke));
     }
 
     // A gate that never runs describes nothing. Without a fixture that rejects
@@ -324,12 +369,9 @@ fn stream_incrementality(component: &dyn ProviderComponentV1, case: &CaseV1) -> 
     OutcomeV1::passed(check, &case.name)
 }
 
-fn coverage(pack: &FixturePackV1) -> Vec<OutcomeV1> {
-    let missing = pack.missing_families();
-    if missing.is_empty() {
-        return vec![OutcomeV1::passed(CheckV1::Coverage, "provider")];
-    }
-    missing
+fn coverage(pack: &FixturePackV1, usage_evidence: UsageEvidenceV1) -> Vec<OutcomeV1> {
+    let mut outcomes: Vec<OutcomeV1> = pack
+        .missing_families()
         .into_iter()
         .map(|family| {
             OutcomeV1::failed(
@@ -338,7 +380,217 @@ fn coverage(pack: &FixturePackV1) -> Vec<OutcomeV1> {
                 "no fixture exercises this family",
             )
         })
-        .collect()
+        .collect();
+    // An `absent` package proves itself on every response and stream case
+    // (`AbsentFamilyEmitsNoUsage`), so it owes no named rows.
+    if usage_evidence.is_reported() {
+        for row in USAGE_ROWS {
+            if !pack.cases().iter().any(|case| case.name == row) {
+                outcomes.push(OutcomeV1::failed(
+                    CheckV1::Coverage,
+                    row,
+                    "a package whose upstream reports usage must ship this usage row; without it \
+                     the check that keeps usage from defaulting to zero never ran",
+                ));
+            }
+        }
+    }
+    if outcomes.is_empty() {
+        outcomes.push(OutcomeV1::passed(CheckV1::Coverage, "provider"));
+    }
+    outcomes
+}
+
+/// The usage reports in a response or stream output, in order.
+fn usage_reports(family: ProviderFamilyV1, output: &Value) -> Vec<&Value> {
+    match family {
+        ProviderFamilyV1::Response => output.get("usage").into_iter().collect(),
+        ProviderFamilyV1::Stream => output
+            .as_array()
+            .map(|events| {
+                events
+                    .iter()
+                    .filter(|event| event["type"] == "usage")
+                    .map(|event| &event["usage"])
+                    .collect()
+            })
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    }
+}
+
+fn count(usage: &Value, field: &str) -> u64 {
+    usage[field].as_u64().unwrap_or(0)
+}
+
+const USAGE_FIELDS: [&str; 7] = [
+    "input_tokens",
+    "output_tokens",
+    "cache_read_tokens",
+    "cache_write_tokens",
+    "cache_write_5m_tokens",
+    "cache_write_1h_tokens",
+    "reasoning_tokens",
+];
+
+fn is_zero(usage: &Value) -> bool {
+    USAGE_FIELDS.iter().all(|field| count(usage, field) == 0)
+}
+
+/// The partition the kernel's `Usage` promises, or why a report breaks it.
+fn partition_violation(usage: &Value) -> Option<&'static str> {
+    let [input, output, read, write, five_minute, one_hour, reasoning] =
+        USAGE_FIELDS.map(|field| count(usage, field));
+    if read.checked_add(write).is_none_or(|cached| cached > input) {
+        return Some("cache read and cache write exceed input_tokens");
+    }
+    if five_minute.checked_add(one_hour).is_none_or(|tiers| tiers > write) {
+        return Some("the cache-write tiers exceed cache_write_tokens");
+    }
+    if reasoning > output {
+        return Some("reasoning_tokens exceeds output_tokens");
+    }
+    None
+}
+
+/// The usage checks for one case. Response and stream cases only.
+fn usage_checks(
+    case: &CaseV1,
+    usage_evidence: UsageEvidenceV1,
+    invoke: &dyn Fn(&Value) -> Invoked,
+) -> Vec<OutcomeV1> {
+    if !matches!(case.family, ProviderFamilyV1::Response | ProviderFamilyV1::Stream) {
+        return Vec::new();
+    }
+    let produced = invoke(&case.input);
+    let reports =
+        produced.as_ref().map(|output| usage_reports(case.family, output)).unwrap_or_default();
+    let mut outcomes = Vec::new();
+
+    let partition = CheckV1::UsagePartition;
+    outcomes.push(reports.iter().find_map(|usage| partition_violation(usage)).map_or_else(
+        || OutcomeV1::passed(partition, &case.name),
+        |violation| OutcomeV1::failed(partition, &case.name, violation),
+    ));
+
+    match usage_evidence {
+        UsageEvidenceV1::Absent => {
+            let check = CheckV1::AbsentFamilyEmitsNoUsage;
+            let emitted = match case.family {
+                ProviderFamilyV1::Stream => !reports.is_empty(),
+                _ => reports.iter().any(|usage| !is_zero(usage)),
+            };
+            outcomes.push(if emitted {
+                OutcomeV1::failed(
+                    check,
+                    &case.name,
+                    "the package declares usage_evidence: absent, yet reported usage; the host \
+                     never reads it and would bill an estimate beside a number it was given",
+                )
+            } else {
+                OutcomeV1::passed(check, &case.name)
+            });
+        }
+        UsageEvidenceV1::Reported => {
+            if USAGE_ROWS.contains(&case.name.as_str()) {
+                outcomes.push(usage_row(case));
+            }
+            if let Some(pointer) = &case.usage_pointer {
+                outcomes.push(usage_never_defaulted(case, pointer, invoke));
+            }
+        }
+    }
+    outcomes
+}
+
+/// A named usage row shows what its name says. Judged on the fixture's
+/// expected output, which `FixtureMatch` already ties to the component.
+fn usage_row(case: &CaseV1) -> OutcomeV1 {
+    let check = CheckV1::UsageRows;
+    let reports = usage_reports(case.family, &case.expected);
+    let problem = match case.name.as_str() {
+        "provider.response.usage" if reports.iter().all(|usage| is_zero(usage)) => {
+            Some("expects no non-zero usage")
+        }
+        "provider.response.usage" if case.usage_pointer.is_none() => {
+            Some("carries no usage_pointer sidecar, so UsageNeverDefaulted has nothing to delete")
+        }
+        "provider.response.missing-usage" => match expected_error(case) {
+            Some(error) if error["code"] == "provider_protocol_error" => None,
+            _ => Some("must expect a provider_protocol_error, never a zero"),
+        },
+        "provider.response.cached-usage"
+            if !reports.iter().any(|usage| {
+                count(usage, "cache_read_tokens") > 0 || count(usage, "cache_write_tokens") > 0
+            }) =>
+        {
+            Some("expects no cache bucket")
+        }
+        "provider.stream.usage-terminal" => {
+            let events = case.expected.as_array().map(Vec::as_slice).unwrap_or_default();
+            let last_usage = events
+                .iter()
+                .rposition(|event| event["type"] == "usage" && !is_zero(&event["usage"]));
+            let done = events.iter().rposition(|event| event["type"] == "done");
+            match (last_usage, done) {
+                (Some(usage), Some(done)) if usage < done => None,
+                _ => Some("must expect a non-zero usage event before the terminal done"),
+            }
+        }
+        "provider.stream.no-usage" if !reports.is_empty() => {
+            Some("must expect no usage event: an upstream that sent none is not a zero")
+        }
+        _ => None,
+    };
+    problem.map_or_else(
+        || OutcomeV1::passed(check, &case.name),
+        |problem| OutcomeV1::failed(check, &case.name, problem),
+    )
+}
+
+/// Deletes what `pointer` names in the upstream body and requires a protocol
+/// error.
+fn usage_never_defaulted(
+    case: &CaseV1,
+    pointer: &str,
+    invoke: &dyn Fn(&Value) -> Invoked,
+) -> OutcomeV1 {
+    let check = CheckV1::UsageNeverDefaulted;
+    let failed = |detail: String| OutcomeV1::failed(check, &case.name, detail);
+
+    let Some(mut body) =
+        case.input["body"].as_str().and_then(|body| serde_json::from_str::<Value>(body).ok())
+    else {
+        return failed("the fixture's body is not a JSON document".to_owned());
+    };
+    let (parent, key) = pointer.rsplit_once('/').unwrap_or(("", pointer));
+    let key = key.replace("~1", "/").replace("~0", "~");
+    let removed = match body.pointer_mut(parent) {
+        Some(Value::Object(map)) => map.remove(&key).is_some(),
+        _ => false,
+    };
+    if !removed {
+        return failed(format!("usage_pointer `{pointer}` names nothing in the body"));
+    }
+    let mut mutated = case.input.clone();
+    mutated["body"] = Value::String(body.to_string());
+
+    match invoke(&mutated) {
+        Err(Failure::Component { envelope, .. })
+            if envelope["code"] == "provider_protocol_error" =>
+        {
+            OutcomeV1::passed(check, &case.name)
+        }
+        Err(failure) => failed(format!(
+            "without its usage the response was refused, but not as a provider protocol error: \
+             {}",
+            failure.detail()
+        )),
+        Ok(_) => failed(format!(
+            "with `{pointer}` deleted the component still produced a response; usage is funds \
+             evidence and a missing report must be an error, never a zero"
+        )),
+    }
 }
 
 fn shared_checks(case: &CaseV1, invoke: &dyn Fn(&Value) -> Invoked) -> Vec<OutcomeV1> {
@@ -352,6 +604,24 @@ fn shared_checks(case: &CaseV1, invoke: &dyn Fn(&Value) -> Invoked) -> Vec<Outco
 }
 
 fn fixture_match(case: &CaseV1, actual: &Invoked) -> OutcomeV1 {
+    if let Some(expected) = expected_error(case) {
+        return match actual {
+            Err(Failure::Component { envelope, .. }) if envelope == expected => {
+                OutcomeV1::passed(CheckV1::FixtureMatch, &case.name)
+            }
+            Err(Failure::Component { envelope, .. }) => OutcomeV1::failed(
+                CheckV1::FixtureMatch,
+                &case.name,
+                format!("expected error {}, produced {}", truncate(expected), truncate(envelope)),
+            ),
+            Err(failure) => OutcomeV1::failed(CheckV1::FixtureMatch, &case.name, failure.detail()),
+            Ok(actual) => OutcomeV1::failed(
+                CheckV1::FixtureMatch,
+                &case.name,
+                format!("expected error {}, produced {}", truncate(expected), truncate(actual)),
+            ),
+        };
+    }
     match actual {
         Err(failure) => OutcomeV1::failed(CheckV1::FixtureMatch, &case.name, failure.detail()),
         Ok(actual) if *actual == case.expected => {
@@ -400,7 +670,22 @@ fn unknown_field_tolerance(case: &CaseV1, invoke: &dyn Fn(&Value) -> Invoked) ->
     };
     target.insert(UNKNOWN_FIELD.to_owned(), Value::Bool(true));
 
-    match invoke(&mutated) {
+    let mutated = invoke(&mutated);
+    if let Some(expected) = expected_error(case) {
+        // A case that expects a refusal must keep refusing for the same reason;
+        // the unknown field may neither rescue it nor change why.
+        return match mutated {
+            Err(Failure::Component { envelope, .. }) if envelope == *expected => {
+                OutcomeV1::passed(check, &case.name)
+            }
+            _ => OutcomeV1::failed(
+                check,
+                &case.name,
+                "a field this version does not model changed how the component refused this input",
+            ),
+        };
+    }
+    match mutated {
         Ok(_) => OutcomeV1::passed(check, &case.name),
         Err(failure) => OutcomeV1::failed(
             check,

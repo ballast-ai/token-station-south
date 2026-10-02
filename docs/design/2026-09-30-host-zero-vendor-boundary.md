@@ -798,6 +798,61 @@ gate ② checks and by-name enforcement: south minor; third-party packages need 
 it only through the runtime floor of §8.6. Normalization of quota headers (`ProviderQuotaMetadataFieldV1`
 enumerates header names per provider, south-contracts/src/lib.rs:1686-1706) is covered in §10.
 
+### 6.6 Implementation of B1 (2026-10-02)
+
+Phase B1 is implemented on branch `feature/b1-usage-strictness`; nothing is released. Where this section left a
+choice open, the implementation chose as follows.
+
+- **Strictness follows the production host's evidence**, so the dual run of item 6 compares like with like
+  (server `crates/gateway-provider-protocol/src/usage_evidence.rs`).
+  - OpenAI-compatible: `prompt_tokens`, `completion_tokens` and `total_tokens` are required, and the total must
+    equal prompt + completion. Sakana's `*_tokens_details.orchestration_*` counts fold into the buckets; the
+    total may then also include the orchestration input. Bailian's
+    `prompt_tokens_details.cache_creation_input_tokens` is read as the cache-write subset. Cached + cache-write
+    must fit in the prompt, and reasoning in the completion.
+  - Anthropic: a message requires `input_tokens` and `output_tokens`. A stream's `message_start` requires input,
+    and its terminal `message_delta` requires output. The `cache_creation` 5-minute / 1-hour tiers now map to the
+    IR and must add up to `cache_creation_input_tokens`.
+  - Gemini: `promptTokenCount` and `totalTokenCount` are required. IR input is prompt + `toolUsePromptTokenCount`;
+    IR output is candidates + thoughts, with `reasoning_tokens` = thoughts (item 6). The wire omits zero counts,
+    so a missing `candidatesTokenCount` is zero only when the total closes without it.
+  - Converse was already strict and is unchanged.
+- **Fixture form.** A response case may expect a refusal: its expected file is then exactly
+  `{"error": <ErrorEnvelope>}`. `usage_pointer` lives in an optional sidecar,
+  `provider.response.<case>.meta.json`, holding exactly `{"usage_pointer": "/…"}`. Any other key, an empty
+  pointer, or a sidecar on a non-response case makes the pack fail to load, so a misspelt key cannot silently
+  disable the check.
+- **Gate ② checks.**
+  - `Coverage` names the five rows of item 2 for a `reported` package.
+  - `UsageRows` checks that each row shows what its name says. `response.usage` must carry the pointer.
+  - `UsageNeverDefaulted` runs on every response case that has a pointer.
+  - An `absent` package owes no named rows. Instead, `AbsentFamilyEmitsNoUsage` runs on every response and
+    stream case.
+  - One check is added beyond item 3: `UsagePartition`, the gate ② half of item 6. On every report it requires
+    cache read + write ≤ input, cache-write tiers ≤ cache write, and reasoning ≤ output.
+  - A host passes the manifest's value through `run_provider_component_suite_v1_with_usage_evidence`. The
+    existing entry point means `reported`.
+- **Manifest.** `usage_evidence` is the package-level scalar of item 4. It is omitted from the wire when it has
+  the default `reported`, so every existing manifest is unchanged. Declaring `absent` outside the provider world
+  is refused (`UsageEvidenceIsAProviderWorldDeclaration`). The WIT `parse-response` comment now states the
+  `absent` exception (§14). Doc comments are not compiled into the components, so a component's bytes do not
+  change.
+- **Judges.** The usage judge gains cases for output, reasoning and refusal. Their expectations come from
+  provider documentation and the Q13 measurement, and each was shown to fail on the previous references.
+  `CONTRIBUTING.md` states the release discipline of item 5.
+- **Identities.** The following package identities bump: `provider-openai-compatible` 2.1.4 → 2.1.5,
+  `provider-anthropic` 1.0.8 → 1.0.9, and `provider-gemini` 1.1.4 → 1.1.5. The runtime version and
+  `compatibility.json` are left to the release.
+- **Known differences from the host's evidence**, for the dual run to account for:
+  1. Bailian's explicit-cache reads are priced apart from implicit hits by the host. The IR has a single read
+     bucket and cannot express the difference.
+  2. A thinking response from DashScope that reports no `reasoning_tokens` is recognised by the host through
+     `reasoning_content`. The IR carries only the count.
+  3. The host refuses non-zero Chat audio tokens as a cost-admission rule. This is host policy and stays there.
+  4. Stream terminal requirements stay host-side internal-consistency checks (§6.3): a finish reason, `[DONE]`,
+     `message_stop`, and exactly one terminal.
+- **Still open before release:** Q9. The community host must confirm the behavior change of §6.5.
+
 ## 7. Request facts, endpoints, non-secret configuration and capability metadata (problem e)
 
 ### 7.1 Today

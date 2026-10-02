@@ -44,3 +44,17 @@ contributors do not need a sibling checkout.
    tests. Untrusted parsers require property tests and a scheduled fuzz target.
 
 Run the commands listed in the root README before opening a pull request.
+
+## Usage judges for released provider packages
+
+Gate ② proves a component matches its own fixtures; it cannot prove the fixtures read a provider's
+usage correctly, because a third-party author cannot vouch for a provider's documentation on South's
+behalf. So every provider package South itself publishes also has a usage judge
+(`crates/south-component-conformance/tests/usage_ir_contract_v1.rs`) whose expectations are **not
+derived from the reference implementation**: they come from the provider's documentation where it
+exists, otherwise from captured upstream traffic archived with the fixtures, and for a package
+declaring `usage_evidence: absent` from the property that it never reports usage. A new provider
+package, or a change to how one reads usage, ships with its judge cases, and each new case is shown
+to fail on the code it guards before the change lands (B1,
+`docs/design/2026-09-30-host-zero-vendor-boundary.md` §6.2 item 5).
+

@@ -699,7 +699,7 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-openai-compatible".to_owned(),
-            version: "2.1.4".to_owned(),
+            version: "2.1.5".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
