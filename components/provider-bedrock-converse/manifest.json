@@ -47,6 +47,7 @@
     "x-amz-content-sha256",
     "x-amz-security-token"
   ],
+  "stream_framing": "aws-eventstream",
   "request_facts": {
     "bedrock": {
       "output_cap": [

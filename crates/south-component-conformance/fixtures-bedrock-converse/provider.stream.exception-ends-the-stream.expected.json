@@ -1,0 +1,16 @@
+[
+  {
+    "type": "delta",
+    "index": 0,
+    "content": "Mi"
+  },
+  {
+    "type": "error",
+    "error": {
+      "code": "rate_limit",
+      "http_status": 502,
+      "message": "the upstream rate limited this request",
+      "provider_message": "Too many requests, please wait."
+    }
+  }
+]

@@ -1,0 +1,6 @@
+{
+  "chunks": [
+    "event: messageStart\ndata: {\"role\":\"assistant\"}\n\n",
+    "event: error:InternalFailure\ndata: {\"message\":\"We encountered an internal error.\"}\n\n"
+  ]
+}

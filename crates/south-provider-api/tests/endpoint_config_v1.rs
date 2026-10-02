@@ -210,6 +210,7 @@ fn endpoint_declarations_round_trip_and_belong_to_the_provider_world() {
     let wire = serde_json::to_value(&manifest).unwrap();
     assert_eq!(wire["endpoint"]["bedrock"], "https://bedrock-runtime.{region}.amazonaws.com");
     assert_eq!(wire["config_schema"]["bedrock"]["region"]["syntax"], "aws_region");
+    assert_eq!(wire["stream_framing"], "aws-eventstream");
     let read: ComponentManifestV1 = serde_json::from_value(wire).unwrap();
     assert_eq!(read, manifest);
 
@@ -219,5 +220,7 @@ fn endpoint_declarations_round_trip_and_belong_to_the_provider_world() {
     task.compatibility.wit_package = south_provider_api::TASK_WIT_PACKAGE.to_owned();
     task.capabilities = ["submit", "observe", "render"].into_iter().map(str::to_owned).collect();
     task.request_facts.clear();
+    assert_eq!(task.validate(), Err(ManifestErrorV1::StreamFramingIsAProviderWorldDeclaration));
+    task.stream_framing = south_provider_api::StreamFramingV1::Bytes;
     assert_eq!(task.validate(), Err(ManifestErrorV1::EndpointIsAProviderWorldDeclaration));
 }

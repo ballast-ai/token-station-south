@@ -247,6 +247,13 @@ pub struct ComponentManifestV1 {
     /// default, omitted when serialized) or `absent`. Provider world only.
     #[serde(default, skip_serializing_if = "UsageEvidenceV1::is_reported")]
     pub usage_evidence: UsageEvidenceV1,
+    /// What the host feeds `parse-stream-chunk`: upstream bytes unchanged
+    /// (`bytes`, the default, omitted when serialized) or the canonical
+    /// re-encoding of AWS eventstream messages (`aws-eventstream`). Package
+    /// level, because the stream parser receives no configuration. Provider
+    /// world only.
+    #[serde(default, skip_serializing_if = "StreamFramingV1::is_bytes")]
+    pub stream_framing: StreamFramingV1,
     /// Where each provider family's request carries the output cap, the model
     /// and the stream flag, keyed by family. A family without an entry uses
     /// [`RequestFactsV1::top_level`]. Provider world only.
@@ -262,6 +269,34 @@ pub struct ComponentManifestV1 {
     pub permissions: ComponentPermissionsV1,
     pub conformance: ConformanceSpecV1,
     pub compatibility: CompatibilityDeclarationV1,
+}
+
+/// How a provider package's upstream frames its stream, which decides what the
+/// host feeds `parse-stream-chunk` (B2, `docs/design/2026-09-30-host-zero-vendor-boundary.md`
+/// §5.2).
+///
+/// There is no `sse`, `ndjson` or `json` value: components already split those
+/// themselves, and a value the host would only branch on without using would
+/// let it pick a decoder by declaration it never runs.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum StreamFramingV1 {
+    /// The host feeds the upstream bytes unchanged.
+    #[default]
+    Bytes,
+    /// The host deframes AWS eventstream with `south_contracts::AwsEventStreamDeframerV1` and
+    /// feeds each message's `south_contracts::reencode_eventstream_v1`. With a family declaring
+    /// `request_facts.stream: "none"`, a non-streaming caller takes the buffered path: the whole
+    /// body is deframed and its re-encoding handed to `parse-response`.
+    AwsEventstream,
+}
+
+impl StreamFramingV1 {
+    /// Whether this is the default, `bytes`.
+    #[must_use]
+    pub const fn is_bytes(&self) -> bool {
+        matches!(self, Self::Bytes)
+    }
 }
 
 /// Whether a provider package's upstreams report token usage (B1,
@@ -536,6 +571,8 @@ impl ComponentManifestV1 {
             }
             self.validate_request_facts()?;
             self.validate_endpoints()?;
+        } else if !self.stream_framing.is_bytes() {
+            return Err(ManifestErrorV1::StreamFramingIsAProviderWorldDeclaration);
         } else if !self.endpoint.is_empty() || !self.config_schema.is_empty() {
             return Err(ManifestErrorV1::EndpointIsAProviderWorldDeclaration);
         } else if !self.usage_evidence.is_reported() {
@@ -787,6 +824,8 @@ pub enum ManifestErrorV1 {
     RequestFactsIsAProviderWorldDeclaration,
     #[error("request_facts for family `{family}`: {detail}")]
     InvalidRequestFacts { family: String, detail: String },
+    #[error("stream_framing is a provider-world declaration")]
+    StreamFramingIsAProviderWorldDeclaration,
     #[error("endpoint and config_schema are provider-world declarations")]
     EndpointIsAProviderWorldDeclaration,
     #[error("endpoint or config_schema for family `{family}`: {detail}")]
