@@ -1407,6 +1407,38 @@ which is what an operator confirms.
 **OAuth admission.** `admit_descriptor_auth` now admits `Auth::OAuth`, as Bearer, exactly when a recipe mints the
 slot (§4.2).
 
+**Gate ② (§3.7)** is `south_component_conformance::credential_recipe`, the reference interpreter, and the check
+`CredentialRecipeMatch`.
+- The interpreter runs only in tests. Time, the JWS signer and the responses to exchanges are injected; it has no
+  network, clock or crypto of its own. It builds the JWS compact form itself and asks the signer only for signature
+  bytes. Fixtures use `FixtureSignerV1`, an FNV-1a stand-in that is not a signature.
+- Fixtures are `credential.<family>.<case>.{input,expected}.json` beside a package's other fixtures. The input names
+  the slot, `now`, the fake field values and a fake response per step. The expected file is the whole run: the
+  recipe after any selector, every rendered request, and the outcome.
+- Both suites run the cases for a manifest that declares `credentials` (`run_task_component_suite_v2_for_manifest` is
+  new). A package with recipes owes a `clock` sample that mints. It also owes a `rotation` sample when a recipe
+  rotates, and an `on-status` sample that meets a non-2xx status when a recipe makes an exchange. A family is
+  judged by what its cases do, not by their names.
+- `task-kling-v2` 0.32.3 declares the Kling recipe. With the same signature bytes, its JWT equals the host's byte for
+  byte: `jsonwebtoken` writes the header as `{"typ":"JWT","alg":"HS256"}`, and the claims `iss`, `exp`, `nbf` come out
+  in that order because the interpreter writes RFC 7519's registered claims first, in RFC order.
+
+**Rules the record did not pin, decided here:**
+- A field with a `default` is always present.
+- A step whose `requires` is unmet ends the run as `use_stored` when the recipe declares
+  `without_refresh_material: use_stored`. Otherwise it is a configuration error.
+- A step that some `goto` targets is entered only through that `goto`. Falling through into it ends the recipe, so a
+  successful exchange does not run its alternative branch.
+- The expiry of the presented value is the clock of the step that produced it, or else `now + default_seconds`. With
+  neither, the run is `transient`. So a `jwt_sign` recipe declares `default_seconds`.
+- A JSON `null` is absent. An absent or empty write-back output keeps the stored value.
+
+**Gaps found.**
+- Copilot's direct-use flow (§3.9) presents the GitHub token itself after the `404 → goto` branch. `present` names
+  one step output, so that recipe cannot say what it presents. `present` would need ordered candidates or a field.
+- Claim order is canonical, not declared, because `claims` is a map. That matches the host for Kling. The host's
+  Vertex struct writes `iss, scope, aud, iat, exp`: the JSON is equal, but the bytes differ.
+
 ## 14. Existing text to revise in step
 
 - ARCHITECTURE.md:117-126: change the concluding sentence to "execution, material, reachable destinations and the
