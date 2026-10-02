@@ -105,6 +105,7 @@ fn reference_manifest() -> ComponentManifestV1 {
         auth_arms: BTreeSet::from(["bearer".to_owned(), "header_secret".to_owned()]),
         emits: Vec::new(),
         usage_evidence: UsageEvidenceV1::Reported,
+        request_facts: std::collections::BTreeMap::new(),
         permissions: ComponentPermissionsV1 {
             network: false,
             filesystem: false,
@@ -677,6 +678,7 @@ fn task_manifest() -> ComponentManifestV1 {
         auth_arms: BTreeSet::from(["host_signed".to_owned()]),
         emits: vec!["authorization".to_owned()],
         usage_evidence: UsageEvidenceV1::Reported,
+        request_facts: std::collections::BTreeMap::new(),
         permissions: ComponentPermissionsV1 {
             network: false,
             filesystem: false,

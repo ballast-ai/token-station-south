@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -247,6 +247,11 @@ pub struct ComponentManifestV1 {
     /// default, omitted when serialized) or `absent`. Provider world only.
     #[serde(default, skip_serializing_if = "UsageEvidenceV1::is_reported")]
     pub usage_evidence: UsageEvidenceV1,
+    /// Where each provider family's request carries the output cap, the model
+    /// and the stream flag, keyed by family. A family without an entry uses
+    /// [`RequestFactsV1::top_level`]. Provider world only.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub request_facts: BTreeMap<String, RequestFactsV1>,
     pub permissions: ComponentPermissionsV1,
     pub conformance: ConformanceSpecV1,
     pub compatibility: CompatibilityDeclarationV1,
@@ -270,6 +275,90 @@ pub enum UsageEvidenceV1 {
     Reported,
     /// The upstream never reports tokens.
     Absent,
+}
+
+/// Where one provider family's request carries the facts the host seals (B2,
+/// `docs/design/2026-09-30-host-zero-vendor-boundary.md` §7.2).
+///
+/// These are the component's own declarations: the host's seal proves a
+/// descriptor is consistent with them, not that the upstream reads the cap
+/// where the component wrote it (§6.3's undetectable zone).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RequestFactsV1 {
+    /// JSON Pointers into the descriptor body where the component may write
+    /// the output cap, at most [`MAX_OUTPUT_CAP_LOCATIONS`]; empty for a wire
+    /// that has no cap field. With a cap set, exactly one location holds it.
+    pub output_cap: Vec<String>,
+    pub model: ModelLocationV1,
+    pub stream: StreamLocationV1,
+}
+
+/// The most output-cap locations one family may declare.
+pub const MAX_OUTPUT_CAP_LOCATIONS: usize = 4;
+
+/// Where a request names its model.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelLocationV1 {
+    /// A JSON Pointer into the body whose value is the model.
+    Body(String),
+    /// A path template with exactly one `{model}` placeholder; the model,
+    /// encoded as one path segment, sits where the placeholder is.
+    Url(String),
+}
+
+/// Where a request carries its stream flag.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StreamLocationV1 {
+    /// A JSON Pointer into the body whose value is `true` for a streaming
+    /// request.
+    Body(String),
+    /// The URL differs; the host checks only that the response's content type
+    /// matches the request.
+    Url,
+    /// The upstream always streams and has no switch.
+    None,
+}
+
+impl RequestFactsV1 {
+    /// The locations a family without an entry uses: today's three top-level
+    /// fields (`max_tokens` or `max_completion_tokens`, `model`, `stream`).
+    #[must_use]
+    pub fn top_level() -> Self {
+        Self {
+            output_cap: vec!["/max_tokens".to_owned(), "/max_completion_tokens".to_owned()],
+            model: ModelLocationV1::Body("/model".to_owned()),
+            stream: StreamLocationV1::Body("/stream".to_owned()),
+        }
+    }
+}
+
+/// A JSON Pointer naming a member somewhere below the document root: every
+/// reference token non-empty and every `~` escaped.
+fn is_member_pointer(pointer: &str) -> bool {
+    let Some(tokens) = pointer.strip_prefix('/') else {
+        return false;
+    };
+    pointer.len() <= 256
+        && tokens.split('/').all(|token| {
+            !token.is_empty()
+                && token
+                    .split('~')
+                    .skip(1)
+                    .all(|rest| rest.starts_with('0') || rest.starts_with('1'))
+        })
+}
+
+/// A path template: starts with `/`, printable ASCII without `?`, `#` or
+/// spaces, and exactly one `{model}` with no other brace.
+fn is_model_url_template(template: &str) -> bool {
+    template.starts_with('/')
+        && template.len() <= 256
+        && template.bytes().all(|byte| byte.is_ascii_graphic() && !matches!(byte, b'?' | b'#'))
+        && template.matches("{model}").count() == 1
+        && template.replacen("{model}", "", 1).bytes().all(|byte| !matches!(byte, b'{' | b'}'))
 }
 
 impl UsageEvidenceV1 {
@@ -438,8 +527,11 @@ impl ComponentManifestV1 {
             if self.providers.is_empty() {
                 return Err(ManifestErrorV1::ProviderFamilyRequired);
             }
+            self.validate_request_facts()?;
         } else if !self.usage_evidence.is_reported() {
             return Err(ManifestErrorV1::UsageEvidenceIsAProviderWorldDeclaration);
+        } else if !self.request_facts.is_empty() {
+            return Err(ManifestErrorV1::RequestFactsIsAProviderWorldDeclaration);
         }
         if matches!(world.world, TASK_WORLD | TASK_WORLD_V2) {
             // Three stages, all required: a component missing one cannot carry
@@ -461,6 +553,51 @@ impl ComponentManifestV1 {
                 .map_err(|_| ManifestErrorV1::InvalidProviderFamily(provider.clone()))?;
         }
         Ok(())
+    }
+
+    fn validate_request_facts(&self) -> Result<(), ManifestErrorV1> {
+        for (family, facts) in &self.request_facts {
+            let invalid = |detail: &str| ManifestErrorV1::InvalidRequestFacts {
+                family: family.clone(),
+                detail: detail.to_owned(),
+            };
+            if !self.providers.contains(family) {
+                return Err(invalid("names a family the manifest does not declare"));
+            }
+            if facts.output_cap.len() > MAX_OUTPUT_CAP_LOCATIONS {
+                return Err(invalid("declares more than four output-cap locations"));
+            }
+            let mut seen = BTreeSet::new();
+            for pointer in &facts.output_cap {
+                if !is_member_pointer(pointer) || !seen.insert(pointer) {
+                    return Err(invalid("an output-cap location is not a distinct member pointer"));
+                }
+            }
+            match &facts.model {
+                ModelLocationV1::Body(pointer) if !is_member_pointer(pointer) => {
+                    return Err(invalid("the model location is not a member pointer"));
+                }
+                ModelLocationV1::Url(template) if !is_model_url_template(template) => {
+                    return Err(invalid(
+                        "the model URL template must be a path with exactly one `{model}`",
+                    ));
+                }
+                ModelLocationV1::Body(_) | ModelLocationV1::Url(_) => {}
+            }
+            if let StreamLocationV1::Body(pointer) = &facts.stream
+                && !is_member_pointer(pointer)
+            {
+                return Err(invalid("the stream location is not a member pointer"));
+            }
+        }
+        Ok(())
+    }
+
+    /// Where `family`'s request carries its sealed facts: its declared entry,
+    /// or [`RequestFactsV1::top_level`].
+    #[must_use]
+    pub fn request_facts_for(&self, family: &str) -> RequestFactsV1 {
+        self.request_facts.get(family).cloned().unwrap_or_else(RequestFactsV1::top_level)
     }
 
     fn validate_conformance(&self, world: &WorldSchemaV1) -> Result<(), ManifestErrorV1> {
@@ -636,6 +773,10 @@ pub enum ManifestErrorV1 {
          contracts"
     )]
     UsageEvidenceIsAProviderWorldDeclaration,
+    #[error("request_facts is a provider-world declaration")]
+    RequestFactsIsAProviderWorldDeclaration,
+    #[error("request_facts for family `{family}`: {detail}")]
+    InvalidRequestFacts { family: String, detail: String },
     #[error("a provider component must declare at least one provider family")]
     ProviderFamilyRequired,
     #[error("provider family `{0}` must be one lowercase kebab-case component")]

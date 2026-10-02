@@ -783,7 +783,7 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-bedrock-converse".to_owned(),
-            version: "1.0.5".to_owned(),
+            version: "1.0.6".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
@@ -832,7 +832,7 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
         let url = format!(
             "{}/model/{}/{operation}",
             config.base_url.as_str().trim_end_matches('/'),
-            request.model
+            crate::url_segment::encode(&request.model)
         );
         let mut descriptor = HttpRequestDescriptor::new(HttpMethod::Post, url);
         descriptor.headers =

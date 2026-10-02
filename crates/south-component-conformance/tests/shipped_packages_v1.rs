@@ -401,3 +401,21 @@ fn usage_strictness_retires_the_three_published_usage_lenient_identities() {
         assert_ne!(manifest.version, published, "{name} reused its published identity");
     }
 }
+
+/// B2 seals requests against declared locations: the Gemini and Converse manifests declare their
+/// `request_facts`, and both references now encode the model as one URL segment, which changes
+/// what the Converse package builds for a model such as an inference-profile ARN.
+#[test]
+fn request_facts_retire_the_published_converse_identity() {
+    let manifest: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(
+            repo_root().join("components/provider-bedrock-converse/manifest.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_ne!(
+        manifest.version, "1.0.5",
+        "provider-bedrock-converse reused its published identity"
+    );
+}

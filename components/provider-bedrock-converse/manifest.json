@@ -1,6 +1,6 @@
 {
   "name": "provider-bedrock-converse",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "api_version": "provider-adapter-v2",
   "providers": [
     "bedrock"
@@ -34,5 +34,16 @@
     "x-amz-date",
     "x-amz-content-sha256",
     "x-amz-security-token"
-  ]
+  ],
+  "request_facts": {
+    "bedrock": {
+      "output_cap": [
+        "/inferenceConfig/maxTokens"
+      ],
+      "model": {
+        "url": "/model/{model}/converse"
+      },
+      "stream": "url"
+    }
+  }
 }
