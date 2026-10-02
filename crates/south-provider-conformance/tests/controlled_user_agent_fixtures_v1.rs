@@ -3,15 +3,15 @@ use std::fmt::Display;
 use bytes::Bytes;
 use http::StatusCode;
 use south_contracts::{
-    BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1, JsonBodyV1,
-    MAX_STREAM_CHUNK_BYTES, ProviderEndpointV1, RelativePathV1, SafeHeaders, StreamChunkV1,
-    StreamingResponseHeadV1,
+    BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1, DeclaredUserAgentV1,
+    JsonBodyV1, MAX_STREAM_CHUNK_BYTES, ProviderEndpointV1, RelativePathV1, SafeHeaders,
+    StreamChunkV1, StreamingResponseHeadV1, UserAgentV1,
 };
 use south_provider_conformance::{
     CONTROLLED_USER_AGENT_CONFORMANCE_SUITE_ID, CONTROLLED_USER_AGENT_CONFORMANCE_SUITE_VERSION,
     ControlledUserAgentCaseIdV1, ControlledUserAgentExpectedOutcomeV1,
-    ControlledUserAgentFixtureV1, ControlledUserAgentUpstreamV1, ProviderCallCaseIdV1,
-    ProviderCallCountV1, ProviderCallFailureCodeV1, ProviderStreamTerminalV1,
+    ControlledUserAgentFixtureV1, ControlledUserAgentSourceV1, ControlledUserAgentUpstreamV1,
+    ProviderCallCaseIdV1, ProviderCallCountV1, ProviderCallFailureCodeV1, ProviderStreamTerminalV1,
     controlled_user_agent_fixtures_v1,
 };
 use static_assertions::assert_not_impl_any;
@@ -35,6 +35,7 @@ const SENTINELS: &[&str] = &[
     "user-agent-value-debug-sentinel",
     "user-agent-invalid-debug-sentinel",
     "user-agent-plain-debug-sentinel",
+    "declared-user-agent-debug-sentinel",
 ];
 
 #[test]
@@ -54,14 +55,47 @@ fn suite_identity_and_canonical_case_order_are_frozen() {
             ControlledUserAgentCaseIdV1::InvalidUserAgentValueRejected,
             ControlledUserAgentCaseIdV1::UserAgentFreeRequestReachesTheWire,
             ControlledUserAgentCaseIdV1::ReservedHeaderDeclarationStillRejected,
+            ControlledUserAgentCaseIdV1::BufferedDeclaredUserAgentSuccess,
+            ControlledUserAgentCaseIdV1::StreamingDeclaredUserAgentSuccess,
+            ControlledUserAgentCaseIdV1::DeclaredUserAgentWithLineBreakRejected,
         ]
     );
+}
+
+/// B7a (HTTP contract version ten, §16 Q15): the declared-instance cases are appended after the
+/// frozen five and are the only ones whose value comes from a manifest.
+#[test]
+fn the_declared_instance_cases_take_their_value_from_a_manifest() {
+    let fixtures = controlled_user_agent_fixtures_v1();
+    for fixture in &fixtures[..5] {
+        assert_eq!(fixture.source(), ControlledUserAgentSourceV1::HostLiteral);
+    }
+    for fixture in &fixtures[5..] {
+        assert_eq!(fixture.source(), ControlledUserAgentSourceV1::Manifest);
+    }
+    // 6 and 7: one manifest value on both paths, distinct from the host literal so a host that
+    // sends its own literal instead fails the wire comparison.
+    assert_eq!(fixtures[5].declared_user_agent(), fixtures[6].declared_user_agent());
+    assert_ne!(fixtures[5].declared_user_agent(), fixtures[0].declared_user_agent());
+    assert!(matches!(fixtures[5].upstream(), ControlledUserAgentUpstreamV1::Response(_)));
+    assert!(matches!(fixtures[6].upstream(), ControlledUserAgentUpstreamV1::Stream(_)));
+    // 8: a value carrying CR/LF, which gate ① and the contract both refuse.
+    let line_break = fixtures[7].declared_user_agent().expect("the negative case declares one");
+    assert!(line_break.contains("\r\n"));
+    assert!(!south_provider_api::is_user_agent_value(line_break));
+    assert!(matches!(fixtures[7].upstream(), ControlledUserAgentUpstreamV1::NotReached));
+    assert!(matches!(
+        fixtures[7].expected().outcome(),
+        ControlledUserAgentExpectedOutcomeV1::Failure {
+            code: ProviderCallFailureCodeV1::InvalidRelativePath
+        }
+    ));
 }
 
 #[test]
 fn canonical_table_freezes_declarations_upstreams_outcomes_and_evidence() {
     let fixtures = controlled_user_agent_fixtures_v1();
-    assert_eq!(fixtures.len(), 5);
+    assert_eq!(fixtures.len(), 8);
 
     // 1. BufferedUserAgentSuccess: one buffered exchange declaring a sanctioned user-agent.
     assert!(fixtures[0].declared_user_agent().is_some());
@@ -164,6 +198,10 @@ fn canonical_table_freezes_the_expected_wire_user_agent_evidence() {
         (ProviderCallCountV1::Zero, ProviderCallCountV1::Zero, false),
         (ProviderCallCountV1::One, ProviderCallCountV1::One, false),
         (ProviderCallCountV1::Zero, ProviderCallCountV1::Zero, false),
+        // Contract version ten (B7a): the declared-instance cases.
+        (ProviderCallCountV1::One, ProviderCallCountV1::One, true),
+        (ProviderCallCountV1::One, ProviderCallCountV1::One, true),
+        (ProviderCallCountV1::Zero, ProviderCallCountV1::Zero, false),
     ];
     // `zip` truncates silently, so a fixture added without extending the table above would go
     // unchecked rather than failing here.
@@ -249,8 +287,19 @@ fn success_declarations_construct_and_the_negative_declaration_is_refused() {
             ));
             continue;
         };
-        let constructed = ControlledUserAgentV1::try_from_static(declared);
-        if fixture.case_id() == ControlledUserAgentCaseIdV1::InvalidUserAgentValueRejected {
+        let constructed = match fixture.source() {
+            ControlledUserAgentSourceV1::HostLiteral => {
+                ControlledUserAgentV1::try_from_static(declared).map(UserAgentV1::from)
+            }
+            ControlledUserAgentSourceV1::Manifest => {
+                DeclaredUserAgentV1::from_manifest_value(declared).map(UserAgentV1::from)
+            }
+        };
+        if matches!(
+            fixture.case_id(),
+            ControlledUserAgentCaseIdV1::InvalidUserAgentValueRejected
+                | ControlledUserAgentCaseIdV1::DeclaredUserAgentWithLineBreakRejected
+        ) {
             constructed.expect_err("the negative case value must violate the grammar");
         } else {
             let user_agent = constructed.expect("a success case declaration must construct");

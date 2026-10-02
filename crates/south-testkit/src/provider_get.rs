@@ -554,7 +554,7 @@ fn declare_reference_query(
     if fixture.declared_query().is_empty() {
         return Ok(None);
     }
-    QueryStringV1::try_from_iter(fixture.declared_query().iter().copied())
+    QueryStringV1::try_from_iter(fixture.declared_query().iter().cloned())
         .map(Some)
         .map_err(map_contract_error)
 }

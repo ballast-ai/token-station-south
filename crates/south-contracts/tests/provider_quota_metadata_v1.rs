@@ -47,12 +47,14 @@ fn all_metadata() -> ProviderQuotaMetadataV1 {
 
 #[test]
 fn contract_version_vocabulary_and_limits_are_exact() {
-    assert_eq!(PROVIDER_QUOTA_METADATA_CONTRACT_VERSION, 1);
+    assert_eq!(PROVIDER_QUOTA_METADATA_CONTRACT_VERSION, 2);
     assert_eq!(PROVIDER_QUOTA_METADATA_FIELD_COUNT, 9);
     assert_eq!(MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES, 256);
     assert_eq!(MAX_PROVIDER_QUOTA_METADATA_TOTAL_BYTES, 2_304);
     assert_eq!(FIELDS.len(), PROVIDER_QUOTA_METADATA_FIELD_COUNT);
     assert_eq!(FIELDS.map(ProviderQuotaMetadataFieldV1::as_header_name), HEADER_NAMES);
+    // B7a: `ALL` is the same closed set in the same order.
+    assert_eq!(ProviderQuotaMetadataFieldV1::ALL, FIELDS);
 }
 
 #[test]

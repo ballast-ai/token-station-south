@@ -9,7 +9,7 @@ use south_contracts::{
     MAX_USER_AGENT_BYTES, MultipartBodyV1, MultipartBoundaryV1, MultipartPostRequestV1,
     PreparationErrorV1, ProviderAuthV1, ProviderEndpointV1, QueryParameterV1, QueryStringV1,
     RelativePathV1, STREAM_CONTRACT_VERSION, SafeHeaders, SecretHeaderV1, SignedHeaderSetErrorV1,
-    SignedHeaderSetV1, SignedHeaderV1, TransportErrorV1,
+    SignedHeaderSetV1, SignedHeaderV1, TransportErrorV1, UserAgentV1,
 };
 
 const SENTINEL: &str = "must-not-appear-7f23a";
@@ -50,7 +50,7 @@ fn secret_header_all_covers_every_variant() {
 
 #[test]
 fn contract_versions_are_independently_versioned() {
-    assert_eq!(HTTP_CONTRACT_VERSION, 9);
+    assert_eq!(HTTP_CONTRACT_VERSION, 10);
     assert_eq!(AUTH_CONTRACT_VERSION, 4);
     assert_eq!(ERROR_CONTRACT_VERSION, 2);
     assert_eq!(STREAM_CONTRACT_VERSION, Some(2));
@@ -710,19 +710,21 @@ fn debug_and_error_output_redact_all_untrusted_contract_values() {
 /// surface must all be updated together.
 const ALL_QUERY_PARAMETERS: [QueryParameterV1; 5] = QueryParameterV1::ALL;
 
-const fn assert_query_parameter_listed(parameter: QueryParameterV1) {
+fn assert_query_parameter_listed(parameter: &QueryParameterV1) {
     match parameter {
         QueryParameterV1::ApiVersion
         | QueryParameterV1::Alt
         | QueryParameterV1::GroupId
         | QueryParameterV1::TaskId
         | QueryParameterV1::FileId => (),
+        // The declared form is a manifest instance, never a member of the fixed table.
+        QueryParameterV1::Declared(_) => panic!("`ALL` must list only fixed parameters"),
     }
 }
 
 #[test]
 fn query_parameter_all_covers_every_variant() {
-    for parameter in QueryParameterV1::ALL {
+    for parameter in &QueryParameterV1::ALL {
         assert_query_parameter_listed(parameter);
     }
     let mut names: Vec<&str> =
@@ -1034,7 +1036,7 @@ fn set_query_is_an_identity_map_on_every_accepted_value() {
 
     for (parameter, values) in accepted_values {
         for value in values {
-            let query = QueryStringV1::try_from_iter([(parameter, *value)])
+            let query = QueryStringV1::try_from_iter([(parameter.clone(), *value)])
                 .expect("fixture value must match the grammar");
             let resolved = path
                 .resolve_against_with_query(&endpoint, Some(&query))
@@ -1162,7 +1164,7 @@ fn request_carries_the_declared_user_agent() {
     )
     .with_user_agent(user_agent);
 
-    assert_eq!(request.user_agent().map(ControlledUserAgentV1::as_str), Some("opencode/1.15.6"));
+    assert_eq!(request.user_agent().map(UserAgentV1::as_str), Some("opencode/1.15.6"));
 }
 
 #[test]

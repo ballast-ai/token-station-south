@@ -8,11 +8,12 @@ use std::{
 use http::StatusCode;
 use south_contracts::{
     BearerAuthV1, BufferedBinaryResponseV1, BufferedHttpResponseV1, ControlledUserAgentV1,
-    CredentialSlotV1, GetRequestV1, JsonBodyV1, JsonPostRequestV1, MAX_BINARY_RESPONSE_BODY_BYTES,
-    MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES, MAX_RESPONSE_BODY_BYTES,
-    MAX_RESPONSE_CONTENT_TYPE_BYTES, MAX_RESPONSE_RETRY_AFTER_BYTES, MultipartBodyV1,
-    MultipartBoundaryV1, MultipartPostRequestV1, ProviderAuthV1, ProviderEndpointV1,
-    QueryParameterV1, QueryStringV1, RelativePathV1, SafeHeaders, SecretHeaderV1, TransportErrorV1,
+    CredentialSlotV1, DeclaredUserAgentV1, GetRequestV1, JsonBodyV1, JsonPostRequestV1,
+    MAX_BINARY_RESPONSE_BODY_BYTES, MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES,
+    MAX_RESPONSE_BODY_BYTES, MAX_RESPONSE_CONTENT_TYPE_BYTES, MAX_RESPONSE_RETRY_AFTER_BYTES,
+    MultipartBodyV1, MultipartBoundaryV1, MultipartPostRequestV1, ProviderAuthV1,
+    ProviderEndpointV1, ProviderQuotaHeaderMapV1, ProviderQuotaMetadataFieldV1, QueryParameterV1,
+    QueryStringV1, RelativePathV1, SafeHeaders, SecretHeaderV1, TransportErrorV1,
 };
 use south_core::{
     CredentialResolutionFuture, CredentialResolver, ProviderBindingV1, ProviderCallErrorV1,
@@ -524,6 +525,46 @@ async fn declared_user_agent_reaches_the_wire_verbatim_and_exactly_once() {
     );
 }
 
+/// B7a (§16 Q15): a manifest-declared value reaches the wire the same way, through the same single
+/// slot, exactly once.
+#[tokio::test]
+async fn a_manifest_declared_user_agent_reaches_the_wire_verbatim_and_exactly_once() {
+    let loopback = loopback_once(response(
+        "200 OK",
+        &[("content-type", "application/json")],
+        br#"{"ok":true}"#,
+    ))
+    .await;
+    let transport = ReqwestTransportV1::new(config()).expect("transport should build");
+    let resolver = StaticResolver::default();
+    let binding = ProviderBindingV1::new(
+        ProviderEndpointV1::parse(&loopback.endpoint).expect("loopback endpoint should be valid"),
+        CredentialSlotV1::parse("primary").expect("fixture slot should be valid"),
+    );
+    let declared = DeclaredUserAgentV1::from_manifest_value("acme-cli/3.1.4 (manifest)")
+        .expect("a grammar-conforming manifest value must be accepted");
+    let request = request().with_user_agent(declared);
+
+    execute_provider_call_v1(
+        &binding,
+        &request,
+        &resolver,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("a call declaring a user-agent should succeed");
+    let received = loopback.request.await.expect("server should report the request");
+    loopback.task.await.expect("server task should finish");
+
+    assert_eq!(
+        received.headers.get("user-agent").map(String::as_str),
+        Some("acme-cli/3.1.4 (manifest)")
+    );
+    assert_eq!(received.header_names.iter().filter(|name| *name == "user-agent").count(), 1);
+}
+
 #[tokio::test]
 async fn an_undeclared_request_carries_no_user_agent_at_all() {
     // The hardened client configures no default user-agent and reqwest adds none on its own; this
@@ -725,6 +766,48 @@ async fn captures_exactly_the_nine_approved_quota_metadata_fields() {
     assert_eq!(quota.anthropic_ratelimit_unified_remaining(), Some("2500"));
     assert_eq!(quota.anthropic_ratelimit_unified_reset(), Some("30s"));
     assert!(!format!("{response:?}").contains("must-not-be-retained"));
+}
+
+/// B7a (quota metadata contract version two): a package's declared quota headers replace the
+/// canonical names. The declared header feeds its field; a canonical header the package did not
+/// declare is no longer captured.
+#[tokio::test]
+async fn a_declared_quota_header_map_replaces_the_canonical_names() {
+    let loopback = loopback_once(response(
+        "200 OK",
+        &[
+            ("X-Acme-Tokens-Left", "41"),
+            ("x-acme-tokens-cap", "100"),
+            ("x-ratelimit-reset-tokens", "10s"),
+        ],
+        b"safe",
+    ))
+    .await;
+    let declared = ProviderQuotaHeaderMapV1::try_from_iter([
+        ("x-acme-tokens-left", ProviderQuotaMetadataFieldV1::XRateLimitRemainingTokens),
+        ("x-acme-tokens-cap", ProviderQuotaMetadataFieldV1::XRateLimitLimitTokens),
+    ])
+    .expect("the declaration is admissible");
+    let transport = ReqwestTransportV1::new(config())
+        .expect("transport should build")
+        .with_quota_headers(declared);
+
+    let response = call(
+        &loopback.endpoint,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("declared quota metadata must preserve the response");
+    loopback.request.await.expect("server should receive one request");
+    loopback.task.await.expect("server task should finish");
+
+    let quota = response.provider_quota_metadata();
+    assert_eq!(quota.present_field_count(), 2);
+    assert_eq!(quota.x_ratelimit_remaining_tokens(), Some("41"));
+    assert_eq!(quota.x_ratelimit_limit_tokens(), Some("100"));
+    assert_eq!(quota.x_ratelimit_reset_tokens(), None);
 }
 
 #[tokio::test]

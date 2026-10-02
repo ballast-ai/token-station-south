@@ -3,6 +3,7 @@
 use std::fmt;
 
 use south_contracts::QueryParameterV1;
+use south_provider_api::{QueryParameterDeclarationV1, QueryValueSyntaxV1};
 
 use crate::{
     ProviderCallCountV1, ProviderCallFailureCodeV1, ProviderCallInputV1, ProviderCallRawResponseV1,
@@ -56,6 +57,25 @@ pub enum ControlledQueryCaseIdV1 {
     /// lower-cases names or re-validates against a stale two-parameter table fails here and
     /// nowhere else.
     BufferedGroupIdQuerySuccess,
+    // B7a (HTTP contract version ten): declared-instance cases, appended so no earlier case moves.
+    /// A parameter the package declared in its manifest, beside a sanctioned one declared after
+    /// it, on one buffered exchange.
+    ///
+    /// The host must turn the manifest declaration into the contract's declared form (in
+    /// production through `south_component_conformance::DeclaredInstancesV1`) and the wire must
+    /// carry the sanctioned parameter first and the declared one after it. A host that drops
+    /// unknown names, or sends them in declaration order, fails here.
+    BufferedDeclaredQuerySuccess,
+    /// A declared `enum` parameter carrying a value outside its list, refused before any boundary.
+    ///
+    /// The value grammar of a declared name is its declared syntax; a host that admits any value
+    /// for a declared name would send it.
+    DeclaredQueryValueOutsideSyntaxRejected,
+    /// A declaration with a credential-shaped name (`api_key`), refused before any boundary.
+    ///
+    /// Gate ① refuses such a manifest; this row proves a host that builds the declared form
+    /// itself still goes through the contract's refusal rather than sending the raw pair.
+    ReservedDeclaredNameRejected,
 }
 
 fixed_debug!(ControlledQueryCaseIdV1 {
@@ -65,7 +85,111 @@ fixed_debug!(ControlledQueryCaseIdV1 {
     ReversedDeclarationOrderIsCanonicalized => "ReversedDeclarationOrderIsCanonicalized",
     QueryFreeRequestReachesTheWire => "QueryFreeRequestReachesTheWire",
     BufferedGroupIdQuerySuccess => "BufferedGroupIdQuerySuccess",
+    BufferedDeclaredQuerySuccess => "BufferedDeclaredQuerySuccess",
+    DeclaredQueryValueOutsideSyntaxRejected => "DeclaredQueryValueOutsideSyntaxRejected",
+    ReservedDeclaredNameRejected => "ReservedDeclaredNameRejected",
 });
+
+/// The value syntax of a declared parameter in a fixture: the manifest's closed set, in a form a
+/// `const` table can hold.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ControlledQueryDeclaredSyntaxV1 {
+    /// `"digits"`.
+    Digits,
+    /// `"token"`.
+    Token,
+    /// `"date"`.
+    Date,
+    /// `{"enum": [...]}`.
+    Enum(&'static [&'static str]),
+}
+
+impl ControlledQueryDeclaredSyntaxV1 {
+    /// The manifest syntax this fixture syntax stands for.
+    #[must_use]
+    pub fn manifest_syntax(self) -> QueryValueSyntaxV1 {
+        match self {
+            Self::Digits => QueryValueSyntaxV1::Digits,
+            Self::Token => QueryValueSyntaxV1::Token,
+            Self::Date => QueryValueSyntaxV1::Date,
+            Self::Enum(values) => {
+                QueryValueSyntaxV1::Enum(values.iter().map(|value| (*value).to_owned()).collect())
+            }
+        }
+    }
+    /// The contract syntax this fixture syntax stands for, as gate ① admits it into the
+    /// `south_contracts::DeclaredQueryParameterV1` form.
+    #[must_use]
+    pub fn contract_syntax(self) -> south_contracts::QueryValueSyntaxV1 {
+        match self {
+            Self::Digits => south_contracts::QueryValueSyntaxV1::Digits,
+            Self::Token => south_contracts::QueryValueSyntaxV1::Token,
+            Self::Date => south_contracts::QueryValueSyntaxV1::Date,
+            Self::Enum(values) => south_contracts::QueryValueSyntaxV1::Enum(
+                values.iter().map(|value| (*value).to_owned()).collect(),
+            ),
+        }
+    }
+}
+
+impl fmt::Debug for ControlledQueryDeclaredSyntaxV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Digits => formatter.write_str("Digits"),
+            Self::Token => formatter.write_str("Token"),
+            Self::Date => formatter.write_str("Date"),
+            Self::Enum(values) => formatter.debug_tuple("Enum").field(&values.len()).finish(),
+        }
+    }
+}
+
+/// One parameter a case declares the way a package does (B7a): the manifest's `query_parameters`
+/// entry, plus the value the request carries under that name.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct ControlledQueryDeclaredParameterV1 {
+    name: &'static str,
+    syntax: ControlledQueryDeclaredSyntaxV1,
+    value: &'static str,
+}
+
+impl ControlledQueryDeclaredParameterV1 {
+    /// Returns the declared wire name.
+    #[must_use]
+    pub const fn name(&self) -> &'static str {
+        self.name
+    }
+
+    /// Returns the declared value syntax.
+    #[must_use]
+    pub const fn syntax(&self) -> ControlledQueryDeclaredSyntaxV1 {
+        self.syntax
+    }
+
+    /// Returns the value the request carries under this name.
+    #[must_use]
+    pub const fn value(&self) -> &'static str {
+        self.value
+    }
+
+    /// Returns the declaration exactly as a manifest's `query_parameters` entry reads.
+    #[must_use]
+    pub fn manifest_declaration(&self) -> QueryParameterDeclarationV1 {
+        QueryParameterDeclarationV1 {
+            name: self.name.to_owned(),
+            syntax: self.syntax.manifest_syntax(),
+        }
+    }
+}
+
+impl fmt::Debug for ControlledQueryDeclaredParameterV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ControlledQueryDeclaredParameterV1")
+            .field("syntax", &self.syntax)
+            .field("value_byte_count", &self.value.len())
+            .finish_non_exhaustive()
+    }
+}
 
 /// A raw upstream exchange or fake-transport behavior for a canonical controlled-query case.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -243,6 +367,7 @@ pub struct ControlledQueryFixtureV1 {
     case_id: ControlledQueryCaseIdV1,
     input: ProviderCallInputV1,
     declared_query: &'static [(QueryParameterV1, &'static str)],
+    declared_parameters: &'static [ControlledQueryDeclaredParameterV1],
     upstream: ControlledQueryUpstreamV1,
     expected: ControlledQueryExpectedV1,
 }
@@ -270,6 +395,18 @@ impl ControlledQueryFixtureV1 {
         self.declared_query
     }
 
+    /// Returns the parameters the request declares through a package manifest (B7a), after the
+    /// sanctioned ones in [`Self::declared_query`].
+    ///
+    /// An executor builds each parameter's declared form from
+    /// [`ControlledQueryDeclaredParameterV1::manifest_declaration`] the way its production path
+    /// does, and adds it to the same query as the sanctioned pairs. Empty for every case before
+    /// HTTP contract version ten.
+    #[must_use]
+    pub const fn declared_parameters(&self) -> &'static [ControlledQueryDeclaredParameterV1] {
+        self.declared_parameters
+    }
+
     /// Returns the canonical fake-upstream behavior.
     #[must_use]
     pub const fn upstream(&self) -> &ControlledQueryUpstreamV1 {
@@ -289,6 +426,7 @@ impl fmt::Debug for ControlledQueryFixtureV1 {
             .debug_struct("ControlledQueryFixtureV1")
             .field("case_id", &self.case_id)
             .field("declared_parameter_count", &self.declared_query.len())
+            .field("manifest_parameters", &self.declared_parameters)
             .field("input", &self.input)
             .field("upstream", &self.upstream)
             .field("expected", &self.expected)
@@ -334,6 +472,32 @@ const CONTROLLED_QUERY_GROUP_ID: &str = "1782000000000000000";
 const GROUP_ID_QUERY: &[(QueryParameterV1, &str)] =
     &[(QueryParameterV1::GroupId, CONTROLLED_QUERY_GROUP_ID)];
 
+const NO_DECLARED_PARAMETERS: &[ControlledQueryDeclaredParameterV1] = &[];
+/// A sanctioned parameter the declared-instance success case pairs with its declared one.
+const DECLARED_CASE_SANCTIONED_QUERY: &[(QueryParameterV1, &str)] =
+    &[(QueryParameterV1::ApiVersion, CONTROLLED_QUERY_API_VERSION)];
+/// The declared-instance success case's manifest parameter: a token name no sanctioned set has.
+const DECLARED_TOKEN_PARAMETER: &[ControlledQueryDeclaredParameterV1] =
+    &[ControlledQueryDeclaredParameterV1 {
+        name: "declared-mode",
+        syntax: ControlledQueryDeclaredSyntaxV1::Token,
+        value: "declared.value_1",
+    }];
+/// An `enum` parameter whose value is not in its list.
+const DECLARED_OUT_OF_SYNTAX_PARAMETER: &[ControlledQueryDeclaredParameterV1] =
+    &[ControlledQueryDeclaredParameterV1 {
+        name: "declared-region",
+        syntax: ControlledQueryDeclaredSyntaxV1::Enum(&["eu", "us"]),
+        value: "ap",
+    }];
+/// A credential-shaped declared name.
+const DECLARED_RESERVED_NAME_PARAMETER: &[ControlledQueryDeclaredParameterV1] =
+    &[ControlledQueryDeclaredParameterV1 {
+        name: "api_key",
+        syntax: ControlledQueryDeclaredSyntaxV1::Token,
+        value: "declared-reserved-debug-sentinel",
+    }];
+
 const fn query_evidence(
     resolver_calls: ProviderCallCountV1,
     transport_calls: ProviderCallCountV1,
@@ -346,6 +510,7 @@ const CONTROLLED_QUERY_FIXTURES: &[ControlledQueryFixtureV1] = &[
     ControlledQueryFixtureV1 {
         case_id: ControlledQueryCaseIdV1::BufferedQuerySuccess,
         input: input(CONTROLLED_QUERY_PATH, CONTROLLED_QUERY_BOUND_SLOT),
+        declared_parameters: NO_DECLARED_PARAMETERS,
         declared_query: BUFFERED_QUERY,
         upstream: ControlledQueryUpstreamV1::Response(ProviderCallRawResponseV1 {
             status: 201,
@@ -366,6 +531,7 @@ const CONTROLLED_QUERY_FIXTURES: &[ControlledQueryFixtureV1] = &[
     ControlledQueryFixtureV1 {
         case_id: ControlledQueryCaseIdV1::StreamingQuerySuccess,
         input: input(CONTROLLED_QUERY_PATH, CONTROLLED_QUERY_BOUND_SLOT),
+        declared_parameters: NO_DECLARED_PARAMETERS,
         declared_query: STREAMING_QUERY,
         upstream: ControlledQueryUpstreamV1::Stream(ProviderStreamRawStreamV1::assemble(
             ProviderStreamRawHeadV1::assemble(200, Some(CONTROLLED_QUERY_CONTENT_TYPE), None),
@@ -385,6 +551,7 @@ const CONTROLLED_QUERY_FIXTURES: &[ControlledQueryFixtureV1] = &[
     ControlledQueryFixtureV1 {
         case_id: ControlledQueryCaseIdV1::InvalidQueryValueRejected,
         input: input(CONTROLLED_QUERY_PATH, CONTROLLED_QUERY_BOUND_SLOT),
+        declared_parameters: NO_DECLARED_PARAMETERS,
         declared_query: INVALID_QUERY,
         upstream: ControlledQueryUpstreamV1::NotReached,
         expected: ControlledQueryExpectedV1 {
@@ -401,6 +568,7 @@ const CONTROLLED_QUERY_FIXTURES: &[ControlledQueryFixtureV1] = &[
     ControlledQueryFixtureV1 {
         case_id: ControlledQueryCaseIdV1::ReversedDeclarationOrderIsCanonicalized,
         input: input(CONTROLLED_QUERY_PATH, CONTROLLED_QUERY_BOUND_SLOT),
+        declared_parameters: NO_DECLARED_PARAMETERS,
         declared_query: REVERSED_ORDER_QUERY,
         upstream: ControlledQueryUpstreamV1::Response(ProviderCallRawResponseV1 {
             status: 200,
@@ -423,6 +591,7 @@ const CONTROLLED_QUERY_FIXTURES: &[ControlledQueryFixtureV1] = &[
     ControlledQueryFixtureV1 {
         case_id: ControlledQueryCaseIdV1::QueryFreeRequestReachesTheWire,
         input: input(CONTROLLED_QUERY_PATH, CONTROLLED_QUERY_BOUND_SLOT),
+        declared_parameters: NO_DECLARED_PARAMETERS,
         declared_query: QUERY_FREE_QUERY,
         upstream: ControlledQueryUpstreamV1::Response(ProviderCallRawResponseV1 {
             status: 200,
@@ -448,6 +617,7 @@ const CONTROLLED_QUERY_FIXTURES: &[ControlledQueryFixtureV1] = &[
     ControlledQueryFixtureV1 {
         case_id: ControlledQueryCaseIdV1::BufferedGroupIdQuerySuccess,
         input: input(CONTROLLED_QUERY_PATH, CONTROLLED_QUERY_BOUND_SLOT),
+        declared_parameters: NO_DECLARED_PARAMETERS,
         declared_query: GROUP_ID_QUERY,
         upstream: ControlledQueryUpstreamV1::Response(ProviderCallRawResponseV1 {
             status: 200,
@@ -465,6 +635,58 @@ const CONTROLLED_QUERY_FIXTURES: &[ControlledQueryFixtureV1] = &[
             // The wire must carry `GroupId=…` with the upstream's casing; the probe compares
             // against the canonical serialization, so a lower-cased name fails here.
             evidence: query_evidence(ProviderCallCountV1::One, ProviderCallCountV1::One, true),
+        },
+    },
+    // B7a (HTTP contract version ten): declared-instance cases.
+    ControlledQueryFixtureV1 {
+        case_id: ControlledQueryCaseIdV1::BufferedDeclaredQuerySuccess,
+        input: input(CONTROLLED_QUERY_PATH, CONTROLLED_QUERY_BOUND_SLOT),
+        declared_query: DECLARED_CASE_SANCTIONED_QUERY,
+        declared_parameters: DECLARED_TOKEN_PARAMETER,
+        upstream: ControlledQueryUpstreamV1::Response(ProviderCallRawResponseV1 {
+            status: 200,
+            body: CONTROLLED_QUERY_RESPONSE_BODY,
+            content_type: Some(CONTROLLED_QUERY_CONTENT_TYPE),
+            retry_after: None,
+        }),
+        expected: ControlledQueryExpectedV1 {
+            outcome: ControlledQueryExpectedOutcomeV1::Response {
+                status: 200,
+                body: CONTROLLED_QUERY_RESPONSE_BODY,
+                content_type: Some(CONTROLLED_QUERY_CONTENT_TYPE),
+                retry_after: None,
+            },
+            // The wire must be `api-version=…&declared-mode=declared.value_1`: sanctioned first,
+            // declared after, both byte for byte.
+            evidence: query_evidence(ProviderCallCountV1::One, ProviderCallCountV1::One, true),
+        },
+    },
+    ControlledQueryFixtureV1 {
+        case_id: ControlledQueryCaseIdV1::DeclaredQueryValueOutsideSyntaxRejected,
+        input: input(CONTROLLED_QUERY_PATH, CONTROLLED_QUERY_BOUND_SLOT),
+        declared_query: QUERY_FREE_QUERY,
+        declared_parameters: DECLARED_OUT_OF_SYNTAX_PARAMETER,
+        upstream: ControlledQueryUpstreamV1::NotReached,
+        expected: ControlledQueryExpectedV1 {
+            // The same fold as the sanctioned grammar violation.
+            outcome: ControlledQueryExpectedOutcomeV1::Failure {
+                code: ProviderCallFailureCodeV1::InvalidRelativePath,
+            },
+            evidence: query_evidence(ProviderCallCountV1::Zero, ProviderCallCountV1::Zero, false),
+        },
+    },
+    ControlledQueryFixtureV1 {
+        case_id: ControlledQueryCaseIdV1::ReservedDeclaredNameRejected,
+        input: input(CONTROLLED_QUERY_PATH, CONTROLLED_QUERY_BOUND_SLOT),
+        declared_query: QUERY_FREE_QUERY,
+        declared_parameters: DECLARED_RESERVED_NAME_PARAMETER,
+        upstream: ControlledQueryUpstreamV1::NotReached,
+        expected: ControlledQueryExpectedV1 {
+            // A refused declaration is a preparation-time, zero-call declaration failure too.
+            outcome: ControlledQueryExpectedOutcomeV1::Failure {
+                code: ProviderCallFailureCodeV1::InvalidRelativePath,
+            },
+            evidence: query_evidence(ProviderCallCountV1::Zero, ProviderCallCountV1::Zero, false),
         },
     },
 ];

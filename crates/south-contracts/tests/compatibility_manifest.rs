@@ -298,7 +298,13 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 1
                 // they send two auth headers and ProviderAuthV1 is single-arm.
                 // The adoption record is held by that host's own repository;
                 // this manifest records only the resulting status.
-                ("controlled_query", "verified", Some(6)),
+                //
+                // Demoted to not_verified 2026-10-02 (B7a): the suite grew
+                // declared-instance cases (HTTP contract version ten) that the
+                // six-case run cannot have exercised. The host returns to
+                // verified by re-running the larger table; editing `cases`
+                // without a run would fabricate the evidence.
+                ("controlled_query", "not_verified", None),
                 // controlled_user_agent stays not_verified until that host runs
                 // its own adoption slice against south.controlled-user-agent.v1
                 // (its migration batches 3 and 4b are the expected consumers).

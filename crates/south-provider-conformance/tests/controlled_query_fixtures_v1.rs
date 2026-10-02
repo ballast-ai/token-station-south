@@ -3,10 +3,11 @@ use std::fmt::Display;
 use bytes::Bytes;
 use http::StatusCode;
 use south_contracts::{
-    BufferedHttpResponseV1, CredentialSlotV1, JsonBodyV1, MAX_STREAM_CHUNK_BYTES,
-    ProviderEndpointV1, QueryParameterV1, QueryStringV1, RelativePathV1, SafeHeaders,
-    StreamChunkV1, StreamingResponseHeadV1,
+    BufferedHttpResponseV1, ContractErrorV1, CredentialSlotV1, DeclaredQueryParameterV1,
+    JsonBodyV1, MAX_STREAM_CHUNK_BYTES, ProviderEndpointV1, QueryParameterV1, QueryStringV1,
+    RelativePathV1, SafeHeaders, StreamChunkV1, StreamingResponseHeadV1,
 };
+use south_provider_api::{QueryParameterDeclarationV1, QueryValueSyntaxV1};
 use south_provider_conformance::{
     CONTROLLED_QUERY_CONFORMANCE_SUITE_ID, CONTROLLED_QUERY_CONFORMANCE_SUITE_VERSION,
     ControlledQueryCaseIdV1, ControlledQueryExpectedOutcomeV1, ControlledQueryFixtureV1,
@@ -32,6 +33,7 @@ const SENTINELS: &[&str] = &[
     "content-type-debug-sentinel",
     "retry-after-debug-sentinel",
     "invalid value-debug-sentinel",
+    "declared-reserved-debug-sentinel",
 ];
 
 #[test]
@@ -50,8 +52,77 @@ fn suite_identity_and_canonical_case_order_are_frozen() {
             ControlledQueryCaseIdV1::ReversedDeclarationOrderIsCanonicalized,
             ControlledQueryCaseIdV1::QueryFreeRequestReachesTheWire,
             ControlledQueryCaseIdV1::BufferedGroupIdQuerySuccess,
+            ControlledQueryCaseIdV1::BufferedDeclaredQuerySuccess,
+            ControlledQueryCaseIdV1::DeclaredQueryValueOutsideSyntaxRejected,
+            ControlledQueryCaseIdV1::ReservedDeclaredNameRejected,
         ]
     );
+}
+
+/// B7a (HTTP contract version ten): the declared-instance cases are appended after the frozen six
+/// and are the only ones declaring a manifest parameter.
+#[test]
+fn the_declared_instance_cases_declare_manifest_parameters_and_nothing_earlier_does() {
+    let fixtures = controlled_query_fixtures_v1();
+    for fixture in &fixtures[..6] {
+        assert!(fixture.declared_parameters().is_empty(), "{:?}", fixture.case_id());
+    }
+
+    // 7. A token parameter beside a sanctioned one, which the wire must carry after it.
+    let success = &fixtures[6];
+    assert_eq!(success.case_id(), ControlledQueryCaseIdV1::BufferedDeclaredQuerySuccess);
+    assert_eq!(success.declared_query(), [(QueryParameterV1::ApiVersion, "2025-04-01-preview")]);
+    let [declared] = success.declared_parameters() else { panic!("one declared parameter") };
+    assert_eq!(
+        declared.manifest_declaration(),
+        QueryParameterDeclarationV1 {
+            name: "declared-mode".to_owned(),
+            syntax: QueryValueSyntaxV1::Token,
+        }
+    );
+    let parameter = QueryParameterV1::Declared(
+        DeclaredQueryParameterV1::try_new(declared.name(), declared.syntax().contract_syntax())
+            .expect("the success declaration is admissible"),
+    );
+    let query = QueryStringV1::try_from_iter([
+        (parameter, declared.value()),
+        (QueryParameterV1::ApiVersion, "2025-04-01-preview"),
+    ])
+    .expect("the success value has the declared syntax");
+    assert_eq!(query.as_str(), "api-version=2025-04-01-preview&declared-mode=declared.value_1");
+    assert!(success.expected().evidence().wire_query_exact());
+
+    // 8. An enum parameter whose value is not in its list: the contract refuses the value.
+    let outside = &fixtures[7];
+    assert_eq!(outside.case_id(), ControlledQueryCaseIdV1::DeclaredQueryValueOutsideSyntaxRejected);
+    let [declared] = outside.declared_parameters() else { panic!("one declared parameter") };
+    let parameter = QueryParameterV1::Declared(
+        DeclaredQueryParameterV1::try_new(declared.name(), declared.syntax().contract_syntax())
+            .expect("the declaration itself is admissible"),
+    );
+    assert_eq!(
+        QueryStringV1::try_from_iter([(parameter, declared.value())]),
+        Err(ContractErrorV1::InvalidQueryValue)
+    );
+
+    // 9. A credential-shaped name: both gate ① and the contract refuse the declaration.
+    let reserved = &fixtures[8];
+    assert_eq!(reserved.case_id(), ControlledQueryCaseIdV1::ReservedDeclaredNameRejected);
+    let [declared] = reserved.declared_parameters() else { panic!("one declared parameter") };
+    assert_eq!(
+        DeclaredQueryParameterV1::try_new(declared.name(), declared.syntax().contract_syntax()),
+        Err(ContractErrorV1::InvalidQueryDeclaration)
+    );
+    for refused in [outside, reserved] {
+        assert!(refused.declared_query().is_empty());
+        assert!(matches!(refused.upstream(), ControlledQueryUpstreamV1::NotReached));
+        assert!(matches!(
+            refused.expected().outcome(),
+            ControlledQueryExpectedOutcomeV1::Failure {
+                code: ProviderCallFailureCodeV1::InvalidRelativePath
+            }
+        ));
+    }
 }
 
 /// Contract version five's parameter has its own success case, appended after the frozen five so
@@ -64,7 +135,7 @@ fn the_group_id_case_declares_the_new_parameter_and_reaches_the_wire() {
     assert_eq!(fixture.declared_query(), [(QueryParameterV1::GroupId, "1782000000000000000")]);
     assert!(matches!(fixture.upstream(), ControlledQueryUpstreamV1::Response(_)));
     assert!(fixture.expected().evidence().wire_query_exact());
-    let query = QueryStringV1::try_from_iter(fixture.declared_query().iter().copied())
+    let query = QueryStringV1::try_from_iter(fixture.declared_query().iter().cloned())
         .expect("the group id fixture value satisfies its grammar");
     assert_eq!(query.as_str(), "GroupId=1782000000000000000");
 }
@@ -72,7 +143,7 @@ fn the_group_id_case_declares_the_new_parameter_and_reaches_the_wire() {
 #[test]
 fn canonical_table_freezes_queries_upstreams_outcomes_and_evidence() {
     let fixtures = controlled_query_fixtures_v1();
-    assert_eq!(fixtures.len(), 6);
+    assert_eq!(fixtures.len(), 9);
 
     // 1. BufferedQuerySuccess: one buffered exchange carrying a sanctioned `api-version`.
     let declared = fixtures[0].declared_query();
@@ -128,7 +199,7 @@ fn canonical_table_freezes_queries_upstreams_outcomes_and_evidence() {
     assert_eq!(declared.len(), 2);
     assert_eq!(declared[0].0, QueryParameterV1::Alt);
     assert_eq!(declared[1].0, QueryParameterV1::ApiVersion);
-    let canonical = QueryStringV1::try_from_iter(declared.iter().copied())
+    let canonical = QueryStringV1::try_from_iter(declared.iter().cloned())
         .expect("the reversed-order case must construct");
     assert!(
         canonical.as_str().starts_with(QueryParameterV1::ApiVersion.wire_name()),
@@ -173,8 +244,12 @@ fn canonical_table_freezes_the_expected_wire_query_evidence() {
         (ProviderCallCountV1::Zero, ProviderCallCountV1::Zero, false),
         (ProviderCallCountV1::One, ProviderCallCountV1::One, true),
         (ProviderCallCountV1::One, ProviderCallCountV1::One, false),
-        // Contract version five: the `GroupId` success case, appended last.
+        // Contract version five: the `GroupId` success case.
         (ProviderCallCountV1::One, ProviderCallCountV1::One, true),
+        // Contract version ten (B7a): the declared-instance cases.
+        (ProviderCallCountV1::One, ProviderCallCountV1::One, true),
+        (ProviderCallCountV1::Zero, ProviderCallCountV1::Zero, false),
+        (ProviderCallCountV1::Zero, ProviderCallCountV1::Zero, false),
     ];
     // `zip` truncates silently, so a fixture added without extending the table above would go
     // unchecked rather than failing here.
@@ -240,6 +315,10 @@ fn every_raw_fixture_field_is_checked_through_the_production_contract() {
 #[test]
 fn success_queries_construct_and_the_negative_query_is_refused_by_the_contract() {
     for fixture in controlled_query_fixtures_v1() {
+        // The declared-instance cases are checked by their own test.
+        if !fixture.declared_parameters().is_empty() {
+            continue;
+        }
         // An empty declaration is the absence of a query, not a query the contract refuses. The
         // constructor has no empty representation, so a correct executor never reaches it for
         // this case — and neither does this test.
@@ -247,7 +326,7 @@ fn success_queries_construct_and_the_negative_query_is_refused_by_the_contract()
             assert_eq!(fixture.case_id(), ControlledQueryCaseIdV1::QueryFreeRequestReachesTheWire);
             continue;
         }
-        let constructed = QueryStringV1::try_from_iter(fixture.declared_query().iter().copied());
+        let constructed = QueryStringV1::try_from_iter(fixture.declared_query().iter().cloned());
         if fixture.case_id() == ControlledQueryCaseIdV1::InvalidQueryValueRejected {
             constructed.expect_err("the negative case value must violate its grammar");
         } else {

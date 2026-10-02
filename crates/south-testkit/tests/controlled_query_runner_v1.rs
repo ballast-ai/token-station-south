@@ -220,6 +220,56 @@ async fn a_probe_that_hardcodes_the_wire_query_claim_is_caught() {
     assert_eq!(mismatch.category(), ControlledQueryMismatchCategoryV1::WireQuery);
 }
 
+/// B7a: a host that ignores manifest-declared parameters — it sends the sanctioned pairs and
+/// drops every name it does not know — passes the frozen six cases and fails exactly the three
+/// declared-instance cases.
+#[tokio::test]
+async fn a_host_that_drops_declared_parameters_fails_exactly_the_declared_cases() {
+    struct DroppingExecutor;
+
+    impl AssembledControlledQueryExecutorV1 for DroppingExecutor {
+        fn execute_case<'a>(
+            &'a self,
+            fixture: &'a ControlledQueryFixtureV1,
+        ) -> AssembledControlledQueryExecutionFutureV1<'a> {
+            Box::pin(async move {
+                if fixture.declared_parameters().is_empty() {
+                    return observation_matching(fixture);
+                }
+                match fixture.case_id() {
+                    // The sanctioned half reaches the wire, so the URL is not the declaration.
+                    ControlledQueryCaseIdV1::BufferedDeclaredQuerySuccess => {
+                        observation_with_evidence(
+                            fixture,
+                            ControlledQueryEvidenceV1::new(1, 1, false),
+                        )
+                    }
+                    // Nothing refused the declaration, so the request is sent; the scripted
+                    // upstream is not there to answer it.
+                    _ => ControlledQueryObservationV1::failure(
+                        ProviderCallFailureCodeV1::RequestFailed,
+                        ControlledQueryEvidenceV1::new(1, 1, false),
+                    ),
+                }
+            })
+        }
+    }
+
+    let failure = run_controlled_query_conformance_v1(&DroppingExecutor)
+        .await
+        .expect_err("a host that drops declared parameters must not pass");
+    let failed: BTreeSet<_> =
+        failure.mismatches().iter().map(|mismatch| format!("{:?}", mismatch.case_id())).collect();
+    assert_eq!(
+        failed,
+        BTreeSet::from([
+            "BufferedDeclaredQuerySuccess".to_owned(),
+            "DeclaredQueryValueOutsideSyntaxRejected".to_owned(),
+            "ReservedDeclaredNameRejected".to_owned(),
+        ])
+    );
+}
+
 #[tokio::test]
 async fn a_fully_wrong_executor_reports_every_case_without_failing_fast() {
     struct WrongExecutor;

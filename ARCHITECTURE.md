@@ -231,3 +231,15 @@ directory with `load_package_set` judges each package on its own and follows thr
 
 A release that tightens gate ① or ② says so, and a host enforces the tightening by raising its floor. Design record:
 `docs/design/2026-09-30-host-zero-vendor-boundary.md` §8.
+
+**Declared query parameters, quota headers and user-agents (B7a).** These three provider instances move from
+closed south sets into the package manifest, so a provider that needs a new one is a new package, not a south
+release and a host re-pin. A provider package may declare `query_parameters` (a restricted name plus one value
+syntax: `digits`, `token`, `date` or `{"enum": [...]}`), `quota_headers` (a response header feeding one of the
+nine closed quota metadata fields), and a per-family `user_agent` under the controlled user-agent grammar. Gate ①
+refuses credential-shaped and fixed query names, credential-bearing or framing response headers, and values outside
+the grammar. `DeclaredInstancesV1` in `south-component-conformance` validates the manifest and returns the contract
+types: `QueryParameterV1::Declared` (HTTP contract 10), `ProviderQuotaHeaderMapV1` (quota metadata contract 2),
+and `DeclaredUserAgentV1`, which fills the request's single user-agent slot beside the `'static`
+`ControlledUserAgentV1`. Query values still never come from credential resolution. Design record:
+`docs/design/2026-09-30-host-zero-vendor-boundary.md` §10.

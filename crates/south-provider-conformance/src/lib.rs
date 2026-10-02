@@ -30,15 +30,16 @@ mod stream;
 
 pub use controlled_query::{
     CONTROLLED_QUERY_CONFORMANCE_SUITE_ID, CONTROLLED_QUERY_CONFORMANCE_SUITE_VERSION,
-    ControlledQueryCaseIdV1, ControlledQueryExpectedEvidenceV1, ControlledQueryExpectedOutcomeV1,
-    ControlledQueryExpectedV1, ControlledQueryFixtureV1, ControlledQueryUpstreamV1,
-    controlled_query_fixtures_v1,
+    ControlledQueryCaseIdV1, ControlledQueryDeclaredParameterV1, ControlledQueryDeclaredSyntaxV1,
+    ControlledQueryExpectedEvidenceV1, ControlledQueryExpectedOutcomeV1, ControlledQueryExpectedV1,
+    ControlledQueryFixtureV1, ControlledQueryUpstreamV1, controlled_query_fixtures_v1,
 };
 pub use controlled_user_agent::{
     CONTROLLED_USER_AGENT_CONFORMANCE_SUITE_ID, CONTROLLED_USER_AGENT_CONFORMANCE_SUITE_VERSION,
     ControlledUserAgentCaseIdV1, ControlledUserAgentExpectedEvidenceV1,
     ControlledUserAgentExpectedOutcomeV1, ControlledUserAgentExpectedV1,
-    ControlledUserAgentFixtureV1, ControlledUserAgentUpstreamV1, controlled_user_agent_fixtures_v1,
+    ControlledUserAgentFixtureV1, ControlledUserAgentSourceV1, ControlledUserAgentUpstreamV1,
+    controlled_user_agent_fixtures_v1,
 };
 pub use credential_recipe::{
     CREDENTIAL_RECIPE_CONFORMANCE_SUITE_ID, CREDENTIAL_RECIPE_CONFORMANCE_SUITE_VERSION,

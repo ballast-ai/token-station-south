@@ -12,11 +12,11 @@
   },
   "contracts": {
     "reserved_header_policy": 1,
-    "http": 9,
+    "http": 10,
     "auth": 4,
     "error": 2,
     "stream": 2,
-    "provider_quota_metadata": 1,
+    "provider_quota_metadata": 2,
     "response_diagnostic": 1,
     "response_transcript": 1,
     "canonical_ir": null,
@@ -153,8 +153,7 @@
         "cases": 4
       },
       "controlled_query": {
-        "status": "verified",
-        "cases": 6
+        "status": "not_verified"
       },
       "controlled_user_agent": {
         "status": "not_verified"
