@@ -30,6 +30,8 @@ fn key(syntax: ValueSyntaxV1, required: bool) -> ConfigKeyV1 {
 /// The Converse manifest with its `bedrock` family's endpoint and keys replaced.
 fn declaring(template: &str, keys: &[(&str, ConfigKeyV1)]) -> ComponentManifestV1 {
     let mut manifest = converse();
+    // Signing names the shipped template's `{region}`; these templates are about the endpoint only.
+    manifest.signing = None;
     manifest.endpoint = BTreeMap::from([("bedrock".to_owned(), template.to_owned())]);
     manifest.config_schema = BTreeMap::from([(
         "bedrock".to_owned(),
@@ -220,7 +222,55 @@ fn endpoint_declarations_round_trip_and_belong_to_the_provider_world() {
     task.compatibility.wit_package = south_provider_api::TASK_WIT_PACKAGE.to_owned();
     task.capabilities = ["submit", "observe", "render"].into_iter().map(str::to_owned).collect();
     task.request_facts.clear();
+    assert!(matches!(task.validate(), Err(ManifestErrorV1::InvalidSigning(_))));
+    task.signing = None;
     assert_eq!(task.validate(), Err(ManifestErrorV1::StreamFramingIsAProviderWorldDeclaration));
     task.stream_framing = south_provider_api::StreamFramingV1::Bytes;
     assert_eq!(task.validate(), Err(ManifestErrorV1::EndpointIsAProviderWorldDeclaration));
+}
+
+#[test]
+fn signing_names_its_scheme_service_region_and_inputs() {
+    let manifest = converse();
+    let signing = manifest.signing.expect("the shipped Converse manifest declares signing");
+    assert_eq!(signing.scheme, south_provider_api::SigningSchemeV1::AwsSigv4);
+    assert_eq!(signing.service, "bedrock");
+    assert_eq!(signing.region.template_param, "region");
+
+    let refused = |edit: &dyn Fn(&mut ComponentManifestV1)| {
+        let mut manifest = converse();
+        edit(&mut manifest);
+        matches!(manifest.validate(), Err(ManifestErrorV1::InvalidSigning(_)))
+    };
+    assert!(
+        refused(&|m| {
+            m.auth_arms = ["bearer".to_owned()].into();
+            m.emits.clear();
+        }),
+        "signing without host_signed"
+    );
+    assert!(
+        refused(&|m| m.emits.retain(|header| header != "x-amz-date")),
+        "a missing SigV4 header"
+    );
+    assert!(
+        refused(&|m| m.signing.as_mut().unwrap().service = "Bedrock".to_owned()),
+        "service syntax"
+    );
+    assert!(
+        refused(&|m| {
+            m.signing.as_mut().unwrap().credentials.remove("secret_access_key");
+        }),
+        "a missing secret key input"
+    );
+    assert!(
+        refused(&|m| {
+            m.signing.as_mut().unwrap().credentials.insert("password".to_owned(), "p".to_owned());
+        }),
+        "an input the scheme does not take"
+    );
+    assert!(
+        refused(&|m| m.signing.as_mut().unwrap().region.template_param = "zone".to_owned()),
+        "a region parameter the endpoint does not have"
+    );
 }

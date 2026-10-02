@@ -48,6 +48,18 @@
     "x-amz-security-token"
   ],
   "stream_framing": "aws-eventstream",
+  "signing": {
+    "scheme": "aws-sigv4",
+    "service": "bedrock",
+    "region": {
+      "template_param": "region"
+    },
+    "credentials": {
+      "access_key_id": "access_key_id",
+      "secret_access_key": "secret_access_key",
+      "session_token": "session_token"
+    }
+  },
   "request_facts": {
     "bedrock": {
       "output_cap": [

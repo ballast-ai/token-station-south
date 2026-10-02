@@ -254,6 +254,10 @@ pub struct ComponentManifestV1 {
     /// world only.
     #[serde(default, skip_serializing_if = "StreamFramingV1::is_bytes")]
     pub stream_framing: StreamFramingV1,
+    /// How the host signs a `host_signed` package's requests. Absent means the
+    /// host infers nothing from the declaration (today's behavior).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signing: Option<SigningV1>,
     /// Where each provider family's request carries the output cap, the model
     /// and the stream flag, keyed by family. A family without an entry uses
     /// [`RequestFactsV1::top_level`]. Provider world only.
@@ -270,6 +274,46 @@ pub struct ComponentManifestV1 {
     pub conformance: ConformanceSpecV1,
     pub compatibility: CompatibilityDeclarationV1,
 }
+
+/// How the host signs a `host_signed` provider package's requests (B2,
+/// `docs/design/2026-09-30-host-zero-vendor-boundary.md` §5.3).
+///
+/// The host picks its finalizer by `scheme` — a public-standard executor kept
+/// in the host and selected by declaration — instead of inferring it from the
+/// provider type.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SigningV1 {
+    pub scheme: SigningSchemeV1,
+    /// The scheme's service name, e.g. `bedrock`.
+    pub service: String,
+    /// The endpoint-template parameter that names the region, so the region
+    /// the host signs for is the region in the origin it sends to.
+    pub region: TemplateParamV1,
+    /// Each input the scheme needs, mapped to a credential field name.
+    /// `aws-sigv4` requires `access_key_id` and `secret_access_key` and admits
+    /// `session_token`. Checking the names against declared credential fields
+    /// arrives with credential recipes (§3.3, phase B4).
+    pub credentials: BTreeMap<String, String>,
+}
+
+/// A signing scheme the host implements. A closed set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SigningSchemeV1 {
+    /// AWS Signature Version 4.
+    AwsSigv4,
+}
+
+/// A reference to an endpoint-template parameter.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TemplateParamV1 {
+    pub template_param: String,
+}
+
+/// The headers an `aws-sigv4` signature always emits.
+const SIGV4_REQUIRED_EMITS: [&str; 3] = ["authorization", "x-amz-date", "x-amz-content-sha256"];
 
 /// How a provider package's upstream frames its stream, which decides what the
 /// host feeds `parse-stream-chunk` (B2, `docs/design/2026-09-30-host-zero-vendor-boundary.md`
@@ -571,6 +615,11 @@ impl ComponentManifestV1 {
             }
             self.validate_request_facts()?;
             self.validate_endpoints()?;
+            self.validate_signing_declaration()?;
+        } else if self.signing.is_some() {
+            return Err(ManifestErrorV1::InvalidSigning(
+                "signing is a provider-world declaration".to_owned(),
+            ));
         } else if !self.stream_framing.is_bytes() {
             return Err(ManifestErrorV1::StreamFramingIsAProviderWorldDeclaration);
         } else if !self.endpoint.is_empty() || !self.config_schema.is_empty() {
@@ -598,6 +647,66 @@ impl ComponentManifestV1 {
         for provider in &self.providers {
             validate_component_name(provider)
                 .map_err(|_| ManifestErrorV1::InvalidProviderFamily(provider.clone()))?;
+        }
+        Ok(())
+    }
+
+    fn validate_signing_declaration(&self) -> Result<(), ManifestErrorV1> {
+        let Some(signing) = &self.signing else {
+            return Ok(());
+        };
+        let invalid = |detail: &str| ManifestErrorV1::InvalidSigning(detail.to_owned());
+        if !self.auth_arms.contains("host_signed") {
+            return Err(invalid("signing is declared only by a host_signed package"));
+        }
+        if signing.service.is_empty()
+            || signing.service.len() > 64
+            || !signing
+                .service
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+        {
+            return Err(invalid("the service must be lowercase letters, digits and hyphens"));
+        }
+        match signing.scheme {
+            SigningSchemeV1::AwsSigv4 => {
+                if let Some(missing) = SIGV4_REQUIRED_EMITS
+                    .iter()
+                    .find(|header| !self.emits.iter().any(|emit| emit == *header))
+                {
+                    return Err(ManifestErrorV1::InvalidSigning(format!(
+                        "aws-sigv4 always emits `{missing}`, which emits does not list"
+                    )));
+                }
+                let inputs: Vec<&str> = signing.credentials.keys().map(String::as_str).collect();
+                if !inputs.contains(&"access_key_id")
+                    || !inputs.contains(&"secret_access_key")
+                    || inputs.iter().any(|input| {
+                        !matches!(*input, "access_key_id" | "secret_access_key" | "session_token")
+                    })
+                {
+                    return Err(invalid(
+                        "aws-sigv4 credentials are access_key_id, secret_access_key and optionally session_token",
+                    ));
+                }
+            }
+        }
+        if signing.credentials.values().any(|field| {
+            field.is_empty()
+                || field.len() > 64
+                || !field
+                    .bytes()
+                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+        }) {
+            return Err(invalid("a credential field name is not lowercase snake_case"));
+        }
+        let placeholder = format!("{{{}}}", signing.region.template_param);
+        if self.providers.iter().any(|family| {
+            self.endpoint.get(family).is_none_or(|template| !template.contains(&placeholder))
+        }) {
+            return Err(invalid(
+                "the region parameter must appear in every family's endpoint template",
+            ));
         }
         Ok(())
     }
@@ -824,6 +933,8 @@ pub enum ManifestErrorV1 {
     RequestFactsIsAProviderWorldDeclaration,
     #[error("request_facts for family `{family}`: {detail}")]
     InvalidRequestFacts { family: String, detail: String },
+    #[error("signing: {0}")]
+    InvalidSigning(String),
     #[error("stream_framing is a provider-world declaration")]
     StreamFramingIsAProviderWorldDeclaration,
     #[error("endpoint and config_schema are provider-world declarations")]

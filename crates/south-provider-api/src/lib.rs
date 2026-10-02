@@ -44,10 +44,11 @@ pub use manifest::{
     CompatibilityTupleV1, ComponentManifestV1, ComponentMetadataV1, ComponentPermissionsV1,
     ConformanceSpecV1, HostExpectationsV1, KNOWN_WORLDS, MAX_OUTPUT_CAP_LOCATIONS, ManifestErrorV1,
     ModelLocationV1, PROVIDER_AUTH_ARMS, PROVIDER_CAPABILITIES, PROVIDER_WORLD,
-    PROVIDER_WORLD_SCHEMA, RequestFactsV1, SIGNED_HEADER_NAMES, StreamFramingV1, StreamLocationV1,
-    TASK_BEHAVIOR_SUITE, TASK_BEHAVIOR_SUITE_V2, TASK_CAPABILITIES, TASK_REQUIRED_CAPABILITIES,
-    TASK_WIT_PACKAGE, TASK_WIT_PACKAGE_V2, TASK_WORLD, TASK_WORLD_SCHEMA, TASK_WORLD_SCHEMA_V2,
-    TASK_WORLD_V2, UsageEvidenceV1, WIT_PACKAGE, WorldSchemaV1, compatibility_matches, known_world,
+    PROVIDER_WORLD_SCHEMA, RequestFactsV1, SIGNED_HEADER_NAMES, SigningSchemeV1, SigningV1,
+    StreamFramingV1, StreamLocationV1, TASK_BEHAVIOR_SUITE, TASK_BEHAVIOR_SUITE_V2,
+    TASK_CAPABILITIES, TASK_REQUIRED_CAPABILITIES, TASK_WIT_PACKAGE, TASK_WIT_PACKAGE_V2,
+    TASK_WORLD, TASK_WORLD_SCHEMA, TASK_WORLD_SCHEMA_V2, TASK_WORLD_V2, TemplateParamV1,
+    UsageEvidenceV1, WIT_PACKAGE, WorldSchemaV1, compatibility_matches, known_world,
     validate_component_name, validate_package_relative_path,
 };
 
