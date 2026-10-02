@@ -53,7 +53,9 @@ the [task adapter vocabulary](docs/design/2026-08-27-task-adapter-vocabulary.md)
 - `south-contracts` defines bounded HTTP (the JSON POST request, the body-less GET request, and
   the multipart POST request, whose opaque bytes travel under a media type the contract renders
   from a validated boundary),
-  Bearer, sanctioned header-secret, and combined Bearer-plus-header-secret authentication, stable
+  Bearer, sanctioned header-secret, combined Bearer-plus-header-secret, and package-declared
+  header-secret authentication (auth contract 5, whose declared names join the reserved headers
+  and leave the response transcript for that package's calls), stable
   error, byte-streaming, and closed provider quota metadata contracts, plus a buffered binary
   response beside the UTF-8 one, which keeps its guarantee unchanged — including reserved-header
   enforcement, redacted diagnostics, and the sanctioned controlled query and controlled
@@ -75,7 +77,8 @@ the [task adapter vocabulary](docs/design/2026-08-27-task-adapter-vocabulary.md)
   applies the request's sanctioned user-agent declaration exactly once, applies every auth header
   the prepared request carries (one for the credential arms, the finalizer's diffed set for the
   host-signed arm), adds exactly `TRANSPORT_ADDED_HEADERS_V1` and nothing else, captures only the
-  nine bounded quota metadata fields, and keeps redirects, retries, compression, cookies, referer
+  nine bounded quota metadata fields, redacts the request's declared secret headers from the
+  response transcript, and keeps redirects, retries, compression, cookies, referer
   propagation, and implicit system proxies disabled. `TransportPairV1` builds the buffered and
   streaming transports from one timeout configuration.
 - `south-provider-conformance` publishes immutable `south.provider-call.v1`,
