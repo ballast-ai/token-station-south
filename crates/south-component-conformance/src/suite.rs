@@ -24,6 +24,7 @@ use token_station_protocol::{
 };
 
 use crate::component::{ProviderComponentV1, StreamParserV1};
+use crate::credential_fixture::credential_recipe_checks_v1;
 use crate::descriptor_auth::admit_descriptor_auth;
 use crate::fixture::{CaseV1, FixturePackV1, ProviderFamilyV1};
 use crate::report::{CheckV1, OutcomeV1, ReportV1};
@@ -141,6 +142,8 @@ pub fn run_provider_component_suite_v1(
 ///
 /// The manifest selects the usage checks (`usage_evidence`) and is what
 /// `DescriptorAuthWithinManifest` judges descriptors against (`auth_arms`).
+/// When it declares `credentials`, the pack's `credential.*` cases run
+/// through `CredentialRecipeMatch` and the credential coverage rule.
 /// This is the entry point an admitting host uses.
 #[must_use]
 pub fn run_provider_component_suite_v1_for_manifest(
@@ -199,6 +202,10 @@ fn run_suite(
             "no fixture maps a 401 or 403, so the check that keeps a rejected credential from \
              being replayed across every configured upstream never ran",
         ));
+    }
+
+    if let Some(credentials) = manifest.and_then(|manifest| manifest.credentials.as_ref()) {
+        outcomes.extend(credential_recipe_checks_v1(credentials, pack.credentials()));
     }
 
     ReportV1::new(PROVIDER_COMPONENT_SUITE_V1, outcomes)

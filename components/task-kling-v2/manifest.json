@@ -1,6 +1,6 @@
 {
   "name": "task-kling-v2",
-  "version": "0.32.2",
+  "version": "0.32.3",
   "api_version": "task-adapter-v2",
   "providers": [
     "kling"
@@ -38,6 +38,55 @@
     },
     "contracts": {
       "task": 7
+    }
+  },
+  "credentials": {
+    "schema": "south.credential-recipe.v1",
+    "fields": {
+      "access_key": {
+        "secret": false,
+        "required": true,
+        "syntax": {
+          "printable_ascii": 128
+        }
+      },
+      "secret_key": {
+        "secret": true,
+        "required": true
+      }
+    },
+    "slots": {
+      "provider_api_key": {
+        "minted": "kling_jwt"
+      }
+    },
+    "recipes": {
+      "kling_jwt": {
+        "steps": [
+          {
+            "id": "jwt",
+            "kind": "jwt_sign",
+            "alg": "HS256",
+            "key": {
+              "field": "secret_key"
+            },
+            "claims": {
+              "iss": {
+                "field": "access_key"
+              },
+              "exp": {
+                "now_plus": 1800
+              },
+              "nbf": {
+                "now_plus": -5
+              }
+            }
+          }
+        ],
+        "present": "jwt.jwt",
+        "rotates_refresh_material": false,
+        "default_seconds": 1800
+      }
     }
   }
 }

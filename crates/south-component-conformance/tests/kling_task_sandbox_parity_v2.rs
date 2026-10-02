@@ -7,7 +7,8 @@ use std::time::Duration;
 
 use south_component_conformance::sandbox_task_v2::SandboxedTaskComponentV2;
 use south_component_conformance::{
-    TaskFixturePackV2, reference_kling_task_v2::KlingTaskReferenceV2, run_task_component_suite_v2,
+    TaskFixturePackV2, reference_kling_task_v2::KlingTaskReferenceV2,
+    run_task_component_suite_v2_for_manifest,
 };
 use south_provider_runtime::{
     ComponentRuntimeV1, LoadedComponentV1, RuntimeLimitsV1, SecretSignerV1,
@@ -54,6 +55,14 @@ fn pack() -> TaskFixturePackV2 {
     .expect("the shipped pack loads")
 }
 
+fn manifest() -> south_provider_api::ComponentManifestV1 {
+    serde_json::from_str(
+        &std::fs::read_to_string(repo_root().join("components/task-kling-v2/manifest.json"))
+            .expect("manifest reads"),
+    )
+    .expect("manifest parses")
+}
+
 fn sandboxed() -> SandboxedTaskComponentV2 {
     let manifest =
         std::fs::read_to_string(repo_root().join("components/task-kling-v2/manifest.json"))
@@ -82,7 +91,7 @@ fn sandboxed() -> SandboxedTaskComponentV2 {
 #[test]
 fn the_sandboxed_component_passes_gate_two_byte_for_byte() {
     let evidence = gate2_report::Evidence::capture("task-kling-v2", component_wasm());
-    let report = run_task_component_suite_v2(&sandboxed(), &pack());
+    let report = run_task_component_suite_v2_for_manifest(&sandboxed(), &pack(), &manifest());
     evidence.record(&report);
     assert!(
         report.is_passing(),
@@ -96,8 +105,9 @@ fn the_sandboxed_component_passes_gate_two_byte_for_byte() {
 #[test]
 fn the_sandboxed_and_native_reports_are_identical() {
     let pack = pack();
-    let sandboxed = run_task_component_suite_v2(&sandboxed(), &pack);
-    let native = run_task_component_suite_v2(&KlingTaskReferenceV2, &pack);
+    let sandboxed = run_task_component_suite_v2_for_manifest(&sandboxed(), &pack, &manifest());
+    let native =
+        run_task_component_suite_v2_for_manifest(&KlingTaskReferenceV2, &pack, &manifest());
     assert_eq!(
         format!("{:?}", sandboxed.outcomes()),
         format!("{:?}", native.outcomes()),
