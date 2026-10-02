@@ -29,7 +29,7 @@ community policy      enterprise policy
 | `south-contracts` | Implemented bounded HTTP (JSON POST, body-less GET, and multipart POST request shapes, and a buffered binary response beside the UTF-8 one), Bearer, sanctioned header-secret, and combined Bearer-plus-header-secret auth, stable error, byte-streaming, and closed quota metadata contracts, plus the sanctioned controlled query and controlled user-agent declarations |
 | `south-core` | Implemented host-neutral buffered and streaming provider-call orchestration and its buffered body-less GET, multipart and binary-response twins, plus the shared host prelude (`raw` module: raw-call type, its host-signed, GET and multipart twins, contract-parse orchestration, one-shot wrappers for all four, resolver adapters) |
 | `south-transport-reqwest` | Implemented hardened buffered and byte-streaming JSON POST transport, the same buffered transport for body-less GET and multipart POST requests (rendering the latter's media type and sharing its allocation) and for a JSON POST whose response is buffered as opaque bytes under its own larger cap, bounded quota metadata capture, sanctioned user-agent application, and one-config transport-pair construction |
-| `south-provider-conformance` | Implemented immutable provider-call, provider-stream, provider-quota-metadata, header-auth, controlled-query, controlled-user-agent, provider-get, provider-multipart, and provider-binary v1 fixtures |
+| `south-provider-conformance` | Implemented immutable provider-call, provider-stream, provider-quota-metadata, header-auth, controlled-query, controlled-user-agent, provider-get, provider-multipart, and provider-binary v1 fixtures, and the host-implemented credential-recipe v1 suite (harness, fake token endpoint, runner) |
 | `south-testkit` | Implemented assembled-executor conformance runners and reference executors for all nine suites, plus the owned raw-call, host-signed raw-call, raw-GET and raw-multipart builders for host tests |
 | `south-provider-api` | Implemented v2 provider component ABI: WIT package `token-station:adapter@2.0.0` (world `provider-adapter-v2`) plus the gate-① manifest schema with the seven-field compatibility tuple; depends on no other south crate by design |
 | `south-component-conformance` | Implemented gates ① and ② (package admission + `south.provider-component.v1` behavior suite) with the native `provider-openai-compatible`, `provider-anthropic` and `provider-gemini` references and a frozen fixture pack each; a sanctioned typed consumer of the Canonical IR, pinned to a kernel distribution tag |
@@ -59,6 +59,7 @@ south-core -------------------------------> south-contracts
 south-transport-reqwest ------------------> south-core
 south-transport-reqwest ------------------> south-contracts
 south-provider-conformance ---------------> south-contracts
+south-provider-conformance ---------------> south-provider-api
 south-testkit ----------------------------> south-contracts
 south-testkit ----------------------------> south-core
 south-testkit ----------------------------> south-provider-conformance

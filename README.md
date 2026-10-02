@@ -82,7 +82,9 @@ the [task adapter vocabulary](docs/design/2026-08-27-task-adapter-vocabulary.md)
   `south.provider-stream.v1`, `south.provider-quota-metadata.v1`, `south.header-auth.v1`,
   `south.controlled-query.v1`, `south.controlled-user-agent.v1`, `south.provider-get.v1`,
   `south.provider-multipart.v1`, and `south.provider-binary.v1` fixtures, while `south-testkit`
-  runs them against assembled host executors.
+  runs them against assembled host executors. It also carries the host-implemented
+  `south.credential-recipe.v1` suite (gate ③ of credential recipes): a harness the host wraps around
+  its own recipe executor and credential store, an in-process fake token endpoint, and the runner.
 - `south-provider-api` owns the v2 provider component ABI: the WIT package
   `token-station:adapter@2.0.0` (world `provider-adapter-v2`, JSON payloads named by
   canonical type, raw-bytes stream chunks) and the component `manifest.json` schema
