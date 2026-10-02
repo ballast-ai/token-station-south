@@ -370,6 +370,22 @@ fn clock_rules_refuse_what_they_guard() {
     });
 }
 
+/// A presented JWT is cached for `default_seconds`, which must not outlive its own `exp`.
+#[test]
+fn a_presented_jwt_is_never_cached_past_its_exp() {
+    let set = insert;
+    let package = "task-kling-v2";
+    refuses("cached longer than exp", package, kling(), |c| {
+        set(c, "/recipes/kling_jwt/default_seconds", json!(3600));
+    });
+    refuses("no default_seconds", package, kling(), |c| {
+        c["recipes"]["kling_jwt"].as_object_mut().unwrap().remove("default_seconds");
+    });
+    refuses("exp not relative to now", package, kling(), |c| {
+        set(c, "/recipes/kling_jwt/steps/0/claims/exp", json!({ "const": 1_900_000_000 }));
+    });
+}
+
 #[test]
 fn status_rules_refuse_what_they_guard() {
     let set = insert;

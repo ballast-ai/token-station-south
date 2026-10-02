@@ -1373,7 +1373,7 @@ to native reference implementations. Where §8 left a choice open:
   clean rebuild of `provider-gemini` was byte-identical. Builds on a different runner image would surface as a false
   "bump the version".
 
-### 13.3 Implementation of B4 (2026-10-02, in progress)
+### 13.3 Implementation of B4 (2026-10-02)
 
 Phase B4 is on branch `feature/b4-credential-recipes`, stacked on B3 (§13.2). Under the owner's standing rule,
 three questions were taken as recommended:
@@ -1433,9 +1433,45 @@ slot (§4.2).
   neither, the run is `transient`. So a `jwt_sign` recipe declares `default_seconds`.
 - A JSON `null` is absent. An absent or empty write-back output keeps the stored value.
 
+**Two further gate ① rules, found while building gates ② and ③:**
+- `refresh_margin_seconds` must be shorter than the shortest validity a minted value can have, which is the recipe's
+  `min_ttl_seconds`, else the host's 60 s floor. Otherwise every freshly minted value is already due, and the host
+  exchanges on every request.
+- A presented JWT that the recipe signs itself declares `exp` as `now_plus`, and `default_seconds` no longer than
+  that lifetime. Otherwise a host could cache a token past its own expiry.
+
+**Gate ③ (§3.7)** is the host suite `south.credential-recipe.v1` in `south-provider-conformance`.
+- The host implements `CredentialRecipeHarnessV1`: open a session over a fresh store and its own generic executor,
+  with token egress injected to the suite's `FakeTokenEndpointV1`. The injection exists only in test builds, which is
+  how §3.4 rule 6 is met.
+- Nine cases: an exchange failure writes nothing; `reauth_required` is not retried; concurrent refreshes make one
+  exchange; the host clamp; the recipe clamp; rotation writes back and keeps the previous generation; an empty
+  rotation does not wipe; a CAS loser re-reads the winner; a probe does not rotate.
+- An in-memory reference host passes all nine. Nine deliberately broken hosts each fail exactly the case guarding
+  their invariant.
+- `compatibility.json` registers the suite as `not_verified` on both hosts.
+
+**What gate ③ pins where §3.5 was silent:**
+- "Until the operator acts" means a new credential generation. A `reauth_required` latch is tied to the generation,
+  and any operator write clears it.
+- A transient failure writes nothing and does not latch. A cooldown keyed by credential id, which outlives a
+  generation change, would fail the suite.
+- The previous generation that §3.5 keeps holds the replaced write-back values.
+- For no-wipe, an omitted, `""` or `null` refresh token all mean "keep the stored one".
+- A CAS loser uses the winner's value.
+
+**Left open:**
+- Whether a probe may refresh a non-rotating recipe.
+- What a loser does when the winner's value is already stale. Today's server errors.
+
 **Gaps found.**
+- **The production host fails case 2 today.** Its terminal-failure path writes an audit entry and a metric, but holds
+  no latch, so a `reauth_required` credential is retried on the next request. The generic executor of P21 S3 has to
+  add the latch.
 - Copilot's direct-use flow (§3.9) presents the GitHub token itself after the `404 → goto` branch. `present` names
-  one step output, so that recipe cannot say what it presents. `present` would need ordered candidates or a field.
+  one step output, so that recipe cannot say what it presents. This is an **open amendment for B6**, recommended
+  as: `present` takes ordered candidates, each a step output or `{"field": name}` of a secret field, and the first
+  one present wins. No shipped package needs it before a Copilot component exists.
 - Claim order is canonical, not declared, because `claims` is a map. That matches the host for Kling. The host's
   Vertex struct writes `iss, scope, aud, iat, exp`: the JSON is equal, but the bytes differ.
 

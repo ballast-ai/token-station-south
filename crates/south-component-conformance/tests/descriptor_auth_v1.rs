@@ -114,7 +114,8 @@ fn an_oauth_descriptor_is_admitted_only_on_a_minted_slot() {
             "recipes": { "token": {
                 "steps": [{ "id": "jwt", "kind": "jwt_sign", "alg": "HS256",
                             "key": { "field": "secret_key" }, "claims": { "exp": { "now_plus": 60 } } }],
-                "present": "jwt.jwt", "rotates_refresh_material": false } }
+                "present": "jwt.jwt", "rotates_refresh_material": false,
+                "default_seconds": 60 } }
         }))
         .unwrap(),
     );

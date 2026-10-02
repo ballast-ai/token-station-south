@@ -606,6 +606,25 @@ impl CredentialsV1 {
         if !outputs.contains(present) {
             return Err(format!("present `{present}` is not an output of any step"));
         }
+        // A presented JWT the recipe signs itself has no response to read an expiry from, so the
+        // host caches it for `default_seconds`; that must not outlive the token's own `exp`.
+        if let Some(signer) = recipe
+            .steps
+            .iter()
+            .find(|step| step.kind == StepKindV1::JwtSign && format!("{}.jwt", step.id) == present)
+        {
+            let lifetime = signer.claims.get("exp").and_then(|exp| exp.now_plus);
+            match (lifetime, recipe.default_seconds) {
+                (Some(lifetime), Some(cached)) if i64::from(cached) <= lifetime => {}
+                _ => {
+                    return Err(
+                        "a presented JWT needs exp as now_plus and default_seconds no longer \
+                         than that lifetime"
+                            .to_owned(),
+                    );
+                }
+            }
+        }
         for (field, output) in &recipe.write_back {
             if self.is_secret(field) != Some(true) {
                 return Err(format!("write_back target `{field}` must be a declared secret field"));
