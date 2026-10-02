@@ -253,7 +253,8 @@ Field derivation, where §9.2 leaves it implicit:
 | `credential_recipes` | `true` when the manifest has a non-empty `credentials.recipes` |
 | `compatibility` | `south_runtime`, `runtime_abi`, `kernel_contracts`, `contracts` copied from the manifest; `null` while a key is absent |
 | `archive_sha256`, `manifest_sha256`, `component_sha256` | SHA-256 of the archive and of the two files inside it |
-| `gate2_report_sha256` | SHA-256 of the report file published beside the archive |
+| `gate2_report` | The report file published beside the archive, `<package>-<tag>.gate2.json`; `null` when none was produced |
+| `gate2_report_sha256` | SHA-256 of that report file |
 
 Packages are sorted by name, keys keep the order §9.2 shows, and the file ends with a newline, so the same inputs
 give the same bytes. `catalogs` is `[]` until the catalog data of B6 exists.

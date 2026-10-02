@@ -147,10 +147,12 @@ def package_entry(
     report_path = dist / gate2_report_name(package, tag)
     if report_path.is_file():
         report = verify_gate2_report(report_path, manifest, manifest_sha256, component_sha256)
+        gate2_report = report_path.name
         gate2_report_sha256 = sha256_hex(report)
     elif require_gate2_reports:
         raise ReleaseIndexError(f"{package}: {report_path.name} is missing from {dist}")
     else:
+        gate2_report = None
         gate2_report_sha256 = None
 
     compatibility = manifest.get("compatibility", {})
@@ -170,6 +172,7 @@ def package_entry(
         "archive_sha256": sha256_hex(archive_bytes),
         "manifest_sha256": manifest_sha256,
         "component_sha256": component_sha256,
+        "gate2_report": gate2_report,
         "gate2_report_sha256": gate2_report_sha256,
     }
     return entry, archive

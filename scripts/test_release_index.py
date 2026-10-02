@@ -157,6 +157,7 @@ class GenerateTest(unittest.TestCase):
                     "archive_sha256": hashlib.sha256(archive).hexdigest(),
                     "manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
                     "component_sha256": hashlib.sha256(wasm).hexdigest(),
+                    "gate2_report": f"provider-gemini-{TAG}.gate2.json",
                     "gate2_report_sha256": hashlib.sha256(report).hexdigest(),
                 }
             ],
@@ -190,6 +191,7 @@ class GenerateTest(unittest.TestCase):
                 "contracts": {"task": 7},
             },
         )
+        self.assertIsNone(entry["gate2_report"])
         self.assertIsNone(entry["gate2_report_sha256"])
 
     def test_provider_world_defaults_do_not_apply_to_task_packages(self) -> None:
