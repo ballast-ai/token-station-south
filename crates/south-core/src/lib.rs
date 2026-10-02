@@ -235,8 +235,11 @@ pub trait RequestFinalizerV1: Send + Sync {
     fn finalize<'a>(&'a self, view: FinalizeViewV1<'a>) -> FinalizeFutureV1<'a>;
 }
 
-/// One auth header bound to the wire: its frozen name and its zeroizing value.
-type BoundAuthHeader = (&'static str, Zeroizing<Vec<u8>>);
+/// One auth header bound to the wire: its name and its zeroizing value.
+///
+/// The name is a frozen literal for every arm except the declared header-secret arm (auth
+/// contract version five), whose name is borrowed from the request's own declaration.
+type BoundAuthHeader<'name> = (&'name str, Zeroizing<Vec<u8>>);
 
 /// `Bearer `-prefixes a resolved secret into a fresh zeroizing allocation.
 fn bearer_prefixed(secret: &SecretValue) -> Zeroizing<Vec<u8>> {
@@ -256,7 +259,7 @@ fn bearer_prefixed(secret: &SecretValue) -> Zeroizing<Vec<u8>> {
 fn diff_finalized(
     emits: &SignedHeaderSetV1,
     finalized: &FinalizedHeadersV1,
-) -> Result<Vec<BoundAuthHeader>, PreparationErrorV1> {
+) -> Result<Vec<BoundAuthHeader<'static>>, PreparationErrorV1> {
     // Pass one, over what arrived: nothing undeclared, nothing empty, nothing twice.
     let mut seen: Vec<SignedHeaderV1> = Vec::with_capacity(emits.len());
     for (header, value) in finalized.emitted() {
@@ -275,7 +278,7 @@ fn diff_finalized(
     // mismatch can only mean a declared header is missing, which is exactly what this loop
     // rejects. Removing it as a mutation left every test green — that is what dead judges look
     // like, and it is why this loop keeps the rejection instead of an `unwrap`.
-    let mut bound: Vec<BoundAuthHeader> = Vec::with_capacity(emits.len());
+    let mut bound: Vec<BoundAuthHeader<'static>> = Vec::with_capacity(emits.len());
     for declared in emits.headers() {
         let Some((_, value)) = finalized.emitted().find(|(header, _)| header == declared) else {
             return Err(PreparationErrorV1::RequestFinalizationRejected);
@@ -299,7 +302,7 @@ pub struct PreparedHttpRequestV1<'request> {
     /// arm also says *which* body shape it is, because a multipart body brings a media type the
     /// transport must emit and a JSON one does not.
     body: Option<RequestBodyRefV1<'request>>,
-    auth_headers: Vec<BoundAuthHeader>,
+    auth_headers: Vec<BoundAuthHeader<'request>>,
     user_agent: Option<ControlledUserAgentV1>,
 }
 
@@ -440,10 +443,20 @@ impl<'request> PreparedHttpRequestV1<'request> {
         destination: Url,
         secret: SecretValue,
     ) -> Result<Self, PreparationErrorV1> {
-        let auth_headers: Vec<BoundAuthHeader> = match request.auth {
+        let auth_headers: Vec<BoundAuthHeader<'request>> = match request.auth {
             ProviderAuthV1::Bearer(_) => vec![("authorization", bearer_prefixed(&secret))],
             ProviderAuthV1::HeaderSecret { header, .. } => {
                 vec![(header.header_name(), secret.value)]
+            }
+            // A declared name is bound only over headers validated under a declaration naming it
+            // (reserved-header policy version two). That is what proves the ordinary channel did
+            // not already carry the name, and what tells the transport to keep it out of the
+            // response transcript; anything else fails closed before the secret reaches a header.
+            ProviderAuthV1::DeclaredHeaderSecret { header, .. } => {
+                if !request.headers.secret_headers().contains(header.as_str()) {
+                    return Err(PreparationErrorV1::UnsupportedAuthShape);
+                }
+                vec![(header.as_str(), secret.value)]
             }
             // Two bindings of one secret, in a fixed order; the verbatim copy takes over the
             // resolver allocation and the prefixed copy is a fresh zeroizing allocation.
@@ -514,7 +527,7 @@ impl<'request> PreparedHttpRequestV1<'request> {
     }
 
     /// Attaches the diffed finalizer output.
-    fn bind_finalized(&mut self, headers: Vec<BoundAuthHeader>) {
+    fn bind_finalized(&mut self, headers: Vec<BoundAuthHeader<'static>>) {
         self.auth_headers = headers;
     }
 }
@@ -560,10 +573,12 @@ impl PreparedHttpRequestV1<'_> {
 
     /// Returns every auth header as its name and complete value bytes.
     ///
-    /// For the Bearer arm the value carries its `Bearer ` prefix; for the header-secret arm the
+    /// For the Bearer arm the value carries its `Bearer ` prefix; for the header-secret arms the
     /// value is the verbatim resolved secret. No name is ever a plain-channel header: every
     /// sanctioned name, every signed name, and `authorization` itself stay on the reserved-header
-    /// blacklist.
+    /// blacklist, and a declared name is reserved by the declaration these headers were validated
+    /// under ([`SafeHeaders::secret_headers`]). Since auth contract version five the name is
+    /// borrowed rather than `'static`, because a declared name is not a literal of this crate.
     ///
     /// The Bearer and header-secret arms yield exactly one element, as the single-header accessor
     /// this replaced always did; the combined arm yields two (`authorization` first). The
@@ -571,7 +586,7 @@ impl PreparedHttpRequestV1<'_> {
     /// one to four elements, never zero: a request that reached a transport has passed the
     /// allow-list diff, and an empty declaration cannot be constructed.
     #[must_use]
-    pub fn auth_headers(&self) -> impl ExactSizeIterator<Item = (&'static str, &[u8])> {
+    pub fn auth_headers(&self) -> impl ExactSizeIterator<Item = (&str, &[u8])> {
         self.auth_headers.iter().map(|(name, value)| (*name, value.as_slice()))
     }
 

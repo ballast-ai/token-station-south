@@ -36,7 +36,7 @@ async fn reference_assembled_header_auth_conforms_under_a_structured_watchdog() 
             .expect("reference executor must conform");
 
     assert_eq!(report.passed_case_ids().len(), header_auth_fixtures_v1().len());
-    assert_eq!(report.passed_case_ids().len(), 4);
+    assert_eq!(report.passed_case_ids().len(), 7);
 }
 
 fn assert_observation_matches(
@@ -51,6 +51,18 @@ fn assert_observation_matches(
             assert_eq!(response.body(), *body);
             assert_eq!(response.content_type(), *content_type);
             assert_eq!(response.retry_after(), *retry_after);
+            if let Some(expected) = fixture.expected().transcript() {
+                let transcript: Vec<(&str, &str)> = response.response_transcript().iter().collect();
+                for retained in expected.retained() {
+                    assert!(transcript.contains(retained), "{transcript:?} lacks {retained:?}");
+                }
+                for redacted in expected.redacted() {
+                    assert!(
+                        transcript.iter().all(|(name, _)| name != redacted),
+                        "{redacted} must be redacted from {transcript:?}"
+                    );
+                }
+            }
         }
         HeaderAuthExpectedOutcomeV1::Opened { status, content_type, retry_after, chunks } => {
             let head = observation.opened_head().expect("expected an opened stream observation");

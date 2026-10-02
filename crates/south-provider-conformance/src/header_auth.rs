@@ -36,6 +36,21 @@ pub enum HeaderAuthCaseIdV1 {
     /// adapter that hardcodes the absence claim, or resolves the slot once per header, fails
     /// here and nowhere else.
     BufferedBearerAndHeaderSecretSuccess,
+    /// One successful buffered exchange under a package-declared secret header (auth contract
+    /// version five): the declared name carries the resolved secret verbatim, alone.
+    BufferedDeclaredHeaderSecretSuccess,
+    /// The declared name smuggled through the ordinary header channel of the declaring package's
+    /// request (reserved-header policy version two), refused before resolver and transport.
+    ///
+    /// An adapter that validates ordinary headers without the package's declaration passes every
+    /// other case and sends the smuggled value here.
+    DeclaredHeaderSmuggledThroughOrdinaryChannel,
+    /// An upstream that echoes the declared header, and a sanctioned one, in its response: the
+    /// transcript keeps an ordinary control header and drops both secret names.
+    ///
+    /// An adapter whose transport captures the transcript without the request's declaration
+    /// fails here and nowhere else.
+    DeclaredHeaderRedactedFromTranscript,
 }
 
 fixed_debug!(HeaderAuthCaseIdV1 {
@@ -43,7 +58,43 @@ fixed_debug!(HeaderAuthCaseIdV1 {
     StreamingHeaderSecretSuccess => "StreamingHeaderSecretSuccess",
     HeaderSecretSlotMismatch => "HeaderSecretSlotMismatch",
     BufferedBearerAndHeaderSecretSuccess => "BufferedBearerAndHeaderSecretSuccess",
+    BufferedDeclaredHeaderSecretSuccess => "BufferedDeclaredHeaderSecretSuccess",
+    DeclaredHeaderSmuggledThroughOrdinaryChannel => "DeclaredHeaderSmuggledThroughOrdinaryChannel",
+    DeclaredHeaderRedactedFromTranscript => "DeclaredHeaderRedactedFromTranscript",
 });
+
+/// The secret-bearing header a canonical header-auth request presents its credential in.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum HeaderAuthHeaderV1 {
+    /// A sanctioned name, presented through the closed `HeaderSecret` arm, or through
+    /// `BearerAndHeaderSecret` when [`HeaderAuthFixtureV1::bearer_alongside`] is set.
+    Sanctioned(SecretHeaderV1),
+    /// A name the package declares (auth contract version five), presented through
+    /// `DeclaredHeaderSecret`. It is always one of
+    /// [`HeaderAuthFixtureV1::declared_secret_headers`].
+    Declared(&'static str),
+}
+
+impl HeaderAuthHeaderV1 {
+    /// Returns the lowercase wire name.
+    #[must_use]
+    pub const fn header_name(self) -> &'static str {
+        match self {
+            Self::Sanctioned(header) => header.header_name(),
+            Self::Declared(name) => name,
+        }
+    }
+}
+
+impl fmt::Debug for HeaderAuthHeaderV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Header names are not secrets; values never enter this type.
+        match self {
+            Self::Sanctioned(header) => formatter.debug_tuple("Sanctioned").field(header).finish(),
+            Self::Declared(name) => formatter.debug_tuple("Declared").field(name).finish(),
+        }
+    }
+}
 
 /// A raw upstream exchange or fake-transport behavior for a canonical header-auth case.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -175,11 +226,47 @@ impl fmt::Debug for HeaderAuthExpectedEvidenceV1 {
     }
 }
 
+/// What the buffered response's display transcript must and must not hold.
+///
+/// Not an exact match: a real transport over a real socket transcribes headers the fixture never
+/// scripted (`date`, `content-length`), so the claim is containment. `retained` proves a transcript
+/// was captured at all, so dropping every header cannot pass as redaction.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct HeaderAuthExpectedTranscriptV1 {
+    retained: &'static [(&'static str, &'static str)],
+    redacted: &'static [&'static str],
+}
+
+impl HeaderAuthExpectedTranscriptV1 {
+    /// Returns the name and value pairs the transcript must contain.
+    #[must_use]
+    pub const fn retained(&self) -> &'static [(&'static str, &'static str)] {
+        self.retained
+    }
+
+    /// Returns the names the transcript must not contain, under any value.
+    #[must_use]
+    pub const fn redacted(&self) -> &'static [&'static str] {
+        self.redacted
+    }
+}
+
+impl fmt::Debug for HeaderAuthExpectedTranscriptV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("HeaderAuthExpectedTranscriptV1")
+            .field("retained_count", &self.retained.len())
+            .field("redacted", &self.redacted)
+            .finish()
+    }
+}
+
 /// The expected outcome and boundary evidence for one header-auth fixture.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct HeaderAuthExpectedV1 {
     outcome: HeaderAuthExpectedOutcomeV1,
     evidence: HeaderAuthExpectedEvidenceV1,
+    transcript: Option<HeaderAuthExpectedTranscriptV1>,
 }
 
 impl HeaderAuthExpectedV1 {
@@ -194,6 +281,13 @@ impl HeaderAuthExpectedV1 {
     pub const fn evidence(&self) -> &HeaderAuthExpectedEvidenceV1 {
         &self.evidence
     }
+
+    /// Returns the transcript expectation, for the cases that make one. Only a buffered
+    /// response case does.
+    #[must_use]
+    pub const fn transcript(&self) -> Option<&HeaderAuthExpectedTranscriptV1> {
+        self.transcript.as_ref()
+    }
 }
 
 impl fmt::Debug for HeaderAuthExpectedV1 {
@@ -202,6 +296,7 @@ impl fmt::Debug for HeaderAuthExpectedV1 {
             .debug_struct("HeaderAuthExpectedV1")
             .field("outcome", &self.outcome)
             .field("evidence", &self.evidence)
+            .field("transcript", &self.transcript)
             .finish()
     }
 }
@@ -211,9 +306,11 @@ impl fmt::Debug for HeaderAuthExpectedV1 {
 pub struct HeaderAuthFixtureV1 {
     case_id: HeaderAuthCaseIdV1,
     input: ProviderCallInputV1,
-    secret_header: SecretHeaderV1,
+    header: HeaderAuthHeaderV1,
     bearer_alongside: bool,
+    declared_secret_headers: &'static [&'static str],
     upstream: HeaderAuthUpstreamV1,
+    upstream_response_headers: &'static [(&'static str, &'static str)],
     expected: HeaderAuthExpectedV1,
 }
 
@@ -230,22 +327,43 @@ impl HeaderAuthFixtureV1 {
         &self.input
     }
 
-    /// Returns the sanctioned header the request declares.
+    /// Returns the header the request presents its credential in.
+    ///
+    /// Replaced `secret_header()` when auth contract version five admitted declared names: a
+    /// [`HeaderAuthHeaderV1::Declared`] header has no [`SecretHeaderV1`] to return, and an
+    /// executor must choose the declared arm for it rather than a sanctioned one.
     #[must_use]
-    pub const fn secret_header(&self) -> SecretHeaderV1 {
-        self.secret_header
+    pub const fn header(&self) -> HeaderAuthHeaderV1 {
+        self.header
     }
+
     /// Returns whether the request declares the combined arm — the secret also travels as
-    /// `Authorization: Bearer …` — rather than the header-secret arm alone.
+    /// `Authorization: Bearer …` — rather than the header-secret arm alone. Only ever set with a
+    /// sanctioned header.
     #[must_use]
     pub const fn bearer_alongside(&self) -> bool {
         self.bearer_alongside
+    }
+
+    /// Returns the secret headers the request's package declares (reserved-header policy version
+    /// two). The adapter validates the input's ordinary headers under this declaration and passes
+    /// it to whatever captures the response transcript. Empty for the sanctioned-header cases.
+    #[must_use]
+    pub const fn declared_secret_headers(&self) -> &'static [&'static str] {
+        self.declared_secret_headers
     }
 
     /// Returns the canonical fake-upstream behavior.
     #[must_use]
     pub const fn upstream(&self) -> &HeaderAuthUpstreamV1 {
         &self.upstream
+    }
+
+    /// Returns the extra headers the fake upstream sends, verbatim and in this order, on a
+    /// buffered [`HeaderAuthUpstreamV1::Response`]. Empty except for the transcript case.
+    #[must_use]
+    pub const fn upstream_response_headers(&self) -> &'static [(&'static str, &'static str)] {
+        self.upstream_response_headers
     }
 
     /// Returns the exact expected outcome and evidence.
@@ -260,10 +378,12 @@ impl fmt::Debug for HeaderAuthFixtureV1 {
         formatter
             .debug_struct("HeaderAuthFixtureV1")
             .field("case_id", &self.case_id)
-            .field("secret_header", &self.secret_header)
+            .field("header", &self.header)
             .field("bearer_alongside", &self.bearer_alongside)
+            .field("declared_secret_headers", &self.declared_secret_headers)
             .field("input", &self.input)
             .field("upstream", &self.upstream)
+            .field("upstream_response_header_count", &self.upstream_response_headers.len())
             .field("expected", &self.expected)
             .finish()
     }
@@ -278,6 +398,23 @@ const HEADER_AUTH_RETRY_AFTER: &str = "retry-after-debug-sentinel";
 const HEADER_AUTH_CHUNK_ONE: &[u8] = b"header-auth-chunk-one-debug-sentinel";
 const HEADER_AUTH_CHUNK_TWO: &[u8] = b"header-auth-chunk-two-debug-sentinel";
 const HEADER_AUTH_CHUNKS: &[&[u8]] = &[HEADER_AUTH_CHUNK_ONE, HEADER_AUTH_CHUNK_TWO];
+
+/// A synthetic package-declared secret header: no provider uses it, and it is on no reserved list.
+const DECLARED_HEADER: &str = "x-south-fixture-key";
+const DECLARED_SECRET_HEADERS: &[&str] = &[DECLARED_HEADER];
+/// The shared ordinary header plus the declared name carrying a value of the adapter's choosing.
+const SMUGGLING_HEADERS: &[(&str, &str)] = &[
+    ("header-name-debug-sentinel", "header-value-debug-sentinel"),
+    (DECLARED_HEADER, "smuggled-value-debug-sentinel"),
+];
+const TRANSCRIPT_CONTROL: (&str, &str) =
+    ("x-south-transcript-control", "transcript-control-debug-sentinel");
+/// The upstream echoes both secret names and one ordinary control header.
+const ECHOING_RESPONSE_HEADERS: &[(&str, &str)] = &[
+    (DECLARED_HEADER, "echoed-declared-secret-debug-sentinel"),
+    ("x-api-key", "echoed-sanctioned-secret-debug-sentinel"),
+    TRANSCRIPT_CONTROL,
+];
 
 const fn wire_evidence(
     resolver_calls: ProviderCallCountV1,
@@ -310,14 +447,16 @@ const HEADER_AUTH_FIXTURES: &[HeaderAuthFixtureV1] = &[
     HeaderAuthFixtureV1 {
         case_id: HeaderAuthCaseIdV1::BufferedHeaderSecretSuccess,
         input: input(HEADER_AUTH_PATH, HEADER_AUTH_BOUND_SLOT),
-        secret_header: SecretHeaderV1::XApiKey,
+        header: HeaderAuthHeaderV1::Sanctioned(SecretHeaderV1::XApiKey),
         bearer_alongside: false,
+        declared_secret_headers: &[],
         upstream: HeaderAuthUpstreamV1::Response(ProviderCallRawResponseV1 {
             status: 201,
             body: HEADER_AUTH_RESPONSE_BODY,
             content_type: Some(HEADER_AUTH_CONTENT_TYPE),
             retry_after: Some(HEADER_AUTH_RETRY_AFTER),
         }),
+        upstream_response_headers: &[],
         expected: HeaderAuthExpectedV1 {
             outcome: HeaderAuthExpectedOutcomeV1::Response {
                 status: 201,
@@ -326,18 +465,21 @@ const HEADER_AUTH_FIXTURES: &[HeaderAuthFixtureV1] = &[
                 retry_after: Some(HEADER_AUTH_RETRY_AFTER),
             },
             evidence: wire_evidence(ProviderCallCountV1::One, ProviderCallCountV1::One, true),
+            transcript: None,
         },
     },
     HeaderAuthFixtureV1 {
         case_id: HeaderAuthCaseIdV1::StreamingHeaderSecretSuccess,
         input: input(HEADER_AUTH_PATH, HEADER_AUTH_BOUND_SLOT),
-        secret_header: SecretHeaderV1::XGoogApiKey,
+        header: HeaderAuthHeaderV1::Sanctioned(SecretHeaderV1::XGoogApiKey),
         bearer_alongside: false,
+        declared_secret_headers: &[],
         upstream: HeaderAuthUpstreamV1::Stream(ProviderStreamRawStreamV1::assemble(
             ProviderStreamRawHeadV1::assemble(200, Some(HEADER_AUTH_CONTENT_TYPE), None),
             HEADER_AUTH_CHUNKS,
             ProviderStreamTerminalV1::CleanEof,
         )),
+        upstream_response_headers: &[],
         expected: HeaderAuthExpectedV1 {
             outcome: HeaderAuthExpectedOutcomeV1::Opened {
                 status: 200,
@@ -346,33 +488,39 @@ const HEADER_AUTH_FIXTURES: &[HeaderAuthFixtureV1] = &[
                 chunks: HEADER_AUTH_CHUNKS,
             },
             evidence: wire_evidence(ProviderCallCountV1::One, ProviderCallCountV1::One, true),
+            transcript: None,
         },
     },
     HeaderAuthFixtureV1 {
         case_id: HeaderAuthCaseIdV1::HeaderSecretSlotMismatch,
         input: input(HEADER_AUTH_PATH, HEADER_AUTH_DIFFERENT_SLOT),
-        secret_header: SecretHeaderV1::ApiKey,
+        header: HeaderAuthHeaderV1::Sanctioned(SecretHeaderV1::ApiKey),
         bearer_alongside: false,
+        declared_secret_headers: &[],
         upstream: HeaderAuthUpstreamV1::NotReached,
+        upstream_response_headers: &[],
         expected: HeaderAuthExpectedV1 {
             outcome: HeaderAuthExpectedOutcomeV1::Failure {
                 code: ProviderCallFailureCodeV1::CredentialBindingMismatch,
             },
             evidence: wire_evidence(ProviderCallCountV1::Zero, ProviderCallCountV1::Zero, false),
+            transcript: None,
         },
     },
     HeaderAuthFixtureV1 {
         case_id: HeaderAuthCaseIdV1::BufferedBearerAndHeaderSecretSuccess,
         input: input(HEADER_AUTH_PATH, HEADER_AUTH_BOUND_SLOT),
         // The one production shape that needs both: Gemini's OpenAI-compatible surface.
-        secret_header: SecretHeaderV1::XGoogApiKey,
+        header: HeaderAuthHeaderV1::Sanctioned(SecretHeaderV1::XGoogApiKey),
         bearer_alongside: true,
+        declared_secret_headers: &[],
         upstream: HeaderAuthUpstreamV1::Response(ProviderCallRawResponseV1 {
             status: 200,
             body: HEADER_AUTH_RESPONSE_BODY,
             content_type: Some(HEADER_AUTH_CONTENT_TYPE),
             retry_after: None,
         }),
+        upstream_response_headers: &[],
         expected: HeaderAuthExpectedV1 {
             outcome: HeaderAuthExpectedOutcomeV1::Response {
                 status: 200,
@@ -381,6 +529,80 @@ const HEADER_AUTH_FIXTURES: &[HeaderAuthFixtureV1] = &[
                 retry_after: None,
             },
             evidence: dual_wire_evidence(ProviderCallCountV1::One, ProviderCallCountV1::One),
+            transcript: None,
+        },
+    },
+    HeaderAuthFixtureV1 {
+        case_id: HeaderAuthCaseIdV1::BufferedDeclaredHeaderSecretSuccess,
+        input: input(HEADER_AUTH_PATH, HEADER_AUTH_BOUND_SLOT),
+        header: HeaderAuthHeaderV1::Declared(DECLARED_HEADER),
+        bearer_alongside: false,
+        declared_secret_headers: DECLARED_SECRET_HEADERS,
+        upstream: HeaderAuthUpstreamV1::Response(ProviderCallRawResponseV1 {
+            status: 201,
+            body: HEADER_AUTH_RESPONSE_BODY,
+            content_type: Some(HEADER_AUTH_CONTENT_TYPE),
+            retry_after: Some(HEADER_AUTH_RETRY_AFTER),
+        }),
+        upstream_response_headers: &[],
+        expected: HeaderAuthExpectedV1 {
+            outcome: HeaderAuthExpectedOutcomeV1::Response {
+                status: 201,
+                body: HEADER_AUTH_RESPONSE_BODY,
+                content_type: Some(HEADER_AUTH_CONTENT_TYPE),
+                retry_after: Some(HEADER_AUTH_RETRY_AFTER),
+            },
+            evidence: wire_evidence(ProviderCallCountV1::One, ProviderCallCountV1::One, true),
+            transcript: None,
+        },
+    },
+    HeaderAuthFixtureV1 {
+        case_id: HeaderAuthCaseIdV1::DeclaredHeaderSmuggledThroughOrdinaryChannel,
+        input: ProviderCallInputV1 {
+            headers: SMUGGLING_HEADERS,
+            ..input(HEADER_AUTH_PATH, HEADER_AUTH_BOUND_SLOT)
+        },
+        header: HeaderAuthHeaderV1::Declared(DECLARED_HEADER),
+        bearer_alongside: false,
+        declared_secret_headers: DECLARED_SECRET_HEADERS,
+        upstream: HeaderAuthUpstreamV1::NotReached,
+        upstream_response_headers: &[],
+        expected: HeaderAuthExpectedV1 {
+            // The frozen nineteen-code set has no header-policy code; a reserved name on the
+            // ordinary channel folds into the context-free `REQUEST_FAILED` at zero calls, as the
+            // controlled user-agent suite's smuggled `user-agent` case already does.
+            outcome: HeaderAuthExpectedOutcomeV1::Failure {
+                code: ProviderCallFailureCodeV1::RequestFailed,
+            },
+            evidence: wire_evidence(ProviderCallCountV1::Zero, ProviderCallCountV1::Zero, false),
+            transcript: None,
+        },
+    },
+    HeaderAuthFixtureV1 {
+        case_id: HeaderAuthCaseIdV1::DeclaredHeaderRedactedFromTranscript,
+        input: input(HEADER_AUTH_PATH, HEADER_AUTH_BOUND_SLOT),
+        header: HeaderAuthHeaderV1::Declared(DECLARED_HEADER),
+        bearer_alongside: false,
+        declared_secret_headers: DECLARED_SECRET_HEADERS,
+        upstream: HeaderAuthUpstreamV1::Response(ProviderCallRawResponseV1 {
+            status: 200,
+            body: HEADER_AUTH_RESPONSE_BODY,
+            content_type: Some(HEADER_AUTH_CONTENT_TYPE),
+            retry_after: None,
+        }),
+        upstream_response_headers: ECHOING_RESPONSE_HEADERS,
+        expected: HeaderAuthExpectedV1 {
+            outcome: HeaderAuthExpectedOutcomeV1::Response {
+                status: 200,
+                body: HEADER_AUTH_RESPONSE_BODY,
+                content_type: Some(HEADER_AUTH_CONTENT_TYPE),
+                retry_after: None,
+            },
+            evidence: wire_evidence(ProviderCallCountV1::One, ProviderCallCountV1::One, true),
+            transcript: Some(HeaderAuthExpectedTranscriptV1 {
+                retained: &[TRANSCRIPT_CONTROL],
+                redacted: &[DECLARED_HEADER, "x-api-key"],
+            }),
         },
     },
 ];

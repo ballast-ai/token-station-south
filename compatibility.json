@@ -11,9 +11,9 @@
     "stream": 2
   },
   "contracts": {
-    "reserved_header_policy": 1,
+    "reserved_header_policy": 2,
     "http": 9,
-    "auth": 4,
+    "auth": 5,
     "error": 2,
     "stream": 2,
     "provider_quota_metadata": 1,
@@ -149,8 +149,7 @@
         "cases": 3
       },
       "header_auth": {
-        "status": "verified",
-        "cases": 4
+        "status": "not_verified"
       },
       "controlled_query": {
         "status": "verified",

@@ -263,7 +263,13 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 1
                 // south plan's guard admits the Chat contract alone. The
                 // adoption record is held by that host's own repository; this
                 // manifest records only the resulting status.
-                ("header_auth", "verified", Some(4)),
+                //
+                // That run covered the four-case table. B7a (auth contract 5,
+                // reserved-header policy 2) appended three declared-instance
+                // cases the host has not run, so the status is not_verified
+                // until it re-runs the seven-case suite; editing the count
+                // without that run would fabricate the evidence.
+                ("header_auth", "not_verified", None),
                 // token-station-server controlled_query verified 2026-08-18,
                 // evidence refreshed against 0.4.1 after the suite grew its
                 // fifth case. The original run passed the four-case table, but

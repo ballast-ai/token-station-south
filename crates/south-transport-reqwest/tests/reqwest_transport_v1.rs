@@ -8,11 +8,12 @@ use std::{
 use http::StatusCode;
 use south_contracts::{
     BearerAuthV1, BufferedBinaryResponseV1, BufferedHttpResponseV1, ControlledUserAgentV1,
-    CredentialSlotV1, GetRequestV1, JsonBodyV1, JsonPostRequestV1, MAX_BINARY_RESPONSE_BODY_BYTES,
-    MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES, MAX_RESPONSE_BODY_BYTES,
-    MAX_RESPONSE_CONTENT_TYPE_BYTES, MAX_RESPONSE_RETRY_AFTER_BYTES, MultipartBodyV1,
-    MultipartBoundaryV1, MultipartPostRequestV1, ProviderAuthV1, ProviderEndpointV1,
-    QueryParameterV1, QueryStringV1, RelativePathV1, SafeHeaders, SecretHeaderV1, TransportErrorV1,
+    CredentialSlotV1, DeclaredSecretHeaderV1, DeclaredSecretHeadersV1, GetRequestV1, JsonBodyV1,
+    JsonPostRequestV1, MAX_BINARY_RESPONSE_BODY_BYTES, MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES,
+    MAX_RESPONSE_BODY_BYTES, MAX_RESPONSE_CONTENT_TYPE_BYTES, MAX_RESPONSE_RETRY_AFTER_BYTES,
+    MultipartBodyV1, MultipartBoundaryV1, MultipartPostRequestV1, ProviderAuthV1,
+    ProviderEndpointV1, QueryParameterV1, QueryStringV1, RelativePathV1, SafeHeaders,
+    SecretHeaderV1, TransportErrorV1,
 };
 use south_core::{
     CredentialResolutionFuture, CredentialResolver, ProviderBindingV1, ProviderCallErrorV1,
@@ -473,6 +474,76 @@ async fn header_secret_call_injects_the_sanctioned_header_and_no_authorization()
             .expect_err("the plain header channel must keep rejecting sanctioned names");
         assert_eq!(error.code(), "RESERVED_HEADER_FORBIDDEN");
     }
+}
+
+/// Auth contract version five and reserved-header policy version two: a package-declared secret
+/// header reaches the wire exactly once, through the auth arm alone, and an upstream that echoes
+/// it does not put it in the response transcript.
+#[tokio::test]
+async fn declared_secret_header_is_injected_once_and_never_transcribed() {
+    let loopback = loopback_once(response(
+        "200 OK",
+        &[
+            ("content-type", "application/json"),
+            ("x-acme-key", "echoed-declared-secret"),
+            ("x-api-key", "echoed-sanctioned-secret"),
+            ("x-acme-trace", "visible"),
+        ],
+        br#"{"ok":true}"#,
+    ))
+    .await;
+    let transport = ReqwestTransportV1::new(config()).expect("transport should build");
+    let resolver = StaticResolver::default();
+    let binding = ProviderBindingV1::new(
+        ProviderEndpointV1::parse(&loopback.endpoint).expect("loopback endpoint should be valid"),
+        CredentialSlotV1::parse("primary").expect("fixture slot should be valid"),
+    );
+    let header = DeclaredSecretHeaderV1::parse("x-acme-key").expect("fixture name is declarable");
+    let declared =
+        DeclaredSecretHeadersV1::try_new([header]).expect("fixture declaration should be valid");
+    let request = JsonPostRequestV1::new(
+        RelativePathV1::parse("v1/call").expect("fixture path should be valid"),
+        SafeHeaders::try_from_iter_with_secret_headers([("x-test", HEADER_SENTINEL)], &declared)
+            .expect("fixture headers should be valid"),
+        JsonBodyV1::parse(&format!(r#"{{"value":"{BODY_SENTINEL}"}}"#))
+            .expect("fixture body should be valid"),
+        ProviderAuthV1::DeclaredHeaderSecret {
+            header,
+            slot: BearerAuthV1::new(
+                CredentialSlotV1::parse("primary").expect("fixture slot should be valid"),
+            ),
+        },
+    );
+
+    let result = execute_provider_call_v1(
+        &binding,
+        &request,
+        &resolver,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("a declared header-secret call should succeed");
+    let received = loopback.request.await.expect("server should report the request");
+    loopback.task.await.expect("server task should finish");
+
+    assert_eq!(received.headers.get("x-acme-key").map(String::as_str), Some(SECRET_SENTINEL));
+    assert_eq!(
+        received.header_names.iter().filter(|name| name.as_str() == "x-acme-key").count(),
+        1,
+        "the declared header must appear exactly once on the wire"
+    );
+    assert!(!received.headers.contains_key("authorization"));
+
+    let transcribed: Vec<&str> =
+        result.response_transcript().iter().map(|(name, _)| name).collect();
+    assert!(
+        transcribed.contains(&"x-acme-trace"),
+        "the transcript still captures: {transcribed:?}"
+    );
+    assert!(!transcribed.contains(&"x-acme-key"), "a declared secret is never transcribed");
+    assert!(!transcribed.contains(&"x-api-key"), "a sanctioned secret is never transcribed");
 }
 
 // ─────────────── controlled user-agent (HTTP contract v3) ───────────────

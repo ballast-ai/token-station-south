@@ -27,6 +27,61 @@ fn the_manifest_signed_header_vocabulary_is_the_host_halfs() {
     assert_eq!(south_provider_api::SIGNED_HEADER_NAMES, host_half.as_slice());
 }
 
+/// Gate ①'s `secret_headers` rules are repeated in `south-provider-api` for the same reason
+/// (B7a, host-zero-vendor-boundary §10): the bounds, the undeclarable list and the name syntax must
+/// agree with the host half's `DeclaredSecretHeaderV1`, or a manifest gate ① admitted could carry
+/// a name the host refuses, or the reverse.
+#[test]
+fn the_manifest_secret_header_rules_are_the_host_halfs() {
+    assert_eq!(
+        south_provider_api::UNDECLARABLE_SECRET_HEADER_NAMES,
+        south_contracts::UNDECLARABLE_SECRET_HEADER_NAMES
+    );
+    assert_eq!(
+        south_provider_api::MAX_SECRET_HEADER_NAME_BYTES,
+        south_contracts::MAX_SECRET_HEADER_NAME_BYTES
+    );
+    assert_eq!(
+        south_provider_api::MAX_SECRET_HEADERS,
+        south_contracts::MAX_DECLARED_SECRET_HEADERS
+    );
+
+    let longest = "k".repeat(south_contracts::MAX_SECRET_HEADER_NAME_BYTES);
+    let too_long = "k".repeat(south_contracts::MAX_SECRET_HEADER_NAME_BYTES + 1);
+    let mut corpus = vec![
+        "",
+        "x-acme-key",
+        "X-Acme-Key",
+        "x acme",
+        "x:acme",
+        "x/acme",
+        "x\"acme",
+        "x(acme)",
+        "x@acme",
+        "x,acme",
+        "x;acme",
+        "x=acme",
+        "x?acme",
+        "x[acme]",
+        "x{acme}",
+        "x\tacme",
+        "x\u{7f}acme",
+        "\u{e9}",
+        "!#$%&'*+-.^_`|~",
+        "0",
+        longest.as_str(),
+        too_long.as_str(),
+    ];
+    corpus.extend(south_contracts::UNDECLARABLE_SECRET_HEADER_NAMES);
+    for name in corpus {
+        assert_eq!(
+            south_provider_api::validate_secret_header_name(name).is_ok(),
+            south_contracts::DeclaredSecretHeaderV1::parse(name).is_ok(),
+            "gate ① and the host half disagree on {name:?}"
+        );
+    }
+}
+
 fn reference_manifest() -> ComponentManifestV1 {
     ComponentManifestV1 {
         name: "provider-openai-compatible".to_owned(),
@@ -41,6 +96,7 @@ fn reference_manifest() -> ComponentManifestV1 {
         ]),
         auth_arms: BTreeSet::from(["bearer".to_owned(), "header_secret".to_owned()]),
         emits: Vec::new(),
+        secret_headers: Vec::new(),
         usage_evidence: UsageEvidenceV1::Reported,
         stream_framing: south_provider_api::StreamFramingV1::Bytes,
         signing: None,

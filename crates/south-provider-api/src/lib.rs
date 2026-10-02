@@ -61,6 +61,12 @@ pub use manifest::{
     validate_package_relative_path,
 };
 
+// Declared secret headers (B7a, host-zero-vendor-boundary §10).
+pub use manifest::{
+    MAX_SECRET_HEADER_NAME_BYTES, MAX_SECRET_HEADERS, UNDECLARABLE_SECRET_HEADER_NAMES,
+    validate_secret_header_name,
+};
+
 /// The component ABI, as WIT source.
 ///
 /// Embedded so hosts and component authors can hand it to `wit-bindgen`

@@ -78,7 +78,7 @@ pub const PROVIDER_CAPABILITIES: &[&str] = &["chat", "stream", "tool_call", "jso
 /// - `bearer`: `Authorization: Bearer <resolved secret>`, including
 ///   host-minted (OAuth-shaped) credentials whose product is a bearer token.
 /// - `header_secret`: the resolved secret travels verbatim in one sanctioned
-///   provider header.
+///   provider header, or in one the manifest declares in `secret_headers`.
 /// - `oauth`: the host exchanges the named grant for a token before the funds
 ///   marker and presents it as a bearer token; the component never sees the
 ///   exchange.
@@ -96,6 +96,98 @@ pub const PROVIDER_AUTH_ARMS: &[&str] = &["bearer", "header_secret", "oauth", "h
 /// together.
 pub const SIGNED_HEADER_NAMES: &[&str] =
     &["authorization", "x-amz-date", "x-amz-content-sha256", "x-amz-security-token"];
+
+// -- Declared secret headers (B7a, host-zero-vendor-boundary §10) -------------
+
+/// The maximum byte length of a declared secret header name.
+///
+/// Mirrors `south_contracts::MAX_SECRET_HEADER_NAME_BYTES`, repeated because
+/// this crate depends on no other south crate; a conformance-crate test pins
+/// the two together, with the list and the name rules below.
+pub const MAX_SECRET_HEADER_NAME_BYTES: usize = 64;
+
+/// The maximum number of names `secret_headers` may list. Mirrors
+/// `south_contracts::MAX_DECLARED_SECRET_HEADERS`.
+pub const MAX_SECRET_HEADERS: usize = 8;
+
+/// The names `secret_headers` may never list, sorted.
+///
+/// Every name south already reserves for another purpose: framing and
+/// hop-by-hop headers, `host`, `authorization`, cookies, `user-agent`, the
+/// signed headers, the five sanctioned secret headers, `accept`, and the
+/// response metadata the contracts read. Mirrors
+/// `south_contracts::UNDECLARABLE_SECRET_HEADER_NAMES`.
+pub const UNDECLARABLE_SECRET_HEADER_NAMES: &[&str] = &[
+    "accept",
+    "anthropic-ratelimit-tokens-limit",
+    "anthropic-ratelimit-tokens-remaining",
+    "anthropic-ratelimit-tokens-reset",
+    "anthropic-ratelimit-unified-limit",
+    "anthropic-ratelimit-unified-remaining",
+    "anthropic-ratelimit-unified-reset",
+    "anthropic-request-id",
+    "api-key",
+    "authorization",
+    "cf-ray",
+    "connection",
+    "content-encoding",
+    "content-length",
+    "content-type",
+    "cookie",
+    "expect",
+    "host",
+    "keep-alive",
+    "ocp-apim-subscription-key",
+    "openai-organization",
+    "openai-processing-ms",
+    "openai-version",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "proxy-connection",
+    "request-id",
+    "retry-after",
+    "server",
+    "set-cookie",
+    "set-cookie2",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+    "user-agent",
+    "x-amz-content-sha256",
+    "x-amz-date",
+    "x-amz-security-token",
+    "x-api-key",
+    "x-goog-api-key",
+    "x-ratelimit-limit-tokens",
+    "x-ratelimit-remaining-tokens",
+    "x-ratelimit-reset-tokens",
+    "x-request-id",
+    "xi-api-key",
+];
+
+/// Validates one `secret_headers` name: 1 to [`MAX_SECRET_HEADER_NAME_BYTES`]
+/// bytes of lowercase RFC 9110 `tchar`, and not on
+/// [`UNDECLARABLE_SECRET_HEADER_NAMES`].
+///
+/// # Errors
+///
+/// Returns [`ManifestErrorV1::InvalidSecretHeaderName`] for the syntax and
+/// [`ManifestErrorV1::SecretHeaderIsReserved`] for a reserved name.
+pub fn validate_secret_header_name(name: &str) -> Result<(), ManifestErrorV1> {
+    let syntax = !name.is_empty()
+        && name.len() <= MAX_SECRET_HEADER_NAME_BYTES
+        && name.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"!#$%&'*+-.^_`|~".contains(&byte)
+        });
+    if !syntax {
+        return Err(ManifestErrorV1::InvalidSecretHeaderName(name.to_owned()));
+    }
+    if UNDECLARABLE_SECRET_HEADER_NAMES.contains(&name) {
+        return Err(ManifestErrorV1::SecretHeaderIsReserved(name.to_owned()));
+    }
+    Ok(())
+}
 
 /// The provider world, as gate ① validates it.
 pub const PROVIDER_WORLD_SCHEMA: WorldSchemaV1 = WorldSchemaV1 {
@@ -257,6 +349,15 @@ pub struct ComponentManifestV1 {
     /// name rather than silently collapsed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub emits: Vec<String>,
+    /// Secret-bearing header names this package's descriptors may present under
+    /// the `header_secret` arm, beyond the five sanctioned ones (B7a,
+    /// host-zero-vendor-boundary §10). For this package's requests the host
+    /// reserves every listed name on the ordinary header channel and drops it
+    /// from response transcripts. Requires the `header_secret` arm. A `Vec`,
+    /// not a set, so a duplicate is refused by name. Absent means none, which is
+    /// today's behavior.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub secret_headers: Vec<String>,
     /// Whether this package's upstreams report token usage. `reported` (the
     /// default, omitted when serialized) or `absent`. Provider world only.
     #[serde(default, skip_serializing_if = "UsageEvidenceV1::is_reported")]
@@ -539,6 +640,7 @@ impl ComponentManifestV1 {
         }
         self.validate_vocabulary(world)?;
         self.validate_signing()?;
+        self.validate_secret_headers()?;
         self.validate_role(world)?;
         self.validate_conformance(world)?;
         self.validate_compatibility(world)
@@ -621,6 +723,31 @@ impl ComponentManifestV1 {
             }
             if !seen.insert(header.as_str()) {
                 return Err(ManifestErrorV1::HostSignedNamesAHeaderTwice(header.clone()));
+            }
+        }
+        Ok(())
+    }
+
+    /// The `secret_headers` rules (B7a, host-zero-vendor-boundary §10): the list
+    /// needs the `header_secret` arm, is bounded and duplicate-free, and every
+    /// name passes [`validate_secret_header_name`]. Every world whose vocabulary
+    /// has `header_secret` may declare them, since task descriptors present
+    /// credentials exactly as chat ones do.
+    fn validate_secret_headers(&self) -> Result<(), ManifestErrorV1> {
+        let Some(first) = self.secret_headers.first() else {
+            return Ok(());
+        };
+        if !self.auth_arms.contains("header_secret") {
+            return Err(ManifestErrorV1::SecretHeadersRequireTheHeaderSecretArm(first.clone()));
+        }
+        if self.secret_headers.len() > MAX_SECRET_HEADERS {
+            return Err(ManifestErrorV1::TooManySecretHeaders(self.secret_headers.len()));
+        }
+        let mut seen = BTreeSet::new();
+        for name in &self.secret_headers {
+            validate_secret_header_name(name)?;
+            if !seen.insert(name.as_str()) {
+                return Err(ManifestErrorV1::SecretHeaderDeclaredTwice(name.clone()));
             }
         }
         Ok(())
@@ -932,6 +1059,19 @@ pub enum ManifestErrorV1 {
     EmitIsNotASignedHeader(String),
     #[error("a host-signed declaration must not name the same header twice; `{0}` repeats")]
     HostSignedNamesAHeaderTwice(String),
+    #[error("secret_headers names `{0}` but the manifest does not declare the `header_secret` arm")]
+    SecretHeadersRequireTheHeaderSecretArm(String),
+    #[error("secret_headers lists {0} names; at most 8 are allowed")]
+    TooManySecretHeaders(usize),
+    #[error(
+        "secret header `{0}` must be 1 to 64 bytes of lowercase letters, digits and RFC 9110 \
+         token symbols"
+    )]
+    InvalidSecretHeaderName(String),
+    #[error("`{0}` is reserved for another purpose and cannot be declared as a secret header")]
+    SecretHeaderIsReserved(String),
+    #[error("secret_headers must not name the same header twice; `{0}` repeats")]
+    SecretHeaderDeclaredTwice(String),
     #[error("components have no network; the host makes every request")]
     NetworkPermissionDenied,
     #[error("components have no file system")]
