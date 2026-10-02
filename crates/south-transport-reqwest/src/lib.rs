@@ -244,7 +244,7 @@ impl ReqwestTransportV1 {
             MAX_RESPONSE_RETRY_AFTER_BYTES,
         )?;
         let provider_quota_metadata =
-            provider_quota_metadata(response.headers(), &self.quota_headers)?;
+            provider_quota_metadata(response.headers(), &self.quota_headers, request)?;
         // Every response-header read must happen before `read_bounded_body` consumes `response`:
         // past this point the upstream's `HeaderMap` is gone.
         let response_diagnostics = response_diagnostics(response.headers())?;
@@ -350,7 +350,7 @@ impl ReqwestStreamingTransportV1 {
             MAX_RESPONSE_RETRY_AFTER_BYTES,
         )?;
         let provider_quota_metadata =
-            provider_quota_metadata(response.headers(), &self.quota_headers)?;
+            provider_quota_metadata(response.headers(), &self.quota_headers, request)?;
         // As in the buffered arm: read the headers while `response` still owns them, because both
         // the success and the rejection path below move it away.
         let response_diagnostics = response_diagnostics(response.headers())?;
@@ -690,14 +690,20 @@ fn response_metadata(
 ///
 /// The declaration maps one header to one field and never reuses a field, so the contract's
 /// duplicate check cannot trip on a well-formed map; a value that is repeated, over-long or not
-/// text is dropped, as before.
+/// text is dropped, as before. A name the request's package declares as a secret header is never
+/// read, whatever the map says: gate ① refuses that pairing, and the transport holds it too,
+/// because the transcript hides that name and quota metadata must not expose it.
 fn provider_quota_metadata(
     headers: &HeaderMap,
     quota_headers: &ProviderQuotaHeaderMapV1,
+    request: &PreparedHttpRequestV1<'_>,
 ) -> Result<ProviderQuotaMetadataV1, TransportErrorV1> {
-    ProviderQuotaMetadataV1::try_from_iter(quota_headers.iter().filter_map(|(name, field)| {
-        optional_quota_metadata(headers, name).map(|value| (field, value))
-    }))
+    let secret_headers = request.headers().secret_headers();
+    ProviderQuotaMetadataV1::try_from_iter(
+        quota_headers.iter().filter(|(name, _)| !secret_headers.contains(name)).filter_map(
+            |(name, field)| optional_quota_metadata(headers, name).map(|value| (field, value)),
+        ),
+    )
 }
 
 /// Collects the closed diagnostic allow-list.

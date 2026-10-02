@@ -305,6 +305,12 @@ impl ComponentManifestV1 {
                     "the header is reserved: it carries a credential, framing, or its own typed slot",
                 ));
             }
+            // A declared secret header is dropped from every response transcript; reading the
+            // same name into quota metadata would hand a host the value the transcript hides.
+            if self.secret_headers.iter().any(|name| name.eq_ignore_ascii_case(&declaration.header))
+            {
+                return Err(invalid("the header is declared in `secret_headers`"));
+            }
             if !QUOTA_METADATA_FIELDS.contains(&declaration.field.as_str()) {
                 return Err(invalid("the field is not one of the closed quota metadata fields"));
             }

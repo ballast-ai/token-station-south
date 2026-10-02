@@ -479,7 +479,7 @@ async fn header_secret_call_injects_the_sanctioned_header_and_no_authorization()
 
 /// Auth contract version five and reserved-header policy version two: a package-declared secret
 /// header reaches the wire exactly once, through the auth arm alone, and an upstream that echoes
-/// it does not put it in the response transcript.
+/// it does not put it in the response transcript or in the provider quota metadata.
 #[tokio::test]
 async fn declared_secret_header_is_injected_once_and_never_transcribed() {
     let loopback = loopback_once(response(
@@ -489,11 +489,21 @@ async fn declared_secret_header_is_injected_once_and_never_transcribed() {
             ("x-acme-key", "echoed-declared-secret"),
             ("x-api-key", "echoed-sanctioned-secret"),
             ("x-acme-trace", "visible"),
+            ("x-acme-left", "41"),
         ],
         br#"{"ok":true}"#,
     ))
     .await;
-    let transport = ReqwestTransportV1::new(config()).expect("transport should build");
+    // A map that names the declared secret header: gate ① refuses this pairing, and the
+    // transport must not read the name even when a host builds such a map anyway.
+    let quota_headers = ProviderQuotaHeaderMapV1::try_from_iter([
+        ("x-acme-key", ProviderQuotaMetadataFieldV1::XRateLimitLimitTokens),
+        ("x-acme-left", ProviderQuotaMetadataFieldV1::XRateLimitRemainingTokens),
+    ])
+    .expect("the map alone does not know the package's secret set");
+    let transport = ReqwestTransportV1::new(config())
+        .expect("transport should build")
+        .with_quota_headers(quota_headers);
     let resolver = StaticResolver::default();
     let binding = ProviderBindingV1::new(
         ProviderEndpointV1::parse(&loopback.endpoint).expect("loopback endpoint should be valid"),
@@ -545,6 +555,11 @@ async fn declared_secret_header_is_injected_once_and_never_transcribed() {
     );
     assert!(!transcribed.contains(&"x-acme-key"), "a declared secret is never transcribed");
     assert!(!transcribed.contains(&"x-api-key"), "a sanctioned secret is never transcribed");
+
+    let quota = result.provider_quota_metadata();
+    assert_eq!(quota.x_ratelimit_limit_tokens(), None, "a declared secret is never quota metadata");
+    assert_eq!(quota.x_ratelimit_remaining_tokens(), Some("41"));
+    assert_eq!(quota.present_field_count(), 1);
 }
 
 // ─────────────── controlled user-agent (HTTP contract v3) ───────────────

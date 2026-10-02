@@ -332,6 +332,21 @@ fn a_repeated_quota_header_or_field_is_refused() {
 }
 
 #[test]
+fn a_declared_secret_header_cannot_feed_a_quota_field() {
+    // Both grammars are lowercase-only, so an exact match is the only collision `validate` can
+    // meet; the check itself folds case regardless.
+    let mut manifest = provider();
+    manifest.secret_headers = vec!["x-acme-key".to_owned()];
+    manifest.quota_headers = vec![quota("x-acme-key", "x-ratelimit-limit-tokens")];
+    assert!(matches!(
+        manifest.validate(),
+        Err(ManifestErrorV1::InvalidQuotaHeader { header, .. }) if header == "x-acme-key"
+    ));
+    manifest.quota_headers = vec![quota("x-acme-remaining", "x-ratelimit-remaining-tokens")];
+    assert_eq!(manifest.validate(), Ok(()));
+}
+
+#[test]
 fn user_agents_outside_the_grammar_are_refused() {
     for value in [
         "",
