@@ -62,6 +62,32 @@ fn valid_endpoint_inputs() -> impl Strategy<Value = String> {
         })
 }
 
+/// Endpoint-shaped inputs built from separator fragments, so that a scheme without `//`, a later
+/// `://`, repeated slashes, ports, and bytes the `url` crate percent-encodes all appear far more
+/// often than in arbitrary strings.
+fn endpoint_shaped_inputs() -> impl Strategy<Value = String> {
+    (
+        prop_oneof![Just("http"), Just("https"), Just("HTTPS"), Just("ftp")],
+        proptest::collection::vec(
+            prop_oneof![
+                Just(":".to_owned()),
+                Just("/".to_owned()),
+                Just("//".to_owned()),
+                Just("://".to_owned()),
+                Just(":8080".to_owned()),
+                Just("@".to_owned()),
+                Just("..".to_owned()),
+                Just("%2f".to_owned()),
+                Just("\"<".to_owned()),
+                Just("\u{96d4}".to_owned()),
+                ascii_string(b"abcdefghijklmnopqrstuvwxyz0123456789.+-", 1..9),
+            ],
+            1..10,
+        ),
+    )
+        .prop_map(|(scheme, fragments)| format!("{scheme}:{}", fragments.concat()))
+}
+
 fn valid_relative_path_inputs() -> impl Strategy<Value = String> {
     proptest::collection::vec(ascii_string(b"abcdefghijklmnopqrstuvwxyz0123456789_-", 1..17), 1..6)
         .prop_map(|segments| segments.join("/"))
@@ -104,7 +130,7 @@ proptest! {
 
     #[test]
     fn accepted_endpoints_are_bounded_canonical_and_idempotent(
-        input in prop_oneof![any::<String>(), valid_endpoint_inputs()],
+        input in prop_oneof![any::<String>(), valid_endpoint_inputs(), endpoint_shaped_inputs()],
     ) {
         if let Ok(endpoint) = ProviderEndpointV1::parse(&input) {
             let canonical = endpoint.as_str();
