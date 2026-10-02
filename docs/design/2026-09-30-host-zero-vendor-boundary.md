@@ -1354,8 +1354,24 @@ to native reference implementations. Where §8 left a choice open:
   identities: `task-kling` 1.0.5, `task-kling-v2` 0.32.2, `task-minimax-v2` / `task-bailian-v2` 0.31.2,
   `task-byteplus-v2` 0.36.2, and the other four 0.35.2. The four provider packages already moved in B1 and B2 and
   are unreleased. If B1, B2 and B3 are not released together, they need another bump.
-- **Release index and digest stability (§8.6, §9)** are a separate commit set on the same phase; see their notes
-  below once merged.
+- **South's own tests use the range.** Every test that admits a shipped package goes through a shared
+  `HostRangeV1` built from `compatibility.json`; the tests that exercise the exact handshake take their true tuple
+  from the manifest. The shipped-package rule is `south_runtime` ≤ the workspace version, not equality, so a
+  package whose content is unchanged keeps its identity across releases instead of being re-stamped.
+- **Release index (§9).** Release CI generates `south-release-index.json` (schema `south.release-index.v1`) with
+  `scripts/release_index.py` from the archived manifests and wasm, never by hand, and lists it in `SHASUMS256.txt`.
+  Beyond §9.2's example, each entry names its `gate2_report` file. Where a field does not apply, it is `null`:
+  `stream_framing` and `usage_evidence` outside the provider world, and absent `compatibility` keys.
+- **Gate ② reports (§9.2).** Release CI runs each package's sandbox parity test against the bytes it just built
+  and writes a `south.gate2-report.v1` report: the suite, the identity, the manifest and `component.wasm` digests,
+  and every outcome, sorted. The component is digested before and after the run. The index generator refuses a
+  report that is missing, failing, or whose identity or digests differ from the archived package.
+- **Digest stability (§8.6).** "Previous release" means the latest earlier non-draft `vX.Y.Z` release; a previous
+  release without an index skips the check, with a log line. Otherwise a package that keeps its version but changes
+  its `component.wasm` digest fails the release. Only the wasm is compared: manifests may change without a version
+  bump, since `south_runtime` moves when a package is re-verified. Reproducibility is proven only locally so far: a
+  clean rebuild of `provider-gemini` was byte-identical. Builds on a different runner image would surface as a false
+  "bump the version".
 
 ## 14. Existing text to revise in step
 
