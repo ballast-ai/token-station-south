@@ -99,10 +99,13 @@ fn b64(bytes: &[u8]) -> String {
 // The golden vector: the Kling recipe against the host's minting.
 // ---------------------------------------------------------------------------------------------
 
+/// One signing request: the algorithm, the key bytes and the signing input.
+type SignCall = (JwtAlgorithmV1, Vec<u8>, Vec<u8>);
+
 /// Hands back fixed signature bytes and records what it was asked to sign.
 struct HostBytes {
     signature: Vec<u8>,
-    seen: RefCell<Vec<(JwtAlgorithmV1, Vec<u8>, Vec<u8>)>>,
+    seen: RefCell<Vec<SignCall>>,
 }
 
 impl JwtSignerV1 for HostBytes {
