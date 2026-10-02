@@ -556,9 +556,13 @@ used); absent = `bytes` (today's behavior for the three SSE dialects, R5):
 | `bytes` | Upstream bytes unchanged | Nothing |
 | `aws-eventstream` | The canonical re-encoding of each message (below) | Call south's deframer |
 
-**Canonical re-encoding** (`reencode_eventstream_v1`), one SSE frame per eventstream message, with the payload
-parsed as JSON and re-serialized compactly (no insignificant whitespace, so no CR or LF can reach the SSE line; a
-payload that is not UTF-8 JSON is a deframer error, never passed through):
+**Canonical re-encoding** (`reencode_eventstream_v1`), one SSE frame per eventstream message. The compact payload
+is the payload's own JSON text, validated as exactly one UTF-8 JSON value, with every insignificant whitespace byte
+removed and nothing else changed — member order, number spelling and string escapes are kept. (Amended 2026-10-02:
+the earlier wording said "parsed and re-serialized"; a re-serialization depends on the consumer's `serde_json`
+features, such as `preserve_order`, so two hosts would not produce the same bytes.) No CR or LF can reach the SSE
+line. A payload that is not UTF-8 JSON is a re-encoding error, never passed through; the deframer itself does not
+read payloads, so a host calls both functions:
 
 - `:message-type` `event`: `event: <:event-type>` / `data: <compact payload>`;
 - `:message-type` `exception`: `event: exception:<:exception-type>` / `data: <compact payload>`;
@@ -566,8 +570,8 @@ payload that is not UTF-8 JSON is a deframer error, never passed through):
   (these frames carry their detail in headers, not in the payload).
 
 The `event` form equals what the host's seam produces today for Converse's JSON payloads (§5.1), so the existing
-Converse fixtures keep their meaning; key order of re-serialized objects is not part of the contract (components
-parse JSON), and south's golden vectors pin the exact bytes so both hosts produce the same ones. The `exception` and
+Converse fixtures keep their meaning, and south's golden vectors pin the exact bytes so both hosts produce the same
+ones. The `exception` and
 `error` forms are new: today the Converse stream parser ignores every unknown event, on the grounds that "the host's
 own strict validator lives upstream of here" (reference_bedrock_converse.rs:736-739) — and that upstream validator
 is precisely the dialect knowledge being moved out of the host. Instead, the host passes these frames through in
@@ -1269,6 +1273,58 @@ on B7a because the Kiro component needs a declared user-agent (the Responses com
 headers are ordinary descriptor headers). B7b comes last
 only because it goes through the kernel chain; until it lands, a new secret header name still needs a kernel
 release, and a provider needing one is outside DP0.
+
+### 13.1 Implementation of B2 (2026-10-02)
+
+Phase B2 is implemented on branch `feature/b2-descriptor-facts`, which is stacked on B1 (§6.6); nothing is
+released. Q6 was ruled as recommended under the owner's standing rule that a recommendation consistent with DP0
+is adopted: the deframer lives in `south-contracts`. Where this record left a choice open, the implementation
+chose as follows.
+
+- **Descriptor auth (§4).** `admit_descriptor_auth` returns `AdmittedAuthV1` (`None`, `Bearer`,
+  `HeaderSecret(SecretHeaderV1)` or `HostSigned`) for the host to map onto its raw-call arm. It runs the kernel's
+  `ProviderConfig::authorize` first. `DescriptorAuthWithinManifest` runs through a new entry point,
+  `run_provider_component_suite_v1_for_manifest`, which also carries `usage_evidence`; it replaces B1's unreleased
+  `run_provider_component_suite_v1_with_usage_evidence`. All four shipped provider packages pass unchanged, as
+  §4.4 predicted.
+- **Request facts (§7.2, §7.6).**
+  - The cap mutation check runs for every family, not only those declaring no cap. A body rebuilt with another cap
+    may differ only at the declared locations, so a cap also written somewhere undeclared is caught when it moves.
+    A wrapper object the removal leaves empty (Gemini's `generationConfig`) counts as part of the location.
+  - The references now encode the model as one URL segment, sharing the encoder with the check, so a Bedrock
+    inference-profile ARN cannot split the path.
+  - Gemini and Converse declare their facts; OpenAI-compatible and Anthropic use the top-level default.
+- **Endpoint and config keys (§7.3).**
+  - Gate ① refuses a template that a parameter could steer. The host part must end in a fixed domain of at least
+    two labels, and a host parameter's syntax must fit in a DNS label. Ports, queries, fragments, userinfo and
+    escapes are refused.
+  - South provides `validate_config_values`, `fill_endpoint` (path parameters encoded as one segment) and
+    `endpoint_admits` (an operator-entered `base_url` checked against the template).
+  - Until Q14 gives the component a channel, a config key may only feed the endpoint. Gate ① refuses a key the
+    template does not use, and `config_schema` without an endpoint.
+- **Deframer and re-encoding (§5.2).** `AwsEventStreamDeframerV1` is pull-based (`push`, then `next_message`), and
+  its first error is sticky. It adds a 128 KiB header-block bound, as the AWS SDKs have. It is stricter than
+  today's host:
+  1. A missing `:message-type` is an error rather than "event", and a missing `:exception-type` or `:error-code`
+     is an error rather than a synthetic name.
+  2. Duplicate headers are refused.
+  3. Non-JSON payloads are reported by the re-encoding, not the deframer.
+  Converse declares `stream_framing: aws-eventstream`. It maps `exception:` and `error:` frames to
+  `StreamEvent::Error`, comparing an exception's first letter without case, and emits nothing after the stream
+  closes.
+- **Signing (§5.3).** `signing` is optional and allowed only with `host_signed`, so task-world `host_signed`
+  packages are unaffected. Gate ① checks the scheme's emitted headers and its inputs, and that the region
+  parameter appears in every family's endpoint. Checking credential field names waits for recipes (B4).
+- **Identities.** `provider-bedrock-converse` 1.0.5 → 1.0.6. The manifest changes to `provider-anthropic` and
+  `provider-gemini` ride their B1 bumps (1.0.9, 1.1.5). If B1 is released without B2, those two packages need
+  another bump when B2 ships.
+- **Not in B2:**
+  - host adoption (P21 S1, S4);
+  - `decode_sse_v1`, which ships with the image world's minor;
+  - the component's channel for config keys (Q14);
+  - the combined auth arm (Q4, B7b).
+- **Found while fuzzing.** The fuzz work turned up an existing defect, unrelated to B2:
+  `ProviderEndpointV1::parse` is not idempotent for some inputs. It is fixed separately.
 
 ## 14. Existing text to revise in step
 
