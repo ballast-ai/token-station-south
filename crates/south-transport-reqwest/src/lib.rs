@@ -231,7 +231,7 @@ impl ReqwestTransportV1 {
         // Every response-header read must happen before `read_bounded_body` consumes `response`:
         // past this point the upstream's `HeaderMap` is gone.
         let response_diagnostics = response_diagnostics(response.headers())?;
-        let response_transcript = response_transcript(response.headers());
+        let response_transcript = response_transcript(response.headers(), request);
         let body = read_bounded_body(response, body_cap).await?;
 
         Ok(BufferedPartsV1 {
@@ -323,7 +323,7 @@ impl ReqwestStreamingTransportV1 {
         // As in the buffered arm: read the headers while `response` still owns them, because both
         // the success and the rejection path below move it away.
         let response_diagnostics = response_diagnostics(response.headers())?;
-        let response_transcript = response_transcript(response.headers());
+        let response_transcript = response_transcript(response.headers(), request);
         let head = StreamingResponseHeadV1::try_from_parts_with_response_metadata(
             status,
             content_type,
@@ -691,11 +691,17 @@ fn response_diagnostics(headers: &HeaderMap) -> Result<ResponseDiagnosticsV1, Tr
 
 /// Captures the bounded, display-only transcript of every other response header.
 ///
-/// Deliberately total: [`ResponseTranscriptV1::capture`] drops what it may not keep and records that
-/// it did, so a hostile or merely odd upstream cannot fail an otherwise good response here.
-fn response_transcript(headers: &HeaderMap) -> ResponseTranscriptV1 {
-    ResponseTranscriptV1::capture(
+/// Deliberately total: [`ResponseTranscriptV1::capture_redacting`] drops what it may not keep and
+/// records that it did, so a hostile or merely odd upstream cannot fail an otherwise good response
+/// here. The request's package declaration rides along (reserved-header policy version two), so an
+/// upstream that echoes a declared secret header never shows it to a reader.
+fn response_transcript(
+    headers: &HeaderMap,
+    request: &PreparedHttpRequestV1<'_>,
+) -> ResponseTranscriptV1 {
+    ResponseTranscriptV1::capture_redacting(
         headers.iter().map(|(name, value)| (name.as_str(), value.to_str().ok())),
+        request.headers().secret_headers(),
     )
 }
 

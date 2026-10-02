@@ -32,9 +32,10 @@ use std::fmt;
 
 use south_contracts::{
     BearerAuthV1, BufferedHttpResponseV1, ContractErrorV1, ControlledUserAgentV1, CredentialSlotV1,
-    GetRequestV1, HeaderPolicyError, JsonBodyV1, JsonPostRequestV1, MultipartBodyV1,
-    MultipartBoundaryV1, MultipartPostRequestV1, ProviderAuthV1, ProviderEndpointV1, QueryStringV1,
-    RelativePathV1, SafeHeaders, SecretHeaderV1, SignedHeaderSetV1,
+    DeclaredSecretHeaderV1, DeclaredSecretHeadersV1, GetRequestV1, HeaderPolicyError, JsonBodyV1,
+    JsonPostRequestV1, MultipartBodyV1, MultipartBoundaryV1, MultipartPostRequestV1,
+    ProviderAuthV1, ProviderEndpointV1, QueryStringV1, RelativePathV1, SafeHeaders, SecretHeaderV1,
+    SignedHeaderSetV1,
 };
 use thiserror::Error;
 use tokio::time::Instant;
@@ -69,6 +70,10 @@ pub enum RawAuthV1 {
     /// The secret travels both as `Authorization: Bearer …` and verbatim in the named sanctioned
     /// header (auth contract version four).
     BearerAndHeaderSecret(SecretHeaderV1),
+    /// The secret travels verbatim in one header the package declared (auth contract version
+    /// five). The raw call's `secret_headers` must name it, or the parse fails on `auth` with
+    /// `UNDECLARED_SECRET_HEADER`.
+    DeclaredHeaderSecret(DeclaredSecretHeaderV1),
 }
 
 impl RawAuthV1 {
@@ -80,6 +85,25 @@ impl RawAuthV1 {
             Self::BearerAndHeaderSecret(header) => {
                 ProviderAuthV1::BearerAndHeaderSecret { header, slot }
             }
+            Self::DeclaredHeaderSecret(header) => {
+                ProviderAuthV1::DeclaredHeaderSecret { header, slot }
+            }
+        }
+    }
+
+    /// Refuses a declared arm whose header the package's declaration does not name.
+    ///
+    /// The declaration is what reserves the name on the ordinary channel and redacts it from the
+    /// transcript, so an arm outside it would bind a header nothing else protects.
+    fn check_declared(
+        self,
+        secret_headers: &DeclaredSecretHeadersV1,
+    ) -> Result<(), RawCallErrorV1> {
+        match self {
+            Self::DeclaredHeaderSecret(header) if !secret_headers.contains(header.as_str()) => {
+                Err(RawCallErrorV1::Auth(ContractErrorV1::UndeclaredSecretHeader))
+            }
+            _ => Ok(()),
         }
     }
 }
@@ -106,6 +130,10 @@ pub struct RawProviderCallV1<'a> {
     pub body: &'a str,
     /// The authentication arm selected by the host.
     pub auth: RawAuthV1,
+    /// The secret headers the call's package declares (reserved-header policy version two):
+    /// refused in `headers`, and the only names [`RawAuthV1::DeclaredHeaderSecret`] may carry.
+    /// [`DeclaredSecretHeadersV1::none`] for a package that declares none.
+    pub secret_headers: &'a DeclaredSecretHeadersV1,
     /// The sanctioned query declaration, when the call carries one.
     pub query: Option<QueryStringV1>,
     /// The sanctioned user-agent declaration, when the call carries one.
@@ -117,6 +145,7 @@ impl fmt::Debug for RawProviderCallV1<'_> {
         formatter
             .debug_struct("RawProviderCallV1")
             .field("auth", &self.auth)
+            .field("secret_header_count", &self.secret_headers.len())
             .field("header_count", &self.headers.len())
             .field("body_byte_count", &self.body.len())
             .field("has_query", &self.query.is_some())
@@ -197,6 +226,10 @@ pub struct RawGetProviderCallV1<'a> {
     pub headers: &'a [(String, String)],
     /// The authentication arm selected by the host.
     pub auth: RawAuthV1,
+    /// The secret headers the call's package declares (reserved-header policy version two):
+    /// refused in `headers`, and the only names [`RawAuthV1::DeclaredHeaderSecret`] may carry.
+    /// [`DeclaredSecretHeadersV1::none`] for a package that declares none.
+    pub secret_headers: &'a DeclaredSecretHeadersV1,
     /// The sanctioned query declaration, when the call carries one.
     pub query: Option<QueryStringV1>,
     /// The sanctioned user-agent declaration, when the call carries one.
@@ -208,6 +241,7 @@ impl fmt::Debug for RawGetProviderCallV1<'_> {
         formatter
             .debug_struct("RawGetProviderCallV1")
             .field("auth", &self.auth)
+            .field("secret_header_count", &self.secret_headers.len())
             .field("header_count", &self.headers.len())
             .field("has_query", &self.query.is_some())
             .field("has_user_agent", &self.user_agent.is_some())
@@ -250,6 +284,10 @@ pub struct RawMultipartProviderCallV1<'a> {
     pub boundary: &'a str,
     /// The authentication arm selected by the host.
     pub auth: RawAuthV1,
+    /// The secret headers the call's package declares (reserved-header policy version two):
+    /// refused in `headers`, and the only names [`RawAuthV1::DeclaredHeaderSecret`] may carry.
+    /// [`DeclaredSecretHeadersV1::none`] for a package that declares none.
+    pub secret_headers: &'a DeclaredSecretHeadersV1,
     /// The sanctioned query declaration, when the call carries one.
     pub query: Option<QueryStringV1>,
     /// The sanctioned user-agent declaration, when the call carries one.
@@ -261,6 +299,7 @@ impl fmt::Debug for RawMultipartProviderCallV1<'_> {
         formatter
             .debug_struct("RawMultipartProviderCallV1")
             .field("auth", &self.auth)
+            .field("secret_header_count", &self.secret_headers.len())
             .field("header_count", &self.headers.len())
             .field("body_byte_count", &self.body.len())
             .field("boundary_byte_count", &self.boundary.len())
@@ -304,6 +343,10 @@ pub enum RawCallErrorV1 {
     /// The `headers` field carried a `content-type` on a shape that renders its own.
     #[error("content-type header is not permitted on this request shape")]
     ContentTypeHeader(ContractErrorV1),
+    /// The `auth` field named a declared secret header outside the call's `secret_headers`
+    /// (auth contract version five).
+    #[error("auth arm failed contract validation")]
+    Auth(ContractErrorV1),
 }
 
 impl RawCallErrorV1 {
@@ -317,7 +360,8 @@ impl RawCallErrorV1 {
             | Self::RelativePath(error)
             | Self::Body(error)
             | Self::Boundary(error)
-            | Self::ContentTypeHeader(error) => error.code(),
+            | Self::ContentTypeHeader(error)
+            | Self::Auth(error) => error.code(),
             Self::Headers(error) => error.code(),
         }
     }
@@ -333,6 +377,7 @@ impl RawCallErrorV1 {
             Self::RelativePath(_) => "relative_path",
             Self::Body(_) => "body",
             Self::Boundary(_) => "boundary",
+            Self::Auth(_) => "auth",
             // The host's fix is in the field it supplied, not in the name of the rule: it must
             // stop putting a `content-type` in `headers`, because this shape renders one.
             Self::Headers(_) | Self::ContentTypeHeader(_) => "headers",
@@ -354,8 +399,10 @@ pub fn parse_raw_call(
         raw.bound_slot,
         raw.requested_slot,
         raw.headers,
+        raw.secret_headers,
         raw.body,
     )?;
+    raw.auth.check_declared(raw.secret_headers)?;
     let auth = raw.auth.declare(BearerAuthV1::new(parts.requested_slot));
     let request = finish_request(
         JsonPostRequestV1::new(parts.relative_path, parts.headers, parts.body, auth),
@@ -382,12 +429,15 @@ pub fn raw_call_parses(raw: &RawProviderCallV1<'_>) -> bool {
 pub fn parse_raw_signed_call(
     raw: &RawSignedProviderCallV1<'_>,
 ) -> Result<(ProviderBindingV1, JsonPostRequestV1), RawCallErrorV1> {
+    // A host-signed package declares no secret headers: `host_signed` admits no other arm, and
+    // declaring `secret_headers` requires the `header_secret` arm (gate ①).
     let parts = parse_raw_parts(
         raw.endpoint,
         raw.relative_path,
         raw.bound_slot,
         raw.requested_slot,
         raw.headers,
+        DeclaredSecretHeadersV1::none(),
         raw.body,
     )?;
     let auth = ProviderAuthV1::HostSigned {
@@ -420,7 +470,8 @@ pub fn parse_raw_get_call(
 ) -> Result<(ProviderBindingV1, GetRequestV1), RawCallErrorV1> {
     let parts =
         parse_raw_binding(raw.endpoint, raw.relative_path, raw.bound_slot, raw.requested_slot)?;
-    let headers = parse_raw_headers(raw.headers)?;
+    let headers = parse_raw_headers(raw.headers, raw.secret_headers)?;
+    raw.auth.check_declared(raw.secret_headers)?;
     let auth = raw.auth.declare(BearerAuthV1::new(parts.requested_slot));
     let mut request = GetRequestV1::new(parts.relative_path, headers, auth);
     if let Some(query) = raw.query.clone() {
@@ -459,7 +510,8 @@ pub fn parse_raw_multipart_call(
         parse_raw_binding(raw.endpoint, raw.relative_path, raw.bound_slot, raw.requested_slot)?;
     let boundary = MultipartBoundaryV1::parse(raw.boundary).map_err(RawCallErrorV1::Boundary)?;
     let body = MultipartBodyV1::parse(raw.body.to_vec(), boundary).map_err(RawCallErrorV1::Body)?;
-    let headers = parse_raw_headers(raw.headers)?;
+    let headers = parse_raw_headers(raw.headers, raw.secret_headers)?;
+    raw.auth.check_declared(raw.secret_headers)?;
     let auth = raw.auth.declare(BearerAuthV1::new(parts.requested_slot));
     let mut request = MultipartPostRequestV1::try_new(parts.relative_path, headers, body, auth)
         .map_err(RawCallErrorV1::ContentTypeHeader)?;
@@ -493,19 +545,21 @@ struct ParsedRawParts {
 
 /// The parse order is part of the prelude's observable behavior — a host that pre-checks sees
 /// the first failing field — so the POST shapes keep it exactly: endpoint, bound slot, requested
-/// slot, relative path, body, headers. The GET shape runs the same sequence with the body step
-/// removed, through the same two helpers.
+/// slot, relative path, body, headers, then (since auth contract version five) the declared auth
+/// arm. The GET shape runs the same sequence with the body step removed, through the same two
+/// helpers.
 fn parse_raw_parts(
     endpoint: &str,
     relative_path: &str,
     bound_slot: &str,
     requested_slot: &str,
     headers: &[(String, String)],
+    secret_headers: &DeclaredSecretHeadersV1,
     body: &str,
 ) -> Result<ParsedRawParts, RawCallErrorV1> {
     let parts = parse_raw_binding(endpoint, relative_path, bound_slot, requested_slot)?;
     let body = JsonBodyV1::parse(body).map_err(RawCallErrorV1::Body)?;
-    let headers = parse_raw_headers(headers)?;
+    let headers = parse_raw_headers(headers, secret_headers)?;
     Ok(ParsedRawParts {
         binding: parts.binding,
         requested_slot: parts.requested_slot,
@@ -541,9 +595,15 @@ fn parse_raw_binding(
     })
 }
 
-fn parse_raw_headers(headers: &[(String, String)]) -> Result<SafeHeaders, RawCallErrorV1> {
-    SafeHeaders::try_from_iter(headers.iter().map(|(name, value)| (name.as_str(), value)))
-        .map_err(RawCallErrorV1::Headers)
+fn parse_raw_headers(
+    headers: &[(String, String)],
+    secret_headers: &DeclaredSecretHeadersV1,
+) -> Result<SafeHeaders, RawCallErrorV1> {
+    SafeHeaders::try_from_iter_with_secret_headers(
+        headers.iter().map(|(name, value)| (name.as_str(), value)),
+        secret_headers,
+    )
+    .map_err(RawCallErrorV1::Headers)
 }
 
 fn finish_request(

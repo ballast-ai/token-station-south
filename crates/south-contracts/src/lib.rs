@@ -3,6 +3,7 @@
 //! Host-neutral contracts for provider execution.
 
 mod eventstream;
+mod secret_header;
 mod task;
 mod task_v2;
 
@@ -10,6 +11,11 @@ pub use eventstream::{
     AwsEventStreamDeframerV1, EventStreamErrorV1, EventStreamHeaderValueV1, EventStreamMessageV1,
     MAX_EVENTSTREAM_FRAME_BYTES, MAX_EVENTSTREAM_HEADERS_BYTES, MIN_EVENTSTREAM_FRAME_BYTES,
     deframe_aws_eventstream_v1, reencode_eventstream_v1,
+};
+
+pub use secret_header::{
+    DeclaredSecretHeaderV1, DeclaredSecretHeadersV1, MAX_DECLARED_SECRET_HEADERS,
+    MAX_SECRET_HEADER_NAME_BYTES, UNDECLARABLE_SECRET_HEADER_NAMES,
 };
 
 pub use task_v2::{
@@ -71,8 +77,11 @@ pub const HTTP_CONTRACT_VERSION: u16 = 9;
 /// [`ProviderAuthV1::Bearer`] arm, version two adds the sanctioned header-secret scheme, and
 /// version three adds [`ProviderAuthV1::HostSigned`] — the arm whose credential never crosses
 /// into South at all. Version four adds [`ProviderAuthV1::BearerAndHeaderSecret`], the one
-/// closed shape in which a single resolved secret is bound to two headers.
-pub const AUTH_CONTRACT_VERSION: u16 = 4;
+/// closed shape in which a single resolved secret is bound to two headers. Version five adds
+/// [`ProviderAuthV1::DeclaredHeaderSecret`], whose header name a package declares and gate ①
+/// validates ([`DeclaredSecretHeaderV1`]) instead of this crate enumerating it; the closed
+/// [`ProviderAuthV1::HeaderSecret`] arm is unchanged.
+pub const AUTH_CONTRACT_VERSION: u16 = 5;
 
 /// The version of the stable provider-call error contract.
 ///
@@ -197,10 +206,16 @@ pub const MAX_RESPONSE_TRANSCRIPT_TOTAL_BYTES: usize = 16 * 1024;
 ///   `upgrade`, `proxy-connection`. These describe one hop's framing, never the provider's answer,
 ///   and reproducing them invites a reader to draw conclusions about a connection that no longer
 ///   exists.
-const RESPONSE_TRANSCRIPT_DENIED_HEADERS: &[&str] = &[
+/// - **Secret-bearing** (reserved-header policy version two): the five sanctioned
+///   [`SecretHeaderV1`] names, so an upstream that echoes the key it was sent does not put it in
+///   front of a reader. A package's declared secret headers join this list for that package's
+///   responses through [`ResponseTranscriptV1::capture_redacting`].
+pub(crate) const RESPONSE_TRANSCRIPT_DENIED_HEADERS: &[&str] = &[
+    "api-key",
     "authorization",
     "connection",
     "keep-alive",
+    "ocp-apim-subscription-key",
     "proxy-authenticate",
     "proxy-authorization",
     "proxy-connection",
@@ -210,6 +225,9 @@ const RESPONSE_TRANSCRIPT_DENIED_HEADERS: &[&str] = &[
     "trailer",
     "transfer-encoding",
     "upgrade",
+    "x-api-key",
+    "x-goog-api-key",
+    "xi-api-key",
 ];
 
 /// The maximum byte length of the buffered error body attached to a rejected stream.
@@ -222,7 +240,13 @@ pub const MAX_STREAM_CHUNK_BYTES: usize = 64 * 1024;
 pub const MAX_TRANSPORT_TIMEOUT: Duration = Duration::from_hours(24);
 
 /// The version of the reserved-header policy enforced by [`SafeHeaders`].
-pub const RESERVED_HEADER_POLICY_VERSION: u16 = 1;
+///
+/// Version two lets a package add its declared secret headers ([`DeclaredSecretHeadersV1`]) to
+/// the reserved set: [`SafeHeaders::try_from_iter_with_secret_headers`] refuses them on the
+/// ordinary channel, and [`ResponseTranscriptV1::capture_redacting`] drops them from the response
+/// transcript, which since this version also drops the five sanctioned [`SecretHeaderV1`] names.
+/// With no declaration the request side is exactly version one.
+pub const RESERVED_HEADER_POLICY_VERSION: u16 = 2;
 
 /// The maximum number of ordinary provider headers in one request descriptor.
 pub const MAX_PROVIDER_HEADER_COUNT: usize = 64;
@@ -236,7 +260,7 @@ pub const MAX_PROVIDER_HEADER_VALUE_BYTES: usize = 16 * 1024;
 /// The maximum combined byte length of provider header names and values.
 pub const MAX_PROVIDER_HEADER_TOTAL_BYTES: usize = 64 * 1024;
 
-const RESERVED_HEADERS: &[&str] = &[
+pub(crate) const RESERVED_HEADERS: &[&str] = &[
     "api-key",
     "authorization",
     "connection",
@@ -269,6 +293,7 @@ const RESERVED_HEADERS: &[&str] = &[
 #[derive(Clone, Default, PartialEq, Eq)]
 pub struct SafeHeaders {
     values: BTreeMap<String, String>,
+    secret_headers: DeclaredSecretHeadersV1,
 }
 
 impl SafeHeaders {
@@ -277,6 +302,26 @@ impl SafeHeaders {
     /// Header names are stored in their lowercase canonical form. Duplicate names are rejected
     /// after normalization rather than silently overwriting an earlier value.
     pub fn try_from_iter<I, N, V>(headers: I) -> Result<Self, HeaderPolicyError>
+    where
+        I: IntoIterator<Item = (N, V)>,
+        N: AsRef<str>,
+        V: AsRef<str>,
+    {
+        Self::try_from_iter_with_secret_headers(headers, DeclaredSecretHeadersV1::none())
+    }
+
+    /// Validates provider-supplied headers under one package's declared secret headers
+    /// (reserved-header policy version two).
+    ///
+    /// Exactly [`Self::try_from_iter`], except that every declared name is reserved too, so a
+    /// declared secret header can reach the wire only through its auth arm. The result keeps the
+    /// declaration: a request carrying the declared header-secret arm is prepared only over
+    /// headers validated under a declaration that names its header, and a transport reads the
+    /// declaration back ([`Self::secret_headers`]) to redact the response transcript.
+    pub fn try_from_iter_with_secret_headers<I, N, V>(
+        headers: I,
+        secret_headers: &DeclaredSecretHeadersV1,
+    ) -> Result<Self, HeaderPolicyError>
     where
         I: IntoIterator<Item = (N, V)>,
         N: AsRef<str>,
@@ -310,7 +355,7 @@ impl SafeHeaders {
             }
 
             let normalized_name = normalize_name(raw_name)?;
-            if is_reserved(&normalized_name) {
+            if is_reserved(&normalized_name) || secret_headers.contains(&normalized_name) {
                 return Err(HeaderPolicyError::ReservedHeader);
             }
 
@@ -321,7 +366,14 @@ impl SafeHeaders {
             }
         }
 
-        Ok(Self { values })
+        Ok(Self { values, secret_headers: secret_headers.clone() })
+    }
+
+    /// Returns the declared secret headers these headers were validated under; empty for
+    /// [`Self::try_from_iter`].
+    #[must_use]
+    pub const fn secret_headers(&self) -> &DeclaredSecretHeadersV1 {
+        &self.secret_headers
     }
 
     /// Returns a header value using an ASCII case-insensitive name lookup.
@@ -355,6 +407,7 @@ impl fmt::Debug for SafeHeaders {
         formatter
             .debug_struct("SafeHeaders")
             .field("count", &self.values.len())
+            .field("secret_header_count", &self.secret_headers.len())
             .field("policy_version", &RESERVED_HEADER_POLICY_VERSION)
             .finish_non_exhaustive()
     }
@@ -1350,6 +1403,22 @@ pub enum ProviderAuthV1 {
         /// The credential-slot declaration resolved by the host, exactly as in the Bearer arm.
         slot: BearerAuthV1,
     },
+    /// The secret travels verbatim in one header the package declared (auth contract version
+    /// five).
+    ///
+    /// The open counterpart of [`Self::HeaderSecret`]: the name came from the package manifest's
+    /// `secret_headers` and passed gate ①'s rules, so it is never a framing, hop-by-hop, cookie,
+    /// `authorization` or otherwise reserved name. A request carrying this arm is prepared only
+    /// over [`SafeHeaders`] validated under a declaration naming the header
+    /// ([`SafeHeaders::try_from_iter_with_secret_headers`]); any other request fails closed as
+    /// `UNSUPPORTED_AUTH_SHAPE` before its credential is resolved into a header, which is what
+    /// keeps the same name off the ordinary channel and out of the response transcript.
+    DeclaredHeaderSecret {
+        /// The declared secret-bearing header selected by the provider.
+        header: DeclaredSecretHeaderV1,
+        /// The credential-slot declaration resolved by the host, exactly as in the Bearer arm.
+        slot: BearerAuthV1,
+    },
 }
 
 impl ProviderAuthV1 {
@@ -1360,7 +1429,8 @@ impl ProviderAuthV1 {
             Self::Bearer(slot)
             | Self::HeaderSecret { slot, .. }
             | Self::HostSigned { slot, .. }
-            | Self::BearerAndHeaderSecret { slot, .. } => slot.credential_slot(),
+            | Self::BearerAndHeaderSecret { slot, .. }
+            | Self::DeclaredHeaderSecret { slot, .. } => slot.credential_slot(),
         }
     }
 }
@@ -1387,6 +1457,11 @@ impl fmt::Debug for ProviderAuthV1 {
                 .finish(),
             Self::BearerAndHeaderSecret { header, slot } => formatter
                 .debug_struct("BearerAndHeaderSecret")
+                .field("header", header)
+                .field("slot", slot)
+                .finish(),
+            Self::DeclaredHeaderSecret { header, slot } => formatter
+                .debug_struct("DeclaredHeaderSecret")
                 .field("header", header)
                 .field("slot", slot)
                 .finish(),
@@ -1972,6 +2047,21 @@ impl ResponseTranscriptV1 {
     where
         I: IntoIterator<Item = (&'a str, Option<&'a str>)>,
     {
+        Self::capture_redacting(headers, DeclaredSecretHeadersV1::none())
+    }
+
+    /// Captures a transcript for one package's response, also dropping its declared secret headers
+    /// (reserved-header policy version two).
+    ///
+    /// Exactly [`Self::capture`], with every name in `secret_headers` denied as the sanctioned
+    /// secret headers are. A transport passes the declaration the request's headers were validated
+    /// under ([`SafeHeaders::secret_headers`]), so an upstream echoing a declared key never shows
+    /// it to a reader.
+    #[must_use]
+    pub fn capture_redacting<'a, I>(headers: I, secret_headers: &DeclaredSecretHeadersV1) -> Self
+    where
+        I: IntoIterator<Item = (&'a str, Option<&'a str>)>,
+    {
         let mut captured: Vec<(String, String)> = Vec::new();
         let mut total_bytes = 0_usize;
         let mut truncated = false;
@@ -1984,7 +2074,9 @@ impl ResponseTranscriptV1 {
                 truncated = true;
                 continue;
             };
-            if RESPONSE_TRANSCRIPT_DENIED_HEADERS.contains(&name.as_str()) {
+            if RESPONSE_TRANSCRIPT_DENIED_HEADERS.contains(&name.as_str())
+                || secret_headers.contains(&name)
+            {
                 continue;
             }
             if name.len() > MAX_RESPONSE_TRANSCRIPT_NAME_BYTES
@@ -2884,6 +2976,15 @@ pub enum ContractErrorV1 {
     /// A request that renders its own media type was given a `content-type` header to carry.
     #[error("content-type header is not permitted on this request shape")]
     ContentTypeHeaderNotPermitted,
+    /// A declared secret header name violates the declaration rules (auth contract version five).
+    #[error("declared secret header name is invalid")]
+    InvalidSecretHeaderName,
+    /// A secret header declaration repeats a name or exceeds the declaration bound.
+    #[error("secret header declaration is invalid")]
+    InvalidSecretHeaderSet,
+    /// A declared header-secret arm names a header outside the package's declaration.
+    #[error("secret header is not declared by the package")]
+    UndeclaredSecretHeader,
 }
 
 impl ContractErrorV1 {
@@ -2904,6 +3005,9 @@ impl ContractErrorV1 {
             Self::InvalidMultipartBoundary => "INVALID_MULTIPART_BOUNDARY",
             Self::InvalidMultipartBody => "INVALID_MULTIPART_BODY",
             Self::ContentTypeHeaderNotPermitted => "CONTENT_TYPE_HEADER_NOT_PERMITTED",
+            Self::InvalidSecretHeaderName => "INVALID_SECRET_HEADER_NAME",
+            Self::InvalidSecretHeaderSet => "INVALID_SECRET_HEADER_SET",
+            Self::UndeclaredSecretHeader => "UNDECLARED_SECRET_HEADER",
         }
     }
 }

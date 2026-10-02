@@ -2,7 +2,10 @@
 
 use std::fmt;
 
-use south_contracts::{ControlledUserAgentV1, QueryStringV1, SignedHeaderSetV1, SignedHeaderV1};
+use south_contracts::{
+    ControlledUserAgentV1, DeclaredSecretHeadersV1, QueryStringV1, SignedHeaderSetV1,
+    SignedHeaderV1,
+};
 use south_core::raw::{
     RawAuthV1, RawGetProviderCallV1, RawMultipartProviderCallV1, RawProviderCallV1,
     RawSignedProviderCallV1,
@@ -21,6 +24,7 @@ pub struct RawProviderCallBuilderV1 {
     headers: Vec<(String, String)>,
     body: String,
     auth: RawAuthV1,
+    secret_headers: DeclaredSecretHeadersV1,
     query: Option<QueryStringV1>,
     user_agent: Option<ControlledUserAgentV1>,
 }
@@ -37,6 +41,7 @@ impl RawProviderCallBuilderV1 {
             headers: Vec::new(),
             body: "{}".to_owned(),
             auth: RawAuthV1::Bearer,
+            secret_headers: DeclaredSecretHeadersV1::default(),
             query: None,
             user_agent: None,
         }
@@ -97,6 +102,13 @@ impl RawProviderCallBuilderV1 {
         self
     }
 
+    /// Declares the package's secret headers (reserved-header policy version two).
+    #[must_use]
+    pub fn secret_headers(mut self, secret_headers: DeclaredSecretHeadersV1) -> Self {
+        self.secret_headers = secret_headers;
+        self
+    }
+
     /// Attaches a sanctioned query declaration.
     #[must_use]
     pub fn query(mut self, query: QueryStringV1) -> Self {
@@ -122,6 +134,7 @@ impl RawProviderCallBuilderV1 {
             headers: &self.headers,
             body: &self.body,
             auth: self.auth,
+            secret_headers: &self.secret_headers,
             query: self.query.clone(),
             user_agent: self.user_agent,
         }
@@ -301,6 +314,7 @@ pub struct RawGetProviderCallBuilderV1 {
     requested_slot: String,
     headers: Vec<(String, String)>,
     auth: RawAuthV1,
+    secret_headers: DeclaredSecretHeadersV1,
     query: Option<QueryStringV1>,
     user_agent: Option<ControlledUserAgentV1>,
 }
@@ -316,6 +330,7 @@ impl RawGetProviderCallBuilderV1 {
             requested_slot: "primary".to_owned(),
             headers: Vec::new(),
             auth: RawAuthV1::Bearer,
+            secret_headers: DeclaredSecretHeadersV1::default(),
             query: None,
             user_agent: None,
         }
@@ -369,6 +384,13 @@ impl RawGetProviderCallBuilderV1 {
         self
     }
 
+    /// Declares the package's secret headers (reserved-header policy version two).
+    #[must_use]
+    pub fn secret_headers(mut self, secret_headers: DeclaredSecretHeadersV1) -> Self {
+        self.secret_headers = secret_headers;
+        self
+    }
+
     /// Attaches a sanctioned query declaration.
     #[must_use]
     pub fn query(mut self, query: QueryStringV1) -> Self {
@@ -393,6 +415,7 @@ impl RawGetProviderCallBuilderV1 {
             requested_slot: &self.requested_slot,
             headers: &self.headers,
             auth: self.auth,
+            secret_headers: &self.secret_headers,
             query: self.query.clone(),
             user_agent: self.user_agent,
         }
@@ -432,6 +455,7 @@ pub struct RawMultipartProviderCallBuilderV1 {
     body: Vec<u8>,
     boundary: String,
     auth: RawAuthV1,
+    secret_headers: DeclaredSecretHeadersV1,
     query: Option<QueryStringV1>,
     user_agent: Option<ControlledUserAgentV1>,
 }
@@ -453,6 +477,7 @@ impl RawMultipartProviderCallBuilderV1 {
             body: default_multipart_body(&boundary),
             boundary,
             auth: RawAuthV1::Bearer,
+            secret_headers: DeclaredSecretHeadersV1::default(),
             query: None,
             user_agent: None,
         }
@@ -525,6 +550,13 @@ impl RawMultipartProviderCallBuilderV1 {
         self
     }
 
+    /// Declares the package's secret headers (reserved-header policy version two).
+    #[must_use]
+    pub fn secret_headers(mut self, secret_headers: DeclaredSecretHeadersV1) -> Self {
+        self.secret_headers = secret_headers;
+        self
+    }
+
     /// Attaches a sanctioned query declaration.
     #[must_use]
     pub fn query(mut self, query: QueryStringV1) -> Self {
@@ -551,6 +583,7 @@ impl RawMultipartProviderCallBuilderV1 {
             body: &self.body,
             boundary: &self.boundary,
             auth: self.auth,
+            secret_headers: &self.secret_headers,
             query: self.query.clone(),
             user_agent: self.user_agent,
         }
