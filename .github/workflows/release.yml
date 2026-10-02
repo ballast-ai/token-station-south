@@ -1,12 +1,17 @@
 name: Release
 
-# Publishes the three provider component packages a tag already builds.
+# Publishes the component packages a tag already builds.
 #
 # Each package is the exact directory shape `south-provider-runtime` loads —
 # `manifest.json` next to `component.wasm` — so a host consumes a release by
 # extracting an archive and pointing its component directory at the result.
 #
-# See docs/design/2026-09-10-released-component-artifacts.md.
+# Beside the archives: one gate ② report per package, naming the exact
+# component.wasm it judged, and `south-release-index.json`, the
+# machine-readable index generated from the archived manifests.
+#
+# See docs/design/2026-09-10-released-component-artifacts.md and
+# docs/design/2026-09-30-host-zero-vendor-boundary.md sections 8.6 and 9.
 
 on:
   push:
@@ -71,6 +76,34 @@ jobs:
           scripts/build-wan-image-task-v2-component.sh
           scripts/build-gmi-image-task-v2-component.sh
 
+      # Gate ② over the bytes just built: each sandbox parity test runs the
+      # package's required suite against its component.wasm and, with
+      # SOUTH_GATE2_REPORT_DIR set, writes a report naming that wasm's digest.
+      # The build scripts the tests invoke are no-ops on the fresh build above;
+      # the index step below refuses a report whose digest differs from the
+      # archived component.wasm, so a rebuild in between could not slip by.
+      - name: Gate ② reports
+        env:
+          SOUTH_GATE2_REPORT_DIR: ${{ github.workspace }}/target/gate2-reports
+        run: |
+          set -euo pipefail
+          cargo test -p south-component-conformance --features sandbox \
+            --test sandbox_parity_v1 \
+            --test anthropic_sandbox_parity_v1 \
+            --test bedrock_converse_sandbox_parity_v1 \
+            --test gemini_sandbox_parity_v1 \
+            --test kling_task_sandbox_parity_v1 \
+            --test kling_task_sandbox_parity_v2 \
+            --test minimax_task_sandbox_parity_v2 \
+            --test bailian_task_sandbox_parity_v2 \
+            --test xai_task_sandbox_parity_v2 \
+            --test byteplus_task_sandbox_parity_v2 \
+            --test veo_task_sandbox_parity_v2 \
+            --test wan_image_task_sandbox_parity_v2 \
+            --test gmi_image_task_sandbox_parity_v2 \
+            -- --exact the_sandboxed_component_passes_gate_two_byte_for_byte
+          ls -l "${SOUTH_GATE2_REPORT_DIR}"
+
       - name: Package
         run: |
           set -euo pipefail
@@ -87,6 +120,8 @@ jobs:
             tar -czf "dist/${component}-${GITHUB_REF_NAME}.tar.gz" -C "${staged}" \
               manifest.json component.wasm
             rm -rf "${staged}"
+            cp "target/gate2-reports/${component}.gate2.json" \
+               "dist/${component}-${GITHUB_REF_NAME}.gate2.json"
           }
           package provider-openai-compatible provider_openai_compatible.wasm
           package provider-anthropic provider_anthropic.wasm
@@ -101,9 +136,54 @@ jobs:
           package task-veo-v2 task_veo_v2.wasm
           package task-wan-image-v2 task_wan_image_v2.wasm
           package task-gmi-image-v2 task_gmi_image_v2.wasm
+
+      # Generated from the archived manifests, never hand-written. It refuses
+      # a missing archive, an archive without a components/ directory, a
+      # manifest that differs from the source tree, and a missing, failing or
+      # mismatched gate ② report.
+      - name: Release index
+        run: |
+          set -euo pipefail
+          python3 scripts/release_index.py generate \
+            --dist dist --tag "${GITHUB_REF_NAME}" --require-gate2-reports
+          cat dist/south-release-index.json
+
+      # A package whose version did not change must not change its
+      # component.wasm bytes (boundary record §8.6): compared against the
+      # previous release's index, and a difference fails the release.
+      - name: Digest stability
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tags="$(gh release list --exclude-drafts --limit 1000 --json tagName --jq '.[].tagName')"
+          previous="$(printf '%s\n' "${tags}" \
+            | python3 scripts/release_index.py previous-tag --current "${GITHUB_REF_NAME}")"
+          if [ -z "${previous}" ]; then
+            echo "no release earlier than ${GITHUB_REF_NAME}; digest stability check skipped"
+            exit 0
+          fi
+          assets="$(gh release view "${previous}" --json assets --jq '.assets[].name')"
+          if ! printf '%s\n' "${assets}" | grep -qxF south-release-index.json; then
+            echo "release ${previous} has no south-release-index.json; digest stability check skipped"
+            exit 0
+          fi
+          prev_dir="$(mktemp -d)"
+          gh release download "${previous}" --dir "${prev_dir}" \
+            --pattern south-release-index.json --pattern SHASUMS256.txt
+          (cd "${prev_dir}" && sha256sum --check --ignore-missing SHASUMS256.txt)
+          echo "comparing against ${previous}"
+          python3 scripts/release_index.py compare \
+            --previous "${prev_dir}/south-release-index.json" \
+            --current dist/south-release-index.json
+
+      - name: Checksums
+        run: |
+          set -euo pipefail
           # sha256sum output, so a host verifies with `sha256sum --check` and
-          # no bespoke tooling.
-          (cd dist && sha256sum ./*.tar.gz > SHASUMS256.txt)
+          # no bespoke tooling. Covers the archives, the gate ② reports and
+          # the index.
+          (cd dist && sha256sum ./*.tar.gz ./*.gate2.json ./south-release-index.json > SHASUMS256.txt)
           ls -l dist
 
       - name: Publish
@@ -119,6 +199,12 @@ jobs:
           the directory shape `south-provider-runtime` loads. Extract one and
           point a host's component directory at the result.
 
+          `south-release-index.json` lists every package with its world,
+          families, compatibility declaration and the digests of the archive,
+          its `manifest.json` and its `component.wasm`. Each
+          `<package>-<tag>.gate2.json` is the gate ② report CI produced for
+          that exact `component.wasm`; the index carries its digest.
+
           Verify with `sha256sum --check SHASUMS256.txt`.
 
           These are first-party builds identified by checksum, not signature;
@@ -130,4 +216,5 @@ jobs:
           gh release create "${GITHUB_REF_NAME}" \
             --title "${GITHUB_REF_NAME}" \
             --notes-file dist/NOTES.md \
-            dist/*.tar.gz dist/SHASUMS256.txt
+            dist/*.tar.gz dist/*.gate2.json dist/south-release-index.json \
+            dist/SHASUMS256.txt

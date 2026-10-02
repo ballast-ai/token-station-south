@@ -47,6 +47,10 @@ jobs:
         run: |
           scripts/check-boundaries.sh --self-test
           scripts/check-boundaries.sh
+      # The release index generator and the digest-stability check (release.yml).
+      # Standard-library Python with no setup; it runs in well under a second.
+      - name: Release tooling
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
       - name: Licenses and sources
         run: |
           cargo deny check

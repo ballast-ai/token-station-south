@@ -16,6 +16,9 @@ use south_provider_api::ComponentManifestV1;
 use south_provider_api::{HostExpectationsV1, compatibility_matches};
 use south_provider_runtime::{ComponentRuntimeV1, NoSecretsV1, RuntimeLimitsV1};
 
+#[path = "support/gate2_report.rs"]
+mod gate2_report;
+
 fn repo_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().and_then(Path::parent).expect("repo root")
 }
@@ -82,10 +85,12 @@ fn sandboxed() -> SandboxedComponentV1 {
 fn the_sandboxed_component_passes_gate_two_byte_for_byte() {
     let pack = FixturePackV1::load(&Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures"))
         .expect("the shipped fixture pack loads");
+    let evidence = gate2_report::Evidence::capture("provider-openai-compatible", component_wasm());
     let component = sandboxed();
 
     let report =
         run_provider_component_suite_v1_for_manifest(&component, &pack, &shipped_manifest().1);
+    evidence.record(&report);
     for failure in report.failures() {
         eprintln!("{failure}");
     }
