@@ -1616,9 +1616,15 @@ Tags: S = south maintainers, L = lv, K = kernel.
 - **Q15 (S)** Reopen the 2026-08-20 controlled-user-agent ruling: may a user-agent value come from a manifest value
   validated at gate ① (`DeclaredUserAgentV1`, §10) rather than only from host program text? Recommended: yes, with
   the value grammar unchanged and a fuzz obligation on the new parser.
+  **Ruled (lv, 2026-10-02): as recommended.** A user-agent value may come from a manifest value validated at gate ①;
+  the value grammar is unchanged and the new parser carries a fuzz obligation.
 - **Q16 (S)** Does south accept publishing impersonation values (client user-agents and client-identification
   headers of third-party tools) inside its packages? lv's Q10 ruling requires it for DP0 on those providers; the
   south maintainers decide whether the repository carries them.
+  **Ruled (lv, 2026-10-02): yes**, consistent with lv's Q10 ruling. South's packages may carry client
+  user-agents and client-identification headers of third-party tools. The owner takes the terms-of-service risk
+  of publishing them. B7a adds only the declaration mechanism; concrete values enter packages with the components
+  that need them (B6).
 - **Q17 (S)** Who runs gate ② for a package south did not build: nobody (it is the author's self-attestation, and
   the host relies only on its own seals and bounds), the installer (the host runs the suite at admission on the
   package's own fixtures, proving self-consistency only), or a registry run by south? Recommended: the installer, as
