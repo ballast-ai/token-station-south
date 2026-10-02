@@ -851,7 +851,8 @@ choice open, the implementation chose as follows.
   3. The host refuses non-zero Chat audio tokens as a cost-admission rule. This is host policy and stays there.
   4. Stream terminal requirements stay host-side internal-consistency checks (§6.3): a finish reason, `[DONE]`,
      `message_stop`, and exactly one terminal.
-- **Still open before release:** Q9. The community host must confirm the behavior change of §6.5.
+- **Q9** is ruled (lv, 2026-10-02): the community host confirms the behavior change of §6.5, so nothing in §6
+  remains open before release.
 
 ## 7. Request facts, endpoints, non-secret configuration and capability metadata (problem e)
 
@@ -1360,6 +1361,8 @@ Tags: S = south maintainers, L = lv, K = kernel.
   (§6.5); in addition, ARCHITECTURE.md:114-115 requires a metering vocabulary to have "a second consumer in sight" —
   both `usage_evidence` and the recipes need the community host to confirm its intent to adopt them (P21 §7
   recommends implementing in step).
+  **Ruled (lv, 2026-10-02): lv maintains the community host as well and confirms both halves** — the strictness
+  change and adopting `usage_evidence` and recipes in step. The "second consumer in sight" test is met.
 - **Q10 (L)** DP7: does south take in Copilot's editor headers, Claude Code's impersonation headers and Codex's
   client-identification headers? They would appear in both recipes and components.
   **Ruled (lv, 2026-09-30): south takes them in; the host keeps no special case.** Headers on the inference request
