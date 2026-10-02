@@ -22,7 +22,7 @@
   ],
   "usage": {
     "input_tokens": 100,
-    "output_tokens": 5,
+    "output_tokens": 45,
     "cache_read_tokens": 80,
     "cache_write_tokens": 0,
     "reasoning_tokens": 40

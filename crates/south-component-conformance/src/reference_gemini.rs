@@ -289,15 +289,78 @@ fn finish_reason_of(raw: &str, produced_tool_calls: bool) -> FinishReason {
     }
 }
 
-fn usage_of(meta: &Value) -> Usage {
-    let count = |name: &str| meta[name].as_u64().unwrap_or(0);
-    Usage {
-        input_tokens: count("promptTokenCount"),
-        output_tokens: count("candidatesTokenCount"),
-        cache_read_tokens: count("cachedContentTokenCount"),
-        reasoning_tokens: count("thoughtsTokenCount"),
-        ..Usage::default()
+fn meta_count(meta: &Value, key: &str) -> ComponentResultV1<u64> {
+    match meta.get(key) {
+        None | Some(Value::Null) => Ok(0),
+        Some(value) => value.as_u64().ok_or_else(|| {
+            provider_protocol_error("the upstream usageMetadata has an invalid token count")
+        }),
     }
+}
+
+fn meta_sum(left: u64, right: u64) -> ComponentResultV1<u64> {
+    left.checked_add(right)
+        .ok_or_else(|| provider_protocol_error("the upstream usageMetadata counts overflow"))
+}
+
+/// Usage is funds evidence (provider-adapter.wit, `parse-response`): a missing
+/// count or a total that does not add up is a protocol error, never a zero (B1,
+/// host-zero-vendor-boundary §6.2 item 1).
+///
+/// Gemini reports thoughts **outside** the candidates, and its total is
+/// `prompt + toolUsePrompt + candidates + thoughts` (measured 2026-10-01,
+/// host-zero-vendor-boundary §16 Q13). So the IR output is
+/// `candidates + thoughts`, with `reasoning_tokens = thoughts` as its subset, and
+/// the IR input is `prompt + toolUsePrompt`.
+///
+/// `promptTokenCount` and `totalTokenCount` are required. The JSON mapping of the
+/// wire omits zero counts, so a missing `candidatesTokenCount` is zero only when
+/// the total already closes without it; otherwise the candidates went
+/// unreported, which is an error.
+fn usage_of(meta: &Value) -> ComponentResultV1<Usage> {
+    if !meta.is_object() {
+        return Err(provider_protocol_error("a Gemini response must carry usageMetadata"));
+    }
+    let required = |key: &str| {
+        meta.get(key).and_then(Value::as_u64).ok_or_else(|| {
+            provider_protocol_error(
+                "the upstream usageMetadata lacks a valid promptTokenCount or totalTokenCount",
+            )
+        })
+    };
+    let prompt = required("promptTokenCount")?;
+    let total = required("totalTokenCount")?;
+    let cached = meta_count(meta, "cachedContentTokenCount")?;
+    if cached > prompt {
+        return Err(provider_protocol_error(
+            "the upstream cachedContentTokenCount exceeds promptTokenCount",
+        ));
+    }
+    let input_tokens = meta_sum(prompt, meta_count(meta, "toolUsePromptTokenCount")?)?;
+    let thoughts = meta_count(meta, "thoughtsTokenCount")?;
+    let known = meta_sum(input_tokens, thoughts)?;
+    let candidates = match meta.get("candidatesTokenCount") {
+        Some(_) => meta_count(meta, "candidatesTokenCount")?,
+        None if known < total => {
+            return Err(provider_protocol_error(
+                "the upstream usageMetadata lacks candidatesTokenCount",
+            ));
+        }
+        None => 0,
+    };
+    let output_tokens = meta_sum(candidates, thoughts)?;
+    if meta_sum(input_tokens, output_tokens)? != total {
+        return Err(provider_protocol_error(
+            "the upstream totalTokenCount does not equal prompt, tool-use prompt, candidates and thoughts",
+        ));
+    }
+    Ok(Usage {
+        input_tokens,
+        output_tokens,
+        cache_read_tokens: cached,
+        reasoning_tokens: thoughts,
+        ..Usage::default()
+    })
 }
 
 /// A synthetic call id, stable for a given response.
@@ -350,7 +413,7 @@ impl GeminiSseParser {
         })
     }
 
-    fn events_of(&mut self, frame: &Value) -> Vec<StreamEvent> {
+    fn events_of(&mut self, frame: &Value) -> ComponentResultV1<Vec<StreamEvent>> {
         let mut events = Vec::new();
         let candidate = &frame["candidates"][0];
         let mut produced_call = false;
@@ -394,13 +457,13 @@ impl GeminiSseParser {
             let finish = self.take_pending_finish();
             let terminal = finish.is_some();
             events.extend(finish);
-            events.push(StreamEvent::Usage { usage: usage_of(&frame["usageMetadata"]) });
+            events.push(StreamEvent::Usage { usage: usage_of(&frame["usageMetadata"])? });
             if terminal {
                 events.push(StreamEvent::Done { finish_reason: None, stop_sequence: None });
                 self.done_emitted = true;
             }
         }
-        events
+        Ok(events)
     }
 }
 
@@ -436,7 +499,7 @@ impl StreamParserV1 for GeminiSseParser {
             let parsed: Value = serde_json::from_str(data).map_err(|_| {
                 provider_protocol_error("the upstream sent a stream frame with invalid JSON")
             })?;
-            events.extend(self.events_of(&parsed));
+            events.extend(self.events_of(&parsed)?);
         }
         Ok(events)
     }
@@ -579,7 +642,7 @@ impl ProviderComponentV1 for GeminiReferenceV1 {
                     .as_str()
                     .map(|raw| finish_reason_of(raw, produced_tool_calls)),
             }],
-            usage: usage_of(&raw["usageMetadata"]),
+            usage: usage_of(&raw["usageMetadata"])?,
             extensions: Extensions::new(),
         })
     }
