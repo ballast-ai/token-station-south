@@ -3,8 +3,7 @@
 use std::fmt;
 
 use south_contracts::{
-    ControlledUserAgentV1, DeclaredSecretHeadersV1, QueryStringV1, SignedHeaderSetV1,
-    SignedHeaderV1,
+    DeclaredSecretHeadersV1, QueryStringV1, SignedHeaderSetV1, SignedHeaderV1, UserAgentV1,
 };
 use south_core::raw::{
     RawAuthV1, RawGetProviderCallV1, RawMultipartProviderCallV1, RawProviderCallV1,
@@ -26,7 +25,7 @@ pub struct RawProviderCallBuilderV1 {
     auth: RawAuthV1,
     secret_headers: DeclaredSecretHeadersV1,
     query: Option<QueryStringV1>,
-    user_agent: Option<ControlledUserAgentV1>,
+    user_agent: Option<UserAgentV1>,
 }
 
 impl RawProviderCallBuilderV1 {
@@ -116,10 +115,10 @@ impl RawProviderCallBuilderV1 {
         self
     }
 
-    /// Attaches a sanctioned user-agent declaration.
+    /// Attaches a sanctioned user-agent declaration: a host literal or a declared manifest value.
     #[must_use]
-    pub const fn user_agent(mut self, user_agent: ControlledUserAgentV1) -> Self {
-        self.user_agent = Some(user_agent);
+    pub fn user_agent(mut self, user_agent: impl Into<UserAgentV1>) -> Self {
+        self.user_agent = Some(user_agent.into());
         self
     }
 
@@ -136,7 +135,7 @@ impl RawProviderCallBuilderV1 {
             auth: self.auth,
             secret_headers: &self.secret_headers,
             query: self.query.clone(),
-            user_agent: self.user_agent,
+            user_agent: self.user_agent.clone(),
         }
     }
 }
@@ -173,7 +172,7 @@ pub struct RawSignedProviderCallBuilderV1 {
     body: String,
     emits: SignedHeaderSetV1,
     query: Option<QueryStringV1>,
-    user_agent: Option<ControlledUserAgentV1>,
+    user_agent: Option<UserAgentV1>,
 }
 
 impl RawSignedProviderCallBuilderV1 {
@@ -260,10 +259,10 @@ impl RawSignedProviderCallBuilderV1 {
         self
     }
 
-    /// Attaches a sanctioned user-agent declaration.
+    /// Attaches a sanctioned user-agent declaration: a host literal or a declared manifest value.
     #[must_use]
-    pub const fn user_agent(mut self, user_agent: ControlledUserAgentV1) -> Self {
-        self.user_agent = Some(user_agent);
+    pub fn user_agent(mut self, user_agent: impl Into<UserAgentV1>) -> Self {
+        self.user_agent = Some(user_agent.into());
         self
     }
 
@@ -279,7 +278,7 @@ impl RawSignedProviderCallBuilderV1 {
             body: &self.body,
             emits: &self.emits,
             query: self.query.clone(),
-            user_agent: self.user_agent,
+            user_agent: self.user_agent.clone(),
         }
     }
 }
@@ -316,7 +315,7 @@ pub struct RawGetProviderCallBuilderV1 {
     auth: RawAuthV1,
     secret_headers: DeclaredSecretHeadersV1,
     query: Option<QueryStringV1>,
-    user_agent: Option<ControlledUserAgentV1>,
+    user_agent: Option<UserAgentV1>,
 }
 
 impl RawGetProviderCallBuilderV1 {
@@ -398,10 +397,10 @@ impl RawGetProviderCallBuilderV1 {
         self
     }
 
-    /// Attaches a sanctioned user-agent declaration.
+    /// Attaches a sanctioned user-agent declaration: a host literal or a declared manifest value.
     #[must_use]
-    pub const fn user_agent(mut self, user_agent: ControlledUserAgentV1) -> Self {
-        self.user_agent = Some(user_agent);
+    pub fn user_agent(mut self, user_agent: impl Into<UserAgentV1>) -> Self {
+        self.user_agent = Some(user_agent.into());
         self
     }
 
@@ -417,7 +416,7 @@ impl RawGetProviderCallBuilderV1 {
             auth: self.auth,
             secret_headers: &self.secret_headers,
             query: self.query.clone(),
-            user_agent: self.user_agent,
+            user_agent: self.user_agent.clone(),
         }
     }
 }
@@ -457,7 +456,7 @@ pub struct RawMultipartProviderCallBuilderV1 {
     auth: RawAuthV1,
     secret_headers: DeclaredSecretHeadersV1,
     query: Option<QueryStringV1>,
-    user_agent: Option<ControlledUserAgentV1>,
+    user_agent: Option<UserAgentV1>,
 }
 
 impl RawMultipartProviderCallBuilderV1 {
@@ -564,10 +563,10 @@ impl RawMultipartProviderCallBuilderV1 {
         self
     }
 
-    /// Attaches a sanctioned user-agent declaration.
+    /// Attaches a sanctioned user-agent declaration: a host literal or a declared manifest value.
     #[must_use]
-    pub const fn user_agent(mut self, user_agent: ControlledUserAgentV1) -> Self {
-        self.user_agent = Some(user_agent);
+    pub fn user_agent(mut self, user_agent: impl Into<UserAgentV1>) -> Self {
+        self.user_agent = Some(user_agent.into());
         self
     }
 
@@ -585,7 +584,7 @@ impl RawMultipartProviderCallBuilderV1 {
             auth: self.auth,
             secret_headers: &self.secret_headers,
             query: self.query.clone(),
-            user_agent: self.user_agent,
+            user_agent: self.user_agent.clone(),
         }
     }
 }

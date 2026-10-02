@@ -31,11 +31,11 @@
 use std::fmt;
 
 use south_contracts::{
-    BearerAuthV1, BufferedHttpResponseV1, ContractErrorV1, ControlledUserAgentV1, CredentialSlotV1,
+    BearerAuthV1, BufferedHttpResponseV1, ContractErrorV1, CredentialSlotV1,
     DeclaredSecretHeaderV1, DeclaredSecretHeadersV1, GetRequestV1, HeaderPolicyError, JsonBodyV1,
     JsonPostRequestV1, MultipartBodyV1, MultipartBoundaryV1, MultipartPostRequestV1,
     ProviderAuthV1, ProviderEndpointV1, QueryStringV1, RelativePathV1, SafeHeaders, SecretHeaderV1,
-    SignedHeaderSetV1,
+    SignedHeaderSetV1, UserAgentV1,
 };
 use thiserror::Error;
 use tokio::time::Instant;
@@ -137,7 +137,7 @@ pub struct RawProviderCallV1<'a> {
     /// The sanctioned query declaration, when the call carries one.
     pub query: Option<QueryStringV1>,
     /// The sanctioned user-agent declaration, when the call carries one.
-    pub user_agent: Option<ControlledUserAgentV1>,
+    pub user_agent: Option<UserAgentV1>,
 }
 
 impl fmt::Debug for RawProviderCallV1<'_> {
@@ -184,7 +184,7 @@ pub struct RawSignedProviderCallV1<'a> {
     /// The sanctioned query declaration, when the call carries one.
     pub query: Option<QueryStringV1>,
     /// The sanctioned user-agent declaration, when the call carries one.
-    pub user_agent: Option<ControlledUserAgentV1>,
+    pub user_agent: Option<UserAgentV1>,
 }
 
 impl fmt::Debug for RawSignedProviderCallV1<'_> {
@@ -233,7 +233,7 @@ pub struct RawGetProviderCallV1<'a> {
     /// The sanctioned query declaration, when the call carries one.
     pub query: Option<QueryStringV1>,
     /// The sanctioned user-agent declaration, when the call carries one.
-    pub user_agent: Option<ControlledUserAgentV1>,
+    pub user_agent: Option<UserAgentV1>,
 }
 
 impl fmt::Debug for RawGetProviderCallV1<'_> {
@@ -291,7 +291,7 @@ pub struct RawMultipartProviderCallV1<'a> {
     /// The sanctioned query declaration, when the call carries one.
     pub query: Option<QueryStringV1>,
     /// The sanctioned user-agent declaration, when the call carries one.
-    pub user_agent: Option<ControlledUserAgentV1>,
+    pub user_agent: Option<UserAgentV1>,
 }
 
 impl fmt::Debug for RawMultipartProviderCallV1<'_> {
@@ -407,7 +407,7 @@ pub fn parse_raw_call(
     let request = finish_request(
         JsonPostRequestV1::new(parts.relative_path, parts.headers, parts.body, auth),
         raw.query.clone(),
-        raw.user_agent,
+        raw.user_agent.clone(),
     );
     Ok((parts.binding, request))
 }
@@ -447,7 +447,7 @@ pub fn parse_raw_signed_call(
     let request = finish_request(
         JsonPostRequestV1::new(parts.relative_path, parts.headers, parts.body, auth),
         raw.query.clone(),
-        raw.user_agent,
+        raw.user_agent.clone(),
     );
     Ok((parts.binding, request))
 }
@@ -477,7 +477,7 @@ pub fn parse_raw_get_call(
     if let Some(query) = raw.query.clone() {
         request = request.with_query(query);
     }
-    if let Some(user_agent) = raw.user_agent {
+    if let Some(user_agent) = raw.user_agent.clone() {
         request = request.with_user_agent(user_agent);
     }
     Ok((parts.binding, request))
@@ -518,7 +518,7 @@ pub fn parse_raw_multipart_call(
     if let Some(query) = raw.query.clone() {
         request = request.with_query(query);
     }
-    if let Some(user_agent) = raw.user_agent {
+    if let Some(user_agent) = raw.user_agent.clone() {
         request = request.with_user_agent(user_agent);
     }
     Ok((parts.binding, request))
@@ -609,7 +609,7 @@ fn parse_raw_headers(
 fn finish_request(
     mut request: JsonPostRequestV1,
     query: Option<QueryStringV1>,
-    user_agent: Option<ControlledUserAgentV1>,
+    user_agent: Option<UserAgentV1>,
 ) -> JsonPostRequestV1 {
     if let Some(query) = query {
         request = request.with_query(query);

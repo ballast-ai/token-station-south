@@ -752,6 +752,9 @@ const fn map_contract_error(error: ContractErrorV1) -> ProviderCallFailureCodeV1
         | ContractErrorV1::ContentTypeHeaderNotPermitted => {
             ProviderCallFailureCodeV1::InvalidRelativePath
         }
+        // B7a: a declared query parameter refused at construction is the same preparation-time,
+        // zero-call declaration failure as an invalid sanctioned value, and folds the same way.
+        ContractErrorV1::InvalidQueryDeclaration => ProviderCallFailureCodeV1::InvalidRelativePath,
         // `ContractErrorV1` is `#[non_exhaustive]` since 0.25.0. No frozen fixture can produce a
         // variant this version does not know, so one reaching here is an executor wiring error:
         // use the context-free request fallback rather than widening the frozen code set.

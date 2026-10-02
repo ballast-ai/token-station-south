@@ -7,13 +7,16 @@ use south_component_conformance::task_v2_json::{
     prepared_task_json, render_context_json, submit_outcome_json,
 };
 use south_contracts::{
-    AwsEventStreamDeframerV1, CredentialSlotV1, JsonBodyV1, MAX_CREDENTIAL_SLOT_BYTES,
+    AwsEventStreamDeframerV1, ControlledUserAgentV1, CredentialSlotV1, DeclaredQueryParameterV1,
+    DeclaredUserAgentV1, JsonBodyV1, MAX_CREDENTIAL_SLOT_BYTES, MAX_DECLARED_QUERY_NAME_BYTES,
     MAX_ENDPOINT_BYTES, MAX_JSON_REQUEST_BODY_BYTES, MAX_PROVIDER_QUOTA_METADATA_TOTAL_BYTES,
-    MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES, MAX_QUERY_TOTAL_BYTES, MAX_RELATIVE_PATH_BYTES,
-    MAX_RESPONSE_DIAGNOSTIC_TOTAL_BYTES, MAX_RESPONSE_DIAGNOSTIC_VALUE_BYTES,
-    MAX_RESPONSE_TRANSCRIPT_COUNT, MAX_RESPONSE_TRANSCRIPT_NAME_BYTES,
-    MAX_RESPONSE_TRANSCRIPT_TOTAL_BYTES, MAX_RESPONSE_TRANSCRIPT_VALUE_BYTES, ProviderEndpointV1,
-    ProviderQuotaMetadataFieldV1, ProviderQuotaMetadataV1, QueryParameterV1, QueryStringV1,
+    MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES, MAX_QUERY_TOTAL_BYTES, MAX_QUOTA_HEADER_NAME_BYTES,
+    MAX_RELATIVE_PATH_BYTES, MAX_RESPONSE_DIAGNOSTIC_TOTAL_BYTES,
+    MAX_RESPONSE_DIAGNOSTIC_VALUE_BYTES, MAX_RESPONSE_TRANSCRIPT_COUNT,
+    MAX_RESPONSE_TRANSCRIPT_NAME_BYTES, MAX_RESPONSE_TRANSCRIPT_TOTAL_BYTES,
+    MAX_RESPONSE_TRANSCRIPT_VALUE_BYTES, MAX_USER_AGENT_BYTES, PROVIDER_QUOTA_HEADER_DENIED_NAMES,
+    ProviderEndpointV1, ProviderQuotaHeaderMapV1, ProviderQuotaMetadataFieldV1,
+    ProviderQuotaMetadataV1, QueryParameterV1, QueryStringV1, QueryValueSyntaxV1,
     RESPONSE_DIAGNOSTIC_FIELD_COUNT, RelativePathV1, ResponseDiagnosticFieldV1,
     ResponseDiagnosticsV1, ResponseTranscriptV1, deframe_aws_eventstream_v1,
     reencode_eventstream_v1,
@@ -121,6 +124,77 @@ fn fuzz_eventstream(data: &[u8]) {
     }
 }
 
+/// B7a: the declared-instance parsers consume untrusted manifest text (§10, §16 Q15).
+fn fuzz_declared_instances(input: &str) {
+    // A declared user-agent: an accepted value has the controlled grammar and round-trips.
+    if let Ok(agent) = DeclaredUserAgentV1::from_manifest_value(input) {
+        assert_eq!(agent.as_str(), input);
+        assert!(!input.is_empty() && input.len() <= MAX_USER_AGENT_BYTES);
+        assert!(input.bytes().all(|byte| (0x20..=0x7e).contains(&byte)));
+        assert!(!input.starts_with(' ') && !input.ends_with(' '));
+        let literal: &'static str = Box::leak(input.to_owned().into_boxed_str());
+        assert!(ControlledUserAgentV1::try_from_static(literal).is_ok());
+    }
+
+    // A declared query parameter: `name\0value\0enum values...`. An accepted name with an accepted
+    // value yields exactly one `name=value` pair that survives the join byte for byte.
+    let mut parts = input.split('\0');
+    let name = parts.next().unwrap_or_default();
+    let value = parts.next().unwrap_or_default();
+    let listed: Vec<String> = parts.map(str::to_owned).collect();
+    for syntax in [
+        QueryValueSyntaxV1::Digits,
+        QueryValueSyntaxV1::Token,
+        QueryValueSyntaxV1::Date,
+        QueryValueSyntaxV1::Enum(listed),
+    ] {
+        let Ok(parameter) = DeclaredQueryParameterV1::try_new(name, syntax) else {
+            continue;
+        };
+        assert_eq!(parameter.name(), name);
+        assert!(!name.is_empty() && name.len() <= MAX_DECLARED_QUERY_NAME_BYTES);
+        assert!(name.bytes().all(|byte| byte.is_ascii_alphanumeric() || b"-._~".contains(&byte)));
+        assert!(!QueryParameterV1::ALL.iter().any(|fixed| fixed.wire_name() == name));
+        let Ok(query) =
+            QueryStringV1::try_from_iter([(QueryParameterV1::Declared(parameter), value)])
+        else {
+            continue;
+        };
+        assert_eq!(query.as_str(), format!("{name}={value}"));
+        assert_eq!(query.as_str().matches('=').count(), 1);
+        assert!(!query.as_str().contains(['&', '#', '%', '+', ' ']));
+        let (Ok(path), Ok(endpoint)) = (
+            RelativePathV1::parse("v1/resource"),
+            ProviderEndpointV1::parse("https://example.com/base/"),
+        ) else {
+            panic!("static fuzz path and binding must be valid");
+        };
+        let Ok(resolved) = path.resolve_against_with_query(&endpoint, Some(&query)) else {
+            panic!("accepted declared query must remain inside a valid binding");
+        };
+        assert_eq!(resolved.query(), Some(query.as_str()));
+        assert!(resolved.fragment().is_none());
+    }
+
+    // Declared quota headers: an accepted map names each field at most once, through a lowercase
+    // header name that is neither credential-bearing nor framing.
+    let entries = input
+        .split('\0')
+        .enumerate()
+        .map(|(index, header)| (header, QUOTA_FIELDS[index % QUOTA_FIELDS.len()]));
+    if let Ok(map) = ProviderQuotaHeaderMapV1::try_from_iter(entries) {
+        assert!(map.iter().len() <= QUOTA_FIELDS.len());
+        for (header, field) in map.iter() {
+            assert!(header.len() <= MAX_QUOTA_HEADER_NAME_BYTES);
+            assert!(
+                header.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+            );
+            assert!(!PROVIDER_QUOTA_HEADER_DENIED_NAMES.contains(&header));
+            assert_eq!(map.header_for(field), Some(header));
+        }
+    }
+}
+
 fuzz_target!(|data: &[u8]| {
     fuzz_eventstream(data);
 
@@ -221,7 +295,7 @@ fuzz_target!(|data: &[u8]| {
     // Controlled query: a successfully constructed query must survive the join byte for byte,
     // against every valid binding, exactly like an accepted path must resolve.
     for parameter in QueryParameterV1::ALL {
-        let Ok(query) = QueryStringV1::try_from_iter([(parameter, input)]) else {
+        let Ok(query) = QueryStringV1::try_from_iter([(parameter.clone(), input)]) else {
             continue;
         };
         assert!(!query.as_str().is_empty());
@@ -249,6 +323,8 @@ fuzz_target!(|data: &[u8]| {
             assert!(resolved.fragment().is_none());
         }
     }
+
+    fuzz_declared_instances(input);
 
     if let Ok(slot) = CredentialSlotV1::parse(input) {
         assert!(!slot.as_str().is_empty());

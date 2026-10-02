@@ -31,6 +31,10 @@ use url::Url;
 assert_impl_all!(ProviderBindingV1: Send, Sync);
 assert_impl_all!(SecretValue: Send, Sync);
 assert_not_impl_any!(SecretValue: Clone, Display, serde::Serialize, serde::de::DeserializeOwned);
+// B7a: query values never come from credential resolution, declared parameters included. A
+// declared query parameter names a syntax, never a source, and a resolved secret has no read
+// path from which a host could build a query value.
+assert_not_impl_any!(SecretValue: AsRef<str>, AsRef<[u8]>, std::ops::Deref, Into<String>);
 
 const ENDPOINT_SENTINEL: &str = "endpoint-sentinel.invalid";
 const PATH_SENTINEL: &str = "path-sentinel";
@@ -179,7 +183,7 @@ struct Observation {
     body: String,
     auth_header_name: String,
     auth_header_value: Vec<u8>,
-    user_agent: Option<&'static str>,
+    user_agent: Option<String>,
     remaining_timeout: Duration,
     prepared_debug: String,
 }
@@ -208,7 +212,7 @@ impl AsyncHttpTransport for RecordingTransport {
             }),
             auth_header_name: auth_header_name.to_owned(),
             auth_header_value: auth_header_value.to_vec(),
-            user_agent: prepared.user_agent().map(ControlledUserAgentV1::as_str),
+            user_agent: prepared.user_agent().map(|agent| agent.as_str().to_owned()),
             remaining_timeout,
             prepared_debug: format!("{prepared:?}"),
         };
@@ -841,7 +845,7 @@ async fn declared_user_agent_reaches_the_transport_boundary_intact() {
         .expect("observation lock")
         .clone()
         .expect("transport must be reached");
-    assert_eq!(observation.user_agent, Some("aws-sdk-js/1.0.0 KiroIDE"));
+    assert_eq!(observation.user_agent.as_deref(), Some("aws-sdk-js/1.0.0 KiroIDE"));
     // The declaration is a header concern only: it must not have touched the URL or the auth
     // channel.
     assert_eq!(observation.url.as_str(), "https://example.com/base/v1/chat/completions");
@@ -1016,7 +1020,7 @@ async fn get_declared_user_agent_and_header_secret_arm_reach_the_boundary() {
     let observation = observed(&transport);
     assert_eq!(observation.auth_header_name, "x-api-key");
     assert_eq!(observation.auth_header_value, SECRET_SENTINEL.as_bytes());
-    assert_eq!(observation.user_agent, Some("south-poll/1.0"));
+    assert_eq!(observation.user_agent.as_deref(), Some("south-poll/1.0"));
 }
 
 #[tokio::test]
@@ -1283,7 +1287,7 @@ impl AsyncBinaryHttpTransport for BinaryRecordingTransport {
             }),
             auth_header_name: auth_header_name.to_owned(),
             auth_header_value: auth_header_value.to_vec(),
-            user_agent: prepared.user_agent().map(ControlledUserAgentV1::as_str),
+            user_agent: prepared.user_agent().map(|agent| agent.as_str().to_owned()),
             remaining_timeout,
             prepared_debug: format!("{prepared:?}"),
         };

@@ -92,6 +92,12 @@ the [task adapter vocabulary](docs/design/2026-08-27-task-adapter-vocabulary.md)
   `token-station:adapter@2.0.0` (world `provider-adapter-v2`, JSON payloads named by
   canonical type, raw-bytes stream chunks) and the component `manifest.json` schema
   carrying the seven-field compatibility tuple the runtime handshake refuses on mismatch.
+- Provider instances a package declares (B7a): a provider manifest may declare query parameters
+  (a restricted name plus a closed value syntax), the response headers that feed the closed quota
+  metadata fields, and a per-family user-agent. Gate ① validates them,
+  `south_component_conformance::DeclaredInstancesV1` turns an admitted manifest into the contract
+  types (`QueryParameterV1::Declared`, `ProviderQuotaHeaderMapV1`, `DeclaredUserAgentV1`), and
+  `ReqwestTransportV1::with_quota_headers` captures a package's declared quota headers.
 - `south-component-conformance` is gates ① and ② of the four-gate layering: package
   admission (manifest, reported identity, tuple handshake) and the
   `south.provider-component.v1` behavior suite (fixture-pinned translation, determinism,

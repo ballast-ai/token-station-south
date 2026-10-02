@@ -8,11 +8,11 @@ use std::{fmt, future::Future, pin::Pin, time::Duration};
 
 use http::Method;
 use south_contracts::{
-    BufferedBinaryResponseV1, BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1,
-    GetRequestV1, JsonBodyV1, JsonPostRequestV1, MultipartBodyV1, MultipartPostRequestV1,
-    PreparationErrorV1, ProviderAuthV1, ProviderEndpointV1, QueryStringV1, RelativePathV1,
-    SafeHeaders, SignedHeaderSetV1, SignedHeaderV1, StreamChunkV1, StreamReadErrorV1,
-    StreamRejectedV1, StreamingResponseHeadV1, TransportErrorV1,
+    BufferedBinaryResponseV1, BufferedHttpResponseV1, CredentialSlotV1, GetRequestV1, JsonBodyV1,
+    JsonPostRequestV1, MultipartBodyV1, MultipartPostRequestV1, PreparationErrorV1, ProviderAuthV1,
+    ProviderEndpointV1, QueryStringV1, RelativePathV1, SafeHeaders, SignedHeaderSetV1,
+    SignedHeaderV1, StreamChunkV1, StreamReadErrorV1, StreamRejectedV1, StreamingResponseHeadV1,
+    TransportErrorV1, UserAgentV1,
 };
 use thiserror::Error;
 use tokio::time::{Instant, timeout_at};
@@ -105,7 +105,7 @@ pub struct FinalizeViewV1<'a> {
     url: &'a Url,
     headers: &'a SafeHeaders,
     body: &'a [u8],
-    user_agent: Option<ControlledUserAgentV1>,
+    user_agent: Option<&'a UserAgentV1>,
     slot: &'a CredentialSlotV1,
     emits: &'a SignedHeaderSetV1,
 }
@@ -137,7 +137,7 @@ impl<'a> FinalizeViewV1<'a> {
 
     /// Returns the sanctioned user-agent the transport will apply, when the request declared one.
     #[must_use]
-    pub const fn user_agent(&self) -> Option<ControlledUserAgentV1> {
+    pub const fn user_agent(&self) -> Option<&'a UserAgentV1> {
         self.user_agent
     }
 
@@ -303,7 +303,7 @@ pub struct PreparedHttpRequestV1<'request> {
     /// transport must emit and a JSON one does not.
     body: Option<RequestBodyRefV1<'request>>,
     auth_headers: Vec<BoundAuthHeader<'request>>,
-    user_agent: Option<ControlledUserAgentV1>,
+    user_agent: Option<&'request UserAgentV1>,
 }
 
 /// The body a prepared request carries, borrowed from the contract type that owns it.
@@ -374,7 +374,7 @@ struct RequestParts<'request> {
     headers: &'request SafeHeaders,
     body: Option<RequestBodyRefV1<'request>>,
     auth: &'request ProviderAuthV1,
-    user_agent: Option<ControlledUserAgentV1>,
+    user_agent: Option<&'request UserAgentV1>,
 }
 
 impl<'request> From<&'request JsonPostRequestV1> for RequestParts<'request> {
@@ -596,7 +596,7 @@ impl PreparedHttpRequestV1<'_> {
     /// channel cannot carry the name (it is reserved) and the auth channel never produces it, so
     /// applying this declaration is the single source of the header on the wire.
     #[must_use]
-    pub const fn user_agent(&self) -> Option<ControlledUserAgentV1> {
+    pub const fn user_agent(&self) -> Option<&UserAgentV1> {
         self.user_agent
     }
 }

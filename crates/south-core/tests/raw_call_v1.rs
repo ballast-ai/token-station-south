@@ -11,6 +11,7 @@ use south_contracts::{
     BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1, DeclaredSecretHeaderV1,
     DeclaredSecretHeadersV1, ProviderAuthV1, QueryParameterV1, QueryStringV1, SecretHeaderV1,
     SignedHeaderSetV1, SignedHeaderV1, StreamChunkV1, StreamingResponseHeadV1, TransportErrorV1,
+    UserAgentV1,
 };
 use south_core::raw::{
     BoundedResolverV1, PreparedSecretResolverV1, RawAuthV1, RawCallErrorV1, RawGetProviderCallV1,
@@ -262,13 +263,13 @@ fn parse_carries_auth_arm_query_and_user_agent() {
     let raw = RawProviderCallV1 {
         auth: RawAuthV1::HeaderSecret(SecretHeaderV1::XApiKey),
         query: Some(query.clone()),
-        user_agent: Some(user_agent),
+        user_agent: Some(user_agent.into()),
         ..valid_raw(&headers, "{\"model\":\"m\"}")
     };
 
     let (_binding, request) = parse_raw_call(&raw).unwrap();
     assert_eq!(request.query().map(QueryStringV1::as_str), Some(query.as_str()));
-    assert_eq!(request.user_agent().map(ControlledUserAgentV1::as_str), Some("prelude-test/1.0"));
+    assert_eq!(request.user_agent().map(UserAgentV1::as_str), Some("prelude-test/1.0"));
     match request.auth() {
         south_contracts::ProviderAuthV1::HeaderSecret { header, .. } => {
             assert_eq!(header.header_name(), "x-api-key");
@@ -596,7 +597,7 @@ fn signed_parse_carries_the_declaration_query_and_user_agent() {
         query: Some(
             QueryStringV1::try_from_iter([(QueryParameterV1::ApiVersion, "2024-01-01")]).unwrap(),
         ),
-        user_agent: Some(ControlledUserAgentV1::try_from_static("south-drill/1.0").unwrap()),
+        user_agent: Some(ControlledUserAgentV1::try_from_static("south-drill/1.0").unwrap().into()),
         ..valid_signed_raw(&headers, "{\"model\":\"m\"}", &emits)
     };
 
@@ -608,7 +609,7 @@ fn signed_parse_carries_the_declaration_query_and_user_agent() {
     assert_eq!(slot.credential_slot().as_str(), "aws.primary");
     assert_eq!(parsed, &emits, "the declaration must travel verbatim");
     assert!(request.query().is_some());
-    assert_eq!(request.user_agent().map(ControlledUserAgentV1::as_str), Some("south-drill/1.0"));
+    assert_eq!(request.user_agent().map(UserAgentV1::as_str), Some("south-drill/1.0"));
 }
 
 #[tokio::test]
@@ -829,14 +830,14 @@ fn get_parse_carries_auth_arm_query_and_user_agent_into_a_body_less_request() {
         relative_path: "v1/query/video_generation",
         auth: RawAuthV1::BearerAndHeaderSecret(SecretHeaderV1::XGoogApiKey),
         query: Some(query.clone()),
-        user_agent: Some(user_agent),
+        user_agent: Some(user_agent.into()),
         ..valid_raw_get(&headers)
     };
 
     let (binding, request) = parse_raw_get_call(&raw).unwrap();
     assert_eq!(request.relative_path().as_str(), "v1/query/video_generation");
     assert_eq!(request.query().map(QueryStringV1::as_str), Some(query.as_str()));
-    assert_eq!(request.user_agent().map(ControlledUserAgentV1::as_str), Some("prelude-poll/1.0"));
+    assert_eq!(request.user_agent().map(UserAgentV1::as_str), Some("prelude-poll/1.0"));
     assert!(matches!(
         request.auth(),
         ProviderAuthV1::BearerAndHeaderSecret { header: SecretHeaderV1::XGoogApiKey, .. }

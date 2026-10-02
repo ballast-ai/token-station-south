@@ -14,8 +14,8 @@ use std::{
 use bytes::Bytes;
 use http::StatusCode;
 use south_contracts::{
-    BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1, StreamChunkV1,
-    StreamingResponseHeadV1, TransportErrorV1,
+    BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1, DeclaredUserAgentV1,
+    StreamChunkV1, StreamingResponseHeadV1, TransportErrorV1, UserAgentV1,
 };
 use south_core::{
     AsyncHttpTransport, AsyncStreamingTransport, CredentialResolutionFuture, CredentialResolver,
@@ -26,15 +26,16 @@ use south_core::{
 use south_provider_conformance::{
     CONTROLLED_USER_AGENT_CONFORMANCE_SUITE_ID, CONTROLLED_USER_AGENT_CONFORMANCE_SUITE_VERSION,
     ControlledUserAgentCaseIdV1, ControlledUserAgentExpectedOutcomeV1,
-    ControlledUserAgentFixtureV1, ControlledUserAgentUpstreamV1, FAKE_BEARER_SECRET_V1,
-    ProviderCallCountV1, ProviderCallFailureCodeV1, controlled_user_agent_fixtures_v1,
+    ControlledUserAgentFixtureV1, ControlledUserAgentSourceV1, ControlledUserAgentUpstreamV1,
+    FAKE_BEARER_SECRET_V1, ProviderCallCountV1, ProviderCallFailureCodeV1,
+    controlled_user_agent_fixtures_v1,
 };
 use tokio_util::sync::CancellationToken;
 
 use crate::{map_contract_error, map_provider_call_error, parse_reference_input};
 
-/// Five cases multiplied by the ten closed controlled user-agent mismatch categories.
-pub const MAX_CONTROLLED_USER_AGENT_MISMATCHES_V1: usize = 50;
+/// Eight cases multiplied by the ten closed controlled user-agent mismatch categories.
+pub const MAX_CONTROLLED_USER_AGENT_MISMATCHES_V1: usize = 80;
 
 /// A boxed, cancellation-safe assembled controlled user-agent executor future.
 pub type AssembledControlledUserAgentExecutionFutureV1<'a> =
@@ -579,13 +580,25 @@ impl AssembledControlledUserAgentExecutorV1 for ReferenceAssembledControlledUser
 /// rejection. `Ok(Some(_))` is a declared user-agent. `Err(_)` is a declaration the contract
 /// refuses. `Ok(None)` is *no* declaration, a legitimate request shape and not a failure, and it
 /// must never reach `ControlledUserAgentV1::try_from_static`.
+///
+/// A manifest value (B7a) goes through `DeclaredUserAgentV1::from_manifest_value`, the
+/// constructor a host reaches through its admitted manifest; a host literal through
+/// `ControlledUserAgentV1::try_from_static`. Both apply the one grammar.
 fn declare_reference_user_agent(
     fixture: &ControlledUserAgentFixtureV1,
-) -> Result<Option<ControlledUserAgentV1>, ProviderCallFailureCodeV1> {
+) -> Result<Option<UserAgentV1>, ProviderCallFailureCodeV1> {
     let Some(declared) = fixture.declared_user_agent() else {
         return Ok(None);
     };
-    ControlledUserAgentV1::try_from_static(declared).map(Some).map_err(map_contract_error)
+    let user_agent = match fixture.source() {
+        ControlledUserAgentSourceV1::HostLiteral => {
+            ControlledUserAgentV1::try_from_static(declared).map(UserAgentV1::from)
+        }
+        ControlledUserAgentSourceV1::Manifest => {
+            DeclaredUserAgentV1::from_manifest_value(declared).map(UserAgentV1::from)
+        }
+    };
+    user_agent.map(Some).map_err(map_contract_error)
 }
 
 async fn execute_reference_controlled_user_agent_case(
@@ -613,7 +626,7 @@ async fn execute_reference_controlled_user_agent_case(
             );
         }
     };
-    let request = match declared_user_agent {
+    let request = match declared_user_agent.clone() {
         Some(user_agent) => request.with_user_agent(user_agent),
         None => request,
     };
@@ -714,7 +727,7 @@ impl CredentialResolver for BearerSecretResolver {
 struct UserAgentRecordingTransport<'fixture> {
     calls: Arc<AtomicUsize>,
     upstream: &'fixture ControlledUserAgentUpstreamV1,
-    declared_user_agent: Option<ControlledUserAgentV1>,
+    declared_user_agent: Option<UserAgentV1>,
     wire_user_agent_exact: Arc<AtomicBool>,
 }
 
@@ -729,8 +742,8 @@ impl UserAgentRecordingTransport<'_> {
     /// must read the prepared request to answer at all, so one that hardcodes `true` is caught
     /// there.
     fn record_wire_user_agent(&self, request: &PreparedHttpRequestV1<'_>) {
-        let wire = request.user_agent().map(ControlledUserAgentV1::as_str);
-        let declared = self.declared_user_agent.map(ControlledUserAgentV1::as_str);
+        let wire = request.user_agent().map(UserAgentV1::as_str);
+        let declared = self.declared_user_agent.as_ref().map(UserAgentV1::as_str);
         debug_assert!(
             declared.is_some() || wire.is_none(),
             "a request declaring no user-agent must carry none"

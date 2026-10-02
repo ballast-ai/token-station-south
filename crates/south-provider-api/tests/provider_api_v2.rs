@@ -112,6 +112,9 @@ fn reference_manifest() -> ComponentManifestV1 {
         request_facts: std::collections::BTreeMap::new(),
         endpoint: std::collections::BTreeMap::new(),
         config_schema: std::collections::BTreeMap::new(),
+        query_parameters: Vec::new(),
+        quota_headers: Vec::new(),
+        user_agent: std::collections::BTreeMap::new(),
         permissions: ComponentPermissionsV1 {
             network: false,
             filesystem: false,
@@ -694,6 +697,9 @@ fn task_manifest() -> ComponentManifestV1 {
         request_facts: std::collections::BTreeMap::new(),
         endpoint: std::collections::BTreeMap::new(),
         config_schema: std::collections::BTreeMap::new(),
+        query_parameters: Vec::new(),
+        quota_headers: Vec::new(),
+        user_agent: std::collections::BTreeMap::new(),
         permissions: ComponentPermissionsV1 {
             network: false,
             filesystem: false,

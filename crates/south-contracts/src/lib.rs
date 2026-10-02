@@ -2,10 +2,19 @@
 
 //! Host-neutral contracts for provider execution.
 
+mod declared;
 mod eventstream;
 mod secret_header;
 mod task;
 mod task_v2;
+
+// B7a (query, quota, user-agent): provider instances declared in a package manifest.
+pub use declared::{
+    DECLARED_QUERY_DENIED_FRAGMENTS, DECLARED_QUERY_DENIED_NAMES, DeclaredQueryParameterV1,
+    DeclaredUserAgentV1, MAX_DECLARED_QUERY_NAME_BYTES, MAX_QUERY_DIGITS, MAX_QUERY_ENUM_VALUES,
+    MAX_QUOTA_HEADER_NAME_BYTES, PROVIDER_QUOTA_HEADER_DENIED_NAMES, ProviderQuotaHeaderMapV1,
+    QueryValueSyntaxV1, UserAgentV1,
+};
 
 pub use eventstream::{
     AwsEventStreamDeframerV1, EventStreamErrorV1, EventStreamHeaderValueV1, EventStreamMessageV1,
@@ -69,7 +78,13 @@ use url::Url;
 /// shape changes, and [`BufferedHttpResponseV1`] keeps its UTF-8 guarantee exactly as frozen — a
 /// consumer of the text response cannot be handed bytes by this version or any later one.
 /// Version nine adds the bounded `MiniMax` file-id query; existing query bytes are unchanged.
-pub const HTTP_CONTRACT_VERSION: u16 = 9;
+///
+/// Version ten (B7a) admits provider instances a package declares in its manifest: a query
+/// parameter named by [`QueryParameterV1::Declared`] with a closed value syntax, and a
+/// [`DeclaredUserAgentV1`] in the request's single [`UserAgentV1`] slot. A version-nine request is
+/// exactly a version-ten request that declares neither; every previously accepted declaration
+/// serializes byte-identically, and declared parameters follow the sanctioned ones on the wire.
+pub const HTTP_CONTRACT_VERSION: u16 = 10;
 
 /// The version of the provider authentication declaration contract.
 ///
@@ -153,7 +168,11 @@ pub const MAX_RESPONSE_CONTENT_TYPE_BYTES: usize = 256;
 pub const MAX_RESPONSE_RETRY_AFTER_BYTES: usize = 256;
 
 /// The version of the closed provider quota response metadata contract.
-pub const PROVIDER_QUOTA_METADATA_CONTRACT_VERSION: u16 = 1;
+///
+/// Version two (B7a) makes the captured header names a per-package declaration
+/// ([`ProviderQuotaHeaderMapV1`]); the normalized field set and the value bounds are unchanged. A
+/// version-one capture is exactly a version-two capture with [`ProviderQuotaHeaderMapV1::canonical`].
+pub const PROVIDER_QUOTA_METADATA_CONTRACT_VERSION: u16 = 2;
 
 /// The exact number of approved provider quota response metadata fields.
 pub const PROVIDER_QUOTA_METADATA_FIELD_COUNT: usize = 9;
@@ -1120,7 +1139,13 @@ impl SignedHeaderSetV1 {
 /// Values never come from credential resolution. [`ProviderAuthV1`] remains the sole path a
 /// secret takes to the wire; there is deliberately no conversion from a resolved secret into a
 /// query value.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+///
+/// Since HTTP contract version ten the set also has a declared form, [`Self::Declared`]: a name a
+/// package declared in its manifest, carrying the value syntax gate ① validated (B7a). The fixed
+/// variants stay and keep their grammars. Declaring a name needs a denylist where the closed set
+/// needed none ([`DeclaredQueryParameterV1::try_new`]). The enum is no longer `Copy`, because the
+/// declared form owns its name.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum QueryParameterV1 {
     /// `api-version` (Azure `OpenAI`, Azure AI Foundry).
     ApiVersion,
@@ -1144,19 +1169,22 @@ pub enum QueryParameterV1 {
     TaskId,
     /// `file_id` for `MiniMax` v1 artifact retrieval; a bounded decimal identifier.
     FileId,
+    /// A parameter a package declared in its manifest (HTTP contract version ten, B7a).
+    Declared(DeclaredQueryParameterV1),
 }
 
 impl QueryParameterV1 {
-    /// Every sanctioned parameter, in canonical declaration order.
+    /// Every sanctioned (fixed) parameter, in canonical declaration order.
     ///
     /// Serialization follows this order, so a request's query is byte-identical regardless of the
-    /// order the host declared its parameters in.
+    /// order the host declared its parameters in. Declared parameters are not listed: they follow
+    /// every sanctioned one, in byte order of their names.
     pub const ALL: [Self; 5] =
         [Self::ApiVersion, Self::Alt, Self::GroupId, Self::TaskId, Self::FileId];
 
-    /// Returns the wire name of the sanctioned parameter.
+    /// Returns the wire name of the parameter.
     #[must_use]
-    pub const fn wire_name(&self) -> &'static str {
+    pub fn wire_name(&self) -> &str {
         match self {
             Self::ApiVersion => "api-version",
             Self::Alt => "alt",
@@ -1164,7 +1192,15 @@ impl QueryParameterV1 {
             Self::GroupId => "GroupId",
             Self::TaskId => "task_id",
             Self::FileId => "file_id",
+            Self::Declared(parameter) => parameter.name(),
         }
+    }
+
+    /// The parameter's position in canonical order: sanctioned parameters by their `ALL` index,
+    /// then declared ones by name. The name is unreserved ASCII, so its bytes order it.
+    fn canonical_key(&self) -> (usize, &str) {
+        let position = Self::ALL.iter().position(|sanctioned| sanctioned == self);
+        (position.unwrap_or(Self::ALL.len()), self.wire_name())
     }
 
     /// Checks a candidate value against this parameter's own grammar.
@@ -1173,7 +1209,7 @@ impl QueryParameterV1 {
     /// grammar is known exactly, so a shared rule would admit values no upstream accepts and turn
     /// a contract error into a runtime rejection.
     #[must_use]
-    fn accepts(self, value: &str) -> bool {
+    fn accepts(&self, value: &str) -> bool {
         match self {
             // Real Azure versions are dated (`2024-10-21`, `2025-04-01-preview`) or the literal
             // `v1`. This is deliberately stricter than the adopting host's own handling, which
@@ -1201,6 +1237,7 @@ impl QueryParameterV1 {
                     && value.len() <= MAX_QUERY_VALUE_BYTES
                     && value.bytes().all(|byte| byte.is_ascii_digit())
             }
+            Self::Declared(parameter) => parameter.syntax().admits(value),
         }
     }
 }
@@ -1230,7 +1267,9 @@ impl QueryStringV1 {
             if !parameter.accepts(value) {
                 return Err(ContractErrorV1::InvalidQueryValue);
             }
-            if declared.iter().any(|(seen, _)| *seen == parameter) {
+            // By wire name, so a declared parameter cannot repeat another one either. The
+            // declared constructor already refuses every sanctioned name.
+            if declared.iter().any(|(seen, _)| seen.wire_name() == parameter.wire_name()) {
                 return Err(ContractErrorV1::DuplicateQueryParameter);
             }
             declared.push((parameter, value));
@@ -1239,27 +1278,17 @@ impl QueryStringV1 {
             return Err(ContractErrorV1::EmptyQuery);
         }
 
+        // Canonical order: the sanctioned parameters in `ALL` order, then the declared ones by
+        // name. The sort is over distinct keys, so the result does not depend on input order.
+        declared.sort_by(|(left, _), (right, _)| left.canonical_key().cmp(&right.canonical_key()));
         let mut serialized = String::new();
-        let mut emitted = 0_usize;
-        for parameter in QueryParameterV1::ALL {
-            let Some((_, value)) = declared.iter().find(|(seen, _)| *seen == parameter) else {
-                continue;
-            };
+        for (parameter, value) in &declared {
             if !serialized.is_empty() {
                 serialized.push('&');
             }
             serialized.push_str(parameter.wire_name());
             serialized.push('=');
             serialized.push_str(value);
-            emitted += 1;
-        }
-        // Serialization iterates `ALL` while validation iterates the caller's input, so a variant
-        // missing from `ALL` would validate and then contribute nothing — silently dropping a
-        // parameter, or producing a bare trailing `?` when it was the only one. Unlike
-        // `wire_name`'s exhaustive match, `ALL` membership is not compiler-enforced, so compare
-        // the two counts and fail loudly instead of emitting a URL the caller did not ask for.
-        if emitted != declared.len() || serialized.is_empty() {
-            return Err(ContractErrorV1::EmptyQuery);
         }
         if serialized.len() > MAX_QUERY_TOTAL_BYTES {
             return Err(ContractErrorV1::QueryTooLarge);
@@ -1300,6 +1329,11 @@ impl fmt::Debug for QueryStringV1 {
 /// resolver output, configuration, or request data to a user-agent value. (`String::leak` defeats
 /// this, so `'static` provenance is a discipline claim against accidental flows, not a proof
 /// against a hostile host.)
+///
+/// Amended 2026-10-02 (B7a, §16 Q15): host program text is no longer the only source. A package
+/// may declare a per-family value in its manifest, which gate ① checks against this same grammar
+/// and which travels as a [`DeclaredUserAgentV1`] in the same single [`UserAgentV1`] slot. This
+/// type and its `'static` constructor are unchanged and remain the way to send a host literal.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct ControlledUserAgentV1 {
     value: &'static str,
@@ -1318,21 +1352,11 @@ impl ControlledUserAgentV1 {
     ///
     /// Returns [`ContractErrorV1::InvalidUserAgentValue`] when the value violates the grammar.
     pub const fn try_from_static(value: &'static str) -> Result<Self, ContractErrorV1> {
-        let bytes = value.as_bytes();
-        if bytes.is_empty() || bytes.len() > MAX_USER_AGENT_BYTES {
-            return Err(ContractErrorV1::InvalidUserAgentValue);
+        if declared::user_agent_grammar_admits(value.as_bytes()) {
+            Ok(Self { value })
+        } else {
+            Err(ContractErrorV1::InvalidUserAgentValue)
         }
-        if bytes[0] == b' ' || bytes[bytes.len() - 1] == b' ' {
-            return Err(ContractErrorV1::InvalidUserAgentValue);
-        }
-        let mut index = 0;
-        while index < bytes.len() {
-            if bytes[index] < 0x20 || bytes[index] > 0x7E {
-                return Err(ContractErrorV1::InvalidUserAgentValue);
-            }
-            index += 1;
-        }
-        Ok(Self { value })
     }
 
     /// Returns the declared user-agent value.
@@ -1477,7 +1501,7 @@ pub struct JsonPostRequestV1 {
     body: JsonBodyV1,
     auth: ProviderAuthV1,
     query: Option<QueryStringV1>,
-    user_agent: Option<ControlledUserAgentV1>,
+    user_agent: Option<UserAgentV1>,
 }
 
 impl JsonPostRequestV1 {
@@ -1515,16 +1539,20 @@ impl JsonPostRequestV1 {
     ///
     /// A separate builder rather than a `new` parameter so http-contract-version-two call sites
     /// keep compiling unchanged: a v2 request is exactly a v3 request with no user-agent.
+    ///
+    /// Takes a host literal ([`ControlledUserAgentV1`]) or, since HTTP contract version ten, a
+    /// declared manifest value ([`DeclaredUserAgentV1`]). Either fills the one slot, replacing
+    /// whatever it held.
     #[must_use]
-    pub const fn with_user_agent(mut self, user_agent: ControlledUserAgentV1) -> Self {
-        self.user_agent = Some(user_agent);
+    pub fn with_user_agent(mut self, user_agent: impl Into<UserAgentV1>) -> Self {
+        self.user_agent = Some(user_agent.into());
         self
     }
 
     /// Returns the sanctioned user-agent declaration, when one was attached.
     #[must_use]
-    pub const fn user_agent(&self) -> Option<ControlledUserAgentV1> {
-        self.user_agent
+    pub const fn user_agent(&self) -> Option<&UserAgentV1> {
+        self.user_agent.as_ref()
     }
 
     /// Returns the provider-selected relative path.
@@ -1577,7 +1605,7 @@ pub struct GetRequestV1 {
     headers: SafeHeaders,
     auth: ProviderAuthV1,
     query: Option<QueryStringV1>,
-    user_agent: Option<ControlledUserAgentV1>,
+    user_agent: Option<UserAgentV1>,
 }
 
 impl GetRequestV1 {
@@ -1612,16 +1640,20 @@ impl GetRequestV1 {
     }
 
     /// Attaches a sanctioned user-agent declaration to this request.
+    ///
+    /// Takes a host literal ([`ControlledUserAgentV1`]) or, since HTTP contract version ten, a
+    /// declared manifest value ([`DeclaredUserAgentV1`]). Either fills the one slot, replacing
+    /// whatever it held.
     #[must_use]
-    pub const fn with_user_agent(mut self, user_agent: ControlledUserAgentV1) -> Self {
-        self.user_agent = Some(user_agent);
+    pub fn with_user_agent(mut self, user_agent: impl Into<UserAgentV1>) -> Self {
+        self.user_agent = Some(user_agent.into());
         self
     }
 
     /// Returns the sanctioned user-agent declaration, when one was attached.
     #[must_use]
-    pub const fn user_agent(&self) -> Option<ControlledUserAgentV1> {
-        self.user_agent
+    pub const fn user_agent(&self) -> Option<&UserAgentV1> {
+        self.user_agent.as_ref()
     }
 
     /// Returns the provider-selected relative path.
@@ -1670,7 +1702,7 @@ pub struct MultipartPostRequestV1 {
     body: MultipartBodyV1,
     auth: ProviderAuthV1,
     query: Option<QueryStringV1>,
-    user_agent: Option<ControlledUserAgentV1>,
+    user_agent: Option<UserAgentV1>,
 }
 
 impl MultipartPostRequestV1 {
@@ -1714,16 +1746,20 @@ impl MultipartPostRequestV1 {
     }
 
     /// Attaches a sanctioned user-agent declaration to this request.
+    ///
+    /// Takes a host literal ([`ControlledUserAgentV1`]) or, since HTTP contract version ten, a
+    /// declared manifest value ([`DeclaredUserAgentV1`]). Either fills the one slot, replacing
+    /// whatever it held.
     #[must_use]
-    pub const fn with_user_agent(mut self, user_agent: ControlledUserAgentV1) -> Self {
-        self.user_agent = Some(user_agent);
+    pub fn with_user_agent(mut self, user_agent: impl Into<UserAgentV1>) -> Self {
+        self.user_agent = Some(user_agent.into());
         self
     }
 
     /// Returns the sanctioned user-agent declaration, when one was attached.
     #[must_use]
-    pub const fn user_agent(&self) -> Option<ControlledUserAgentV1> {
-        self.user_agent
+    pub const fn user_agent(&self) -> Option<&UserAgentV1> {
+        self.user_agent.as_ref()
     }
 
     /// Returns the provider-selected relative path.
@@ -1789,6 +1825,29 @@ pub enum ProviderQuotaMetadataFieldV1 {
 }
 
 impl ProviderQuotaMetadataFieldV1 {
+    /// Every field, in index order (B7a).
+    ///
+    /// The quota header declaration of a package maps a header onto one of these, and the
+    /// canonical declaration reads each from its own header name.
+    pub const ALL: [Self; PROVIDER_QUOTA_METADATA_FIELD_COUNT] = [
+        Self::XRateLimitLimitTokens,
+        Self::XRateLimitRemainingTokens,
+        Self::XRateLimitResetTokens,
+        Self::AnthropicRateLimitTokensLimit,
+        Self::AnthropicRateLimitTokensRemaining,
+        Self::AnthropicRateLimitTokensReset,
+        Self::AnthropicRateLimitUnifiedLimit,
+        Self::AnthropicRateLimitUnifiedRemaining,
+        Self::AnthropicRateLimitUnifiedReset,
+    ];
+
+    /// Returns the field whose canonical header name is `name`, which is also how a manifest's
+    /// quota header declaration names the field it feeds (B7a).
+    #[must_use]
+    pub fn from_header_name(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|field| field.as_header_name() == name)
+    }
+
     /// Returns the canonical lowercase HTTP header name.
     #[must_use]
     pub const fn as_header_name(self) -> &'static str {
@@ -2985,6 +3044,13 @@ pub enum ContractErrorV1 {
     /// A declared header-secret arm names a header outside the package's declaration.
     #[error("secret header is not declared by the package")]
     UndeclaredSecretHeader,
+    // B7a (query, quota, user-agent): declared provider instances.
+    /// A declared query parameter's name or value syntax is refused.
+    #[error("declared query parameter is invalid")]
+    InvalidQueryDeclaration,
+    /// A declared quota header set is empty or names a refused, repeated or reused entry.
+    #[error("declared quota headers are invalid")]
+    InvalidQuotaHeaderDeclaration,
 }
 
 impl ContractErrorV1 {
@@ -3008,6 +3074,9 @@ impl ContractErrorV1 {
             Self::InvalidSecretHeaderName => "INVALID_SECRET_HEADER_NAME",
             Self::InvalidSecretHeaderSet => "INVALID_SECRET_HEADER_SET",
             Self::UndeclaredSecretHeader => "UNDECLARED_SECRET_HEADER",
+            // B7a (query, quota, user-agent).
+            Self::InvalidQueryDeclaration => "INVALID_QUERY_DECLARATION",
+            Self::InvalidQuotaHeaderDeclaration => "INVALID_QUOTA_HEADER_DECLARATION",
         }
     }
 }
@@ -3241,8 +3310,9 @@ mod query_serialization_completeness_tests {
                 QueryParameterV1::GroupId => "19000",
                 QueryParameterV1::TaskId => "276843862449040",
                 QueryParameterV1::FileId => "00176844028768320",
+                QueryParameterV1::Declared(_) => unreachable!("`ALL` lists only fixed parameters"),
             };
-            let query = QueryStringV1::try_from_iter([(parameter, value)])
+            let query = QueryStringV1::try_from_iter([(parameter.clone(), value)])
                 .expect("a sanctioned parameter with a valid value must construct");
             assert_eq!(query.as_str(), format!("{}={value}", parameter.wire_name()));
         }

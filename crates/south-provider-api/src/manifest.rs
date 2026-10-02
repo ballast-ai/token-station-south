@@ -389,6 +389,20 @@ pub struct ComponentManifestV1 {
     /// Each family's non-secret configuration keys (§7.3). Provider world only.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub config_schema: BTreeMap<String, BTreeMap<String, crate::ConfigKeyV1>>,
+    // B7a (query, quota, user-agent): provider instances, §10. Provider world only.
+    /// Query parameters the package's requests may carry beyond the fixed sanctioned ones, each a
+    /// name and a value syntax. A `Vec`, so a repeated name is refused rather than collapsed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub query_parameters: Vec<crate::QueryParameterDeclarationV1>,
+    /// The response headers the host's transport captures as quota metadata, each feeding one
+    /// closed field. Package level, because responses are parsed without configuration (R6).
+    /// Absent (or empty) means each field is read from its own canonical header, as before.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub quota_headers: Vec<crate::QuotaHeaderDeclarationV1>,
+    /// Each family's `user-agent` value, under the controlled user-agent value grammar (§16 Q15).
+    /// A family without an entry sends whatever the host sends today.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub user_agent: BTreeMap<String, String>,
     pub permissions: ComponentPermissionsV1,
     pub conformance: ConformanceSpecV1,
     pub compatibility: CompatibilityDeclarationV1,
@@ -642,6 +656,7 @@ impl ComponentManifestV1 {
         self.validate_signing()?;
         self.validate_secret_headers()?;
         self.validate_role(world)?;
+        self.validate_instances(world)?;
         self.validate_conformance(world)?;
         self.validate_compatibility(world)
     }
@@ -1130,6 +1145,15 @@ pub enum ManifestErrorV1 {
     InvalidKernelRevision(String),
     #[error("compatibility.south_runtime `{0}` is not a `major.minor.patch` triple")]
     InvalidSouthRuntimeVersion(String),
+    // B7a (query, quota, user-agent).
+    #[error("{0} is a provider-world declaration")]
+    InstanceIsAProviderWorldDeclaration(String),
+    #[error("query parameter `{name}`: {detail}")]
+    InvalidQueryParameter { name: String, detail: String },
+    #[error("quota header `{header}`: {detail}")]
+    InvalidQuotaHeader { header: String, detail: String },
+    #[error("user_agent for family `{family}`: {detail}")]
+    InvalidUserAgent { family: String, detail: String },
 }
 
 // -- compatibility admission -------------------------------------------------
