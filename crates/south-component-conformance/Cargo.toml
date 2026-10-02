@@ -24,6 +24,7 @@ sandbox = ["dep:south-provider-runtime"]
 
 [dev-dependencies]
 proptest.workspace = true
+sha2.workspace = true
 
 [[test]]
 name = "sandbox_parity_v1"

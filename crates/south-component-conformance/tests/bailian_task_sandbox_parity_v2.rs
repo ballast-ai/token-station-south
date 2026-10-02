@@ -15,6 +15,9 @@ use south_provider_runtime::{
     ComponentRuntimeV1, LoadedComponentV1, RuntimeLimitsV1, SecretSignerV1,
 };
 
+#[path = "support/gate2_report.rs"]
+mod gate2_report;
+
 fn repo_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().and_then(Path::parent).expect("repo root")
 }
@@ -83,7 +86,9 @@ fn sandboxed() -> SandboxedTaskComponentV2 {
 /// does, against the same frozen pack.
 #[test]
 fn the_sandboxed_component_passes_gate_two_byte_for_byte() {
+    let evidence = gate2_report::Evidence::capture("task-bailian-v2", component_wasm());
     let report = run_task_component_suite_v2(&sandboxed(), &pack());
+    evidence.record(&report);
     assert!(
         report.is_passing(),
         "the sandboxed component must pass the suite its reference passes: {:?}",
