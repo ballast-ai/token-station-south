@@ -12,7 +12,7 @@ use std::error::Error;
 use std::fmt;
 
 use south_contracts::SecretHeaderV1;
-use south_provider_api::ComponentManifestV1;
+use south_provider_api::{ComponentManifestV1, SlotV1};
 use token_station_protocol::{Auth, DescriptorError, HttpRequestDescriptor, ProviderConfig};
 
 /// The presentation an admitted descriptor asks the host for.
@@ -45,8 +45,8 @@ pub enum DescriptorAuthErrorV1 {
     HeaderSecretNotDeclared,
     /// The descriptor names a header that is not a sanctioned secret-bearing header.
     HeaderNotSanctioned(String),
-    /// The descriptor asks for an OAuth exchange. Admitted only once credential recipes declare
-    /// the minted slot (§3, phase B4).
+    /// The descriptor asks for an OAuth exchange on a slot the manifest's credential recipes do
+    /// not mint (§3.3, §4.2).
     OAuthNotAdmitted,
     /// A `host_signed` package's descriptor names a credential; its requests are signed by the
     /// host and carry none.
@@ -66,9 +66,9 @@ impl fmt::Display for DescriptorAuthErrorV1 {
             Self::HeaderNotSanctioned(name) => {
                 write!(f, "`{name}` is not a sanctioned secret-bearing header")
             }
-            Self::OAuthNotAdmitted => f.write_str(
-                "OAuth descriptors are not admitted until a credential recipe declares the slot",
-            ),
+            Self::OAuthNotAdmitted => {
+                f.write_str("an OAuth descriptor names a slot no credential recipe mints")
+            }
             Self::HostSignedCarriesAuth => f.write_str(
                 "a host-signed package's descriptor must not name a credential; the host signs it",
             ),
@@ -86,7 +86,8 @@ impl Error for DescriptorAuthErrorV1 {}
 /// - a `host_signed` package's descriptor must carry no auth (the host passes no slot for it);
 /// - `Auth::Bearer` requires the `bearer` arm;
 /// - `Auth::Header` requires the `header_secret` arm and a sanctioned header name;
-/// - `Auth::OAuth` is refused until phase B4;
+/// - `Auth::OAuth` is admitted, as Bearer, only on a slot a credential recipe mints (§3.3); the
+///   host's recipe executor produces the value, and nothing in the descriptor names an exchange;
 /// - no auth is admitted when, and only when, the upstream is configured without a slot (which
 ///   `authorize` has already judged).
 ///
@@ -121,6 +122,15 @@ pub fn admit_descriptor_auth(
                 .map(AdmittedAuthV1::HeaderSecret)
                 .ok_or_else(|| DescriptorAuthErrorV1::HeaderNotSanctioned(name.clone()))
         }
-        Some(Auth::OAuth { .. }) => Err(DescriptorAuthErrorV1::OAuthNotAdmitted),
+        Some(Auth::OAuth { secret, .. }) => {
+            let minted = manifest.credentials.as_ref().is_some_and(|credentials| {
+                matches!(credentials.slots.get(secret.as_str()), Some(SlotV1::Minted(_)))
+            });
+            if minted {
+                Ok(AdmittedAuthV1::Bearer)
+            } else {
+                Err(DescriptorAuthErrorV1::OAuthNotAdmitted)
+            }
+        }
     }
 }

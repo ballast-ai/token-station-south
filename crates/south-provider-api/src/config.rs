@@ -93,7 +93,7 @@ impl ValueSyntaxV1 {
 
     /// Whether every value of this syntax can stand inside a DNS label, which is what a parameter
     /// in an endpoint's host part must be: it may choose a label, never the domain.
-    fn is_label_safe(&self) -> bool {
+    pub(crate) fn is_label_safe(&self) -> bool {
         match self {
             Self::AwsRegion | Self::GcpProjectId | Self::Digits => true,
             Self::Enum(values) => values.iter().all(|value| is_dns_label(value)),
@@ -101,7 +101,7 @@ impl ValueSyntaxV1 {
         }
     }
 
-    fn is_well_formed(&self) -> bool {
+    pub(crate) fn is_well_formed(&self) -> bool {
         match self {
             Self::PrintableAscii(max) => (1..=MAX_PRINTABLE_ASCII).contains(max),
             Self::Enum(values) => {
@@ -204,6 +204,44 @@ fn encode_segment(value: &str) -> String {
     encoded
 }
 
+/// The parameters of an `https` endpoint template, each with whether it sits in the host part, or
+/// why the template is refused.
+///
+/// Shared by family endpoints (§7.3) and credential-recipe endpoints (§3.3, §3.4): the domain is
+/// fixed — the host part ends with a literal of at least two labels, so a parameter may choose a
+/// label but never the domain — and there is no port, query, fragment, userinfo or escape.
+pub fn template_params(template: &str) -> Result<Vec<(&str, bool)>, &'static str> {
+    let rest = template
+        .strip_prefix("https://")
+        .filter(|_| template.len() <= MAX_TEMPLATE_BYTES)
+        .filter(|rest| {
+            rest.bytes().all(|byte| byte.is_ascii_graphic() && !b"?#@\\%".contains(&byte))
+        })
+        .ok_or(
+            "the endpoint must be an https template without query, fragment, userinfo or escapes",
+        )?;
+    let (authority, path) = rest.find('/').map_or((rest, ""), |slash| rest.split_at(slash));
+    let authority_parts = parts(authority).ok_or("the endpoint's braces are malformed")?;
+    let path_parts = parts(path).ok_or("the endpoint's braces are malformed")?;
+    match authority_parts.last() {
+        Some(Part::Literal(suffix))
+            if suffix.trim_start_matches('.').contains('.')
+                && suffix.bytes().all(|byte| {
+                    byte.is_ascii_lowercase() || byte.is_ascii_digit() || b".-".contains(&byte)
+                }) => {}
+        _ => return Err("the endpoint's host must end in a fixed domain without a port"),
+    }
+    Ok(authority_parts
+        .iter()
+        .map(|part| (part, true))
+        .chain(path_parts.iter().map(|part| (part, false)))
+        .filter_map(|(part, in_host)| match part {
+            Part::Param(name) => Some((*name, in_host)),
+            Part::Literal(_) => None,
+        })
+        .collect())
+}
+
 impl ComponentManifestV1 {
     pub(crate) fn validate_endpoints(&self) -> Result<(), ManifestErrorV1> {
         for (family, keys) in &self.config_schema {
@@ -237,42 +275,10 @@ impl ComponentManifestV1 {
                 return Err(invalid("endpoint names a family the manifest does not declare"));
             }
             let keys = self.config_schema.get(family);
-            let rest = template
-                .strip_prefix("https://")
-                .filter(|_| template.len() <= MAX_TEMPLATE_BYTES)
-                .filter(|rest| {
-                    rest.bytes().all(|byte| byte.is_ascii_graphic() && !b"?#@\\%".contains(&byte))
-                })
-                .ok_or_else(|| invalid("the endpoint must be an https template without query, fragment, userinfo or escapes"))?;
-            let (authority, path) = rest.find('/').map_or((rest, ""), |slash| rest.split_at(slash));
-            let authority_parts =
-                parts(authority).ok_or_else(|| invalid("the endpoint's braces are malformed"))?;
-            let path_parts =
-                parts(path).ok_or_else(|| invalid("the endpoint's braces are malformed"))?;
-            // The domain is fixed: the host part ends with a literal of at least two labels, so a
-            // parameter may choose a label but never the domain the request goes to.
-            match authority_parts.last() {
-                Some(Part::Literal(suffix))
-                    if suffix.trim_start_matches('.').contains('.')
-                        && suffix.bytes().all(|byte| {
-                            byte.is_ascii_lowercase()
-                                || byte.is_ascii_digit()
-                                || b".-".contains(&byte)
-                        }) => {}
-                _ => {
-                    return Err(invalid(
-                        "the endpoint's host must end in a fixed domain without a port",
-                    ));
-                }
-            }
+            let params = template_params(template).map_err(invalid)?;
             let mut used = Vec::new();
-            for (part, in_host) in authority_parts
-                .iter()
-                .map(|part| (part, true))
-                .chain(path_parts.iter().map(|part| (part, false)))
-            {
-                let Part::Param(name) = part else { continue };
-                let Some(declaration) = keys.and_then(|keys| keys.get(*name)) else {
+            for (name, in_host) in params {
+                let Some(declaration) = keys.and_then(|keys| keys.get(name)) else {
                     return Err(invalid("an endpoint parameter is not a config key of the family"));
                 };
                 if !declaration.required {
@@ -281,7 +287,7 @@ impl ComponentManifestV1 {
                 if in_host && !declaration.syntax.is_label_safe() {
                     return Err(invalid("a host parameter's syntax must fit inside a DNS label"));
                 }
-                used.push(*name);
+                used.push(name);
             }
             if let Some(unused) =
                 keys.and_then(|keys| keys.keys().find(|key| !used.contains(&key.as_str())))

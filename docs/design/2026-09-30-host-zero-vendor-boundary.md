@@ -1373,6 +1373,40 @@ to native reference implementations. Where §8 left a choice open:
   clean rebuild of `provider-gemini` was byte-identical. Builds on a different runner image would surface as a false
   "bump the version".
 
+### 13.3 Implementation of B4 (2026-10-02, in progress)
+
+Phase B4 is on branch `feature/b4-credential-recipes`, stacked on B3 (§13.2). Under the owner's standing rule,
+three questions were taken as recommended:
+
+- Q11: package signing comes before third-party recipes.
+- Q18 (south half): the operator confirms every recipe endpoint per package digest.
+- Q2: the ARCHITECTURE sentence is revised as §3.5 proposes.
+
+**Gate ① (§3.7)** is implemented as the `credentials` section of the manifest (`CredentialsV1`).
+- It checks the closed step kinds and algorithms, and caps a recipe at 4 steps.
+- Rotation has no default. A recipe that rotates requires `write_back`, which must target a secret field.
+- `present` must be reachable.
+- `goto` may only name a later step, so the graph is acyclic by construction.
+- Endpoints follow the family-endpoint template rules (§7.3). Their parameters come only from whole non-secret
+  fields that have a syntax.
+- It enforces the §3.4 rules: `aud` is bound to the receiving step, `sub` is never a constant, and attributes
+  come only from non-secret fields.
+- A clamp declared by a recipe must lie within 60 seconds to 24 hours.
+- A selector may test whether a secret field is present, never its value.
+- Its test proves the vocabulary expresses the Vertex, Codex, Copilot, Kiro and Kling recipes of §3.9.
+
+**Three rules the record did not pin, decided here:**
+- A recipe may not set the headers `authorization`, `cookie`, `host` or the framing headers. A credential is
+  presented through the step's `auth` (scheme plus value).
+- The signing key of `jwt_sign` must come from a secret field.
+- A seed fills only a minted slot.
+
+**Endpoints for confirmation.** `CredentialsV1::endpoints()` lists every endpoint a package's recipes can reach,
+which is what an operator confirms.
+
+**OAuth admission.** `admit_descriptor_auth` now admits `Auth::OAuth`, as Bearer, exactly when a recipe mints the
+slot (§4.2).
+
 ## 14. Existing text to revise in step
 
 - ARCHITECTURE.md:117-126: change the concluding sentence to "execution, material, reachable destinations and the

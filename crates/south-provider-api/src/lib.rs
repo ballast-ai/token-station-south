@@ -35,9 +35,17 @@
 //! installed components are compiled artifacts that cannot be migrated.
 
 mod config;
+mod credentials;
 mod manifest;
 
 pub use config::{ConfigErrorV1, ConfigKeyV1, ValueSyntaxV1};
+pub use credentials::{
+    AttributeV1, CREDENTIAL_RECIPE_SCHEMA, ConstantV1, CredentialFieldV1, CredentialsV1,
+    EncodingV1, ExtractV1, FieldRefV1, HOST_MAX_TTL_SECONDS, HOST_MIN_TTL_SECONDS, ImportRuleV1,
+    JwtAlgorithmV1, JwtClaimV1, MAX_RECIPE_STEPS, PredicateV1, RecipeV1, SeedClockV1, SeedV1,
+    SelectRuleV1, SlotV1, StatusActionV1, StepAuthV1, StepKindV1, StepMethodV1, StepV1,
+    ValueSourceV1, WithoutRefreshMaterialV1,
+};
 
 pub use manifest::{
     COMPONENT_BEHAVIOR_SUITE, CompatibilityDeclarationV1, CompatibilityMismatchV1,
