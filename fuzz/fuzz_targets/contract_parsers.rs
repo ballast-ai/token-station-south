@@ -7,15 +7,16 @@ use south_component_conformance::task_v2_json::{
     prepared_task_json, render_context_json, submit_outcome_json,
 };
 use south_contracts::{
-    CredentialSlotV1, JsonBodyV1, MAX_CREDENTIAL_SLOT_BYTES, MAX_ENDPOINT_BYTES,
-    MAX_JSON_REQUEST_BODY_BYTES, MAX_PROVIDER_QUOTA_METADATA_TOTAL_BYTES,
+    AwsEventStreamDeframerV1, CredentialSlotV1, JsonBodyV1, MAX_CREDENTIAL_SLOT_BYTES,
+    MAX_ENDPOINT_BYTES, MAX_JSON_REQUEST_BODY_BYTES, MAX_PROVIDER_QUOTA_METADATA_TOTAL_BYTES,
     MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES, MAX_QUERY_TOTAL_BYTES, MAX_RELATIVE_PATH_BYTES,
     MAX_RESPONSE_DIAGNOSTIC_TOTAL_BYTES, MAX_RESPONSE_DIAGNOSTIC_VALUE_BYTES,
     MAX_RESPONSE_TRANSCRIPT_COUNT, MAX_RESPONSE_TRANSCRIPT_NAME_BYTES,
     MAX_RESPONSE_TRANSCRIPT_TOTAL_BYTES, MAX_RESPONSE_TRANSCRIPT_VALUE_BYTES, ProviderEndpointV1,
     ProviderQuotaMetadataFieldV1, ProviderQuotaMetadataV1, QueryParameterV1, QueryStringV1,
     RESPONSE_DIAGNOSTIC_FIELD_COUNT, RelativePathV1, ResponseDiagnosticFieldV1,
-    ResponseDiagnosticsV1, ResponseTranscriptV1,
+    ResponseDiagnosticsV1, ResponseTranscriptV1, deframe_aws_eventstream_v1,
+    reencode_eventstream_v1,
 };
 
 const QUOTA_FIELDS: [ProviderQuotaMetadataFieldV1; 9] = [
@@ -30,7 +31,99 @@ const QUOTA_FIELDS: [ProviderQuotaMetadataFieldV1; 9] = [
     ProviderQuotaMetadataFieldV1::AnthropicRateLimitUnifiedReset,
 ];
 
+/// Bitwise CRC32 (IEEE), so constructed frames reach the header and payload grammar instead of
+/// stopping at the checksums, which random bytes almost never satisfy.
+fn crc32(bytes: &[u8]) -> u32 {
+    let mut crc = u32::MAX;
+    for &byte in bytes {
+        crc ^= u32::from(byte);
+        for _ in 0..8 {
+            crc = if crc & 1 == 1 { (crc >> 1) ^ 0xEDB8_8320 } else { crc >> 1 };
+        }
+    }
+    !crc
+}
+
+fn eventstream_frame(header_block: &[u8], payload: &[u8]) -> Vec<u8> {
+    let length = |len: usize| u32::try_from(len).expect("fuzz inputs are small").to_be_bytes();
+    let mut frame = Vec::new();
+    frame.extend_from_slice(&length(16 + header_block.len() + payload.len()));
+    frame.extend_from_slice(&length(header_block.len()));
+    frame.extend_from_slice(&crc32(&frame).to_be_bytes());
+    frame.extend_from_slice(header_block);
+    frame.extend_from_slice(payload);
+    frame.extend_from_slice(&crc32(&frame).to_be_bytes());
+    frame
+}
+
+/// The AWS eventstream deframer and canonical re-encoding (host-zero-vendor-boundary §5.2).
+fn fuzz_eventstream(data: &[u8]) {
+    // Raw upstream bytes: chunking never changes the messages or the first error.
+    let whole = deframe_aws_eventstream_v1(data);
+    let stride = usize::from(data.first().copied().unwrap_or(0) % 17) + 1;
+    let mut deframer = AwsEventStreamDeframerV1::new();
+    let mut messages = Vec::new();
+    let mut outcome = Ok(());
+    'chunks: for chunk in data.chunks(stride) {
+        deframer.push(chunk);
+        loop {
+            match deframer.next_message() {
+                Ok(Some(message)) => messages.push(message),
+                Ok(None) => break,
+                Err(error) => {
+                    outcome = Err(error);
+                    break 'chunks;
+                }
+            }
+        }
+    }
+    if outcome.is_ok() {
+        outcome = deframer.finish();
+    }
+    match whole {
+        Ok(expected) => {
+            assert_eq!(outcome, Ok(()));
+            assert_eq!(messages, expected);
+        }
+        Err(error) => assert_eq!(outcome, Err(error)),
+    }
+
+    // A checksum-valid frame around fuzzed headers and payload, behind a fuzz-selected message
+    // type, exercises the header grammar and the re-encoding.
+    let Some((&selector, rest)) = data.split_first() else {
+        return;
+    };
+    let split = usize::from(selector) % (rest.len() + 1);
+    let (fuzzed_headers, payload) = rest.split_at(split);
+    let message_type: &[u8] = match selector % 3 {
+        0 => b"event",
+        1 => b"exception",
+        _ => b"error",
+    };
+    let mut header_block = vec![13];
+    header_block.extend_from_slice(b":message-type");
+    header_block.push(7);
+    header_block
+        .extend_from_slice(&u16::try_from(message_type.len()).expect("short").to_be_bytes());
+    header_block.extend_from_slice(message_type);
+    header_block.extend_from_slice(fuzzed_headers);
+    let Ok(decoded) = deframe_aws_eventstream_v1(&eventstream_frame(&header_block, payload)) else {
+        return;
+    };
+    assert_eq!(decoded.len(), 1);
+    if let Ok(frame) = reencode_eventstream_v1(&decoded[0]) {
+        // Exactly one SSE frame: the `event:` line, the `data:` line, the blank line.
+        assert!(frame.starts_with("event: "));
+        assert!(frame.ends_with("\n\n"));
+        assert_eq!(frame.matches('\n').count(), 3);
+        assert!(!frame.contains('\r'));
+        assert_eq!(frame.lines().nth(1).map(|line| line.starts_with("data: ")), Some(true));
+    }
+}
+
 fuzz_target!(|data: &[u8]| {
+    fuzz_eventstream(data);
+
     let Ok(input) = std::str::from_utf8(data) else {
         return;
     };

@@ -10,7 +10,7 @@ use south_component_conformance::reference::OpenAiCompatibleReferenceV1;
 use south_component_conformance::sandbox::SandboxedComponentV1;
 use south_component_conformance::{
     FixturePackV1, ProviderComponentV1, accepts_manifest, reported_identity_matches,
-    run_provider_component_suite_v1,
+    run_provider_component_suite_v1_for_manifest,
 };
 use south_provider_api::ComponentManifestV1;
 use south_provider_api::{HostExpectationsV1, compatibility_matches};
@@ -84,7 +84,8 @@ fn the_sandboxed_component_passes_gate_two_byte_for_byte() {
         .expect("the shipped fixture pack loads");
     let component = sandboxed();
 
-    let report = run_provider_component_suite_v1(&component, &pack);
+    let report =
+        run_provider_component_suite_v1_for_manifest(&component, &pack, &shipped_manifest().1);
     for failure in report.failures() {
         eprintln!("{failure}");
     }

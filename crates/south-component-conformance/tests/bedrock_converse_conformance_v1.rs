@@ -15,7 +15,7 @@ use std::path::Path;
 use south_component_conformance::reference_bedrock_converse::BedrockConverseReferenceV1;
 use south_component_conformance::{
     FixturePackV1, ProviderComponentV1, accepts_manifest, reported_identity_matches,
-    run_provider_component_suite_v1,
+    run_provider_component_suite_v1_for_manifest,
 };
 use south_provider_api::{
     ComponentManifestV1, HostExpectationsV1, PROVIDER_WORLD, SIGNED_HEADER_NAMES,
@@ -108,7 +108,11 @@ fn the_manifest_declares_the_host_signed_arm_and_nothing_beside_it() {
 /// Gate ②: the reference implementation answers its own frozen pack exactly.
 #[test]
 fn gate_two_passes_over_the_shipped_pack() {
-    let report = run_provider_component_suite_v1(&BedrockConverseReferenceV1, &shipped_pack());
+    let report = run_provider_component_suite_v1_for_manifest(
+        &BedrockConverseReferenceV1,
+        &shipped_pack(),
+        &shipped_manifest(),
+    );
     let failures: Vec<String> = report.failures().map(|outcome| format!("{outcome:?}")).collect();
     assert!(failures.is_empty(), "{} gate ② failures:\n{}", failures.len(), failures.join("\n"));
 }

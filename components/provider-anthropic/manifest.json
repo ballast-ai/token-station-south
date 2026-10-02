@@ -13,6 +13,9 @@
   "auth_arms": [
     "header_secret"
   ],
+  "endpoint": {
+    "anthropic": "https://api.anthropic.com"
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

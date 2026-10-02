@@ -1,6 +1,6 @@
 {
   "name": "provider-bedrock-converse",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "api_version": "provider-adapter-v2",
   "providers": [
     "bedrock"
@@ -13,6 +13,18 @@
   "auth_arms": [
     "host_signed"
   ],
+  "endpoint": {
+    "bedrock": "https://bedrock-runtime.{region}.amazonaws.com"
+  },
+  "config_schema": {
+    "bedrock": {
+      "region": {
+        "syntax": "aws_region",
+        "required": true,
+        "description": "The AWS region the Bedrock runtime is called in."
+      }
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,
@@ -34,5 +46,29 @@
     "x-amz-date",
     "x-amz-content-sha256",
     "x-amz-security-token"
-  ]
+  ],
+  "stream_framing": "aws-eventstream",
+  "signing": {
+    "scheme": "aws-sigv4",
+    "service": "bedrock",
+    "region": {
+      "template_param": "region"
+    },
+    "credentials": {
+      "access_key_id": "access_key_id",
+      "secret_access_key": "secret_access_key",
+      "session_token": "session_token"
+    }
+  },
+  "request_facts": {
+    "bedrock": {
+      "output_cap": [
+        "/inferenceConfig/maxTokens"
+      ],
+      "model": {
+        "url": "/model/{model}/converse"
+      },
+      "stream": "url"
+    }
+  }
 }

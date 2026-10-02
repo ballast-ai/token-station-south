@@ -13,6 +13,20 @@
   "auth_arms": [
     "header_secret"
   ],
+  "request_facts": {
+    "gemini": {
+      "output_cap": [
+        "/generationConfig/maxOutputTokens"
+      ],
+      "model": {
+        "url": "/models/{model}:"
+      },
+      "stream": "url"
+    }
+  },
+  "endpoint": {
+    "gemini": "https://generativelanguage.googleapis.com"
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

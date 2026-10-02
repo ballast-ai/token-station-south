@@ -42,6 +42,9 @@ pub mod task_v2_json;
 pub use task_fixture_v2::{TASK_FIXTURE_KIND_V2, TaskCaseV2, TaskFamilyV2, TaskFixturePackV2};
 pub use task_suite_v2::{TASK_COMPONENT_SUITE_V2, run_task_component_suite_v2};
 pub mod anthropic_dialect;
+mod descriptor_auth;
+mod url_segment;
+pub use descriptor_auth::{AdmittedAuthV1, DescriptorAuthErrorV1, admit_descriptor_auth};
 mod fixture;
 mod reasoning_replay;
 pub mod reference;
@@ -64,7 +67,7 @@ pub use fixture::{CaseV1, FIXTURE_KIND_V1, FixtureErrorV1, FixturePackV1, Provid
 pub use report::{CheckV1, OutcomeV1, ReportV1, VerdictV1};
 pub use suite::{
     PROVIDER_COMPONENT_SUITE_V1, run_provider_component_suite_v1,
-    run_provider_component_suite_v1_with_usage_evidence,
+    run_provider_component_suite_v1_for_manifest,
 };
 pub use task_fixture::{TASK_FIXTURE_KIND_V1, TaskCaseV1, TaskFamilyV1, TaskFixturePackV1};
 pub use task_suite::{TASK_COMPONENT_SUITE_V1, run_task_component_suite_v1};

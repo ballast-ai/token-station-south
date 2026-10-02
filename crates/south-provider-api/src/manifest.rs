@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -247,9 +247,100 @@ pub struct ComponentManifestV1 {
     /// default, omitted when serialized) or `absent`. Provider world only.
     #[serde(default, skip_serializing_if = "UsageEvidenceV1::is_reported")]
     pub usage_evidence: UsageEvidenceV1,
+    /// What the host feeds `parse-stream-chunk`: upstream bytes unchanged
+    /// (`bytes`, the default, omitted when serialized) or the canonical
+    /// re-encoding of AWS eventstream messages (`aws-eventstream`). Package
+    /// level, because the stream parser receives no configuration. Provider
+    /// world only.
+    #[serde(default, skip_serializing_if = "StreamFramingV1::is_bytes")]
+    pub stream_framing: StreamFramingV1,
+    /// How the host signs a `host_signed` package's requests. Absent means the
+    /// host infers nothing from the declaration (today's behavior).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signing: Option<SigningV1>,
+    /// Where each provider family's request carries the output cap, the model
+    /// and the stream flag, keyed by family. A family without an entry uses
+    /// [`RequestFactsV1::top_level`]. Provider world only.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub request_facts: BTreeMap<String, RequestFactsV1>,
+    /// Each family's `https` endpoint template, whose parameters are its
+    /// `config_schema` keys (§7.3). Provider world only.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub endpoint: BTreeMap<String, String>,
+    /// Each family's non-secret configuration keys (§7.3). Provider world only.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub config_schema: BTreeMap<String, BTreeMap<String, crate::ConfigKeyV1>>,
     pub permissions: ComponentPermissionsV1,
     pub conformance: ConformanceSpecV1,
     pub compatibility: CompatibilityDeclarationV1,
+}
+
+/// How the host signs a `host_signed` provider package's requests (B2,
+/// `docs/design/2026-09-30-host-zero-vendor-boundary.md` §5.3).
+///
+/// The host picks its finalizer by `scheme` — a public-standard executor kept
+/// in the host and selected by declaration — instead of inferring it from the
+/// provider type.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SigningV1 {
+    pub scheme: SigningSchemeV1,
+    /// The scheme's service name, e.g. `bedrock`.
+    pub service: String,
+    /// The endpoint-template parameter that names the region, so the region
+    /// the host signs for is the region in the origin it sends to.
+    pub region: TemplateParamV1,
+    /// Each input the scheme needs, mapped to a credential field name.
+    /// `aws-sigv4` requires `access_key_id` and `secret_access_key` and admits
+    /// `session_token`. Checking the names against declared credential fields
+    /// arrives with credential recipes (§3.3, phase B4).
+    pub credentials: BTreeMap<String, String>,
+}
+
+/// A signing scheme the host implements. A closed set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SigningSchemeV1 {
+    /// AWS Signature Version 4.
+    AwsSigv4,
+}
+
+/// A reference to an endpoint-template parameter.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TemplateParamV1 {
+    pub template_param: String,
+}
+
+/// The headers an `aws-sigv4` signature always emits.
+const SIGV4_REQUIRED_EMITS: [&str; 3] = ["authorization", "x-amz-date", "x-amz-content-sha256"];
+
+/// How a provider package's upstream frames its stream, which decides what the
+/// host feeds `parse-stream-chunk` (B2, `docs/design/2026-09-30-host-zero-vendor-boundary.md`
+/// §5.2).
+///
+/// There is no `sse`, `ndjson` or `json` value: components already split those
+/// themselves, and a value the host would only branch on without using would
+/// let it pick a decoder by declaration it never runs.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum StreamFramingV1 {
+    /// The host feeds the upstream bytes unchanged.
+    #[default]
+    Bytes,
+    /// The host deframes AWS eventstream with `south_contracts::AwsEventStreamDeframerV1` and
+    /// feeds each message's `south_contracts::reencode_eventstream_v1`. With a family declaring
+    /// `request_facts.stream: "none"`, a non-streaming caller takes the buffered path: the whole
+    /// body is deframed and its re-encoding handed to `parse-response`.
+    AwsEventstream,
+}
+
+impl StreamFramingV1 {
+    /// Whether this is the default, `bytes`.
+    #[must_use]
+    pub const fn is_bytes(&self) -> bool {
+        matches!(self, Self::Bytes)
+    }
 }
 
 /// Whether a provider package's upstreams report token usage (B1,
@@ -270,6 +361,90 @@ pub enum UsageEvidenceV1 {
     Reported,
     /// The upstream never reports tokens.
     Absent,
+}
+
+/// Where one provider family's request carries the facts the host seals (B2,
+/// `docs/design/2026-09-30-host-zero-vendor-boundary.md` §7.2).
+///
+/// These are the component's own declarations: the host's seal proves a
+/// descriptor is consistent with them, not that the upstream reads the cap
+/// where the component wrote it (§6.3's undetectable zone).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RequestFactsV1 {
+    /// JSON Pointers into the descriptor body where the component may write
+    /// the output cap, at most [`MAX_OUTPUT_CAP_LOCATIONS`]; empty for a wire
+    /// that has no cap field. With a cap set, exactly one location holds it.
+    pub output_cap: Vec<String>,
+    pub model: ModelLocationV1,
+    pub stream: StreamLocationV1,
+}
+
+/// The most output-cap locations one family may declare.
+pub const MAX_OUTPUT_CAP_LOCATIONS: usize = 4;
+
+/// Where a request names its model.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelLocationV1 {
+    /// A JSON Pointer into the body whose value is the model.
+    Body(String),
+    /// A path template with exactly one `{model}` placeholder; the model,
+    /// encoded as one path segment, sits where the placeholder is.
+    Url(String),
+}
+
+/// Where a request carries its stream flag.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StreamLocationV1 {
+    /// A JSON Pointer into the body whose value is `true` for a streaming
+    /// request.
+    Body(String),
+    /// The URL differs; the host checks only that the response's content type
+    /// matches the request.
+    Url,
+    /// The upstream always streams and has no switch.
+    None,
+}
+
+impl RequestFactsV1 {
+    /// The locations a family without an entry uses: today's three top-level
+    /// fields (`max_tokens` or `max_completion_tokens`, `model`, `stream`).
+    #[must_use]
+    pub fn top_level() -> Self {
+        Self {
+            output_cap: vec!["/max_tokens".to_owned(), "/max_completion_tokens".to_owned()],
+            model: ModelLocationV1::Body("/model".to_owned()),
+            stream: StreamLocationV1::Body("/stream".to_owned()),
+        }
+    }
+}
+
+/// A JSON Pointer naming a member somewhere below the document root: every
+/// reference token non-empty and every `~` escaped.
+fn is_member_pointer(pointer: &str) -> bool {
+    let Some(tokens) = pointer.strip_prefix('/') else {
+        return false;
+    };
+    pointer.len() <= 256
+        && tokens.split('/').all(|token| {
+            !token.is_empty()
+                && token
+                    .split('~')
+                    .skip(1)
+                    .all(|rest| rest.starts_with('0') || rest.starts_with('1'))
+        })
+}
+
+/// A path template: starts with `/`, printable ASCII without `?`, `#` or
+/// spaces, and exactly one `{model}` with no other brace.
+fn is_model_url_template(template: &str) -> bool {
+    template.starts_with('/')
+        && template.len() <= 256
+        && template.bytes().all(|byte| byte.is_ascii_graphic() && !matches!(byte, b'?' | b'#'))
+        && template.matches("{model}").count() == 1
+        && template.replacen("{model}", "", 1).bytes().all(|byte| !matches!(byte, b'{' | b'}'))
 }
 
 impl UsageEvidenceV1 {
@@ -438,8 +613,21 @@ impl ComponentManifestV1 {
             if self.providers.is_empty() {
                 return Err(ManifestErrorV1::ProviderFamilyRequired);
             }
+            self.validate_request_facts()?;
+            self.validate_endpoints()?;
+            self.validate_signing_declaration()?;
+        } else if self.signing.is_some() {
+            return Err(ManifestErrorV1::InvalidSigning(
+                "signing is a provider-world declaration".to_owned(),
+            ));
+        } else if !self.stream_framing.is_bytes() {
+            return Err(ManifestErrorV1::StreamFramingIsAProviderWorldDeclaration);
+        } else if !self.endpoint.is_empty() || !self.config_schema.is_empty() {
+            return Err(ManifestErrorV1::EndpointIsAProviderWorldDeclaration);
         } else if !self.usage_evidence.is_reported() {
             return Err(ManifestErrorV1::UsageEvidenceIsAProviderWorldDeclaration);
+        } else if !self.request_facts.is_empty() {
+            return Err(ManifestErrorV1::RequestFactsIsAProviderWorldDeclaration);
         }
         if matches!(world.world, TASK_WORLD | TASK_WORLD_V2) {
             // Three stages, all required: a component missing one cannot carry
@@ -461,6 +649,111 @@ impl ComponentManifestV1 {
                 .map_err(|_| ManifestErrorV1::InvalidProviderFamily(provider.clone()))?;
         }
         Ok(())
+    }
+
+    fn validate_signing_declaration(&self) -> Result<(), ManifestErrorV1> {
+        let Some(signing) = &self.signing else {
+            return Ok(());
+        };
+        let invalid = |detail: &str| ManifestErrorV1::InvalidSigning(detail.to_owned());
+        if !self.auth_arms.contains("host_signed") {
+            return Err(invalid("signing is declared only by a host_signed package"));
+        }
+        if signing.service.is_empty()
+            || signing.service.len() > 64
+            || !signing
+                .service
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+        {
+            return Err(invalid("the service must be lowercase letters, digits and hyphens"));
+        }
+        match signing.scheme {
+            SigningSchemeV1::AwsSigv4 => {
+                if let Some(missing) = SIGV4_REQUIRED_EMITS
+                    .iter()
+                    .find(|header| !self.emits.iter().any(|emit| emit == *header))
+                {
+                    return Err(ManifestErrorV1::InvalidSigning(format!(
+                        "aws-sigv4 always emits `{missing}`, which emits does not list"
+                    )));
+                }
+                let inputs: Vec<&str> = signing.credentials.keys().map(String::as_str).collect();
+                if !inputs.contains(&"access_key_id")
+                    || !inputs.contains(&"secret_access_key")
+                    || inputs.iter().any(|input| {
+                        !matches!(*input, "access_key_id" | "secret_access_key" | "session_token")
+                    })
+                {
+                    return Err(invalid(
+                        "aws-sigv4 credentials are access_key_id, secret_access_key and optionally session_token",
+                    ));
+                }
+            }
+        }
+        if signing.credentials.values().any(|field| {
+            field.is_empty()
+                || field.len() > 64
+                || !field
+                    .bytes()
+                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+        }) {
+            return Err(invalid("a credential field name is not lowercase snake_case"));
+        }
+        let placeholder = format!("{{{}}}", signing.region.template_param);
+        if self.providers.iter().any(|family| {
+            self.endpoint.get(family).is_none_or(|template| !template.contains(&placeholder))
+        }) {
+            return Err(invalid(
+                "the region parameter must appear in every family's endpoint template",
+            ));
+        }
+        Ok(())
+    }
+
+    fn validate_request_facts(&self) -> Result<(), ManifestErrorV1> {
+        for (family, facts) in &self.request_facts {
+            let invalid = |detail: &str| ManifestErrorV1::InvalidRequestFacts {
+                family: family.clone(),
+                detail: detail.to_owned(),
+            };
+            if !self.providers.contains(family) {
+                return Err(invalid("names a family the manifest does not declare"));
+            }
+            if facts.output_cap.len() > MAX_OUTPUT_CAP_LOCATIONS {
+                return Err(invalid("declares more than four output-cap locations"));
+            }
+            let mut seen = BTreeSet::new();
+            for pointer in &facts.output_cap {
+                if !is_member_pointer(pointer) || !seen.insert(pointer) {
+                    return Err(invalid("an output-cap location is not a distinct member pointer"));
+                }
+            }
+            match &facts.model {
+                ModelLocationV1::Body(pointer) if !is_member_pointer(pointer) => {
+                    return Err(invalid("the model location is not a member pointer"));
+                }
+                ModelLocationV1::Url(template) if !is_model_url_template(template) => {
+                    return Err(invalid(
+                        "the model URL template must be a path with exactly one `{model}`",
+                    ));
+                }
+                ModelLocationV1::Body(_) | ModelLocationV1::Url(_) => {}
+            }
+            if let StreamLocationV1::Body(pointer) = &facts.stream
+                && !is_member_pointer(pointer)
+            {
+                return Err(invalid("the stream location is not a member pointer"));
+            }
+        }
+        Ok(())
+    }
+
+    /// Where `family`'s request carries its sealed facts: its declared entry,
+    /// or [`RequestFactsV1::top_level`].
+    #[must_use]
+    pub fn request_facts_for(&self, family: &str) -> RequestFactsV1 {
+        self.request_facts.get(family).cloned().unwrap_or_else(RequestFactsV1::top_level)
     }
 
     fn validate_conformance(&self, world: &WorldSchemaV1) -> Result<(), ManifestErrorV1> {
@@ -636,6 +929,18 @@ pub enum ManifestErrorV1 {
          contracts"
     )]
     UsageEvidenceIsAProviderWorldDeclaration,
+    #[error("request_facts is a provider-world declaration")]
+    RequestFactsIsAProviderWorldDeclaration,
+    #[error("request_facts for family `{family}`: {detail}")]
+    InvalidRequestFacts { family: String, detail: String },
+    #[error("signing: {0}")]
+    InvalidSigning(String),
+    #[error("stream_framing is a provider-world declaration")]
+    StreamFramingIsAProviderWorldDeclaration,
+    #[error("endpoint and config_schema are provider-world declarations")]
+    EndpointIsAProviderWorldDeclaration,
+    #[error("endpoint or config_schema for family `{family}`: {detail}")]
+    InvalidEndpoint { family: String, detail: String },
     #[error("a provider component must declare at least one provider family")]
     ProviderFamilyRequired,
     #[error("provider family `{0}` must be one lowercase kebab-case component")]

@@ -15,13 +15,16 @@
 
 use serde::Deserialize;
 use serde_json::Value;
-use south_provider_api::UsageEvidenceV1;
+use south_provider_api::{
+    ComponentManifestV1, ModelLocationV1, RequestFactsV1, StreamLocationV1, UsageEvidenceV1,
+};
 use token_station_protocol::{
     ChatRequest, ErrorEnvelope, HttpRequestDescriptor, HttpResponseParts, ProviderConfig,
     StreamEvent,
 };
 
 use crate::component::{ProviderComponentV1, StreamParserV1};
+use crate::descriptor_auth::admit_descriptor_auth;
 use crate::fixture::{CaseV1, FixturePackV1, ProviderFamilyV1};
 use crate::report::{CheckV1, OutcomeV1, ReportV1};
 
@@ -131,16 +134,28 @@ pub fn run_provider_component_suite_v1(
     component: &dyn ProviderComponentV1,
     pack: &FixturePackV1,
 ) -> ReportV1 {
-    run_provider_component_suite_v1_with_usage_evidence(component, pack, UsageEvidenceV1::Reported)
+    run_suite(component, pack, UsageEvidenceV1::Reported, None)
 }
 
-/// Runs `south.provider-component.v1` against a provider component, holding it
-/// to the usage checks its manifest's `usage_evidence` selects.
+/// Runs `south.provider-component.v1` against a provider component with its manifest.
+///
+/// The manifest selects the usage checks (`usage_evidence`) and is what
+/// `DescriptorAuthWithinManifest` judges descriptors against (`auth_arms`).
+/// This is the entry point an admitting host uses.
 #[must_use]
-pub fn run_provider_component_suite_v1_with_usage_evidence(
+pub fn run_provider_component_suite_v1_for_manifest(
+    component: &dyn ProviderComponentV1,
+    pack: &FixturePackV1,
+    manifest: &ComponentManifestV1,
+) -> ReportV1 {
+    run_suite(component, pack, manifest.usage_evidence, Some(manifest))
+}
+
+fn run_suite(
     component: &dyn ProviderComponentV1,
     pack: &FixturePackV1,
     usage_evidence: UsageEvidenceV1,
+    manifest: Option<&ComponentManifestV1>,
 ) -> ReportV1 {
     let mut outcomes = coverage(pack, usage_evidence);
     let mut a_credential_was_rejected_somewhere = false;
@@ -152,7 +167,12 @@ pub fn run_provider_component_suite_v1_with_usage_evidence(
 
         match case.family {
             ProviderFamilyV1::Request => {
-                outcomes.push(endpoint_confinement(case, &invoke(&case.input)));
+                let built = invoke(&case.input);
+                outcomes.push(endpoint_confinement(case, &built));
+                if let Some(manifest) = manifest {
+                    outcomes.push(descriptor_auth_within_manifest(case, &built, manifest));
+                    outcomes.push(request_facts_honoured(case, &built, manifest, &invoke));
+                }
             }
             ProviderFamilyV1::Error => {
                 if let Some(outcome) = auth_errors_are_not_retriable(case, &invoke(&case.input)) {
@@ -283,6 +303,207 @@ fn endpoint_confinement(case: &CaseV1, built: &Invoked) -> OutcomeV1 {
         Ok(()) => OutcomeV1::passed(check, &case.name),
         Err(refusal) => OutcomeV1::failed(check, &case.name, refusal.to_string()),
     }
+}
+
+/// The descriptor presents its credential only through an arm the manifest
+/// declares (B2, host-zero-vendor-boundary §4.4).
+///
+/// Run on what the component built. A host that presents strictly what the
+/// descriptor says relies on this; the host-side admission is what binds a
+/// third-party package, and this check is its early warning.
+fn descriptor_auth_within_manifest(
+    case: &CaseV1,
+    built: &Invoked,
+    manifest: &ComponentManifestV1,
+) -> OutcomeV1 {
+    let check = CheckV1::DescriptorAuthWithinManifest;
+    let input: RequestInput = match parse(&case.input) {
+        Ok(input) => input,
+        Err(failure) => return OutcomeV1::failed(check, &case.name, failure.detail()),
+    };
+    let descriptor: HttpRequestDescriptor = match built {
+        Ok(built) => match parse(built) {
+            Ok(descriptor) => descriptor,
+            Err(failure) => return OutcomeV1::failed(check, &case.name, failure.detail()),
+        },
+        Err(failure) => return OutcomeV1::failed(check, &case.name, failure.detail()),
+    };
+    match admit_descriptor_auth(manifest, &input.provider_config, &descriptor) {
+        Ok(_) => OutcomeV1::passed(check, &case.name),
+        Err(refusal) => OutcomeV1::failed(check, &case.name, refusal.to_string()),
+    }
+}
+
+/// The built request carries the cap, the model and the stream flag where the
+/// manifest's `request_facts` say (B2, host-zero-vendor-boundary §7.2, §7.6).
+///
+/// The cap is also a mutation check: the suite changes the IR cap, builds
+/// again, and requires the two bodies to differ only at the declared cap
+/// locations — for a family declaring none, not at all. A body that changes
+/// elsewhere has written the cap somewhere the host's seal does not look.
+fn request_facts_honoured(
+    case: &CaseV1,
+    built: &Invoked,
+    manifest: &ComponentManifestV1,
+    invoke: &dyn Fn(&Value) -> Invoked,
+) -> OutcomeV1 {
+    let check = CheckV1::RequestFactsHonoured;
+    request_facts_problem(case, built, manifest, invoke).map_or_else(
+        || OutcomeV1::passed(check, &case.name),
+        |problem| OutcomeV1::failed(check, &case.name, problem),
+    )
+}
+
+fn request_facts_problem(
+    case: &CaseV1,
+    built: &Invoked,
+    manifest: &ComponentManifestV1,
+    invoke: &dyn Fn(&Value) -> Invoked,
+) -> Option<String> {
+    let input: RequestInput = match parse(&case.input) {
+        Ok(input) => input,
+        Err(failure) => return Some(failure.detail()),
+    };
+    let descriptor: HttpRequestDescriptor = match built {
+        Ok(built) => match parse(built) {
+            Ok(descriptor) => descriptor,
+            Err(failure) => return Some(failure.detail()),
+        },
+        Err(failure) => return Some(failure.detail()),
+    };
+    let facts = manifest.request_facts_for(&input.provider_config.provider);
+    let body = descriptor.body.clone().unwrap_or(Value::Null);
+    let request = &input.chat_request;
+
+    if let Some(cap) = request.sampling.max_output_tokens
+        && !facts.output_cap.is_empty()
+    {
+        let holding: Vec<&Value> =
+            facts.output_cap.iter().filter_map(|pointer| body.pointer(pointer)).collect();
+        if holding.len() != 1 || holding[0].as_u64() != Some(u64::from(cap)) {
+            return Some(format!(
+                "the IR cap {cap} must sit in exactly one declared location ({}), and the \
+                 others must be absent",
+                facts.output_cap.join(", ")
+            ));
+        }
+    }
+    if let Some(problem) = cap_moves_only_where_declared(&input, &facts, invoke) {
+        return Some(problem);
+    }
+
+    match &facts.model {
+        ModelLocationV1::Body(pointer) => {
+            if body.pointer(pointer).and_then(Value::as_str) != Some(request.model.as_str()) {
+                return Some(format!("the body must name the IR model at `{pointer}`"));
+            }
+        }
+        ModelLocationV1::Url(template) => {
+            let (prefix, suffix) = template.split_once("{model}").unwrap_or((template, ""));
+            let expected =
+                format!("{prefix}{}{suffix}", crate::url_segment::encode(&request.model));
+            if !url_path(&descriptor.url).contains(&expected) {
+                return Some(format!(
+                    "the URL path must carry the IR model as one segment where `{template}` \
+                     places it"
+                ));
+            }
+        }
+    }
+
+    if let StreamLocationV1::Body(pointer) = &facts.stream {
+        let flag = body.pointer(pointer);
+        let consistent = if request.stream {
+            flag == Some(&Value::Bool(true))
+        } else {
+            flag.is_none_or(|flag| *flag == Value::Bool(false))
+        };
+        if !consistent {
+            return Some(format!("the stream flag at `{pointer}` must agree with the IR"));
+        }
+    }
+    None
+}
+
+/// Builds the request twice through the same serialization, once with a
+/// different IR cap, and compares the bodies with the declared cap locations
+/// removed.
+fn cap_moves_only_where_declared(
+    input: &RequestInput,
+    facts: &RequestFactsV1,
+    invoke: &dyn Fn(&Value) -> Invoked,
+) -> Option<String> {
+    let other_cap = match input.chat_request.sampling.max_output_tokens {
+        Some(cap) if cap > 1 => cap - 1,
+        Some(_) => 2,
+        None => 777,
+    };
+    let body_with = |cap: Option<u32>| -> Result<Value, String> {
+        let mut request = input.chat_request.clone();
+        request.sampling.max_output_tokens = cap;
+        let wire = serde_json::json!({
+            "provider_config": input.provider_config,
+            "chat_request": request,
+        });
+        let built = invoke(&wire).map_err(|failure| failure.detail())?;
+        let descriptor: HttpRequestDescriptor =
+            parse(&built).map_err(|failure| failure.detail())?;
+        let mut body = descriptor.body.unwrap_or(Value::Null);
+        for pointer in &facts.output_cap {
+            remove_pointer(&mut body, pointer);
+        }
+        Ok(body)
+    };
+    let (baseline, mutated) = match (
+        body_with(input.chat_request.sampling.max_output_tokens),
+        body_with(Some(other_cap)),
+    ) {
+        (Ok(baseline), Ok(mutated)) => (baseline, mutated),
+        (Err(detail), _) | (_, Err(detail)) => {
+            return Some(format!("rebuilding the request failed: {detail}"));
+        }
+    };
+    if baseline == mutated {
+        None
+    } else if facts.output_cap.is_empty() {
+        Some("the family declares no cap location, yet the body changed with the IR cap".to_owned())
+    } else {
+        Some("the body changed with the IR cap outside the declared cap locations".to_owned())
+    }
+}
+
+/// Removes what `pointer` names, then every ancestor on its path that the
+/// removal left empty: a cap is the only member of the object a dialect wraps
+/// it in when nothing else is set (`generationConfig`), and that object is part
+/// of the declared location.
+fn remove_pointer(value: &mut Value, pointer: &str) {
+    let mut path = pointer.to_owned();
+    let mut removed_member = false;
+    while let Some((parent, key)) = path.rsplit_once('/') {
+        let key = key.replace("~1", "/").replace("~0", "~");
+        let Some(Value::Object(map)) = value.pointer_mut(parent) else {
+            return;
+        };
+        let removable = !removed_member
+            || map
+                .get(&key)
+                .is_some_and(|child| child.as_object().is_some_and(serde_json::Map::is_empty));
+        if !removable || map.remove(&key).is_none() {
+            return;
+        }
+        removed_member = true;
+        if !map.is_empty() || parent.is_empty() {
+            return;
+        }
+        path = parent.to_owned();
+    }
+}
+
+/// The path of a URL: after the authority, before any query or fragment.
+fn url_path(url: &str) -> &str {
+    let after_scheme = url.split_once("://").map_or(url, |(_, rest)| rest);
+    let path = after_scheme.find('/').map_or("", |start| &after_scheme[start..]);
+    path.split(['?', '#']).next().unwrap_or(path)
 }
 
 /// A rejected credential must never be retried on another upstream.

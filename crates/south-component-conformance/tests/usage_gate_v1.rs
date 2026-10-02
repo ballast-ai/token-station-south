@@ -10,13 +10,23 @@ use std::path::Path;
 use south_component_conformance::reference::OpenAiCompatibleReferenceV1;
 use south_component_conformance::{
     CheckV1, ComponentResultV1, FixtureErrorV1, FixturePackV1, ProviderComponentV1, StreamParserV1,
-    run_provider_component_suite_v1, run_provider_component_suite_v1_with_usage_evidence,
+    run_provider_component_suite_v1, run_provider_component_suite_v1_for_manifest,
 };
-use south_provider_api::{ComponentMetadataV1, UsageEvidenceV1};
+use south_provider_api::{ComponentManifestV1, ComponentMetadataV1, UsageEvidenceV1};
 use token_station_protocol::{
     ChatRequest, ChatResponse, ErrorEnvelope, Extensions, HttpRequestDescriptor, HttpResponseParts,
     ModelCapability, ProviderConfig, StreamEvent, Usage,
 };
+
+/// The shipped `OpenAI`-compatible manifest, declaring `usage_evidence`.
+fn manifest(usage_evidence: UsageEvidenceV1) -> ComponentManifestV1 {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../components/provider-openai-compatible/manifest.json");
+    let mut manifest: ComponentManifestV1 =
+        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    manifest.usage_evidence = usage_evidence;
+    manifest
+}
 
 fn shipped_pack() -> FixturePackV1 {
     FixturePackV1::load(&Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures"))
@@ -168,10 +178,10 @@ fn a_pack_without_the_usage_rows_fails_coverage_by_name() {
     assert_eq!(missing, ROWS.map(str::to_owned), "{report}");
 
     // An `absent` package owes no named usage rows.
-    let report = run_provider_component_suite_v1_with_usage_evidence(
+    let report = run_provider_component_suite_v1_for_manifest(
         &Bent(Bend::NeverReportUsage),
         &pack,
-        UsageEvidenceV1::Absent,
+        &manifest(UsageEvidenceV1::Absent),
     );
     assert!(failed(&report, CheckV1::Coverage).is_empty(), "{report}");
 }
@@ -211,10 +221,10 @@ fn a_usage_row_that_does_not_show_its_name_fails() {
 
 #[test]
 fn an_absent_package_that_reports_usage_is_refused_and_an_honest_one_passes() {
-    let liar = run_provider_component_suite_v1_with_usage_evidence(
+    let liar = run_provider_component_suite_v1_for_manifest(
         &OpenAiCompatibleReferenceV1,
         &shipped_pack(),
-        UsageEvidenceV1::Absent,
+        &manifest(UsageEvidenceV1::Absent),
     );
     let lied: Vec<String> = failed(&liar, CheckV1::AbsentFamilyEmitsNoUsage)
         .into_iter()
@@ -223,10 +233,10 @@ fn an_absent_package_that_reports_usage_is_refused_and_an_honest_one_passes() {
     assert!(lied.contains(&"provider.response.cached-usage".to_owned()), "{liar}");
     assert!(lied.contains(&"provider.stream.usage-terminal".to_owned()), "{liar}");
 
-    let honest = run_provider_component_suite_v1_with_usage_evidence(
+    let honest = run_provider_component_suite_v1_for_manifest(
         &Bent(Bend::NeverReportUsage),
         &shipped_pack(),
-        UsageEvidenceV1::Absent,
+        &manifest(UsageEvidenceV1::Absent),
     );
     assert!(failed(&honest, CheckV1::AbsentFamilyEmitsNoUsage).is_empty(), "{honest}");
     assert!(

@@ -554,7 +554,7 @@ impl ProviderComponentV1 for GeminiReferenceV1 {
         let url = format!(
             "{}/{API_VERSION}/models/{}:{method}{query}",
             config.base_url.as_str().trim_end_matches('/'),
-            request.model
+            crate::url_segment::encode(&request.model)
         );
         let mut descriptor = HttpRequestDescriptor::new(HttpMethod::Post, url);
         descriptor.headers =

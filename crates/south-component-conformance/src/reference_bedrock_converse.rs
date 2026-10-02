@@ -572,7 +572,7 @@ struct ConverseSseParser {
     /// The finish reason `messageStop` announced, held until `metadata` lets
     /// `Done` go out.
     pending_finish: Option<FinishReason>,
-    /// Whether `metadata` has already closed the stream.
+    /// Whether `metadata` or a mid-stream failure has already closed the stream.
     closed: bool,
     open_blocks: BTreeSet<u32>,
     seen_blocks: BTreeSet<u32>,
@@ -624,13 +624,21 @@ impl ConverseSseParser {
         }
     }
 
-    #[expect(
-        clippy::match_same_arms,
-        reason = "a known event that carries nothing and an event this dialect has not got yet \
-                  are different facts that happen to need the same handling; merging them into \
-                  the wildcard would lose the record of which names are accounted for"
-    )]
+    /// Ends the stream with the failure the upstream reported mid-stream.
+    fn fail(&mut self, code: ErrorCode, provider_message: Option<&str>) -> Vec<StreamEvent> {
+        self.closed = true;
+        let mut error = ErrorEnvelope::new(code, 502, message_of(code));
+        error.provider_message =
+            provider_message.filter(|message| message.chars().count() <= 256).map(str::to_owned);
+        vec![StreamEvent::Error { error }]
+    }
+
     fn events_of(&mut self, event: &str, data: &Value) -> ComponentResultV1<Vec<StreamEvent>> {
+        // Nothing follows the terminal `metadata` or a reported failure: the kernel's
+        // `StreamEvent::Error` contract forbids events after it, and `Done` ends the exchange.
+        if self.closed {
+            return Ok(Vec::new());
+        }
         match event {
             // Both are accounted for and carry nothing this side needs:
             // `messageStart` only announces the turn, `contentBlockStop` only
@@ -734,9 +742,19 @@ impl ConverseSseParser {
                     },
                 ])
             }
-            // An event this dialect gains later. Ignored rather than refused:
-            // the host's own strict validator lives upstream of here and is the
-            // place that decides an unknown event is fatal.
+            // The canonical re-encoding's exception and error frames
+            // (`south_contracts::reencode_eventstream_v1`): a mid-stream failure
+            // the upstream reported. The stream ends here.
+            exception if exception.starts_with("exception:") => {
+                let name = &exception["exception:".len()..];
+                let code = exception_code(name).unwrap_or(ErrorCode::Internal);
+                Ok(self.fail(code, data["message"].as_str()))
+            }
+            error if error.starts_with("error:") => {
+                Ok(self.fail(ErrorCode::UpstreamUnavailable, data["message"].as_str()))
+            }
+            // An event this dialect gains later. Ignored rather than refused: a
+            // new event kind must not break an old component.
             _ => Ok(Vec::new()),
         }
     }
@@ -783,7 +801,7 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-bedrock-converse".to_owned(),
-            version: "1.0.5".to_owned(),
+            version: "1.0.6".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
@@ -832,7 +850,7 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
         let url = format!(
             "{}/model/{}/{operation}",
             config.base_url.as_str().trim_end_matches('/'),
-            request.model
+            crate::url_segment::encode(&request.model)
         );
         let mut descriptor = HttpRequestDescriptor::new(HttpMethod::Post, url);
         descriptor.headers =
@@ -960,43 +978,16 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
             .unwrap_or_default();
         let exception = exception.rsplit('#').next().unwrap_or(exception);
         let exception = exception.split(':').next().unwrap_or(exception);
-        let code = match exception {
-            "ThrottlingException" => ErrorCode::RateLimit,
-            "ModelTimeoutException" => ErrorCode::Timeout,
-            "ServiceUnavailableException" | "ModelNotReadyException" => {
-                ErrorCode::UpstreamUnavailable
-            }
-            "ModelErrorException" | "InternalServerException" => ErrorCode::Capacity,
-            "AccessDeniedException" | "UnrecognizedClientException" => ErrorCode::Auth,
-            "ValidationException" | "ResourceNotFoundException" => ErrorCode::InvalidRequest,
-            _ => match parts.status {
-                400 | 404 | 422 => ErrorCode::InvalidRequest,
-                401 | 403 => ErrorCode::Auth,
-                402 => ErrorCode::PaymentRequired,
-                408 => ErrorCode::Timeout,
-                429 => ErrorCode::RateLimit,
-                500 | 502 | 503 | 504 => ErrorCode::UpstreamUnavailable,
-                _ => ErrorCode::Internal,
-            },
-        };
-        let message = match code {
-            ErrorCode::InvalidRequest => "the upstream refused the request as malformed",
-            ErrorCode::Auth => "the upstream rejected the credential",
-            ErrorCode::PaymentRequired => {
-                "the upstream requires payment or the account is out of funds"
-            }
-            ErrorCode::RateLimit => "the upstream rate limited this request",
-            ErrorCode::ContentPolicy => "the upstream refused on content-policy grounds",
-            ErrorCode::ContextLength => "the request exceeds the model's context window",
-            ErrorCode::Timeout => "the upstream did not answer in time",
-            ErrorCode::UpstreamUnavailable => "the upstream is unavailable",
-            ErrorCode::TransportTruncated => "the upstream connection dropped mid-response",
-            ErrorCode::ProviderProtocolError => "the upstream answered with an invalid body",
-            ErrorCode::Capacity | ErrorCode::Capability | ErrorCode::Internal => {
-                "the upstream failed"
-            }
-        };
-        let mut envelope = ErrorEnvelope::new(code, parts.status, message);
+        let code = exception_code(exception).unwrap_or(match parts.status {
+            400 | 404 | 422 => ErrorCode::InvalidRequest,
+            401 | 403 => ErrorCode::Auth,
+            402 => ErrorCode::PaymentRequired,
+            408 => ErrorCode::Timeout,
+            429 => ErrorCode::RateLimit,
+            500 | 502 | 503 | 504 => ErrorCode::UpstreamUnavailable,
+            _ => ErrorCode::Internal,
+        });
+        let mut envelope = ErrorEnvelope::new(code, parts.status, message_of(code));
         envelope.provider_message = raw["message"]
             .as_str()
             .filter(|message| message.chars().count() <= 256)
@@ -1011,5 +1002,42 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
 
     fn stream_parser(&self) -> Box<dyn StreamParserV1> {
         Box::new(ConverseSseParser::new())
+    }
+}
+
+/// A Bedrock exception name, as a response header, a body `__type` or an eventstream
+/// `:exception-type` names it. Streams spell it in lower camel case (`throttlingException`),
+/// responses in upper camel case, so the first letter is compared without case.
+fn exception_code(exception: &str) -> Option<ErrorCode> {
+    let mut chars = exception.chars();
+    let first = chars.next()?.to_ascii_uppercase();
+    let name = format!("{first}{}", chars.as_str());
+    Some(match name.as_str() {
+        "ThrottlingException" => ErrorCode::RateLimit,
+        "ModelTimeoutException" => ErrorCode::Timeout,
+        "ServiceUnavailableException" | "ModelNotReadyException" => ErrorCode::UpstreamUnavailable,
+        "ModelErrorException" | "InternalServerException" => ErrorCode::Capacity,
+        "ModelStreamErrorException" => ErrorCode::TransportTruncated,
+        "AccessDeniedException" | "UnrecognizedClientException" => ErrorCode::Auth,
+        "ValidationException" | "ResourceNotFoundException" => ErrorCode::InvalidRequest,
+        _ => return None,
+    })
+}
+
+const fn message_of(code: ErrorCode) -> &'static str {
+    match code {
+        ErrorCode::InvalidRequest => "the upstream refused the request as malformed",
+        ErrorCode::Auth => "the upstream rejected the credential",
+        ErrorCode::PaymentRequired => {
+            "the upstream requires payment or the account is out of funds"
+        }
+        ErrorCode::RateLimit => "the upstream rate limited this request",
+        ErrorCode::ContentPolicy => "the upstream refused on content-policy grounds",
+        ErrorCode::ContextLength => "the request exceeds the model's context window",
+        ErrorCode::Timeout => "the upstream did not answer in time",
+        ErrorCode::UpstreamUnavailable => "the upstream is unavailable",
+        ErrorCode::TransportTruncated => "the upstream connection dropped mid-response",
+        ErrorCode::ProviderProtocolError => "the upstream answered with an invalid body",
+        ErrorCode::Capacity | ErrorCode::Capability | ErrorCode::Internal => "the upstream failed",
     }
 }

@@ -2,8 +2,15 @@
 
 //! Host-neutral contracts for provider execution.
 
+mod eventstream;
 mod task;
 mod task_v2;
+
+pub use eventstream::{
+    AwsEventStreamDeframerV1, EventStreamErrorV1, EventStreamHeaderValueV1, EventStreamMessageV1,
+    MAX_EVENTSTREAM_FRAME_BYTES, MAX_EVENTSTREAM_HEADERS_BYTES, MIN_EVENTSTREAM_FRAME_BYTES,
+    deframe_aws_eventstream_v1, reencode_eventstream_v1,
+};
 
 pub use task_v2::{
     MAX_IMMUTABLE_BODY_PATH_BYTES, MAX_IMMUTABLE_BODY_PATHS, TASK_LOCATOR_SCHEMA_VERSION,
