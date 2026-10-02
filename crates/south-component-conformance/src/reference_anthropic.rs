@@ -375,17 +375,81 @@ struct WireUsage {
     output: u64,
     cache_read: u64,
     cache_write: u64,
+    cache_write_5m: u64,
+    cache_write_1h: u64,
+}
+
+/// Which counts a usage report must carry (B1, host-zero-vendor-boundary §6.2
+/// item 1). A complete message reports both sides; a stream reports the input
+/// side in `message_start` and the output side in `message_delta`.
+#[derive(Debug, Clone, Copy)]
+enum UsageReport {
+    Message,
+    StreamStart,
+    StreamDelta,
+}
+
+fn wire_count(raw: &Value, key: &str, required: bool) -> ComponentResultV1<u64> {
+    match raw.get(key) {
+        None | Some(Value::Null) if required => {
+            Err(provider_protocol_error("the upstream usage lacks a required token count"))
+        }
+        None | Some(Value::Null) => Ok(0),
+        Some(value) => value.as_u64().ok_or_else(|| {
+            provider_protocol_error("the upstream usage has an invalid token count")
+        }),
+    }
 }
 
 impl WireUsage {
-    fn of(raw: &Value) -> Self {
-        let count = |name: &str| raw[name].as_u64().unwrap_or(0);
-        Self {
-            uncached_input: count("input_tokens"),
-            output: count("output_tokens"),
-            cache_read: count("cache_read_input_tokens"),
-            cache_write: count("cache_creation_input_tokens"),
+    /// Usage is funds evidence (provider-adapter.wit, `parse-response`): a
+    /// missing required count or a cache-tier breakdown that does not add up is
+    /// a protocol error, never a zero.
+    fn of(raw: &Value, report: UsageReport) -> ComponentResultV1<Self> {
+        if !raw.is_object() {
+            return Err(provider_protocol_error("a Messages response must carry a usage object"));
         }
+        let (input_required, output_required) = match report {
+            UsageReport::Message => (true, true),
+            UsageReport::StreamStart => (true, false),
+            UsageReport::StreamDelta => (false, true),
+        };
+        let mut usage = Self {
+            uncached_input: wire_count(raw, "input_tokens", input_required)?,
+            output: wire_count(raw, "output_tokens", output_required)?,
+            cache_read: wire_count(raw, "cache_read_input_tokens", false)?,
+            cache_write: wire_count(raw, "cache_creation_input_tokens", false)?,
+            ..Self::default()
+        };
+        match raw.get("cache_creation") {
+            None | Some(Value::Null) => {}
+            Some(tiers @ Value::Object(_)) => {
+                if raw.get("cache_creation_input_tokens").is_none_or(Value::is_null) {
+                    return Err(provider_protocol_error(
+                        "the upstream cache_creation breakdown lacks its cache_creation_input_tokens total",
+                    ));
+                }
+                usage.cache_write_5m = wire_count(tiers, "ephemeral_5m_input_tokens", true)?;
+                usage.cache_write_1h = wire_count(tiers, "ephemeral_1h_input_tokens", true)?;
+                if usage.cache_write_5m.checked_add(usage.cache_write_1h) != Some(usage.cache_write)
+                {
+                    return Err(provider_protocol_error(
+                        "the upstream cache_creation tiers do not add up to cache_creation_input_tokens",
+                    ));
+                }
+            }
+            Some(_) => {
+                return Err(provider_protocol_error(
+                    "the upstream usage has an invalid cache_creation field",
+                ));
+            }
+        }
+        usage
+            .uncached_input
+            .checked_add(usage.cache_read)
+            .and_then(|sum| sum.checked_add(usage.cache_write))
+            .ok_or_else(|| provider_protocol_error("the upstream usage counts overflow"))?;
+        Ok(usage)
     }
 
     /// Fold a later report in, last-nonzero-wins per wire field.
@@ -403,6 +467,8 @@ impl WireUsage {
         keep(&mut self.output, later.output);
         keep(&mut self.cache_read, later.cache_read);
         keep(&mut self.cache_write, later.cache_write);
+        keep(&mut self.cache_write_5m, later.cache_write_5m);
+        keep(&mut self.cache_write_1h, later.cache_write_1h);
     }
 
     fn to_ir(self) -> Usage {
@@ -414,13 +480,15 @@ impl WireUsage {
             output_tokens: self.output,
             cache_read_tokens: self.cache_read,
             cache_write_tokens: self.cache_write,
+            cache_write_5m_tokens: self.cache_write_5m,
+            cache_write_1h_tokens: self.cache_write_1h,
             ..Usage::default()
         }
     }
 }
 
-fn usage_of(raw: &Value) -> Usage {
-    WireUsage::of(raw).to_ir()
+fn usage_of(raw: &Value) -> ComponentResultV1<Usage> {
+    WireUsage::of(raw, UsageReport::Message).map(WireUsage::to_ir)
 }
 
 // -- stream ------------------------------------------------------------------
@@ -527,9 +595,9 @@ impl AnthropicSseParser {
     /// prompt and win. So the wire buckets are folded here and every report
     /// carries the whole-so-far usage, which a last-nonzero-wins consumer
     /// absorbs to the same result.
-    fn report_usage(&mut self, raw: &Value) -> StreamEvent {
-        self.usage.absorb(WireUsage::of(raw));
-        StreamEvent::Usage { usage: self.usage.to_ir() }
+    fn report_usage(&mut self, raw: &Value, report: UsageReport) -> ComponentResultV1<StreamEvent> {
+        self.usage.absorb(WireUsage::of(raw, report)?);
+        Ok(StreamEvent::Usage { usage: self.usage.to_ir() })
     }
 
     fn events_of(&mut self, event: &str, data: &Value) -> ComponentResultV1<Vec<StreamEvent>> {
@@ -537,7 +605,7 @@ impl AnthropicSseParser {
             "message_start" => {
                 let usage = &data["message"]["usage"];
                 if usage.is_object() {
-                    return Ok(vec![self.report_usage(usage)]);
+                    return Ok(vec![self.report_usage(usage, UsageReport::StreamStart)?]);
                 }
                 Ok(Vec::new())
             }
@@ -627,7 +695,7 @@ impl AnthropicSseParser {
                     return Ok(Vec::new());
                 }
                 let mut events: Vec<StreamEvent> = self.take_pending_finish().into_iter().collect();
-                events.push(self.report_usage(&data["usage"]));
+                events.push(self.report_usage(&data["usage"], UsageReport::StreamDelta)?);
                 events.push(StreamEvent::Done { finish_reason: None, stop_sequence: None });
                 self.done_emitted = true;
                 Ok(events)
@@ -693,7 +761,7 @@ impl ProviderComponentV1 for AnthropicReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-anthropic".to_owned(),
-            version: "1.0.8".to_owned(),
+            version: "1.0.9".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
@@ -844,7 +912,7 @@ impl ProviderComponentV1 for AnthropicReferenceV1 {
                 },
                 finish_reason: raw["stop_reason"].as_str().map(stop_reason_to_finish),
             }],
-            usage: usage_of(&raw["usage"]),
+            usage: usage_of(&raw["usage"])?,
             extensions: Extensions::new(),
         })
     }

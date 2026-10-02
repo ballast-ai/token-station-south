@@ -243,9 +243,41 @@ pub struct ComponentManifestV1 {
     /// name rather than silently collapsed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub emits: Vec<String>,
+    /// Whether this package's upstreams report token usage. `reported` (the
+    /// default, omitted when serialized) or `absent`. Provider world only.
+    #[serde(default, skip_serializing_if = "UsageEvidenceV1::is_reported")]
+    pub usage_evidence: UsageEvidenceV1,
     pub permissions: ComponentPermissionsV1,
     pub conformance: ConformanceSpecV1,
     pub compatibility: CompatibilityDeclarationV1,
+}
+
+/// Whether a provider package's upstreams report token usage (B1,
+/// `docs/design/2026-09-30-host-zero-vendor-boundary.md` §6.2 item 4).
+///
+/// Package-level: a package whose families differ on this is two packages.
+/// For an `absent` package, `parse-response` returns all-zero usage (the IR
+/// field is not optional), the component never emits a usage event, and the
+/// host never reads either — it meters with its own provider-agnostic
+/// estimator and labels the result as an estimate. Gate ② holds an `absent`
+/// package to `AbsentFamilyEmitsNoUsage`; a `reported` package to the usage
+/// rows and `UsageNeverDefaulted`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UsageEvidenceV1 {
+    /// The upstream reports exact usage, which is funds evidence.
+    #[default]
+    Reported,
+    /// The upstream never reports tokens.
+    Absent,
+}
+
+impl UsageEvidenceV1 {
+    /// Whether this is the default, `reported`.
+    #[must_use]
+    pub const fn is_reported(&self) -> bool {
+        matches!(self, Self::Reported)
+    }
 }
 
 /// The identity a loaded component must report back from `metadata()`.
@@ -406,6 +438,8 @@ impl ComponentManifestV1 {
             if self.providers.is_empty() {
                 return Err(ManifestErrorV1::ProviderFamilyRequired);
             }
+        } else if !self.usage_evidence.is_reported() {
+            return Err(ManifestErrorV1::UsageEvidenceIsAProviderWorldDeclaration);
         }
         if matches!(world.world, TASK_WORLD | TASK_WORLD_V2) {
             // Three stages, all required: a component missing one cannot carry
@@ -597,6 +631,11 @@ pub enum ManifestErrorV1 {
          stages are mandatory and only `artifact_fetch` is optional"
     )]
     TaskLifecycleCapabilityRequired { missing: String },
+    #[error(
+        "usage_evidence is a provider-world declaration; other worlds meter through their own \
+         contracts"
+    )]
+    UsageEvidenceIsAProviderWorldDeclaration,
     #[error("a provider component must declare at least one provider family")]
     ProviderFamilyRequired,
     #[error("provider family `{0}` must be one lowercase kebab-case component")]

@@ -337,25 +337,132 @@ fn reasoning_effort_allowed(request: &ChatRequest, config: &ProviderConfig) -> b
     )
 }
 
+/// A required usage count: present, a non-negative integer.
+fn required_count(raw: &Value, key: &str, missing: &'static str) -> ComponentResultV1<u64> {
+    raw.get(key).and_then(Value::as_u64).ok_or_else(|| provider_protocol_error(missing))
+}
+
+/// An optional usage count: absent or `null` is zero; anything else must be a
+/// non-negative integer.
+fn optional_count(raw: Option<&Value>, key: &str, invalid: &'static str) -> ComponentResultV1<u64> {
+    match raw.and_then(|raw| raw.get(key)) {
+        None | Some(Value::Null) => Ok(0),
+        Some(value) => value.as_u64().ok_or_else(|| provider_protocol_error(invalid)),
+    }
+}
+
+/// A `*_tokens_details` object: absent or `null`, or an object.
+fn usage_details<'a>(
+    raw: &'a Value,
+    key: &str,
+    invalid: &'static str,
+) -> ComponentResultV1<Option<&'a Value>> {
+    match raw.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(details @ Value::Object(_)) => Ok(Some(details)),
+        Some(_) => Err(provider_protocol_error(invalid)),
+    }
+}
+
+fn checked_sum(left: u64, right: u64) -> ComponentResultV1<u64> {
+    left.checked_add(right)
+        .ok_or_else(|| provider_protocol_error("the upstream usage counts overflow"))
+}
+
 /// Normalizes the wire usage object in the `OpenAI` dialect's native cache
 /// convention (S0 ruling D1): `cache_read_tokens` is the cached **subset** of
 /// `input_tokens`, never a disjoint bucket.
-fn usage_of(raw: &Value) -> Usage {
-    Usage {
-        input_tokens: raw["prompt_tokens"].as_u64().unwrap_or(0),
-        output_tokens: raw["completion_tokens"].as_u64().unwrap_or(0),
-        cache_read_tokens: raw["prompt_tokens_details"]["cached_tokens"]
-            .as_u64()
-            .or_else(|| raw["prompt_cache_hit_tokens"].as_u64())
-            .unwrap_or(0),
-        cache_write_tokens: raw["prompt_tokens_details"]["cache_write_tokens"]
-            .as_u64()
-            .unwrap_or(0),
-        reasoning_tokens: raw["completion_tokens_details"]["reasoning_tokens"]
-            .as_u64()
-            .unwrap_or(0),
-        ..Usage::default()
+///
+/// Usage is funds evidence (provider-adapter.wit, `parse-response`): a missing
+/// count, a total that does not add up or a subset larger than its whole is a
+/// protocol error, never a zero (B1, host-zero-vendor-boundary §6.2 item 1).
+///
+/// - `prompt_tokens`, `completion_tokens` and `total_tokens` are required.
+/// - Multi-agent orchestration (Sakana Fugu) reports sub-model consumption in
+///   `*_tokens_details.orchestration_*` **on top of** the top-level counts, and
+///   its `total_tokens` is `prompt + completion + orchestration_input`. Those
+///   tokens are billable and fold into the IR buckets.
+/// - The cached subset is `prompt_tokens_details.cached_tokens` or, for Kimi and
+///   `DeepSeek`, the top-level `prompt_cache_hit_tokens`.
+/// - The cache-write subset is `prompt_tokens_details.cache_write_tokens`
+///   (`OpenAI`) or `prompt_tokens_details.cache_creation_input_tokens` (Bailian);
+///   when both are present the Bailian key wins, matching the host's evidence.
+fn usage_of(raw: &Value) -> ComponentResultV1<Usage> {
+    if !raw.is_object() {
+        return Err(provider_protocol_error("a chat completion must carry a usage object"));
     }
+    let prompt = required_count(
+        raw,
+        "prompt_tokens",
+        "the upstream usage lacks a valid prompt_tokens count",
+    )?;
+    let completion = required_count(
+        raw,
+        "completion_tokens",
+        "the upstream usage lacks a valid completion_tokens count",
+    )?;
+    let total =
+        required_count(raw, "total_tokens", "the upstream usage lacks a valid total_tokens count")?;
+    let prompt_details = usage_details(
+        raw,
+        "prompt_tokens_details",
+        "the upstream usage has an invalid prompt_tokens_details field",
+    )?;
+    let completion_details = usage_details(
+        raw,
+        "completion_tokens_details",
+        "the upstream usage has an invalid completion_tokens_details field",
+    )?;
+    let invalid_count = "the upstream usage has an invalid token count";
+    let orchestration_input =
+        optional_count(prompt_details, "orchestration_input_tokens", invalid_count)?;
+    let orchestration_cached =
+        optional_count(prompt_details, "orchestration_input_cached_tokens", invalid_count)?;
+    if orchestration_cached > orchestration_input {
+        return Err(provider_protocol_error(
+            "the upstream orchestration cached count exceeds its input count",
+        ));
+    }
+    let orchestration_output =
+        optional_count(completion_details, "orchestration_output_tokens", invalid_count)?;
+    let plain_total = checked_sum(prompt, completion)?;
+    if total != plain_total && total != checked_sum(plain_total, orchestration_input)? {
+        return Err(provider_protocol_error(
+            "the upstream total_tokens does not equal prompt_tokens plus completion_tokens",
+        ));
+    }
+    let input_tokens = checked_sum(prompt, orchestration_input)?;
+    let output_tokens = checked_sum(completion, orchestration_output)?;
+    let cached = match prompt_details.and_then(|details| details.get("cached_tokens")) {
+        Some(_) => optional_count(prompt_details, "cached_tokens", invalid_count)?,
+        None => optional_count(Some(raw), "prompt_cache_hit_tokens", invalid_count)?,
+    };
+    let cache_read_tokens = checked_sum(cached, orchestration_cached)?;
+    let cache_write_tokens = match prompt_details
+        .and_then(|details| details.get("cache_creation_input_tokens"))
+    {
+        Some(_) => optional_count(prompt_details, "cache_creation_input_tokens", invalid_count)?,
+        None => optional_count(prompt_details, "cache_write_tokens", invalid_count)?,
+    };
+    if checked_sum(cache_read_tokens, cache_write_tokens)? > input_tokens {
+        return Err(provider_protocol_error(
+            "the upstream cached and cache-write counts exceed the prompt count",
+        ));
+    }
+    let reasoning_tokens = optional_count(completion_details, "reasoning_tokens", invalid_count)?;
+    if reasoning_tokens > output_tokens {
+        return Err(provider_protocol_error(
+            "the upstream reasoning_tokens exceeds the completion count",
+        ));
+    }
+    Ok(Usage {
+        input_tokens,
+        output_tokens,
+        cache_read_tokens,
+        cache_write_tokens,
+        reasoning_tokens,
+        ..Usage::default()
+    })
 }
 
 /// Tracks finish arrival separately from its canonical mapping, so a
@@ -506,7 +613,7 @@ fn events_of_frame(
         if let Some(finish) = finish {
             events.push(finish);
         }
-        events.push(StreamEvent::Usage { usage: usage_of(usage) });
+        events.push(StreamEvent::Usage { usage: usage_of(usage)? });
         if has_finish {
             events.push(StreamEvent::Done { finish_reason: None, stop_sequence: None });
             pending_finish.done_emitted = true;
@@ -592,7 +699,7 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-openai-compatible".to_owned(),
-            version: "2.1.4".to_owned(),
+            version: "2.1.5".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
@@ -725,7 +832,7 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
             });
         }
 
-        let usage = usage_of(&raw["usage"]);
+        let usage = usage_of(&raw["usage"])?;
         Ok(ChatResponse {
             id: raw["id"].as_str().unwrap_or_default().to_owned(),
             model: raw["model"].as_str().unwrap_or_default().to_owned(),

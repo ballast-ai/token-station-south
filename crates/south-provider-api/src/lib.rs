@@ -43,7 +43,7 @@ pub use manifest::{
     PROVIDER_CAPABILITIES, PROVIDER_WORLD, PROVIDER_WORLD_SCHEMA, SIGNED_HEADER_NAMES,
     TASK_BEHAVIOR_SUITE, TASK_BEHAVIOR_SUITE_V2, TASK_CAPABILITIES, TASK_REQUIRED_CAPABILITIES,
     TASK_WIT_PACKAGE, TASK_WIT_PACKAGE_V2, TASK_WORLD, TASK_WORLD_SCHEMA, TASK_WORLD_SCHEMA_V2,
-    TASK_WORLD_V2, WIT_PACKAGE, WorldSchemaV1, compatibility_matches, known_world,
+    TASK_WORLD_V2, UsageEvidenceV1, WIT_PACKAGE, WorldSchemaV1, compatibility_matches, known_world,
     validate_component_name, validate_package_relative_path,
 };
 

@@ -12,6 +12,14 @@
 //! function the input is fed to, and `case` is free but required even when a
 //! family has one case: fixture names appear in reports that outlive the pack.
 //!
+//! A response case may expect a refusal instead of a chat response: its
+//! expected file is then exactly `{"error": <ErrorEnvelope>}`. A response case
+//! may also carry a sidecar `provider.response.<case>.meta.json` holding
+//! `{"usage_pointer": "/usage"}` — where the usage object sits in the upstream
+//! body — which `UsageNeverDefaulted` deletes to prove the component refuses
+//! rather than reports zeros (B1, `docs/design/2026-09-30-host-zero-vendor-boundary.md`
+//! §6.2).
+//!
 //! Inputs are the Canonical IR, not the provider's wire format. A fixture that
 //! could hold a credential would be a way to smuggle one past the type system,
 //! so the IR's own boundaries — `SafeHeaders`, `ProviderEndpoint` — re-apply
@@ -89,6 +97,13 @@ pub struct CaseV1 {
     pub family: ProviderFamilyV1,
     pub input: Value,
     pub expected: Value,
+    /// Where the usage object sits in a response case's upstream body, as a
+    /// JSON Pointer into the parsed `body`, read from the optional sidecar
+    /// `provider.response.<case>.meta.json` (`{"usage_pointer": "/usage"}`).
+    /// `UsageNeverDefaulted` deletes what it points at and requires an error.
+    /// Written by the fixture author, so it proves only what the author
+    /// pointed at.
+    pub usage_pointer: Option<String>,
 }
 
 /// Every case a component package ships, in a stable order.
@@ -138,11 +153,18 @@ impl FixturePackV1 {
                 continue;
             };
             let expected_path = directory.join(format!("{stem}.expected.json"));
+            let meta_path = directory.join(format!("{stem}.meta.json"));
+            let usage_pointer = if meta_path.exists() {
+                Some(usage_pointer_of(&read_json(&meta_path, &stem)?, &stem, family)?)
+            } else {
+                None
+            };
             cases.push(CaseV1 {
                 input: read_json(&input_path, &stem)?,
                 expected: read_json(&expected_path, &stem)?,
                 family,
                 name: stem,
+                usage_pointer,
             });
         }
 
@@ -166,6 +188,30 @@ impl FixturePackV1 {
             .into_iter()
             .filter(|family| !self.cases.iter().any(|case| case.family == *family))
             .collect()
+    }
+}
+
+/// A case's sidecar metadata: exactly `{"usage_pointer": "/…"}`, on a response
+/// case. Anything else is refused, so a misspelt key cannot silently disable
+/// the check it was meant to enable.
+fn usage_pointer_of(
+    meta: &Value,
+    case: &str,
+    family: ProviderFamilyV1,
+) -> Result<String, FixtureErrorV1> {
+    let invalid = |detail: &str| FixtureErrorV1::InvalidMeta {
+        case: case.to_owned(),
+        detail: detail.to_owned(),
+    };
+    if family != ProviderFamilyV1::Response {
+        return Err(invalid("only response cases carry metadata"));
+    }
+    let Some(map) = meta.as_object().filter(|map| map.len() == 1) else {
+        return Err(invalid("metadata must be an object with the single key `usage_pointer`"));
+    };
+    match map.get("usage_pointer").and_then(Value::as_str) {
+        Some(pointer) if pointer.starts_with('/') => Ok(pointer.to_owned()),
+        _ => Err(invalid("`usage_pointer` must be a non-root JSON Pointer string")),
     }
 }
 
@@ -252,6 +298,12 @@ pub enum FixtureErrorV1 {
         case: String,
         detail: String,
     },
+    /// A `.meta.json` sidecar that is not `{"usage_pointer": "/…"}` on a
+    /// response case.
+    InvalidMeta {
+        case: String,
+        detail: String,
+    },
 }
 
 impl fmt::Display for FixtureErrorV1 {
@@ -267,6 +319,9 @@ impl fmt::Display for FixtureErrorV1 {
                 write!(f, "fixture `{name}` names no such family `{family}`")
             }
             Self::NotJson { case, detail } => write!(f, "fixture `{case}` is not JSON: {detail}"),
+            Self::InvalidMeta { case, detail } => {
+                write!(f, "fixture `{case}` has invalid metadata: {detail}")
+            }
         }
     }
 }

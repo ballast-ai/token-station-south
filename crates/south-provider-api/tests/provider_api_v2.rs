@@ -8,7 +8,7 @@ use south_provider_api::{
     KNOWN_WORLDS, ManifestErrorV1, PROVIDER_AUTH_ARMS, PROVIDER_WORLD, PROVIDER_WORLD_SCHEMA,
     TASK_ADAPTER_V2_WIT, TASK_ADAPTER_WIT, TASK_BEHAVIOR_SUITE, TASK_CAPABILITIES,
     TASK_WIT_PACKAGE, TASK_WORLD, TASK_WORLD_SCHEMA, TASK_WORLD_SCHEMA_V2, TASK_WORLD_V2,
-    WIT_PACKAGE, compatibility_matches, known_world,
+    UsageEvidenceV1, WIT_PACKAGE, compatibility_matches, known_world,
 };
 use wit_parser::{Resolve, Type, TypeDefKind};
 
@@ -104,6 +104,7 @@ fn reference_manifest() -> ComponentManifestV1 {
         ]),
         auth_arms: BTreeSet::from(["bearer".to_owned(), "header_secret".to_owned()]),
         emits: Vec::new(),
+        usage_evidence: UsageEvidenceV1::Reported,
         permissions: ComponentPermissionsV1 {
             network: false,
             filesystem: false,
@@ -675,6 +676,7 @@ fn task_manifest() -> ComponentManifestV1 {
         ]),
         auth_arms: BTreeSet::from(["host_signed".to_owned()]),
         emits: vec!["authorization".to_owned()],
+        usage_evidence: UsageEvidenceV1::Reported,
         permissions: ComponentPermissionsV1 {
             network: false,
             filesystem: false,
@@ -806,4 +808,31 @@ fn task_v2_manifest_refuses_auth_arms_outside_the_candidate_contract() {
             })
         );
     }
+}
+
+/// B1 (host-zero-vendor-boundary §6.2 item 4): `usage_evidence` is a
+/// package-level provider-world scalar. The default is omitted from the wire,
+/// so every manifest written before it existed reads, validates and
+/// re-serializes unchanged.
+#[test]
+fn usage_evidence_defaults_to_reported_and_is_a_provider_world_declaration() {
+    let manifest = reference_manifest();
+    let wire = serde_json::to_value(&manifest).unwrap();
+    assert!(wire.get("usage_evidence").is_none(), "the default stays off the wire");
+    let read: ComponentManifestV1 = serde_json::from_value(wire.clone()).unwrap();
+    assert_eq!(read.usage_evidence, UsageEvidenceV1::Reported);
+
+    let mut absent = wire;
+    absent["usage_evidence"] = serde_json::json!("absent");
+    let absent: ComponentManifestV1 = serde_json::from_value(absent).unwrap();
+    assert_eq!(absent.usage_evidence, UsageEvidenceV1::Absent);
+    assert_eq!(absent.validate(), Ok(()));
+
+    let mut unknown = serde_json::to_value(&manifest).unwrap();
+    unknown["usage_evidence"] = serde_json::json!("estimated");
+    assert!(serde_json::from_value::<ComponentManifestV1>(unknown).is_err());
+
+    let mut task = task_manifest();
+    task.usage_evidence = UsageEvidenceV1::Absent;
+    assert_eq!(task.validate(), Err(ManifestErrorV1::UsageEvidenceIsAProviderWorldDeclaration));
 }

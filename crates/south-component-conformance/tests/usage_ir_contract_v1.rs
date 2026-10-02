@@ -28,6 +28,13 @@
 //!    equal the expected IR `input_tokens`. A weaker "cache ≤ input" sweep was
 //!    tried first and passed over the old, wrong fixtures (120 uncached vs 90 +
 //!    30 cached) — a gate born green. This one fails on them.
+//!
+//! A third layer (B1, `docs/design/2026-09-30-host-zero-vendor-boundary.md`
+//! §6.2 items 1 and 6) judges the output side and strictness: `reasoning_tokens`
+//! is a subset of `output_tokens` in every dialect; Gemini's thoughts lie outside
+//! its candidates (measured 2026-10-01, that record's §16 Q13), so its IR output
+//! is candidates + thoughts; and a 2xx whose usage is missing or does not add up
+//! is a protocol error, never a zero (provider-adapter.wit, `parse-response`).
 
 use std::path::Path;
 
@@ -250,11 +257,12 @@ const DIALECTS: [Dialect; 4] = [
         prompt: &["input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"],
         cache: &["cache_read_input_tokens", "cache_creation_input_tokens"],
     },
-    // `promptTokenCount` already contains `cachedContentTokenCount`.
+    // `promptTokenCount` already contains `cachedContentTokenCount`; the
+    // tool-use prompt is billed as input beside it.
     Dialect {
         dir: "fixtures-gemini",
         usage_key: "usageMetadata",
-        prompt: &["promptTokenCount"],
+        prompt: &["promptTokenCount", "toolUsePromptTokenCount"],
         cache: &["cachedContentTokenCount"],
     },
     // `inputTokens` is the uncached remainder (AWS prompt caching guide).
@@ -383,4 +391,256 @@ fn every_shipped_provider_fixture_reports_the_documented_prompt_as_input_tokens(
         assert!(checked > 0, "{}: no fixture carried usage", dialect.dir);
         assert!(with_cache > 0, "{}: no fixture carried a cache bucket", dialect.dir);
     }
+}
+
+// ── Output, reasoning and strictness (B1) ────────────────────────────────────
+
+fn openai_body(usage: &Value) -> Value {
+    json!({
+        "id": "c", "object": "chat.completion", "model": "m",
+        "choices": [{"index": 0, "message": {"role": "assistant", "content": "hi"},
+                     "finish_reason": "stop"}],
+        "usage": usage,
+    })
+}
+
+fn anthropic_body(usage: &Value) -> Value {
+    json!({
+        "id": "msg_1", "type": "message", "role": "assistant", "model": "claude",
+        "content": [{"type": "text", "text": "hi"}],
+        "stop_reason": "end_turn", "stop_sequence": null,
+        "usage": usage,
+    })
+}
+
+fn gemini_body(usage: &Value) -> Value {
+    json!({
+        "candidates": [{"content": {"role": "model", "parts": [{"text": "hi"}]},
+                        "finishReason": "STOP"}],
+        "usageMetadata": usage,
+    })
+}
+
+fn refused(component: &dyn ProviderComponentV1, body: &Value, what: &str) {
+    let mut body = body.clone();
+    if body["usage"].is_null() && body["usageMetadata"].is_null() {
+        // The `null` placeholder of the builders stands for "no usage object".
+        if let Some(map) = body.as_object_mut() {
+            map.remove("usage");
+            map.remove("usageMetadata");
+        }
+    }
+    let error = component
+        .parse_response(&response(&body))
+        .err()
+        .unwrap_or_else(|| panic!("{what}: a usage report that is not exact must be refused"));
+    assert_eq!(error.code.as_str(), "provider_protocol_error", "{what}");
+}
+
+// OpenAI: `completion_tokens_details.reasoning_tokens` is the reasoning part of
+// `completion_tokens`, and `total_tokens = prompt_tokens + completion_tokens`.
+#[test]
+fn openai_reasoning_is_a_subset_of_output_and_the_report_must_add_up() {
+    let usage = OpenAiCompatibleReferenceV1
+        .parse_response(&response(&openai_body(&json!({
+            "prompt_tokens": 12, "completion_tokens": 50, "total_tokens": 62,
+            "completion_tokens_details": {"reasoning_tokens": 41}
+        }))))
+        .unwrap()
+        .usage;
+    assert_eq!((usage.output_tokens, usage.reasoning_tokens), (50, 41));
+
+    let ai = OpenAiCompatibleReferenceV1;
+    refused(&ai, &openai_body(&Value::Null), "openai, no usage object");
+    refused(
+        &ai,
+        &openai_body(&json!({"prompt_tokens": 12, "total_tokens": 12})),
+        "openai, no completion_tokens",
+    );
+    refused(
+        &ai,
+        &openai_body(&json!({"prompt_tokens": 12, "completion_tokens": 50})),
+        "openai, no total_tokens",
+    );
+    refused(
+        &ai,
+        &openai_body(&json!({"prompt_tokens": 12, "completion_tokens": 50, "total_tokens": 61})),
+        "openai, total does not add up",
+    );
+    refused(
+        &ai,
+        &openai_body(&json!({"prompt_tokens": 12, "completion_tokens": 5, "total_tokens": 17,
+                             "completion_tokens_details": {"reasoning_tokens": 6}})),
+        "openai, reasoning larger than output",
+    );
+    refused(
+        &ai,
+        &openai_body(&json!({"prompt_tokens": 12, "completion_tokens": 5, "total_tokens": 17,
+                             "prompt_tokens_details": {"cached_tokens": 13}})),
+        "openai, cached larger than prompt",
+    );
+}
+
+// Sakana Fugu reports sub-model consumption in `*_tokens_details.
+// orchestration_*` on top of the top-level counts; its `total_tokens` is
+// `prompt + completion + orchestration_input`. Bailian reports explicit cache
+// writes as `prompt_tokens_details.cache_creation_input_tokens`.
+#[test]
+fn openai_compatible_folds_orchestration_and_reads_both_cache_write_keys() {
+    let usage = OpenAiCompatibleReferenceV1
+        .parse_response(&response(&openai_body(&json!({
+            "prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 420,
+            "prompt_tokens_details": {"orchestration_input_tokens": 300,
+                                      "orchestration_input_cached_tokens": 50},
+            "completion_tokens_details": {"orchestration_output_tokens": 40}
+        }))))
+        .unwrap()
+        .usage;
+    assert_eq!((usage.input_tokens, usage.output_tokens, usage.cache_read_tokens), (400, 60, 50));
+
+    let usage = OpenAiCompatibleReferenceV1
+        .parse_response(&response(&openai_body(&json!({
+            "prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120,
+            "prompt_tokens_details": {"cached_tokens": 30, "cache_creation_input_tokens": 60}
+        }))))
+        .unwrap()
+        .usage;
+    assert_partitioned(usage, 100, 30, 60, "bailian explicit cache");
+}
+
+// Anthropic: a message reports both sides; a stream reports input in
+// `message_start` and output in `message_delta`. `cache_creation` splits
+// `cache_creation_input_tokens` into the 5-minute and 1-hour tiers.
+#[test]
+fn anthropic_refuses_missing_counts_and_maps_the_cache_write_tiers() {
+    let usage = AnthropicReferenceV1
+        .parse_response(&response(&anthropic_body(&json!({
+            "input_tokens": 10, "output_tokens": 3, "cache_creation_input_tokens": 300,
+            "cache_creation": {"ephemeral_5m_input_tokens": 100, "ephemeral_1h_input_tokens": 200}
+        }))))
+        .unwrap()
+        .usage;
+    assert_partitioned(usage, 310, 0, 300, "anthropic cache tiers");
+    assert_eq!((usage.cache_write_5m_tokens, usage.cache_write_1h_tokens), (100, 200));
+
+    let anthropic = AnthropicReferenceV1;
+    refused(&anthropic, &anthropic_body(&Value::Null), "anthropic, no usage object");
+    refused(
+        &anthropic,
+        &anthropic_body(&json!({"input_tokens": 10})),
+        "anthropic, no output_tokens",
+    );
+    refused(
+        &anthropic,
+        &anthropic_body(&json!({"output_tokens": 3})),
+        "anthropic, no input_tokens",
+    );
+    refused(
+        &anthropic,
+        &anthropic_body(&json!({
+            "input_tokens": 10, "output_tokens": 3, "cache_creation_input_tokens": 300,
+            "cache_creation": {"ephemeral_5m_input_tokens": 100, "ephemeral_1h_input_tokens": 100}
+        })),
+        "anthropic, cache tiers do not add up",
+    );
+
+    let mut parser = AnthropicReferenceV1.stream_parser();
+    parser
+        .parse_chunk(b"event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"m\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude\",\"content\":[],\"usage\":{\"input_tokens\":5,\"output_tokens\":1}}}\n\n")
+        .unwrap();
+    assert!(
+        parser
+            .parse_chunk(b"event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"input_tokens\":5}}\n\n")
+            .is_err(),
+        "anthropic stream, a terminal usage without output_tokens must be refused"
+    );
+}
+
+// Gemini, measured on Vertex AI 2026-10-01 (`gemini-2.5-flash`, thinking budget
+// 512): prompt 32, candidates 6, thoughts 286, total 324. Thoughts lie outside
+// the candidates, so output is 6 + 286.
+#[test]
+fn gemini_output_counts_the_thoughts_the_candidates_leave_out() {
+    let measured = json!({"promptTokenCount": 32, "candidatesTokenCount": 6,
+                          "thoughtsTokenCount": 286, "totalTokenCount": 324});
+    let usage = GeminiReferenceV1.parse_response(&response(&gemini_body(&measured))).unwrap().usage;
+    assert_eq!((usage.input_tokens, usage.output_tokens, usage.reasoning_tokens), (32, 292, 286));
+
+    let usage = folded(
+        &GeminiReferenceV1,
+        &[&format!(
+            "data: {}\n\n",
+            json!({"candidates": [{"content": {"role": "model", "parts": [{"text": "hi"}]},
+                                   "finishReason": "STOP"}],
+                   "usageMetadata": measured})
+        )],
+    );
+    assert_eq!((usage.output_tokens, usage.reasoning_tokens), (292, 286), "gemini stream");
+
+    // The tool-use prompt is input; a zero candidates count is omitted on the
+    // wire and is zero only when the total closes without it.
+    let usage = GeminiReferenceV1
+        .parse_response(&response(&gemini_body(&json!({
+            "promptTokenCount": 32, "toolUsePromptTokenCount": 8,
+            "thoughtsTokenCount": 512, "totalTokenCount": 552
+        }))))
+        .unwrap()
+        .usage;
+    assert_eq!((usage.input_tokens, usage.output_tokens, usage.reasoning_tokens), (40, 512, 512));
+
+    let gemini = GeminiReferenceV1;
+    refused(&gemini, &gemini_body(&Value::Null), "gemini, no usageMetadata");
+    refused(
+        &gemini,
+        &gemini_body(&json!({"promptTokenCount": 32, "candidatesTokenCount": 6})),
+        "gemini, no totalTokenCount",
+    );
+    refused(
+        &gemini,
+        &gemini_body(&json!({"promptTokenCount": 32, "candidatesTokenCount": 6,
+                             "totalTokenCount": 38 + 286, "thoughtsTokenCount": 285})),
+        "gemini, total does not add up",
+    );
+    refused(
+        &gemini,
+        &gemini_body(&json!({"promptTokenCount": 32, "thoughtsTokenCount": 286,
+                             "totalTokenCount": 324})),
+        "gemini, candidates unreported while the total says there were some",
+    );
+    refused(
+        &gemini,
+        &gemini_body(&json!({"promptTokenCount": 32, "candidatesTokenCount": 6,
+                             "cachedContentTokenCount": 33, "totalTokenCount": 38})),
+        "gemini, cached larger than prompt",
+    );
+}
+
+/// Every shipped fixture's expected usage keeps reasoning inside output.
+#[test]
+fn every_shipped_provider_fixture_keeps_reasoning_inside_output() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut with_reasoning = 0;
+    for dialect in &DIALECTS {
+        for entry in std::fs::read_dir(root.join(dialect.dir)).unwrap() {
+            let path = entry.unwrap().path();
+            if !path.to_string_lossy().ends_with(".expected.json") {
+                continue;
+            }
+            let expected: Value =
+                serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+            let mut reports = Vec::new();
+            objects_under(&expected, "usage", &mut reports);
+            for usage in reports {
+                let reasoning = usage["reasoning_tokens"].as_u64().unwrap_or(0);
+                let output = usage["output_tokens"].as_u64().unwrap_or(0);
+                assert!(
+                    reasoning <= output,
+                    "{}: reasoning_tokens {reasoning} exceeds output_tokens {output}",
+                    path.display()
+                );
+                with_reasoning += usize::from(reasoning > 0);
+            }
+        }
+    }
+    assert!(with_reasoning > 0, "no shipped fixture carried reasoning tokens");
 }

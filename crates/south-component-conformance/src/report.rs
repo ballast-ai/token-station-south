@@ -61,6 +61,29 @@ pub enum CheckV1 {
     /// credential as retriable would replay it across every provider the
     /// operator configured.
     AuthErrorsAreNotRetriable,
+    /// Each usage row a `reported` package must ship by name shows what its
+    /// name says (B1, host-zero-vendor-boundary §6.2 item 2).
+    ///
+    /// The rows are `response.usage` (non-zero usage, with a `usage_pointer`),
+    /// `response.missing-usage` (a protocol error), `response.cached-usage` (a
+    /// cache bucket), `stream.usage-terminal` (a usage event before the
+    /// terminal) and `stream.no-usage` (no usage event). A missing row is a
+    /// [`CheckV1::Coverage`] failure.
+    UsageRows,
+    /// Deleting the usage object a response fixture points at makes the
+    /// component refuse the response rather than report zeros (§6.2 item 3).
+    ///
+    /// Usage is funds evidence: a zero the upstream never said would settle a
+    /// call as free. The pointer is the fixture author's, so for a third-party
+    /// package the check proves only what the author pointed at.
+    UsageNeverDefaulted,
+    /// An `absent` package never reports usage: every response carries
+    /// all-zero usage and no stream emits a usage event (§6.2 item 4).
+    AbsentFamilyEmitsNoUsage,
+    /// Every usage the component reports keeps the IR partition: cache read
+    /// and write within input, the cache-write tiers within cache write, and
+    /// reasoning within output (§6.2 item 6; kernel `Usage`).
+    UsagePartition,
 }
 
 impl CheckV1 {
@@ -75,6 +98,10 @@ impl CheckV1 {
             Self::TerminalOnlyFromTheWire => "terminal_only_from_the_wire",
             Self::EndpointConfinement => "endpoint_confinement",
             Self::AuthErrorsAreNotRetriable => "auth_errors_are_not_retriable",
+            Self::UsageRows => "usage_rows",
+            Self::UsageNeverDefaulted => "usage_never_defaulted",
+            Self::AbsentFamilyEmitsNoUsage => "absent_family_emits_no_usage",
+            Self::UsagePartition => "usage_partition",
         }
     }
 }

@@ -380,3 +380,24 @@ fn exclusive_sampling_retires_the_published_041_anthropic_and_converse_identitie
         assert_ne!(manifest.version, published, "{name} reused its published identity");
     }
 }
+
+/// B1 makes three references strict about usage (a missing or inconsistent report is a protocol
+/// error, never a zero) and Gemini's output counts its thoughts, which changes what the three
+/// packages parse; the Converse reference was already strict and is unchanged.
+#[test]
+fn usage_strictness_retires_the_three_published_usage_lenient_identities() {
+    for (name, published) in [
+        ("provider-openai-compatible", "2.1.4"),
+        ("provider-anthropic", "1.0.8"),
+        ("provider-gemini", "1.1.4"),
+    ] {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_ne!(manifest.version, published, "{name} reused its published identity");
+    }
+}
