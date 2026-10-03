@@ -485,3 +485,19 @@ fn the_range_handshake_retires_the_published_task_identities() {
         assert_ne!(manifest.version, published, "{name} reused its published identity");
     }
 }
+
+/// Declaring Kling's credential recipe (B4, host-zero-vendor-boundary §3.3) changes the
+/// `task-kling-v2` manifest, so its pending 0.32.2 identity (the B3 range handshake) retires with
+/// it.
+#[test]
+fn the_kling_credential_recipe_retires_the_pending_task_kling_v2_identity() {
+    let manifest: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(
+            repo_root().join("components").join("task-kling-v2").join("manifest.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(manifest.credentials.is_some(), "task-kling-v2 declares how its bearer is minted");
+    assert_ne!(manifest.version, "0.32.2", "a changed package cannot reuse its identity");
+}

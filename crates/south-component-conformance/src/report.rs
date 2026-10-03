@@ -100,6 +100,15 @@ pub enum CheckV1 {
     /// keyed by provider type; a component that writes the cap elsewhere would
     /// spend more than the host reserved.
     RequestFactsHonoured,
+    /// Each `credential.*` fixture's run of the package's credential recipe, by south's reference
+    /// interpreter, equals the fixture's expected run: the rendered exchange requests, the
+    /// extracted values, the expiry, the write-back and the exported attributes (B4,
+    /// host-zero-vendor-boundary §3.7).
+    ///
+    /// The host executes recipes, so a package's recipe is data whose meaning only a run shows.
+    /// A recipe that sends the refresh token to the wrong parameter, reads the wrong clock, or
+    /// loses rotated refresh material passes gate ① and fails here.
+    CredentialRecipeMatch,
 }
 
 impl CheckV1 {
@@ -120,6 +129,7 @@ impl CheckV1 {
             Self::UsagePartition => "usage_partition",
             Self::DescriptorAuthWithinManifest => "descriptor_auth_within_manifest",
             Self::RequestFactsHonoured => "request_facts_honoured",
+            Self::CredentialRecipeMatch => "credential_recipe_match",
         }
     }
 }

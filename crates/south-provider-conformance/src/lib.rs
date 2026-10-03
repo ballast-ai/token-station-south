@@ -20,6 +20,7 @@ macro_rules! fixed_debug {
 
 mod controlled_query;
 mod controlled_user_agent;
+mod credential_recipe;
 mod header_auth;
 mod provider_binary;
 mod provider_get;
@@ -38,6 +39,21 @@ pub use controlled_user_agent::{
     ControlledUserAgentCaseIdV1, ControlledUserAgentExpectedEvidenceV1,
     ControlledUserAgentExpectedOutcomeV1, ControlledUserAgentExpectedV1,
     ControlledUserAgentFixtureV1, ControlledUserAgentUpstreamV1, controlled_user_agent_fixtures_v1,
+};
+pub use credential_recipe::{
+    CREDENTIAL_RECIPE_CONFORMANCE_SUITE_ID, CREDENTIAL_RECIPE_CONFORMANCE_SUITE_VERSION,
+    CREDENTIAL_RECIPE_EXPIRY_TOLERANCE_SECONDS_V1, CREDENTIAL_RECIPE_FAKE_TOKEN_ENDPOINT_V1,
+    CREDENTIAL_RECIPE_NARROW_MAX_TTL_SECONDS_V1, CREDENTIAL_RECIPE_NARROW_MIN_TTL_SECONDS_V1,
+    CREDENTIAL_RECIPE_REFRESH_MARGIN_SECONDS_V1, CREDENTIAL_RECIPE_SLOT_V1,
+    CredentialGenerationFixtureV1, CredentialMintedFixtureV1, CredentialRecipeCaseIdV1,
+    CredentialRecipeConformanceFailureV1, CredentialRecipeConformanceReportV1,
+    CredentialRecipeFixtureV1, CredentialRecipeFutureV1, CredentialRecipeHarnessV1,
+    CredentialRecipeKindV1, CredentialRecipeMismatchCategoryV1, CredentialRecipeMismatchV1,
+    CredentialRecipeOpenRefusedV1, CredentialRecipeSessionV1, CredentialRecipeStepV1,
+    CredentialResolveExpectedV1, CredentialResolveObservationV1, CredentialStoredExpectedV1,
+    FakeTokenAnswerV1, FakeTokenEndpointV1, FakeTokenExchangeFutureV1, FakeTokenHoldV1,
+    FakeTokenReplyV1, FakeTokenRequestV1, FakeTokenResponseV1, FakeTokenUnreachableV1,
+    StoredCredentialV1, credential_recipe_fixtures_v1, run_credential_recipe_conformance_v1,
 };
 pub use header_auth::{
     FAKE_HEADER_SECRET_V1, HEADER_AUTH_CONFORMANCE_SUITE_ID, HEADER_AUTH_CONFORMANCE_SUITE_VERSION,

@@ -29,7 +29,7 @@ community policy      enterprise policy
 | `south-contracts` | Implemented bounded HTTP (JSON POST, body-less GET, and multipart POST request shapes, and a buffered binary response beside the UTF-8 one), Bearer, sanctioned header-secret, and combined Bearer-plus-header-secret auth, stable error, byte-streaming, and closed quota metadata contracts, plus the sanctioned controlled query and controlled user-agent declarations |
 | `south-core` | Implemented host-neutral buffered and streaming provider-call orchestration and its buffered body-less GET, multipart and binary-response twins, plus the shared host prelude (`raw` module: raw-call type, its host-signed, GET and multipart twins, contract-parse orchestration, one-shot wrappers for all four, resolver adapters) |
 | `south-transport-reqwest` | Implemented hardened buffered and byte-streaming JSON POST transport, the same buffered transport for body-less GET and multipart POST requests (rendering the latter's media type and sharing its allocation) and for a JSON POST whose response is buffered as opaque bytes under its own larger cap, bounded quota metadata capture, sanctioned user-agent application, and one-config transport-pair construction |
-| `south-provider-conformance` | Implemented immutable provider-call, provider-stream, provider-quota-metadata, header-auth, controlled-query, controlled-user-agent, provider-get, provider-multipart, and provider-binary v1 fixtures |
+| `south-provider-conformance` | Implemented immutable provider-call, provider-stream, provider-quota-metadata, header-auth, controlled-query, controlled-user-agent, provider-get, provider-multipart, and provider-binary v1 fixtures, and the host-implemented credential-recipe v1 suite (harness, fake token endpoint, runner) |
 | `south-testkit` | Implemented assembled-executor conformance runners and reference executors for all nine suites, plus the owned raw-call, host-signed raw-call, raw-GET and raw-multipart builders for host tests |
 | `south-provider-api` | Implemented v2 provider component ABI: WIT package `token-station:adapter@2.0.0` (world `provider-adapter-v2`) plus the gate-① manifest schema with the seven-field compatibility tuple; depends on no other south crate by design |
 | `south-component-conformance` | Implemented gates ① and ② (package admission + `south.provider-component.v1` behavior suite) with the native `provider-openai-compatible`, `provider-anthropic` and `provider-gemini` references and a frozen fixture pack each; a sanctioned typed consumer of the Canonical IR, pinned to a kernel distribution tag |
@@ -59,6 +59,7 @@ south-core -------------------------------> south-contracts
 south-transport-reqwest ------------------> south-core
 south-transport-reqwest ------------------> south-contracts
 south-provider-conformance ---------------> south-contracts
+south-provider-conformance ---------------> south-provider-api
 south-testkit ----------------------------> south-contracts
 south-testkit ----------------------------> south-core
 south-testkit ----------------------------> south-provider-conformance
@@ -120,10 +121,18 @@ Two tests, ruled 2026-09-08. Material whose **leak impact exceeds one API key** 
 service-account private keys, key-encryption keys, anything that decrypts every tenant's rows.
 Logic whose **wrong decision is money or an unrecoverable credential** stays host-side: BYOK wallet
 selection and its exclusivity rules, single-use rotation's concurrency guard, anything that depends
-on database semantics to be correct. Minting, OAuth refresh, and request signing therefore remain
-host code by design; South offers the finalizer seam (`RequestFinalizerV1`) for the *position* of a
-signature, never for the material. A host keeps a per-provider authentication layer above South,
-and that layer is not a gap South intends to close.
+on database semantics to be correct. So for minting, OAuth refresh and request signing, the
+**execution**, the **material**, the **destinations** they may reach and the **host invariants**
+belong to the host, and the **per-provider description** belongs to the component: a package
+declares its credential fields, slots and minting recipes as data (`credentials`, a closed step
+vocabulary) and its request-signing scheme (`signing`), and the host runs one generic executor over
+them. South offers the finalizer seam (`RequestFinalizerV1`) for the *position* of a signature, never
+for the material. The host's invariants hold whatever a recipe declares: it never overwrites
+non-empty refresh material with an empty value and keeps the previous generation; every expiry is
+clamped to 60 seconds to 24 hours; a recipe reaches only endpoints the operator confirmed for that
+package digest; and recipes run only for verified first-party packages until package signing exists.
+(Revised 2026-10-02, `docs/design/2026-09-30-host-zero-vendor-boundary.md` §3.4, §3.5; this replaces
+"a host keeps a per-provider authentication layer above South".)
 
 During migration, `token-station-protocol` may re-export South types under old Rust paths. It must
 not define duplicate nominal types, and South must never depend back on that compatibility layer.

@@ -15,6 +15,9 @@
 //!   judged against the [`ProviderComponentV1`] seam so it exists and bites
 //!   before any runtime can instantiate a component, and so a component
 //!   author can run it against a native build without a WASM toolchain.
+//!   A package whose manifest declares credential recipes is also judged by
+//!   [`credential_recipe_checks_v1`]: its `credential.*` fixtures run through
+//!   the test-only reference interpreter in [`credential_recipe`].
 //! - Gate ③ (host integration) is the three frozen suites in
 //!   `south-provider-conformance`, unchanged. Gate ④ (runtime enforcement)
 //!   is a property of the S3 runtime's construction; no fixture here
@@ -40,11 +43,19 @@ mod task_fixture_v2;
 mod task_suite_v2;
 pub mod task_v2_json;
 pub use task_fixture_v2::{TASK_FIXTURE_KIND_V2, TaskCaseV2, TaskFamilyV2, TaskFixturePackV2};
-pub use task_suite_v2::{TASK_COMPONENT_SUITE_V2, run_task_component_suite_v2};
+pub use task_suite_v2::{
+    TASK_COMPONENT_SUITE_V2, run_task_component_suite_v2, run_task_component_suite_v2_for_manifest,
+};
 pub mod anthropic_dialect;
 mod descriptor_auth;
 mod url_segment;
 pub use descriptor_auth::{AdmittedAuthV1, DescriptorAuthErrorV1, admit_descriptor_auth};
+mod credential_fixture;
+pub mod credential_recipe;
+pub use credential_fixture::{
+    CREDENTIAL_FIXTURE_KIND_V1, CredentialCaseV1, CredentialFamilyV1, CredentialFixturePackV1,
+    credential_recipe_checks_v1,
+};
 mod fixture;
 mod reasoning_replay;
 pub mod reference;

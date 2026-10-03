@@ -1373,6 +1373,108 @@ to native reference implementations. Where §8 left a choice open:
   clean rebuild of `provider-gemini` was byte-identical. Builds on a different runner image would surface as a false
   "bump the version".
 
+### 13.3 Implementation of B4 (2026-10-02)
+
+Phase B4 is on branch `feature/b4-credential-recipes`, stacked on B3 (§13.2). Under the owner's standing rule,
+three questions were taken as recommended:
+
+- Q11: package signing comes before third-party recipes.
+- Q18 (south half): the operator confirms every recipe endpoint per package digest.
+- Q2: the ARCHITECTURE sentence is revised as §3.5 proposes.
+
+**Gate ① (§3.7)** is implemented as the `credentials` section of the manifest (`CredentialsV1`).
+- It checks the closed step kinds and algorithms, and caps a recipe at 4 steps.
+- Rotation has no default. A recipe that rotates requires `write_back`, which must target a secret field.
+- `present` must be reachable.
+- `goto` may only name a later step, so the graph is acyclic by construction.
+- Endpoints follow the family-endpoint template rules (§7.3). Their parameters come only from whole non-secret
+  fields that have a syntax.
+- It enforces the §3.4 rules: `aud` is bound to the receiving step, `sub` is never a constant, and attributes
+  come only from non-secret fields.
+- A clamp declared by a recipe must lie within 60 seconds to 24 hours.
+- A selector may test whether a secret field is present, never its value.
+- Its test proves the vocabulary expresses the Vertex, Codex, Copilot, Kiro and Kling recipes of §3.9.
+
+**Three rules the record did not pin, decided here:**
+- A recipe may not set the headers `authorization`, `cookie`, `host` or the framing headers. A credential is
+  presented through the step's `auth` (scheme plus value).
+- The signing key of `jwt_sign` must come from a secret field.
+- A seed fills only a minted slot.
+
+**Endpoints for confirmation.** `CredentialsV1::endpoints()` lists every endpoint a package's recipes can reach,
+which is what an operator confirms.
+
+**OAuth admission.** `admit_descriptor_auth` now admits `Auth::OAuth`, as Bearer, exactly when a recipe mints the
+slot (§4.2).
+
+**Gate ② (§3.7)** is `south_component_conformance::credential_recipe`, the reference interpreter, and the check
+`CredentialRecipeMatch`.
+- The interpreter runs only in tests. Time, the JWS signer and the responses to exchanges are injected; it has no
+  network, clock or crypto of its own. It builds the JWS compact form itself and asks the signer only for signature
+  bytes. Fixtures use `FixtureSignerV1`, an FNV-1a stand-in that is not a signature.
+- Fixtures are `credential.<family>.<case>.{input,expected}.json` beside a package's other fixtures. The input names
+  the slot, `now`, the fake field values and a fake response per step. The expected file is the whole run: the
+  recipe after any selector, every rendered request, and the outcome.
+- Both suites run the cases for a manifest that declares `credentials` (`run_task_component_suite_v2_for_manifest` is
+  new). A package with recipes owes a `clock` sample that mints. It also owes a `rotation` sample when a recipe
+  rotates, and an `on-status` sample that meets a non-2xx status when a recipe makes an exchange. A family is
+  judged by what its cases do, not by their names.
+- `task-kling-v2` 0.32.3 declares the Kling recipe. With the same signature bytes, its JWT equals the host's byte for
+  byte: `jsonwebtoken` writes the header as `{"typ":"JWT","alg":"HS256"}`, and the claims `iss`, `exp`, `nbf` come out
+  in that order because the interpreter writes RFC 7519's registered claims first, in RFC order.
+
+**Rules the record did not pin, decided here:**
+- A field with a `default` is always present.
+- A step whose `requires` is unmet ends the run as `use_stored` when the recipe declares
+  `without_refresh_material: use_stored`. Otherwise it is a configuration error.
+- A step that some `goto` targets is entered only through that `goto`. Falling through into it ends the recipe, so a
+  successful exchange does not run its alternative branch.
+- The expiry of the presented value is the clock of the step that produced it, or else `now + default_seconds`. With
+  neither, the run is `transient`. So a `jwt_sign` recipe declares `default_seconds`.
+- A JSON `null` is absent. An absent or empty write-back output keeps the stored value.
+
+**Two further gate ① rules, found while building gates ② and ③:**
+- `refresh_margin_seconds` must be shorter than the shortest validity a minted value can have, which is the recipe's
+  `min_ttl_seconds`, else the host's 60 s floor. Otherwise every freshly minted value is already due, and the host
+  exchanges on every request.
+- A presented JWT that the recipe signs itself declares `exp` as `now_plus`, and `default_seconds` no longer than
+  that lifetime. Otherwise a host could cache a token past its own expiry.
+
+**Gate ③ (§3.7)** is the host suite `south.credential-recipe.v1` in `south-provider-conformance`.
+- The host implements `CredentialRecipeHarnessV1`: open a session over a fresh store and its own generic executor,
+  with token egress injected to the suite's `FakeTokenEndpointV1`. The injection exists only in test builds, which is
+  how §3.4 rule 6 is met.
+- Nine cases: an exchange failure writes nothing; `reauth_required` is not retried; concurrent refreshes make one
+  exchange; the host clamp; the recipe clamp; rotation writes back and keeps the previous generation; an empty
+  rotation does not wipe; a CAS loser re-reads the winner; a probe does not rotate.
+- An in-memory reference host passes all nine. Nine deliberately broken hosts each fail exactly the case guarding
+  their invariant.
+- `compatibility.json` registers the suite as `not_verified` on both hosts.
+
+**What gate ③ pins where §3.5 was silent:**
+- "Until the operator acts" means a new credential generation. A `reauth_required` latch is tied to the generation,
+  and any operator write clears it.
+- A transient failure writes nothing and does not latch. A cooldown keyed by credential id, which outlives a
+  generation change, would fail the suite.
+- The previous generation that §3.5 keeps holds the replaced write-back values.
+- For no-wipe, an omitted, `""` or `null` refresh token all mean "keep the stored one".
+- A CAS loser uses the winner's value.
+
+**Left open:**
+- Whether a probe may refresh a non-rotating recipe.
+- What a loser does when the winner's value is already stale. Today's server errors.
+
+**Gaps found.**
+- **The production host fails case 2 today.** Its terminal-failure path writes an audit entry and a metric, but holds
+  no latch, so a `reauth_required` credential is retried on the next request. The generic executor of P21 S3 has to
+  add the latch.
+- Copilot's direct-use flow (§3.9) presents the GitHub token itself after the `404 → goto` branch. `present` names
+  one step output, so that recipe cannot say what it presents. This is an **open amendment for B6**, recommended
+  as: `present` takes ordered candidates, each a step output or `{"field": name}` of a secret field, and the first
+  one present wins. No shipped package needs it before a Copilot component exists.
+- Claim order is canonical, not declared, because `claims` is a map. That matches the host for Kling. The host's
+  Vertex struct writes `iss, scope, aud, iat, exp`: the JSON is equal, but the bytes differ.
+
 ## 14. Existing text to revise in step
 
 - ARCHITECTURE.md:117-126: change the concluding sentence to "execution, material, reachable destinations and the

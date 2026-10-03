@@ -99,6 +99,36 @@ fn an_arm_the_manifest_does_not_declare_is_refused() {
     );
 }
 
+/// An OAuth descriptor is admitted, as Bearer, exactly when a credential recipe mints its slot
+/// (B4, host-zero-vendor-boundary §3.3, §4.2).
+#[test]
+fn an_oauth_descriptor_is_admitted_only_on_a_minted_slot() {
+    let (config, mut descriptor) = built();
+    descriptor.auth = Some(Auth::OAuth { secret: slot(&config), scopes: Vec::new() });
+    let mut minting = manifest(&["bearer"]);
+    minting.credentials = Some(
+        serde_json::from_value(serde_json::json!({
+            "schema": "south.credential-recipe.v1",
+            "fields": { "secret_key": { "secret": true, "required": true } },
+            "slots": { slot(&config).as_str(): { "minted": "token" } },
+            "recipes": { "token": {
+                "steps": [{ "id": "jwt", "kind": "jwt_sign", "alg": "HS256",
+                            "key": { "field": "secret_key" }, "claims": { "exp": { "now_plus": 60 } } }],
+                "present": "jwt.jwt", "rotates_refresh_material": false,
+                "default_seconds": 60 } }
+        }))
+        .unwrap(),
+    );
+    assert_eq!(minting.validate(), Ok(()));
+    assert_eq!(admit_descriptor_auth(&minting, &config, &descriptor), Ok(AdmittedAuthV1::Bearer));
+
+    minting.credentials.as_mut().unwrap().slots.clear();
+    assert_eq!(
+        admit_descriptor_auth(&minting, &config, &descriptor),
+        Err(DescriptorAuthErrorV1::OAuthNotAdmitted)
+    );
+}
+
 #[test]
 fn a_host_signed_descriptor_names_no_credential() {
     let (config, descriptor) = built();

@@ -3,6 +3,7 @@ use serde_json::Value;
 use south_component_conformance::{
     CheckV1, ComponentResultV1, PreparedTaskV2, SubmitOutcomeV2, TaskComponentV2,
     TaskFixturePackV2, reference_kling_task_v2::KlingTaskReferenceV2, run_task_component_suite_v2,
+    run_task_component_suite_v2_for_manifest,
 };
 use south_contracts::{HostMintedValuesV1, TaskLocatorV2, TaskObservationV2, TaskRenderContextV2};
 use std::path::Path;
@@ -24,6 +25,53 @@ fn frozen_v2_pack_passes_reference() {
     assert!(report.is_passing(), "{report}");
     assert_eq!(report.suite(), "south.task-component.v2");
 }
+/// Kling's credential recipe (B4, host-zero-vendor-boundary §3.3) is judged with the rest of its
+/// gate ② run: its `credential.clock.*` fixtures, and the coverage a `jwt_sign`-only recipe owes.
+#[test]
+fn frozen_v2_pack_passes_with_the_manifest_and_runs_the_kling_recipe() {
+    let manifest: south_provider_api::ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../components/task-kling-v2/manifest.json"
+        ))
+        .unwrap(),
+    )
+    .unwrap();
+    let report =
+        run_task_component_suite_v2_for_manifest(&KlingTaskReferenceV2, &pack(), &manifest);
+    assert!(report.is_passing(), "{report}");
+    let credential_cases: Vec<&str> = report
+        .outcomes()
+        .iter()
+        .filter(|row| row.check == CheckV1::CredentialRecipeMatch)
+        .map(|row| row.case.as_str())
+        .collect();
+    assert_eq!(
+        credential_cases,
+        [
+            "credential.clock.kling-access-key-not-printable",
+            "credential.clock.kling-jwt",
+            "credential.clock.kling-missing-secret-key",
+        ]
+    );
+    assert!(
+        report
+            .outcomes()
+            .iter()
+            .any(|row| row.check == CheckV1::Coverage && row.case == "credential")
+    );
+
+    // Without its credential cases the same pack owes the clock sample by name.
+    let bare =
+        pack().with_credentials(south_component_conformance::CredentialFixturePackV1::default());
+    let report = run_task_component_suite_v2_for_manifest(&KlingTaskReferenceV2, &bare, &manifest);
+    assert!(
+        report
+            .failures()
+            .any(|row| row.check == CheckV1::Coverage && row.case == "credential.clock")
+    );
+}
+
 #[test]
 fn v2_pack_covers_all_seven_operations() {
     assert!(pack().missing_families().is_empty());

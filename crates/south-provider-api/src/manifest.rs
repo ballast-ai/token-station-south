@@ -268,6 +268,10 @@ pub struct ComponentManifestV1 {
     /// world only.
     #[serde(default, skip_serializing_if = "StreamFramingV1::is_bytes")]
     pub stream_framing: StreamFramingV1,
+    /// How the package's minted secret slots are produced: fields, import,
+    /// slots and recipes (B4, §3.3). Absent means every slot is `static`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub credentials: Option<crate::CredentialsV1>,
     /// How the host signs a `host_signed` package's requests. Absent means the
     /// host infers nothing from the declaration (today's behavior).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -530,6 +534,9 @@ impl ComponentManifestV1 {
     pub fn validate(&self) -> Result<(), ManifestErrorV1> {
         let world = self.validate_identity()?;
         self.validate_sandbox()?;
+        if let Some(credentials) = &self.credentials {
+            credentials.validate(&self.permissions.secrets)?;
+        }
         self.validate_vocabulary(world)?;
         self.validate_signing()?;
         self.validate_role(world)?;
@@ -947,6 +954,8 @@ pub enum ManifestErrorV1 {
     RequestFactsIsAProviderWorldDeclaration,
     #[error("request_facts for family `{family}`: {detail}")]
     InvalidRequestFacts { family: String, detail: String },
+    #[error("credentials: {0}")]
+    InvalidCredentials(String),
     #[error("signing: {0}")]
     InvalidSigning(String),
     #[error("stream_framing is a provider-world declaration")]

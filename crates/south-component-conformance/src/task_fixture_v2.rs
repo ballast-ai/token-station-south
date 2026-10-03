@@ -13,6 +13,7 @@ use std::path::Path;
 
 use serde_json::Value;
 
+use crate::credential_fixture::CredentialFixturePackV1;
 use crate::fixture::FixtureErrorV1;
 
 /// The filename prefix a task fixture carries.
@@ -82,6 +83,7 @@ pub struct TaskCaseV2 {
 #[derive(Debug, Clone, Default)]
 pub struct TaskFixturePackV2 {
     cases: Vec<TaskCaseV2>,
+    credentials: CredentialFixturePackV1,
 }
 
 impl TaskFixturePackV2 {
@@ -126,12 +128,25 @@ impl TaskFixturePackV2 {
             let expected = read_json(&directory.join(format!("{stem}.expected.json")))?;
             cases.push(TaskCaseV2 { name: stem, family, input, expected });
         }
-        Ok(Self { cases })
+        Ok(Self { cases, credentials: CredentialFixturePackV1::load(directory)? })
     }
 
     #[must_use]
     pub fn cases(&self) -> &[TaskCaseV2] {
         &self.cases
+    }
+
+    /// The `credential.*` cases in the same directory (`credential_fixture.rs`).
+    #[must_use]
+    pub const fn credentials(&self) -> &CredentialFixturePackV1 {
+        &self.credentials
+    }
+
+    /// The same pack with these credential cases.
+    #[must_use]
+    pub fn with_credentials(mut self, credentials: CredentialFixturePackV1) -> Self {
+        self.credentials = credentials;
+        self
     }
 
     /// Families with no case. Empty is the only passing answer.

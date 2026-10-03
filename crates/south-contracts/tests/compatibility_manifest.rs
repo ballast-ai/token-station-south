@@ -113,6 +113,8 @@ struct Conformance {
     provider_multipart_suite: u32,
     provider_binary_suite_id: String,
     provider_binary_suite: u32,
+    credential_recipe_suite_id: String,
+    credential_recipe_suite: u32,
     provider_component_suite_id: String,
     provider_component_suite: u32,
     task_component_v1_suite_id: String,
@@ -154,7 +156,7 @@ struct ProviderRuntime {
 /// status is not `verified`.
 type ExpectedCapability = (&'static str, &'static str, Option<usize>);
 
-fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 9]> {
+fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 10]> {
     BTreeMap::from([
         (
             "token-station",
@@ -202,6 +204,9 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 9
                 // 0.26.0) stays not_verified: the community host has no text-to-speech or
                 // image-generation surface, so nothing there answers in bytes.
                 ("provider_binary", "not_verified", None),
+                // credential_recipe (gate ③ of credential recipes, B4) stays not_verified: the
+                // community host has no recipe executor.
+                ("credential_recipe", "not_verified", None),
             ],
         ),
         // token-station-server provider_stream verified 2026-08-17: the durable
@@ -367,6 +372,11 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 9
                 // record is held by that host's repository; this manifest records only the
                 // resulting status.
                 ("provider_binary", "verified", Some(6)),
+                // credential_recipe (gate ③ of credential recipes, B4) stays not_verified until
+                // that host's generic recipe executor replaces its five mint strategies and runs
+                // south.credential-recipe.v1 through its own store. Its strategy skeleton today has
+                // no reauth_required latch, so the suite existing here is not adoption evidence.
+                ("credential_recipe", "not_verified", None),
             ],
         ),
     ])
@@ -506,6 +516,8 @@ fn compatibility_manifest_describes_the_library_slice() {
     assert_eq!(manifest.conformance.provider_multipart_suite, 1);
     assert_eq!(manifest.conformance.provider_binary_suite_id, "south.provider-binary.v1");
     assert_eq!(manifest.conformance.provider_binary_suite, 1);
+    assert_eq!(manifest.conformance.credential_recipe_suite_id, "south.credential-recipe.v1");
+    assert_eq!(manifest.conformance.credential_recipe_suite, 1);
     assert_eq!(manifest.conformance.provider_component_suite_id, "south.provider-component.v1");
     assert_eq!(manifest.conformance.provider_component_suite, 1);
     assert_eq!(manifest.conformance.task_component_v1_suite_id, "south.task-component.v1");
@@ -529,7 +541,7 @@ fn compatibility_manifest_describes_the_library_slice() {
         ("south-component-conformance", "provider_component_gates_reference_v1"),
         (
             "south-provider-conformance",
-            "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_provider_get_provider_multipart_provider_binary_suites_v1",
+            "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_provider_get_provider_multipart_provider_binary_credential_recipe_suites_v1",
         ),
         ("south-provider-runtime", "sandboxed_component_execution_v1"),
         (

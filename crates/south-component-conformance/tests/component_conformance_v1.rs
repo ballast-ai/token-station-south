@@ -44,6 +44,7 @@ fn reference_manifest() -> ComponentManifestV1 {
         usage_evidence: UsageEvidenceV1::Reported,
         stream_framing: south_provider_api::StreamFramingV1::Bytes,
         signing: None,
+        credentials: None,
         request_facts: std::collections::BTreeMap::new(),
         endpoint: std::collections::BTreeMap::new(),
         config_schema: std::collections::BTreeMap::new(),
