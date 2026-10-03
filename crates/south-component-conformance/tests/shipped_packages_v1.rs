@@ -75,15 +75,14 @@ fn package_version(cargo_toml: &str) -> &str {
 /// must not sweep it along — this sentence has been rewritten by a blanket
 /// version replacement twice already.)
 ///
-/// The tuple's `south_runtime` is the same gap one field over: the package
-/// manifest declares the release it was verified with, and the suites hold
-/// that release as literals, so a workspace bump that updates none of them
-/// leaves the package a release behind while every assertion still agrees with
-/// itself. Pinning it to this crate's own version — the workspace version —
-/// makes the bump the machine's job, the way `compatibility.json`'s release
-/// version is already pinned.
+/// `south_runtime` is the release a package was last verified with. Under the
+/// range handshake (B3, `docs/design/2026-09-30-host-zero-vendor-boundary.md`
+/// §8.3, §8.6) a package whose content is unchanged keeps it — re-stamping
+/// every package each release is exactly what the range removes — so it may
+/// lag the workspace version but never exceed it: a package cannot have been
+/// verified with a runtime that does not exist yet.
 #[test]
-fn every_shipped_package_agrees_with_its_crate_and_names_this_release() {
+fn every_shipped_package_agrees_with_its_crate_and_names_no_future_release() {
     let mut seen = BTreeSet::new();
     for package in shipped_packages() {
         let manifest: ComponentManifestV1 = serde_json::from_str(
@@ -100,11 +99,14 @@ fn every_shipped_package_agrees_with_its_crate_and_names_this_release() {
             "{}: the crate version and the package manifest are one number in two files",
             manifest.name
         );
-        assert_eq!(
-            manifest.compatibility.south_runtime,
-            env!("CARGO_PKG_VERSION"),
-            "{}: the package manifest must declare the release it ships in",
-            manifest.name
+        let triple = |version: &str| -> Vec<u64> {
+            version.split('.').map(|part| part.parse().expect("a numeric triple")).collect()
+        };
+        assert!(
+            triple(&manifest.compatibility.south_runtime) <= triple(env!("CARGO_PKG_VERSION")),
+            "{}: declares south runtime {}, newer than this release",
+            manifest.name,
+            manifest.compatibility.south_runtime
         );
         seen.insert(manifest.name);
     }
@@ -418,4 +420,68 @@ fn request_facts_retire_the_published_converse_identity() {
         manifest.version, "1.0.5",
         "provider-bedrock-converse reused its published identity"
     );
+}
+
+/// B3 (host-zero-vendor-boundary §8.3): every shipped manifest declares the runtime ABI epoch and
+/// the kernel contract numbers this release distributes (`compatibility.json`), and every task
+/// package the task contract it speaks, so a host can admit it by range instead of exact tuple.
+#[test]
+fn every_shipped_package_declares_the_range_handshake() {
+    let compatibility: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(repo_root().join("compatibility.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(compatibility["runtime_abi"], south_provider_api::RUNTIME_ABI);
+    let kernel_contracts: std::collections::BTreeMap<String, u32> =
+        serde_json::from_value(compatibility["kernel_contracts"].clone()).unwrap();
+    let mut seen = 0;
+    for entry in std::fs::read_dir(repo_root().join("components")).unwrap() {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(entry.unwrap().path().join("manifest.json")).unwrap(),
+        )
+        .unwrap();
+        let declared = &manifest.compatibility;
+        assert_eq!(
+            declared.runtime_abi,
+            Some(south_provider_api::RUNTIME_ABI),
+            "{}",
+            manifest.name
+        );
+        assert_eq!(declared.kernel_contracts, kernel_contracts, "{}", manifest.name);
+        let expected_contracts: std::collections::BTreeMap<String, u32> =
+            if manifest.api_version.starts_with("task") {
+                [("task".to_owned(), u32::from(south_contracts::TASK_CONTRACT_VERSION))].into()
+            } else {
+                std::collections::BTreeMap::new()
+            };
+        assert_eq!(declared.contracts, expected_contracts, "{}", manifest.name);
+        seen += 1;
+    }
+    assert_eq!(seen, 13);
+}
+
+/// Declaring the range handshake changes every task manifest, so the task identities published
+/// with 0.42.0 retire; the four provider packages already moved in B1 and B2 and are unreleased.
+#[test]
+fn the_range_handshake_retires_the_published_task_identities() {
+    for (name, published) in [
+        ("task-kling", "1.0.4"),
+        ("task-kling-v2", "0.32.1"),
+        ("task-minimax-v2", "0.31.1"),
+        ("task-bailian-v2", "0.31.1"),
+        ("task-xai-v2", "0.35.1"),
+        ("task-byteplus-v2", "0.36.1"),
+        ("task-veo-v2", "0.35.1"),
+        ("task-wan-image-v2", "0.35.1"),
+        ("task-gmi-image-v2", "0.35.1"),
+    ] {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_ne!(manifest.version, published, "{name} reused its published identity");
+    }
 }

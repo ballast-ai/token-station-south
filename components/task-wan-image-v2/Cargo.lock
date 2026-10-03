@@ -410,7 +410,7 @@ dependencies = [
 
 [[package]]
 name = "task-wan-image-v2"
-version = "0.35.1"
+version = "0.35.2"
 dependencies = [
  "south-component-conformance",
  "wit-bindgen",

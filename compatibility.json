@@ -1,8 +1,14 @@
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "release": {
     "version": "0.42.0",
     "stability": "library_slice"
+  },
+  "runtime_abi": 1,
+  "kernel_contracts": {
+    "canonical_ir": 2,
+    "error_catalog": 1,
+    "stream": 2
   },
   "contracts": {
     "reserved_header_policy": 1,

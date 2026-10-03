@@ -11,8 +11,13 @@ use south_component_conformance::{
     FixturePackV1, ProviderComponentV1, accepts_manifest, reported_identity_matches,
     run_provider_component_suite_v1_for_manifest,
 };
-use south_provider_api::{ComponentManifestV1, HostExpectationsV1};
+use south_provider_api::ComponentManifestV1;
 use south_provider_runtime::{ComponentRuntimeV1, NoSecretsV1, RuntimeLimitsV1};
+
+#[path = "support/gate2_report.rs"]
+mod gate2_report;
+#[path = "support/host_range.rs"]
+mod host_range;
 
 fn repo_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().and_then(Path::parent).expect("repo root")
@@ -41,15 +46,6 @@ fn shipped_manifest() -> (String, ComponentManifestV1) {
     (source, manifest)
 }
 
-fn host_expectations() -> HostExpectationsV1 {
-    HostExpectationsV1 {
-        ir_schema_id: "token-station-protocol@0.4.0/v0.3.0".to_owned(),
-        kernel_version: "0.3.0".to_owned(),
-        kernel_revision: "6822aab1dea54ef646cb2206595cd4955ff9764a".to_owned(),
-        south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
-    }
-}
-
 fn sandboxed() -> SandboxedComponentV1 {
     let runtime = ComponentRuntimeV1::new(RuntimeLimitsV1::default()).expect("engine builds");
     let wasm = std::fs::read(component_wasm()).expect("the component reads");
@@ -58,7 +54,7 @@ fn sandboxed() -> SandboxedComponentV1 {
         &runtime,
         &source,
         &wasm,
-        &host_expectations(),
+        &host_range::host_range(),
         NoSecretsV1,
     )
     .expect("the shipped package passes every load gate");
@@ -72,12 +68,14 @@ fn shipped_pack() -> FixturePackV1 {
 
 #[test]
 fn the_sandboxed_component_passes_gate_two_byte_for_byte() {
+    let evidence = gate2_report::Evidence::capture("provider-bedrock-converse", component_wasm());
     let component = sandboxed();
     let report = run_provider_component_suite_v1_for_manifest(
         &component,
         &shipped_pack(),
         &shipped_manifest().1,
     );
+    evidence.record(&report);
     for failure in report.failures() {
         eprintln!("{failure}");
     }

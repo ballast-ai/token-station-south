@@ -205,6 +205,20 @@ pub struct CompatibilityDeclarationV1 {
     pub wit_package: String,
     /// Tuple 5 — the south runtime version the component was verified with.
     pub south_runtime: String,
+    /// The runtime ABI epoch the component was built for; must equal the
+    /// host's (B3, `docs/design/2026-09-30-host-zero-vendor-boundary.md` §8.3).
+    /// Absent on packages built before the range handshake, which only the
+    /// exact handshake ([`compatibility_matches`]) can admit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_abi: Option<u32>,
+    /// The kernel contract numbers the component was built against
+    /// (`canonical_ir`, `stream`, `error_catalog`); each must equal the host's.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub kernel_contracts: BTreeMap<String, u32>,
+    /// The south contract versions the component speaks (e.g. `{"task": 7}`);
+    /// each must be one the host accepts.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub contracts: BTreeMap<String, u32>,
 }
 
 /// A provider component package's `manifest.json`.
@@ -998,8 +1012,132 @@ pub enum CompatibilityMismatchV1 {
     SouthRuntime { declared: String, expected: String },
 }
 
+/// The runtime ABI epoch this south release speaks (§8.3). Incremented only on
+/// an incompatible change to the loader, the sandbox or WIT semantics, which
+/// needs a design record.
+pub const RUNTIME_ABI: u32 = 1;
+
+/// What an admitting host accepts, as ranges and sets rather than one exact
+/// tuple (B3, `docs/design/2026-09-30-host-zero-vendor-boundary.md` §8.3, §8.4).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HostRangeV1 {
+    /// Must equal the component's `runtime_abi`.
+    pub runtime_abi: u32,
+    /// The oldest south runtime a component may declare. A host raises it to
+    /// enforce a release that tightened gate ① or ② (§8.6).
+    pub south_runtime_min: String,
+    /// The south runtime this host links; a component may not declare a newer
+    /// one, which could rely on fields or semantics this runtime lacks.
+    pub south_runtime: String,
+    /// The kernel contract numbers this host distributes; a component must
+    /// declare exactly these.
+    pub kernel_contracts: BTreeMap<String, u32>,
+    /// For each south contract, the versions this host's codecs decode.
+    pub contracts: BTreeMap<String, BTreeSet<u32>>,
+}
+
+/// Why the range handshake refused a component.
+#[derive(Debug, Clone, Error, PartialEq, Eq)]
+pub enum CompatibilityMismatchV2 {
+    #[error(
+        "component declares no runtime_abi; it was built before the range handshake and only an \
+         exact-tuple host can load it"
+    )]
+    MissingRuntimeAbi,
+    #[error("component was built for runtime ABI {declared}; this host speaks {expected}")]
+    RuntimeAbi { declared: u32, expected: u32 },
+    #[error("compatibility.south_runtime `{0}` is not a `major.minor.patch` triple")]
+    InvalidSouthRuntime(String),
+    #[error(
+        "component was verified with south runtime {declared}, older than this host's minimum \
+         {minimum}"
+    )]
+    SouthRuntimeBelowMinimum { declared: String, minimum: String },
+    #[error("component was verified with south runtime {declared}, newer than this host's {host}")]
+    SouthRuntimeAboveHost { declared: String, host: String },
+    #[error(
+        "component declares kernel contract `{name}` as {declared:?}; this host distributes \
+         {expected:?}"
+    )]
+    KernelContract { name: String, declared: Option<u32>, expected: Option<u32> },
+    #[error("component speaks `{name}` contract {declared}; this host decodes {accepted:?}")]
+    Contract { name: String, declared: u32, accepted: Vec<u32> },
+}
+
+fn version_triple(version: &str) -> Option<(u64, u64, u64)> {
+    let mut parts = version.split('.');
+    let triple =
+        (parts.next()?.parse().ok()?, parts.next()?.parse().ok()?, parts.next()?.parse().ok()?);
+    parts.next().is_none().then_some(triple)
+}
+
+/// Gate ①, range half: the component's declaration must fall inside what the host accepts (§8.3).
+///
+/// `world`, WIT package and suite stay exact
+/// ([`ComponentManifestV1::validate`]); `ir_schema_id`, `kernel_version` and
+/// `kernel_revision` are provenance only.
+///
+/// # Errors
+///
+/// Returns the first [`CompatibilityMismatchV2`] found.
+pub fn compatibility_admits(
+    manifest: &ComponentManifestV1,
+    host: &HostRangeV1,
+) -> Result<(), CompatibilityMismatchV2> {
+    let declared = &manifest.compatibility;
+    let abi = declared.runtime_abi.ok_or(CompatibilityMismatchV2::MissingRuntimeAbi)?;
+    if abi != host.runtime_abi {
+        return Err(CompatibilityMismatchV2::RuntimeAbi {
+            declared: abi,
+            expected: host.runtime_abi,
+        });
+    }
+    let parse = |version: &str| {
+        version_triple(version)
+            .ok_or_else(|| CompatibilityMismatchV2::InvalidSouthRuntime(version.to_owned()))
+    };
+    let component = parse(&declared.south_runtime)?;
+    if component < parse(&host.south_runtime_min)? {
+        return Err(CompatibilityMismatchV2::SouthRuntimeBelowMinimum {
+            declared: declared.south_runtime.clone(),
+            minimum: host.south_runtime_min.clone(),
+        });
+    }
+    if component > parse(&host.south_runtime)? {
+        return Err(CompatibilityMismatchV2::SouthRuntimeAboveHost {
+            declared: declared.south_runtime.clone(),
+            host: host.south_runtime.clone(),
+        });
+    }
+    for name in declared.kernel_contracts.keys().chain(host.kernel_contracts.keys()) {
+        let (component, expected) =
+            (declared.kernel_contracts.get(name), host.kernel_contracts.get(name));
+        if component != expected {
+            return Err(CompatibilityMismatchV2::KernelContract {
+                name: name.clone(),
+                declared: component.copied(),
+                expected: expected.copied(),
+            });
+        }
+    }
+    for (name, version) in &declared.contracts {
+        let accepted = host.contracts.get(name);
+        if !accepted.is_some_and(|accepted| accepted.contains(version)) {
+            return Err(CompatibilityMismatchV2::Contract {
+                name: name.clone(),
+                declared: *version,
+                accepted: accepted.map(|set| set.iter().copied().collect()).unwrap_or_default(),
+            });
+        }
+    }
+    Ok(())
+}
+
 /// Gate ①, tuple half: the manifest's compatibility declaration must equal
-/// what the admitting host was built against. Refusal, never silent
+/// what the admitting host was built against.
+///
+/// Superseded by [`compatibility_admits`] (§8.4); kept for one release so a
+/// host can move at its own pace. Refusal, never silent
 /// degradation, and never a partial acceptance.
 ///
 /// # Errors

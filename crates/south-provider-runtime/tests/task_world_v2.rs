@@ -5,10 +5,12 @@ use std::process::Command;
 use std::sync::OnceLock;
 use std::time::Duration;
 
-use south_provider_api::HostExpectationsV1;
 use south_provider_runtime::{
     ComponentRuntimeV1, LoadedComponentV1, RuntimeLimitsV1, SecretSignerV1,
 };
+
+#[path = "support/host_range.rs"]
+mod host_range;
 
 fn repo_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().and_then(Path::parent).expect("repo root")
@@ -64,19 +66,10 @@ impl SecretSignerV1 for FixedSigner {
     }
 }
 
-fn expectations() -> HostExpectationsV1 {
-    HostExpectationsV1 {
-        ir_schema_id: "token-station-protocol@0.4.0/v0.3.0".to_owned(),
-        kernel_version: "0.3.0".to_owned(),
-        kernel_revision: "6822aab1dea54ef646cb2206595cd4955ff9764a".to_owned(),
-        south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
-    }
-}
-
 #[test]
 fn the_task_v2_guest_loads_without_replacing_v1() {
     let dir = package("v2", &shipped_task_manifest(), task_guest_wasm());
-    let loaded = LoadedComponentV1::load(&runtime(), &dir, &expectations(), FixedSigner)
+    let loaded = LoadedComponentV1::load(&runtime(), &dir, &host_range::host_range(), FixedSigner)
         .expect("the task-v2 package loads");
     assert_eq!(loaded.metadata().api_version, "task-adapter-v2");
     assert_eq!(loaded.metadata().name, "task-kling-v2");
@@ -94,7 +87,7 @@ fn task_v2_refuses_signing_imports_before_world_instantiation() {
             &runtime(),
             &shipped_task_manifest(),
             wat.as_bytes(),
-            &expectations(),
+            &host_range::host_range(),
             FixedSigner,
         )
         .expect_err("task-v2 is not granted signing imports");
@@ -112,7 +105,7 @@ fn load_with_limits(limits: RuntimeLimitsV1) -> LoadedComponentV1 {
         &runtime,
         &shipped_task_manifest(),
         &wasm,
-        &expectations(),
+        &host_range::host_range(),
         FixedSigner,
     )
     .expect("v2 loads")
@@ -121,8 +114,8 @@ fn load_with_limits(limits: RuntimeLimitsV1) -> LoadedComponentV1 {
 #[test]
 fn task_v2_calls_refuse_the_v1_and_provider_faces() {
     let dir = package("faces", &shipped_task_manifest(), task_guest_wasm());
-    let loaded =
-        LoadedComponentV1::load(&runtime(), &dir, &expectations(), FixedSigner).expect("v2");
+    let loaded = LoadedComponentV1::load(&runtime(), &dir, &host_range::host_range(), FixedSigner)
+        .expect("v2");
     assert!(matches!(
         loaded.call_parse_observation("{}"),
         Err(south_provider_runtime::CallErrorV1::Trap(_))
@@ -146,7 +139,7 @@ fn task_v2_bytes_cannot_claim_the_v1_world_or_a_different_identity() {
             &runtime(),
             &manifest.to_string(),
             &bytes,
-            &expectations(),
+            &host_range::host_range(),
             FixedSigner
         )
         .is_err()
@@ -157,7 +150,7 @@ fn task_v2_bytes_cannot_claim_the_v1_world_or_a_different_identity() {
         &runtime(),
         &manifest.to_string(),
         &bytes,
-        &expectations(),
+        &host_range::host_range(),
         FixedSigner,
     )
     .expect_err("identity mismatch");
@@ -166,7 +159,9 @@ fn task_v2_bytes_cannot_claim_the_v1_world_or_a_different_identity() {
 
 #[test]
 fn task_v2_admission_keeps_exact_runtime_compatibility() {
-    let mut host = expectations();
+    // The exact handshake, still supported for one release: a host holding the manifest's own
+    // declaration, except for the runtime, which no release can equal.
+    let mut host = host_range::exact_expectations_for(&shipped_task_manifest());
     host.south_runtime = "0.0.0".into();
     let bytes = std::fs::read(task_guest_wasm()).expect("guest");
     let error = LoadedComponentV1::load_embedded(
@@ -247,7 +242,7 @@ fn both_task_versions_load_in_one_runtime_and_keep_separate_faces() {
         &runtime,
         &v1_manifest,
         &v1_wasm,
-        &expectations(),
+        &host_range::host_range(),
         FixedSigner,
     )
     .expect("v1 coexists");
@@ -255,7 +250,7 @@ fn both_task_versions_load_in_one_runtime_and_keep_separate_faces() {
         &runtime,
         &shipped_task_manifest(),
         &v2_wasm,
-        &expectations(),
+        &host_range::host_range(),
         FixedSigner,
     )
     .expect("v2 coexists");

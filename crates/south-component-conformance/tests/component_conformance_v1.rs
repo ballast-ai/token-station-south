@@ -62,6 +62,9 @@ fn reference_manifest() -> ComponentManifestV1 {
             kernel_revision: "6822aab1dea54ef646cb2206595cd4955ff9764a".to_owned(),
             wit_package: WIT_PACKAGE.to_owned(),
             south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
+            runtime_abi: None,
+            kernel_contracts: std::collections::BTreeMap::new(),
+            contracts: std::collections::BTreeMap::new(),
         },
     }
 }

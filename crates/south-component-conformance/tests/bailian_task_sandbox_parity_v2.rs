@@ -10,10 +10,14 @@ use south_component_conformance::{
     TaskFixturePackV2, reference_bailian_task_v2::BailianTaskComponentV2,
     run_task_component_suite_v2,
 };
-use south_provider_api::HostExpectationsV1;
 use south_provider_runtime::{
     ComponentRuntimeV1, LoadedComponentV1, RuntimeLimitsV1, SecretSignerV1,
 };
+
+#[path = "support/gate2_report.rs"]
+mod gate2_report;
+#[path = "support/host_range.rs"]
+mod host_range;
 
 fn repo_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().and_then(Path::parent).expect("repo root")
@@ -34,15 +38,6 @@ fn component_wasm() -> &'static Path {
         repo_root()
             .join("components/task-bailian-v2/target/wasm32-wasip2/release/task_bailian_v2.wasm")
     })
-}
-
-fn expectations() -> HostExpectationsV1 {
-    HostExpectationsV1 {
-        ir_schema_id: "token-station-protocol@0.4.0/v0.3.0".to_owned(),
-        kernel_version: "0.3.0".to_owned(),
-        kernel_revision: "6822aab1dea54ef646cb2206595cd4955ff9764a".to_owned(),
-        south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
-    }
 }
 
 struct FixedSigner;
@@ -73,9 +68,14 @@ fn sandboxed() -> SandboxedTaskComponentV2 {
         max_payload_bytes: 4 * 1024 * 1024,
     })
     .expect("engine builds");
-    let loaded =
-        LoadedComponentV1::load_embedded(&runtime, &manifest, &wasm, &expectations(), FixedSigner)
-            .expect("the shipped package loads");
+    let loaded = LoadedComponentV1::load_embedded(
+        &runtime,
+        &manifest,
+        &wasm,
+        &host_range::host_range(),
+        FixedSigner,
+    )
+    .expect("the shipped package loads");
     SandboxedTaskComponentV2::new(loaded).map_err(|_| ()).expect("it declares the task world")
 }
 
@@ -83,7 +83,9 @@ fn sandboxed() -> SandboxedTaskComponentV2 {
 /// does, against the same frozen pack.
 #[test]
 fn the_sandboxed_component_passes_gate_two_byte_for_byte() {
+    let evidence = gate2_report::Evidence::capture("task-bailian-v2", component_wasm());
     let report = run_task_component_suite_v2(&sandboxed(), &pack());
+    evidence.record(&report);
     assert!(
         report.is_passing(),
         "the sandboxed component must pass the suite its reference passes: {:?}",
@@ -117,9 +119,14 @@ fn the_v1_typed_seam_refuses_a_loaded_v2_component() {
         max_payload_bytes: 4 * 1024 * 1024,
     })
     .expect("runtime");
-    let loaded =
-        LoadedComponentV1::load_embedded(&runtime, &manifest, &wasm, &expectations(), FixedSigner)
-            .expect("v2 loads");
+    let loaded = LoadedComponentV1::load_embedded(
+        &runtime,
+        &manifest,
+        &wasm,
+        &host_range::host_range(),
+        FixedSigner,
+    )
+    .expect("v2 loads");
     let returned = south_component_conformance::sandbox::SandboxedTaskComponentV1::new(loaded)
         .expect_err("v1 seam rejects v2");
     assert!(

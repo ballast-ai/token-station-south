@@ -1327,6 +1327,52 @@ chose as follows.
 - **Found while fuzzing.** The fuzz work turned up an existing defect, unrelated to B2:
   `ProviderEndpointV1::parse` is not idempotent for some inputs. It is fixed separately.
 
+### 13.2 Implementation of B3 (2026-10-02)
+
+Phase B3 is implemented on branch `feature/b3-compat-range`, which is stacked on B2 (§13.1); nothing is released.
+Q5 and Q8 were ruled as recommended under the owner's standing rule that a recommendation consistent with DP0 is
+adopted: a `runtime_abi` epoch (south stays 0.x), exact equality on the kernel's contract numbers, and no fallback
+to native reference implementations. Where §8 left a choice open:
+
+- **Range handshake (§8.3, §8.4).**
+  - `compatibility` gains `runtime_abi`, `kernel_contracts` and `contracts`, all optional on the wire, so manifests
+    written before B3 still parse. Only the exact handshake can admit them: the range handshake refuses a package
+    with no `runtime_abi`.
+  - `RUNTIME_ABI` is 1, and `compatibility.json` (schema 5) records it together with the kernel contract numbers
+    this release distributes.
+  - Kernel contracts must match in both directions: a missing, different or extra name is refused.
+  - `compatibility_matches` stays; it is marked superseded in its documentation but not `#[deprecated]`, so a
+    host building with `-D warnings` is not broken by the upgrade.
+- **One loader for both handshakes.** Every load path takes `&impl HostCompatibilityV1`, which both
+  `HostExpectationsV1` and `HostRangeV1` implement, so a host's call sites do not change when it moves.
+  `LoadErrorV1` gains `OutsideRange`.
+- **Per-package isolation (§8.5).** `load_package_set(runtime, root, host, pins, signer)` returns admitted
+  packages (with their `component.wasm` SHA-256 and the families they serve), refused packages with reasons, and
+  contested families. A pin selects a claimant only when exactly one claimant has that digest; an ambiguous pin
+  selects none. A package that loses every family it declares is refused with `EveryFamilyContested`.
+- **Identities.** Declaring the range handshake changes every manifest. The nine task packages retire their 0.42.0
+  identities: `task-kling` 1.0.5, `task-kling-v2` 0.32.2, `task-minimax-v2` / `task-bailian-v2` 0.31.2,
+  `task-byteplus-v2` 0.36.2, and the other four 0.35.2. The four provider packages already moved in B1 and B2 and
+  are unreleased. If B1, B2 and B3 are not released together, they need another bump.
+- **South's own tests use the range.** Every test that admits a shipped package goes through a shared
+  `HostRangeV1` built from `compatibility.json`; the tests that exercise the exact handshake take their true tuple
+  from the manifest. The shipped-package rule is `south_runtime` ≤ the workspace version, not equality, so a
+  package whose content is unchanged keeps its identity across releases instead of being re-stamped.
+- **Release index (§9).** Release CI generates `south-release-index.json` (schema `south.release-index.v1`) with
+  `scripts/release_index.py` from the archived manifests and wasm, never by hand, and lists it in `SHASUMS256.txt`.
+  Beyond §9.2's example, each entry names its `gate2_report` file. Where a field does not apply, it is `null`:
+  `stream_framing` and `usage_evidence` outside the provider world, and absent `compatibility` keys.
+- **Gate ② reports (§9.2).** Release CI runs each package's sandbox parity test against the bytes it just built
+  and writes a `south.gate2-report.v1` report: the suite, the identity, the manifest and `component.wasm` digests,
+  and every outcome, sorted. The component is digested before and after the run. The index generator refuses a
+  report that is missing, failing, or whose identity or digests differ from the archived package.
+- **Digest stability (§8.6).** "Previous release" means the latest earlier non-draft `vX.Y.Z` release; a previous
+  release without an index skips the check, with a log line. Otherwise a package that keeps its version but changes
+  its `component.wasm` digest fails the release. Only the wasm is compared: manifests may change without a version
+  bump, since `south_runtime` moves when a package is re-verified. Reproducibility is proven only locally so far: a
+  clean rebuild of `provider-gemini` was byte-identical. Builds on a different runner image would surface as a false
+  "bump the version".
+
 ## 14. Existing text to revise in step
 
 - ARCHITECTURE.md:117-126: change the concluding sentence to "execution, material, reachable destinations and the

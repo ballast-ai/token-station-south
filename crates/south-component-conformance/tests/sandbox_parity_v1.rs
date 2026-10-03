@@ -13,8 +13,18 @@ use south_component_conformance::{
     run_provider_component_suite_v1_for_manifest,
 };
 use south_provider_api::ComponentManifestV1;
-use south_provider_api::{HostExpectationsV1, compatibility_matches};
-use south_provider_runtime::{ComponentRuntimeV1, NoSecretsV1, RuntimeLimitsV1};
+use south_provider_api::{
+    CompatibilityMismatchV1, HostExpectationsV1, HostRangeV1, compatibility_admits,
+    compatibility_matches,
+};
+use south_provider_runtime::{
+    ComponentRuntimeV1, LoadErrorV1, LoadedComponentV1, NoSecretsV1, RuntimeLimitsV1,
+};
+
+#[path = "support/gate2_report.rs"]
+mod gate2_report;
+#[path = "support/host_range.rs"]
+mod host_range;
 
 fn repo_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().and_then(Path::parent).expect("repo root")
@@ -49,26 +59,15 @@ fn shipped_manifest() -> (String, ComponentManifestV1) {
     (source, manifest)
 }
 
-/// The host expectations this package was verified against — the true values,
-/// as the gate ① test below re-asserts after deliberately trying a wrong one.
-fn host_expectations() -> HostExpectationsV1 {
-    HostExpectationsV1 {
-        ir_schema_id: "token-station-protocol@0.4.0/v0.3.0".to_owned(),
-        kernel_version: "0.3.0".to_owned(),
-        kernel_revision: "6822aab1dea54ef646cb2206595cd4955ff9764a".to_owned(),
-        south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
-    }
-}
-
 fn sandboxed() -> SandboxedComponentV1 {
     let runtime = ComponentRuntimeV1::new(RuntimeLimitsV1::default()).expect("engine builds");
     let wasm = std::fs::read(component_wasm()).expect("the component reads");
     let (source, _) = shipped_manifest();
-    let loaded = south_provider_runtime::LoadedComponentV1::load_embedded(
+    let loaded = LoadedComponentV1::load_embedded(
         &runtime,
         &source,
         &wasm,
-        &host_expectations(),
+        &host_range::host_range(),
         NoSecretsV1,
     )
     .expect("the official package passes every load gate");
@@ -82,10 +81,12 @@ fn sandboxed() -> SandboxedComponentV1 {
 fn the_sandboxed_component_passes_gate_two_byte_for_byte() {
     let pack = FixturePackV1::load(&Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures"))
         .expect("the shipped fixture pack loads");
+    let evidence = gate2_report::Evidence::capture("provider-openai-compatible", component_wasm());
     let component = sandboxed();
 
     let report =
         run_provider_component_suite_v1_for_manifest(&component, &pack, &shipped_manifest().1);
+    evidence.record(&report);
     for failure in report.failures() {
         eprintln!("{failure}");
     }
@@ -93,7 +94,8 @@ fn the_sandboxed_component_passes_gate_two_byte_for_byte() {
 }
 
 /// Gate ① against the shipped package: manifest, identity (native and
-/// sandboxed agree, both with the manifest), and the tuple handshake.
+/// sandboxed agree, both with the manifest), the range handshake, and the
+/// exact tuple handshake.
 #[test]
 fn the_shipped_package_passes_gate_one_and_the_tuple_handshake() {
     let (_, manifest) = shipped_manifest();
@@ -103,18 +105,60 @@ fn the_shipped_package_passes_gate_one_and_the_tuple_handshake() {
     assert!(reported_identity_matches(&component.metadata(), &manifest));
     assert_eq!(component.metadata(), OpenAiCompatibleReferenceV1.metadata());
 
-    let expectations = HostExpectationsV1 {
-        ir_schema_id: "token-station-protocol@0.4.0/v0.3.0".to_owned(),
-        kernel_version: "0.3.0".to_owned(),
+    // The range handshake a host linking this release uses admits the package.
+    assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
+
+    // The exact handshake, still supported for one release. Its true values come from the
+    // manifest's own runtime declaration, which may lag this release (§8.6).
+    let expectations = host_range::exact_expectations_for(&manifest);
+    let off_by_one_digit = HostExpectationsV1 {
         kernel_revision: "72458e3a11fe157f9ac04818c44b62a3dd2cb00c".to_owned(),
-        south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
+        ..expectations.clone()
     };
     // Deliberately one hex digit off first: the handshake must refuse …
-    assert!(compatibility_matches(&manifest, &expectations).is_err());
+    assert!(compatibility_matches(&manifest, &off_by_one_digit).is_err());
     // … and accept the true values.
-    let expectations = HostExpectationsV1 {
-        kernel_revision: "6822aab1dea54ef646cb2206595cd4955ff9764a".to_owned(),
-        ..expectations
-    };
     assert_eq!(compatibility_matches(&manifest, &expectations), Ok(()));
+}
+
+/// An unchanged package keeps its `south_runtime` across releases (§8.6).
+///
+/// This is the first release after the range handshake in which this package is not re-stamped:
+/// the host links a runtime one minor release newer than the one the manifest declares. The range
+/// handshake admits the unchanged package and the sandbox loads it; the exact handshake, holding
+/// the newer release, refuses it, which is the re-stamp the range removes.
+#[test]
+fn a_package_that_keeps_an_older_runtime_is_admitted_by_the_range_but_not_the_tuple() {
+    let (source, manifest) = shipped_manifest();
+    let declared = manifest.compatibility.south_runtime.clone();
+    let (major, minor, _) = host_range::triple(&declared);
+    // Derived, not a literal: a literal one release ahead is indistinguishable from one that
+    // should track the release, and a blanket version bump would collapse it into the declared one.
+    let newer = format!("{major}.{}.0", minor + 1);
+    let runtime = ComponentRuntimeV1::new(RuntimeLimitsV1::default()).expect("engine builds");
+    let wasm = std::fs::read(component_wasm()).expect("the component reads");
+
+    let range = HostRangeV1 { south_runtime: newer.clone(), ..host_range::host_range() };
+    assert_eq!(compatibility_admits(&manifest, &range), Ok(()));
+    let loaded = LoadedComponentV1::load_embedded(&runtime, &source, &wasm, &range, NoSecretsV1)
+        .expect("a newer host admits the unchanged package");
+    let component = SandboxedComponentV1::new(loaded);
+    assert!(reported_identity_matches(&component.metadata(), &manifest));
+
+    let exact = HostExpectationsV1 {
+        south_runtime: newer.clone(),
+        ..host_range::exact_expectations_for(&manifest)
+    };
+    assert_eq!(
+        compatibility_matches(&manifest, &exact),
+        Err(CompatibilityMismatchV1::SouthRuntime { declared, expected: newer })
+    );
+    let refused = LoadedComponentV1::load_embedded(&runtime, &source, &wasm, &exact, NoSecretsV1);
+    assert!(
+        matches!(
+            refused,
+            Err(LoadErrorV1::Incompatible(CompatibilityMismatchV1::SouthRuntime { .. }))
+        ),
+        "the exact handshake would have forced a re-stamp"
+    );
 }

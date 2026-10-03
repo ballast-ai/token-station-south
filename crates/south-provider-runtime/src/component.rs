@@ -6,15 +6,16 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use south_provider_api::{
-    ComponentManifestV1, ComponentMetadataV1, HostExpectationsV1, PROVIDER_WORLD, TASK_WORLD,
-    TASK_WORLD_V2,
+    ComponentManifestV1, ComponentMetadataV1, PROVIDER_WORLD, TASK_WORLD, TASK_WORLD_V2,
 };
 use wasmtime::Store;
 use wasmtime::component::{Component, Linker};
 
 use crate::bindings::ProviderAdapterV2;
 use crate::bindings::token_station::adapter::host as wit_host;
-use crate::loader::{CallErrorV1, Ctx, LoadErrorV1, parse_package, read_package};
+use crate::loader::{
+    CallErrorV1, Ctx, HostCompatibilityV1, LoadErrorV1, parse_package, read_package,
+};
 use crate::runtime::{ComponentRuntimeV1, StreamPermit};
 
 /// Resolves a *declared* credential name into a signature.
@@ -146,7 +147,7 @@ impl LoadedComponentV1 {
     pub fn load(
         runtime: &ComponentRuntimeV1,
         dir: &Path,
-        expectations: &HostExpectationsV1,
+        expectations: &(impl HostCompatibilityV1 + ?Sized),
         signer: impl SecretSignerV1 + Sync,
     ) -> Result<Self, LoadErrorV1> {
         let (manifest, component) = read_package(runtime, dir, expectations)?;
@@ -163,7 +164,7 @@ impl LoadedComponentV1 {
         runtime: &ComponentRuntimeV1,
         manifest_source: &str,
         wasm: &[u8],
-        expectations: &HostExpectationsV1,
+        expectations: &(impl HostCompatibilityV1 + ?Sized),
         signer: impl SecretSignerV1 + Sync,
     ) -> Result<Self, LoadErrorV1> {
         let (manifest, component) = parse_package(runtime, manifest_source, wasm, expectations)?;
@@ -171,7 +172,7 @@ impl LoadedComponentV1 {
     }
 
     /// The identity gate and onward, shared by both load paths.
-    fn admit(
+    pub fn admit(
         runtime: &ComponentRuntimeV1,
         manifest: ComponentManifestV1,
         component: Component,
