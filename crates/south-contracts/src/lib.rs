@@ -452,6 +452,9 @@ impl ProviderEndpointV1 {
         {
             return Err(ContractErrorV1::InvalidEndpoint);
         }
+        // The path that is serialized, bound, and reparsed is the `url` crate's, not the raw split
+        // above. Validating it too keeps acceptance tied to what is actually used.
+        validate_endpoint_path(url.path())?;
 
         if !url.path().ends_with('/') {
             let mut normalized_path = url.path().to_owned();
@@ -3017,8 +3020,19 @@ impl TransportErrorV1 {
     }
 }
 
+/// Splits the raw path off an endpoint input before the `url` crate normalizes it.
+///
+/// The split is only sound when it agrees with the `url` crate on where the authority starts. For
+/// special schemes the WHATWG parser accepts `https:host` and `https:/host` as `https://host`, so a
+/// later `://` must never be mistaken for the authority separator: the scheme has to end exactly
+/// at the first `://`, and it has to be `http` or `https` in any ASCII case (the `url` crate
+/// lowercases it).
 fn endpoint_raw_path(input: &str) -> Option<&str> {
     let scheme_end = input.find("://")?;
+    let scheme = input.get(..scheme_end)?;
+    if !scheme.eq_ignore_ascii_case("http") && !scheme.eq_ignore_ascii_case("https") {
+        return None;
+    }
     let authority_and_path = input.get(scheme_end + 3..)?;
     let path_start = authority_and_path.find('/').unwrap_or(authority_and_path.len());
     let authority = authority_and_path.get(..path_start)?;
