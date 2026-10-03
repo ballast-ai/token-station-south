@@ -39,7 +39,37 @@ pub enum ControlledUserAgentCaseIdV1 {
     /// through `SafeHeaders` could smuggle the name outside the sanctioned channel and no case
     /// would notice.
     ReservedHeaderDeclarationStillRejected,
+    // B7a (HTTP contract version ten, §16 Q15): declared-instance cases, appended so no earlier
+    // case moves.
+    /// One successful buffered exchange whose user-agent is a package's manifest value.
+    ///
+    /// The host builds `south_contracts::DeclaredUserAgentV1` from the manifest (in production
+    /// through `south_component_conformance::DeclaredInstancesV1`) and puts it in the request's
+    /// single user-agent slot. A host transport that applies only host literals drops it here.
+    BufferedDeclaredUserAgentSuccess,
+    /// One successful streaming exchange whose user-agent is a package's manifest value.
+    StreamingDeclaredUserAgentSuccess,
+    /// A manifest value carrying CR/LF, refused before any boundary.
+    ///
+    /// Gate ① refuses such a manifest; this row proves a host that reads the value itself still
+    /// goes through the contract's grammar rather than writing the bytes into a header.
+    DeclaredUserAgentWithLineBreakRejected,
 }
+
+/// Where a case's user-agent value comes from.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ControlledUserAgentSourceV1 {
+    /// Host program text: `south_contracts::ControlledUserAgentV1::try_from_static`.
+    HostLiteral,
+    /// A package manifest's per-family `user_agent` (B7a):
+    /// `south_contracts::DeclaredUserAgentV1::from_manifest_value`.
+    Manifest,
+}
+
+fixed_debug!(ControlledUserAgentSourceV1 {
+    HostLiteral => "HostLiteral",
+    Manifest => "Manifest",
+});
 
 fixed_debug!(ControlledUserAgentCaseIdV1 {
     BufferedUserAgentSuccess => "BufferedUserAgentSuccess",
@@ -47,6 +77,9 @@ fixed_debug!(ControlledUserAgentCaseIdV1 {
     InvalidUserAgentValueRejected => "InvalidUserAgentValueRejected",
     UserAgentFreeRequestReachesTheWire => "UserAgentFreeRequestReachesTheWire",
     ReservedHeaderDeclarationStillRejected => "ReservedHeaderDeclarationStillRejected",
+    BufferedDeclaredUserAgentSuccess => "BufferedDeclaredUserAgentSuccess",
+    StreamingDeclaredUserAgentSuccess => "StreamingDeclaredUserAgentSuccess",
+    DeclaredUserAgentWithLineBreakRejected => "DeclaredUserAgentWithLineBreakRejected",
 });
 
 /// A raw upstream exchange or fake-transport behavior for a canonical controlled user-agent case.
@@ -221,6 +254,7 @@ pub struct ControlledUserAgentFixtureV1 {
     case_id: ControlledUserAgentCaseIdV1,
     input: ProviderCallInputV1,
     declared_user_agent: Option<&'static str>,
+    source: ControlledUserAgentSourceV1,
     upstream: ControlledUserAgentUpstreamV1,
     expected: ControlledUserAgentExpectedV1,
 }
@@ -248,6 +282,14 @@ impl ControlledUserAgentFixtureV1 {
         self.declared_user_agent
     }
 
+    /// Returns where the declared value comes from (B7a): host program text, or a package
+    /// manifest. [`ControlledUserAgentSourceV1::HostLiteral`] for every case before HTTP contract
+    /// version ten. Meaningless when [`Self::declared_user_agent`] is `None`.
+    #[must_use]
+    pub const fn source(&self) -> ControlledUserAgentSourceV1 {
+        self.source
+    }
+
     /// Returns the canonical fake-upstream behavior.
     #[must_use]
     pub const fn upstream(&self) -> &ControlledUserAgentUpstreamV1 {
@@ -267,6 +309,7 @@ impl fmt::Debug for ControlledUserAgentFixtureV1 {
             .debug_struct("ControlledUserAgentFixtureV1")
             .field("case_id", &self.case_id)
             .field("declares_user_agent", &self.declared_user_agent.is_some())
+            .field("source", &self.source)
             .field("input", &self.input)
             .field("upstream", &self.upstream)
             .field("expected", &self.expected)
@@ -291,6 +334,11 @@ const CONTROLLED_USER_AGENT_VALUE: &str = "user-agent-value-debug-sentinel/1.0 (
 /// grammar violation rather than an injection payload: the suite proves the contract refuses
 /// before the wire, not that a particular exploit string is neutralized.
 const CONTROLLED_USER_AGENT_INVALID_VALUE: &str = " user-agent-invalid-debug-sentinel";
+/// A package's manifest value (B7a), shaped like a client identity with a version and comment.
+const DECLARED_USER_AGENT_VALUE: &str = "declared-user-agent-debug-sentinel/2.0 (manifest)";
+/// A manifest value that tries to start a second header. Gate ① refuses it; the contract must too.
+const DECLARED_USER_AGENT_LINE_BREAK_VALUE: &str =
+    "declared-user-agent-debug-sentinel/2.0\r\nx-injected-debug-sentinel: 1";
 /// The value smuggled through the ordinary header channel by the reserved-header case.
 const CONTROLLED_USER_AGENT_PLAIN_CHANNEL_VALUE: &str = "user-agent-plain-debug-sentinel/1.0";
 
@@ -326,6 +374,7 @@ const CONTROLLED_USER_AGENT_FIXTURES: &[ControlledUserAgentFixtureV1] = &[
     ControlledUserAgentFixtureV1 {
         case_id: ControlledUserAgentCaseIdV1::BufferedUserAgentSuccess,
         input: input(CONTROLLED_USER_AGENT_PATH, CONTROLLED_USER_AGENT_BOUND_SLOT),
+        source: ControlledUserAgentSourceV1::HostLiteral,
         declared_user_agent: Some(CONTROLLED_USER_AGENT_VALUE),
         upstream: ControlledUserAgentUpstreamV1::Response(ProviderCallRawResponseV1 {
             status: 201,
@@ -346,6 +395,7 @@ const CONTROLLED_USER_AGENT_FIXTURES: &[ControlledUserAgentFixtureV1] = &[
     ControlledUserAgentFixtureV1 {
         case_id: ControlledUserAgentCaseIdV1::StreamingUserAgentSuccess,
         input: input(CONTROLLED_USER_AGENT_PATH, CONTROLLED_USER_AGENT_BOUND_SLOT),
+        source: ControlledUserAgentSourceV1::HostLiteral,
         declared_user_agent: Some(CONTROLLED_USER_AGENT_VALUE),
         upstream: ControlledUserAgentUpstreamV1::Stream(ProviderStreamRawStreamV1::assemble(
             ProviderStreamRawHeadV1::assemble(200, Some(CONTROLLED_USER_AGENT_CONTENT_TYPE), None),
@@ -365,6 +415,7 @@ const CONTROLLED_USER_AGENT_FIXTURES: &[ControlledUserAgentFixtureV1] = &[
     ControlledUserAgentFixtureV1 {
         case_id: ControlledUserAgentCaseIdV1::InvalidUserAgentValueRejected,
         input: input(CONTROLLED_USER_AGENT_PATH, CONTROLLED_USER_AGENT_BOUND_SLOT),
+        source: ControlledUserAgentSourceV1::HostLiteral,
         declared_user_agent: Some(CONTROLLED_USER_AGENT_INVALID_VALUE),
         upstream: ControlledUserAgentUpstreamV1::NotReached,
         expected: ControlledUserAgentExpectedV1 {
@@ -386,6 +437,7 @@ const CONTROLLED_USER_AGENT_FIXTURES: &[ControlledUserAgentFixtureV1] = &[
     ControlledUserAgentFixtureV1 {
         case_id: ControlledUserAgentCaseIdV1::UserAgentFreeRequestReachesTheWire,
         input: input(CONTROLLED_USER_AGENT_PATH, CONTROLLED_USER_AGENT_BOUND_SLOT),
+        source: ControlledUserAgentSourceV1::HostLiteral,
         declared_user_agent: None,
         upstream: ControlledUserAgentUpstreamV1::Response(ProviderCallRawResponseV1 {
             status: 200,
@@ -414,6 +466,7 @@ const CONTROLLED_USER_AGENT_FIXTURES: &[ControlledUserAgentFixtureV1] = &[
     ControlledUserAgentFixtureV1 {
         case_id: ControlledUserAgentCaseIdV1::ReservedHeaderDeclarationStillRejected,
         input: input_with_plain_user_agent_header(),
+        source: ControlledUserAgentSourceV1::HostLiteral,
         declared_user_agent: None,
         upstream: ControlledUserAgentUpstreamV1::NotReached,
         expected: ControlledUserAgentExpectedV1 {
@@ -423,6 +476,66 @@ const CONTROLLED_USER_AGENT_FIXTURES: &[ControlledUserAgentFixtureV1] = &[
             // transport reporting the same code.
             outcome: ControlledUserAgentExpectedOutcomeV1::Failure {
                 code: ProviderCallFailureCodeV1::RequestFailed,
+            },
+            evidence: user_agent_evidence(
+                ProviderCallCountV1::Zero,
+                ProviderCallCountV1::Zero,
+                false,
+            ),
+        },
+    },
+    // B7a (HTTP contract version ten): declared-instance cases.
+    ControlledUserAgentFixtureV1 {
+        case_id: ControlledUserAgentCaseIdV1::BufferedDeclaredUserAgentSuccess,
+        input: input(CONTROLLED_USER_AGENT_PATH, CONTROLLED_USER_AGENT_BOUND_SLOT),
+        declared_user_agent: Some(DECLARED_USER_AGENT_VALUE),
+        source: ControlledUserAgentSourceV1::Manifest,
+        upstream: ControlledUserAgentUpstreamV1::Response(ProviderCallRawResponseV1 {
+            status: 200,
+            body: CONTROLLED_USER_AGENT_RESPONSE_BODY,
+            content_type: Some(CONTROLLED_USER_AGENT_CONTENT_TYPE),
+            retry_after: None,
+        }),
+        expected: ControlledUserAgentExpectedV1 {
+            outcome: ControlledUserAgentExpectedOutcomeV1::Response {
+                status: 200,
+                body: CONTROLLED_USER_AGENT_RESPONSE_BODY,
+                content_type: Some(CONTROLLED_USER_AGENT_CONTENT_TYPE),
+                retry_after: None,
+            },
+            evidence: user_agent_evidence(ProviderCallCountV1::One, ProviderCallCountV1::One, true),
+        },
+    },
+    ControlledUserAgentFixtureV1 {
+        case_id: ControlledUserAgentCaseIdV1::StreamingDeclaredUserAgentSuccess,
+        input: input(CONTROLLED_USER_AGENT_PATH, CONTROLLED_USER_AGENT_BOUND_SLOT),
+        declared_user_agent: Some(DECLARED_USER_AGENT_VALUE),
+        source: ControlledUserAgentSourceV1::Manifest,
+        upstream: ControlledUserAgentUpstreamV1::Stream(ProviderStreamRawStreamV1::assemble(
+            ProviderStreamRawHeadV1::assemble(200, Some(CONTROLLED_USER_AGENT_CONTENT_TYPE), None),
+            CONTROLLED_USER_AGENT_CHUNKS,
+            ProviderStreamTerminalV1::CleanEof,
+        )),
+        expected: ControlledUserAgentExpectedV1 {
+            outcome: ControlledUserAgentExpectedOutcomeV1::Opened {
+                status: 200,
+                content_type: Some(CONTROLLED_USER_AGENT_CONTENT_TYPE),
+                retry_after: None,
+                chunks: CONTROLLED_USER_AGENT_CHUNKS,
+            },
+            evidence: user_agent_evidence(ProviderCallCountV1::One, ProviderCallCountV1::One, true),
+        },
+    },
+    ControlledUserAgentFixtureV1 {
+        case_id: ControlledUserAgentCaseIdV1::DeclaredUserAgentWithLineBreakRejected,
+        input: input(CONTROLLED_USER_AGENT_PATH, CONTROLLED_USER_AGENT_BOUND_SLOT),
+        declared_user_agent: Some(DECLARED_USER_AGENT_LINE_BREAK_VALUE),
+        source: ControlledUserAgentSourceV1::Manifest,
+        upstream: ControlledUserAgentUpstreamV1::NotReached,
+        expected: ControlledUserAgentExpectedV1 {
+            // The same fold as the host-literal grammar violation.
+            outcome: ControlledUserAgentExpectedOutcomeV1::Failure {
+                code: ProviderCallFailureCodeV1::InvalidRelativePath,
             },
             evidence: user_agent_evidence(
                 ProviderCallCountV1::Zero,

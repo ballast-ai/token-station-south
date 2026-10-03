@@ -53,6 +53,8 @@ channel. The three things worth stating precisely:
   validator rejects it but because the type cannot be built from it. (A `Box::leak` defeats this,
   as `'static` provenance is a discipline claim, not a proof against a hostile host — the same
   standing caveat as adapter-reported evidence.)
+  *Amended 2026-10-02 (Q15): a value may also come from a package manifest that passed gate ①;
+  see §8.*
 - **The reserved list stays intact.** `SafeHeaders` continues to reject `user-agent`. The
   sanctioned field and the reserved list together give the exactly-once property structurally:
   the prepared request has one optional typed slot for this header and no other source of it.
@@ -185,6 +187,9 @@ case-table change demotes stale evidence automatically.
 
 ## 6. Fuzz and property obligations
 
+*Amended 2026-10-02 (Q15): the manifest-value parser of §8 consumes untrusted input and carries a
+fuzz obligation; the reasoning below still holds for the `'static` constructor.*
+
 None added, and the absence is deliberate rather than an oversight. The fuzz targets exist for
 parsers that consume untrusted or unbounded input. This grammar's input is `&'static str` by
 type — program text, the trusted end of the spectrum — and the check is a single stateless pass
@@ -203,3 +208,31 @@ Out: the multi-auth-header gap (Gemini `/openai/` dual header — tracked by the
 issue #26 adjacent); any host-configurable header name; runtime-composed user-agent values (an
 additive later constructor if a real consumer appears); request signing (issue #26); any host
 adoption (separate slices per host, as always).
+
+## 8. Amended 2026-10-02 (Q15): a declared user-agent from the manifest
+
+The text above, which says a value must exist in host program text, is kept as the 2026-08-20
+ruling. The host-zero-vendor-boundary record
+(`2026-09-30-host-zero-vendor-boundary.md` §10, §16 Q15) reopened it, and the owner ruled as that
+record recommends: a user-agent value may also come from a package manifest, validated at gate ①.
+Phase B7a implements it:
+
+- A provider package declares `user_agent` per family in `manifest.json`. Gate ① refuses a family
+  the manifest does not declare, any non-provider world, and any value outside the grammar of
+  §3.1 (D2), which is unchanged.
+- `south_contracts::DeclaredUserAgentV1` is an owned value built only by
+  `DeclaredUserAgentV1::from_manifest_value`, which applies the same grammar.
+  `south_component_conformance::DeclaredInstancesV1` is the sanctioned path to it: it validates the
+  manifest and then reads the value. As with `'static`, provenance is a discipline claim, not
+  something the type system can carry across crates.
+- `ControlledUserAgentV1` and its `'static` constructor are unchanged. Both types fill the
+  request's one user-agent slot, `UserAgentV1`; the header name stays fixed and reserved, so
+  exactly one `user-agent` reaches the wire.
+- The new parser has a fuzz obligation (`fuzz/fuzz_targets/contract_parsers.rs`) and a property
+  test pinning the gate ① grammar to the contract's.
+- `south.controlled-user-agent.v1` gains three declared-instance cases: buffered and streaming
+  success with a manifest value, and a manifest value carrying CR/LF that must be refused before
+  any boundary.
+
+The ruling on Q16 lets south carry third-party client values in its packages. B7a adds only the
+mechanism; no shipped package declares a client value yet.

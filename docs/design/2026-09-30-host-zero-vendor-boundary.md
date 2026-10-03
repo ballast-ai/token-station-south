@@ -1475,6 +1475,82 @@ slot (§4.2).
 - Claim order is canonical, not declared, because `claims` is a map. That matches the host for Kling. The host's
   Vertex struct writes `iss, scope, aud, iat, exp`: the JSON is equal, but the bytes differ.
 
+### 13.4 Implementation of B7a (2026-10-02)
+
+Phase B7a is implemented on branch `feature/b7a-instance-declarations`, stacked on B4 (§13.3); nothing is released.
+Q15 and Q16 were ruled on 2026-10-02 (§16). B7a adds only the declaration mechanism; no shipped package declares a
+client user-agent or identification header yet — those arrive with the components that need them (B6).
+
+**Contract numbers**
+- auth 4 → 5
+- reserved header policy 1 → 2
+- HTTP 10: declared query parameters and the declared user-agent
+- provider quota metadata 1 → 2
+
+These suites gain declared-instance cases, and their versions stay at 1, following the precedent of earlier
+additive cases:
+- `south.header-auth.v1` goes from 4 to 7 cases;
+- `south.controlled-query.v1` from 6 to 9;
+- `south.controlled-user-agent.v1` from 5 to 8.
+
+`token-station-server` was verified against the smaller `header_auth` and `controlled_query` tables. Both entries
+are now `not_verified` until the host re-runs them.
+
+**Secret headers.** The manifest declares `secret_headers`: at most 8 lowercase RFC 9110 token names.
+- **Refused names:** the reserved-header set, the transcript denials, `accept`, `content-type`,
+  `content-encoding`, `retry-after`, the closed diagnostic and quota names, and the five sanctioned names (which
+  need no declaration). Upper case is refused, not folded.
+- **Auth arm:** `ProviderAuthV1::DeclaredHeaderSecret` carries a declared name; the closed `HeaderSecret` arm stays.
+- **No smuggling:** `SafeHeaders` built with the package's declaration refuses those names on the ordinary channel.
+- **Transcripts** drop declared names. Under policy 2 they also drop the five sanctioned names; before, an upstream
+  echoing `x-api-key` was transcribed.
+- **Admission:** `admit_descriptor_auth` admits a declared name, and refuses a declared name found among the
+  descriptor's ordinary headers.
+- **Blocked on B7b:** the kernel's `Auth::header` still checks names against its static list while deserializing,
+  and the only names it accepts beyond `SecretHeaderV1` are undeclarable. So no component descriptor can name a
+  declared header until B7b. A test pins this and is meant to fail when B7b lands.
+
+**Query parameters.** The manifest declares `query_parameters`: at most 16 entries, provider world only.
+- **Value syntax:** each declaration names one closed value syntax, `digits`, `token`, `date` or `enum`. `token` is
+  RFC 3986 unreserved bytes; RFC 9110's token admits `&`, `#`, `%` and `+`, which would split or escape a query.
+- **Refused names:** credential-like names and fragments (`key`, `token`, `apikey`, `secret`, `signature`, …), and
+  the fixed names in any spelling. Names are normalized before the check.
+- **Order on the wire:** declared parameters follow the fixed ones, in name byte order.
+- **No credentials:** query values still never come from credential resolution.
+- **Task world:** not admitted. A new task-world query name still needs a south release; widening is additive later.
+
+**Quota headers.** The manifest's `quota_headers` maps a response header to one of the nine closed normalized
+fields, one header per field.
+- A declaration replaces the canonical map; without one, capture is as in contract 1. An empty list therefore
+  cannot opt out of capture.
+- The transport is configured per package through `with_quota_headers`.
+- South cannot check that a declared header carries the field's meaning or format, for example a reset given as a
+  duration rather than a timestamp. That stays in the undetectable zone.
+- Gate ① refuses a name declared both as a secret header and as a quota header.
+- The transport also skips any quota entry naming one of the request's declared secret headers, so the rule holds
+  even for a host that builds the map without running gate ①.
+
+**User-agent.** The manifest declares `user_agent` per family, validated by the unchanged `ControlledUserAgentV1`
+grammar.
+- `DeclaredUserAgentV1` is built from that value, and the request slot is `UserAgentV1` (`Controlled` or
+  `Declared`), so exactly one `user-agent` still reaches the wire.
+- "Built only from a value that passed gate ①" is a discipline across the crate boundary, not a type guarantee,
+  just as the `'static` rule was. `DeclaredInstancesV1::from_manifest` (conformance) validates first and is the
+  sanctioned path.
+- The 2026-08-20 record carries an amendment note.
+
+**Breaking API on re-pin**
+- Raw call structs gain `secret_headers`, and their `user_agent` becomes `Option<UserAgentV1>`.
+- `QueryParameterV1` is no longer `Copy`, and `wire_name` is no longer `'static`.
+- `auth_headers()` names are no longer `'static`.
+- Several enums gain variants.
+- The server has about 18 raw-call struct literals to update.
+
+**Error contract.** The error contract version governs the provider-call codes (`PreparationErrorV1`); it moved to 2
+when the finalization codes were added. B7a adds no provider-call code: a refused declared instance surfaces through
+the existing `UNSUPPORTED_AUTH_SHAPE` and `INVALID_RELATIVE_PATH`. The new codes are `ContractErrorV1` parse errors,
+which the multipart body added the same way without a bump.
+
 ## 14. Existing text to revise in step
 
 - ARCHITECTURE.md:117-126: change the concluding sentence to "execution, material, reachable destinations and the
@@ -1616,9 +1692,15 @@ Tags: S = south maintainers, L = lv, K = kernel.
 - **Q15 (S)** Reopen the 2026-08-20 controlled-user-agent ruling: may a user-agent value come from a manifest value
   validated at gate ① (`DeclaredUserAgentV1`, §10) rather than only from host program text? Recommended: yes, with
   the value grammar unchanged and a fuzz obligation on the new parser.
+  **Ruled (lv, 2026-10-02): as recommended.** A user-agent value may come from a manifest value validated at gate ①;
+  the value grammar is unchanged and the new parser carries a fuzz obligation.
 - **Q16 (S)** Does south accept publishing impersonation values (client user-agents and client-identification
   headers of third-party tools) inside its packages? lv's Q10 ruling requires it for DP0 on those providers; the
   south maintainers decide whether the repository carries them.
+  **Ruled (lv, 2026-10-02): yes**, consistent with lv's Q10 ruling. South's packages may carry client
+  user-agents and client-identification headers of third-party tools. The owner takes the terms-of-service risk
+  of publishing them. B7a adds only the declaration mechanism; concrete values enter packages with the components
+  that need them (B6).
 - **Q17 (S)** Who runs gate ② for a package south did not build: nobody (it is the author's self-attestation, and
   the host relies only on its own seals and bounds), the installer (the host runs the suite at admission on the
   package's own fixtures, proving self-consistency only), or a registry run by south? Recommended: the installer, as

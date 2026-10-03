@@ -11,7 +11,7 @@ use south_contracts::{
     MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES, MAX_RESPONSE_BODY_BYTES,
     MAX_RESPONSE_CONTENT_TYPE_BYTES, MAX_RESPONSE_DIAGNOSTIC_VALUE_BYTES,
     MAX_RESPONSE_RETRY_AFTER_BYTES, MAX_STREAM_CHUNK_BYTES, MAX_STREAM_ERROR_BODY_BYTES,
-    ProviderQuotaMetadataFieldV1, ProviderQuotaMetadataV1, ResponseDiagnosticFieldV1,
+    ProviderQuotaHeaderMapV1, ProviderQuotaMetadataV1, ResponseDiagnosticFieldV1,
     ResponseDiagnosticsV1, ResponseTranscriptV1, StreamChunkV1, StreamReadErrorV1,
     StreamRejectedV1, StreamTransportConfigV1, StreamingResponseHeadV1, TransportErrorV1,
 };
@@ -86,6 +86,7 @@ impl fmt::Debug for ReqwestTransportConfigV1 {
 pub struct ReqwestTransportV1 {
     client: reqwest::Client,
     total_timeout: Duration,
+    quota_headers: ProviderQuotaHeaderMapV1,
 }
 
 impl ReqwestTransportV1 {
@@ -106,7 +107,22 @@ impl ReqwestTransportV1 {
             .build()
             .map_err(|_| TransportErrorV1::ClientBuildFailed)?;
 
-        Ok(Self { client, total_timeout: config.total })
+        Ok(Self {
+            client,
+            total_timeout: config.total,
+            quota_headers: ProviderQuotaHeaderMapV1::canonical(),
+        })
+    }
+
+    /// Returns a transport for one package's quota header declaration (B7a).
+    ///
+    /// The returned transport shares this one's client and connection pool and differs only in
+    /// which response headers it captures as quota metadata. A transport built by [`Self::new`]
+    /// captures [`ProviderQuotaHeaderMapV1::canonical`], which is what a package that declares no
+    /// `quota_headers` gets.
+    #[must_use]
+    pub fn with_quota_headers(&self, quota_headers: ProviderQuotaHeaderMapV1) -> Self {
+        Self { client: self.client.clone(), total_timeout: self.total_timeout, quota_headers }
     }
 }
 
@@ -227,11 +243,12 @@ impl ReqwestTransportV1 {
             header::RETRY_AFTER,
             MAX_RESPONSE_RETRY_AFTER_BYTES,
         )?;
-        let provider_quota_metadata = provider_quota_metadata(response.headers())?;
+        let provider_quota_metadata =
+            provider_quota_metadata(response.headers(), &self.quota_headers, request)?;
         // Every response-header read must happen before `read_bounded_body` consumes `response`:
         // past this point the upstream's `HeaderMap` is gone.
         let response_diagnostics = response_diagnostics(response.headers())?;
-        let response_transcript = response_transcript(response.headers());
+        let response_transcript = response_transcript(response.headers(), request);
         let body = read_bounded_body(response, body_cap).await?;
 
         Ok(BufferedPartsV1 {
@@ -269,6 +286,7 @@ impl ReqwestTransportV1 {
 pub struct ReqwestStreamingTransportV1 {
     client: reqwest::Client,
     total_timeout: Option<Duration>,
+    quota_headers: ProviderQuotaHeaderMapV1,
 }
 
 impl ReqwestStreamingTransportV1 {
@@ -288,7 +306,19 @@ impl ReqwestStreamingTransportV1 {
             .build()
             .map_err(|_| TransportErrorV1::ClientBuildFailed)?;
 
-        Ok(Self { client, total_timeout: config.total_timeout() })
+        Ok(Self {
+            client,
+            total_timeout: config.total_timeout(),
+            quota_headers: ProviderQuotaHeaderMapV1::canonical(),
+        })
+    }
+
+    /// Returns a streaming transport for one package's quota header declaration (B7a).
+    ///
+    /// Shares this one's client, exactly as [`ReqwestTransportV1::with_quota_headers`] does.
+    #[must_use]
+    pub fn with_quota_headers(&self, quota_headers: ProviderQuotaHeaderMapV1) -> Self {
+        Self { client: self.client.clone(), total_timeout: self.total_timeout, quota_headers }
     }
 
     async fn open_one(
@@ -319,11 +349,12 @@ impl ReqwestStreamingTransportV1 {
             header::RETRY_AFTER,
             MAX_RESPONSE_RETRY_AFTER_BYTES,
         )?;
-        let provider_quota_metadata = provider_quota_metadata(response.headers())?;
+        let provider_quota_metadata =
+            provider_quota_metadata(response.headers(), &self.quota_headers, request)?;
         // As in the buffered arm: read the headers while `response` still owns them, because both
         // the success and the rejection path below move it away.
         let response_diagnostics = response_diagnostics(response.headers())?;
-        let response_transcript = response_transcript(response.headers());
+        let response_transcript = response_transcript(response.headers(), request);
         let head = StreamingResponseHeadV1::try_from_parts_with_response_metadata(
             status,
             content_type,
@@ -655,34 +686,30 @@ fn response_metadata(
         .map_err(|_| TransportErrorV1::ResponseMetadataInvalid)
 }
 
-const PROVIDER_QUOTA_METADATA_FIELDS: [ProviderQuotaMetadataFieldV1; 9] = [
-    ProviderQuotaMetadataFieldV1::XRateLimitLimitTokens,
-    ProviderQuotaMetadataFieldV1::XRateLimitRemainingTokens,
-    ProviderQuotaMetadataFieldV1::XRateLimitResetTokens,
-    ProviderQuotaMetadataFieldV1::AnthropicRateLimitTokensLimit,
-    ProviderQuotaMetadataFieldV1::AnthropicRateLimitTokensRemaining,
-    ProviderQuotaMetadataFieldV1::AnthropicRateLimitTokensReset,
-    ProviderQuotaMetadataFieldV1::AnthropicRateLimitUnifiedLimit,
-    ProviderQuotaMetadataFieldV1::AnthropicRateLimitUnifiedRemaining,
-    ProviderQuotaMetadataFieldV1::AnthropicRateLimitUnifiedReset,
-];
-
+/// Captures each declared quota header into the field it feeds.
+///
+/// The declaration maps one header to one field and never reuses a field, so the contract's
+/// duplicate check cannot trip on a well-formed map; a value that is repeated, over-long or not
+/// text is dropped, as before. A name the request's package declares as a secret header is never
+/// read, whatever the map says: gate ① refuses that pairing, and the transport holds it too,
+/// because the transcript hides that name and quota metadata must not expose it.
 fn provider_quota_metadata(
     headers: &HeaderMap,
+    quota_headers: &ProviderQuotaHeaderMapV1,
+    request: &PreparedHttpRequestV1<'_>,
 ) -> Result<ProviderQuotaMetadataV1, TransportErrorV1> {
+    let secret_headers = request.headers().secret_headers();
     ProviderQuotaMetadataV1::try_from_iter(
-        PROVIDER_QUOTA_METADATA_FIELDS.into_iter().filter_map(|field| {
-            optional_quota_metadata(headers, field).map(|value| (field, value))
-        }),
+        quota_headers.iter().filter(|(name, _)| !secret_headers.contains(name)).filter_map(
+            |(name, field)| optional_quota_metadata(headers, name).map(|value| (field, value)),
+        ),
     )
 }
 
 /// Collects the closed diagnostic allow-list.
 ///
 /// Iterates [`ResponseDiagnosticFieldV1::ALL`] rather than a hand-written array, so a field added to
-/// the contract is collected here without a second edit. (`PROVIDER_QUOTA_METADATA_FIELDS` above
-/// predates that constant and must be kept in step by hand — the reason the newer contract carries
-/// its own `ALL`.)
+/// the contract is collected here without a second edit.
 fn response_diagnostics(headers: &HeaderMap) -> Result<ResponseDiagnosticsV1, TransportErrorV1> {
     ResponseDiagnosticsV1::try_from_iter(ResponseDiagnosticFieldV1::ALL.into_iter().filter_map(
         |field| optional_single_header(headers, field.as_header_name()).map(|value| (field, value)),
@@ -691,11 +718,17 @@ fn response_diagnostics(headers: &HeaderMap) -> Result<ResponseDiagnosticsV1, Tr
 
 /// Captures the bounded, display-only transcript of every other response header.
 ///
-/// Deliberately total: [`ResponseTranscriptV1::capture`] drops what it may not keep and records that
-/// it did, so a hostile or merely odd upstream cannot fail an otherwise good response here.
-fn response_transcript(headers: &HeaderMap) -> ResponseTranscriptV1 {
-    ResponseTranscriptV1::capture(
+/// Deliberately total: [`ResponseTranscriptV1::capture_redacting`] drops what it may not keep and
+/// records that it did, so a hostile or merely odd upstream cannot fail an otherwise good response
+/// here. The request's package declaration rides along (reserved-header policy version two), so an
+/// upstream that echoes a declared secret header never shows it to a reader.
+fn response_transcript(
+    headers: &HeaderMap,
+    request: &PreparedHttpRequestV1<'_>,
+) -> ResponseTranscriptV1 {
+    ResponseTranscriptV1::capture_redacting(
         headers.iter().map(|(name, value)| (name.as_str(), value.to_str().ok())),
+        request.headers().secret_headers(),
     )
 }
 
@@ -713,11 +746,8 @@ fn optional_single_header(headers: &HeaderMap, name: &str) -> Option<String> {
     value.to_str().ok().map(str::to_owned)
 }
 
-fn optional_quota_metadata(
-    headers: &HeaderMap,
-    field: ProviderQuotaMetadataFieldV1,
-) -> Option<String> {
-    let values = headers.get_all(field.as_header_name());
+fn optional_quota_metadata(headers: &HeaderMap, name: &str) -> Option<String> {
+    let values = headers.get_all(name);
     let mut values = values.iter();
     let value = values.next()?;
     if values.next().is_some() || value.as_bytes().len() > MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES {

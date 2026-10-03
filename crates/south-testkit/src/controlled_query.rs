@@ -14,8 +14,8 @@ use std::{
 use bytes::Bytes;
 use http::StatusCode;
 use south_contracts::{
-    BufferedHttpResponseV1, CredentialSlotV1, QueryStringV1, StreamChunkV1,
-    StreamingResponseHeadV1, TransportErrorV1,
+    BufferedHttpResponseV1, CredentialSlotV1, DeclaredQueryParameterV1, QueryParameterV1,
+    QueryStringV1, StreamChunkV1, StreamingResponseHeadV1, TransportErrorV1,
 };
 use south_core::{
     AsyncHttpTransport, AsyncStreamingTransport, CredentialResolutionFuture, CredentialResolver,
@@ -33,8 +33,8 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{map_contract_error, map_provider_call_error, parse_reference_input};
 
-/// Five cases multiplied by the ten closed controlled-query mismatch categories.
-pub const MAX_CONTROLLED_QUERY_MISMATCHES_V1: usize = 50;
+/// Nine cases multiplied by the ten closed controlled-query mismatch categories.
+pub const MAX_CONTROLLED_QUERY_MISMATCHES_V1: usize = 90;
 
 /// A boxed, cancellation-safe assembled controlled-query executor future.
 pub type AssembledControlledQueryExecutionFutureV1<'a> =
@@ -575,12 +575,19 @@ impl AssembledControlledQueryExecutorV1 for ReferenceAssembledControlledQueryExe
 fn declare_reference_query(
     fixture: &ControlledQueryFixtureV1,
 ) -> Result<Option<QueryStringV1>, ProviderCallFailureCodeV1> {
-    if fixture.declared_query().is_empty() {
+    let mut parameters: Vec<(QueryParameterV1, &str)> = fixture.declared_query().to_vec();
+    // B7a: a manifest-declared parameter enters as the contract's declared form, so its name and
+    // syntax are refused here, before any binding, resolver or transport, exactly like a value.
+    for declared in fixture.declared_parameters() {
+        let parameter =
+            DeclaredQueryParameterV1::try_new(declared.name(), declared.syntax().contract_syntax())
+                .map_err(map_contract_error)?;
+        parameters.push((QueryParameterV1::Declared(parameter), declared.value()));
+    }
+    if parameters.is_empty() {
         return Ok(None);
     }
-    QueryStringV1::try_from_iter(fixture.declared_query().iter().copied())
-        .map(Some)
-        .map_err(map_contract_error)
+    QueryStringV1::try_from_iter(parameters).map(Some).map_err(map_contract_error)
 }
 
 async fn execute_reference_controlled_query_case(

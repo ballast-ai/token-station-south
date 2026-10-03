@@ -602,6 +602,16 @@ fn parse_reference_input_with_auth(
     input: &south_provider_conformance::ProviderCallInputV1,
     auth: impl FnOnce(CredentialSlotV1) -> south_contracts::ProviderAuthV1,
 ) -> Result<(ProviderBindingV1, JsonPostRequestV1), ProviderCallFailureCodeV1> {
+    parse_reference_input_declaring(input, south_contracts::DeclaredSecretHeadersV1::none(), auth)
+}
+
+/// [`parse_reference_input_with_auth`] under one package's declared secret headers
+/// (reserved-header policy version two).
+fn parse_reference_input_declaring(
+    input: &south_provider_conformance::ProviderCallInputV1,
+    secret_headers: &south_contracts::DeclaredSecretHeadersV1,
+    auth: impl FnOnce(CredentialSlotV1) -> south_contracts::ProviderAuthV1,
+) -> Result<(ProviderBindingV1, JsonPostRequestV1), ProviderCallFailureCodeV1> {
     let endpoint = ProviderEndpointV1::parse(input.endpoint()).map_err(map_contract_error)?;
     let bound_slot =
         CredentialSlotV1::parse(input.bound_credential_slot()).map_err(map_contract_error)?;
@@ -609,8 +619,11 @@ fn parse_reference_input_with_auth(
         CredentialSlotV1::parse(input.requested_credential_slot()).map_err(map_contract_error)?;
     let relative_path = RelativePathV1::parse(input.relative_path()).map_err(map_contract_error)?;
     let body = JsonBodyV1::parse(input.json_body()).map_err(map_contract_error)?;
-    let headers = SafeHeaders::try_from_iter(input.headers().iter().copied())
-        .map_err(map_canonical_fixture_header_invariant_failure)?;
+    let headers = SafeHeaders::try_from_iter_with_secret_headers(
+        input.headers().iter().copied(),
+        secret_headers,
+    )
+    .map_err(map_canonical_fixture_header_invariant_failure)?;
     let binding = ProviderBindingV1::new(endpoint, bound_slot);
     let request = JsonPostRequestV1::new(relative_path, headers, body, auth(requested_slot));
     Ok((binding, request))
@@ -739,6 +752,9 @@ const fn map_contract_error(error: ContractErrorV1) -> ProviderCallFailureCodeV1
         | ContractErrorV1::ContentTypeHeaderNotPermitted => {
             ProviderCallFailureCodeV1::InvalidRelativePath
         }
+        // B7a: a declared query parameter refused at construction is the same preparation-time,
+        // zero-call declaration failure as an invalid sanctioned value, and folds the same way.
+        ContractErrorV1::InvalidQueryDeclaration => ProviderCallFailureCodeV1::InvalidRelativePath,
         // `ContractErrorV1` is `#[non_exhaustive]` since 0.25.0. No frozen fixture can produce a
         // variant this version does not know, so one reaching here is an executor wiring error:
         // use the context-free request fallback rather than widening the frozen code set.

@@ -17,7 +17,7 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 
-use south_contracts::{ControlledUserAgentV1, SignedHeaderV1};
+use south_contracts::SignedHeaderV1;
 use south_core::{
     FinalizeFutureV1, FinalizeViewV1, FinalizedHeadersV1, RequestFinalizationErrorV1,
     RequestFinalizerV1,
@@ -140,7 +140,7 @@ fn observe(view: &FinalizeViewV1<'_>) -> ObservedFinalizeViewV1 {
             .map(|(name, value)| (name.to_owned(), value.to_owned()))
             .collect(),
         body: view.body().to_vec(),
-        user_agent: view.user_agent().map(|agent: ControlledUserAgentV1| agent.as_str().to_owned()),
+        user_agent: view.user_agent().map(|agent| agent.as_str().to_owned()),
         slot: view.slot().as_str().to_owned(),
         emits: view.emits().headers().to_vec(),
     }

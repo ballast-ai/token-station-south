@@ -26,7 +26,7 @@ community policy      enterprise policy
 | `south-north-codec` | OpenAI Chat、Anthropic Messages 与 Responses 北向纯映射；typed 与 JSON façade 同源，宿主传入时间、身份及每流状态，准入、计费和 continuation 留宿主 |
 | `south-task-core` | 候选：独立 Rust 版本 0.1.0，无生产依赖；共享提交/观察/CAS 赢家回读/等待/取消顺序，宿主保留政策与复合原子效果 |
 | `south-task-conformance` | 候选：独立 Rust 版本 0.1.0，无生产依赖；公共原子效果故障套件，宿主适配真实 SQLite / PG 事务，无资金宿主明确不适用 |
-| `south-contracts` | Implemented bounded HTTP (JSON POST, body-less GET, and multipart POST request shapes, and a buffered binary response beside the UTF-8 one), Bearer, sanctioned header-secret, and combined Bearer-plus-header-secret auth, stable error, byte-streaming, and closed quota metadata contracts, plus the sanctioned controlled query and controlled user-agent declarations |
+| `south-contracts` | Implemented bounded HTTP (JSON POST, body-less GET, and multipart POST request shapes, and a buffered binary response beside the UTF-8 one), Bearer, sanctioned header-secret, combined Bearer-plus-header-secret, and package-declared header-secret auth, stable error, byte-streaming, and closed quota metadata contracts, plus the sanctioned controlled query and controlled user-agent declarations |
 | `south-core` | Implemented host-neutral buffered and streaming provider-call orchestration and its buffered body-less GET, multipart and binary-response twins, plus the shared host prelude (`raw` module: raw-call type, its host-signed, GET and multipart twins, contract-parse orchestration, one-shot wrappers for all four, resolver adapters) |
 | `south-transport-reqwest` | Implemented hardened buffered and byte-streaming JSON POST transport, the same buffered transport for body-less GET and multipart POST requests (rendering the latter's media type and sharing its allocation) and for a JSON POST whose response is buffered as opaque bytes under its own larger cap, bounded quota metadata capture, sanctioned user-agent application, and one-config transport-pair construction |
 | `south-provider-conformance` | Implemented immutable provider-call, provider-stream, provider-quota-metadata, header-auth, controlled-query, controlled-user-agent, provider-get, provider-multipart, and provider-binary v1 fixtures, and the host-implemented credential-recipe v1 suite (harness, fake token endpoint, runner) |
@@ -231,3 +231,15 @@ directory with `load_package_set` judges each package on its own and follows thr
 
 A release that tightens gate ① or ② says so, and a host enforces the tightening by raising its floor. Design record:
 `docs/design/2026-09-30-host-zero-vendor-boundary.md` §8.
+
+**Declared query parameters, quota headers and user-agents (B7a).** These three provider instances move from
+closed south sets into the package manifest, so a provider that needs a new one is a new package, not a south
+release and a host re-pin. A provider package may declare `query_parameters` (a restricted name plus one value
+syntax: `digits`, `token`, `date` or `{"enum": [...]}`), `quota_headers` (a response header feeding one of the
+nine closed quota metadata fields), and a per-family `user_agent` under the controlled user-agent grammar. Gate ①
+refuses credential-shaped and fixed query names, credential-bearing or framing response headers, and values outside
+the grammar. `DeclaredInstancesV1` in `south-component-conformance` validates the manifest and returns the contract
+types: `QueryParameterV1::Declared` (HTTP contract 10), `ProviderQuotaHeaderMapV1` (quota metadata contract 2),
+and `DeclaredUserAgentV1`, which fills the request's single user-agent slot beside the `'static`
+`ControlledUserAgentV1`. Query values still never come from credential resolution. Design record:
+`docs/design/2026-09-30-host-zero-vendor-boundary.md` §10.

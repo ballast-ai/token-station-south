@@ -151,7 +151,7 @@ fn every_raw_fixture_field_is_checked_through_the_production_contract() {
         SafeHeaders::try_from_iter(input.headers().iter().copied())
             .expect("canonical headers must parse");
         if !fixture.declared_query().is_empty() {
-            QueryStringV1::try_from_iter(fixture.declared_query().iter().copied())
+            QueryStringV1::try_from_iter(fixture.declared_query().iter().cloned())
                 .expect("canonical query must satisfy its grammar");
         }
         if let ProviderGetAuthArmV1::HeaderSecret(header) = fixture.auth_arm() {

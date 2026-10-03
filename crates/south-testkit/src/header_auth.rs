@@ -14,8 +14,9 @@ use std::{
 use bytes::Bytes;
 use http::StatusCode;
 use south_contracts::{
-    BearerAuthV1, BufferedHttpResponseV1, CredentialSlotV1, ProviderAuthV1, SecretHeaderV1,
-    StreamChunkV1, StreamingResponseHeadV1, TransportErrorV1,
+    BearerAuthV1, BufferedHttpResponseV1, CredentialSlotV1, DeclaredSecretHeaderV1,
+    DeclaredSecretHeadersV1, ProviderAuthV1, ProviderQuotaMetadataV1, ResponseDiagnosticsV1,
+    ResponseTranscriptV1, StreamChunkV1, StreamingResponseHeadV1, TransportErrorV1,
 };
 use south_core::{
     AsyncHttpTransport, AsyncStreamingTransport, CredentialResolutionFuture, CredentialResolver,
@@ -25,15 +26,15 @@ use south_core::{
 };
 use south_provider_conformance::{
     FAKE_HEADER_SECRET_V1, HEADER_AUTH_CONFORMANCE_SUITE_ID, HEADER_AUTH_CONFORMANCE_SUITE_VERSION,
-    HeaderAuthCaseIdV1, HeaderAuthExpectedOutcomeV1, HeaderAuthFixtureV1, HeaderAuthUpstreamV1,
-    ProviderCallCountV1, ProviderCallFailureCodeV1, header_auth_fixtures_v1,
+    HeaderAuthCaseIdV1, HeaderAuthExpectedOutcomeV1, HeaderAuthFixtureV1, HeaderAuthHeaderV1,
+    HeaderAuthUpstreamV1, ProviderCallCountV1, ProviderCallFailureCodeV1, header_auth_fixtures_v1,
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::{map_provider_call_error, parse_reference_input_with_auth};
+use crate::{map_provider_call_error, parse_reference_input_declaring};
 
-/// Three cases multiplied by the eleven closed header-auth mismatch categories.
-pub const MAX_HEADER_AUTH_MISMATCHES_V1: usize = 33;
+/// Seven cases multiplied by the twelve closed header-auth mismatch categories.
+pub const MAX_HEADER_AUTH_MISMATCHES_V1: usize = 84;
 
 /// A boxed, cancellation-safe assembled header-auth executor future.
 pub type AssembledHeaderAuthExecutionFutureV1<'a> =
@@ -247,6 +248,9 @@ pub enum HeaderAuthMismatchCategoryV1 {
     SanctionedHeader,
     /// Authorization-absence wire-shape evidence differed.
     AuthorizationPresence,
+    /// The buffered response's transcript lacked a header it must retain, or held one it must
+    /// redact (reserved-header policy version two).
+    Transcript,
 }
 
 fixed_debug!(HeaderAuthMismatchCategoryV1 {
@@ -261,6 +265,7 @@ fixed_debug!(HeaderAuthMismatchCategoryV1 {
     TransportCallCount => "TransportCallCount",
     SanctionedHeader => "SanctionedHeader",
     AuthorizationPresence => "AuthorizationPresence",
+    Transcript => "Transcript",
 });
 
 /// One case/category mismatch without expected or observed payload values.
@@ -391,6 +396,7 @@ pub async fn run_header_auth_conformance_v1(
         let mismatch_count_before_case = mismatches.len();
         let observation = executor.execute_case(fixture).await;
         compare_header_auth_outcome(fixture, &observation, &mut mismatches);
+        compare_header_auth_transcript(fixture, &observation, &mut mismatches);
         compare_header_auth_evidence(fixture, &observation, &mut mismatches);
         if mismatches.len() == mismatch_count_before_case {
             passed_case_ids.push(fixture.case_id());
@@ -482,6 +488,34 @@ fn compare_header_auth_outcome(
     }
 }
 
+/// Judged only on a buffered response: any other observation already mismatched its outcome kind.
+fn compare_header_auth_transcript(
+    fixture: &HeaderAuthFixtureV1,
+    observation: &HeaderAuthObservationV1,
+    mismatches: &mut Vec<HeaderAuthMismatchV1>,
+) {
+    let (Some(expected), HeaderAuthObservedOutcomeV1::Response(response)) =
+        (fixture.expected().transcript(), &observation.outcome)
+    else {
+        return;
+    };
+    let transcript = response.response_transcript();
+    let retained = expected
+        .retained()
+        .iter()
+        .all(|(name, value)| transcript.iter().any(|entry| entry == (*name, *value)));
+    let redacted = expected
+        .redacted()
+        .iter()
+        .all(|name| transcript.iter().all(|(observed, _)| !observed.eq_ignore_ascii_case(name)));
+    record_if(
+        !(retained && redacted),
+        fixture,
+        HeaderAuthMismatchCategoryV1::Transcript,
+        mismatches,
+    );
+}
+
 fn compare_header_auth_evidence(
     fixture: &HeaderAuthFixtureV1,
     observation: &HeaderAuthObservationV1,
@@ -540,7 +574,8 @@ fn record(
 /// The buffered and slot-mismatch cases run through `execute_provider_call_v1`; the streaming
 /// case runs through `open_streaming_provider_call_v1`. The wire-shape booleans are measured on
 /// the prepared request at the fake transport boundary, mirroring what a real adapter must
-/// measure on its wire.
+/// measure on its wire. The fake transport captures the response transcript the way a real one
+/// does: under the declaration the prepared request's headers were validated with.
 pub struct ReferenceAssembledHeaderAuthExecutorV1;
 
 impl ReferenceAssembledHeaderAuthExecutorV1 {
@@ -573,15 +608,20 @@ async fn execute_reference_header_auth_case(
     let transport_calls = Arc::new(AtomicUsize::new(0));
     let wire_shape = Arc::new(WireShapeProbe::default());
 
-    let secret_header = fixture.secret_header();
+    let header = fixture.header();
     let bearer_alongside = fixture.bearer_alongside();
-    let parsed = parse_reference_input_with_auth(fixture.input(), |slot| {
-        let slot = BearerAuthV1::new(slot);
-        if bearer_alongside {
-            ProviderAuthV1::BearerAndHeaderSecret { header: secret_header, slot }
-        } else {
-            ProviderAuthV1::HeaderSecret { header: secret_header, slot }
-        }
+    // Canonical declarations always parse; a failure here is a broken fixture, reported through
+    // the context-free fallback rather than a panic.
+    let Ok(secret_headers) =
+        DeclaredSecretHeadersV1::try_from_names(fixture.declared_secret_headers().iter().copied())
+    else {
+        return HeaderAuthObservationV1::failure(
+            ProviderCallFailureCodeV1::RequestFailed,
+            HeaderAuthEvidenceV1::new(0, 0, false, true),
+        );
+    };
+    let parsed = parse_reference_input_declaring(fixture.input(), &secret_headers, |slot| {
+        reference_auth(header, bearer_alongside, BearerAuthV1::new(slot))
     });
     let (binding, request) = match parsed {
         Ok(parsed) => parsed,
@@ -597,7 +637,8 @@ async fn execute_reference_header_auth_case(
     let transport = WireRecordingTransport {
         calls: Arc::clone(&transport_calls),
         upstream: fixture.upstream(),
-        expected_header: secret_header,
+        upstream_response_headers: fixture.upstream_response_headers(),
+        expected_header: header.header_name(),
         expected_bearer_alongside: bearer_alongside,
         wire_shape: Arc::clone(&wire_shape),
     };
@@ -667,6 +708,30 @@ async fn execute_reference_header_auth_case(
     }
 }
 
+/// The arm a fixture's header asks for: the closed arms for a sanctioned name, the declared arm
+/// for a declared one.
+fn reference_auth(
+    header: HeaderAuthHeaderV1,
+    bearer_alongside: bool,
+    slot: BearerAuthV1,
+) -> ProviderAuthV1 {
+    match header {
+        HeaderAuthHeaderV1::Sanctioned(header) if bearer_alongside => {
+            ProviderAuthV1::BearerAndHeaderSecret { header, slot }
+        }
+        HeaderAuthHeaderV1::Sanctioned(header) => ProviderAuthV1::HeaderSecret { header, slot },
+        // A declared name always parses in the canonical table, and never travels with Bearer.
+        // Bearer stands in for a broken fixture, and the wire probe then reports the missing
+        // header.
+        HeaderAuthHeaderV1::Declared(name) => match DeclaredSecretHeaderV1::parse(name) {
+            Ok(header) if !bearer_alongside => {
+                ProviderAuthV1::DeclaredHeaderSecret { header, slot }
+            }
+            _ => ProviderAuthV1::Bearer(slot),
+        },
+    }
+}
+
 // The canonical table scripts only clean EOF streams, so a mid-stream terminal here means the
 // reference wiring itself is broken. Fail closed with the context-free request fallback rather
 // than panicking or widening the frozen code set.
@@ -709,7 +774,8 @@ impl CredentialResolver for HeaderSecretResolver {
 struct WireRecordingTransport<'fixture> {
     calls: Arc<AtomicUsize>,
     upstream: &'fixture HeaderAuthUpstreamV1,
-    expected_header: SecretHeaderV1,
+    upstream_response_headers: &'static [(&'static str, &'static str)],
+    expected_header: &'static str,
     expected_bearer_alongside: bool,
     wire_shape: Arc<WireShapeProbe>,
 }
@@ -727,7 +793,7 @@ impl WireRecordingTransport<'_> {
         if self.expected_bearer_alongside {
             expected.push(("authorization", [b"Bearer ".as_slice(), secret].concat()));
         }
-        expected.push((self.expected_header.header_name(), secret.to_vec()));
+        expected.push((self.expected_header, secret.to_vec()));
         let sanctioned_header_exact = bound == expected;
         let authorization_header_absent = bound.iter().all(|(name, _)| *name != "authorization")
             && request.headers().get("authorization").is_none();
@@ -752,9 +818,29 @@ impl AsyncHttpTransport for WireRecordingTransport<'_> {
                 let body = raw.body().as_bytes().to_vec();
                 let content_type = raw.content_type().map(str::to_owned);
                 let retry_after = raw.retry_after().map(str::to_owned);
+                // What the upstream answered with, transcribed as a real transport would: every
+                // header, under the declaration the request's headers were validated with.
+                let answered = content_type
+                    .iter()
+                    .map(|value| ("content-type", value.as_str()))
+                    .chain(retry_after.iter().map(|value| ("retry-after", value.as_str())))
+                    .chain(self.upstream_response_headers.iter().copied())
+                    .map(|(name, value)| (name, Some(value)));
+                let transcript = ResponseTranscriptV1::capture_redacting(
+                    answered,
+                    request.headers().secret_headers(),
+                );
                 Box::pin(async move {
                     let status = status.map_err(|_| TransportErrorV1::ResponseMetadataInvalid)?;
-                    BufferedHttpResponseV1::try_from_parts(status, body, content_type, retry_after)
+                    BufferedHttpResponseV1::try_from_parts_with_response_metadata(
+                        status,
+                        body,
+                        content_type,
+                        retry_after,
+                        ProviderQuotaMetadataV1::default(),
+                        ResponseDiagnosticsV1::default(),
+                        transcript,
+                    )
                 })
             }
             // A stream fixture must never reach the buffered boundary, and `NotReached` must not

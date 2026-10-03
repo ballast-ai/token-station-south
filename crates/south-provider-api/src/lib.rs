@@ -36,6 +36,7 @@
 
 mod config;
 mod credentials;
+mod instances;
 mod manifest;
 
 pub use config::{ConfigErrorV1, ConfigKeyV1, ValueSyntaxV1};
@@ -45,6 +46,15 @@ pub use credentials::{
     JwtAlgorithmV1, JwtClaimV1, MAX_RECIPE_STEPS, PredicateV1, RecipeV1, SeedClockV1, SeedV1,
     SelectRuleV1, SlotV1, StatusActionV1, StepAuthV1, StepKindV1, StepMethodV1, StepV1,
     ValueSourceV1, WithoutRefreshMaterialV1,
+};
+
+// B7a (query, quota, user-agent): provider instances declared in the manifest.
+pub use instances::{
+    DECLARED_QUERY_DENIED_FRAGMENTS, DECLARED_QUERY_DENIED_NAMES, MAX_DECLARED_QUERY_NAME_BYTES,
+    MAX_DECLARED_QUERY_PARAMETERS, MAX_QUERY_ENUM_VALUES, MAX_QUOTA_HEADER_NAME_BYTES,
+    MAX_USER_AGENT_BYTES, QUOTA_HEADER_DENIED_NAMES, QUOTA_METADATA_FIELDS,
+    QueryParameterDeclarationV1, QueryValueSyntaxV1, QuotaHeaderDeclarationV1,
+    SANCTIONED_QUERY_NAMES, is_user_agent_value,
 };
 
 pub use manifest::{
@@ -59,6 +69,12 @@ pub use manifest::{
     TASK_WORLD_V2, TemplateParamV1, UsageEvidenceV1, WIT_PACKAGE, WorldSchemaV1,
     compatibility_admits, compatibility_matches, known_world, validate_component_name,
     validate_package_relative_path,
+};
+
+// Declared secret headers (B7a, host-zero-vendor-boundary §10).
+pub use manifest::{
+    MAX_SECRET_HEADER_NAME_BYTES, MAX_SECRET_HEADERS, UNDECLARABLE_SECRET_HEADER_NAMES,
+    validate_secret_header_name,
 };
 
 /// The component ABI, as WIT source.

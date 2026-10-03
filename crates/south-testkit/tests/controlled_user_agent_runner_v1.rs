@@ -12,8 +12,8 @@ use south_contracts::{BufferedHttpResponseV1, StreamChunkV1, StreamingResponseHe
 use south_provider_conformance::{
     CONTROLLED_USER_AGENT_CONFORMANCE_SUITE_ID, CONTROLLED_USER_AGENT_CONFORMANCE_SUITE_VERSION,
     ControlledUserAgentCaseIdV1, ControlledUserAgentExpectedOutcomeV1,
-    ControlledUserAgentFixtureV1, ProviderCallCountV1, ProviderCallFailureCodeV1,
-    controlled_user_agent_fixtures_v1,
+    ControlledUserAgentFixtureV1, ControlledUserAgentSourceV1, ProviderCallCountV1,
+    ProviderCallFailureCodeV1, controlled_user_agent_fixtures_v1,
 };
 use south_testkit::{
     AssembledControlledUserAgentExecutionFutureV1, AssembledControlledUserAgentExecutorV1,
@@ -230,6 +230,57 @@ async fn a_probe_that_hardcodes_the_wire_user_agent_claim_is_caught() {
     let mismatch = &failure.mismatches()[0];
     assert_eq!(mismatch.case_id(), ControlledUserAgentCaseIdV1::UserAgentFreeRequestReachesTheWire);
     assert_eq!(mismatch.category(), ControlledUserAgentMismatchCategoryV1::WireUserAgent);
+}
+
+/// B7a (§16 Q15): a host that applies only host literals — it never reads a manifest value into
+/// the user-agent slot — passes the frozen five cases and fails exactly the three declared-instance
+/// cases.
+#[tokio::test]
+async fn a_host_that_ignores_manifest_user_agents_fails_exactly_the_declared_cases() {
+    struct LiteralOnlyExecutor;
+
+    impl AssembledControlledUserAgentExecutorV1 for LiteralOnlyExecutor {
+        fn execute_case<'a>(
+            &'a self,
+            fixture: &'a ControlledUserAgentFixtureV1,
+        ) -> AssembledControlledUserAgentExecutionFutureV1<'a> {
+            Box::pin(async move {
+                if fixture.source() == ControlledUserAgentSourceV1::HostLiteral {
+                    return observation_matching(fixture);
+                }
+                match fixture.case_id() {
+                    // The request reaches the wire without the declared value.
+                    ControlledUserAgentCaseIdV1::BufferedDeclaredUserAgentSuccess
+                    | ControlledUserAgentCaseIdV1::StreamingDeclaredUserAgentSuccess => {
+                        observation_with_evidence(
+                            fixture,
+                            ControlledUserAgentEvidenceV1::new(1, 1, false),
+                        )
+                    }
+                    // Nothing refused the value, so the request is sent; the scripted upstream is
+                    // not there to answer it.
+                    _ => ControlledUserAgentObservationV1::failure(
+                        ProviderCallFailureCodeV1::RequestFailed,
+                        ControlledUserAgentEvidenceV1::new(1, 1, false),
+                    ),
+                }
+            })
+        }
+    }
+
+    let failure = run_controlled_user_agent_conformance_v1(&LiteralOnlyExecutor)
+        .await
+        .expect_err("a host that ignores manifest user-agents must not pass");
+    let failed: BTreeSet<_> =
+        failure.mismatches().iter().map(|mismatch| format!("{:?}", mismatch.case_id())).collect();
+    assert_eq!(
+        failed,
+        BTreeSet::from([
+            "BufferedDeclaredUserAgentSuccess".to_owned(),
+            "DeclaredUserAgentWithLineBreakRejected".to_owned(),
+            "StreamingDeclaredUserAgentSuccess".to_owned(),
+        ])
+    );
 }
 
 #[tokio::test]

@@ -263,7 +263,13 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 1
                 // south plan's guard admits the Chat contract alone. The
                 // adoption record is held by that host's own repository; this
                 // manifest records only the resulting status.
-                ("header_auth", "verified", Some(4)),
+                //
+                // That run covered the four-case table. B7a (auth contract 5,
+                // reserved-header policy 2) appended three declared-instance
+                // cases the host has not run, so the status is not_verified
+                // until it re-runs the seven-case suite; editing the count
+                // without that run would fabricate the evidence.
+                ("header_auth", "not_verified", None),
                 // token-station-server controlled_query verified 2026-08-18,
                 // evidence refreshed against 0.4.1 after the suite grew its
                 // fifth case. The original run passed the four-case table, but
@@ -298,7 +304,13 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 1
                 // they send two auth headers and ProviderAuthV1 is single-arm.
                 // The adoption record is held by that host's own repository;
                 // this manifest records only the resulting status.
-                ("controlled_query", "verified", Some(6)),
+                //
+                // Demoted to not_verified 2026-10-02 (B7a): the suite grew
+                // declared-instance cases (HTTP contract version ten) that the
+                // six-case run cannot have exercised. The host returns to
+                // verified by re-running the larger table; editing `cases`
+                // without a run would fabricate the evidence.
+                ("controlled_query", "not_verified", None),
                 // controlled_user_agent stays not_verified until that host runs
                 // its own adoption slice against south.controlled-user-agent.v1
                 // (its migration batches 3 and 4b are the expected consumers).

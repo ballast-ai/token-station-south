@@ -2,14 +2,29 @@
 
 //! Host-neutral contracts for provider execution.
 
+mod declared;
 mod eventstream;
+mod secret_header;
 mod task;
 mod task_v2;
+
+// B7a (query, quota, user-agent): provider instances declared in a package manifest.
+pub use declared::{
+    DECLARED_QUERY_DENIED_FRAGMENTS, DECLARED_QUERY_DENIED_NAMES, DeclaredQueryParameterV1,
+    DeclaredUserAgentV1, MAX_DECLARED_QUERY_NAME_BYTES, MAX_QUERY_DIGITS, MAX_QUERY_ENUM_VALUES,
+    MAX_QUOTA_HEADER_NAME_BYTES, PROVIDER_QUOTA_HEADER_DENIED_NAMES, ProviderQuotaHeaderMapV1,
+    QueryValueSyntaxV1, UserAgentV1,
+};
 
 pub use eventstream::{
     AwsEventStreamDeframerV1, EventStreamErrorV1, EventStreamHeaderValueV1, EventStreamMessageV1,
     MAX_EVENTSTREAM_FRAME_BYTES, MAX_EVENTSTREAM_HEADERS_BYTES, MIN_EVENTSTREAM_FRAME_BYTES,
     deframe_aws_eventstream_v1, reencode_eventstream_v1,
+};
+
+pub use secret_header::{
+    DeclaredSecretHeaderV1, DeclaredSecretHeadersV1, MAX_DECLARED_SECRET_HEADERS,
+    MAX_SECRET_HEADER_NAME_BYTES, UNDECLARABLE_SECRET_HEADER_NAMES,
 };
 
 pub use task_v2::{
@@ -63,7 +78,13 @@ use url::Url;
 /// shape changes, and [`BufferedHttpResponseV1`] keeps its UTF-8 guarantee exactly as frozen — a
 /// consumer of the text response cannot be handed bytes by this version or any later one.
 /// Version nine adds the bounded `MiniMax` file-id query; existing query bytes are unchanged.
-pub const HTTP_CONTRACT_VERSION: u16 = 9;
+///
+/// Version ten (B7a) admits provider instances a package declares in its manifest: a query
+/// parameter named by [`QueryParameterV1::Declared`] with a closed value syntax, and a
+/// [`DeclaredUserAgentV1`] in the request's single [`UserAgentV1`] slot. A version-nine request is
+/// exactly a version-ten request that declares neither; every previously accepted declaration
+/// serializes byte-identically, and declared parameters follow the sanctioned ones on the wire.
+pub const HTTP_CONTRACT_VERSION: u16 = 10;
 
 /// The version of the provider authentication declaration contract.
 ///
@@ -71,8 +92,11 @@ pub const HTTP_CONTRACT_VERSION: u16 = 9;
 /// [`ProviderAuthV1::Bearer`] arm, version two adds the sanctioned header-secret scheme, and
 /// version three adds [`ProviderAuthV1::HostSigned`] — the arm whose credential never crosses
 /// into South at all. Version four adds [`ProviderAuthV1::BearerAndHeaderSecret`], the one
-/// closed shape in which a single resolved secret is bound to two headers.
-pub const AUTH_CONTRACT_VERSION: u16 = 4;
+/// closed shape in which a single resolved secret is bound to two headers. Version five adds
+/// [`ProviderAuthV1::DeclaredHeaderSecret`], whose header name a package declares and gate ①
+/// validates ([`DeclaredSecretHeaderV1`]) instead of this crate enumerating it; the closed
+/// [`ProviderAuthV1::HeaderSecret`] arm is unchanged.
+pub const AUTH_CONTRACT_VERSION: u16 = 5;
 
 /// The version of the stable provider-call error contract.
 ///
@@ -144,7 +168,11 @@ pub const MAX_RESPONSE_CONTENT_TYPE_BYTES: usize = 256;
 pub const MAX_RESPONSE_RETRY_AFTER_BYTES: usize = 256;
 
 /// The version of the closed provider quota response metadata contract.
-pub const PROVIDER_QUOTA_METADATA_CONTRACT_VERSION: u16 = 1;
+///
+/// Version two (B7a) makes the captured header names a per-package declaration
+/// ([`ProviderQuotaHeaderMapV1`]); the normalized field set and the value bounds are unchanged. A
+/// version-one capture is exactly a version-two capture with [`ProviderQuotaHeaderMapV1::canonical`].
+pub const PROVIDER_QUOTA_METADATA_CONTRACT_VERSION: u16 = 2;
 
 /// The exact number of approved provider quota response metadata fields.
 pub const PROVIDER_QUOTA_METADATA_FIELD_COUNT: usize = 9;
@@ -197,10 +225,16 @@ pub const MAX_RESPONSE_TRANSCRIPT_TOTAL_BYTES: usize = 16 * 1024;
 ///   `upgrade`, `proxy-connection`. These describe one hop's framing, never the provider's answer,
 ///   and reproducing them invites a reader to draw conclusions about a connection that no longer
 ///   exists.
-const RESPONSE_TRANSCRIPT_DENIED_HEADERS: &[&str] = &[
+/// - **Secret-bearing** (reserved-header policy version two): the five sanctioned
+///   [`SecretHeaderV1`] names, so an upstream that echoes the key it was sent does not put it in
+///   front of a reader. A package's declared secret headers join this list for that package's
+///   responses through [`ResponseTranscriptV1::capture_redacting`].
+pub(crate) const RESPONSE_TRANSCRIPT_DENIED_HEADERS: &[&str] = &[
+    "api-key",
     "authorization",
     "connection",
     "keep-alive",
+    "ocp-apim-subscription-key",
     "proxy-authenticate",
     "proxy-authorization",
     "proxy-connection",
@@ -210,6 +244,9 @@ const RESPONSE_TRANSCRIPT_DENIED_HEADERS: &[&str] = &[
     "trailer",
     "transfer-encoding",
     "upgrade",
+    "x-api-key",
+    "x-goog-api-key",
+    "xi-api-key",
 ];
 
 /// The maximum byte length of the buffered error body attached to a rejected stream.
@@ -222,7 +259,13 @@ pub const MAX_STREAM_CHUNK_BYTES: usize = 64 * 1024;
 pub const MAX_TRANSPORT_TIMEOUT: Duration = Duration::from_hours(24);
 
 /// The version of the reserved-header policy enforced by [`SafeHeaders`].
-pub const RESERVED_HEADER_POLICY_VERSION: u16 = 1;
+///
+/// Version two lets a package add its declared secret headers ([`DeclaredSecretHeadersV1`]) to
+/// the reserved set: [`SafeHeaders::try_from_iter_with_secret_headers`] refuses them on the
+/// ordinary channel, and [`ResponseTranscriptV1::capture_redacting`] drops them from the response
+/// transcript, which since this version also drops the five sanctioned [`SecretHeaderV1`] names.
+/// With no declaration the request side is exactly version one.
+pub const RESERVED_HEADER_POLICY_VERSION: u16 = 2;
 
 /// The maximum number of ordinary provider headers in one request descriptor.
 pub const MAX_PROVIDER_HEADER_COUNT: usize = 64;
@@ -236,7 +279,7 @@ pub const MAX_PROVIDER_HEADER_VALUE_BYTES: usize = 16 * 1024;
 /// The maximum combined byte length of provider header names and values.
 pub const MAX_PROVIDER_HEADER_TOTAL_BYTES: usize = 64 * 1024;
 
-const RESERVED_HEADERS: &[&str] = &[
+pub(crate) const RESERVED_HEADERS: &[&str] = &[
     "api-key",
     "authorization",
     "connection",
@@ -269,6 +312,7 @@ const RESERVED_HEADERS: &[&str] = &[
 #[derive(Clone, Default, PartialEq, Eq)]
 pub struct SafeHeaders {
     values: BTreeMap<String, String>,
+    secret_headers: DeclaredSecretHeadersV1,
 }
 
 impl SafeHeaders {
@@ -277,6 +321,26 @@ impl SafeHeaders {
     /// Header names are stored in their lowercase canonical form. Duplicate names are rejected
     /// after normalization rather than silently overwriting an earlier value.
     pub fn try_from_iter<I, N, V>(headers: I) -> Result<Self, HeaderPolicyError>
+    where
+        I: IntoIterator<Item = (N, V)>,
+        N: AsRef<str>,
+        V: AsRef<str>,
+    {
+        Self::try_from_iter_with_secret_headers(headers, DeclaredSecretHeadersV1::none())
+    }
+
+    /// Validates provider-supplied headers under one package's declared secret headers
+    /// (reserved-header policy version two).
+    ///
+    /// Exactly [`Self::try_from_iter`], except that every declared name is reserved too, so a
+    /// declared secret header can reach the wire only through its auth arm. The result keeps the
+    /// declaration: a request carrying the declared header-secret arm is prepared only over
+    /// headers validated under a declaration that names its header, and a transport reads the
+    /// declaration back ([`Self::secret_headers`]) to redact the response transcript.
+    pub fn try_from_iter_with_secret_headers<I, N, V>(
+        headers: I,
+        secret_headers: &DeclaredSecretHeadersV1,
+    ) -> Result<Self, HeaderPolicyError>
     where
         I: IntoIterator<Item = (N, V)>,
         N: AsRef<str>,
@@ -310,7 +374,7 @@ impl SafeHeaders {
             }
 
             let normalized_name = normalize_name(raw_name)?;
-            if is_reserved(&normalized_name) {
+            if is_reserved(&normalized_name) || secret_headers.contains(&normalized_name) {
                 return Err(HeaderPolicyError::ReservedHeader);
             }
 
@@ -321,7 +385,14 @@ impl SafeHeaders {
             }
         }
 
-        Ok(Self { values })
+        Ok(Self { values, secret_headers: secret_headers.clone() })
+    }
+
+    /// Returns the declared secret headers these headers were validated under; empty for
+    /// [`Self::try_from_iter`].
+    #[must_use]
+    pub const fn secret_headers(&self) -> &DeclaredSecretHeadersV1 {
+        &self.secret_headers
     }
 
     /// Returns a header value using an ASCII case-insensitive name lookup.
@@ -355,6 +426,7 @@ impl fmt::Debug for SafeHeaders {
         formatter
             .debug_struct("SafeHeaders")
             .field("count", &self.values.len())
+            .field("secret_header_count", &self.secret_headers.len())
             .field("policy_version", &RESERVED_HEADER_POLICY_VERSION)
             .finish_non_exhaustive()
     }
@@ -1070,7 +1142,13 @@ impl SignedHeaderSetV1 {
 /// Values never come from credential resolution. [`ProviderAuthV1`] remains the sole path a
 /// secret takes to the wire; there is deliberately no conversion from a resolved secret into a
 /// query value.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+///
+/// Since HTTP contract version ten the set also has a declared form, [`Self::Declared`]: a name a
+/// package declared in its manifest, carrying the value syntax gate ① validated (B7a). The fixed
+/// variants stay and keep their grammars. Declaring a name needs a denylist where the closed set
+/// needed none ([`DeclaredQueryParameterV1::try_new`]). The enum is no longer `Copy`, because the
+/// declared form owns its name.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum QueryParameterV1 {
     /// `api-version` (Azure `OpenAI`, Azure AI Foundry).
     ApiVersion,
@@ -1094,19 +1172,22 @@ pub enum QueryParameterV1 {
     TaskId,
     /// `file_id` for `MiniMax` v1 artifact retrieval; a bounded decimal identifier.
     FileId,
+    /// A parameter a package declared in its manifest (HTTP contract version ten, B7a).
+    Declared(DeclaredQueryParameterV1),
 }
 
 impl QueryParameterV1 {
-    /// Every sanctioned parameter, in canonical declaration order.
+    /// Every sanctioned (fixed) parameter, in canonical declaration order.
     ///
     /// Serialization follows this order, so a request's query is byte-identical regardless of the
-    /// order the host declared its parameters in.
+    /// order the host declared its parameters in. Declared parameters are not listed: they follow
+    /// every sanctioned one, in byte order of their names.
     pub const ALL: [Self; 5] =
         [Self::ApiVersion, Self::Alt, Self::GroupId, Self::TaskId, Self::FileId];
 
-    /// Returns the wire name of the sanctioned parameter.
+    /// Returns the wire name of the parameter.
     #[must_use]
-    pub const fn wire_name(&self) -> &'static str {
+    pub fn wire_name(&self) -> &str {
         match self {
             Self::ApiVersion => "api-version",
             Self::Alt => "alt",
@@ -1114,7 +1195,15 @@ impl QueryParameterV1 {
             Self::GroupId => "GroupId",
             Self::TaskId => "task_id",
             Self::FileId => "file_id",
+            Self::Declared(parameter) => parameter.name(),
         }
+    }
+
+    /// The parameter's position in canonical order: sanctioned parameters by their `ALL` index,
+    /// then declared ones by name. The name is unreserved ASCII, so its bytes order it.
+    fn canonical_key(&self) -> (usize, &str) {
+        let position = Self::ALL.iter().position(|sanctioned| sanctioned == self);
+        (position.unwrap_or(Self::ALL.len()), self.wire_name())
     }
 
     /// Checks a candidate value against this parameter's own grammar.
@@ -1123,7 +1212,7 @@ impl QueryParameterV1 {
     /// grammar is known exactly, so a shared rule would admit values no upstream accepts and turn
     /// a contract error into a runtime rejection.
     #[must_use]
-    fn accepts(self, value: &str) -> bool {
+    fn accepts(&self, value: &str) -> bool {
         match self {
             // Real Azure versions are dated (`2024-10-21`, `2025-04-01-preview`) or the literal
             // `v1`. This is deliberately stricter than the adopting host's own handling, which
@@ -1151,6 +1240,7 @@ impl QueryParameterV1 {
                     && value.len() <= MAX_QUERY_VALUE_BYTES
                     && value.bytes().all(|byte| byte.is_ascii_digit())
             }
+            Self::Declared(parameter) => parameter.syntax().admits(value),
         }
     }
 }
@@ -1180,7 +1270,9 @@ impl QueryStringV1 {
             if !parameter.accepts(value) {
                 return Err(ContractErrorV1::InvalidQueryValue);
             }
-            if declared.iter().any(|(seen, _)| *seen == parameter) {
+            // By wire name, so a declared parameter cannot repeat another one either. The
+            // declared constructor already refuses every sanctioned name.
+            if declared.iter().any(|(seen, _)| seen.wire_name() == parameter.wire_name()) {
                 return Err(ContractErrorV1::DuplicateQueryParameter);
             }
             declared.push((parameter, value));
@@ -1189,27 +1281,17 @@ impl QueryStringV1 {
             return Err(ContractErrorV1::EmptyQuery);
         }
 
+        // Canonical order: the sanctioned parameters in `ALL` order, then the declared ones by
+        // name. The sort is over distinct keys, so the result does not depend on input order.
+        declared.sort_by(|(left, _), (right, _)| left.canonical_key().cmp(&right.canonical_key()));
         let mut serialized = String::new();
-        let mut emitted = 0_usize;
-        for parameter in QueryParameterV1::ALL {
-            let Some((_, value)) = declared.iter().find(|(seen, _)| *seen == parameter) else {
-                continue;
-            };
+        for (parameter, value) in &declared {
             if !serialized.is_empty() {
                 serialized.push('&');
             }
             serialized.push_str(parameter.wire_name());
             serialized.push('=');
             serialized.push_str(value);
-            emitted += 1;
-        }
-        // Serialization iterates `ALL` while validation iterates the caller's input, so a variant
-        // missing from `ALL` would validate and then contribute nothing — silently dropping a
-        // parameter, or producing a bare trailing `?` when it was the only one. Unlike
-        // `wire_name`'s exhaustive match, `ALL` membership is not compiler-enforced, so compare
-        // the two counts and fail loudly instead of emitting a URL the caller did not ask for.
-        if emitted != declared.len() || serialized.is_empty() {
-            return Err(ContractErrorV1::EmptyQuery);
         }
         if serialized.len() > MAX_QUERY_TOTAL_BYTES {
             return Err(ContractErrorV1::QueryTooLarge);
@@ -1250,6 +1332,11 @@ impl fmt::Debug for QueryStringV1 {
 /// resolver output, configuration, or request data to a user-agent value. (`String::leak` defeats
 /// this, so `'static` provenance is a discipline claim against accidental flows, not a proof
 /// against a hostile host.)
+///
+/// Amended 2026-10-02 (B7a, §16 Q15): host program text is no longer the only source. A package
+/// may declare a per-family value in its manifest, which gate ① checks against this same grammar
+/// and which travels as a [`DeclaredUserAgentV1`] in the same single [`UserAgentV1`] slot. This
+/// type and its `'static` constructor are unchanged and remain the way to send a host literal.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct ControlledUserAgentV1 {
     value: &'static str,
@@ -1268,21 +1355,11 @@ impl ControlledUserAgentV1 {
     ///
     /// Returns [`ContractErrorV1::InvalidUserAgentValue`] when the value violates the grammar.
     pub const fn try_from_static(value: &'static str) -> Result<Self, ContractErrorV1> {
-        let bytes = value.as_bytes();
-        if bytes.is_empty() || bytes.len() > MAX_USER_AGENT_BYTES {
-            return Err(ContractErrorV1::InvalidUserAgentValue);
+        if declared::user_agent_grammar_admits(value.as_bytes()) {
+            Ok(Self { value })
+        } else {
+            Err(ContractErrorV1::InvalidUserAgentValue)
         }
-        if bytes[0] == b' ' || bytes[bytes.len() - 1] == b' ' {
-            return Err(ContractErrorV1::InvalidUserAgentValue);
-        }
-        let mut index = 0;
-        while index < bytes.len() {
-            if bytes[index] < 0x20 || bytes[index] > 0x7E {
-                return Err(ContractErrorV1::InvalidUserAgentValue);
-            }
-            index += 1;
-        }
-        Ok(Self { value })
     }
 
     /// Returns the declared user-agent value.
@@ -1353,6 +1430,22 @@ pub enum ProviderAuthV1 {
         /// The credential-slot declaration resolved by the host, exactly as in the Bearer arm.
         slot: BearerAuthV1,
     },
+    /// The secret travels verbatim in one header the package declared (auth contract version
+    /// five).
+    ///
+    /// The open counterpart of [`Self::HeaderSecret`]: the name came from the package manifest's
+    /// `secret_headers` and passed gate ①'s rules, so it is never a framing, hop-by-hop, cookie,
+    /// `authorization` or otherwise reserved name. A request carrying this arm is prepared only
+    /// over [`SafeHeaders`] validated under a declaration naming the header
+    /// ([`SafeHeaders::try_from_iter_with_secret_headers`]); any other request fails closed as
+    /// `UNSUPPORTED_AUTH_SHAPE` before its credential is resolved into a header, which is what
+    /// keeps the same name off the ordinary channel and out of the response transcript.
+    DeclaredHeaderSecret {
+        /// The declared secret-bearing header selected by the provider.
+        header: DeclaredSecretHeaderV1,
+        /// The credential-slot declaration resolved by the host, exactly as in the Bearer arm.
+        slot: BearerAuthV1,
+    },
 }
 
 impl ProviderAuthV1 {
@@ -1363,7 +1456,8 @@ impl ProviderAuthV1 {
             Self::Bearer(slot)
             | Self::HeaderSecret { slot, .. }
             | Self::HostSigned { slot, .. }
-            | Self::BearerAndHeaderSecret { slot, .. } => slot.credential_slot(),
+            | Self::BearerAndHeaderSecret { slot, .. }
+            | Self::DeclaredHeaderSecret { slot, .. } => slot.credential_slot(),
         }
     }
 }
@@ -1393,6 +1487,11 @@ impl fmt::Debug for ProviderAuthV1 {
                 .field("header", header)
                 .field("slot", slot)
                 .finish(),
+            Self::DeclaredHeaderSecret { header, slot } => formatter
+                .debug_struct("DeclaredHeaderSecret")
+                .field("header", header)
+                .field("slot", slot)
+                .finish(),
         }
     }
 }
@@ -1405,7 +1504,7 @@ pub struct JsonPostRequestV1 {
     body: JsonBodyV1,
     auth: ProviderAuthV1,
     query: Option<QueryStringV1>,
-    user_agent: Option<ControlledUserAgentV1>,
+    user_agent: Option<UserAgentV1>,
 }
 
 impl JsonPostRequestV1 {
@@ -1443,16 +1542,20 @@ impl JsonPostRequestV1 {
     ///
     /// A separate builder rather than a `new` parameter so http-contract-version-two call sites
     /// keep compiling unchanged: a v2 request is exactly a v3 request with no user-agent.
+    ///
+    /// Takes a host literal ([`ControlledUserAgentV1`]) or, since HTTP contract version ten, a
+    /// declared manifest value ([`DeclaredUserAgentV1`]). Either fills the one slot, replacing
+    /// whatever it held.
     #[must_use]
-    pub const fn with_user_agent(mut self, user_agent: ControlledUserAgentV1) -> Self {
-        self.user_agent = Some(user_agent);
+    pub fn with_user_agent(mut self, user_agent: impl Into<UserAgentV1>) -> Self {
+        self.user_agent = Some(user_agent.into());
         self
     }
 
     /// Returns the sanctioned user-agent declaration, when one was attached.
     #[must_use]
-    pub const fn user_agent(&self) -> Option<ControlledUserAgentV1> {
-        self.user_agent
+    pub const fn user_agent(&self) -> Option<&UserAgentV1> {
+        self.user_agent.as_ref()
     }
 
     /// Returns the provider-selected relative path.
@@ -1505,7 +1608,7 @@ pub struct GetRequestV1 {
     headers: SafeHeaders,
     auth: ProviderAuthV1,
     query: Option<QueryStringV1>,
-    user_agent: Option<ControlledUserAgentV1>,
+    user_agent: Option<UserAgentV1>,
 }
 
 impl GetRequestV1 {
@@ -1540,16 +1643,20 @@ impl GetRequestV1 {
     }
 
     /// Attaches a sanctioned user-agent declaration to this request.
+    ///
+    /// Takes a host literal ([`ControlledUserAgentV1`]) or, since HTTP contract version ten, a
+    /// declared manifest value ([`DeclaredUserAgentV1`]). Either fills the one slot, replacing
+    /// whatever it held.
     #[must_use]
-    pub const fn with_user_agent(mut self, user_agent: ControlledUserAgentV1) -> Self {
-        self.user_agent = Some(user_agent);
+    pub fn with_user_agent(mut self, user_agent: impl Into<UserAgentV1>) -> Self {
+        self.user_agent = Some(user_agent.into());
         self
     }
 
     /// Returns the sanctioned user-agent declaration, when one was attached.
     #[must_use]
-    pub const fn user_agent(&self) -> Option<ControlledUserAgentV1> {
-        self.user_agent
+    pub const fn user_agent(&self) -> Option<&UserAgentV1> {
+        self.user_agent.as_ref()
     }
 
     /// Returns the provider-selected relative path.
@@ -1598,7 +1705,7 @@ pub struct MultipartPostRequestV1 {
     body: MultipartBodyV1,
     auth: ProviderAuthV1,
     query: Option<QueryStringV1>,
-    user_agent: Option<ControlledUserAgentV1>,
+    user_agent: Option<UserAgentV1>,
 }
 
 impl MultipartPostRequestV1 {
@@ -1642,16 +1749,20 @@ impl MultipartPostRequestV1 {
     }
 
     /// Attaches a sanctioned user-agent declaration to this request.
+    ///
+    /// Takes a host literal ([`ControlledUserAgentV1`]) or, since HTTP contract version ten, a
+    /// declared manifest value ([`DeclaredUserAgentV1`]). Either fills the one slot, replacing
+    /// whatever it held.
     #[must_use]
-    pub const fn with_user_agent(mut self, user_agent: ControlledUserAgentV1) -> Self {
-        self.user_agent = Some(user_agent);
+    pub fn with_user_agent(mut self, user_agent: impl Into<UserAgentV1>) -> Self {
+        self.user_agent = Some(user_agent.into());
         self
     }
 
     /// Returns the sanctioned user-agent declaration, when one was attached.
     #[must_use]
-    pub const fn user_agent(&self) -> Option<ControlledUserAgentV1> {
-        self.user_agent
+    pub const fn user_agent(&self) -> Option<&UserAgentV1> {
+        self.user_agent.as_ref()
     }
 
     /// Returns the provider-selected relative path.
@@ -1717,6 +1828,29 @@ pub enum ProviderQuotaMetadataFieldV1 {
 }
 
 impl ProviderQuotaMetadataFieldV1 {
+    /// Every field, in index order (B7a).
+    ///
+    /// The quota header declaration of a package maps a header onto one of these, and the
+    /// canonical declaration reads each from its own header name.
+    pub const ALL: [Self; PROVIDER_QUOTA_METADATA_FIELD_COUNT] = [
+        Self::XRateLimitLimitTokens,
+        Self::XRateLimitRemainingTokens,
+        Self::XRateLimitResetTokens,
+        Self::AnthropicRateLimitTokensLimit,
+        Self::AnthropicRateLimitTokensRemaining,
+        Self::AnthropicRateLimitTokensReset,
+        Self::AnthropicRateLimitUnifiedLimit,
+        Self::AnthropicRateLimitUnifiedRemaining,
+        Self::AnthropicRateLimitUnifiedReset,
+    ];
+
+    /// Returns the field whose canonical header name is `name`, which is also how a manifest's
+    /// quota header declaration names the field it feeds (B7a).
+    #[must_use]
+    pub fn from_header_name(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|field| field.as_header_name() == name)
+    }
+
     /// Returns the canonical lowercase HTTP header name.
     #[must_use]
     pub const fn as_header_name(self) -> &'static str {
@@ -1975,6 +2109,21 @@ impl ResponseTranscriptV1 {
     where
         I: IntoIterator<Item = (&'a str, Option<&'a str>)>,
     {
+        Self::capture_redacting(headers, DeclaredSecretHeadersV1::none())
+    }
+
+    /// Captures a transcript for one package's response, also dropping its declared secret headers
+    /// (reserved-header policy version two).
+    ///
+    /// Exactly [`Self::capture`], with every name in `secret_headers` denied as the sanctioned
+    /// secret headers are. A transport passes the declaration the request's headers were validated
+    /// under ([`SafeHeaders::secret_headers`]), so an upstream echoing a declared key never shows
+    /// it to a reader.
+    #[must_use]
+    pub fn capture_redacting<'a, I>(headers: I, secret_headers: &DeclaredSecretHeadersV1) -> Self
+    where
+        I: IntoIterator<Item = (&'a str, Option<&'a str>)>,
+    {
         let mut captured: Vec<(String, String)> = Vec::new();
         let mut total_bytes = 0_usize;
         let mut truncated = false;
@@ -1987,7 +2136,9 @@ impl ResponseTranscriptV1 {
                 truncated = true;
                 continue;
             };
-            if RESPONSE_TRANSCRIPT_DENIED_HEADERS.contains(&name.as_str()) {
+            if RESPONSE_TRANSCRIPT_DENIED_HEADERS.contains(&name.as_str())
+                || secret_headers.contains(&name)
+            {
                 continue;
             }
             if name.len() > MAX_RESPONSE_TRANSCRIPT_NAME_BYTES
@@ -2887,6 +3038,22 @@ pub enum ContractErrorV1 {
     /// A request that renders its own media type was given a `content-type` header to carry.
     #[error("content-type header is not permitted on this request shape")]
     ContentTypeHeaderNotPermitted,
+    /// A declared secret header name violates the declaration rules (auth contract version five).
+    #[error("declared secret header name is invalid")]
+    InvalidSecretHeaderName,
+    /// A secret header declaration repeats a name or exceeds the declaration bound.
+    #[error("secret header declaration is invalid")]
+    InvalidSecretHeaderSet,
+    /// A declared header-secret arm names a header outside the package's declaration.
+    #[error("secret header is not declared by the package")]
+    UndeclaredSecretHeader,
+    // B7a (query, quota, user-agent): declared provider instances.
+    /// A declared query parameter's name or value syntax is refused.
+    #[error("declared query parameter is invalid")]
+    InvalidQueryDeclaration,
+    /// A declared quota header set is empty or names a refused, repeated or reused entry.
+    #[error("declared quota headers are invalid")]
+    InvalidQuotaHeaderDeclaration,
 }
 
 impl ContractErrorV1 {
@@ -2907,6 +3074,12 @@ impl ContractErrorV1 {
             Self::InvalidMultipartBoundary => "INVALID_MULTIPART_BOUNDARY",
             Self::InvalidMultipartBody => "INVALID_MULTIPART_BODY",
             Self::ContentTypeHeaderNotPermitted => "CONTENT_TYPE_HEADER_NOT_PERMITTED",
+            Self::InvalidSecretHeaderName => "INVALID_SECRET_HEADER_NAME",
+            Self::InvalidSecretHeaderSet => "INVALID_SECRET_HEADER_SET",
+            Self::UndeclaredSecretHeader => "UNDECLARED_SECRET_HEADER",
+            // B7a (query, quota, user-agent).
+            Self::InvalidQueryDeclaration => "INVALID_QUERY_DECLARATION",
+            Self::InvalidQuotaHeaderDeclaration => "INVALID_QUOTA_HEADER_DECLARATION",
         }
     }
 }
@@ -3151,8 +3324,9 @@ mod query_serialization_completeness_tests {
                 QueryParameterV1::GroupId => "19000",
                 QueryParameterV1::TaskId => "276843862449040",
                 QueryParameterV1::FileId => "00176844028768320",
+                QueryParameterV1::Declared(_) => unreachable!("`ALL` lists only fixed parameters"),
             };
-            let query = QueryStringV1::try_from_iter([(parameter, value)])
+            let query = QueryStringV1::try_from_iter([(parameter.clone(), value)])
                 .expect("a sanctioned parameter with a valid value must construct");
             assert_eq!(query.as_str(), format!("{}={value}", parameter.wire_name()));
         }

@@ -11,10 +11,11 @@ use south_component_conformance::{
     AdmittedAuthV1, CheckV1, DescriptorAuthErrorV1, FixturePackV1, ProviderComponentV1,
     admit_descriptor_auth, run_provider_component_suite_v1_for_manifest,
 };
-use south_contracts::SecretHeaderV1;
+use south_contracts::{DeclaredSecretHeaderV1, SecretHeaderV1};
 use south_provider_api::ComponentManifestV1;
 use token_station_protocol::{
-    Auth, ChatRequest, DescriptorError, HttpRequestDescriptor, ProviderConfig, SecretRef,
+    Auth, ChatRequest, DescriptorError, HttpRequestDescriptor, ProviderConfig,
+    SafeHeaders as KernelSafeHeaders, SecretRef,
 };
 
 fn root() -> &'static Path {
@@ -96,6 +97,91 @@ fn an_arm_the_manifest_does_not_declare_is_refused() {
     assert_eq!(
         admit_descriptor_auth(&manifest(&["bearer"]), &config, &descriptor),
         Err(DescriptorAuthErrorV1::OAuthNotAdmitted)
+    );
+}
+
+/// A header the manifest declares in `secret_headers` is admitted as the declared arm (B7a,
+/// host-zero-vendor-boundary §10). The descriptor is built in-process: see the next test for why a
+/// component cannot produce it yet.
+#[test]
+fn a_declared_secret_header_is_admitted_as_the_declared_arm() {
+    let (config, mut descriptor) = built();
+    let mut declaring = manifest(&["header_secret"]);
+    declaring.secret_headers = vec!["x-acme-key".to_owned()];
+    assert_eq!(declaring.validate(), Ok(()));
+
+    descriptor.auth = Some(Auth::Header { name: "X-Acme-Key".to_owned(), secret: slot(&config) });
+    assert_eq!(
+        admit_descriptor_auth(&declaring, &config, &descriptor),
+        Ok(AdmittedAuthV1::DeclaredHeaderSecret(
+            DeclaredSecretHeaderV1::parse("x-acme-key").unwrap()
+        )),
+        "declared names compare case-insensitively and admit in their declared form"
+    );
+
+    // The sanctioned names keep their closed arm whatever the declaration says.
+    descriptor.auth = Some(Auth::Header { name: "x-api-key".to_owned(), secret: slot(&config) });
+    assert_eq!(
+        admit_descriptor_auth(&declaring, &config, &descriptor),
+        Ok(AdmittedAuthV1::HeaderSecret(SecretHeaderV1::XApiKey))
+    );
+
+    descriptor.auth = Some(Auth::Header { name: "x-acme-other".to_owned(), secret: slot(&config) });
+    assert_eq!(
+        admit_descriptor_auth(&declaring, &config, &descriptor),
+        Err(DescriptorAuthErrorV1::HeaderNotSanctioned("x-acme-other".to_owned()))
+    );
+
+    descriptor.auth = Some(Auth::Header { name: "x-acme-key".to_owned(), secret: slot(&config) });
+    let mut undeclared_arm = declaring;
+    undeclared_arm.auth_arms = BTreeSet::from(["bearer".to_owned()]);
+    assert_eq!(
+        admit_descriptor_auth(&undeclared_arm, &config, &descriptor),
+        Err(DescriptorAuthErrorV1::HeaderSecretNotDeclared)
+    );
+}
+
+/// The kernel limitation B7b removes: `Auth::header` checks its name against the kernel's static
+/// `CREDENTIAL_HEADERS` while deserializing, so a component's descriptor cannot name a header
+/// outside that list, and every name on it is either sanctioned or undeclarable. Until B7b, the
+/// declared arm is reachable only from descriptors built in-process. When the kernel moves the
+/// check, this test fails and should be replaced by one that admits a deserialized descriptor.
+#[test]
+fn until_b7b_no_component_descriptor_can_name_a_declared_header() {
+    let (config, _) = built();
+    assert!(Auth::header("x-acme-key", slot(&config)).is_err());
+    // The same wire shape with a kernel-listed name deserializes, so the refusal is the name's.
+    let wire = |name: &str| {
+        serde_json::to_value(Auth::Header { name: name.to_owned(), secret: slot(&config) })
+    };
+    assert!(serde_json::from_value::<Auth>(wire("x-api-key").unwrap()).is_ok());
+    assert!(serde_json::from_value::<Auth>(wire("x-acme-key").unwrap()).is_err());
+
+    for kernel_only in ["authorization", "proxy-authorization", "cookie", "set-cookie"] {
+        assert!(Auth::header(kernel_only, slot(&config)).is_ok());
+        assert!(
+            south_provider_api::validate_secret_header_name(kernel_only).is_err(),
+            "{kernel_only} is a kernel credential header but must stay undeclarable"
+        );
+    }
+}
+
+/// A declared name on the ordinary header channel is refused: nothing downstream redacts an
+/// ordinary header, and the host's reserved check would refuse it later anyway.
+#[test]
+fn a_declared_secret_header_on_the_ordinary_channel_is_refused() {
+    let (config, mut descriptor) = built();
+    let mut declaring = manifest(&["bearer", "header_secret"]);
+    declaring.secret_headers = vec!["x-acme-key".to_owned()];
+    descriptor.headers = KernelSafeHeaders::try_new([("X-Acme-Key", "smuggled")]).unwrap();
+    assert!(matches!(
+        admit_descriptor_auth(&declaring, &config, &descriptor),
+        Err(DescriptorAuthErrorV1::SecretHeaderOnOrdinaryChannel(_))
+    ));
+    // The same header is ordinary for a package that does not declare it.
+    assert_eq!(
+        admit_descriptor_auth(&manifest(&["bearer", "header_secret"]), &config, &descriptor),
+        Ok(AdmittedAuthV1::Bearer)
     );
 }
 

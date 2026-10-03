@@ -8,9 +8,10 @@ use std::time::Duration;
 
 use http::StatusCode;
 use south_contracts::{
-    BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1, ProviderAuthV1,
-    QueryParameterV1, QueryStringV1, SecretHeaderV1, SignedHeaderSetV1, SignedHeaderV1,
-    StreamChunkV1, StreamingResponseHeadV1, TransportErrorV1,
+    BufferedHttpResponseV1, ControlledUserAgentV1, CredentialSlotV1, DeclaredSecretHeaderV1,
+    DeclaredSecretHeadersV1, ProviderAuthV1, QueryParameterV1, QueryStringV1, SecretHeaderV1,
+    SignedHeaderSetV1, SignedHeaderV1, StreamChunkV1, StreamingResponseHeadV1, TransportErrorV1,
+    UserAgentV1,
 };
 use south_core::raw::{
     BoundedResolverV1, PreparedSecretResolverV1, RawAuthV1, RawCallErrorV1, RawGetProviderCallV1,
@@ -40,6 +41,7 @@ const fn valid_raw<'a>(headers: &'a [(String, String)], body: &'a str) -> RawPro
         headers,
         body,
         auth: RawAuthV1::Bearer,
+        secret_headers: DeclaredSecretHeadersV1::none(),
         query: None,
         user_agent: None,
     }
@@ -261,13 +263,13 @@ fn parse_carries_auth_arm_query_and_user_agent() {
     let raw = RawProviderCallV1 {
         auth: RawAuthV1::HeaderSecret(SecretHeaderV1::XApiKey),
         query: Some(query.clone()),
-        user_agent: Some(user_agent),
+        user_agent: Some(user_agent.into()),
         ..valid_raw(&headers, "{\"model\":\"m\"}")
     };
 
     let (_binding, request) = parse_raw_call(&raw).unwrap();
     assert_eq!(request.query().map(QueryStringV1::as_str), Some(query.as_str()));
-    assert_eq!(request.user_agent().map(ControlledUserAgentV1::as_str), Some("prelude-test/1.0"));
+    assert_eq!(request.user_agent().map(UserAgentV1::as_str), Some("prelude-test/1.0"));
     match request.auth() {
         south_contracts::ProviderAuthV1::HeaderSecret { header, .. } => {
             assert_eq!(header.header_name(), "x-api-key");
@@ -595,7 +597,7 @@ fn signed_parse_carries_the_declaration_query_and_user_agent() {
         query: Some(
             QueryStringV1::try_from_iter([(QueryParameterV1::ApiVersion, "2024-01-01")]).unwrap(),
         ),
-        user_agent: Some(ControlledUserAgentV1::try_from_static("south-drill/1.0").unwrap()),
+        user_agent: Some(ControlledUserAgentV1::try_from_static("south-drill/1.0").unwrap().into()),
         ..valid_signed_raw(&headers, "{\"model\":\"m\"}", &emits)
     };
 
@@ -607,7 +609,7 @@ fn signed_parse_carries_the_declaration_query_and_user_agent() {
     assert_eq!(slot.credential_slot().as_str(), "aws.primary");
     assert_eq!(parsed, &emits, "the declaration must travel verbatim");
     assert!(request.query().is_some());
-    assert_eq!(request.user_agent().map(ControlledUserAgentV1::as_str), Some("south-drill/1.0"));
+    assert_eq!(request.user_agent().map(UserAgentV1::as_str), Some("south-drill/1.0"));
 }
 
 #[tokio::test]
@@ -765,6 +767,7 @@ const fn valid_raw_get(headers: &[(String, String)]) -> RawGetProviderCallV1<'_>
         requested_slot: "primary",
         headers,
         auth: RawAuthV1::Bearer,
+        secret_headers: DeclaredSecretHeadersV1::none(),
         query: None,
         user_agent: None,
     }
@@ -827,14 +830,14 @@ fn get_parse_carries_auth_arm_query_and_user_agent_into_a_body_less_request() {
         relative_path: "v1/query/video_generation",
         auth: RawAuthV1::BearerAndHeaderSecret(SecretHeaderV1::XGoogApiKey),
         query: Some(query.clone()),
-        user_agent: Some(user_agent),
+        user_agent: Some(user_agent.into()),
         ..valid_raw_get(&headers)
     };
 
     let (binding, request) = parse_raw_get_call(&raw).unwrap();
     assert_eq!(request.relative_path().as_str(), "v1/query/video_generation");
     assert_eq!(request.query().map(QueryStringV1::as_str), Some(query.as_str()));
-    assert_eq!(request.user_agent().map(ControlledUserAgentV1::as_str), Some("prelude-poll/1.0"));
+    assert_eq!(request.user_agent().map(UserAgentV1::as_str), Some("prelude-poll/1.0"));
     assert!(matches!(
         request.auth(),
         ProviderAuthV1::BearerAndHeaderSecret { header: SecretHeaderV1::XGoogApiKey, .. }
@@ -974,6 +977,7 @@ const fn valid_raw_multipart<'a>(
         body,
         boundary: RAW_BOUNDARY,
         auth: RawAuthV1::Bearer,
+        secret_headers: DeclaredSecretHeadersV1::none(),
         query: None,
         user_agent: None,
     }
@@ -1156,4 +1160,144 @@ fn raw_multipart_debug_shows_shape_only() {
     assert!(rendered.starts_with("RawMultipartProviderCallV1 {"));
     assert!(!rendered.contains(RAW_BOUNDARY));
     assert!(!rendered.contains("provider.invalid"));
+}
+
+// -- Declared secret headers (auth contract version five, reserved-header policy version two) ----
+
+fn acme_declaration() -> (DeclaredSecretHeaderV1, DeclaredSecretHeadersV1) {
+    let header = DeclaredSecretHeaderV1::parse("x-acme-key").unwrap();
+    (header, DeclaredSecretHeadersV1::try_new([header]).unwrap())
+}
+
+#[tokio::test]
+async fn execute_binds_a_declared_secret_header_verbatim_and_alone() {
+    let (header, declared) = acme_declaration();
+    let headers = vec![("x-acme-trace".to_owned(), "visible".to_owned())];
+    let raw = RawProviderCallV1 {
+        auth: RawAuthV1::DeclaredHeaderSecret(header),
+        secret_headers: &declared,
+        ..valid_raw(&headers, "{}")
+    };
+    let resolver = CountingResolver::new();
+    let transport = RecordingTransport::new();
+    let cancellation = CancellationToken::new();
+
+    let (_binding, request) = parse_raw_call(&raw).unwrap();
+    assert!(matches!(
+        request.auth(),
+        ProviderAuthV1::DeclaredHeaderSecret { header: parsed, .. } if *parsed == header
+    ));
+    assert_eq!(request.headers().secret_headers(), &declared);
+
+    execute_raw_call_v1(&raw, &resolver, &transport, far_deadline(), &cancellation).await.unwrap();
+    let recorded = transport.recorded.lock().unwrap().clone().unwrap();
+    assert_eq!(recorded.0, "x-acme-key");
+    assert_eq!(recorded.1, SECRET.as_bytes());
+    assert_eq!(resolver.calls(), 1);
+}
+
+#[tokio::test]
+async fn a_declared_name_on_the_ordinary_channel_is_refused_before_any_side_effect() {
+    let (header, declared) = acme_declaration();
+    let headers = vec![("X-Acme-Key".to_owned(), "smuggled".to_owned())];
+    for auth in [RawAuthV1::Bearer, RawAuthV1::DeclaredHeaderSecret(header)] {
+        let raw =
+            RawProviderCallV1 { auth, secret_headers: &declared, ..valid_raw(&headers, "{}") };
+        let resolver = CountingResolver::new();
+        let transport = RecordingTransport::new();
+
+        let error = execute_raw_call_v1(
+            &raw,
+            &resolver,
+            &transport,
+            far_deadline(),
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap_err();
+
+        assert_eq!(error.code(), "RESERVED_HEADER_FORBIDDEN");
+        let RawProviderCallErrorV1::Parse(parse) = error else { panic!("must fail in the parse") };
+        assert_eq!(parse.field(), "headers");
+        assert_eq!(resolver.calls(), 0);
+        assert_eq!(transport.calls(), 0);
+    }
+
+    // The GET and multipart shapes apply the same per-package addition.
+    let get = RawGetProviderCallV1 { secret_headers: &declared, ..valid_raw_get(&headers) };
+    assert!(matches!(parse_raw_get_call(&get), Err(RawCallErrorV1::Headers(_))));
+    let body = raw_multipart_body();
+    let multipart = RawMultipartProviderCallV1 {
+        secret_headers: &declared,
+        ..valid_raw_multipart(&headers, &body)
+    };
+    assert!(matches!(parse_raw_multipart_call(&multipart), Err(RawCallErrorV1::Headers(_))));
+
+    // Without the declaration the same name is an ordinary header, as under policy version one.
+    assert!(raw_call_parses(&valid_raw(&headers, "{}")));
+}
+
+#[test]
+fn a_declared_arm_outside_the_declaration_is_refused_on_auth() {
+    let (header, _) = acme_declaration();
+    let headers: Vec<(String, String)> = Vec::new();
+    let other = DeclaredSecretHeadersV1::try_from_names(["x-other-key"]).unwrap();
+    for secret_headers in [DeclaredSecretHeadersV1::none(), &other] {
+        let raw = RawProviderCallV1 {
+            auth: RawAuthV1::DeclaredHeaderSecret(header),
+            secret_headers,
+            ..valid_raw(&headers, "{}")
+        };
+        let error = parse_raw_call(&raw).unwrap_err();
+        assert_eq!(
+            error,
+            RawCallErrorV1::Auth(south_contracts::ContractErrorV1::UndeclaredSecretHeader)
+        );
+        assert_eq!(error.field(), "auth");
+        assert_eq!(error.code(), "UNDECLARED_SECRET_HEADER");
+
+        let get = RawGetProviderCallV1 {
+            auth: RawAuthV1::DeclaredHeaderSecret(header),
+            secret_headers,
+            ..valid_raw_get(&headers)
+        };
+        assert_eq!(parse_raw_get_call(&get).unwrap_err().field(), "auth");
+    }
+}
+
+#[tokio::test]
+async fn the_typed_path_refuses_a_declared_arm_over_headers_without_its_declaration() {
+    use south_contracts::{
+        BearerAuthV1, JsonBodyV1, JsonPostRequestV1, RelativePathV1, SafeHeaders,
+    };
+
+    let (header, _) = acme_declaration();
+    let headers: Vec<(String, String)> = Vec::new();
+    let (binding, _) = parse_raw_call(&valid_raw(&headers, "{}")).unwrap();
+    // Plain `SafeHeaders` would let the same name ride the ordinary channel and the transcript.
+    let request = JsonPostRequestV1::new(
+        RelativePathV1::parse("v1/chat/completions").unwrap(),
+        SafeHeaders::try_from_iter([("x-acme-key", "smuggled")]).unwrap(),
+        JsonBodyV1::parse("{}").unwrap(),
+        ProviderAuthV1::DeclaredHeaderSecret {
+            header,
+            slot: BearerAuthV1::new(CredentialSlotV1::parse("primary").unwrap()),
+        },
+    );
+    let resolver = CountingResolver::new();
+    let transport = RecordingTransport::new();
+
+    let error = south_core::execute_provider_call_v1(
+        &binding,
+        &request,
+        &resolver,
+        &transport,
+        far_deadline(),
+        &CancellationToken::new(),
+    )
+    .await
+    .unwrap_err();
+
+    assert_eq!(error.code(), "UNSUPPORTED_AUTH_SHAPE");
+    assert_eq!(transport.calls(), 0);
 }

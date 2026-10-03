@@ -50,6 +50,11 @@ pub mod anthropic_dialect;
 mod descriptor_auth;
 mod url_segment;
 pub use descriptor_auth::{AdmittedAuthV1, DescriptorAuthErrorV1, admit_descriptor_auth};
+// B7a (query, quota, user-agent): a manifest's declared instances as contract types.
+mod declared_instances;
+pub use declared_instances::{
+    DeclaredInstancesErrorV1, DeclaredInstancesV1, contract_query_syntax,
+};
 mod credential_fixture;
 pub mod credential_recipe;
 pub use credential_fixture::{
