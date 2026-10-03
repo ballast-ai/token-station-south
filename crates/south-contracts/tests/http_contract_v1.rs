@@ -166,6 +166,37 @@ fn endpoint_rejects_non_http_or_ambiguous_authorities() {
 }
 
 #[test]
+fn endpoint_rejects_a_scheme_not_immediately_followed_by_the_authority_separator() {
+    // The `url` crate reads `https:host` as `https://host` and treats everything after the host as
+    // the path, while a later `://` used to make the raw-path check validate a different, shorter
+    // path. The accepted canonical form then failed its own reparse. The first input is the fuzz
+    // reproducer from `contract_parsers`.
+    let invalid = [
+        "https:rvatrr://a+meeeeeeeeeeee\u{96d4}eeeee\"dHHHHHHH./e</e/",
+        "https:host://authority/base",
+        "https:evil.example://trusted.example/base",
+        "https:/host://authority/base",
+        "http:host:8080://authority/base",
+        "HTTPS:host://authority/base",
+        "https:host/a/%2f/b://authority/base",
+        "https:host/a/../b://authority/base",
+        "xhttps://example.com/base",
+    ];
+
+    for input in invalid {
+        assert_eq!(
+            ProviderEndpointV1::parse(input),
+            Err(ContractErrorV1::InvalidEndpoint),
+            "unexpectedly accepted endpoint with a misplaced authority separator: {input}"
+        );
+    }
+
+    let mixed_case = ProviderEndpointV1::parse("HtTpS://example.com/base").unwrap();
+    assert_eq!(mixed_case.as_str(), "https://example.com/base/");
+    assert_eq!(ProviderEndpointV1::parse(mixed_case.as_str()), Ok(mixed_case));
+}
+
+#[test]
 fn endpoint_rejects_unsafe_path_segments() {
     let invalid = [
         "https://example.com/a//b",
