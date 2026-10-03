@@ -16,10 +16,10 @@ use std::path::Path;
 use serde_json::Value;
 use south_provider_api::{ComponentManifestV1, HostExpectationsV1, HostRangeV1};
 
-/// The oldest `south_runtime` this test host admits: 0.42.0, the release that introduced the range
+/// The oldest `south_runtime` this test host admits: 0.43.0, the release that introduced the range
 /// handshake. A floor policy of this test host, not a south rule: every host chooses its own
 /// `south_runtime_min` (§8.6).
-pub const SOUTH_RUNTIME_FLOOR: &str = "0.42.0";
+pub const SOUTH_RUNTIME_FLOOR: &str = "0.43.0";
 
 fn repo_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().and_then(Path::parent).expect("repo root")

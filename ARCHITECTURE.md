@@ -176,7 +176,16 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-该库独立 Rust 版本为 0.1.0；八个库与组件运行时当前为 v0.42.0。
+该库独立 Rust 版本为 0.1.0；八个库与组件运行时当前为 v0.43.0。
+**v0.43.0**: phases B1–B4 and B7a of `docs/design/2026-09-30-host-zero-vendor-boundary.md` (notes in §6.6 and
+§13.1–§13.4): strict usage evidence, descriptor auth admission and request facts, endpoint and config declarations, the
+eventstream deframer, the range handshake with per-package isolation and a release index, credential recipe v1, and
+package-declared provider instances. Contracts: auth 5, reserved header policy 2, HTTP 10, provider quota metadata 2.
+Packages declare `runtime_abi` 1, so from this release on a package whose content is unchanged keeps its identity.
+Identities: `provider-openai-compatible` 2.1.5, `provider-anthropic` 1.0.9, `provider-gemini` 1.1.5,
+`provider-bedrock-converse` 1.0.6, `task-kling` 1.0.5, `task-kling-v2` 0.32.3, `task-minimax-v2` / `task-bailian-v2`
+0.31.2, `task-byteplus-v2` 0.36.2, and `task-xai-v2` / `task-veo-v2` / `task-wan-image-v2` / `task-gmi-image-v2` 0.35.2.
+Hosts re-pinning to this release must absorb breaking API changes listed in §13.4.
 **v0.42.0**: one more Claude dialect word, `anthropic.sampling.exclusive`: Opus 4.5 through Sonnet 4.6 accept `temperature`
 or `top_p` but reject both in one request, so for a model declaring it both components keep `temperature` and drop `top_p`.
 Identities: `provider-anthropic` 1.0.7 → **1.0.8**, `provider-bedrock-converse` 1.0.4 → **1.0.5**; the other eleven packages

@@ -20,14 +20,14 @@ use std::path::Path;
 use serde_json::Value;
 use south_provider_api::{ComponentManifestV1, HostExpectationsV1, HostRangeV1};
 
-/// The oldest `south_runtime` this test host admits: 0.42.0, the release that introduced the range
+/// The oldest `south_runtime` this test host admits: 0.43.0, the release that introduced the range
 /// handshake.
 ///
 /// This is a floor policy of this test host, not a south rule. Every host chooses its own
 /// `south_runtime_min`, and raises it when it wants a release that tightened gate ① or ② enforced
 /// (§8.6). This one admits every package built for the range handshake at all; no earlier release
 /// wrote the fields that handshake reads.
-pub const SOUTH_RUNTIME_FLOOR: &str = "0.42.0";
+pub const SOUTH_RUNTIME_FLOOR: &str = "0.43.0";
 
 /// The IR, kernel release and kernel revision this release distributes. The range handshake records
 /// them for provenance only; the exact handshake still compares them.
