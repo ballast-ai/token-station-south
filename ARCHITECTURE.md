@@ -176,7 +176,18 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-该库独立 Rust 版本为 0.1.0；八个库与组件运行时当前为 v0.43.0。
+该库独立 Rust 版本为 0.1.0；八个库与组件运行时当前为 v0.44.0。
+**v0.44.0**: the S3b prerequisites and the host's S3a feedback (`docs/design/2026-09-30-host-zero-vendor-boundary.md`
+§13.5, §16 Q19–Q22): `present` candidates (D1), family-scoped `credentials` (D2), field slots (D3), field descriptions
+(D4) and config-key defaults, gate ③ case 10 `TransientFailureIsRetried` (D5), the Kiro draft's four-rule selector (D6),
+and the `github-copilot` family with per-plan chat hosts (D7). Contract numbers and the `south.credential-recipe.v1`
+suite version are unchanged; a runtime older than 0.44.0 refuses the new manifest fields, and every package declares
+`south_runtime` 0.44.0. Identities: `provider-openai-compatible` 2.1.5 → **2.2.0**; the shared crates changed every
+`component.wasm`, so the other twelve take a patch bump with unchanged behavior: `provider-anthropic` 1.0.10,
+`provider-gemini` 1.1.6, `provider-bedrock-converse` 1.0.7, `task-kling` 1.0.6, `task-kling-v2` 0.32.4,
+`task-minimax-v2` / `task-bailian-v2` 0.31.3, `task-byteplus-v2` 0.36.3, and `task-xai-v2` / `task-veo-v2` /
+`task-wan-image-v2` / `task-gmi-image-v2` 0.35.3. Hosts re-pinning to this release must absorb the breaking Rust API
+changes listed in §13.5.
 **v0.43.0**: phases B1–B4 and B7a of `docs/design/2026-09-30-host-zero-vendor-boundary.md` (notes in §6.6 and
 §13.1–§13.4): strict usage evidence, descriptor auth admission and request facts, endpoint and config declarations, the
 eventstream deframer, the range handshake with per-package isolation and a release index, credential recipe v1, and
