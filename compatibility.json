@@ -170,8 +170,7 @@
         "cases": 6
       },
       "credential_recipe": {
-        "status": "verified",
-        "cases": 9
+        "status": "not_verified"
       }
     }
   },

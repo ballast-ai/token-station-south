@@ -66,6 +66,14 @@ pub trait CredentialRecipeSessionV1: Send + Sync {
     /// write-back would: it replaces the fields and the minted value (none when absent), bumps the
     /// version the compare-and-swap compares, and does **not** wait for the refresh lock — the
     /// suite calls it while a refresh holds that lock.
+    ///
+    /// It must produce a **new generation even when the values equal the stored ones**: case
+    /// `ExchangeFailureWritesNothing` rewrites its seed unchanged, and the cases read every write as
+    /// the operator acting, which clears a `reauth_required` latch. A store that bumps its
+    /// generation only when a value changes (a trigger comparing old and new values, for example)
+    /// commits this write through a path that forces the bump. The runner cannot observe a
+    /// generation, so a harness that skips the bump makes the suite's verdicts unsound without
+    /// failing it (§13.5 D5, host feedback SF3).
     fn write_generation<'a>(
         &'a self,
         generation: &'a CredentialGenerationFixtureV1,

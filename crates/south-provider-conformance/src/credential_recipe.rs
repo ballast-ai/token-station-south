@@ -278,7 +278,7 @@ impl fmt::Debug for CredentialMintedFixtureV1 {
 ///
 /// A host stores it as a new generation — bumping whatever version its compare-and-swap compares —
 /// either as the seed of a case or as an out-of-band write
-/// ([`CredentialRecipeSessionV1::write_generation`]).
+/// ([`CredentialRecipeSessionV1::write_generation`]), even when its values equal the stored ones.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct CredentialGenerationFixtureV1 {
     fields: &'static [(&'static str, &'static str)],
@@ -529,6 +529,9 @@ pub enum CredentialRecipeCaseIdV1 {
     CasLoserRereadsTheWinner,
     /// A probe on a rotating recipe with an expired token never reaches the endpoint.
     ProbeDoesNotRotate,
+    /// Two transient failures on the same generation, with no write in between, and the next resolve
+    /// exchanges again and mints: a transient failure holds nothing (§13.5 D5, host feedback SF2).
+    TransientFailureIsRetried,
 }
 
 fixed_debug!(CredentialRecipeCaseIdV1 {
@@ -541,6 +544,7 @@ fixed_debug!(CredentialRecipeCaseIdV1 {
     EmptyRotationDoesNotWipe => "EmptyRotationDoesNotWipe",
     CasLoserRereadsTheWinner => "CasLoserRereadsTheWinner",
     ProbeDoesNotRotate => "ProbeDoesNotRotate",
+    TransientFailureIsRetried => "TransientFailureIsRetried",
 });
 
 /// One immutable canonical credential-recipe case.
@@ -866,6 +870,32 @@ const FIXTURES: &[CredentialRecipeFixtureV1] = &[
         replies: &[reply(200, ROTATED_1_HOUR)],
         steps: &[CredentialRecipeStepV1::Probe, calls(0), stored(SEED_FIELDS, AT_SEED, EXPIRED)],
         exchanges: &[],
+    },
+    // Case 1 writes a new generation between its two failures, so a host that latched a transient
+    // failure to the generation passed it. Here nothing is written: each resolve must reach the
+    // endpoint, and the third mints.
+    CredentialRecipeFixtureV1 {
+        case_id: CredentialRecipeCaseIdV1::TransientFailureIsRetried,
+        recipe: CredentialRecipeKindV1::Rotating,
+        seed: ROTATING_SEED,
+        replies: &[
+            reply(503, r#"{"error":"temporarily_unavailable"}"#),
+            FakeTokenReplyV1 {
+                answer: FakeTokenAnswerV1::Unreachable,
+                hold: FakeTokenHoldV1::None,
+            },
+            reply(200, ROTATED_1_HOUR),
+        ],
+        steps: &[
+            TRANSIENT,
+            calls(1),
+            TRANSIENT,
+            calls(2),
+            resolve(AT_1),
+            calls(3),
+            stored(RT_2_FIELDS, AT_1, HOUR),
+        ],
+        exchanges: &[RT_SEED, RT_SEED, RT_SEED],
     },
 ];
 

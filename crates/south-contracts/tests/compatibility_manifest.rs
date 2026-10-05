@@ -384,12 +384,13 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 1
                 // record is held by that host's repository; this manifest records only the
                 // resulting status.
                 ("provider_binary", "verified", Some(6)),
-                // token-station-server credential_recipe verified 2026-10-05 (P21 S3a, C3): its
-                // generic recipe executor, wrapped by `CredentialRecipeHarnessV1` over a fresh store
-                // per case, passes south.credential-recipe.v1 9/9 at server `8777b84f`, and each of
-                // its deliberately broken invariants fails exactly the guarding case. The adoption
-                // record is held by that host's repository (P21 §5 S3, host feedback SF6).
-                ("credential_recipe", "verified", Some(9)),
+                // token-station-server credential_recipe demoted 2026-10-05. It was verified the
+                // same day against the nine-case table (P21 S3a, C3: its generic recipe executor
+                // passed 9/9 at server `8777b84f`, host feedback SF6). The suite has since grown
+                // `TransientFailureIsRetried` (host feedback SF2), added because case 1 could not
+                // separate a host that latches transient failures from one that does not, so the
+                // nine-case evidence is known-insufficient. Re-run the ten-case suite to restore it.
+                ("credential_recipe", "not_verified", None),
             ],
         ),
     ])

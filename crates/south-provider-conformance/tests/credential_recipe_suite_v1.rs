@@ -55,6 +55,7 @@ fn suite_identity_and_canonical_case_order_are_frozen() {
             Case::EmptyRotationDoesNotWipe,
             Case::CasLoserRereadsTheWinner,
             Case::ProbeDoesNotRotate,
+            Case::TransientFailureIsRetried,
         ]
     );
 }
@@ -110,6 +111,9 @@ enum Fault {
     CasOverwrites,
     /// Probes by resolving, which rotates.
     ProbeRefreshes,
+    /// Treats a transient failure like `reauth_required`: the generation is latched until it
+    /// changes (host feedback SF2).
+    LatchesTransientFailure,
 }
 
 struct ReferenceHost {
@@ -255,6 +259,11 @@ impl ReferenceSession {
                 if current.version == row.version {
                     match failure {
                         CredentialResolveObservationV1::ReauthRequired => {
+                            current.reauth_at = Some(row.version);
+                        }
+                        CredentialResolveObservationV1::Transient
+                            if self.fault == Fault::LatchesTransientFailure =>
+                        {
                             current.reauth_at = Some(row.version);
                         }
                         CredentialResolveObservationV1::Transient
@@ -439,6 +448,7 @@ async fn each_broken_invariant_fails_exactly_the_case_that_guards_it() {
         (Fault::WipesOnEmptyRotation, Case::EmptyRotationDoesNotWipe),
         (Fault::CasOverwrites, Case::CasLoserRereadsTheWinner),
         (Fault::ProbeRefreshes, Case::ProbeDoesNotRotate),
+        (Fault::LatchesTransientFailure, Case::TransientFailureIsRetried),
     ];
     // Every case is guarded by exactly one fault here, so the table is fully discriminating.
     let guarded: Vec<_> = expectations.iter().map(|(_, case)| *case).collect();
