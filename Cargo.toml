@@ -7,7 +7,7 @@ edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/GlimpseEngine/token-station-south"
 rust-version = "1.96"
-version = "0.43.0"
+version = "0.44.0"
 
 [workspace.dependencies]
 base64 = "0.22.1"
