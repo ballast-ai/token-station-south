@@ -88,6 +88,9 @@ the [task adapter vocabulary](docs/design/2026-08-27-task-adapter-vocabulary.md)
   runs them against assembled host executors. It also carries the host-implemented
   `south.credential-recipe.v1` suite (gate ③ of credential recipes): a harness the host wraps around
   its own recipe executor and credential store, an in-process fake token endpoint, and the runner.
+  Two more gate ③ suites are host-implemented the same way: `south.eventstream-framing.v1` (the host's
+  framing executor: `bytes` versus `aws-eventstream`, canonical re-encoding, faults, the buffered path) and
+  `south.request-signing.v1` (the declaration-selected SigV4 finalizer, verified by recomputing the signature).
 - `south-provider-api` owns the v2 provider component ABI: the WIT package
   `token-station:adapter@2.0.0` (world `provider-adapter-v2`, JSON payloads named by
   canonical type, raw-bytes stream chunks) and the component `manifest.json` schema
