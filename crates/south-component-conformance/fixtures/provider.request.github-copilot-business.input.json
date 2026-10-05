@@ -1,7 +1,7 @@
 {
   "provider_config": {
     "provider": "github-copilot",
-    "base_url": "https://api.individual.githubcopilot.com",
+    "base_url": "https://api.business.githubcopilot.com",
     "auth": "provider_api_key",
     "models": [
       {

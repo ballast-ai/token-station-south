@@ -1,6 +1,6 @@
 {
   "method": "POST",
-  "url": "https://api.individual.githubcopilot.com/chat/completions",
+  "url": "https://api.business.githubcopilot.com/chat/completions",
   "headers": {
     "content-type": "application/json",
     "copilot-integration-id": "copilot-developer-cli",

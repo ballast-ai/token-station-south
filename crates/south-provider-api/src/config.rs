@@ -126,6 +126,10 @@ pub struct ConfigKeyV1 {
     pub required: bool,
     /// One line for the operator form.
     pub description: String,
+    /// The value used when the operator enters none (§13.5 D7). Only an optional key has one, and
+    /// it has the key's syntax.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default: Option<String>,
 }
 
 /// Why operator values do not fit a family's declarations.
@@ -264,6 +268,14 @@ impl ComponentManifestV1 {
                 if !declaration.syntax.is_well_formed() {
                     return Err(invalid("a config key's syntax is malformed"));
                 }
+                if let Some(default) = &declaration.default {
+                    if declaration.required {
+                        return Err(invalid("a required config key has no default"));
+                    }
+                    if !declaration.syntax.admits(default) {
+                        return Err(invalid("a config key's default does not have its syntax"));
+                    }
+                }
             }
         }
         for (family, template) in &self.endpoint {
@@ -281,8 +293,10 @@ impl ComponentManifestV1 {
                 let Some(declaration) = keys.and_then(|keys| keys.get(name)) else {
                     return Err(invalid("an endpoint parameter is not a config key of the family"));
                 };
-                if !declaration.required {
-                    return Err(invalid("an endpoint parameter must be a required config key"));
+                if !declaration.required && declaration.default.is_none() {
+                    return Err(invalid(
+                        "an endpoint parameter must be a required config key or carry a default",
+                    ));
                 }
                 if in_host && !declaration.syntax.is_label_safe() {
                     return Err(invalid("a host parameter's syntax must fit inside a DNS label"));
@@ -312,7 +326,8 @@ impl ComponentManifestV1 {
     }
 
     /// Checks operator values for `family` against its `config_schema`: no unknown key, every
-    /// required key present, every value of its declared syntax.
+    /// required key present, every value of its declared syntax. An absent key with a `default`
+    /// takes it.
     ///
     /// # Errors
     ///
@@ -339,9 +354,9 @@ impl ComponentManifestV1 {
         Ok(())
     }
 
-    /// The endpoint `family` declares, filled from validated operator values; `None` when the
-    /// family declares no endpoint. Host parameters are substituted as validated; path parameters
-    /// are encoded as one segment.
+    /// The endpoint `family` declares, filled from validated operator values (a key's `default`
+    /// standing in for an absent one); `None` when the family declares no endpoint. Host
+    /// parameters are substituted as validated; path parameters are encoded as one segment.
     ///
     /// # Errors
     ///
@@ -369,6 +384,12 @@ impl ComponentManifestV1 {
                 Part::Param(name) => {
                     let value = values
                         .get(name)
+                        .or_else(|| {
+                            self.config_schema
+                                .get(family)
+                                .and_then(|keys| keys.get(name))
+                                .and_then(|key| key.default.as_ref())
+                        })
                         .ok_or_else(|| ConfigErrorV1::MissingKey(name.to_owned()))?;
                     if offset < authority_end {
                         filled.push_str(value);

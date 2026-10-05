@@ -136,7 +136,22 @@
     }
   },
   "endpoint": {
-    "github-copilot": "https://api.githubcopilot.com"
+    "github-copilot": "https://api.{plan}.githubcopilot.com"
+  },
+  "config_schema": {
+    "github-copilot": {
+      "plan": {
+        "syntax": {
+          "enum": [
+            "individual",
+            "business",
+            "enterprise"
+          ]
+        },
+        "description": "The account's Copilot plan, which selects GitHub's chat API host: individual (Pro and Pro+), business or enterprise.",
+        "default": "individual"
+      }
+    }
   },
   "user_agent": {
     "github-copilot": "GitHubCopilotChat/0.43.0"
