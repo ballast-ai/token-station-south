@@ -311,12 +311,13 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 1
                 // verified by re-running the larger table; editing `cases`
                 // without a run would fabricate the evidence.
                 ("controlled_query", "not_verified", None),
-                // controlled_user_agent stays not_verified until that host runs
-                // its own adoption slice against south.controlled-user-agent.v1
-                // (its migration batches 3 and 4b are the expected consumers).
-                // The suite existing in this repository is not adoption
-                // evidence.
-                ("controlled_user_agent", "not_verified", None),
+                // token-station-server controlled_user_agent verified 2026-10-05 against the
+                // eight-case table at v0.44.0: server dev-v2 `29520b5a`, pinned to the v0.44.0 tag
+                // (`8ac99028`), runs south.controlled-user-agent.v1 8/8 in
+                // `gateway/tests/south_adoption.rs` under both its balance and quota billing
+                // forms, and its full local matrix of 86 legs is green. The adoption record is
+                // held by that host's repository; this manifest records only the resulting status.
+                ("controlled_user_agent", "verified", Some(8)),
                 // token-station-server provider_get verified 2026-09-09 against
                 // the four-case table at v0.24.0: that host's task poller adopts
                 // execute_get_raw_call_v1 (dev-v2 merge 89139b4d, adoption commit
@@ -389,8 +390,14 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 1
                 // passed 9/9 at server `8777b84f`, host feedback SF6). The suite has since grown
                 // `TransientFailureIsRetried` (host feedback SF2), added because case 1 could not
                 // separate a host that latches transient failures from one that does not, so the
-                // nine-case evidence is known-insufficient. Re-run the ten-case suite to restore it.
-                ("credential_recipe", "not_verified", None),
+                // nine-case evidence is known-insufficient.
+                //
+                // Restored 2026-10-05 against the ten-case table at v0.44.0: server dev-v2
+                // `29520b5a`, pinned to the v0.44.0 tag (`8ac99028`), runs
+                // south.credential-recipe.v1 10/10 in `gateway/tests/south_adoption.rs` under both
+                // its balance and quota billing forms, and its full local matrix of 86 legs is
+                // green. The adoption record is held by that host's repository.
+                ("credential_recipe", "verified", Some(10)),
             ],
         ),
     ])
