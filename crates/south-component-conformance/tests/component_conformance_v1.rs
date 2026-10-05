@@ -85,9 +85,13 @@ fn the_manifest_secret_header_rules_are_the_host_halfs() {
 fn reference_manifest() -> ComponentManifestV1 {
     ComponentManifestV1 {
         name: "provider-openai-compatible".to_owned(),
-        version: "2.1.5".to_owned(),
+        version: "2.2.0".to_owned(),
         api_version: PROVIDER_WORLD.to_owned(),
-        providers: vec!["openai-compatible".to_owned(), "azure-openai-v1".to_owned()],
+        providers: vec![
+            "openai-compatible".to_owned(),
+            "azure-openai-v1".to_owned(),
+            "github-copilot".to_owned(),
+        ],
         capabilities: BTreeSet::from([
             "chat".to_owned(),
             "stream".to_owned(),
@@ -129,6 +133,15 @@ fn reference_manifest() -> ComponentManifestV1 {
     }
 }
 
+/// The package's own `manifest.json`, which carries the per-family declarations and the
+/// `credentials` section the hand-built tuple above leaves out.
+fn shipped_manifest() -> ComponentManifestV1 {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../components/provider-openai-compatible/manifest.json");
+    serde_json::from_str(&std::fs::read_to_string(path).expect("the manifest reads"))
+        .expect("the manifest parses")
+}
+
 fn shipped_pack() -> FixturePackV1 {
     let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures");
     FixturePackV1::load(&directory).expect("the shipped fixture pack loads")
@@ -161,20 +174,51 @@ fn the_shipped_pack_still_carries_every_host_parity_case() {
     }
 }
 
-/// Gate ② against the reference implementation: the run that freezes the
-/// fixture table. Every failure is printed so a drift names its case.
+/// Gate ② against the reference implementation and the shipped manifest: the
+/// run that freezes the fixture table, including the `github-copilot` family's
+/// credential recipe (boundary §13.5 D7). Every failure is printed so a drift
+/// names its case.
 #[test]
 fn the_reference_implementation_passes_the_component_behavior_suite() {
+    let manifest = shipped_manifest();
+    assert_eq!(manifest.validate(), Ok(()));
     let report = run_provider_component_suite_v1_for_manifest(
         &OpenAiCompatibleReferenceV1,
         &shipped_pack(),
-        &reference_manifest(),
+        &manifest,
     );
     for failure in report.failures() {
         eprintln!("{failure}");
     }
     assert!(report.is_passing(), "{report}");
     assert_eq!(report.suite(), PROVIDER_COMPONENT_SUITE_V1);
+    let credential_cases: Vec<&str> = report
+        .outcomes()
+        .iter()
+        .filter(|row| row.check == south_component_conformance::CheckV1::CredentialRecipeMatch)
+        .map(|row| row.case.as_str())
+        .collect();
+    assert_eq!(credential_cases.len(), 8, "{credential_cases:?}");
+}
+
+/// The Copilot recipe and user-agent apply to their own family only: the
+/// package's other two families keep their static slot, the operator's key and
+/// no user-agent (§13.5 D2, D7).
+#[test]
+fn the_copilot_declarations_apply_to_the_github_copilot_family_only() {
+    let manifest = shipped_manifest();
+    assert!(manifest.credentials_for("github-copilot").is_some());
+    assert_eq!(manifest.credentials_for("openai-compatible"), None);
+    assert_eq!(manifest.credentials_for("azure-openai-v1"), None);
+
+    let instances = south_component_conformance::DeclaredInstancesV1::from_manifest(&manifest)
+        .expect("the shipped manifest passes gate ①");
+    assert_eq!(
+        instances.user_agent("github-copilot").map(south_contracts::DeclaredUserAgentV1::as_str),
+        Some("GitHubCopilotChat/0.43.0")
+    );
+    assert_eq!(instances.user_agent("openai-compatible"), None);
+    assert_eq!(instances.user_agent("azure-openai-v1"), None);
 }
 
 /// The pack covers every family, so `Coverage` is a real gate, and the suite

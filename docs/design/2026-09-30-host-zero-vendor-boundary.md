@@ -1616,7 +1616,7 @@ The Copilot recipe:
 "refresh_margin_seconds": 30
 ```
 
-Two deliberate differences from the host's native arm, both recorded in the package's fixture README:
+Two deliberate differences from the host's native arm, pinned by the family's `credential.*` fixtures:
 
 - **Status classes.** The native arm turns every non-404 failure, 5xx included, into an operator error. The recipe
   uses the vocabulary's defaults (4xx `reauth_required`, 5xx `transient`) and declares 429 `transient`, so a rate
@@ -1674,7 +1674,8 @@ needs no normalization. The Kiro record's `field_in` was also rewritten in the i
 **D7 the `github-copilot` family in `provider-openai-compatible`.**
 
 - `providers` gains `github-copilot`; `endpoint` is `https://api.githubcopilot.com`; no `config_schema` keys;
-  `request_facts` are the top-level ones, declared explicitly.
+  no `request_facts` entry, so the family uses the top-level locations (`max_tokens` or `max_completion_tokens`,
+  `model`, `stream`), which is what its OpenAI-compatible body writes.
 - `build-http-request` for the family posts to `{base_url}/chat/completions` (the kernel's `resolve` would add `/v1`
   to an origin-only URL), with the OpenAI-compatible body, `Auth::bearer` on the slot, and the six identification
   headers as ordinary descriptor headers.

@@ -276,7 +276,7 @@ dependencies = [
 
 [[package]]
 name = "provider-openai-compatible"
-version = "2.1.5"
+version = "2.2.0"
 dependencies = [
  "south-component-conformance",
  "wit-bindgen",
