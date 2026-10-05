@@ -19,12 +19,18 @@ fn converse() -> ComponentManifestV1 {
     serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
 }
 
+fn openai() -> ComponentManifestV1 {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../components/provider-openai-compatible/manifest.json");
+    serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
+}
+
 fn values(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
     pairs.iter().map(|(key, value)| ((*key).to_owned(), (*value).to_owned())).collect()
 }
 
 fn key(syntax: ValueSyntaxV1, required: bool) -> ConfigKeyV1 {
-    ConfigKeyV1 { syntax, required, description: "test".to_owned() }
+    ConfigKeyV1 { syntax, required, description: "test".to_owned(), default: None }
 }
 
 /// The Converse manifest with its `bedrock` family's endpoint and keys replaced.
@@ -273,4 +279,75 @@ fn signing_names_its_scheme_service_region_and_inputs() {
         refused(&|m| m.signing.as_mut().unwrap().region.template_param = "zone".to_owned()),
         "a region parameter the endpoint does not have"
     );
+}
+
+/// Host feedback SF7 (§13.5 D7): Copilot's chat API host depends on the account's plan. The
+/// family's `plan` key admits only GitHub's three documented hosts and defaults to the individual
+/// one, so an operator who enters nothing gets a Pro / Pro+ host and no value can leave the domain.
+#[test]
+fn the_shipped_copilot_endpoint_follows_the_plan_and_defaults_to_individual() {
+    let manifest = openai();
+    assert_eq!(manifest.validate(), Ok(()));
+    assert_eq!(
+        manifest.fill_endpoint("github-copilot", &values(&[])),
+        Ok(Some("https://api.individual.githubcopilot.com".to_owned()))
+    );
+    for (plan, host) in [
+        ("individual", "https://api.individual.githubcopilot.com"),
+        ("business", "https://api.business.githubcopilot.com"),
+        ("enterprise", "https://api.enterprise.githubcopilot.com"),
+    ] {
+        assert_eq!(
+            manifest.fill_endpoint("github-copilot", &values(&[("plan", plan)])),
+            Ok(Some(host.to_owned()))
+        );
+        assert!(manifest.endpoint_admits("github-copilot", host), "{host}");
+    }
+    for plan in ["Business", "free", "attacker.example", ""] {
+        assert_eq!(
+            manifest.fill_endpoint("github-copilot", &values(&[("plan", plan)])),
+            Err(ConfigErrorV1::InvalidValue("plan".to_owned())),
+            "{plan}"
+        );
+    }
+    for url in ["https://api.githubcopilot.com", "https://api.attacker.githubcopilot.com"] {
+        assert!(!manifest.endpoint_admits("github-copilot", url), "{url}");
+    }
+    // The package's other families declare no endpoint: the operator's URL stays their anchor.
+    assert_eq!(manifest.fill_endpoint("openai-compatible", &values(&[])), Ok(None));
+}
+
+/// A config key's `default` (§13.5 D7) fills an absent value: it must have the key's syntax, a
+/// required key has none, and an endpoint parameter is required or defaulted.
+#[test]
+fn a_config_default_fills_an_absent_value_and_gate_one_checks_it() {
+    let label = || ValueSyntaxV1::Enum(vec!["one".to_owned(), "two".to_owned()]);
+    let defaulted =
+        |default: &str| ConfigKeyV1 { default: Some(default.to_owned()), ..key(label(), false) };
+    let manifest = declaring("https://api.{tier}.example.com", &[("tier", defaulted("two"))]);
+    assert_eq!(manifest.validate(), Ok(()));
+    assert_eq!(manifest.validate_config_values("bedrock", &values(&[])), Ok(()));
+    assert_eq!(
+        manifest.fill_endpoint("bedrock", &values(&[])),
+        Ok(Some("https://api.two.example.com".to_owned()))
+    );
+    assert_eq!(
+        manifest.fill_endpoint("bedrock", &values(&[("tier", "one")])),
+        Ok(Some("https://api.one.example.com".to_owned()))
+    );
+
+    for (keys, why) in [
+        (vec![("tier", defaulted("three"))], "a default without the key's syntax"),
+        (
+            vec![("tier", ConfigKeyV1 { default: Some("one".to_owned()), ..key(label(), true) })],
+            "a default on a required key",
+        ),
+        (vec![("tier", key(label(), false))], "an optional parameter without a default"),
+    ] {
+        let manifest = declaring("https://api.{tier}.example.com", &keys);
+        assert!(
+            matches!(manifest.validate(), Err(ManifestErrorV1::InvalidEndpoint { .. })),
+            "{why}"
+        );
+    }
 }

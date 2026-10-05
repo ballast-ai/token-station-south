@@ -1,10 +1,11 @@
 {
   "name": "provider-openai-compatible",
-  "version": "2.1.5",
+  "version": "2.2.0",
   "api_version": "provider-adapter-v2",
   "providers": [
     "openai-compatible",
-    "azure-openai-v1"
+    "azure-openai-v1",
+    "github-copilot"
   ],
   "capabilities": [
     "chat",
@@ -16,6 +17,145 @@
     "bearer",
     "header_secret"
   ],
+  "credentials": {
+    "schema": "south.credential-recipe.v1",
+    "families": [
+      "github-copilot"
+    ],
+    "fields": {
+      "github_token": {
+        "secret": true,
+        "required": true,
+        "description": "A GitHub OAuth token from an account with a Copilot seat, such as the oauth_token in the editor's github-copilot/apps.json or hosts.json."
+      }
+    },
+    "import": {
+      "github_token": {
+        "file": "github-copilot-editor-json",
+        "pointers": [
+          "/github.com/oauth_token",
+          "/github.com:Iv1.b507a08c87ecfe98/oauth_token"
+        ]
+      }
+    },
+    "slots": {
+      "provider_api_key": {
+        "minted": "copilot"
+      }
+    },
+    "recipes": {
+      "copilot": {
+        "steps": [
+          {
+            "id": "exchange",
+            "kind": "http_exchange",
+            "method": "GET",
+            "endpoint": "https://api.github.com/copilot_internal/v2/token",
+            "headers": {
+              "accept": {
+                "const": "application/json"
+              },
+              "editor-plugin-version": {
+                "const": "copilot-chat/0.43.0"
+              },
+              "editor-version": {
+                "const": "vscode/1.123.0"
+              },
+              "user-agent": {
+                "const": "GitHubCopilotChat/0.43.0"
+              },
+              "x-github-api-version": {
+                "const": "2025-04-01"
+              }
+            },
+            "auth": {
+              "scheme": "token",
+              "value": {
+                "field": "github_token"
+              }
+            },
+            "on_status": {
+              "404": {
+                "goto": "direct"
+              },
+              "429": "transient"
+            },
+            "extract": {
+              "token": {
+                "pointer": "/token",
+                "secret": true
+              },
+              "expires_at": {
+                "epoch_seconds": "/expires_at"
+              }
+            }
+          },
+          {
+            "id": "direct",
+            "kind": "http_probe",
+            "method": "GET",
+            "endpoint": "https://api.github.com/copilot_internal/user",
+            "headers": {
+              "accept": {
+                "const": "application/json"
+              },
+              "editor-plugin-version": {
+                "const": "copilot-chat/0.43.0"
+              },
+              "editor-version": {
+                "const": "vscode/1.123.0"
+              },
+              "user-agent": {
+                "const": "GitHubCopilotChat/0.43.0"
+              },
+              "x-github-api-version": {
+                "const": "2025-04-01"
+              }
+            },
+            "auth": {
+              "scheme": "token",
+              "value": {
+                "field": "github_token"
+              }
+            },
+            "on_status": {
+              "429": "transient"
+            }
+          }
+        ],
+        "present": [
+          "exchange.token",
+          {
+            "field": "github_token",
+            "validity_seconds": 3600
+          }
+        ],
+        "rotates_refresh_material": false,
+        "refresh_margin_seconds": 30
+      }
+    }
+  },
+  "endpoint": {
+    "github-copilot": "https://api.{plan}.githubcopilot.com"
+  },
+  "config_schema": {
+    "github-copilot": {
+      "plan": {
+        "syntax": {
+          "enum": [
+            "individual",
+            "business",
+            "enterprise"
+          ]
+        },
+        "description": "The account's Copilot plan, which selects GitHub's chat API host: individual (Pro and Pro+), business or enterprise.",
+        "default": "individual"
+      }
+    }
+  },
+  "user_agent": {
+    "github-copilot": "GitHubCopilotChat/0.43.0"
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

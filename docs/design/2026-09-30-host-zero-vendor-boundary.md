@@ -240,8 +240,10 @@ The complete vocabulary:
 
 | Level | Form | Meaning |
 |---|---|---|
-| field | `secret`, `required`, `syntax`, `media`, `default` | As above; `default` is a non-secret value used when the field is empty |
+| field | `secret`, `required`, `syntax`, `media`, `default`, `description` | As above; `default` is a non-secret value used when the field is empty; `description` is one line for the operator form (§13.5 D4) |
 | credential | `require_one_of: [[field, …], …]` | Each group needs at least one present field; checked when the credential is saved |
+| credential | `families: [family, …]` | The families the section applies to; absent means every family of the package (§13.5 D2) |
+| slot | `{"minted": recipe}` / `{"field": name}` | Minted by a recipe, or the stored value of a declared secret field; where a section applies every slot names one of the two (§13.5 D3) |
 | import | `pointers: [pointer, …]` | Ordered candidates; first present wins |
 | import | `seed: { present: {pointer, secret: true}, expires_at: {<clock>: pointer} }` | A minted value already in the file; clock forms as in `extract`, plus `rfc3339_or_epoch_seconds` (import only) |
 | step | `endpoint` | A constant or a template (§3.4 applies to both) |
@@ -254,7 +256,7 @@ The complete vocabulary:
 | step | clock forms in `extract` | `relative_seconds` / `epoch_seconds` / `epoch_millis` / `jwt_exp` / `fixed_window` |
 | step | `jwt_claim: { token, pointer }` | Decodes a JWT payload without verifying the signature |
 | step | `must_equal_field: field` | On an extracted value: when both it and the named stored field are present and differ, the refresh fails as `reauth_required` and nothing is written back |
-| recipe | `present` | Which output becomes the slot value |
+| recipe | `present` | Which output becomes the slot value: one step output, or ordered candidates, each a step output or `{"field": name, "validity_seconds": n}`; the first present one wins (§13.5 D1) |
 | recipe | `rotates_refresh_material` | **Required, no default** |
 | recipe | `write_back: { field: "step.output" }` | Where rotated refresh material goes; **required whenever the recipe rotates**; an absent output keeps the stored value (§3.5) |
 | recipe | `refresh_margin_seconds`, `without_refresh_material` (`use_stored` / `fail`) | As in the host skeleton |
@@ -443,7 +445,7 @@ rule 5).
 |---|---|---|
 | Codex | JSON refresh_token grant; a fixed 50-minute window after refresh; stored account id, refusing a refresh whose `id_token` names another account; rotates | `oauth2_token` (json) + `fixed_window` (`fixed_validity_seconds` 3000); `account_id` exported only from the stored non-secret field; the `id_token` claim only as a `must_equal_field` check; rotates = true, `write_back` = `refresh_token`; `without_refresh_material: use_stored` (Responses record §10.2 is the full recipe) |
 | Claude Code | JSON refresh_token grant; millisecond clock; rotates | `oauth2_token` + `relative_seconds` (the stored convention is normalized by the host); rotates = true, `write_back` to `refresh_token` |
-| Copilot | GET + `Authorization: token …` + editor headers; a 404 switches to the direct-use flow and re-verifies the seat; does not rotate | `http_exchange` + `on_status` 404→`goto` + `http_probe`; rotates = false; the editor headers are declared on the step (Q10) |
+| Copilot | GET + `Authorization: token …` + editor headers; a 404 switches to the direct-use flow and re-verifies the seat; does not rotate | `http_exchange` + `on_status` 404→`goto` + `http_probe`; `present` candidates end with the GitHub token field and its 3600 s validity (§13.5 D1); rotates = false; the editor headers are declared on the step (Q10) |
 | Kiro | Social / IdC forms, camelCase JSON bodies, endpoint built from a region template; only 400 / 401 terminal; rotates | `select` (`field_in` / `field_present` / `all_present`) + two `http_exchange` recipes with `endpoint_params` (`aws_region`), `requires`, `on_status` class keys, import `seed`; profile ARN a non-secret `aws_arn` field exported as an attribute; rotates = true, `write_back` = `refresh_token` |
 | Vertex service account | RS256 assertion exchanged for a token; project id goes into the URL; does not rotate | The §3.3 sketch; the project id is a non-secret field imported from the same file |
 | Kling | HS256 JWT used directly as the bearer | A single `jwt_sign` step |
@@ -1471,7 +1473,8 @@ slot (§4.2).
 - Copilot's direct-use flow (§3.9) presents the GitHub token itself after the `404 → goto` branch. `present` names
   one step output, so that recipe cannot say what it presents. This is an **open amendment for B6**, recommended
   as: `present` takes ordered candidates, each a step output or `{"field": name}` of a secret field, and the first
-  one present wins. No shipped package needs it before a Copilot component exists.
+  one present wins. No shipped package needs it before a Copilot component exists. Resolved in §13.5 D1, with a
+  field candidate carrying its own validity.
 - Claim order is canonical, not declared, because `claims` is a map. That matches the host for Kling. The host's
   Vertex struct writes `iss, scope, aud, iat, exp`: the JSON is equal, but the bytes differ.
 
@@ -1550,6 +1553,187 @@ grammar.
 when the finalization codes were added. B7a adds no provider-call code: a refused declared instance surfaces through
 the existing `UNSUPPORTED_AUTH_SHAPE` and `INVALID_RELATIVE_PATH`. The new codes are `ContractErrorV1` parse errors,
 which the multipart body added the same way without a bump.
+
+### 13.5 S3b prerequisites: the Copilot recipe and the host's feedback (2026-10-05)
+
+The host completed P21 S3a on v0.43.0: its generic recipe executor passes gate ③ 9/9 at token-station-server
+`8777b84f`, and Kling mints through the recipe. Its first OAuth family is Copilot (host ruling Q-F), which needs a
+south release. This section lists what that release adds, and the host's feedback items SF1–SF6. Under the owner's
+standing rule (a question whose recommendation keeps the host vendor-neutral is taken as recommended), Q19–Q22 below
+were taken as recommended; the one item that could reasonably go the other way is called out under Q20.
+
+**Copilot today, in the host** (server `8777b84f`, `token_refresh.rs` Copilot section, `upstream.rs`,
+`south_adapter.rs`):
+
+- The stored GitHub OAuth token is exchanged by `GET https://api.github.com/copilot_internal/v2/token` with
+  `authorization: token <github token>`, `editor-version: vscode/1.123.0`, `editor-plugin-version: copilot-chat/0.43.0`,
+  `user-agent: GitHubCopilotChat/0.43.0`, `x-github-api-version: 2025-04-01` and `accept: application/json`. A 2xx
+  carries `token` and an absolute `expires_at` in epoch seconds. Nothing rotates.
+- A 404 means the token itself is the chat bearer (the Copilot CLI and Enterprise flow). The host first confirms the
+  seat with `GET https://api.github.com/copilot_internal/user` under the same headers, then presents the GitHub token
+  with a synthetic validity of 3600 s: a re-validation cadence, not a real expiry.
+- The chat request goes to `{base}/chat/completions` (no `/v1`) with the Copilot bearer, a declared user-agent and
+  six constant headers: `copilot-integration-id: copilot-developer-cli`, `editor-version`, `editor-plugin-version`,
+  `openai-intent: conversation-panel`, `x-github-api-version: 2025-04-01` and
+  `x-vscode-user-agent-library-version: electron-fetch`. The body is the OpenAI-compatible body.
+
+**D1 `present` takes ordered candidates (§16 Q19).** §13.3 left the direct flow unexpressible: `present` named one
+step output and `http_probe` produces none, so the reference interpreter ended the 404 branch as "present missing",
+`transient`. `present` now also accepts an array of candidates, the first present and non-empty one wins:
+
+- a candidate is a step output (`"exchange.token"`, as before) or `{"field": name, "validity_seconds": n}`, which
+  presents the stored value of a declared **secret** field;
+- a single string keeps its meaning, so every existing manifest reads the same;
+- the expiry of an output candidate is its step's clock, else `now + default_seconds`, as before; a field candidate has
+  no step, so it carries its own `validity_seconds` (60 s to 24 h). It does not borrow `default_seconds`, which would
+  also become the fallback of every clock in the recipe: Copilot's exchange must fail when its `expires_at` is
+  missing, not quietly trust the token for an hour;
+- gate ①: one to four distinct candidates, every output candidate produced by some step, every field candidate a
+  declared secret field with its validity in range; the presented-JWT rule applies to each JWT candidate.
+
+Trust: a field candidate sends the field to the inference upstream only, under `ProviderConfig::authorize`, exactly as
+a static slot sends an operator key; it never reaches a recipe endpoint through `present`. §3.4 is unchanged.
+
+The Copilot recipe:
+
+```json
+"steps": [
+  { "id": "exchange", "kind": "http_exchange", "method": "GET",
+    "endpoint": "https://api.github.com/copilot_internal/v2/token",
+    "auth": { "scheme": "token", "value": { "field": "github_token" } },
+    "headers": { "<the five exchange headers above>": "…" },
+    "on_status": { "404": { "goto": "direct" }, "429": "transient" },
+    "extract": { "token": { "pointer": "/token", "secret": true },
+                 "expires_at": { "epoch_seconds": "/expires_at" } } },
+  { "id": "direct", "kind": "http_probe", "method": "GET",
+    "endpoint": "https://api.github.com/copilot_internal/user",
+    "auth": { "scheme": "token", "value": { "field": "github_token" } },
+    "headers": { "<the same five headers>": "…" },
+    "on_status": { "429": "transient" } }
+],
+"present": ["exchange.token", { "field": "github_token", "validity_seconds": 3600 }],
+"rotates_refresh_material": false,
+"refresh_margin_seconds": 30
+```
+
+Three deliberate differences from the host's native arm, pinned by the family's `credential.*` fixtures; a host's
+replay comparison classifies them as expected rather than as drift:
+
+- **Status classes.** The native arm turns every non-404 failure, 5xx included, into an operator error. The recipe
+  uses the vocabulary's defaults (4xx `reauth_required`, 5xx `transient`) and declares 429 `transient`, so a rate
+  limit or an outage at GitHub does not latch a working credential.
+- **Refresh margin.** The native arm refreshes 300 s early. Gate ① requires the margin to be shorter than the shortest
+  validity after the clamp (§13.3); a recipe floor of 600 s would make the host trust a short-lived token for longer
+  than GitHub granted it. The recipe declares 30 s, the host's default (P21 Q-A).
+- **A 2xx without `token` or `expires_at`** (host feedback SF8). The native arm fails to parse it and answers 400,
+  the operator-error class; the recipe ends `transient`, as the vocabulary does for any extraction a successful
+  response lacks (§3.3). Under DP0 the recipe's answer is the right one: a malformed answer from GitHub says nothing
+  about the stored GitHub token, so it must not latch the credential, and only `on_status` may call a credential
+  unusable. The native 400 did not latch either (its latch matched only `(HTTP 400` / `(HTTP 401` in the message),
+  so the practical difference is the class the client sees: 503 instead of 400.
+
+**D2 a `credentials` section may be scoped to families (§16 Q20).** A manifest has one `credentials` section and its
+`slots` are package-wide. Adding the Copilot recipe to `provider-openai-compatible` unscoped would mint
+`provider_api_key` for the `openai-compatible` and `azure-openai-v1` rows too, and replace their operator form with
+Copilot's. R6 already says request-side declarations are per family; credentials are request-side. So the section
+gains an optional `families` list:
+
+- absent: the section applies to every family of the package (today's meaning, R5);
+- present: one or more of the manifest's `providers`, no repeats; every other family behaves as if the package
+  declared no `credentials` (static slots, the operator's key, no recipe, no form);
+- `ComponentManifestV1::credentials_for(family)` is the one accessor; `admit_descriptor_auth` admits `Auth::OAuth`
+  only for a family the section covers.
+
+A package needing two different credential kinds for two families (Copilot and a future Vertex family in the same
+package) is not expressible yet; the natural extension is a list of scoped sections, left until a package needs it.
+
+**D3 a static slot names its field (SF5, §16 Q21).** v0.43.0 said a static slot uses "the operator-entered value",
+which was well defined only without a `credentials` section. With one, the host collects only the declared fields, so
+it had to refuse the package (host R28) rather than guess a field. A slot may now say `{"field": name}`: the slot
+holds the stored value of that declared secret field, presented as is. And wherever a `credentials` section applies,
+gate ① requires every secret slot to name its source, minted by a recipe or a field; a slot with no entry or a bare
+`static` is refused there. Outside a section's families nothing changes. The reference interpreter adds
+`stored_slot_value_v1`, which applies the same field rules as a run (defaults, syntax, `required`,
+`require_one_of`) and returns the field's value or a configuration error, so a host has an oracle for it.
+
+**D4 `CredentialFieldV1.description` (SF4).** Optional, one line for the operator form, mirroring
+`ConfigKeyV1.description`. Like that field it is shown, never interpreted.
+
+**D5 gate ③ (SF2, SF3).**
+
+- A tenth case, `TransientFailureIsRetried`: two transient failures on the same generation with no write in between,
+  and the third resolve exchanges and mints. Case 1 writes a new generation between its two failures, so a host that
+  latched transient failures to the generation passed it. The reference host gains the matching fault, which fails
+  exactly this case. The suite stays version 1, as additive cases have before (§13.4).
+- `CredentialRecipeSessionV1::write_generation` documents that it must produce a new generation even when the values
+  equal the stored ones: case 1 rewrites the seed unchanged. A store that bumps its generation only on a changed value
+  (the server's trigger) commits the harness's write through a path that forces the bump. The runner cannot observe a
+  generation, so this stays a documented obligation rather than a check.
+
+**D6 the Kiro draft (SF1).** The B4 test draft declared `auth_method` as `enum ["social", "idc"]` with the default
+`social`. `enum` matches exactly, so a stored `IdC`, `enterprise` or `iam_identity_center`, all of which the host's
+native arm accepts case-insensitively as IdC, would have been a configuration error; and the default made an explicit
+`social` with client fields select IdC. The draft now follows the Kiro record's four-rule selector: `auth_method` has
+syntax `token` and no default; `field_in` (already ASCII case-insensitive) lists the three IdC spellings; any other
+explicit value selects social; with no value, client fields decide. The host needs no alias table and the hand-over
+needs no normalization. The Kiro record's `field_in` was also rewritten in the implemented `{field, values}` shape.
+
+**D7 the `github-copilot` family in `provider-openai-compatible`.**
+
+- `providers` gains `github-copilot`. Its `endpoint` is `https://api.{plan}.githubcopilot.com`, and its one
+  `config_schema` key `plan` admits `individual`, `business` or `enterprise` and defaults to `individual` (host
+  feedback SF7). GitHub routes each plan to its own chat API host (Pro and Pro+ to `api.individual`, Business to
+  `api.business`, Enterprise to `api.enterprise`, per GitHub's Copilot network allowlist reference); the host's
+  native rows reach the latter two by an operator-edited endpoint, so a fixed host would have kept those seats off
+  the component. An enum of DNS labels keeps the domain fixed (§7.3). Not offered: the plan-less
+  `api.githubcopilot.com`, which the native default uses and which GitHub's allowlist no longer lists, and GitHub
+  Enterprise Cloud with data residency (`*.ghe.com`), whose chat and token hosts both carry a per-tenant name that no
+  enum can list. The token exchange and the seat check stay at `api.github.com` for every `github.com` plan; only the
+  chat host varies.
+- `config_schema` keys gain an optional `default`, the value used when the operator enters none, mirroring a
+  credential field's `default`: only an optional key has one, it has the key's syntax, and an endpoint parameter is
+  now a required key or one with a default. `fill_endpoint` and `validate_config_values` apply it.
+- No `request_facts` entry, so the family uses the top-level locations (`max_tokens` or `max_completion_tokens`,
+  `model`, `stream`), which is what its OpenAI-compatible body writes.
+- `build-http-request` for the family posts to `{base_url}/chat/completions` (the kernel's `resolve` would add `/v1`
+  to an origin-only URL), with the OpenAI-compatible body, `Auth::bearer` on the slot, and the six identification
+  headers as ordinary descriptor headers.
+- `user_agent` declares `GitHubCopilotChat/0.43.0` for the family (§10, Q15).
+- `credentials`, scoped to `github-copilot`: the field `github_token` (secret, required, with a description), imported
+  from the editor's `apps.json` / `hosts.json` (`/github.com/oauth_token`, then the VS Code app key), the minted slot
+  and the recipe above.
+- Body-dependent headers (`copilot-vision-request` for image parts) stay out, as they are in the host today.
+
+*Descriptor headers, not a manifest declaration.* Q10 ruled that headers on the inference request are written by the
+component. §10's declared sets exist where a name must be reserved (secret headers) or a value must not come from
+request data (the user-agent). Neither applies to six non-secret constants: the ordinary channel already admits
+them, gate ② pins them byte for byte in the family's fixtures, and a manifest list would be a new mechanism with no
+safety property to enforce (R1). The user-agent is the exception because it is reserved, and it goes through the
+existing `user_agent` declaration.
+
+Package identities: `provider-openai-compatible` 2.2.0 (a new family; the other two families' requests, responses
+and streams are unchanged, as their frozen fixtures show). The shared conformance and provider-api crates changed,
+and a same-path rebuild of every package before and after showed a different `component.wasm` for all thirteen, so
+the other twelve take a patch bump with unchanged behavior: `provider-anthropic` 1.0.10, `provider-bedrock-converse`
+1.0.7, `provider-gemini` 1.1.6, `task-kling` 1.0.6, `task-kling-v2` 0.32.4, `task-minimax-v2` and `task-bailian-v2`
+0.31.3, `task-byteplus-v2` 0.36.3, and `task-xai-v2`, `task-veo-v2`, `task-wan-image-v2` and `task-gmi-image-v2`
+0.35.3.
+
+**SF6.** `compatibility.json` first records `token-station-server`'s `credential_recipe` as verified against nine
+cases (server `8777b84f`). D5's tenth case makes that evidence stale, so the same branch sets it back to
+`not_verified` until the host re-runs the suite (the freshness test enforces it).
+
+**Contract and versioning.** Every change is additive on the wire: a single-string `present`, a manifest without
+`families`, a field without `description` and a gate ③ table of nine cases all keep their meaning. The schema tag stays
+`south.credential-recipe.v1`; a config key without `default` keeps its meaning too. A runtime that predates them refuses a manifest using them (`deny_unknown_fields`), and
+the package's `south_runtime` moves with the release, so an older host refuses the new package cleanly. The Rust API is
+not additive: `RecipeV1::present` becomes `Option<PresentV1>`, `SlotV1` gains `Field`, `CredentialFieldV1`,
+`CredentialsV1` and `ConfigKeyV1` gain a field each, and `CredentialRecipeCaseIdV1` gains a variant.
+
+**What the host does after the release** (P21 S3b): re-pin; read credentials through `credentials_for`; implement
+present candidates and field slots in its executor and lift R28; offer the `github-copilot` family's `plan` key with
+its default when a row is created; apply the declared user-agent and run
+`south.controlled-user-agent.v1` (lifting R12); re-run gate ③ (ten cases) and report it; then C11–C13 for Copilot.
 
 ## 14. Existing text to revise in step
 
@@ -1710,6 +1894,27 @@ Tags: S = south maintainers, L = lv, K = kernel.
   **Ruled for the host side (lv, 2026-10-01): operator confirmation per package digest only; a host-side allowlist
   is rejected**, because a host allowlist means a new provider endpoint requires a host change, against DP0. The
   south maintainers' half remains open.
+- **Q19 (S)** How does a recipe say what it presents after a branch that produces no output (Copilot's direct flow,
+  §13.3)? Options: `present` takes ordered candidates, a step output or a secret field with its own validity; or a
+  probe step that presents a field. Recommended: candidates (§13.5 D1), since they keep "what is presented" in one
+  place and need no new step semantics.
+  **Taken as recommended (2026-10-05) under the owner's standing rule**: the host stays vendor-neutral either way.
+- **Q20 (S)** How does a multi-family package declare a credential kind for one family only? Options: an optional
+  `families` scope on the section (recommended, §13.5 D2); a separate package per credential kind
+  (`provider-github-copilot`); or a section per family. Recommended: the scope, because R6 already makes request-side
+  declarations per family and it adds one field.
+  **Taken as recommended (2026-10-05) under the owner's standing rule.** Flagged for the owner: a separate package would
+  have needed no schema change, at the cost of a fourteenth package, its build and its release line; and with the
+  family inside `provider-openai-compatible`, a host must re-pin before it can take any later version of that package.
+- **Q21 (S)** Where does a static slot's value come from when a package declares `credentials` (host feedback SF5)?
+  Recommended: the slot names a declared secret field, `{"field": name}`, and gate ① refuses a slot with no source
+  where a section applies (§13.5 D3).
+  **Taken as recommended (2026-10-05) under the owner's standing rule.**
+- **Q22 (S)** Must gate ③ forbid a host from holding a credential after a transient failure (host feedback SF2)?
+  Recommended: yes; a transient failure is retried on the next resolve of the same generation, which is what §13.3
+  already states and the server already does (§13.5 D5). A host wanting to protect a token endpoint during an outage
+  does it outside the credential's state, for example by bounding concurrent exchanges.
+  **Taken as recommended (2026-10-05) under the owner's standing rule.**
 
 ## 17. Amendments found while drafting the component records (2026-09-30) — change log
 

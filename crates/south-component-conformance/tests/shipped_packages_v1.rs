@@ -328,6 +328,39 @@ fn reasoning_replay_release_retires_every_published_038_package_identity() {
     }
 }
 
+/// S3b (host-zero-vendor-boundary §13.5) adds the `github-copilot` family to
+/// `provider-openai-compatible`, and changes the shared conformance and provider-api crates every
+/// component links. A same-path rebuild of each package before and after showed a different
+/// `component.wasm` for all thirteen (the strings are the same, their layout is not), so every
+/// identity published with 0.43.0 retires, or the release's digest-stability check would refuse it.
+#[test]
+fn s3b_retires_every_published_043_package_identity() {
+    for (name, published) in [
+        ("provider-openai-compatible", "2.1.5"),
+        ("provider-anthropic", "1.0.9"),
+        ("provider-gemini", "1.1.5"),
+        ("provider-bedrock-converse", "1.0.6"),
+        ("task-kling", "1.0.5"),
+        ("task-kling-v2", "0.32.3"),
+        ("task-minimax-v2", "0.31.2"),
+        ("task-bailian-v2", "0.31.2"),
+        ("task-xai-v2", "0.35.2"),
+        ("task-byteplus-v2", "0.36.2"),
+        ("task-veo-v2", "0.35.2"),
+        ("task-wan-image-v2", "0.35.2"),
+        ("task-gmi-image-v2", "0.35.2"),
+    ] {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_ne!(manifest.version, published, "{name} reused its published identity");
+    }
+}
+
 /// Reporting the whole prompt as the IR's `input_tokens` (the cache buckets partition it, kernel
 /// `Usage::total`) changes what both packages parse, and the Converse package stops refusing a
 /// `totalTokens` that counts the cache buckets, so the identities published with 0.39.0 retire.

@@ -21,7 +21,7 @@ use std::{collections::BTreeMap, fmt};
 
 use south_provider_api::{
     CREDENTIAL_RECIPE_SCHEMA, ConstantV1, CredentialFieldV1, CredentialsV1, EncodingV1, ExtractV1,
-    RecipeV1, SlotV1, StepKindV1, StepV1, ValueSourceV1,
+    PresentV1, RecipeV1, SlotV1, StepKindV1, StepV1, ValueSourceV1,
 };
 
 mod endpoint;
@@ -113,7 +113,14 @@ impl CredentialRecipeKindV1 {
 }
 
 const fn field(secret: bool, required: bool) -> CredentialFieldV1 {
-    CredentialFieldV1 { secret, required, syntax: None, media: None, default: None }
+    CredentialFieldV1 {
+        secret,
+        required,
+        syntax: None,
+        media: None,
+        default: None,
+        description: None,
+    }
 }
 
 fn constant(value: &str) -> ValueSourceV1 {
@@ -175,7 +182,7 @@ fn rotating_credentials() -> CredentialsV1 {
             extract,
             vec!["refresh_token".to_owned()],
         )],
-        present: Some("token.access_token".to_owned()),
+        present: Some(PresentV1::output("token.access_token")),
         rotates_refresh_material: Some(true),
         write_back: BTreeMap::from([(
             "refresh_token".to_owned(),
@@ -186,6 +193,7 @@ fn rotating_credentials() -> CredentialsV1 {
     };
     CredentialsV1 {
         schema: CREDENTIAL_RECIPE_SCHEMA.to_owned(),
+        families: None,
         fields: BTreeMap::from([("refresh_token".to_owned(), field(true, true))]),
         require_one_of: Vec::new(),
         import: BTreeMap::new(),
@@ -210,7 +218,7 @@ fn non_rotating_credentials() -> CredentialsV1 {
     ]);
     let recipe = RecipeV1 {
         steps: vec![token_step(EncodingV1::Form, params, extract, Vec::new())],
-        present: Some("token.access_token".to_owned()),
+        present: Some(PresentV1::output("token.access_token")),
         rotates_refresh_material: Some(false),
         refresh_margin_seconds: Some(CREDENTIAL_RECIPE_REFRESH_MARGIN_SECONDS_V1),
         min_ttl_seconds: Some(CREDENTIAL_RECIPE_NARROW_MIN_TTL_SECONDS_V1),
@@ -219,6 +227,7 @@ fn non_rotating_credentials() -> CredentialsV1 {
     };
     CredentialsV1 {
         schema: CREDENTIAL_RECIPE_SCHEMA.to_owned(),
+        families: None,
         fields: BTreeMap::from([
             ("client_id".to_owned(), field(false, true)),
             ("client_secret".to_owned(), field(true, true)),
@@ -269,7 +278,7 @@ impl fmt::Debug for CredentialMintedFixtureV1 {
 ///
 /// A host stores it as a new generation — bumping whatever version its compare-and-swap compares —
 /// either as the seed of a case or as an out-of-band write
-/// ([`CredentialRecipeSessionV1::write_generation`]).
+/// ([`CredentialRecipeSessionV1::write_generation`]), even when its values equal the stored ones.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct CredentialGenerationFixtureV1 {
     fields: &'static [(&'static str, &'static str)],
@@ -520,6 +529,9 @@ pub enum CredentialRecipeCaseIdV1 {
     CasLoserRereadsTheWinner,
     /// A probe on a rotating recipe with an expired token never reaches the endpoint.
     ProbeDoesNotRotate,
+    /// Two transient failures on the same generation, with no write in between, and the next resolve
+    /// exchanges again and mints: a transient failure holds nothing (§13.5 D5, host feedback SF2).
+    TransientFailureIsRetried,
 }
 
 fixed_debug!(CredentialRecipeCaseIdV1 {
@@ -532,6 +544,7 @@ fixed_debug!(CredentialRecipeCaseIdV1 {
     EmptyRotationDoesNotWipe => "EmptyRotationDoesNotWipe",
     CasLoserRereadsTheWinner => "CasLoserRereadsTheWinner",
     ProbeDoesNotRotate => "ProbeDoesNotRotate",
+    TransientFailureIsRetried => "TransientFailureIsRetried",
 });
 
 /// One immutable canonical credential-recipe case.
@@ -857,6 +870,32 @@ const FIXTURES: &[CredentialRecipeFixtureV1] = &[
         replies: &[reply(200, ROTATED_1_HOUR)],
         steps: &[CredentialRecipeStepV1::Probe, calls(0), stored(SEED_FIELDS, AT_SEED, EXPIRED)],
         exchanges: &[],
+    },
+    // Case 1 writes a new generation between its two failures, so a host that latched a transient
+    // failure to the generation passed it. Here nothing is written: each resolve must reach the
+    // endpoint, and the third mints.
+    CredentialRecipeFixtureV1 {
+        case_id: CredentialRecipeCaseIdV1::TransientFailureIsRetried,
+        recipe: CredentialRecipeKindV1::Rotating,
+        seed: ROTATING_SEED,
+        replies: &[
+            reply(503, r#"{"error":"temporarily_unavailable"}"#),
+            FakeTokenReplyV1 {
+                answer: FakeTokenAnswerV1::Unreachable,
+                hold: FakeTokenHoldV1::None,
+            },
+            reply(200, ROTATED_1_HOUR),
+        ],
+        steps: &[
+            TRANSIENT,
+            calls(1),
+            TRANSIENT,
+            calls(2),
+            resolve(AT_1),
+            calls(3),
+            stored(RT_2_FIELDS, AT_1, HOUR),
+        ],
+        exchanges: &[RT_SEED, RT_SEED, RT_SEED],
     },
 ];
 

@@ -18,7 +18,7 @@ use std::{
 use serde_json::Value;
 use south_provider_api::{
     ComponentManifestV1, ConstantV1, CredentialsV1, EncodingV1, HOST_MAX_TTL_SECONDS,
-    HOST_MIN_TTL_SECONDS, RecipeV1, SlotV1, StatusActionV1, StepV1,
+    HOST_MIN_TTL_SECONDS, PresentCandidateV1, PresentV1, RecipeV1, SlotV1, StatusActionV1, StepV1,
 };
 use south_provider_conformance::{
     CREDENTIAL_RECIPE_CONFORMANCE_SUITE_ID, CREDENTIAL_RECIPE_CONFORMANCE_SUITE_VERSION,
@@ -55,6 +55,7 @@ fn suite_identity_and_canonical_case_order_are_frozen() {
             Case::EmptyRotationDoesNotWipe,
             Case::CasLoserRereadsTheWinner,
             Case::ProbeDoesNotRotate,
+            Case::TransientFailureIsRetried,
         ]
     );
 }
@@ -110,6 +111,9 @@ enum Fault {
     CasOverwrites,
     /// Probes by resolving, which rotates.
     ProbeRefreshes,
+    /// Treats a transient failure like `reauth_required`: the generation is latched until it
+    /// changes (host feedback SF2).
+    LatchesTransientFailure,
 }
 
 struct ReferenceHost {
@@ -258,6 +262,11 @@ impl ReferenceSession {
                             current.reauth_at = Some(row.version);
                         }
                         CredentialResolveObservationV1::Transient
+                            if self.fault == Fault::LatchesTransientFailure =>
+                        {
+                            current.reauth_at = Some(row.version);
+                        }
+                        CredentialResolveObservationV1::Transient
                             if self.fault == Fault::WritesOnTransientFailure =>
                         {
                             current.minted = None;
@@ -328,7 +337,12 @@ impl ReferenceSession {
                 return Exchanged::Failed(CredentialResolveObservationV1::OtherFailure);
             }
         }
-        let present = recipe.present.as_deref().unwrap().split_once('.').unwrap().1;
+        let Some([PresentCandidateV1::Output(present)]) =
+            recipe.present.as_ref().map(PresentV1::as_slice)
+        else {
+            panic!("the suite's recipes present one step output");
+        };
+        let present = present.split_once('.').unwrap().1;
         match (outputs.get(present).and_then(Value::as_str), ttl) {
             (Some(value), Some(ttl)) => Exchanged::Minted { value: value.to_owned(), ttl, outputs },
             _ => Exchanged::Failed(CredentialResolveObservationV1::Transient),
@@ -434,6 +448,7 @@ async fn each_broken_invariant_fails_exactly_the_case_that_guards_it() {
         (Fault::WipesOnEmptyRotation, Case::EmptyRotationDoesNotWipe),
         (Fault::CasOverwrites, Case::CasLoserRereadsTheWinner),
         (Fault::ProbeRefreshes, Case::ProbeDoesNotRotate),
+        (Fault::LatchesTransientFailure, Case::TransientFailureIsRetried),
     ];
     // Every case is guarded by exactly one fault here, so the table is fully discriminating.
     let guarded: Vec<_> = expectations.iter().map(|(_, case)| *case).collect();

@@ -40,6 +40,24 @@ fn provider_protocol_error(message: &'static str) -> ErrorEnvelope {
     ErrorEnvelope::new(ErrorCode::ProviderProtocolError, 502, message)
 }
 
+// -- the github-copilot family -----------------------------------------------
+
+/// The family whose bearer a credential recipe mints from a GitHub token (boundary §13.5 D7).
+const GITHUB_COPILOT: &str = "github-copilot";
+
+/// The identification headers GitHub's Copilot proxy expects on every chat request, as the
+/// host's native arm sends them (server `upstream.rs`, `apply_github_copilot_auth`). The
+/// `copilot-developer-cli` integration id is the one that unlocks the full model catalog; the
+/// user-agent is the package's declared one (`user_agent`), since the ordinary channel refuses it.
+const COPILOT_HEADERS: [(&str, &str); 6] = [
+    ("copilot-integration-id", "copilot-developer-cli"),
+    ("editor-plugin-version", "copilot-chat/0.43.0"),
+    ("editor-version", "vscode/1.123.0"),
+    ("openai-intent", "conversation-panel"),
+    ("x-github-api-version", "2025-04-01"),
+    ("x-vscode-user-agent-library-version", "electron-fetch"),
+];
+
 // -- translation -------------------------------------------------------------
 
 fn finish_reason(raw: Option<&str>) -> Option<FinishReason> {
@@ -699,7 +717,7 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-openai-compatible".to_owned(),
-            version: "2.1.5".to_owned(),
+            version: "2.2.0".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
@@ -726,12 +744,21 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
                 "the OpenAI-compatible dialect cannot consume Claude reasoning replay",
             ));
         }
-        let mut descriptor = HttpRequestDescriptor::new(
-            HttpMethod::Post,
-            config.base_url.resolve(ProviderApi::ChatCompletions),
-        );
-        descriptor.headers =
-            SafeHeaders::try_new([("content-type", "application/json")]).map_err(internal)?;
+        let copilot = config.provider == GITHUB_COPILOT;
+        // Copilot serves Chat Completions straight off its root: the kernel's `resolve` would add
+        // `/v1` to an origin-only endpoint.
+        let url = if copilot {
+            format!("{}/chat/completions", config.base_url.as_str())
+        } else {
+            config.base_url.resolve(ProviderApi::ChatCompletions)
+        };
+        let mut descriptor = HttpRequestDescriptor::new(HttpMethod::Post, url);
+        let identification: &[(&str, &str)] = if copilot { &COPILOT_HEADERS } else { &[] };
+        descriptor.headers = SafeHeaders::try_new(
+            std::iter::once(("content-type", "application/json"))
+                .chain(identification.iter().copied()),
+        )
+        .map_err(internal)?;
         let mut body = body_of(request, config)?;
         // `reasoning_effort` arrives through the extensions passthrough;
         // render it when the chosen model allows it.
@@ -745,7 +772,7 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
         // The host holds the value; this names the slot and the fixed
         // presentation selected by the trusted provider dialect.
         descriptor.auth = match (config.provider.as_str(), config.auth.clone()) {
-            ("openai-compatible", secret) => secret.map(Auth::bearer),
+            ("openai-compatible" | GITHUB_COPILOT, secret) => secret.map(Auth::bearer),
             ("azure-openai-v1", Some(secret)) => {
                 Some(Auth::header("api-key", secret).map_err(internal)?)
             }

@@ -164,6 +164,8 @@ fn a_pack_without_the_usage_rows_fails_coverage_by_name() {
         "provider.stream.usage-terminal",
         "provider.stream.no-usage",
     ];
+    // The credential cases stay: the manifest's Copilot recipe owes them, and this test is about
+    // the usage rows only.
     let pack = FixturePackV1::from_cases(
         shipped_pack()
             .cases()
@@ -171,7 +173,8 @@ fn a_pack_without_the_usage_rows_fails_coverage_by_name() {
             .filter(|case| !ROWS.contains(&case.name.as_str()))
             .cloned()
             .collect(),
-    );
+    )
+    .with_credentials(shipped_pack().credentials().clone());
     let report = run_provider_component_suite_v1(&OpenAiCompatibleReferenceV1, &pack);
     let missing: Vec<String> =
         failed(&report, CheckV1::Coverage).into_iter().map(|(case, _)| case).collect();

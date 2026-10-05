@@ -28,6 +28,9 @@ pub const CREDENTIAL_RECIPE_SCHEMA: &str = "south.credential-recipe.v1";
 /// The most steps one recipe may have.
 pub const MAX_RECIPE_STEPS: usize = 4;
 
+/// The most candidates one recipe's `present` may list (§13.5 D1).
+pub const MAX_PRESENT_CANDIDATES: usize = 4;
+
 /// The host's TTL clamp (§3.5): every expiry lands between these, whatever its source. A recipe
 /// may only narrow the range.
 pub const HOST_MIN_TTL_SECONDS: u32 = 60;
@@ -40,6 +43,10 @@ pub const HOST_MAX_TTL_SECONDS: u32 = 24 * 60 * 60;
 pub struct CredentialsV1 {
     /// Must be [`CREDENTIAL_RECIPE_SCHEMA`].
     pub schema: String,
+    /// The provider families this section applies to (§13.5 D2). Absent means every family of the
+    /// package; every other family behaves as if the package declared no `credentials`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub families: Option<Vec<String>>,
     /// The fields this kind of credential consists of.
     pub fields: BTreeMap<String, CredentialFieldV1>,
     /// Each group needs at least one present field when the credential is saved.
@@ -51,7 +58,8 @@ pub struct CredentialsV1 {
     /// A usable minted value already in an imported file, so the first request needs no exchange.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seed: Option<SeedV1>,
-    /// Each secret slot that is minted rather than entered. A slot without an entry is `static`.
+    /// Where each secret slot's value comes from: minted by a recipe, or a declared secret field.
+    /// Gate ① requires an entry for every slot of `permissions.secrets` (§13.5 D3).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub slots: BTreeMap<String, SlotV1>,
     /// The minting recipes, by name.
@@ -75,6 +83,10 @@ pub struct CredentialFieldV1 {
     /// A non-secret value used when the field is empty.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default: Option<String>,
+    /// One line for the operator form, like a configuration key's (§13.5 D4). Shown, never
+    /// interpreted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 }
 
 /// Where in an imported file a field's value is.
@@ -111,12 +123,17 @@ pub enum SeedClockV1 {
     Rfc3339OrEpochSeconds(String),
 }
 
-/// A secret slot: entered as is, or minted by a recipe.
+/// Where a secret slot's value comes from.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SlotV1 {
+    /// The operator-entered value. Meaningful only for a family no `credentials` section applies
+    /// to; where one applies, gate ① refuses it, since the host stores only declared fields.
     Static,
+    /// Minted by the named recipe.
     Minted(String),
+    /// The stored value of this declared secret field, presented as is (§13.5 D3).
+    Field(String),
 }
 
 /// One minting recipe, or a selector over recipes.
@@ -125,9 +142,9 @@ pub enum SlotV1 {
 pub struct RecipeV1 {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub steps: Vec<StepV1>,
-    /// `step.output` that becomes the slot value.
+    /// What becomes the slot value: one `step.output`, or ordered candidates (§13.5 D1).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub present: Option<String>,
+    pub present: Option<PresentV1>,
     /// Whether a refresh replaces the refresh material. Required, no default: getting it backwards
     /// raises no error and loses the credential.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -155,6 +172,78 @@ pub struct RecipeV1 {
     /// Non-secret values exported to the component.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub attributes: BTreeMap<String, AttributeV1>,
+}
+
+/// What a recipe presents: ordered candidates, the first present and non-empty one wins.
+///
+/// On the wire a single `"step.output"` string is the v0.43.0 form and means one candidate; a list
+/// holds candidates, each a step output or a [`PresentFieldV1`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "PresentWireV1", into = "PresentWireV1")]
+pub struct PresentV1(Vec<PresentCandidateV1>);
+
+impl PresentV1 {
+    /// One step output, `step.output`.
+    #[must_use]
+    pub fn output(output: impl Into<String>) -> Self {
+        Self(vec![PresentCandidateV1::Output(output.into())])
+    }
+
+    /// Ordered candidates.
+    #[must_use]
+    pub const fn candidates(candidates: Vec<PresentCandidateV1>) -> Self {
+        Self(candidates)
+    }
+
+    /// The candidates, in order.
+    #[must_use]
+    pub fn as_slice(&self) -> &[PresentCandidateV1] {
+        &self.0
+    }
+}
+
+/// One candidate of [`PresentV1`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum PresentCandidateV1 {
+    /// `step.output` of a step of the recipe.
+    Output(String),
+    /// The stored value of a declared secret field.
+    Field(PresentFieldV1),
+}
+
+/// A secret field presented as is. It has no step clock, so it carries its own validity.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PresentFieldV1 {
+    pub field: String,
+    /// Seconds the presented value is used before the recipe runs again, within the host clamp.
+    pub validity_seconds: u32,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(untagged)]
+enum PresentWireV1 {
+    One(String),
+    Candidates(Vec<PresentCandidateV1>),
+}
+
+impl From<PresentWireV1> for PresentV1 {
+    fn from(wire: PresentWireV1) -> Self {
+        match wire {
+            PresentWireV1::One(output) => Self::output(output),
+            PresentWireV1::Candidates(candidates) => Self(candidates),
+        }
+    }
+}
+
+impl From<PresentV1> for PresentWireV1 {
+    fn from(present: PresentV1) -> Self {
+        match present.0.as_slice() {
+            [PresentCandidateV1::Output(output)] => Self::One(output.clone()),
+            _ => Self::Candidates(present.0),
+        }
+    }
 }
 
 /// What a recipe does when the stored credential has no refresh material.
@@ -420,6 +509,12 @@ fn is_header_name(name: &str) -> bool {
 }
 
 impl CredentialsV1 {
+    /// Whether this section applies to `family` (§13.5 D2).
+    #[must_use]
+    pub fn applies_to(&self, family: &str) -> bool {
+        self.families.as_ref().is_none_or(|families| families.iter().any(|f| f == family))
+    }
+
     /// Every endpoint (constant or template) the package's recipes can reach, sorted and
     /// deduplicated: what an operator confirms for this package digest before any recipe runs
     /// (§3.4 rule 1, §16 Q18).
@@ -434,25 +529,55 @@ impl CredentialsV1 {
             .collect()
     }
 
-    /// Gate ① for the section (§3.7). `secret_slots` are the manifest's `permissions.secrets`.
-    pub(crate) fn validate(&self, secret_slots: &[String]) -> Result<(), ManifestErrorV1> {
-        self.check(secret_slots).map_err(ManifestErrorV1::InvalidCredentials)
+    /// Gate ① for the section (§3.7). `secret_slots` are the manifest's `permissions.secrets` and
+    /// `providers` its families.
+    pub(crate) fn validate(
+        &self,
+        secret_slots: &[String],
+        providers: &[String],
+    ) -> Result<(), ManifestErrorV1> {
+        self.check(secret_slots, providers).map_err(ManifestErrorV1::InvalidCredentials)
     }
 
-    fn check(&self, secret_slots: &[String]) -> Result<(), String> {
+    fn check(&self, secret_slots: &[String], providers: &[String]) -> Result<(), String> {
         if self.schema != CREDENTIAL_RECIPE_SCHEMA {
             return Err(format!("schema must be `{CREDENTIAL_RECIPE_SCHEMA}`"));
+        }
+        if let Some(families) = &self.families {
+            let distinct: BTreeSet<&String> = families.iter().collect();
+            if families.is_empty() || distinct.len() != families.len() {
+                return Err("families lists one or more families, each once".to_owned());
+            }
+            if let Some(family) = families.iter().find(|family| !providers.contains(family)) {
+                return Err(format!(
+                    "families names `{family}`, which the package does not declare"
+                ));
+            }
         }
         self.check_fields()?;
         for (slot, kind) in &self.slots {
             if !secret_slots.contains(slot) {
                 return Err(format!("slot `{slot}` is not declared under permissions.secrets"));
             }
-            if let SlotV1::Minted(recipe) = kind
-                && !self.recipes.contains_key(recipe)
-            {
-                return Err(format!("slot `{slot}` names no recipe `{recipe}`"));
+            match kind {
+                SlotV1::Minted(recipe) if !self.recipes.contains_key(recipe) => {
+                    return Err(format!("slot `{slot}` names no recipe `{recipe}`"));
+                }
+                SlotV1::Field(field) if self.is_secret(field) != Some(true) => {
+                    return Err(format!("slot `{slot}` must name a declared secret field"));
+                }
+                _ => {}
             }
+        }
+        // §13.5 D3: the host stores only declared fields, so a slot that names no source would make
+        // it guess which one the operator meant.
+        if let Some(slot) = secret_slots
+            .iter()
+            .find(|slot| matches!(self.slots.get(*slot), None | Some(SlotV1::Static)))
+        {
+            return Err(format!(
+                "slot `{slot}` must name its source: minted by a recipe or a declared secret field"
+            ));
         }
         if let Some(seed) = &self.seed {
             if !matches!(self.slots.get(&seed.slot), Some(SlotV1::Minted(_))) {
@@ -602,17 +727,17 @@ impl CredentialsV1 {
         if uses_fixed_window && recipe.fixed_validity_seconds.is_none() {
             return Err("a fixed_window clock needs fixed_validity_seconds".to_owned());
         }
-        let present = recipe.present.as_deref().ok_or("present is required")?;
-        if !outputs.contains(present) {
-            return Err(format!("present `{present}` is not an output of any step"));
-        }
+        let present = recipe.present.as_ref().ok_or("present is required")?;
+        self.check_present(present, &outputs)?;
         // A presented JWT the recipe signs itself has no response to read an expiry from, so the
         // host caches it for `default_seconds`; that must not outlive the token's own `exp`.
-        if let Some(signer) = recipe
-            .steps
-            .iter()
-            .find(|step| step.kind == StepKindV1::JwtSign && format!("{}.jwt", step.id) == present)
-        {
+        for signer in recipe.steps.iter().filter(|step| {
+            step.kind == StepKindV1::JwtSign
+                && present.as_slice().iter().any(|candidate| {
+                    matches!(candidate, PresentCandidateV1::Output(output)
+                        if *output == format!("{}.jwt", step.id))
+                })
+        }) {
             let lifetime = signer.claims.get("exp").and_then(|exp| exp.now_plus);
             match (lifetime, recipe.default_seconds) {
                 (Some(lifetime), Some(cached)) if i64::from(cached) <= lifetime => {}
@@ -634,6 +759,39 @@ impl CredentialsV1 {
             }
         }
         check_assertions(recipe)
+    }
+
+    /// §13.5 D1: one to [`MAX_PRESENT_CANDIDATES`] distinct candidates; an output is produced by
+    /// some step; a field is a declared secret field with a validity inside the host clamp.
+    fn check_present(&self, present: &PresentV1, outputs: &BTreeSet<String>) -> Result<(), String> {
+        let candidates = present.as_slice();
+        if candidates.is_empty() || candidates.len() > MAX_PRESENT_CANDIDATES {
+            return Err(format!("present lists one to {MAX_PRESENT_CANDIDATES} candidates"));
+        }
+        for (index, candidate) in candidates.iter().enumerate() {
+            if candidates[..index].contains(candidate) {
+                return Err("present repeats a candidate".to_owned());
+            }
+            match candidate {
+                PresentCandidateV1::Output(output) if !outputs.contains(output) => {
+                    return Err(format!("present `{output}` is not an output of any step"));
+                }
+                PresentCandidateV1::Field(PresentFieldV1 { field, validity_seconds }) => {
+                    if self.is_secret(field) != Some(true) {
+                        return Err(format!(
+                            "present field `{field}` is not a declared secret field"
+                        ));
+                    }
+                    if !(HOST_MIN_TTL_SECONDS..=HOST_MAX_TTL_SECONDS).contains(validity_seconds) {
+                        return Err(format!(
+                            "present field `{field}` has a validity outside the host's 60 s to 24 h"
+                        ));
+                    }
+                }
+                PresentCandidateV1::Output(_) => {}
+            }
+        }
+        Ok(())
     }
 
     fn check_selector(&self, name: &str, recipe: &RecipeV1) -> Result<(), String> {

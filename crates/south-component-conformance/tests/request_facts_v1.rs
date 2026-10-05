@@ -100,10 +100,13 @@ fn request_facts_round_trip_and_stay_off_the_wire_when_absent() {
     );
     let openai = serde_json::to_value(shipped("provider-openai-compatible")).unwrap();
     assert!(openai.get("request_facts").is_none());
-    assert_eq!(
-        shipped("provider-openai-compatible").request_facts_for("openai-compatible"),
-        RequestFactsV1::top_level()
-    );
+    // Every family of the package, `github-copilot` included, writes the top-level fields.
+    for family in ["openai-compatible", "azure-openai-v1", "github-copilot"] {
+        assert_eq!(
+            shipped("provider-openai-compatible").request_facts_for(family),
+            RequestFactsV1::top_level()
+        );
+    }
 }
 
 #[test]

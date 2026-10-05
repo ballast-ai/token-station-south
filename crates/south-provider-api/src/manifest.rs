@@ -650,7 +650,7 @@ impl ComponentManifestV1 {
         let world = self.validate_identity()?;
         self.validate_sandbox()?;
         if let Some(credentials) = &self.credentials {
-            credentials.validate(&self.permissions.secrets)?;
+            credentials.validate(&self.permissions.secrets, &self.providers)?;
         }
         self.validate_vocabulary(world)?;
         self.validate_signing()?;
@@ -910,6 +910,17 @@ impl ComponentManifestV1 {
             }
         }
         Ok(())
+    }
+
+    /// The `credentials` section that applies to `family`: the package's section when it is
+    /// unscoped or lists the family, otherwise none (§13.5 D2). A family without a section uses its
+    /// static slots as the operator entered them, as before credential recipes.
+    #[must_use]
+    pub fn credentials_for(&self, family: &str) -> Option<&crate::CredentialsV1> {
+        self.credentials.as_ref().filter(|credentials| {
+            self.providers.iter().any(|provider| provider == family)
+                && credentials.applies_to(family)
+        })
     }
 
     /// Where `family`'s request carries its sealed facts: its declared entry,

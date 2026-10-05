@@ -626,7 +626,8 @@ is `minted`. `Auth::OAuth` is not used — the boundary record deprecates it in 
   "recipes": {
     "kiro": {
       "select": [
-        { "when": { "field_in": { "auth_method": ["idc", "enterprise", "iam_identity_center"] } }, "recipe": "idc" },
+        { "when": { "field_in": { "field": "auth_method",
+                                  "values": ["idc", "enterprise", "iam_identity_center"] } }, "recipe": "idc" },
         { "when": { "field_present": "auth_method" },                                             "recipe": "social" },
         { "when": { "all_present": ["client_id", "client_secret"] },                              "recipe": "idc" },
         { "recipe": "social" }
