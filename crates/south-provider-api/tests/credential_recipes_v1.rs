@@ -131,10 +131,25 @@ fn codex() -> Value {
     })
 }
 
+/// The five identification headers the host's native Copilot arm sends on both exchange
+/// requests (server `token_refresh.rs`, `upstream.rs`).
+fn copilot_headers() -> Value {
+    json!({
+        "accept": { "const": "application/json" },
+        "editor-plugin-version": { "const": "copilot-chat/0.43.0" },
+        "editor-version": { "const": "vscode/1.123.0" },
+        "user-agent": { "const": "GitHubCopilotChat/0.43.0" },
+        "x-github-api-version": { "const": "2025-04-01" }
+    })
+}
+
+/// Copilot (§13.5 D1): a 404 from the token endpoint switches to the direct flow, which checks the
+/// seat and presents the GitHub token itself for a fixed validity.
 fn copilot() -> Value {
     json!({
         "schema": "south.credential-recipe.v1",
-        "fields": { "github_token": { "secret": true, "required": true } },
+        "fields": { "github_token": { "secret": true, "required": true,
+                                      "description": "A GitHub OAuth token with a Copilot seat." } },
         "slots": { "provider_api_key": { "minted": "copilot" } },
         "recipes": {
             "copilot": {
@@ -142,17 +157,20 @@ fn copilot() -> Value {
                     { "id": "exchange", "kind": "http_exchange", "method": "GET",
                       "endpoint": "https://api.github.com/copilot_internal/v2/token",
                       "auth": { "scheme": "token", "value": { "field": "github_token" } },
-                      "headers": { "editor-version": { "const": "vscode/1.100.0" } },
-                      "on_status": { "404": { "goto": "direct" } },
+                      "headers": copilot_headers(),
+                      "on_status": { "404": { "goto": "direct" }, "429": "transient" },
                       "extract": {
                           "token": { "pointer": "/token", "secret": true },
                           "expires_at": { "epoch_seconds": "/expires_at" } } },
                     { "id": "direct", "kind": "http_probe", "method": "GET",
-                      "endpoint": "https://api.githubcopilot.com/models",
-                      "auth": { "scheme": "Bearer", "value": { "field": "github_token" } } }
+                      "endpoint": "https://api.github.com/copilot_internal/user",
+                      "auth": { "scheme": "token", "value": { "field": "github_token" } },
+                      "headers": copilot_headers(),
+                      "on_status": { "429": "transient" } }
                 ],
-                "present": "exchange.token",
-                "rotates_refresh_material": false
+                "present": ["exchange.token", { "field": "github_token", "validity_seconds": 3600 }],
+                "rotates_refresh_material": false,
+                "refresh_margin_seconds": 30
             }
         }
     })
@@ -185,7 +203,7 @@ fn kiro() -> Value {
             "refresh_token": { "secret": true, "required": true },
             "client_id": { "secret": false, "syntax": { "printable_ascii": 256 } },
             "client_secret": { "secret": true },
-            "auth_method": { "secret": false, "syntax": { "enum": ["social", "idc"] }, "default": "social" },
+            "auth_method": { "secret": false, "syntax": "token" },
             "region": { "secret": false, "syntax": "aws_region", "default": "us-east-1" },
             "profile_arn": { "secret": false, "syntax": "aws_arn" }
         },
@@ -194,7 +212,10 @@ fn kiro() -> Value {
         "slots": { "provider_api_key": { "minted": "kiro" } },
         "recipes": {
             "kiro": { "select": [
-                { "when": { "field_in": { "field": "auth_method", "values": ["idc"] } }, "recipe": "idc" },
+                { "when": { "field_in": { "field": "auth_method",
+                                          "values": ["idc", "enterprise", "iam_identity_center"] } },
+                  "recipe": "idc" },
+                { "when": { "field_present": "auth_method" }, "recipe": "social" },
                 { "when": { "all_present": ["client_id", "client_secret"] }, "recipe": "idc" },
                 { "recipe": "social" } ] },
             "social": refresh("social", "https://prod.{region}.auth.desktop.kiro.dev/refreshToken",
@@ -474,9 +495,132 @@ fn trust_rules_refuse_what_they_guard() {
         set(c, "/recipes/kiro/steps", steps);
     });
     refuses("a selector whose last rule tests", package, kiro(), |c| {
-        set(c, "/recipes/kiro/select/2/when", json!({ "field_present": "client_id" }));
+        set(c, "/recipes/kiro/select/3/when", json!({ "field_present": "client_id" }));
     });
     refuses("a selector naming a selector", package, kiro(), |c| {
-        set(c, "/recipes/kiro/select/2/recipe", json!("kiro"));
+        set(c, "/recipes/kiro/select/3/recipe", json!("kiro"));
+    });
+}
+
+/// `present` (§13.5 D1): one output as before, or ordered candidates, each a step output or a
+/// secret field with its own validity.
+#[test]
+fn present_candidates_refuse_what_they_guard() {
+    let set = insert;
+    let package = "provider-openai-compatible";
+    let present = "/recipes/copilot/present";
+
+    // A single output keeps its v0.43.0 meaning, and a one-candidate list is the same thing.
+    for form in [json!("exchange.token"), json!(["exchange.token"])] {
+        let mut credentials = copilot();
+        set(&mut credentials, present, form.clone());
+        assert_eq!(with(package, &credentials), Ok(()), "{form}");
+    }
+
+    refuses("no candidate", package, copilot(), |c| set(c, present, json!([])));
+    refuses("five candidates", package, copilot(), |c| {
+        set(c, present, json!(vec!["exchange.token"; 5]));
+    });
+    refuses("a repeated candidate", package, copilot(), |c| {
+        set(c, present, json!(["exchange.token", "exchange.token"]));
+    });
+    refuses("an output no step produces", package, copilot(), |c| {
+        set(
+            c,
+            present,
+            json!(["direct.token", { "field": "github_token", "validity_seconds": 3600 }]),
+        );
+    });
+    refuses("an undeclared field", package, copilot(), |c| {
+        set(c, present, json!(["exchange.token", { "field": "nobody", "validity_seconds": 3600 }]));
+    });
+    refuses("a field candidate without its validity", package, copilot(), |c| {
+        set(c, present, json!(["exchange.token", { "field": "github_token" }]));
+    });
+    for validity in [59, 86_401] {
+        refuses("a validity outside the host clamp", package, copilot(), |c| {
+            set(
+                c,
+                present,
+                json!(["exchange.token", { "field": "github_token", "validity_seconds": validity }]),
+            );
+        });
+    }
+    // A presented credential is a secret: a non-secret field is never presented.
+    let mut credentials = copilot();
+    set(&mut credentials, "/fields/login", json!({ "secret": false }));
+    refuses("a non-secret field", package, credentials, |c| {
+        set(c, present, json!(["exchange.token", { "field": "login", "validity_seconds": 3600 }]));
+    });
+    // The presented-JWT rule applies to each JWT candidate, not only to a single output.
+    refuses("a candidate JWT cached past its exp", "task-kling-v2", kling(), |c| {
+        set(c, "/recipes/kling_jwt/present", json!(["jwt.jwt"]));
+        set(c, "/recipes/kling_jwt/default_seconds", json!(3600));
+    });
+}
+
+/// `families` (§13.5 D2): a section may apply to some of the package's families only.
+#[test]
+fn a_section_scoped_to_families_applies_to_those_families_only() {
+    let package = "provider-openai-compatible";
+    let mut scoped = copilot();
+    scoped["families"] = json!(["azure-openai-v1"]);
+    assert_eq!(with(package, &scoped), Ok(()));
+
+    let manifest: ComponentManifestV1 = {
+        let mut manifest = shipped(package);
+        manifest["credentials"] = scoped;
+        serde_json::from_value(manifest).unwrap()
+    };
+    assert!(manifest.credentials_for("azure-openai-v1").is_some());
+    assert_eq!(manifest.credentials_for("openai-compatible"), None);
+
+    // Unscoped, the section covers every family, as in v0.43.0.
+    let manifest: ComponentManifestV1 = {
+        let mut manifest = shipped(package);
+        manifest["credentials"] = copilot();
+        serde_json::from_value(manifest).unwrap()
+    };
+    assert!(manifest.credentials_for("openai-compatible").is_some());
+    assert!(manifest.credentials_for("azure-openai-v1").is_some());
+    assert_eq!(manifest.credentials_for("not-a-family"), None);
+
+    refuses("an empty scope", package, copilot(), |c| c["families"] = json!([]));
+    refuses("a family the package does not declare", package, copilot(), |c| {
+        c["families"] = json!(["github-copilot-enterprise"]);
+    });
+    refuses("a repeated family", package, copilot(), |c| {
+        c["families"] = json!(["azure-openai-v1", "azure-openai-v1"]);
+    });
+}
+
+/// Slots (§13.5 D3, host feedback SF5): where a section applies, every secret slot names its source,
+/// minted by a recipe or a declared secret field.
+#[test]
+fn every_slot_names_its_source_where_a_section_applies() {
+    let package = "provider-openai-compatible";
+    let api_key = || {
+        json!({
+            "schema": "south.credential-recipe.v1",
+            "fields": { "api_key": { "secret": true, "required": true,
+                                     "description": "The key from the provider's console." } },
+            "slots": { "provider_api_key": { "field": "api_key" } }
+        })
+    };
+    assert_eq!(with(package, &api_key()), Ok(()));
+
+    refuses("a slot with no entry", package, api_key(), |c| c["slots"] = json!({}));
+    refuses("a bare static slot", package, api_key(), |c| {
+        c["slots"] = json!({ "provider_api_key": "static" });
+    });
+    refuses("a field slot naming an undeclared field", package, api_key(), |c| {
+        c["slots"] = json!({ "provider_api_key": { "field": "nobody" } });
+    });
+    refuses("a field slot naming a non-secret field", package, api_key(), |c| {
+        c["fields"]["api_key"]["secret"] = json!(false);
+    });
+    refuses("a seed filling a field slot", package, api_key(), |c| {
+        c["seed"] = json!({ "file": "key-json", "slot": "provider_api_key", "present": "/key",
+                            "expires_at": { "epoch_seconds": "/exp" } });
     });
 }

@@ -18,7 +18,7 @@ use std::{
 use serde_json::Value;
 use south_provider_api::{
     ComponentManifestV1, ConstantV1, CredentialsV1, EncodingV1, HOST_MAX_TTL_SECONDS,
-    HOST_MIN_TTL_SECONDS, RecipeV1, SlotV1, StatusActionV1, StepV1,
+    HOST_MIN_TTL_SECONDS, PresentCandidateV1, PresentV1, RecipeV1, SlotV1, StatusActionV1, StepV1,
 };
 use south_provider_conformance::{
     CREDENTIAL_RECIPE_CONFORMANCE_SUITE_ID, CREDENTIAL_RECIPE_CONFORMANCE_SUITE_VERSION,
@@ -328,7 +328,12 @@ impl ReferenceSession {
                 return Exchanged::Failed(CredentialResolveObservationV1::OtherFailure);
             }
         }
-        let present = recipe.present.as_deref().unwrap().split_once('.').unwrap().1;
+        let Some([PresentCandidateV1::Output(present)]) =
+            recipe.present.as_ref().map(PresentV1::as_slice)
+        else {
+            panic!("the suite's recipes present one step output");
+        };
+        let present = present.split_once('.').unwrap().1;
         match (outputs.get(present).and_then(Value::as_str), ttl) {
             (Some(value), Some(ttl)) => Exchanged::Minted { value: value.to_owned(), ttl, outputs },
             _ => Exchanged::Failed(CredentialResolveObservationV1::Transient),

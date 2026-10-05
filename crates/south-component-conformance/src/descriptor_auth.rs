@@ -103,8 +103,9 @@ impl Error for DescriptorAuthErrorV1 {}
 ///   manifest declares in `secret_headers` (B7a, §10), which is admitted as
 ///   [`AdmittedAuthV1::DeclaredHeaderSecret`];
 /// - no ordinary descriptor header may carry a declared secret header's name;
-/// - `Auth::OAuth` is admitted, as Bearer, only on a slot a credential recipe mints (§3.3); the
-///   host's recipe executor produces the value, and nothing in the descriptor names an exchange;
+/// - `Auth::OAuth` is admitted, as Bearer, only on a slot a credential recipe mints (§3.3) in the
+///   section that applies to the configured family (§13.5 D2); the host's recipe executor produces
+///   the value, and nothing in the descriptor names an exchange;
 /// - no auth is admitted when, and only when, the upstream is configured without a slot (which
 ///   `authorize` has already judged).
 ///
@@ -154,7 +155,8 @@ pub fn admit_descriptor_auth(
                 .ok_or_else(|| DescriptorAuthErrorV1::HeaderNotSanctioned(name.clone()))
         }
         Some(Auth::OAuth { secret, .. }) => {
-            let minted = manifest.credentials.as_ref().is_some_and(|credentials| {
+            // Only the section that applies to this family mints (§13.5 D2).
+            let minted = manifest.credentials_for(&config.provider).is_some_and(|credentials| {
                 matches!(credentials.slots.get(secret.as_str()), Some(SlotV1::Minted(_)))
             });
             if minted {

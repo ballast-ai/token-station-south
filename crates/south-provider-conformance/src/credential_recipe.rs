@@ -21,7 +21,7 @@ use std::{collections::BTreeMap, fmt};
 
 use south_provider_api::{
     CREDENTIAL_RECIPE_SCHEMA, ConstantV1, CredentialFieldV1, CredentialsV1, EncodingV1, ExtractV1,
-    RecipeV1, SlotV1, StepKindV1, StepV1, ValueSourceV1,
+    PresentV1, RecipeV1, SlotV1, StepKindV1, StepV1, ValueSourceV1,
 };
 
 mod endpoint;
@@ -113,7 +113,14 @@ impl CredentialRecipeKindV1 {
 }
 
 const fn field(secret: bool, required: bool) -> CredentialFieldV1 {
-    CredentialFieldV1 { secret, required, syntax: None, media: None, default: None }
+    CredentialFieldV1 {
+        secret,
+        required,
+        syntax: None,
+        media: None,
+        default: None,
+        description: None,
+    }
 }
 
 fn constant(value: &str) -> ValueSourceV1 {
@@ -175,7 +182,7 @@ fn rotating_credentials() -> CredentialsV1 {
             extract,
             vec!["refresh_token".to_owned()],
         )],
-        present: Some("token.access_token".to_owned()),
+        present: Some(PresentV1::output("token.access_token")),
         rotates_refresh_material: Some(true),
         write_back: BTreeMap::from([(
             "refresh_token".to_owned(),
@@ -186,6 +193,7 @@ fn rotating_credentials() -> CredentialsV1 {
     };
     CredentialsV1 {
         schema: CREDENTIAL_RECIPE_SCHEMA.to_owned(),
+        families: None,
         fields: BTreeMap::from([("refresh_token".to_owned(), field(true, true))]),
         require_one_of: Vec::new(),
         import: BTreeMap::new(),
@@ -210,7 +218,7 @@ fn non_rotating_credentials() -> CredentialsV1 {
     ]);
     let recipe = RecipeV1 {
         steps: vec![token_step(EncodingV1::Form, params, extract, Vec::new())],
-        present: Some("token.access_token".to_owned()),
+        present: Some(PresentV1::output("token.access_token")),
         rotates_refresh_material: Some(false),
         refresh_margin_seconds: Some(CREDENTIAL_RECIPE_REFRESH_MARGIN_SECONDS_V1),
         min_ttl_seconds: Some(CREDENTIAL_RECIPE_NARROW_MIN_TTL_SECONDS_V1),
@@ -219,6 +227,7 @@ fn non_rotating_credentials() -> CredentialsV1 {
     };
     CredentialsV1 {
         schema: CREDENTIAL_RECIPE_SCHEMA.to_owned(),
+        families: None,
         fields: BTreeMap::from([
             ("client_id".to_owned(), field(false, true)),
             ("client_secret".to_owned(), field(true, true)),

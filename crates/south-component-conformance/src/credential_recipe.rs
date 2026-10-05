@@ -34,12 +34,16 @@
 //!    step as `transient` unless it is `optional`. A clock form that yields no expiry falls back to
 //!    `default_seconds` and is otherwise `transient`. `must_equal_field` that disagrees with the
 //!    stored field fails as `reauth_required` before anything is written back.
-//! 6. The outcome: the `present` output, its expiry clamped to the host's 60 s to 24 h range as
-//!    narrowed by the recipe (§3.5), write-back values (an absent or empty output keeps the stored
-//!    value: the no-wipe invariant), and the exported attributes, taken only from fields.
+//! 6. The outcome: the first `present` candidate that is present and non-empty, its expiry clamped
+//!    to the host's 60 s to 24 h range as narrowed by the recipe (§3.5), write-back values (an
+//!    absent or empty output keeps the stored value: the no-wipe invariant), and the exported
+//!    attributes, taken only from fields. With no candidate present the run is `transient`.
 //!
-//! The expiry of the presented value is the clock extracted by the step that produced it, or else
-//! `now + default_seconds`; with neither, the run is `transient`.
+//! The expiry of a presented step output is the clock extracted by the step that produced it, or
+//! else `now + default_seconds`; with neither, the run is `transient`. A presented field (§13.5 D1)
+//! has no step, so its expiry is `now + validity_seconds`, its own and never `default_seconds`.
+//!
+//! A slot that names a field (§13.5 D3) is not minted; [`stored_slot_value_v1`] reads it.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -47,8 +51,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use south_provider_api::{
     ConstantV1, CredentialsV1, EncodingV1, ExtractV1, HOST_MAX_TTL_SECONDS, HOST_MIN_TTL_SECONDS,
-    JwtAlgorithmV1, PredicateV1, RecipeV1, SlotV1, StatusActionV1, StepKindV1, StepMethodV1,
-    StepV1, ValueSourceV1, WithoutRefreshMaterialV1,
+    JwtAlgorithmV1, PredicateV1, PresentCandidateV1, PresentFieldV1, RecipeV1, SlotV1,
+    StatusActionV1, StepKindV1, StepMethodV1, StepV1, ValueSourceV1, WithoutRefreshMaterialV1,
 };
 
 use crate::url_segment;
@@ -233,6 +237,30 @@ pub fn run_recipe_v1(
     RecipeRunV1 { recipe: chosen, requests, outcome }
 }
 
+/// The value of a slot that names a field (§13.5 D3).
+///
+/// It is that field's stored value, under the same field rules as a run: an empty value is absent,
+/// a default fills a non-secret field, every present value has its syntax, and `required` and
+/// `require_one_of` hold.
+///
+/// # Errors
+///
+/// A configuration outcome when the slot names no field (it is minted, static or undeclared) or
+/// the stored fields break a rule.
+pub fn stored_slot_value_v1(
+    credentials: &CredentialsV1,
+    slot: &str,
+    fields: &BTreeMap<String, String>,
+) -> Result<String, RecipeOutcomeV1> {
+    let Some(SlotV1::Field(field)) = credentials.slots.get(slot) else {
+        return Err(configuration(None, format!("slot `{slot}` does not name a field")));
+    };
+    resolve_fields(credentials, fields)?
+        .get(field.as_str())
+        .map(|value| (*value).to_owned())
+        .ok_or_else(|| configuration(Some(field), format!("field `{field}` is absent")))
+}
+
 /// The headers `alg` names in a JWS header.
 const fn alg_name(alg: JwtAlgorithmV1) -> &'static str {
     match alg {
@@ -270,7 +298,7 @@ fn mint(
     let fields = resolve_fields(credentials, stored)?;
     let name = match credentials.slots.get(slot) {
         Some(SlotV1::Minted(name)) => name.as_str(),
-        Some(SlotV1::Static) | None => {
+        Some(SlotV1::Static | SlotV1::Field(_)) | None => {
             return Err(configuration(None, format!("slot `{slot}` is not minted by a recipe")));
         }
     };
@@ -742,33 +770,55 @@ impl Run<'_> {
         read.map_or(Clock::Missing, Clock::Expiry)
     }
 
-    fn outcome(&self) -> Result<MintedV1, RecipeOutcomeV1> {
-        let present_name = self
+    /// The first `present` candidate that is present and non-empty, and its expiry.
+    fn presented(&self) -> Result<(String, i64), RecipeOutcomeV1> {
+        let candidates = self
             .recipe
             .present
-            .as_deref()
+            .as_ref()
+            .map(south_provider_api::PresentV1::as_slice)
+            .filter(|candidates| !candidates.is_empty())
             .ok_or_else(|| configuration(None, "the recipe names no present output"))?;
-        let present_step = present_name.split_once('.').map_or(present_name, |(step, _)| step);
-        let present = self
-            .outputs
-            .get(present_name)
-            .and_then(Value::as_str)
-            .filter(|value| !value.is_empty())
-            .ok_or_else(|| {
-                transient(Some(present_step), None, format!("present `{present_name}` is absent"))
-            })?
-            .to_owned();
-        let expiry = match (self.clocks.get(present_step), self.recipe.default_seconds) {
-            (Some(expiry), _) => *expiry,
-            (None, Some(default)) => self.now.saturating_add(i64::from(default)),
-            (None, None) => {
-                return Err(transient(
-                    Some(present_step),
-                    None,
-                    "the presented value has no clock and the recipe no default_seconds",
-                ));
+        for candidate in candidates {
+            match candidate {
+                PresentCandidateV1::Output(name) => {
+                    let Some(value) =
+                        self.outputs.get(name).and_then(Value::as_str).filter(|v| !v.is_empty())
+                    else {
+                        continue;
+                    };
+                    let step = step_of(name);
+                    let expiry = match (self.clocks.get(step), self.recipe.default_seconds) {
+                        (Some(expiry), _) => *expiry,
+                        (None, Some(default)) => self.now.saturating_add(i64::from(default)),
+                        (None, None) => {
+                            return Err(transient(
+                                Some(step),
+                                None,
+                                "the presented value has no clock and the recipe no default_seconds",
+                            ));
+                        }
+                    };
+                    return Ok((value.to_owned(), expiry));
+                }
+                PresentCandidateV1::Field(PresentFieldV1 { field, validity_seconds }) => {
+                    if let Some(value) = self.fields.get(field.as_str()) {
+                        let expiry = self.now.saturating_add(i64::from(*validity_seconds));
+                        return Ok(((*value).to_owned(), expiry));
+                    }
+                }
             }
-        };
+        }
+        // As v0.43.0 reported a single absent output: transient, at the first output's step.
+        let step = candidates.iter().find_map(|candidate| match candidate {
+            PresentCandidateV1::Output(name) => Some(step_of(name)),
+            PresentCandidateV1::Field(_) => None,
+        });
+        Err(transient(step, None, "no present candidate is present"))
+    }
+
+    fn outcome(&self) -> Result<MintedV1, RecipeOutcomeV1> {
+        let (present, expiry) = self.presented()?;
         // §3.5: the host's range, narrowed (never widened) by the recipe.
         let floor =
             self.recipe.min_ttl_seconds.unwrap_or(HOST_MIN_TTL_SECONDS).max(HOST_MIN_TTL_SECONDS);
@@ -814,6 +864,11 @@ impl Run<'_> {
             attributes,
         })
     }
+}
+
+/// The step of a `step.output` name.
+fn step_of(output: &str) -> &str {
+    output.split_once('.').map_or(output, |(step, _)| step)
 }
 
 /// A value as header, form or key text: a string as is, anything else as compact JSON.

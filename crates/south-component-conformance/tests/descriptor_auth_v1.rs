@@ -208,6 +208,17 @@ fn an_oauth_descriptor_is_admitted_only_on_a_minted_slot() {
     assert_eq!(minting.validate(), Ok(()));
     assert_eq!(admit_descriptor_auth(&minting, &config, &descriptor), Ok(AdmittedAuthV1::Bearer));
 
+    // A section scoped to another family mints nothing for this one (§13.5 D2).
+    let other = minting.providers.iter().find(|family| **family != config.provider).cloned();
+    minting.credentials.as_mut().unwrap().families = Some(vec![other.unwrap()]);
+    assert_eq!(minting.validate(), Ok(()));
+    assert_eq!(
+        admit_descriptor_auth(&minting, &config, &descriptor),
+        Err(DescriptorAuthErrorV1::OAuthNotAdmitted)
+    );
+    minting.credentials.as_mut().unwrap().families = Some(vec![config.provider.clone()]);
+    assert_eq!(admit_descriptor_auth(&minting, &config, &descriptor), Ok(AdmittedAuthV1::Bearer));
+
     minting.credentials.as_mut().unwrap().slots.clear();
     assert_eq!(
         admit_descriptor_auth(&minting, &config, &descriptor),

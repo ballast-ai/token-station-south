@@ -12,7 +12,7 @@ use std::path::Path;
 use serde_json::{Value, json};
 use south_component_conformance::credential_recipe::{
     FakeResponseV1, FixtureSignerV1, JwtSignerV1, RecipeEffectsV1, RecipeOutcomeV1, RecipeRunV1,
-    RenderedRequestV1, run_recipe_v1,
+    RenderedRequestV1, run_recipe_v1, stored_slot_value_v1,
 };
 use south_component_conformance::reference::OpenAiCompatibleReferenceV1;
 use south_component_conformance::{
@@ -384,14 +384,17 @@ fn kiro() -> Value {
             "refresh_token": { "secret": true, "required": true },
             "client_id": { "secret": false, "syntax": { "printable_ascii": 256 } },
             "client_secret": { "secret": true },
-            "auth_method": { "secret": false, "syntax": { "enum": ["social", "idc"] }, "default": "social" },
+            "auth_method": { "secret": false, "syntax": "token" },
             "region": { "secret": false, "syntax": "aws_region", "default": "us-east-1" },
             "profile_arn": { "secret": false, "syntax": "aws_arn" }
         },
         "slots": { "provider_api_key": { "minted": "kiro" } },
         "recipes": {
             "kiro": { "select": [
-                { "when": { "field_in": { "field": "auth_method", "values": ["IDC"] } }, "recipe": "idc" },
+                { "when": { "field_in": { "field": "auth_method",
+                                          "values": ["idc", "enterprise", "iam_identity_center"] } },
+                  "recipe": "idc" },
+                { "when": { "field_present": "auth_method" }, "recipe": "social" },
                 { "when": { "all_present": ["client_id", "client_secret"] }, "recipe": "idc" },
                 { "recipe": "social" } ] },
             "social": refresh("social", "https://prod.{region}.auth.desktop.kiro.dev/refreshToken",
@@ -412,7 +415,8 @@ fn a_selector_picks_the_first_matching_rule_and_the_template_takes_the_region() 
     let kiro_recipe = credentials(&kiro());
     let ok = json!({ "status": 200, "body": { "accessToken": "fake-kiro", "expiresIn": 3600 } });
 
-    // Defaults fill the empty method and region; the social form sends no grant type.
+    // No method and no client fields select social; the default fills the region; the social form
+    // sends no grant type.
     let run = mint_once(
         &kiro_recipe,
         &[("refresh_token", "fake-refresh"), ("profile_arn", ARN)],
@@ -433,10 +437,10 @@ fn a_selector_picks_the_first_matching_rule_and_the_template_takes_the_region() 
         "no refreshToken in the response keeps the stored one"
     );
 
-    // `field_in` compares ASCII case-insensitively: the rule lists `IDC`, the field holds `idc`.
+    // `field_in` compares ASCII case-insensitively: the rule lists `idc`, the field holds `IdC`.
     let client = [("client_id", "fake-client"), ("client_secret", "fake-client-secret")];
     let fields =
-        [("refresh_token", "fake-refresh"), ("auth_method", "idc"), ("region", "eu-west-1")];
+        [("refresh_token", "fake-refresh"), ("auth_method", "IdC"), ("region", "eu-west-1")];
     let run = mint_once(&kiro_recipe, &[&fields[..], &client[..]].concat(), &json!({ "idc": ok }));
     assert_eq!(run.recipe.as_deref(), Some("idc"));
     assert_eq!(run.requests[0].url, "https://oidc.eu-west-1.amazonaws.com/token");
@@ -463,6 +467,41 @@ fn a_selector_picks_the_first_matching_rule_and_the_template_takes_the_region() 
              \"grantType\":\"refresh_token\",\"refreshToken\":\"fake-refresh\"}"
         )
     );
+}
+
+/// Host feedback SF1: the host's native arm takes `IdC`, `enterprise` and `iam_identity_center`
+/// in any case as `IdC` and every other explicit value as social; with no value, client fields
+/// decide (server `token_refresh.rs`, `KiroExtras`). The draft once declared an exact
+/// `enum ["social", "idc"]` with a `social` default, which made the aliases configuration errors
+/// and let client fields override an explicit `social`.
+#[test]
+fn the_kiro_selector_takes_the_hosts_spellings_and_an_explicit_method_wins() {
+    let kiro_recipe = credentials(&kiro());
+    let client = [("client_id", "fake-client"), ("client_secret", "fake-client-secret")];
+    let chosen = |method: Option<&str>, with_client: bool| {
+        let mut fields = vec![("refresh_token", "fake-refresh")];
+        fields.extend(method.map(|method| ("auth_method", method)));
+        if with_client {
+            fields.extend(client);
+        }
+        mint_once(&kiro_recipe, &fields, &json!({})).recipe
+    };
+    for method in [
+        "idc",
+        "IdC",
+        "IDC",
+        "enterprise",
+        "Enterprise",
+        "iam_identity_center",
+        "IAM_Identity_Center",
+    ] {
+        assert_eq!(chosen(Some(method), true).as_deref(), Some("idc"), "{method}");
+    }
+    for method in ["social", "Social", "github", "google"] {
+        assert_eq!(chosen(Some(method), true).as_deref(), Some("social"), "{method}");
+    }
+    assert_eq!(chosen(None, true).as_deref(), Some("idc"));
+    assert_eq!(chosen(None, false).as_deref(), Some("social"));
 }
 
 #[test]
@@ -509,6 +548,18 @@ fn an_exact_status_beats_its_class_and_the_defaults_apply_without_either() {
     assert_eq!(default_for(502), json!({ "transient": { "step": "refresh", "status": 502 } }));
 }
 
+fn copilot_headers() -> Value {
+    json!({
+        "accept": { "const": "application/json" },
+        "editor-plugin-version": { "const": "copilot-chat/0.43.0" },
+        "editor-version": { "const": "vscode/1.123.0" },
+        "user-agent": { "const": "GitHubCopilotChat/0.43.0" },
+        "x-github-api-version": { "const": "2025-04-01" }
+    })
+}
+
+/// Copilot (boundary §13.5 D1): the exchange, and on a 404 the seat check after which the GitHub
+/// token itself is presented for a fixed validity.
 fn copilot() -> Value {
     json!({
         "schema": "south.credential-recipe.v1",
@@ -520,20 +571,34 @@ fn copilot() -> Value {
                     { "id": "exchange", "kind": "http_exchange", "method": "GET",
                       "endpoint": "https://api.github.com/copilot_internal/v2/token",
                       "auth": { "scheme": "token", "value": { "field": "github_token" } },
-                      "headers": { "editor-version": { "const": "vscode/1.100.0" } },
-                      "on_status": { "404": { "goto": "direct" } },
+                      "headers": copilot_headers(),
+                      "on_status": { "404": { "goto": "direct" }, "429": "transient" },
                       "extract": {
                           "token": { "pointer": "/token", "secret": true },
                           "expires_at": { "epoch_seconds": "/expires_at" } } },
                     { "id": "direct", "kind": "http_probe", "method": "GET",
-                      "endpoint": "https://api.githubcopilot.com/models",
-                      "auth": { "scheme": "Bearer", "value": { "field": "github_token" } } }
+                      "endpoint": "https://api.github.com/copilot_internal/user",
+                      "auth": { "scheme": "token", "value": { "field": "github_token" } },
+                      "headers": copilot_headers(),
+                      "on_status": { "429": "transient" } }
                 ],
-                "present": "exchange.token",
-                "rotates_refresh_material": false
+                "present": ["exchange.token", { "field": "github_token", "validity_seconds": 3600 }],
+                "rotates_refresh_material": false,
+                "refresh_margin_seconds": 30
             }
         }
     })
+}
+
+/// What the exchange and the seat check send: the GitHub token under `token`, and the editor's
+/// identification headers.
+fn copilot_request(step: &str, url: &str) -> Value {
+    json!({ "step": step, "method": "GET", "url": url,
+            "headers": { "accept": "application/json", "authorization": "token fake-gh",
+                         "editor-plugin-version": "copilot-chat/0.43.0",
+                         "editor-version": "vscode/1.123.0",
+                         "user-agent": "GitHubCopilotChat/0.43.0",
+                         "x-github-api-version": "2025-04-01" } })
 }
 
 #[test]
@@ -546,9 +611,7 @@ fn a_successful_step_does_not_fall_through_into_a_goto_branch() {
     );
     assert_eq!(
         serde_json::to_value(&run.requests).unwrap(),
-        json!([{ "step": "exchange", "method": "GET",
-                 "url": "https://api.github.com/copilot_internal/v2/token",
-                 "headers": { "authorization": "token fake-gh", "editor-version": "vscode/1.100.0" } }])
+        json!([copilot_request("exchange", "https://api.github.com/copilot_internal/v2/token")])
     );
     assert_eq!(minted(&run).present, "fake-copilot");
     assert_eq!(minted(&run).expires_at, NOW + 1500);
@@ -566,29 +629,66 @@ fn a_goto_runs_the_branch_and_its_probe_classifies_by_status() {
         run.requests.iter().map(|request| request.step.as_str()).collect::<Vec<_>>(),
         ["exchange", "direct"]
     );
-    assert_eq!(run.requests[1].headers["authorization"], "Bearer fake-gh");
+    assert_eq!(
+        serde_json::to_value(&run.requests[1]).unwrap(),
+        copilot_request("direct", "https://api.github.com/copilot_internal/user")
+    );
     assert_eq!(
         serde_json::to_value(&run.outcome).unwrap(),
         json!({ "reauth_required": { "step": "direct", "status": 401 } })
     );
+    // A rate limit on either step is declared transient, so it never latches the credential.
+    for responses in [
+        json!({ "exchange": { "status": 429 } }),
+        json!({ "exchange": { "status": 404 }, "direct": { "status": 429 } }),
+    ] {
+        let run = mint_once(&copilot_recipe, &[("github_token", "fake-gh")], &responses);
+        assert!(matches!(run.outcome, RecipeOutcomeV1::Transient { .. }), "{responses}");
+    }
 }
 
-/// §3.9 says Copilot's direct-use flow is `on_status` 404 → `goto` + `http_probe`. In that flow
-/// the host presents the GitHub token itself, but `present` names one step output, and the probe
-/// extracts nothing — so the recipe has no way to say what it presents after the branch. Recorded
-/// here as the vocabulary's gap rather than papered over.
+/// §3.9 says Copilot's direct-use flow is `on_status` 404 → `goto` + `http_probe`, after which the
+/// host presents the GitHub token itself. v0.43.0 could not say so: `present` named one step output
+/// and the probe extracts nothing, so the run ended `transient`. A field candidate (§13.5 D1) names
+/// the token and its own validity, the host's 3600 s re-validation cadence.
 #[test]
-fn copilot_direct_use_cannot_name_its_presented_value() {
+fn copilot_direct_use_presents_the_github_token_for_its_own_validity() {
     let copilot_recipe = credentials(&copilot());
     let run = mint_once(
         &copilot_recipe,
         &[("github_token", "fake-gh")],
-        &json!({ "exchange": { "status": 404 }, "direct": { "status": 200 } }),
+        &json!({ "exchange": { "status": 404 }, "direct": { "status": 200, "body": { "login": "x" } } }),
+    );
+    let minted = minted(&run);
+    assert_eq!(minted.present, "fake-gh");
+    assert_eq!(minted.expires_at, NOW + 3600);
+    assert!(minted.outputs.is_empty(), "the probe extracts nothing");
+    assert!(minted.write_back.is_empty());
+
+    // The field candidate does not stand in for a failed exchange: a 2xx without its expiry is
+    // transient, because the field's validity is its own and not a recipe-wide default.
+    let run = mint_once(
+        &copilot_recipe,
+        &[("github_token", "fake-gh")],
+        &json!({ "exchange": { "status": 200, "body": { "token": "fake-copilot" } } }),
     );
     assert_eq!(
         serde_json::to_value(&run.outcome).unwrap(),
-        json!({ "transient": { "step": "exchange" } })
+        json!({ "transient": { "step": "exchange", "status": 200 } })
     );
+}
+
+/// A field candidate's validity goes through the clamp like every other expiry.
+#[test]
+fn a_field_candidate_is_clamped_by_the_recipe() {
+    let mut recipe = copilot();
+    recipe["recipes"]["copilot"]["max_ttl_seconds"] = json!(1800);
+    let run = mint_once(
+        &credentials(&recipe),
+        &[("github_token", "fake-gh")],
+        &json!({ "exchange": { "status": 404 }, "direct": { "status": 204 } }),
+    );
+    assert_eq!(minted(&run).expires_at, NOW + 1800);
 }
 
 fn vertex() -> Value {
@@ -745,6 +845,40 @@ fn a_static_slot_or_an_absent_field_mints_nothing() {
     );
     kling.slots.clear();
     let run = mint_once(&kling, &[("access_key", "a"), ("secret_key", "s")], &json!({}));
+    assert!(matches!(run.outcome, RecipeOutcomeV1::Configuration { field: None, .. }));
+}
+
+/// Host feedback SF5 (§13.5 D3): a slot that names a field holds that field's stored value, under
+/// the same field rules as a run, and is never minted.
+#[test]
+fn a_field_slot_holds_the_stored_field_value() {
+    let api_key = credentials(&json!({
+        "schema": "south.credential-recipe.v1",
+        "fields": {
+            "api_key": { "secret": true, "required": true },
+            "region": { "secret": false, "syntax": "aws_region", "default": "us-east-1" }
+        },
+        "slots": { "provider_api_key": { "field": "api_key" } }
+    }));
+    let fields = |pairs: &[(&str, &str)]| -> BTreeMap<String, String> {
+        pairs.iter().map(|(name, value)| ((*name).to_owned(), (*value).to_owned())).collect()
+    };
+    assert_eq!(
+        stored_slot_value_v1(&api_key, "provider_api_key", &fields(&[("api_key", "fake-key")])),
+        Ok("fake-key".to_owned())
+    );
+    // The same field rules as a run: a required field that is empty, and a field without its
+    // syntax, are configuration errors.
+    for stored in [&[("api_key", "")][..], &[("api_key", "k"), ("region", "evil.example")][..]] {
+        let refused = stored_slot_value_v1(&api_key, "provider_api_key", &fields(stored));
+        assert!(matches!(refused, Err(RecipeOutcomeV1::Configuration { field: Some(_), .. })));
+    }
+    // A minted slot or an unknown one has no stored value, and a field slot is not minted.
+    let kling = shipped("task-kling-v2").credentials.unwrap();
+    let kling_fields = fields(&[("access_key", "a"), ("secret_key", "s")]);
+    assert!(stored_slot_value_v1(&kling, "provider_api_key", &kling_fields).is_err());
+    assert!(stored_slot_value_v1(&api_key, "other_slot", &fields(&[("api_key", "k")])).is_err());
+    let run = mint_once(&api_key, &[("api_key", "fake-key")], &json!({}));
     assert!(matches!(run.outcome, RecipeOutcomeV1::Configuration { field: None, .. }));
 }
 
