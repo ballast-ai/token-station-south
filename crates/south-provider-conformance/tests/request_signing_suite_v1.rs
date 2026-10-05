@@ -70,6 +70,20 @@ fn every_declaration_passes_gate_one_inside_a_shipped_manifest() {
         manifest["config_schema"] = json!({ "bedrock": { param.as_str(): {
             "syntax": "aws_region", "required": true, "description": "The region to sign for."
         } } });
+        // Gate ① requires every signing input to name a declared secret field, required when the
+        // scheme requires the input (§5.4, SF13), so the declaration's own fields are declared.
+        let fields: serde_json::Map<String, Value> = signing
+            .credentials
+            .iter()
+            .map(|(input, field)| {
+                (
+                    field.clone(),
+                    json!({ "secret": true, "required": signing.scheme.requires(input) }),
+                )
+            })
+            .collect();
+        manifest["credentials"] =
+            json!({ "schema": "south.credential-recipe.v1", "fields": fields });
         let manifest: ComponentManifestV1 = serde_json::from_value(manifest).unwrap();
         manifest
             .validate()
