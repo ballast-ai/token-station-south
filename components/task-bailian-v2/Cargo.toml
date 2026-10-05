@@ -4,7 +4,7 @@
 # without wasmtime (the conformance dependency's `sandbox` feature stays off).
 [package]
 name = "task-bailian-v2"
-version = "0.31.2"
+version = "0.31.3"
 edition = "2021"
 publish = false
 
