@@ -149,10 +149,12 @@
         "cases": 3
       },
       "header_auth": {
-        "status": "not_verified"
+        "status": "verified",
+        "cases": 7
       },
       "controlled_query": {
-        "status": "not_verified"
+        "status": "verified",
+        "cases": 9
       },
       "controlled_user_agent": {
         "status": "verified",
