@@ -177,9 +177,12 @@ package's world, families, capabilities, auth arms, compatibility declaration an
 its archive, `manifest.json` and `component.wasm`, plus the digest of the gate ② report
 (`<package>-<tag>.gate2.json`) CI produced for that exact `component.wasm`.
 `scripts/release_index.py` generates it from the archived manifests, and the release fails when a
-package keeps its version but its `component.wasm` digest differs from the previous release's
-index. See [released component artifacts](docs/design/2026-09-10-released-component-artifacts.md)
-§8.
+package keeps its version but its `component.wasm` or `manifest.json` digest differs from the
+previous release's index. A package's `south_runtime` is the oldest runtime it needs, not the
+release that carries it, and `scripts/check-declared-runtime.sh` loads each archived package under
+exactly that runtime before the release publishes (see CONTRIBUTING). See
+[released component artifacts](docs/design/2026-09-10-released-component-artifacts.md) §8 and the
+[boundary record](docs/design/2026-09-30-host-zero-vendor-boundary.md) §13.6.
 
 
 ## Local verification

@@ -309,11 +309,15 @@ class GenerateTest(unittest.TestCase):
         self.assertEqual(json.loads(written)["packages"][0]["name"], "provider-gemini")
 
 
-def index_of(*packages: tuple[str, str, str]) -> dict:
-    return {
-        "schema": "south.release-index.v1",
-        "packages": [{"name": n, "version": v, "component_sha256": d} for n, v, d in packages],
-    }
+def index_of(*packages: tuple[str, ...]) -> dict:
+    """An index of (name, version, component digest[, manifest digest]) entries."""
+    entries = []
+    for name, version, digest, *manifest in packages:
+        entry = {"name": name, "version": version, "component_sha256": digest}
+        if manifest:
+            entry["manifest_sha256"] = manifest[0]
+        entries.append(entry)
+    return {"schema": "south.release-index.v1", "packages": entries}
 
 
 class CompareTest(unittest.TestCase):
@@ -339,6 +343,24 @@ class CompareTest(unittest.TestCase):
         self.assertEqual(violations, [])
         self.assertEqual(log, ["a: 1.0.0 -> 1.0.1", "new 0.1.0: new package", "gone: no longer released"])
 
+    def test_unchanged_version_with_changed_manifest_fails_naming_the_package(self) -> None:
+        # Boundary record §8.6 and §13.6: a package that keeps its version keeps its whole
+        # identity, so its south_runtime is never re-stamped without a version bump.
+        _, violations = release_index.compare(
+            index_of(("a", "1.0.0", "aa", "m1")),
+            index_of(("a", "1.0.0", "aa", "m2")),
+        )
+        self.assertEqual(len(violations), 1)
+        self.assertIn("a 1.0.0: manifest.json changed", violations[0])
+        self.assertIn("bump the version", violations[0])
+
+    def test_unchanged_version_with_unchanged_manifest_passes(self) -> None:
+        _, violations = release_index.compare(
+            index_of(("a", "1.0.0", "aa", "m1")),
+            index_of(("a", "1.0.0", "aa", "m1")),
+        )
+        self.assertEqual(violations, [])
+
     def test_unknown_schema_is_refused(self) -> None:
         with self.assertRaisesRegex(release_index.ReleaseIndexError, "previous index"):
             release_index.compare({"schema": "other", "packages": []}, index_of())
@@ -353,6 +375,84 @@ class CompareTest(unittest.TestCase):
                 code = release_index.main(["compare", f"--previous={previous}", f"--current={current}"])
             self.assertEqual(code, 1)
             self.assertIn("error: a 1.0.0", stderr.getvalue())
+
+
+def staged(root: Path, manifest: dict) -> None:
+    package = root / manifest["name"]
+    package.mkdir(parents=True)
+    (package / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    (package / "component.wasm").write_bytes(b"\0asm")
+
+
+def with_runtime(manifest: dict, south_runtime: str, runtime_abi: int | None = 1) -> dict:
+    manifest["compatibility"]["south_runtime"] = south_runtime
+    if runtime_abi is not None:
+        manifest["compatibility"]["runtime_abi"] = runtime_abi
+    return manifest
+
+
+class DeclaredRuntimesTest(unittest.TestCase):
+    """Boundary record §13.6 (SF10): each package is checked under the runtime it declares."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def test_packages_are_grouped_by_the_runtime_they_declare(self) -> None:
+        staged(self.root, with_runtime(provider_manifest("provider-b"), "0.44.0"))
+        staged(self.root, with_runtime(provider_manifest("provider-a"), "0.45.0"))
+        staged(self.root, with_runtime(task_manifest("task-c"), "0.44.0"))
+        self.assertEqual(
+            release_index.declared_runtimes(self.root, "0.45.0"),
+            {"0.44.0": ["provider-b", "task-c"], "0.45.0": ["provider-a"]},
+        )
+
+    def test_a_runtime_newer_than_the_workspace_is_refused(self) -> None:
+        staged(self.root, with_runtime(provider_manifest(), "0.46.0"))
+        with self.assertRaisesRegex(release_index.ReleaseIndexError, "newer than this release"):
+            release_index.declared_runtimes(self.root, "0.45.0")
+
+    def test_a_runtime_older_than_the_range_handshake_is_refused(self) -> None:
+        staged(self.root, with_runtime(provider_manifest(), "0.42.0"))
+        with self.assertRaisesRegex(release_index.ReleaseIndexError, "range handshake"):
+            release_index.declared_runtimes(self.root, "0.45.0")
+
+    def test_a_package_without_runtime_abi_is_refused(self) -> None:
+        staged(self.root, with_runtime(provider_manifest(), "0.44.0", runtime_abi=None))
+        with self.assertRaisesRegex(release_index.ReleaseIndexError, "runtime_abi"):
+            release_index.declared_runtimes(self.root, "0.45.0")
+
+    def test_a_malformed_runtime_is_refused(self) -> None:
+        staged(self.root, with_runtime(provider_manifest(), "0.44"))
+        with self.assertRaisesRegex(release_index.ReleaseIndexError, "major.minor.patch"):
+            release_index.declared_runtimes(self.root, "0.45.0")
+
+    def test_a_directory_without_a_package_is_refused(self) -> None:
+        (self.root / "stray").mkdir()
+        with self.assertRaisesRegex(release_index.ReleaseIndexError, "stray"):
+            release_index.declared_runtimes(self.root, "0.45.0")
+
+    def test_an_empty_root_is_refused(self) -> None:
+        with self.assertRaisesRegex(release_index.ReleaseIndexError, "no package"):
+            release_index.declared_runtimes(self.root, "0.45.0")
+
+    def test_main_prints_one_line_per_package(self) -> None:
+        staged(self.root, with_runtime(provider_manifest("provider-a"), "0.44.0"))
+        cargo_toml = self.root.parent / f"{self.root.name}-Cargo.toml"
+        cargo_toml.write_text('[workspace.package]\nversion = "0.45.0"\n', encoding="utf-8")
+        try:
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                code = release_index.main(
+                    ["declared-runtimes", f"--root={self.root}", f"--cargo-toml={cargo_toml}"]
+                )
+        finally:
+            cargo_toml.unlink()
+        self.assertEqual(code, 0)
+        self.assertEqual(stdout.getvalue(), "0.44.0 provider-a\n")
 
 
 class PreviousTagTest(unittest.TestCase):

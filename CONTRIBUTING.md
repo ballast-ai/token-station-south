@@ -58,3 +58,21 @@ package, or a change to how one reads usage, ships with its judge cases, and eac
 to fail on the code it guards before the change lands (B1,
 `docs/design/2026-09-30-host-zero-vendor-boundary.md` §6.2 item 5).
 
+
+## A package declares the oldest runtime it needs
+
+A package's `compatibility.south_runtime` is the oldest south runtime that admits and correctly runs it, not the
+release that carries it (`docs/design/2026-09-30-host-zero-vendor-boundary.md` §13.6, host feedback SF10). A host
+links one runtime and refuses a package that declares a newer one, so a package stamped with every release would be
+refused by every host that has not yet re-pinned, even when nothing in it needs the new runtime.
+
+- **When it moves.** Raise a package's `south_runtime` only when the package itself starts relying on something a
+  release introduced: a manifest field or value an older runtime's gate ① refuses or reads differently, or a
+  runtime-side meaning its descriptors depend on. Raise it to that release, and bump the package's version with it.
+- **When it stays.** A release does not re-stamp packages. A package whose `component.wasm` and `manifest.json` are
+  unchanged keeps its version, its digests and its `south_runtime`; the release's digest-stability check fails a
+  package that changed either without a version bump.
+- **How it is checked.** `scripts/check-declared-runtime.sh` loads each package under exactly the runtime it
+  declares, in a checkout of that runtime's release tag: gate ①, the range handshake, the import scan and the
+  identity probe. Release CI runs it on the published archives, and CI runs it on `release/*` pull requests. Run it
+  locally before a release with `scripts/check-declared-runtime.sh --build` after the component build scripts.
