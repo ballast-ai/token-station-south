@@ -1616,7 +1616,8 @@ The Copilot recipe:
 "refresh_margin_seconds": 30
 ```
 
-Two deliberate differences from the host's native arm, pinned by the family's `credential.*` fixtures:
+Three deliberate differences from the host's native arm, pinned by the family's `credential.*` fixtures; a host's
+replay comparison classifies them as expected rather than as drift:
 
 - **Status classes.** The native arm turns every non-404 failure, 5xx included, into an operator error. The recipe
   uses the vocabulary's defaults (4xx `reauth_required`, 5xx `transient`) and declares 429 `transient`, so a rate
@@ -1624,6 +1625,12 @@ Two deliberate differences from the host's native arm, pinned by the family's `c
 - **Refresh margin.** The native arm refreshes 300 s early. Gate ① requires the margin to be shorter than the shortest
   validity after the clamp (§13.3); a recipe floor of 600 s would make the host trust a short-lived token for longer
   than GitHub granted it. The recipe declares 30 s, the host's default (P21 Q-A).
+- **A 2xx without `token` or `expires_at`** (host feedback SF8). The native arm fails to parse it and answers 400,
+  the operator-error class; the recipe ends `transient`, as the vocabulary does for any extraction a successful
+  response lacks (§3.3). Under DP0 the recipe's answer is the right one: a malformed answer from GitHub says nothing
+  about the stored GitHub token, so it must not latch the credential, and only `on_status` may call a credential
+  unusable. The native 400 did not latch either (its latch matched only `(HTTP 400` / `(HTTP 401` in the message),
+  so the practical difference is the class the client sees: 503 instead of 400.
 
 **D2 a `credentials` section may be scoped to families (§16 Q20).** A manifest has one `credentials` section and its
 `slots` are package-wide. Adding the Copilot recipe to `provider-openai-compatible` unscoped would mint
@@ -1673,8 +1680,20 @@ needs no normalization. The Kiro record's `field_in` was also rewritten in the i
 
 **D7 the `github-copilot` family in `provider-openai-compatible`.**
 
-- `providers` gains `github-copilot`; `endpoint` is `https://api.githubcopilot.com`; no `config_schema` keys;
-  no `request_facts` entry, so the family uses the top-level locations (`max_tokens` or `max_completion_tokens`,
+- `providers` gains `github-copilot`. Its `endpoint` is `https://api.{plan}.githubcopilot.com`, and its one
+  `config_schema` key `plan` admits `individual`, `business` or `enterprise` and defaults to `individual` (host
+  feedback SF7). GitHub routes each plan to its own chat API host (Pro and Pro+ to `api.individual`, Business to
+  `api.business`, Enterprise to `api.enterprise`, per GitHub's Copilot network allowlist reference); the host's
+  native rows reach the latter two by an operator-edited endpoint, so a fixed host would have kept those seats off
+  the component. An enum of DNS labels keeps the domain fixed (§7.3). Not offered: the plan-less
+  `api.githubcopilot.com`, which the native default uses and which GitHub's allowlist no longer lists, and GitHub
+  Enterprise Cloud with data residency (`*.ghe.com`), whose chat and token hosts both carry a per-tenant name that no
+  enum can list. The token exchange and the seat check stay at `api.github.com` for every `github.com` plan; only the
+  chat host varies.
+- `config_schema` keys gain an optional `default`, the value used when the operator enters none, mirroring a
+  credential field's `default`: only an optional key has one, it has the key's syntax, and an endpoint parameter is
+  now a required key or one with a default. `fill_endpoint` and `validate_config_values` apply it.
+- No `request_facts` entry, so the family uses the top-level locations (`max_tokens` or `max_completion_tokens`,
   `model`, `stream`), which is what its OpenAI-compatible body writes.
 - `build-http-request` for the family posts to `{base_url}/chat/completions` (the kernel's `resolve` would add `/v1`
   to an origin-only URL), with the OpenAI-compatible body, `Auth::bearer` on the slot, and the six identification
@@ -1706,13 +1725,14 @@ cases (server `8777b84f`). D5's tenth case makes that evidence stale, so the sam
 
 **Contract and versioning.** Every change is additive on the wire: a single-string `present`, a manifest without
 `families`, a field without `description` and a gate ③ table of nine cases all keep their meaning. The schema tag stays
-`south.credential-recipe.v1`. A runtime that predates them refuses a manifest using them (`deny_unknown_fields`), and
+`south.credential-recipe.v1`; a config key without `default` keeps its meaning too. A runtime that predates them refuses a manifest using them (`deny_unknown_fields`), and
 the package's `south_runtime` moves with the release, so an older host refuses the new package cleanly. The Rust API is
-not additive: `RecipeV1::present` becomes `Option<PresentV1>`, `SlotV1` gains `Field`, `CredentialFieldV1` and
-`CredentialsV1` gain a field each, and `CredentialRecipeCaseIdV1` gains a variant.
+not additive: `RecipeV1::present` becomes `Option<PresentV1>`, `SlotV1` gains `Field`, `CredentialFieldV1`,
+`CredentialsV1` and `ConfigKeyV1` gain a field each, and `CredentialRecipeCaseIdV1` gains a variant.
 
 **What the host does after the release** (P21 S3b): re-pin; read credentials through `credentials_for`; implement
-present candidates and field slots in its executor and lift R28; apply the declared user-agent and run
+present candidates and field slots in its executor and lift R28; offer the `github-copilot` family's `plan` key with
+its default when a row is created; apply the declared user-agent and run
 `south.controlled-user-agent.v1` (lifting R12); re-run gate ③ (ten cases) and report it; then C11–C13 for Copilot.
 
 ## 14. Existing text to revise in step
