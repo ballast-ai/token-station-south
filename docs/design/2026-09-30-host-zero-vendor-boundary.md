@@ -1692,8 +1692,13 @@ them, gate ② pins them byte for byte in the family's fixtures, and a manifest 
 safety property to enforce (R1). The user-agent is the exception because it is reserved, and it goes through the
 existing `user_agent` declaration.
 
-Package identity: `provider-openai-compatible` 2.2.0 (a new family; the other two families' requests, responses and
-streams are unchanged, as their frozen fixtures show).
+Package identities: `provider-openai-compatible` 2.2.0 (a new family; the other two families' requests, responses
+and streams are unchanged, as their frozen fixtures show). The shared conformance and provider-api crates changed,
+and a same-path rebuild of every package before and after showed a different `component.wasm` for all thirteen, so
+the other twelve take a patch bump with unchanged behavior: `provider-anthropic` 1.0.10, `provider-bedrock-converse`
+1.0.7, `provider-gemini` 1.1.6, `task-kling` 1.0.6, `task-kling-v2` 0.32.4, `task-minimax-v2` and `task-bailian-v2`
+0.31.3, `task-byteplus-v2` 0.36.3, and `task-xai-v2`, `task-veo-v2`, `task-wan-image-v2` and `task-gmi-image-v2`
+0.35.3.
 
 **SF6.** `compatibility.json` first records `token-station-server`'s `credential_recipe` as verified against nine
 cases (server `8777b84f`). D5's tenth case makes that evidence stale, so the same branch sets it back to
