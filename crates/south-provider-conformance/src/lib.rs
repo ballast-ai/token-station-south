@@ -21,11 +21,13 @@ macro_rules! fixed_debug {
 mod controlled_query;
 mod controlled_user_agent;
 mod credential_recipe;
+mod eventstream_framing;
 mod header_auth;
 mod provider_binary;
 mod provider_get;
 mod provider_multipart;
 mod quota;
+mod request_signing;
 mod stream;
 
 pub use controlled_query::{
@@ -55,6 +57,15 @@ pub use credential_recipe::{
     FakeTokenAnswerV1, FakeTokenEndpointV1, FakeTokenExchangeFutureV1, FakeTokenHoldV1,
     FakeTokenReplyV1, FakeTokenRequestV1, FakeTokenResponseV1, FakeTokenUnreachableV1,
     StoredCredentialV1, credential_recipe_fixtures_v1, run_credential_recipe_conformance_v1,
+};
+pub use eventstream_framing::{
+    EVENTSTREAM_FRAMING_CONFORMANCE_SUITE_ID, EVENTSTREAM_FRAMING_CONFORMANCE_SUITE_VERSION,
+    EventStreamBufferedObservationV1, EventStreamDeliveredV1, EventStreamFeedObservationV1,
+    EventStreamFramingBodyV1, EventStreamFramingCaseIdV1, EventStreamFramingConformanceFailureV1,
+    EventStreamFramingConformanceReportV1, EventStreamFramingExpectedV1,
+    EventStreamFramingFixtureV1, EventStreamFramingHarnessV1, EventStreamFramingMismatchCategoryV1,
+    EventStreamFramingMismatchV1, EventStreamFramingPathV1, EventStreamOutcomeV1,
+    EventStreamSplitV1, eventstream_framing_fixtures_v1, run_eventstream_framing_conformance_v1,
 };
 pub use header_auth::{
     FAKE_HEADER_SECRET_V1, HEADER_AUTH_CONFORMANCE_SUITE_ID, HEADER_AUTH_CONFORMANCE_SUITE_VERSION,
@@ -88,6 +99,14 @@ pub use quota::{
     ProviderQuotaMetadataExpectedEvidenceV1, ProviderQuotaMetadataExpectedOutcomeV1,
     ProviderQuotaMetadataFixtureV1, ProviderQuotaMetadataRawV1, ProviderQuotaMetadataUpstreamV1,
     provider_quota_metadata_fixtures_v1,
+};
+pub use request_signing::{
+    REQUEST_SIGNING_CONFORMANCE_SUITE_ID, REQUEST_SIGNING_CONFORMANCE_SUITE_VERSION,
+    RequestSigningCaseIdV1, RequestSigningConformanceFailureV1, RequestSigningConformanceReportV1,
+    RequestSigningExpectedV1, RequestSigningFixtureV1, RequestSigningHarnessV1,
+    RequestSigningInputV1, RequestSigningMismatchCategoryV1, RequestSigningMismatchV1,
+    RequestSigningRefusedV1, RequestSigningRequestV1, request_signing_fixtures_v1,
+    run_request_signing_conformance_v1,
 };
 
 pub use stream::{
