@@ -1,0 +1,8 @@
+{
+  "chunks": [
+    "event: messageStart\ndata: {\"role\":\"assistant\"}\n\n",
+    "event: contentBlockDelta\ndata: {\"contentBlockIndex\":0,\"delta\":{\"text\":\"Mi\"}}\n\n",
+    "event: exception:throttlingException\ndata: {\"message\":\"Too many requests, please wait.\"}\n\n",
+    "event: contentBlockDelta\ndata: {\"contentBlockIndex\":0,\"delta\":{\"text\":\"ld\"}}\n\n"
+  ]
+}

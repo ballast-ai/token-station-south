@@ -364,6 +364,11 @@ there — a leak whose impact exceeds one key, the first 2026-09-08 test. So:
    recipes only for packages it verifies as south first-party releases by digest against the release index;
    a third-party package that declares `credentials.recipes` is admitted with every slot treated as `static`, or
    refused, at the operator's choice.
+   The same holds for **signing** (host feedback SF19, §13.6, §16 Q34): a host's finalizer signs whatever request
+   the component builds for the template's host, with the operator's credential, so a third-party package declaring
+   `signing` could obtain signed requests to any path on that host. Until package signing exists, a host enables
+   `signing` only for a package it verifies as a south first-party release by digest; any other package declaring
+   `signing` is refused.
 6. **Test endpoints are a build feature, not configuration.** The host's generic executor needs a fake token
    endpoint for gate ③ (§3.7). That override is compiled only into test builds; the production executor has no
    configuration or credential field that replaces an endpoint. This retires the `extras.tokenUrl` / `refreshUrl`
@@ -639,7 +644,9 @@ executor, kept in the host and selected by declaration — and `aws_sigv4` among
 - gate ②: stream fixtures for `aws-eventstream` packages are written in the canonical re-encoding (consistent with
   today's Converse fixtures); gate ① validates that `signing` and `emits` are compatible (`aws-sigv4` requires at
   least `authorization`, `x-amz-date` and `x-amz-content-sha256`) and that every `signing.credentials` entry names a
-  declared field.
+  declared field. (The field check landed with host feedback SF13, §13.6: each entry names a declared **secret**
+  field of the section that applies to every signed family, and an input the scheme requires names a required
+  field.)
 - New manifest fields: south minor. `provider-bedrock-converse` needs `stream_framing`, `signing` and the
   exception / error mapping added, with an identity bump. The deframer is a new link-layer API, recorded under
   `host_capabilities` once the host adopts it.
@@ -1070,6 +1077,10 @@ one package failed. Accompanying rules, written into ARCHITECTURE:
 - Contract changes must be additive (new keys have defaults, old shapes still decode), or the codecs must also
   accept the older versions in the declared set. "Reject when the new key is missing; it will be re-stamped anyway"
   (2026-09-27-task-contract-v6-facts.md:22-23) no longer holds.
+- **A package declares the oldest runtime it needs** (amended 2026-10-05, §13.6, §16 Q23): its `south_runtime` moves
+  only when the package starts relying on something a release introduced, and release CI loads each package under
+  exactly the runtime it declares. A package whose `component.wasm` and `manifest.json` are unchanged keeps its
+  version, so `south_runtime` is never re-stamped without a version bump.
 - **A tightened gate ② binds only through the floor.** Each release that tightens gate ① or ② (B1's usage rows,
   `DescriptorAuthWithinManifest`, `RequestFactsHonoured`) states so, and a host that wants the tightening enforced
   raises `south_runtime_min` to that release; packages declaring an older runtime are then refused (R7).
@@ -1228,7 +1239,8 @@ must prove, each item mapping to a host red item:
    in the URL under a declared `{model}` template. → J2b⑤, §7.2.
 4. It needs one non-secret config key (declared by `config_schema`, syntax `token`) consumed by its `endpoint`
    template, and declares a user-agent value. → §7.3, §10.
-5. `t21-unseen-eventstream`: `stream_framing: aws-eventstream`, `stream: "none"`; the fake upstream sends real
+5. `t21-unseen-eventstream` (implemented 2026-10-05 with the `host_signed` mode as well, §13.6 SF18):
+   `stream_framing: aws-eventstream`, `stream: "none"`; the fake upstream sends real
    eventstream frames, including an `exception` and an `error` frame, and answers non-streaming requests with an
    eventstream body. → §5.2.
 6. **Usage** has its own shape, including cache buckets; the fixtures carry every required usage row and
@@ -1371,7 +1383,8 @@ to native reference implementations. Where §8 left a choice open:
 - **Digest stability (§8.6).** "Previous release" means the latest earlier non-draft `vX.Y.Z` release; a previous
   release without an index skips the check, with a log line. Otherwise a package that keeps its version but changes
   its `component.wasm` digest fails the release. Only the wasm is compared: manifests may change without a version
-  bump, since `south_runtime` moves when a package is re-verified. Reproducibility is proven only locally so far: a
+  bump, since `south_runtime` moves when a package is re-verified (withdrawn 2026-10-05, §13.6 and §16 Q25: the
+  manifest is compared too). Reproducibility is proven only locally so far: a
   clean rebuild of `provider-gemini` was byte-identical. Builds on a different runner image would surface as a false
   "bump the version".
 
@@ -1735,6 +1748,182 @@ present candidates and field slots in its executor and lift R28; offer the `gith
 its default when a row is created; apply the declared user-agent and run
 `south.controlled-user-agent.v1` (lifting R12); re-run gate ③ (ten cases) and report it; then C11–C13 for Copilot.
 
+### 13.6 Host S2 and S4 prerequisites (2026-10-05)
+
+The host planned P21 S2 (version ranges and package discovery through the release index) and S4 (framing and signing
+selected by declaration, each form implemented once) against v0.44.0 and sent ten items back, SF10–SF19. On
+2026-10-05 the owner (lv) ruled every one of them as recommended. Where an item left a choice open, the choice below
+keeps the host vendor-neutral and was taken as recommended under the owner's standing rule; §16 Q23–Q34 record each
+one, and the items that still need the owner are called out there.
+
+**SF10 a package declares the oldest runtime it needs (§16 Q23, Q24, Q25).** Until v0.44.0 every release re-stamped
+every manifest's `south_runtime` with the release's own version. A host links one runtime and refuses a package that
+declares a newer one (§8.2 item 2), so a package added in a later release was refused by every host that had not yet
+re-pinned, even when it needed nothing new, and the S2 acceptance ("a new package installs without a host change")
+could only hold on a synthetic release. The rule is now:
+
+- `south_runtime` is the oldest south runtime that admits and correctly runs the package. It moves only when the
+  package starts relying on something a release introduced (a manifest field or value an older gate ① refuses or reads
+  differently, or a runtime-side meaning its descriptors depend on), and it moves to that release, with a version bump.
+- A release re-stamps nothing. A package whose `component.wasm` **and** `manifest.json` are unchanged keeps its
+  version; the digest-stability check (§8.6, §13.2) now also fails a package whose manifest changed under an unchanged
+  version (`scripts/release_index.py compare`). The ruling of §13.2 that "manifests may change without a version bump,
+  since `south_runtime` moves when a package is re-verified" is withdrawn with it.
+- Release CI proves each declaration: `scripts/check-declared-runtime.sh` stages the packages, groups them by declared
+  runtime (`release_index.py declared-runtimes`, which refuses a runtime newer than the release, older than the range
+  handshake of 0.43.0, malformed, or without `runtime_abi`), and for every older runtime checks out that runtime's
+  release tag and runs `crates/south-provider-runtime/tests/declared_runtime_v1.rs` there. That test loads each package
+  with the tag's own `LoadedComponentV1::load` under a `HostRangeV1` whose floor and ceiling are both the declared
+  runtime: gate ① (`gate_manifest`), the range handshake (`compatibility_admits`), the import scan and the identity
+  probe. The packages declaring the version being built are judged by this tree. `release.yml` runs it on the archives
+  before the index is generated; `ci.yml` runs it on `release/*` pull requests only, since it builds every component
+  and one older runtime per distinct declaration.
+- **What the check does not prove.** It proves the declared runtime *loads* the package. It does not prove that the
+  declared runtime's link layer (descriptor auth admission, request-facts sealing, the codecs) accepts every request
+  the package builds; a package whose manifest parses under an older runtime but whose descriptors rely on a newer
+  link-layer meaning would pass. Running the declared runtime's gate ② over the package's own fixtures would close that,
+  at the cost of the fixture format becoming a cross-release contract; §16 Q24 recommends it as a follow-up and flags
+  it. Until then the rule's first bullet is held by review.
+- Building an older runtime costs one more compile of the runtime crate and wasmtime per distinct older declaration;
+  the script shares the tree's target directory so registry dependencies compile once. It was exercised locally
+  against `v0.43.0`: a package declaring 0.43.0 whose manifest uses a 0.44.0 field (`CredentialFieldV1.description`)
+  is refused by the 0.43.0 loader, and one using nothing newer is admitted.
+
+Under this rule the packages of this change declare: `provider-bedrock-converse` 1.0.8 and the new
+`provider-bedrock-converse-bearer` 1.0.0 declare 0.44.0 (their manifests use 0.44.0's credential field descriptions and
+nothing newer); the other twelve keep 0.44.0. The release that carries this change bumps the workspace version and
+re-stamps no manifest.
+
+**SF11 provider packages declaring link-layer contracts (§16 Q26): written up, not implemented.** The request was cheap
+only if additive, and it is not: `compatibility_admits` refuses a declared contract the host does not list, and hosts
+list only `task` today, so a provider package declaring `{"http": 10}` would be refused by every current host. §16 Q26
+records the recommendation.
+
+**SF12 one instance per package (§16 Q27).** `SandboxedComponentV1` holds an `Arc<LoadedComponentV1>`;
+`SandboxedComponentV1::shared` takes one, so a host serving the three families of `provider-openai-compatible` loads
+and instantiates the package once. `new` still takes a `LoadedComponentV1`. Calls on the shared instance are serialized
+by the runtime as before, and every stream still gets its own instance. `new` and `inner` are no longer `const fn`.
+
+**SF13 Converse declares its signing credential fields (§16 Q28).** `provider-bedrock-converse` declares a
+`credentials` section with three secret fields: `access_key_id` and `secret_access_key` (required) and
+`session_token` (optional), each with a description. Gate ① now checks what §5.4 promised and §13.1 deferred: every
+`signing.credentials` entry names a declared secret field of the section that applies to each signed family
+(`credentials_for`), and an input the scheme requires (`SigningSchemeV1::requires`) names a required field. A host
+collects exactly those fields and needs no field set of its own; its R32 becomes unreachable. The check refuses a
+signing package with no section at all, which includes the published `provider-bedrock-converse` 1.0.7: a host linking
+the next runtime must take 1.0.8 with it.
+
+**SF14 Converse sends the native arm's headers (§16 Q29).** The descriptor adds `accept` (`application/json`, or
+`application/vnd.amazon.eventstream` when streaming) and `x-amzn-bedrock-accept: application/json`, the values the
+host's native Converse arm sends (server `p21-s3b` `text_admission/sender.rs`, `bedrock.rs`). The transport's own
+`accept: */*` is replaced by the descriptor's, as for any ordinary header. A request moved from the native arm onto the
+component therefore reaches the upstream with the same headers; the host's `component`-row code that writes `accept`
+itself must stop doing so for this package. Both are ordinary descriptor headers pinned by the fixtures, for the reason
+§13.5 D7 gives for Copilot's. A streaming request fixture is added. Identity 1.0.7 → 1.0.8.
+
+**SF15 gate ③ suites for framing and signing (§16 Q31).** Two host-implemented suites in `south-provider-conformance` let a host prove its own
+wiring of the B2 declarations; `compatibility.json` records both as `not_verified` on both hosts until a host runs them.
+
+- `south.eventstream-framing.v1` (nine cases) drives the host's framing executor through
+  `EventStreamFramingHarnessV1`: a streaming method that takes the package's `stream_framing` and the upstream body as
+  chunks and reports what the host fed `parse-stream-chunk` and whether the stream completed or failed, and a buffered
+  method (for `aws-eventstream` with a family declaring `stream: "none"`) that reports the text handed to
+  `parse-response`. The cases check that `bytes` framing passes the body unchanged under every split; that `event`
+  frames re-encode byte for byte and `exception` / `error` frames pass through in canonical form; that every
+  byte-boundary split delivers the same bytes; that a checksum mismatch, a truncated tail at end of input (the host must
+  call `finish`) and a non-JSON payload each fail the stream after delivering exactly the messages before the fault; and
+  that the buffered path concatenates the re-encoding or fails without handing anything over. Bodies come from a
+  test-only encoder in the suite crate, pinned to a frame computed with Python's `zlib`.
+- `south.request-signing.v1` (seven cases) drives the host's declaration-selected finalizer through
+  `RequestSigningHarnessV1` with the declaration (`SigningV1` and `emits`), the family's configuration values, credential
+  values keyed by field name, an injected time and the finished request. It verifies rather than compares (§16 Q31): it
+  recomputes SigV4 from the request and the emitted `SignedHeaders` and checks the signature, the credential scope
+  `<date>/<region>/<service>/aws4_request`, `x-amz-date`, the payload hash, the session token, that the emitted names
+  are the expected subset of `emits` (`emits` is the upper bound; the per-request set follows the credential), and that
+  `SignedHeaders` is sorted, covers `host`, `x-amz-date`, `x-amz-content-sha256` and any session token, and names only
+  headers the request carries. The cases cover the exact body bytes, a sent and signed session token, three headers
+  without one, service and region taken from the declaration and configuration (`sagemaker`, `eu-central-1`, parameter
+  `aws_region`), credential fields read through the mapping, path segments encoded twice (an inference-profile ARN),
+  and refusal without a secret access key. The verifier stays private to the crate, so the suite offers no signer for
+  a host to adopt; its HMAC is written over `sha2` and pinned to RFC 4231, to AWS's `get-vanilla` vector and to a POST
+  vector computed with Python's standard library. It covers the fixture shapes only (`https`, no query, no dot
+  segments), so a host's own query or path normalization is not exercised.
+
+As with `south.credential-recipe.v1`, each self-test runs a reference host that passes every case and deliberately
+broken hosts, each failing exactly the cases that guard its mistake; the signing reference host is a second SigV4
+implementation written apart from the verifier.
+
+**SF16 a Bearer sibling for Bedrock API keys (§16 Q30).** Bedrock also accepts an API key as `Authorization: Bearer`.
+`host_signed` admits no second arm, so the Bearer form is a fourteenth package, `provider-bedrock-converse-bearer`
+1.0.0, with the family `bedrock-bearer` on the `bearer` arm and the slot `provider_api_key`. Every other declaration
+equals Converse's (endpoint template, `region` key, `request_facts`, `stream_framing`, capabilities, compatibility), and
+a test pins that. Its reference, `BedrockConverseBearerReferenceV1`, delegates parsing, streaming, errors and
+capabilities to `BedrockConverseReferenceV1` and builds the same request through one shared function, differing only in
+its identity, the family it serves and the descriptor's auth. The source is shared; the component crate is a separate
+shell, because a package's reported identity is compiled in and gate ① compares it with the manifest. Its fixture pack
+is the Converse pack with the auth delta applied (request inputs name the family and the slot, request expectations
+carry the bearer auth), and a test fails if the two packs drift. It has its own build script, release workflow entries,
+sandbox parity test, gate ② report and usage judge rows. A host chooses between the two packages by the row's family,
+never by the shape of the stored credential.
+
+**SF17 recovering endpoint parameters from a base URL (§16 Q32).** `ComponentManifestV1::endpoint_values(family,
+base_url)` is the reverse of `fill_endpoint`: it returns the template parameters an operator-entered URL was filled from.
+It returns values only when exactly one assignment matches and filling the template with it gives back the same URL;
+otherwise `EndpointValuesErrorV1::{NoEndpoint, NotThisEndpoint, Ambiguous}`. A host holding only a `base_url` can
+derive a signing package's region from it instead of refusing the row.
+
+**SF18 the T21 eventstream guest (§16 Q33).** `crates/south-provider-runtime/tests/guests/t21-unseen-eventstream/`
+(1.0.0, family of the same name, not released) is §12 item 5's guest, with the `host_signed` mode as well. Like T03
+it is a standalone JSON-only crate that the host builds from a south checkout (`cargo build --target wasm32-wasip2` in
+that directory), and the host synthesizes its manifest. That manifest declares `stream_framing: aws-eventstream`,
+`host_signed` with `aws-sigv4` `signing` for a non-Bedrock service, a credentials section naming the three SigV4 fields,
+`request_facts {output_cap: ["/t21_limits/max_out"], model: {url: "/t21/models/{model}/invoke"}, stream: "none"}`, an
+`https://api.{region}.p21-unseen.test` endpoint and a required `aws_region` key. Its request has no stream switch: one
+URL and one body (`t21_turns`, `t21_limits.max_out`) serve both callers, and the descriptor carries no auth unless the
+host grants a slot (then bearer, for a bearer variant). Its upstream events `t21Say`, `t21Meter` (exact `in`/`out`,
+exactly once, before the end) and `t21End` (`reason`, `ticket`, `served_model`) are read only in south's canonical
+re-encoding, split anywhere. `exception:` and `error:` frames end the stream with the IR error event; an unknown event
+or a non-canonical frame is refused, never skipped. `parse-response` accepts only the concatenated re-encoding and
+refuses plain JSON, so a host that skipped the buffered path is observable. Four rogue sentinels each change one
+descriptor field and must be refused with zero upstream calls: `rogue-signed-auth` (a bearer slot on a `host_signed`
+package; descriptor auth admission, §4), `rogue-origin` (another origin under the same parent domain), `rogue-cap` (the
+cap only at top-level `max_tokens`, §7.2) and `rogue-model-url` (`t21-decoy` in the URL; the `{model}` template).
+`crates/south-provider-runtime/tests/t21_unseen_eventstream_v1.rs` proves the south half: gate ①, loading under a host
+range, every mode on the JSON face, and stream splits at every byte boundary. Its frames are written by hand, since the
+runtime crate does not depend on `south-contracts`; the golden vectors pin that shape. The other §12 rogue modes
+(`rogue-arm`, `rogue-zero-usage`, `rogue-cap-twice`) belong to the other T21 guests and are not part of this one.
+
+**SF19 third-party signing packages wait for package signing (§16 Q34).** Recorded as §3.4 rule 5's second paragraph.
+
+**Package identities.** `provider-bedrock-converse` 1.0.7 → 1.0.8 (SF13, SF14) and the new
+`provider-bedrock-converse-bearer` 1.0.0. The shared conformance and provider-api crates changed, and a same-path
+rebuild of every package before and after showed a different `component.wasm` for all thirteen existing packages, so the
+other twelve take a patch bump with unchanged behavior: `provider-openai-compatible` 2.2.1, `provider-anthropic` 1.0.11,
+`provider-gemini` 1.1.7, `task-kling` 1.0.7, `task-kling-v2` 0.32.5, `task-minimax-v2` and `task-bailian-v2` 0.31.4,
+`task-byteplus-v2` 0.36.4, and `task-xai-v2`, `task-veo-v2`, `task-wan-image-v2` and `task-gmi-image-v2` 0.35.4. Every
+package declares `south_runtime` 0.44.0.
+
+**Contract and versioning.** No contract number changes. Two gate ① tightenings: a signing package must declare its
+credential fields (SF13), and the manifest-digest half of the digest-stability check (SF10) is a release-behavior
+change. New API: `EndpointValuesErrorV1`, `ComponentManifestV1::endpoint_values`, `SigningSchemeV1::requires`,
+`SandboxedComponentV1::shared`, `BedrockConverseBearerReferenceV1` with `BEARER_FAMILY`, and the two gate ③ suites (`EventStreamFramingHarnessV1`, `RequestSigningHarnessV1` and their case tables and runners).
+Breaking only in const-ness: `SandboxedComponentV1::new` and `inner` are no longer `const fn`.
+
+**What the host does after the release** (P21 S2 and S4):
+
+- Re-pin, and take `provider-bedrock-converse` 1.0.8 with the runtime: the new gate ① refuses 1.0.7.
+- S2: keep the host range's ceiling at the linked runtime and its floor where the host chooses; packages from later
+  releases that declare an older runtime now load without a re-pin, which is the S2 acceptance on a real release.
+- S4: read the signing fields through `credentials_for` and lift R32 (now unreachable) and the implied field set; use
+  `endpoint_values` where a row has only an endpoint (R33 shrinks to "no value and no derivable value"); stop writing
+  `accept` for `aws-eventstream` component rows, since the component now writes it; run
+  `south.eventstream-framing.v1` and `south.request-signing.v1` and report them, which moves their
+  `host_capabilities` entries from `not_verified`; serve Bedrock API-key rows with `provider-bedrock-converse-bearer`
+  (family `bedrock-bearer`), lifting CP3, and treat that family by its declarations, not by the name `bedrock`
+  (the host's Claude-dialect handling keyed on the dialect name must follow); use `SandboxedComponentV1::shared` for
+  multi-family packages; build the T21 eventstream guest for the J2 synthetic tests.
+- Keep R35 (signing only for verified first-party packages, §3.4).
+
 ## 14. Existing text to revise in step
 
 - ARCHITECTURE.md:117-126: change the concluding sentence to "execution, material, reachable destinations and the
@@ -1915,6 +2104,74 @@ Tags: S = south maintainers, L = lv, K = kernel.
   already states and the server already does (§13.5 D5). A host wanting to protect a token endpoint during an outage
   does it outside the credential's state, for example by bounding concurrent exchanges.
   **Taken as recommended (2026-10-05) under the owner's standing rule.**
+- **Q23 (S, L)** What does a package's `south_runtime` declare: the release that carried it, or the oldest runtime it
+  needs (host feedback SF10, host Q-S2-1)? Recommended: the oldest runtime it needs, proven by release CI loading the
+  package under exactly that runtime; otherwise a release that only adds a package is refused by every host that has
+  not re-pinned, and the S2 acceptance holds only on a synthetic release.
+  **Ruled (lv, 2026-10-05): as recommended** (§13.6 SF10).
+- **Q24 (S)** How does release CI prove a declared runtime? Options: (a) load the package under the declared runtime's
+  release tag (gate ①, range handshake, import scan, identity probe); (b) also run that runtime's gate ② over the
+  package's own fixtures, which would exercise its link layer (descriptor auth admission, request-facts sealing);
+  (c) only compare manifest fields against a per-release field list. Recommended and implemented: (a), the check lv
+  specified, run in a checkout of the tag so the judging loader is the old one. (b) is the closest sound extension and is
+  recommended as a follow-up, but it makes the fixture file format a contract across releases (an older loader must read
+  newer packs), so it needs its own record. **Taken as recommended under the owner's standing rule; flagged for the
+  owner:** until (b) exists, "a package declares a runtime whose link layer accepts its descriptors" is held by review,
+  not by CI.
+- **Q25 (S)** May a package's `manifest.json` change under an unchanged version? §13.2 allowed it because
+  `south_runtime` was re-stamped every release. Recommended: no; with Q23 an unchanged package keeps its manifest byte
+  for byte, and the digest-stability check compares the manifest digest too. **Taken as recommended under the owner's
+  standing rule.**
+- **Q26 (S, L)** Should provider packages declare the link-layer contracts they use in `compatibility.contracts`, so a
+  host can later widen its ceiling (host feedback SF11, host Q-S2-2)? Not done, because it is not additive: today
+  `compatibility_admits` refuses any declared contract the host does not list, and every host lists only `task`, so the
+  first provider package declaring one would be refused everywhere. It is also unclear what an author would declare: a
+  descriptor is the kernel's shape, and the south contracts (`http`, `auth`, `reserved_header_policy`,
+  `provider_quota_metadata`) govern host code paths that the package's manifest selects. Recommended, when a host needs
+  to widen its ceiling: (1) gate ① derives the set mechanically from the manifest (for example `secret_headers` implies
+  `auth` ≥ 5, `query_parameters` implies `http` ≥ 10) instead of authors hand-writing it, so it cannot drift; (2)
+  `compatibility_admits` judges only the contracts a host lists, with hosts adding the provider contracts in the same
+  release; (3) the south maintainers commit that a minor release never changes the meaning of an existing manifest field
+  or contract version. Until then hosts keep the ceiling at the linked runtime (host S2 §2.3), which Q23 already makes
+  workable. **Written up, not implemented; needs the south maintainers and the owner** for (3), which is a policy
+  promise rather than code. Low urgency.
+- **Q27 (S)** Should a multi-family package be instantiated once (host feedback SF12, host Q-S2-8)? Recommended: yes,
+  `SandboxedComponentV1` shares an `Arc<LoadedComponentV1>`. **Taken as recommended; done** (§13.6).
+- **Q28 (S)** Should gate ① refuse a signing package whose `signing.credentials` does not name declared secret fields,
+  given that this refuses the published `provider-bedrock-converse` 1.0.7 under the next runtime (host feedback SF13)?
+  Recommended: yes, unconditionally; it is what §5.4 promised, the only affected package is first-party and replaced by
+  1.0.8 in the same release, and a host that would otherwise infer a field set from the scheme (its R32 path) holds
+  provider knowledge. **Taken as recommended under the owner's standing rule; the host must take 1.0.8 when it
+  re-pins.**
+- **Q29 (S)** Converse's `accept` and `x-amzn-bedrock-accept`: descriptor headers, or a manifest declaration (host
+  feedback SF14, host Q-S4-1)? Recommended: descriptor headers pinned by fixtures, for §13.5 D7's reason (non-secret
+  constants, no safety property a declaration would add). **Ruled (lv, 2026-10-05): headers in the component, values
+  equal to the host's native arm**; byte-identical upstream requests after migration.
+- **Q30 (S, L)** How is Bedrock's Bearer API-key form served (host feedback SF16, host Q-S4-6)? Options: a second arm
+  in the Converse package (refused: `host_signed` admits no other arm, 2026-08-27 manifest-schema record D2–D3); a
+  sibling package declaring the same family `bedrock` (two admitted packages claiming one family are contested, §8.5,
+  so a host could serve only one credential form at a time); a sibling package with its own family. Recommended: the
+  sibling `provider-bedrock-converse-bearer` with the family `bedrock-bearer`, so a host serves both forms side by side
+  and picks by the row's family, never by the stored credential's shape. **Ruled (lv, 2026-10-05): a sibling package;
+  the family name is taken as recommended under the owner's standing rule.** Flagged for the host: its Claude-dialect
+  handling keyed on the dialect name `bedrock` (S4 plan §4.2) must not special-case the name, or `bedrock-bearer` rows
+  lose it.
+- **Q31 (S)** How do the framing and signing gate ③ suites judge a host (host feedback SF15, host Q-S4-8)? Recommended:
+  framing compares the host's fed bytes with south's canonical re-encoding over the same frames, split at every byte;
+  signing recomputes SigV4 from the request the host signed and the headers it emitted, instead of comparing with one
+  reference signer's bytes, so a host may choose any SignedHeaders set that covers the required headers. Both register
+  as `not_verified` for both hosts. **Ruled (lv, 2026-10-05): add both suites; the judging method is taken as
+  recommended.**
+- **Q32 (S)** Should south offer the reverse of `fill_endpoint` (host feedback SF17, host Q-S4-3)? Recommended: yes,
+  but it never guesses: it returns values only for a unique assignment that fills back to the same URL, and names why
+  otherwise. **Taken as recommended; done.**
+- **Q33 (S)** How does T21 cover the host's synthetic J2 tests of framing, the buffered path and signing (host feedback
+  SF18, host Q-S4-9)? Recommended: §12 item 5's `t21-unseen-eventstream` guest, one guest whose `host_signed` and bearer
+  behaviors follow what the host grants (no slot, no auth), with the manifest synthesized by the host as for T03.
+  **Ruled (lv, 2026-10-05): add the modes; the one-guest shape is taken as recommended.**
+- **Q34 (S)** May a host enable `signing` for a package it has not verified as first-party (host feedback SF19, host
+  Q-S4-7)? Recommended: no, until package signing exists (§3.4, Q11), because the finalizer signs any request the
+  component builds for the template's host. **Ruled (lv, 2026-10-05): as recommended**; recorded in §3.4.
 
 ## 17. Amendments found while drafting the component records (2026-09-30) — change log
 
@@ -2004,3 +2261,7 @@ into the body. Where each landed:
 - Rulings of 2026-10-01:
   - Q18 ruled for the host side: operator confirmation per package digest only; the host-side allowlist is rejected
     under DP0. §3.4 rule 1 states the ruled mechanism; §15 lists the allowlist as a rejected alternative.
+- 2026-10-05, host S2 / S4 prerequisites: new §13.6 (SF10–SF19) and §16 Q23–Q34. §8.6 states that a package declares the
+  oldest runtime it needs; §3.4 rule 5 extends "wait for package signing" to `signing`; §5.4 records that the signing
+  field check landed; §12 item 5 points to the implemented guest. §13.2's allowance for a manifest change under an
+  unchanged version is withdrawn (Q25).

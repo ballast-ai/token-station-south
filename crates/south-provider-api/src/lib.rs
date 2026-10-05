@@ -39,7 +39,7 @@ mod credentials;
 mod instances;
 mod manifest;
 
-pub use config::{ConfigErrorV1, ConfigKeyV1, ValueSyntaxV1};
+pub use config::{ConfigErrorV1, ConfigKeyV1, EndpointValuesErrorV1, ValueSyntaxV1};
 pub use credentials::{
     AttributeV1, CREDENTIAL_RECIPE_SCHEMA, ConstantV1, CredentialFieldV1, CredentialsV1,
     EncodingV1, ExtractV1, FieldRefV1, HOST_MAX_TTL_SECONDS, HOST_MIN_TTL_SECONDS, ImportRuleV1,

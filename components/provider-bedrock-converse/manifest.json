@@ -1,6 +1,6 @@
 {
   "name": "provider-bedrock-converse",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "api_version": "provider-adapter-v2",
   "providers": [
     "bedrock"
@@ -22,6 +22,25 @@
         "syntax": "aws_region",
         "required": true,
         "description": "The AWS region the Bedrock runtime is called in."
+      }
+    }
+  },
+  "credentials": {
+    "schema": "south.credential-recipe.v1",
+    "fields": {
+      "access_key_id": {
+        "secret": true,
+        "required": true,
+        "description": "The AWS access key ID of the IAM principal the requests are signed as."
+      },
+      "secret_access_key": {
+        "secret": true,
+        "required": true,
+        "description": "The AWS secret access key paired with the access key ID."
+      },
+      "session_token": {
+        "secret": true,
+        "description": "The AWS session token, only for temporary credentials from AWS STS."
       }
     }
   },

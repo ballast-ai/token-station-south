@@ -240,7 +240,10 @@ v0.37.0 号已被 `feature/p15-responses` 线（Responses codec）占用、未�
 A package now declares `runtime_abi`, the kernel contract numbers and the south contracts it speaks, and a host
 admits it with `compatibility_admits` against a `HostRangeV1`: the same epoch, the same kernel contract numbers, a
 contract version the host decodes, and `south_runtime` between the host's floor and its own runtime. So a release no
-longer re-stamps every package, and a package whose content is unchanged keeps its identity. A host loading a
+longer re-stamps every package, and a package whose content is unchanged keeps its identity. A package's
+`south_runtime` is the oldest runtime it needs, not the release that carries it, and release CI loads each package
+under exactly that runtime's release tag (boundary record §13.6), so a host that has not re-pinned still admits every
+package that needs nothing newer. A host loading a
 directory with `load_package_set` judges each package on its own and follows three rules:
 
 - a refused package makes only its own families unavailable, and startup continues;

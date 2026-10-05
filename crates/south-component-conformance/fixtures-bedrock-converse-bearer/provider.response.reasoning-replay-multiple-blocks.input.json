@@ -1,0 +1,5 @@
+{
+  "status": 200,
+  "headers": {"content-type": "application/json"},
+  "body": "{\"output\":{\"message\":{\"content\":[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"first\",\"signature\":\"SIG-1\"}}},{\"reasoningContent\":{\"reasoningText\":{\"text\":\"\",\"signature\":\"SIG-EMPTY\"}}},{\"reasoningContent\":{\"redactedContent\":\"OPAQUE\"}},{\"text\":\"answer\"}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":1,\"outputTokens\":2,\"totalTokens\":3}}"
+}

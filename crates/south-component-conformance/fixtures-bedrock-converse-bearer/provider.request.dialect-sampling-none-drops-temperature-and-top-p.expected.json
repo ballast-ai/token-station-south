@@ -1,0 +1,28 @@
+{
+  "method": "POST",
+  "url": "https://bedrock-runtime.us-east-1.amazonaws.com/model/anthropic.claude-x-v1:0/converse",
+  "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "x-amzn-bedrock-accept": "application/json"
+  },
+  "body": {
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "text": "hi"
+          }
+        ]
+      }
+    ],
+    "inferenceConfig": {
+      "maxTokens": 512
+    }
+  },
+  "auth": {
+    "scheme": "bearer",
+    "secret": "provider_api_key"
+  }
+}

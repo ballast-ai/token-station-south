@@ -90,6 +90,30 @@ jobs:
           scripts/check-language.sh --commits \
             '${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}'
 
+  # The declared-runtime discipline (boundary record §13.6): every package's
+  # south_runtime is the oldest runtime it needs, and each package is loaded under
+  # exactly that runtime's release tag. release.yml runs the same check on the
+  # archives it publishes; running it on the release pull request as well catches
+  # a wrong declaration before the tag exists. Only release branches pay for it:
+  # it builds every component and one older runtime per distinct declaration.
+  declared-runtime:
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: 1.96.0
+          targets: wasm32-wasip2
+      - name: Build components
+        run: |
+          set -euo pipefail
+          for script in scripts/build-*-component.sh; do
+            bash "${script}"
+          done
+      - name: Declared runtimes admit their packages
+        run: scripts/check-declared-runtime.sh --build
+
   fuzz:
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest

@@ -425,8 +425,9 @@ pub struct SigningV1 {
     pub region: TemplateParamV1,
     /// Each input the scheme needs, mapped to a credential field name.
     /// `aws-sigv4` requires `access_key_id` and `secret_access_key` and admits
-    /// `session_token`. Checking the names against declared credential fields
-    /// arrives with credential recipes (§3.3, phase B4).
+    /// `session_token`. Every name is a secret field of the `credentials` section
+    /// that applies to each family, and an input the scheme requires names a
+    /// required field (§5.4; checked since host feedback SF13, §13.6).
     pub credentials: BTreeMap<String, String>,
 }
 
@@ -436,6 +437,17 @@ pub struct SigningV1 {
 pub enum SigningSchemeV1 {
     /// AWS Signature Version 4.
     AwsSigv4,
+}
+
+impl SigningSchemeV1 {
+    /// Whether the scheme cannot sign without `input`: `aws-sigv4` needs `access_key_id` and
+    /// `secret_access_key`; its `session_token` is optional.
+    #[must_use]
+    pub fn requires(self, input: &str) -> bool {
+        match self {
+            Self::AwsSigv4 => matches!(input, "access_key_id" | "secret_access_key"),
+        }
+    }
 }
 
 /// A reference to an endpoint-template parameter.
@@ -862,6 +874,29 @@ impl ComponentManifestV1 {
                     .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
         }) {
             return Err(invalid("a credential field name is not lowercase snake_case"));
+        }
+        // §5.4: every input names a declared secret field, in the section that applies to each
+        // signed family, so a host collects exactly the fields the package declares and never
+        // infers a field set from the scheme. An input the scheme requires names a required field.
+        for family in &self.providers {
+            let Some(credentials) = self.credentials_for(family) else {
+                return Err(ManifestErrorV1::InvalidSigning(format!(
+                    "family `{family}` is signed, so a credentials section must declare its fields"
+                )));
+            };
+            for (input, field) in &signing.credentials {
+                let declared = credentials.fields.get(field).filter(|declared| declared.secret);
+                let Some(declared) = declared else {
+                    return Err(ManifestErrorV1::InvalidSigning(format!(
+                        "input `{input}` names `{field}`, which is not a declared secret field"
+                    )));
+                };
+                if signing.scheme.requires(input) && !declared.required {
+                    return Err(ManifestErrorV1::InvalidSigning(format!(
+                        "input `{input}` is required by the scheme, so `{field}` must be required"
+                    )));
+                }
+            }
         }
         let placeholder = format!("{{{}}}", signing.region.template_param);
         if self.providers.iter().any(|family| {

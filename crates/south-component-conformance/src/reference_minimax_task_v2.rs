@@ -328,7 +328,7 @@ impl TaskComponentV2 for MiniMaxTaskReferenceV2 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "task-minimax-v2".into(),
-            version: "0.31.3".into(),
+            version: "0.31.4".into(),
             api_version: "task-adapter-v2".into(),
         }
     }

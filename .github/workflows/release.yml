@@ -65,6 +65,7 @@ jobs:
           scripts/build-reference-component.sh
           scripts/build-anthropic-component.sh
           scripts/build-bedrock-converse-component.sh
+          scripts/build-bedrock-converse-bearer-component.sh
           scripts/build-gemini-component.sh
           scripts/build-kling-task-component.sh
           scripts/build-kling-task-v2-component.sh
@@ -91,6 +92,7 @@ jobs:
             --test sandbox_parity_v1 \
             --test anthropic_sandbox_parity_v1 \
             --test bedrock_converse_sandbox_parity_v1 \
+            --test bedrock_converse_bearer_sandbox_parity_v1 \
             --test gemini_sandbox_parity_v1 \
             --test kling_task_sandbox_parity_v1 \
             --test kling_task_sandbox_parity_v2 \
@@ -126,6 +128,7 @@ jobs:
           package provider-openai-compatible provider_openai_compatible.wasm
           package provider-anthropic provider_anthropic.wasm
           package provider-bedrock-converse provider_bedrock_converse.wasm
+          package provider-bedrock-converse-bearer provider_bedrock_converse_bearer.wasm
           package provider-gemini provider_gemini.wasm
           package task-kling task_kling.wasm
           package task-kling-v2 task_kling_v2.wasm
@@ -136,6 +139,17 @@ jobs:
           package task-veo-v2 task_veo_v2.wasm
           package task-wan-image-v2 task_wan_image_v2.wasm
           package task-gmi-image-v2 task_gmi_image_v2.wasm
+
+      # A package's south_runtime is the oldest runtime it needs, not this release
+      # (boundary record §13.6). Each archived package is loaded under exactly the
+      # runtime it declares: gate ①, the range handshake, the import scan and the
+      # identity probe run in a checkout of that runtime's tag, so a package that
+      # claims an older runtime than it needs fails the release here rather than in
+      # a host.
+      - name: Declared runtimes admit their packages
+        run: |
+          set -euo pipefail
+          scripts/check-declared-runtime.sh --dist dist --tag "${GITHUB_REF_NAME}"
 
       # Generated from the archived manifests, never hand-written. It refuses
       # a missing archive, an archive without a components/ directory, a
@@ -149,8 +163,9 @@ jobs:
           cat dist/south-release-index.json
 
       # A package whose version did not change must not change its
-      # component.wasm bytes (boundary record §8.6): compared against the
-      # previous release's index, and a difference fails the release.
+      # component.wasm bytes or its manifest.json (boundary record §8.6,
+      # §13.6): compared against the previous release's index, and a
+      # difference fails the release.
       - name: Digest stability
         env:
           GH_TOKEN: ${{ github.token }}

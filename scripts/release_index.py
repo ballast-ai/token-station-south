@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """The machine-readable release index (host-zero-vendor-boundary §9) and the digest-stability check (§8.6).
 
-Three subcommands, all used by .github/workflows/release.yml:
+Four subcommands, all used by .github/workflows/release.yml:
 
-  generate      Reads the staged archives (and gate 2 reports) in a dist directory, cross-checks them
-                against components/*/manifest.json, and writes south-release-index.json.
-  previous-tag  Reads release tag names on stdin and prints the latest one earlier than --current.
-  compare       Fails when a package keeps its version between two indexes but its component.wasm
-                digest changed: the version must bump (§8.6).
+  generate           Reads the staged archives (and gate 2 reports) in a dist directory, cross-checks
+                     them against components/*/manifest.json, and writes south-release-index.json.
+  previous-tag       Reads release tag names on stdin and prints the latest one earlier than --current.
+  compare            Fails when a package keeps its version between two indexes but its component.wasm
+                     or its manifest.json changed: the version must bump (§8.6, §13.6).
+  declared-runtimes  Prints `<south_runtime> <package>` for every staged package, so
+                     scripts/check-declared-runtime.sh can load each one under the runtime it declares
+                     (§13.6). Refuses a declaration the check could not honour.
 
 Standard library only: the workspace is library-only and must not gain a binary for its release tooling.
 The index is generated from the manifests inside the archives; nothing in it is written by hand.
@@ -31,6 +34,10 @@ ARCHIVE_MEMBERS = {"manifest.json", "component.wasm"}
 PROVIDER_WORLD_PREFIX = "provider-adapter-"
 COMPATIBILITY_KEYS = ("south_runtime", "runtime_abi", "kernel_contracts", "contracts")
 RELEASE_TAG = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
+VERSION_TRIPLE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
+# The first runtime with the range handshake (B3, §8.3): nothing older can admit a package that
+# declares `runtime_abi`, so no package may declare it as its minimum.
+RANGE_HANDSHAKE_RUNTIME = (0, 43, 0)
 
 
 class ReleaseIndexError(Exception):
@@ -248,16 +255,73 @@ def compare(previous: dict, current: dict) -> tuple[list[str], list[str]]:
             log.append(f"{name} {version}: new package")
         elif old["version"] != version:
             log.append(f"{name}: {old['version']} -> {version}")
-        elif old["component_sha256"] == digest:
-            log.append(f"{name} {version}: component.wasm unchanged")
-        else:
+        elif old["component_sha256"] != digest:
             violations.append(
                 f"{name} {version}: component.wasm changed ({old['component_sha256']} -> {digest}) but the "
                 "version did not; bump the version"
             )
+        elif (
+            "manifest_sha256" in old
+            and "manifest_sha256" in package
+            and old["manifest_sha256"] != package["manifest_sha256"]
+        ):
+            # A package's south_runtime is the oldest runtime it needs, not the release that carried
+            # it (§13.6), so an unchanged package keeps its manifest byte for byte; a changed manifest
+            # is a changed package.
+            violations.append(
+                f"{name} {version}: manifest.json changed ({old['manifest_sha256']} -> "
+                f"{package['manifest_sha256']}) but the version did not; bump the version"
+            )
+        else:
+            log.append(f"{name} {version}: component.wasm unchanged")
     for name in sorted(set(before) - {package["name"] for package in current["packages"]}):
         log.append(f"{name}: no longer released")
     return log, violations
+
+
+def declared_runtimes(root: Path, workspace: str) -> dict[str, list[str]]:
+    """The staged packages under `root`, grouped by the `south_runtime` each declares.
+
+    A package declares the oldest south runtime it needs (§13.6), so the release checks it by loading
+    it under exactly that runtime. A declaration that check could not honour is refused here: newer
+    than the release being built, older than the range handshake, malformed, or without the
+    `runtime_abi` the range handshake requires.
+    """
+    workspace_triple = VERSION_TRIPLE.match(workspace)
+    if workspace_triple is None:
+        raise ReleaseIndexError(f"workspace version {workspace!r} is not a major.minor.patch triple")
+    current = tuple(int(part) for part in workspace_triple.groups())
+    groups: dict[str, list[str]] = {}
+    directories = sorted(path for path in root.iterdir() if path.is_dir()) if root.is_dir() else []
+    if not directories:
+        raise ReleaseIndexError(f"no package directory under {root}")
+    for directory in directories:
+        manifest_path = directory / "manifest.json"
+        if not manifest_path.is_file() or not (directory / "component.wasm").is_file():
+            raise ReleaseIndexError(f"{directory.name}: a staged package holds manifest.json and component.wasm")
+        compatibility = json.loads(manifest_path.read_text(encoding="utf-8")).get("compatibility", {})
+        declared = compatibility.get("south_runtime")
+        match = VERSION_TRIPLE.match(declared) if isinstance(declared, str) else None
+        if match is None:
+            raise ReleaseIndexError(
+                f"{directory.name}: compatibility.south_runtime {declared!r} is not a major.minor.patch triple"
+            )
+        version = tuple(int(part) for part in match.groups())
+        if version > current:
+            raise ReleaseIndexError(
+                f"{directory.name}: declares south runtime {declared}, newer than this release ({workspace})"
+            )
+        if version < RANGE_HANDSHAKE_RUNTIME:
+            raise ReleaseIndexError(
+                f"{directory.name}: declares south runtime {declared}, older than the range handshake "
+                f"({'.'.join(map(str, RANGE_HANDSHAKE_RUNTIME))}), which no runtime could admit"
+            )
+        if not isinstance(compatibility.get("runtime_abi"), int):
+            raise ReleaseIndexError(
+                f"{directory.name}: declares no runtime_abi, so only an exact-tuple host could load it"
+            )
+        groups.setdefault(declared, []).append(directory.name)
+    return dict(sorted(groups.items(), key=lambda item: tuple(int(p) for p in item[0].split("."))))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -284,6 +348,12 @@ def main(argv: list[str] | None = None) -> int:
     cmp_.add_argument("--previous", type=Path, required=True)
     cmp_.add_argument("--current", type=Path, required=True)
 
+    runtimes = commands.add_parser(
+        "declared-runtimes", help="print `<south_runtime> <package>` for every staged package"
+    )
+    runtimes.add_argument("--root", type=Path, required=True, help="a directory of <package>/manifest.json")
+    runtimes.add_argument("--cargo-toml", type=Path, default=Path("Cargo.toml"))
+
     args = parser.parse_args(argv)
     try:
         if args.command == "generate":
@@ -293,6 +363,11 @@ def main(argv: list[str] | None = None) -> int:
             output = args.output or args.dist / INDEX_FILE
             output.write_text(render(index), encoding="utf-8")
             print(f"wrote {output} ({len(index['packages'])} packages)")
+        elif args.command == "declared-runtimes":
+            groups = declared_runtimes(args.root, workspace_version(args.cargo_toml))
+            for runtime, packages in groups.items():
+                for package in packages:
+                    print(f"{runtime} {package}")
         elif args.command == "previous-tag":
             tag = previous_tag(args.current, sys.stdin.read().split())
             if tag:

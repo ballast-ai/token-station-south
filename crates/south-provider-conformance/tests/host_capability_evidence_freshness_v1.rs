@@ -20,9 +20,9 @@ use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use south_provider_conformance::{
     controlled_query_fixtures_v1, controlled_user_agent_fixtures_v1, credential_recipe_fixtures_v1,
-    header_auth_fixtures_v1, provider_binary_fixtures_v1, provider_call_fixtures_v1,
-    provider_get_fixtures_v1, provider_multipart_fixtures_v1, provider_quota_metadata_fixtures_v1,
-    provider_stream_fixtures_v1,
+    eventstream_framing_fixtures_v1, header_auth_fixtures_v1, provider_binary_fixtures_v1,
+    provider_call_fixtures_v1, provider_get_fixtures_v1, provider_multipart_fixtures_v1,
+    provider_quota_metadata_fixtures_v1, provider_stream_fixtures_v1, request_signing_fixtures_v1,
 };
 
 /// Every capability the manifest may annotate.
@@ -42,6 +42,8 @@ enum CapabilityV1 {
     ProviderMultipart,
     ProviderBinary,
     CredentialRecipe,
+    EventStreamFraming,
+    RequestSigning,
 }
 
 impl CapabilityV1 {
@@ -58,6 +60,8 @@ impl CapabilityV1 {
             Self::ProviderMultipart => "provider_multipart",
             Self::ProviderBinary => "provider_binary",
             Self::CredentialRecipe => "credential_recipe",
+            Self::EventStreamFraming => "eventstream_framing",
+            Self::RequestSigning => "request_signing",
         }
     }
 
@@ -74,11 +78,13 @@ impl CapabilityV1 {
             Self::ProviderMultipart => provider_multipart_fixtures_v1().len(),
             Self::ProviderBinary => provider_binary_fixtures_v1().len(),
             Self::CredentialRecipe => credential_recipe_fixtures_v1().len(),
+            Self::EventStreamFraming => eventstream_framing_fixtures_v1().len(),
+            Self::RequestSigning => request_signing_fixtures_v1().len(),
         }
     }
 
     /// Every capability, so the test can prove the manifest annotates exactly this set.
-    const fn all() -> [Self; 10] {
+    const fn all() -> [Self; 12] {
         [
             Self::ProviderCall,
             Self::ProviderStream,
@@ -90,6 +96,8 @@ impl CapabilityV1 {
             Self::ProviderMultipart,
             Self::ProviderBinary,
             Self::CredentialRecipe,
+            Self::EventStreamFraming,
+            Self::RequestSigning,
         ]
     }
 }

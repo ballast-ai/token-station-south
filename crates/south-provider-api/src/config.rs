@@ -143,6 +143,21 @@ pub enum ConfigErrorV1 {
     InvalidValue(String),
 }
 
+/// Why [`ComponentManifestV1::endpoint_values`] recovers no parameters from a `base_url`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+pub enum EndpointValuesErrorV1 {
+    #[error("the family declares no endpoint template")]
+    NoEndpoint,
+    #[error("the URL is not the family's endpoint for any admissible values")]
+    NotThisEndpoint,
+    #[error("the URL splits into the template's parameters in more than one way")]
+    Ambiguous,
+}
+
+/// The longest `base_url` [`ComponentManifestV1::endpoint_values`] reads; a longer one is not an
+/// endpoint any template fills, and the bound keeps the search small.
+const MAX_BASE_URL_BYTES: usize = 2048;
+
 /// A lowercase DNS label: letters, digits and inner hyphens, at most 63 bytes.
 fn is_dns_label(value: &str) -> bool {
     (1..=63).contains(&value.len())
@@ -417,6 +432,96 @@ impl ComponentManifestV1 {
         let keys = self.config_schema.get(family);
         let syntax = |name: &str| keys.and_then(|keys| keys.get(name)).map(|key| &key.syntax);
         matches_parts(&template_parts, base_url.trim_end_matches('/'), &syntax)
+    }
+
+    /// The template parameters an operator-entered `base_url` was filled from: the reverse of
+    /// [`ComponentManifestV1::fill_endpoint`], for a host that holds only the URL (host feedback
+    /// SF17, boundary record §13.6). The values are returned only when exactly one assignment
+    /// matches and filling the template with it gives back the same URL, so a value is never
+    /// guessed.
+    ///
+    /// # Errors
+    ///
+    /// [`EndpointValuesErrorV1::NoEndpoint`] when the family declares no template,
+    /// [`EndpointValuesErrorV1::NotThisEndpoint`] when no admissible values produce the URL, and
+    /// [`EndpointValuesErrorV1::Ambiguous`] when more than one assignment does.
+    pub fn endpoint_values(
+        &self,
+        family: &str,
+        base_url: &str,
+    ) -> Result<BTreeMap<String, String>, EndpointValuesErrorV1> {
+        let template = self.endpoint.get(family).ok_or(EndpointValuesErrorV1::NoEndpoint)?;
+        let text = base_url.trim_end_matches('/');
+        let template_parts = parts(template)
+            .filter(|_| text.len() <= MAX_BASE_URL_BYTES)
+            .ok_or(EndpointValuesErrorV1::NotThisEndpoint)?;
+        let keys = self.config_schema.get(family);
+        let syntax = |name: &str| keys.and_then(|keys| keys.get(name)).map(|key| &key.syntax);
+        let mut found = Vec::new();
+        fills(&template_parts, text, &syntax, &mut BTreeMap::new(), &mut found, 2);
+        let values = match found.len() {
+            0 => return Err(EndpointValuesErrorV1::NotThisEndpoint),
+            1 => found.remove(0),
+            _ => return Err(EndpointValuesErrorV1::Ambiguous),
+        };
+        // A path parameter is filled encoded; a value whose encoding differs from its text in the
+        // URL did not come from this template.
+        match self.fill_endpoint(family, &values) {
+            Ok(Some(filled)) if filled == text => Ok(values),
+            _ => Err(EndpointValuesErrorV1::NotThisEndpoint),
+        }
+    }
+}
+
+/// Every way `text` fills `parts` (up to `limit` of them), each as the parameter values it took. A
+/// parameter named twice must take the same value both times.
+fn fills<'s>(
+    parts: &[Part<'_>],
+    text: &str,
+    syntax: &dyn Fn(&str) -> Option<&'s ValueSyntaxV1>,
+    taken: &mut BTreeMap<String, String>,
+    found: &mut Vec<BTreeMap<String, String>>,
+    limit: usize,
+) {
+    if found.len() >= limit {
+        return;
+    }
+    match parts.split_first() {
+        None => {
+            if text.is_empty() {
+                found.push(taken.clone());
+            }
+        }
+        Some((Part::Literal(literal), rest)) => {
+            if let Some(text) = text.strip_prefix(literal) {
+                fills(rest, text, syntax, taken, found, limit);
+            }
+        }
+        Some((Part::Param(name), rest)) => {
+            let Some(declared) = syntax(name) else {
+                return;
+            };
+            for end in (1..=text.len()).filter(|end| text.is_char_boundary(*end)) {
+                let candidate = &text[..end];
+                // As in `matches_parts`: a value never spans a label or a segment boundary.
+                if candidate.contains(['/', '.']) || !declared.admits(candidate) {
+                    continue;
+                }
+                let previous = taken.get(*name).cloned();
+                if previous.as_deref().is_some_and(|value| value != candidate) {
+                    continue;
+                }
+                taken.insert((*name).to_owned(), candidate.to_owned());
+                fills(rest, &text[end..], syntax, taken, found, limit);
+                match previous {
+                    Some(value) => taken.insert((*name).to_owned(), value),
+                    None => taken.remove(*name),
+                };
+                if found.len() >= limit {
+                    return;
+                }
+            }
+        }
     }
 }
 

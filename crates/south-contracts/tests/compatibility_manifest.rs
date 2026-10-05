@@ -115,6 +115,10 @@ struct Conformance {
     provider_binary_suite: u32,
     credential_recipe_suite_id: String,
     credential_recipe_suite: u32,
+    eventstream_framing_suite_id: String,
+    eventstream_framing_suite: u32,
+    request_signing_suite_id: String,
+    request_signing_suite: u32,
     provider_component_suite_id: String,
     provider_component_suite: u32,
     task_component_v1_suite_id: String,
@@ -156,7 +160,7 @@ struct ProviderRuntime {
 /// status is not `verified`.
 type ExpectedCapability = (&'static str, &'static str, Option<usize>);
 
-fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 10]> {
+fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 12]> {
     BTreeMap::from([
         (
             "token-station",
@@ -207,6 +211,10 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 1
                 // credential_recipe (gate ③ of credential recipes, B4) stays not_verified: the
                 // community host has no recipe executor.
                 ("credential_recipe", "not_verified", None),
+                // eventstream_framing and request_signing (gate ③ of stream framing and signing,
+                // B2) stay not_verified: the community host has no eventstream or signed provider.
+                ("eventstream_framing", "not_verified", None),
+                ("request_signing", "not_verified", None),
             ],
         ),
         // token-station-server provider_stream verified 2026-08-17: the durable
@@ -412,6 +420,12 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 1
                 // its balance and quota billing forms, and its full local matrix of 86 legs is
                 // green. The adoption record is held by that host's repository.
                 ("credential_recipe", "verified", Some(10)),
+                // eventstream_framing and request_signing (gate ③ of stream framing and signing,
+                // B2) stay not_verified until this host runs both suites against the framing
+                // executor and the declaration-selected finalizer of P21 S1 / S4. The suites
+                // existing in this repository are not adoption evidence.
+                ("eventstream_framing", "not_verified", None),
+                ("request_signing", "not_verified", None),
             ],
         ),
     ])
@@ -553,6 +567,10 @@ fn compatibility_manifest_describes_the_library_slice() {
     assert_eq!(manifest.conformance.provider_binary_suite, 1);
     assert_eq!(manifest.conformance.credential_recipe_suite_id, "south.credential-recipe.v1");
     assert_eq!(manifest.conformance.credential_recipe_suite, 1);
+    assert_eq!(manifest.conformance.eventstream_framing_suite_id, "south.eventstream-framing.v1");
+    assert_eq!(manifest.conformance.eventstream_framing_suite, 1);
+    assert_eq!(manifest.conformance.request_signing_suite_id, "south.request-signing.v1");
+    assert_eq!(manifest.conformance.request_signing_suite, 1);
     assert_eq!(manifest.conformance.provider_component_suite_id, "south.provider-component.v1");
     assert_eq!(manifest.conformance.provider_component_suite, 1);
     assert_eq!(manifest.conformance.task_component_v1_suite_id, "south.task-component.v1");
@@ -576,7 +594,7 @@ fn compatibility_manifest_describes_the_library_slice() {
         ("south-component-conformance", "provider_component_gates_reference_v1"),
         (
             "south-provider-conformance",
-            "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_provider_get_provider_multipart_provider_binary_credential_recipe_suites_v1",
+            "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_provider_get_provider_multipart_provider_binary_credential_recipe_eventstream_framing_request_signing_suites_v1",
         ),
         ("south-provider-runtime", "sandboxed_component_execution_v1"),
         (

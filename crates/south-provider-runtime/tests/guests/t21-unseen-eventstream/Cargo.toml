@@ -1,0 +1,26 @@
+# A synthetic unseen-provider component for an adopting host's eventstream
+# acceptance (T21 item 5, host-zero-vendor-boundary §12): a provider whose
+# upstream answers every request with AWS eventstream, signed by the host under
+# a declared scheme. Nothing in this crate is released; a host script outside
+# the commit gate builds it from a local south checkout and synthesizes the
+# manifest itself.
+#
+# Standalone and JSON-only for the same reasons as `t03-canary-provider`: it
+# compiles for a different target, and it must not share translation code with
+# any reference implementation — a guest that reused the Converse parser would
+# prove only that Converse still works.
+[package]
+name = "t21-unseen-eventstream"
+version = "1.0.0"
+edition = "2021"
+publish = false
+
+# Standalone: stops cargo from walking up into the main workspace.
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+serde_json = "1"
+wit-bindgen = "0.59"
