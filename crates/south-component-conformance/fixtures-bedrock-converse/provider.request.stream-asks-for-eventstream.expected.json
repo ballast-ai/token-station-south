@@ -1,0 +1,30 @@
+{
+  "method": "POST",
+  "url": "https://bedrock-runtime.us-east-1.amazonaws.com/model/anthropic.claude-sonnet-4-v1:0/converse-stream",
+  "headers": {
+    "accept": "application/vnd.amazon.eventstream",
+    "content-type": "application/json",
+    "x-amzn-bedrock-accept": "application/json"
+  },
+  "body": {
+    "system": [
+      {
+        "text": "Be terse."
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "text": "Weather in Beijing?"
+          }
+        ]
+      }
+    ],
+    "inferenceConfig": {
+      "maxTokens": 512,
+      "temperature": 0.2
+    }
+  }
+}

@@ -12,9 +12,10 @@ use south_provider_api::ComponentManifestV1;
 
 /// The official components this repository ships. Named, so that an empty or
 /// mistyped scan below cannot pass over nothing.
-const OFFICIAL_COMPONENTS: [&str; 13] = [
+const OFFICIAL_COMPONENTS: [&str; 14] = [
     "provider-anthropic",
     "provider-bedrock-converse",
+    "provider-bedrock-converse-bearer",
     "provider-gemini",
     "provider-openai-compatible",
     "task-kling",
@@ -490,7 +491,7 @@ fn every_shipped_package_declares_the_range_handshake() {
         assert_eq!(declared.contracts, expected_contracts, "{}", manifest.name);
         seen += 1;
     }
-    assert_eq!(seen, 13);
+    assert_eq!(seen, OFFICIAL_COMPONENTS.len());
 }
 
 /// Declaring the range handshake changes every task manifest, so the task identities published
@@ -533,4 +534,61 @@ fn the_kling_credential_recipe_retires_the_pending_task_kling_v2_identity() {
     .unwrap();
     assert!(manifest.credentials.is_some(), "task-kling-v2 declares how its bearer is minted");
     assert_ne!(manifest.version, "0.32.2", "a changed package cannot reuse its identity");
+}
+
+/// Host feedback SF13 and SF14 (host-zero-vendor-boundary §13.6): Converse declares the fields
+/// its signature reads and sends the native arm's `accept` and `x-amzn-bedrock-accept`, which
+/// changes every request it builds, so the identity published with 0.44.0 retires.
+#[test]
+fn the_converse_credential_fields_and_headers_retire_the_published_044_identity() {
+    let manifest: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(
+            repo_root().join("components/provider-bedrock-converse/manifest.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(manifest.credentials.is_some(), "Converse declares its signing credential fields");
+    assert_ne!(
+        manifest.version, "1.0.7",
+        "provider-bedrock-converse reused its published identity"
+    );
+}
+
+/// The shared conformance and provider-api crates changed for host feedback SF12–SF17
+/// (host-zero-vendor-boundary §13.6), and a same-path rebuild of every package before and after
+/// showed a different `component.wasm` for all thirteen, so every identity published with 0.44.0
+/// retires, or the release's digest-stability check would refuse it. Their `south_runtime` stays
+/// 0.44.0: under the declared-runtime discipline it names the oldest runtime a package needs, and
+/// none of them needs anything newer.
+#[test]
+fn host_feedback_sf12_to_sf17_retires_every_published_044_package_identity() {
+    for (name, published) in [
+        ("provider-openai-compatible", "2.2.0"),
+        ("provider-anthropic", "1.0.10"),
+        ("provider-gemini", "1.1.6"),
+        ("provider-bedrock-converse", "1.0.7"),
+        ("task-kling", "1.0.6"),
+        ("task-kling-v2", "0.32.4"),
+        ("task-minimax-v2", "0.31.3"),
+        ("task-bailian-v2", "0.31.3"),
+        ("task-xai-v2", "0.35.3"),
+        ("task-byteplus-v2", "0.36.3"),
+        ("task-veo-v2", "0.35.3"),
+        ("task-wan-image-v2", "0.35.3"),
+        ("task-gmi-image-v2", "0.35.3"),
+    ] {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_ne!(manifest.version, published, "{name} reused its published identity");
+        assert_eq!(
+            manifest.compatibility.south_runtime, "0.44.0",
+            "{name}: needs nothing newer than 0.44.0, so it declares 0.44.0"
+        );
+    }
 }

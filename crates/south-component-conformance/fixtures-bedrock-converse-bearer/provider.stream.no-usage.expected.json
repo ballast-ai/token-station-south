@@ -1,0 +1,16 @@
+[
+  {
+    "type": "delta",
+    "index": 0,
+    "content": "Mi"
+  },
+  {
+    "type": "delta",
+    "index": 0,
+    "content": "ld."
+  },
+  {
+    "type": "finish",
+    "finish_reason": "stop"
+  }
+]

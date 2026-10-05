@@ -1,0 +1,33 @@
+{
+  "provider_config": {
+    "provider": "bedrock-bearer",
+    "base_url": "https://bedrock-runtime.us-east-1.amazonaws.com",
+    "models": [
+      {
+        "model": "anthropic.claude-x-v1:0",
+        "tool": true,
+        "vision": true,
+        "json_schema": false,
+        "context_window": 200000,
+        "supported_parameters": [
+          "anthropic.thinking.adaptive"
+        ]
+      }
+    ],
+    "auth": "provider_api_key"
+  },
+  "chat_request": {
+    "model": "anthropic.claude-x-v1:0",
+    "messages": [
+      {
+        "role": "user",
+        "content": "hi"
+      }
+    ],
+    "sampling": {
+      "max_output_tokens": 512,
+      "temperature": 0.2
+    },
+    "reasoning_effort": "medium"
+  }
+}

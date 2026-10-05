@@ -19,16 +19,29 @@
 //! 2. **The request this function returns is the thing that gets signed.**
 //!    There is no later opportunity to add a header or touch the URL.
 //!
-//! # Streaming: the host owns the frame layer, this parser reads SSE
+//! # The Bearer sibling
+//!
+//! Bedrock also accepts an API key presented as `Authorization: Bearer`. That is
+//! a different auth arm, and `host_signed` admits no second arm, so it is a
+//! separate package, `provider-bedrock-converse-bearer`, whose family is
+//! `bedrock-bearer`: [`BedrockConverseBearerReferenceV1`] builds the same
+//! request and parses the same responses and streams, and differs only in its
+//! identity, its family and the descriptor's auth (host feedback SF16,
+//! host-zero-vendor-boundary §13.6). A host picks the package by the row's
+//! family, never by the shape of the stored credential.
+//!
+//! # Streaming: this package declares `stream_framing: aws-eventstream`
 //!
 //! Converse streams **AWS eventstream binary frames**, not SSE — the event name
-//! lives in an `:event-type` frame header and each frame carries two CRC32s. That
-//! layer stays with the host, which already decodes it: after decoding it holds
-//! `(event_type, payload_json)` and no original bytes, so it feeds components
-//! through a seam that re-encodes each event as one SSE frame. So this parser
+//! lives in an `:event-type` frame header and each frame carries two CRC32s. The
+//! package declares `stream_framing: aws-eventstream`, so the host deframes with
+//! south's `AwsEventStreamDeframerV1` and feeds each message's canonical
+//! re-encoding (`reencode_eventstream_v1`) as one SSE frame. So this parser
 //! sees `event: contentBlockDelta` / `data: {…}` — exactly the shape every other
 //! provider component parses — and needs no eventstream decoder, no CRC
-//! dependency, and no arrangement private to this dialect.
+//! dependency, and no arrangement private to this dialect. Exception and error
+//! messages arrive as `event: exception:<type>` and `event: error:<code>` and
+//! end the stream with `StreamEvent::Error`.
 //!
 //! `parse_chunk` still takes raw bytes and still buffers across split frames:
 //! that contract is unchanged, and a caller holding real bytes may use it
@@ -44,7 +57,7 @@ use serde_json::{Map, Value, json};
 use south_provider_api::{ComponentMetadataV1, PROVIDER_WORLD};
 use std::collections::BTreeSet;
 use token_station_protocol::{
-    ChatRequest, ChatResponse, Choice, Content, ContentPart, ErrorCode, ErrorEnvelope,
+    Auth, ChatRequest, ChatResponse, Choice, Content, ContentPart, ErrorCode, ErrorEnvelope,
     FinishReason, HttpMethod, HttpRequestDescriptor, HttpResponseParts, Message, ProviderConfig,
     Role, SafeHeaders, StreamEvent, ToolCall, ToolChoice, Usage,
 };
@@ -56,6 +69,12 @@ use crate::reasoning_replay::{ReplayRef, validated_layout};
 /// The provider dialect this component translates.
 const DIALECT: &str = "bedrock";
 
+/// The family of the Bearer sibling package (SF16): the same wire under another auth arm.
+pub const BEARER_FAMILY: &str = "bedrock-bearer";
+
+/// The media type Converse streams in: binary AWS eventstream, which the host deframes.
+const EVENTSTREAM_MEDIA_TYPE: &str = "application/vnd.amazon.eventstream";
+
 /// Image formats Converse accepts. An unknown media type is refused here
 /// rather than forwarded — Bedrock would answer 400 anyway, and a local
 /// refusal names the part instead of the whole request.
@@ -63,6 +82,10 @@ const IMAGE_FORMATS: [(&str, &str); 4] =
     [("image/png", "png"), ("image/jpeg", "jpeg"), ("image/gif", "gif"), ("image/webp", "webp")];
 
 pub struct BedrockConverseReferenceV1;
+
+/// The Bearer sibling (SF16): the `bedrock-bearer` family on the `bearer` arm. Everything but the
+/// identity, the family and the descriptor's auth is [`BedrockConverseReferenceV1`]'s.
+pub struct BedrockConverseBearerReferenceV1;
 
 fn internal(detail: impl std::fmt::Display) -> ErrorEnvelope {
     ErrorEnvelope::new(ErrorCode::Internal, 500, detail.to_string())
@@ -801,7 +824,7 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-bedrock-converse".to_owned(),
-            version: "1.0.7".to_owned(),
+            version: "1.0.8".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
@@ -820,47 +843,10 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
         request: &ChatRequest,
         config: &ProviderConfig,
     ) -> ComponentResultV1<HttpRequestDescriptor> {
-        for message in &request.messages {
-            validated_layout(message)
-                .map_err(|()| capability("invalid reasoning replay markers or layout"))?;
-        }
-        if config.provider != DIALECT {
-            return Err(capability(format!("unsupported provider dialect `{}`", config.provider)));
-        }
-        if request.model.is_empty() {
-            return Err(capability(
-                "Converse addresses the model in the URL path, so a request without one has no \
-                 target to send to",
-            ));
-        }
-        if requests_reasoning_replay(request) && !model_allows_reasoning_replay(request, config) {
-            return Err(capability(
-                "reasoning replay requires the target model capability reasoning_replay.claude.v1",
-            ));
-        }
-        let dialect = Dialect::of(request, config)?;
-        dialect.refuse_forced_tool(request)?;
-        // `ProviderApi::resolve` covers four canonical shapes and none of them
-        // is this one — the model sits inside the path and the operation is the
-        // last segment. So the URL is built from the endpoint's own text, which
-        // is what `permits` authorizes against.
-        // Streaming is a different last path segment, not a body field —
-        // the same shape Gemini uses.
-        let operation = if request.stream { "converse-stream" } else { "converse" };
-        let url = format!(
-            "{}/model/{}/{operation}",
-            config.base_url.as_str().trim_end_matches('/'),
-            crate::url_segment::encode(&request.model)
-        );
-        let mut descriptor = HttpRequestDescriptor::new(HttpMethod::Post, url);
-        descriptor.headers =
-            SafeHeaders::try_new([("content-type", "application/json")]).map_err(internal)?;
-        descriptor.body = Some(body_of(request, dialect)?);
-        // Deliberately `None`: this is the `host_signed` arm, so the host's
+        // Deliberately no auth: this is the `host_signed` arm, so the host's
         // finalizer signs the finished request afterwards. A credential value
         // never reaches this component.
-        descriptor.auth = None;
-        Ok(descriptor)
+        build_converse_request(request, config, DIALECT, None)
     }
 
     fn parse_response(&self, parts: &HttpResponseParts) -> ComponentResultV1<ChatResponse> {
@@ -1003,6 +989,106 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
     fn stream_parser(&self) -> Box<dyn StreamParserV1> {
         Box::new(ConverseSseParser::new())
     }
+}
+
+impl ProviderComponentV1 for BedrockConverseBearerReferenceV1 {
+    fn metadata(&self) -> ComponentMetadataV1 {
+        ComponentMetadataV1 {
+            name: "provider-bedrock-converse-bearer".to_owned(),
+            version: "1.0.0".to_owned(),
+            api_version: PROVIDER_WORLD.to_owned(),
+        }
+    }
+
+    fn model_capabilities(
+        &self,
+        config: &ProviderConfig,
+    ) -> ComponentResultV1<Vec<token_station_protocol::ModelCapability>> {
+        BedrockConverseReferenceV1.model_capabilities(config)
+    }
+
+    fn build_http_request(
+        &self,
+        request: &ChatRequest,
+        config: &ProviderConfig,
+    ) -> ComponentResultV1<HttpRequestDescriptor> {
+        // The host holds the key; this names the slot, presented as `Bearer`.
+        build_converse_request(
+            request,
+            config,
+            BEARER_FAMILY,
+            config.auth.clone().map(Auth::bearer),
+        )
+    }
+
+    fn parse_response(&self, parts: &HttpResponseParts) -> ComponentResultV1<ChatResponse> {
+        BedrockConverseReferenceV1.parse_response(parts)
+    }
+
+    fn map_provider_error(&self, parts: &HttpResponseParts) -> ComponentResultV1<ErrorEnvelope> {
+        BedrockConverseReferenceV1.map_provider_error(parts)
+    }
+
+    fn stream_parser(&self) -> Box<dyn StreamParserV1> {
+        BedrockConverseReferenceV1.stream_parser()
+    }
+}
+
+/// The Converse request both packages build, for `family`, with `auth` as the descriptor's.
+fn build_converse_request(
+    request: &ChatRequest,
+    config: &ProviderConfig,
+    family: &str,
+    auth: Option<Auth>,
+) -> ComponentResultV1<HttpRequestDescriptor> {
+    for message in &request.messages {
+        validated_layout(message)
+            .map_err(|()| capability("invalid reasoning replay markers or layout"))?;
+    }
+    if config.provider != family {
+        return Err(capability(format!("unsupported provider dialect `{}`", config.provider)));
+    }
+    if request.model.is_empty() {
+        return Err(capability(
+            "Converse addresses the model in the URL path, so a request without one has no \
+             target to send to",
+        ));
+    }
+    if requests_reasoning_replay(request) && !model_allows_reasoning_replay(request, config) {
+        return Err(capability(
+            "reasoning replay requires the target model capability reasoning_replay.claude.v1",
+        ));
+    }
+    let dialect = Dialect::of(request, config)?;
+    dialect.refuse_forced_tool(request)?;
+    // `ProviderApi::resolve` covers four canonical shapes and none of them
+    // is this one — the model sits inside the path and the operation is the
+    // last segment. So the URL is built from the endpoint's own text, which
+    // is what `permits` authorizes against.
+    // Streaming is a different last path segment, not a body field —
+    // the same shape Gemini uses.
+    let operation = if request.stream { "converse-stream" } else { "converse" };
+    let url = format!(
+        "{}/model/{}/{operation}",
+        config.base_url.as_str().trim_end_matches('/'),
+        crate::url_segment::encode(&request.model)
+    );
+    let mut descriptor = HttpRequestDescriptor::new(HttpMethod::Post, url);
+    // The headers the host's native Converse arm sends (host feedback SF14), so
+    // a request moved onto this component reaches the upstream byte for byte as
+    // before: `accept` names the stream's binary eventstream or the JSON answer,
+    // and `x-amzn-bedrock-accept` is the media type of the model's own output,
+    // JSON on both operations.
+    let accept = if request.stream { EVENTSTREAM_MEDIA_TYPE } else { "application/json" };
+    descriptor.headers = SafeHeaders::try_new([
+        ("content-type", "application/json"),
+        ("accept", accept),
+        ("x-amzn-bedrock-accept", "application/json"),
+    ])
+    .map_err(internal)?;
+    descriptor.body = Some(body_of(request, dialect)?);
+    descriptor.auth = auth;
+    Ok(descriptor)
 }
 
 /// A Bedrock exception name, as a response header, a body `__type` or an eventstream

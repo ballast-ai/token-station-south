@@ -10,7 +10,8 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use south_provider_api::{
-    ComponentManifestV1, ConfigErrorV1, ConfigKeyV1, ManifestErrorV1, ValueSyntaxV1,
+    ComponentManifestV1, ConfigErrorV1, ConfigKeyV1, EndpointValuesErrorV1, ManifestErrorV1,
+    ValueSyntaxV1,
 };
 
 fn converse() -> ComponentManifestV1 {
@@ -278,6 +279,145 @@ fn signing_names_its_scheme_service_region_and_inputs() {
     assert!(
         refused(&|m| m.signing.as_mut().unwrap().region.template_param = "zone".to_owned()),
         "a region parameter the endpoint does not have"
+    );
+}
+
+/// Host feedback SF13 (§5.4, §13.6): the fields `signing.credentials` names are declared by the
+/// package as secret credential fields, so a host collects exactly those and never infers a field
+/// set from the scheme. Gate ① promised this check in §5.4 and deferred it to B4 (§13.1).
+#[test]
+fn signing_inputs_name_declared_secret_fields() {
+    let manifest = converse();
+    let credentials =
+        manifest.credentials_for("bedrock").expect("the Converse family declares its fields");
+    let signing = manifest.signing.as_ref().expect("the Converse package signs");
+    for (input, field) in &signing.credentials {
+        let declared = credentials
+            .fields
+            .get(field)
+            .unwrap_or_else(|| panic!("signing input `{input}` names an undeclared field"));
+        assert!(declared.secret, "`{field}` is a signing credential, so it is secret");
+        assert_eq!(
+            declared.required,
+            input != "session_token",
+            "`{field}`: the two keys are required, the session token is optional"
+        );
+    }
+
+    let refused = |edit: &dyn Fn(&mut ComponentManifestV1)| {
+        let mut manifest = converse();
+        edit(&mut manifest);
+        matches!(manifest.validate(), Err(ManifestErrorV1::InvalidSigning(_)))
+    };
+    assert!(refused(&|m| m.credentials = None), "signing without declared fields");
+    assert!(
+        refused(&|m| {
+            m.signing
+                .as_mut()
+                .unwrap()
+                .credentials
+                .insert("access_key_id".to_owned(), "undeclared".to_owned());
+        }),
+        "an input naming an undeclared field"
+    );
+    assert!(
+        refused(&|m| {
+            m.credentials.as_mut().unwrap().fields.get_mut("secret_access_key").unwrap().secret =
+                false;
+        }),
+        "an input naming a non-secret field"
+    );
+    assert!(
+        refused(&|m| {
+            m.credentials.as_mut().unwrap().fields.get_mut("access_key_id").unwrap().required =
+                false;
+        }),
+        "a required input naming an optional field"
+    );
+    assert!(
+        refused(&|m| {
+            m.providers.push("bedrock-eu".to_owned());
+            m.endpoint.insert(
+                "bedrock-eu".to_owned(),
+                "https://bedrock-runtime.{region}.amazonaws.com".to_owned(),
+            );
+            let keys = m.config_schema["bedrock"].clone();
+            m.config_schema.insert("bedrock-eu".to_owned(), keys);
+            m.credentials.as_mut().unwrap().families = Some(vec!["bedrock".to_owned()]);
+        }),
+        "a signed family the credentials section does not cover"
+    );
+    // An optional session token may map to a required field: that is the operator's stricter
+    // choice, not a contradiction.
+    let mut strict = converse();
+    strict.credentials.as_mut().unwrap().fields.get_mut("session_token").unwrap().required = true;
+    assert_eq!(strict.validate(), Ok(()));
+}
+
+/// Host feedback SF17 (§13.6): the reverse of `fill_endpoint`. A host that has only an
+/// operator-entered `base_url` recovers the template parameters it was filled from, so a signing
+/// package's region need not be entered twice.
+#[test]
+fn endpoint_values_recover_the_parameters_of_a_base_url() {
+    let manifest = converse();
+    assert_eq!(
+        manifest.endpoint_values("bedrock", "https://bedrock-runtime.eu-west-3.amazonaws.com/"),
+        Ok(values(&[("region", "eu-west-3")]))
+    );
+    for base_url in [
+        "https://bedrock-runtime.eu-west-3.amazonaws.com.evil.example",
+        "https://bedrock-runtime..amazonaws.com",
+        "https://bedrock-runtime.EU-WEST-3.amazonaws.com",
+        "https://bedrock-runtime.eu.west.amazonaws.com",
+        "http://bedrock-runtime.eu-west-3.amazonaws.com",
+    ] {
+        assert_eq!(
+            manifest.endpoint_values("bedrock", base_url),
+            Err(EndpointValuesErrorV1::NotThisEndpoint),
+            "{base_url}"
+        );
+    }
+    assert_eq!(
+        manifest.endpoint_values("unknown", "https://example.com"),
+        Err(EndpointValuesErrorV1::NoEndpoint)
+    );
+
+    // Copilot's plan is an enum with a default; the value is recovered as written.
+    let copilot = openai();
+    assert_eq!(
+        copilot.endpoint_values("github-copilot", "https://api.business.githubcopilot.com"),
+        Ok(values(&[("plan", "business")]))
+    );
+    // Every recovered value fills the template back to the same URL.
+    for (family, base_url) in [
+        ("bedrock", "https://bedrock-runtime.ap-southeast-2.amazonaws.com"),
+        ("github-copilot", "https://api.enterprise.githubcopilot.com"),
+    ] {
+        let manifest = if family == "bedrock" { converse() } else { openai() };
+        let recovered = manifest.endpoint_values(family, base_url).unwrap();
+        assert_eq!(manifest.fill_endpoint(family, &recovered), Ok(Some(base_url.to_owned())));
+    }
+}
+
+/// Two adjacent parameters can split one text in more than one way; a reverse that picked one
+/// would invent a value, so it refuses instead.
+#[test]
+fn endpoint_values_refuse_an_ambiguous_split() {
+    let manifest = declaring(
+        "https://{first}-{second}.example.com",
+        &[
+            ("first", key(ValueSyntaxV1::AwsRegion, true)),
+            ("second", key(ValueSyntaxV1::AwsRegion, true)),
+        ],
+    );
+    assert_eq!(manifest.validate(), Ok(()));
+    assert_eq!(
+        manifest.endpoint_values("bedrock", "https://a-b-c.example.com"),
+        Err(EndpointValuesErrorV1::Ambiguous)
+    );
+    assert_eq!(
+        manifest.endpoint_values("bedrock", "https://a-b.example.com"),
+        Ok(values(&[("first", "a"), ("second", "b")]))
     );
 }
 

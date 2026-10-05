@@ -1,0 +1,64 @@
+{
+  "name": "provider-bedrock-converse-bearer",
+  "version": "1.0.0",
+  "api_version": "provider-adapter-v2",
+  "providers": [
+    "bedrock-bearer"
+  ],
+  "capabilities": [
+    "chat",
+    "stream",
+    "tool_call"
+  ],
+  "auth_arms": [
+    "bearer"
+  ],
+  "endpoint": {
+    "bedrock-bearer": "https://bedrock-runtime.{region}.amazonaws.com"
+  },
+  "config_schema": {
+    "bedrock-bearer": {
+      "region": {
+        "syntax": "aws_region",
+        "required": true,
+        "description": "The AWS region the Bedrock runtime is called in."
+      }
+    }
+  },
+  "permissions": {
+    "network": false,
+    "filesystem": false,
+    "secrets": [
+      "provider_api_key"
+    ]
+  },
+  "conformance": {
+    "required_suite": "south.provider-component.v1",
+    "fixtures": "fixtures-bedrock-converse-bearer/"
+  },
+  "compatibility": {
+    "ir_schema_id": "token-station-protocol@0.4.0/v0.3.0",
+    "kernel_version": "0.3.0",
+    "kernel_revision": "6822aab1dea54ef646cb2206595cd4955ff9764a",
+    "wit_package": "token-station:adapter@2.0.0",
+    "south_runtime": "0.44.0",
+    "runtime_abi": 1,
+    "kernel_contracts": {
+      "canonical_ir": 2,
+      "error_catalog": 1,
+      "stream": 2
+    }
+  },
+  "stream_framing": "aws-eventstream",
+  "request_facts": {
+    "bedrock-bearer": {
+      "output_cap": [
+        "/inferenceConfig/maxTokens"
+      ],
+      "model": {
+        "url": "/model/{model}/converse"
+      },
+      "stream": "url"
+    }
+  }
+}

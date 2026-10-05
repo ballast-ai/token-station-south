@@ -40,9 +40,11 @@ use std::path::Path;
 
 use serde_json::{Value, json};
 use south_component_conformance::{
-    ProviderComponentV1, reference::OpenAiCompatibleReferenceV1,
+    ProviderComponentV1,
+    reference::OpenAiCompatibleReferenceV1,
     reference_anthropic::AnthropicReferenceV1,
-    reference_bedrock_converse::BedrockConverseReferenceV1, reference_gemini::GeminiReferenceV1,
+    reference_bedrock_converse::{BedrockConverseBearerReferenceV1, BedrockConverseReferenceV1},
+    reference_gemini::GeminiReferenceV1,
 };
 use token_station_protocol::{HttpResponseParts, StreamEvent, Usage};
 
@@ -191,6 +193,10 @@ fn gemini_prompt_token_count_already_contains_the_cached_part() {
 // cacheWriteInputTokens", and `totalTokens` is total input plus output — a
 // real cached capture reads 10 + 4 + 5848 == 5862.
 
+/// Both Converse packages, the signed one and its Bearer sibling (SF16): one wire, one judge.
+const CONVERSE_PACKAGES: [&dyn ProviderComponentV1; 2] =
+    [&BedrockConverseReferenceV1, &BedrockConverseBearerReferenceV1];
+
 #[test]
 fn converse_input_tokens_exclude_both_cache_buckets_and_total_counts_them() {
     let usage_wire = json!({"inputTokens": 500, "outputTokens": 20, "totalTokens": 1020,
@@ -200,20 +206,22 @@ fn converse_input_tokens_exclude_both_cache_buckets_and_total_counts_them() {
         "stopReason": "end_turn",
         "usage": usage_wire,
     });
-    let usage = BedrockConverseReferenceV1.parse_response(&response(&body)).unwrap().usage;
-    assert_partitioned(usage, 1000, 300, 200, "converse non-stream");
+    for component in CONVERSE_PACKAGES {
+        let usage = component.parse_response(&response(&body)).unwrap().usage;
+        assert_partitioned(usage, 1000, 300, 200, "converse non-stream");
 
-    let usage = folded(
-        &BedrockConverseReferenceV1,
-        &[
-            "event: messageStart\ndata: {\"role\": \"assistant\"}\n\n",
-            "event: contentBlockDelta\ndata: {\"contentBlockIndex\": 0, \"delta\": {\"text\": \"hi\"}}\n\n",
-            "event: contentBlockStop\ndata: {\"contentBlockIndex\": 0}\n\n",
-            "event: messageStop\ndata: {\"stopReason\": \"end_turn\"}\n\n",
-            &format!("event: metadata\ndata: {}\n\n", json!({"usage": usage_wire})),
-        ],
-    );
-    assert_partitioned(usage, 1000, 300, 200, "converse stream");
+        let usage = folded(
+            component,
+            &[
+                "event: messageStart\ndata: {\"role\": \"assistant\"}\n\n",
+                "event: contentBlockDelta\ndata: {\"contentBlockIndex\": 0, \"delta\": {\"text\": \"hi\"}}\n\n",
+                "event: contentBlockStop\ndata: {\"contentBlockIndex\": 0}\n\n",
+                "event: messageStop\ndata: {\"stopReason\": \"end_turn\"}\n\n",
+                &format!("event: metadata\ndata: {}\n\n", json!({"usage": usage_wire})),
+            ],
+        );
+        assert_partitioned(usage, 1000, 300, 200, "converse stream");
+    }
 }
 
 #[test]
@@ -226,7 +234,9 @@ fn converse_refuses_a_total_that_leaves_out_the_cache_buckets() {
         "usage": {"inputTokens": 500, "outputTokens": 20, "totalTokens": 520,
                   "cacheReadInputTokens": 300, "cacheWriteInputTokens": 200},
     });
-    assert!(BedrockConverseReferenceV1.parse_response(&response(&body)).is_err());
+    for component in CONVERSE_PACKAGES {
+        assert!(component.parse_response(&response(&body)).is_err());
+    }
 }
 
 // ── Every shipped provider fixture ───────────────────────────────────────────
@@ -242,7 +252,7 @@ struct Dialect {
     cache: &'static [&'static str],
 }
 
-const DIALECTS: [Dialect; 4] = [
+const DIALECTS: [Dialect; 5] = [
     // `prompt_tokens` already contains `prompt_tokens_details.cached_tokens`.
     Dialect {
         dir: "fixtures",
@@ -268,6 +278,13 @@ const DIALECTS: [Dialect; 4] = [
     // `inputTokens` is the uncached remainder (AWS prompt caching guide).
     Dialect {
         dir: "fixtures-bedrock-converse",
+        usage_key: "usage",
+        prompt: &["inputTokens", "cacheReadInputTokens", "cacheWriteInputTokens"],
+        cache: &["cacheReadInputTokens", "cacheWriteInputTokens"],
+    },
+    // The Bearer sibling reads the same wire (SF16).
+    Dialect {
+        dir: "fixtures-bedrock-converse-bearer",
         usage_key: "usage",
         prompt: &["inputTokens", "cacheReadInputTokens", "cacheWriteInputTokens"],
         cache: &["cacheReadInputTokens", "cacheWriteInputTokens"],

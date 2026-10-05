@@ -2,7 +2,9 @@
   "method": "POST",
   "url": "https://bedrock-runtime.us-east-1.amazonaws.com/model/anthropic.claude-sonnet-4-v1:0/converse",
   "headers": {
-    "content-type": "application/json"
+    "accept": "application/json",
+    "content-type": "application/json",
+    "x-amzn-bedrock-accept": "application/json"
   },
   "body": {
     "messages": [
