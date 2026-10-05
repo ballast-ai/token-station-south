@@ -12,6 +12,8 @@
 //! crate for the [`abi`](crate::abi) shims and compile to `wasm32-wasip2`)
 //! never pull wasmtime into their build.
 
+use std::sync::Arc;
+
 use south_provider_runtime::{CallErrorV1, ComponentStreamV1, LoadedComponentV1};
 use token_station_protocol::{
     ChatRequest, ChatResponse, ErrorCode, ErrorEnvelope, HttpRequestDescriptor, HttpResponseParts,
@@ -28,20 +30,31 @@ use crate::task_json::{ObservationInput, observation_json};
 use south_provider_api::ComponentMetadataV1;
 
 /// A sandboxed component presented through the typed seam.
+///
+/// The loaded component is shared: a package declaring several families is loaded once and each
+/// family's seam holds the same instance ([`SandboxedComponentV1::shared`], host feedback SF12),
+/// rather than instantiating the package once per family. Calls on the shared instance are
+/// serialized by the runtime; each stream still gets an instance of its own.
 #[derive(Debug)]
 pub struct SandboxedComponentV1 {
-    component: LoadedComponentV1,
+    component: Arc<LoadedComponentV1>,
 }
 
 impl SandboxedComponentV1 {
     #[must_use]
-    pub const fn new(component: LoadedComponentV1) -> Self {
+    pub fn new(component: LoadedComponentV1) -> Self {
+        Self { component: Arc::new(component) }
+    }
+
+    /// A seam over a component another seam may also hold, e.g. one per family a package serves.
+    #[must_use]
+    pub const fn shared(component: Arc<LoadedComponentV1>) -> Self {
         Self { component }
     }
 
     /// The loaded component, for callers that need the JSON face too.
     #[must_use]
-    pub const fn inner(&self) -> &LoadedComponentV1 {
+    pub fn inner(&self) -> &LoadedComponentV1 {
         &self.component
     }
 }

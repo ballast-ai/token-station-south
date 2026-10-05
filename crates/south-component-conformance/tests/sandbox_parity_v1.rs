@@ -60,18 +60,40 @@ fn shipped_manifest() -> (String, ComponentManifestV1) {
 }
 
 fn sandboxed() -> SandboxedComponentV1 {
+    SandboxedComponentV1::new(loaded())
+}
+
+fn loaded() -> LoadedComponentV1 {
     let runtime = ComponentRuntimeV1::new(RuntimeLimitsV1::default()).expect("engine builds");
     let wasm = std::fs::read(component_wasm()).expect("the component reads");
     let (source, _) = shipped_manifest();
-    let loaded = LoadedComponentV1::load_embedded(
+    LoadedComponentV1::load_embedded(
         &runtime,
         &source,
         &wasm,
         &host_range::host_range(),
         NoSecretsV1,
     )
-    .expect("the official package passes every load gate");
-    SandboxedComponentV1::new(loaded)
+    .expect("the official package passes every load gate")
+}
+
+/// Host feedback SF12 (host-zero-vendor-boundary §13.6): a package declaring several families is
+/// loaded once and every family's seam shares that one instance, instead of instantiating the
+/// package once per family.
+#[test]
+fn one_loaded_package_serves_every_family_it_declares() {
+    let loaded = std::sync::Arc::new(loaded());
+    let seams: Vec<SandboxedComponentV1> = shipped_manifest()
+        .1
+        .providers
+        .iter()
+        .map(|_| SandboxedComponentV1::shared(std::sync::Arc::clone(&loaded)))
+        .collect();
+    assert_eq!(seams.len(), 3, "openai-compatible, azure-openai-v1 and github-copilot");
+    assert_eq!(std::sync::Arc::strong_count(&loaded), 4, "one instance, three seams");
+    for seam in &seams {
+        assert_eq!(seam.metadata(), loaded.metadata());
+    }
 }
 
 /// Gate ② inside the sandbox: the run that proves "the sandboxed output
