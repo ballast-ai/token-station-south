@@ -755,7 +755,8 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
         let mut descriptor = HttpRequestDescriptor::new(HttpMethod::Post, url);
         let identification: &[(&str, &str)] = if copilot { &COPILOT_HEADERS } else { &[] };
         descriptor.headers = SafeHeaders::try_new(
-            [("content-type", "application/json")].iter().chain(identification).copied(),
+            std::iter::once(("content-type", "application/json"))
+                .chain(identification.iter().copied()),
         )
         .map_err(internal)?;
         let mut body = body_of(request, config)?;
