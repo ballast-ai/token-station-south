@@ -176,7 +176,25 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-该库独立 Rust 版本为 0.1.0；八个库与组件运行时当前为 v0.44.0。
+该库独立 Rust 版本为 0.1.0；八个库与组件运行时当前为 v0.45.0。
+**v0.45.0**: the host's S2 / S4 prerequisites (`docs/design/2026-09-30-host-zero-vendor-boundary.md` §13.6, §16
+Q23–Q34, host feedback SF10–SF19). A package's `south_runtime` is now the oldest runtime it needs, not the release
+that carries it, so this release re-stamps no manifest: every package keeps `south_runtime` 0.44.0, the digest-stability
+check also fails a changed `manifest.json` under an unchanged version, and `scripts/check-declared-runtime.sh` loads
+each package under exactly the runtime it declares (SF10). Gate ① now requires every `signing.credentials` entry to name
+a declared secret field of the section that applies to each signed family, so a runtime of this release refuses
+`provider-bedrock-converse` 1.0.7 (SF13). New: `SandboxedComponentV1::shared` (SF12),
+`ComponentManifestV1::endpoint_values` (SF17), the host-implemented gate ③ suites `south.eventstream-framing.v1` and
+`south.request-signing.v1`, recorded `not_verified` for both hosts (SF15), and the unreleased `t21-unseen-eventstream`
+guest (SF18). Contract numbers are unchanged, and so is the kernel pin. Identities: `provider-bedrock-converse` 1.0.7 →
+**1.0.8** (its SigV4 credential fields and the native `accept` / `x-amzn-bedrock-accept` headers; SF13, SF14), the new
+`provider-bedrock-converse-bearer` **1.0.0** (family `bedrock-bearer`, `bearer` arm; SF16), and, because the shared
+crates changed every `component.wasm`, a patch bump with unchanged behavior for the other twelve:
+`provider-openai-compatible` 2.2.1, `provider-anthropic` 1.0.11, `provider-gemini` 1.1.7, `task-kling` 1.0.7,
+`task-kling-v2` 0.32.5, `task-minimax-v2` / `task-bailian-v2` 0.31.4, `task-byteplus-v2` 0.36.4, and `task-xai-v2` /
+`task-veo-v2` / `task-wan-image-v2` / `task-gmi-image-v2` 0.35.4. Hosts re-pinning to this release must absorb the one
+breaking Rust API change in §13.6 (`SandboxedComponentV1::new` and `inner` are no longer `const fn`) and take
+`provider-bedrock-converse` 1.0.8 with the runtime.
 **v0.44.0**: the S3b prerequisites and the host's S3a feedback (`docs/design/2026-09-30-host-zero-vendor-boundary.md`
 §13.5, §16 Q19–Q22): `present` candidates (D1), family-scoped `credentials` (D2), field slots (D3), field descriptions
 (D4) and config-key defaults, gate ③ case 10 `TransientFailureIsRetried` (D5), the Kiro draft's four-rule selector (D6),
