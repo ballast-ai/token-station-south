@@ -187,10 +187,12 @@
         "cases": 10
       },
       "eventstream_framing": {
-        "status": "not_verified"
+        "status": "verified",
+        "cases": 9
       },
       "request_signing": {
-        "status": "not_verified"
+        "status": "verified",
+        "cases": 7
       }
     }
   },
