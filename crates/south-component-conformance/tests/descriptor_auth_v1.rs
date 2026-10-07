@@ -461,7 +461,7 @@ fn gate_two_refuses_a_package_whose_descriptors_present_an_undeclared_arm() {
     let shipped = run_provider_component_suite_v1_for_manifest(
         &OpenAiCompatibleReferenceV1,
         &pack,
-        &manifest(&["bearer", "header_secret"]),
+        &manifest(&["bearer", "bearer_and_header_secret", "header_secret"]),
     );
     let ran: Vec<_> = shipped
         .outcomes()
@@ -471,8 +471,9 @@ fn gate_two_refuses_a_package_whose_descriptors_present_an_undeclared_arm() {
     assert!(!ran.is_empty(), "the check never ran");
     assert!(ran.iter().all(|outcome| !outcome.is_failure()), "{shipped}");
 
-    // The reference presents Bearer for `openai-compatible` and `api-key` for Azure; a manifest
-    // that declares only one arm must see the other refused.
+    // The reference presents Bearer for `openai-compatible`, `api-key` for Azure and both for
+    // `gemini-openai-compatible`; a manifest that declares only one arm must see the other
+    // refused (the Gemini family has its own test in `gemini_openai_compatible_v1`).
     for (arms, refused_case) in [
         (&["header_secret"][..], "provider.request.chat"),
         (&["bearer"][..], "provider.request.azure-header-auth"),
