@@ -1,6 +1,6 @@
 {
   "name": "provider-openai-compatible",
-  "version": "2.2.1",
+  "version": "2.3.0",
   "api_version": "provider-adapter-v2",
   "providers": [
     "openai-compatible",
@@ -148,8 +148,8 @@
             "enterprise"
           ]
         },
-        "description": "The account's Copilot plan, which selects GitHub's chat API host: individual (Pro and Pro+), business or enterprise.",
-        "default": "individual"
+        "required": true,
+        "description": "The account's Copilot plan, which selects GitHub's chat API host: individual (Pro and Pro+), business or enterprise. Required: a Business or Enterprise account routed to the individual host fails only when the upstream refuses it."
       }
     }
   },
