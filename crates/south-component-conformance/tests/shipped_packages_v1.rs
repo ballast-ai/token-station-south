@@ -592,3 +592,45 @@ fn host_feedback_sf12_to_sf17_retires_every_published_044_package_identity() {
         );
     }
 }
+
+/// The kernel re-pin to mirror `v0.4.0` (protocol 0.5.0, `canonical_ir` 3; design record
+/// `docs/design/2026-10-08-kernel-repin-protocol-0.5.0.md`) changes every manifest's compatibility
+/// declaration, so every identity published with 0.45.0 retires. `provider-openai-compatible` had
+/// already moved to the unreleased 2.3.0 (#150), which this change does not retire again.
+#[test]
+fn the_kernel_repin_retires_every_published_045_package_identity() {
+    for (name, published) in [
+        ("provider-openai-compatible", "2.2.1"),
+        ("provider-anthropic", "1.0.11"),
+        ("provider-gemini", "1.1.7"),
+        ("provider-bedrock-converse", "1.0.8"),
+        ("provider-bedrock-converse-bearer", "1.0.0"),
+        ("task-kling", "1.0.7"),
+        ("task-kling-v2", "0.32.5"),
+        ("task-minimax-v2", "0.31.4"),
+        ("task-bailian-v2", "0.31.4"),
+        ("task-xai-v2", "0.35.4"),
+        ("task-byteplus-v2", "0.36.4"),
+        ("task-veo-v2", "0.35.4"),
+        ("task-wan-image-v2", "0.35.4"),
+        ("task-gmi-image-v2", "0.35.4"),
+    ] {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_ne!(manifest.version, published, "{name} reused its published identity");
+        assert_eq!(
+            manifest.compatibility.kernel_contracts.get("canonical_ir"),
+            Some(&3),
+            "{name}: built against protocol 0.5.0"
+        );
+        assert_eq!(
+            manifest.compatibility.ir_schema_id, "token-station-protocol@0.5.0/v0.4.0",
+            "{name}"
+        );
+    }
+}

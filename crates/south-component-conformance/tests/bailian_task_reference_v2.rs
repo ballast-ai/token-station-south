@@ -254,15 +254,20 @@ fn reference_input_diagnostics_preserve_safe_host_contract() {
 fn query_encoding_keeps_separators_inside_the_existing_authorization_gate() {
     let c = config();
     let l = TaskLocatorV2::new(1, "api/v1/tasks").unwrap();
-    for id in ["original?#%", "original/segment", "original\\segment"] {
+    for id in ["original?#%", "original\\segment"] {
         let query = BailianTaskComponentV2.build_observe_request(&c, "wan", id, &l).unwrap();
-        if id.contains(['/', '\\']) {
+        if id.contains('\\') {
             assert!(c.authorize(&query).is_err());
         } else {
             c.authorize(&query).unwrap();
             assert!(query.url.ends_with("original%3F%23%25"));
         }
     }
+    // Protocol 0.5.0 admits `%2F` inside one segment, so the component refuses `/` itself.
+    let error = BailianTaskComponentV2
+        .build_observe_request(&c, "wan", "original/segment", &l)
+        .unwrap_err();
+    assert_eq!(error.message, "invalid Bailian task identifier");
     let mut wrong = c.clone();
     wrong.auth = Some(SecretRef::new("another-slot"));
     let q = BailianTaskComponentV2.build_observe_request(&c, "wan", "original-id", &l).unwrap();

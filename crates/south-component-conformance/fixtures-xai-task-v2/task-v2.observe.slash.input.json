@@ -5,7 +5,7 @@
     "auth": "provider_api_key"
   },
   "upstream_model": "grok-imagine-video",
-  "upstream_task_id": "a b?c#%",
+  "upstream_task_id": "a b/c",
   "locator": {
     "schema_version": 1,
     "route": "v1/videos"

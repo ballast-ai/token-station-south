@@ -35,9 +35,9 @@ def provider_manifest(name: str = "provider-gemini", version: str = "1.1.5", **e
         "permissions": {"network": False, "filesystem": False, "secrets": ["provider_api_key"]},
         "conformance": {"required_suite": "south.provider-component.v1", "fixtures": "fixtures-gemini/"},
         "compatibility": {
-            "ir_schema_id": "token-station-protocol@0.4.0/v0.3.0",
-            "kernel_version": "0.3.0",
-            "kernel_revision": "6822aab1dea54ef646cb2206595cd4955ff9764a",
+            "ir_schema_id": "token-station-protocol@0.5.0/v0.4.0",
+            "kernel_version": "0.4.0",
+            "kernel_revision": "8e34f5a089d0b9c7273b49ddb6952dd87e960019",
             "wit_package": "token-station:adapter@2.0.0",
             "south_runtime": "0.43.0",
         },
@@ -172,7 +172,7 @@ class GenerateTest(unittest.TestCase):
         )
         manifest["compatibility"].update(
             runtime_abi=1,
-            kernel_contracts={"canonical_ir": 2, "stream": 2, "error_catalog": 1},
+            kernel_contracts={"canonical_ir": 3, "stream": 2, "error_catalog": 1},
             contracts={"task": 7},
         )
         self.ws.add(manifest)
@@ -187,7 +187,7 @@ class GenerateTest(unittest.TestCase):
             {
                 "south_runtime": "0.43.0",
                 "runtime_abi": 1,
-                "kernel_contracts": {"canonical_ir": 2, "stream": 2, "error_catalog": 1},
+                "kernel_contracts": {"canonical_ir": 3, "stream": 2, "error_catalog": 1},
                 "contracts": {"task": 7},
             },
         )

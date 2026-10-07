@@ -48,6 +48,9 @@ pub enum DescriptorAuthErrorV1 {
     BearerNotDeclared,
     /// The descriptor presents a header, which the manifest does not declare (`header_secret`).
     HeaderSecretNotDeclared,
+    /// The descriptor presents the same credential as Bearer and in a header (the kernel's
+    /// `Auth::BearerAndHeader`, protocol 0.5.0), an arm no manifest declares yet.
+    BearerAndHeaderNotDeclared,
     /// The descriptor names a header that is neither a sanctioned secret-bearing header nor one
     /// the manifest declares in `secret_headers`.
     HeaderNotSanctioned(String),
@@ -71,6 +74,10 @@ impl fmt::Display for DescriptorAuthErrorV1 {
             ),
             Self::HeaderSecretNotDeclared => f.write_str(
                 "the descriptor presents a credential header, which the manifest does not declare",
+            ),
+            Self::BearerAndHeaderNotDeclared => f.write_str(
+                "the descriptor presents bearer auth and a credential header together, which the \
+                 manifest does not declare",
             ),
             Self::HeaderNotSanctioned(name) => write!(
                 f,
@@ -102,6 +109,7 @@ impl Error for DescriptorAuthErrorV1 {}
 /// - `Auth::Header` requires the `header_secret` arm and a sanctioned header name, or one the
 ///   manifest declares in `secret_headers` (B7a, §10), which is admitted as
 ///   [`AdmittedAuthV1::DeclaredHeaderSecret`];
+/// - `Auth::BearerAndHeader` is refused: no manifest arm declares it yet;
 /// - no ordinary descriptor header may carry a declared secret header's name;
 /// - `Auth::OAuth` is admitted, as Bearer, only on a slot a credential recipe mints (§3.3) in the
 ///   section that applies to the configured family (§13.5 D2); the host's recipe executor produces
@@ -135,6 +143,9 @@ pub fn admit_descriptor_auth(
             Ok(AdmittedAuthV1::Bearer)
         }
         Some(Auth::Bearer { .. }) => Err(DescriptorAuthErrorV1::BearerNotDeclared),
+        Some(Auth::BearerAndHeader { .. }) => {
+            Err(DescriptorAuthErrorV1::BearerAndHeaderNotDeclared)
+        }
         Some(Auth::Header { name, .. }) => {
             if !manifest.auth_arms.contains("header_secret") {
                 return Err(DescriptorAuthErrorV1::HeaderSecretNotDeclared);
@@ -145,11 +156,9 @@ pub fn admit_descriptor_auth(
             {
                 return Ok(AdmittedAuthV1::HeaderSecret(header));
             }
-            // B7b dependency: the kernel's `Auth::header` checks the name against its static
-            // `CREDENTIAL_HEADERS` while deserializing, so a component's descriptor naming a header
-            // outside that list cannot reach this point until the kernel chain (§10, B7b) moves the
-            // check here. Every name on that list is either sanctioned or undeclarable, so today
-            // only a descriptor built in-process can take this arm.
+            // Since protocol 0.5.0 the kernel's `Auth::header` admits any lowercase field name
+            // outside its never-credential list, so a component's descriptor can name a header
+            // outside `CREDENTIAL_HEADERS`; this check decides whether the package may use it.
             declared(manifest, name)
                 .map(AdmittedAuthV1::DeclaredHeaderSecret)
                 .ok_or_else(|| DescriptorAuthErrorV1::HeaderNotSanctioned(name.clone()))

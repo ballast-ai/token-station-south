@@ -276,7 +276,7 @@ dependencies = [
 
 [[package]]
 name = "provider-anthropic"
-version = "1.0.11"
+version = "1.0.12"
 dependencies = [
  "south-component-conformance",
  "wit-bindgen",
@@ -448,8 +448,8 @@ dependencies = [
 
 [[package]]
 name = "token-station-protocol"
-version = "0.4.0"
-source = "git+https://github.com/ballast-ai/token-station-kernel.git?rev=f585bc83e5f8a31fbbc6535dd17c3ac8deec6a54#f585bc83e5f8a31fbbc6535dd17c3ac8deec6a54"
+version = "0.5.0"
+source = "git+https://github.com/ballast-ai/token-station-kernel.git?rev=c2581f37ad468201c903e0d596b59e796173e459#c2581f37ad468201c903e0d596b59e796173e459"
 dependencies = [
  "serde",
  "serde_json",

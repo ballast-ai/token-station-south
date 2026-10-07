@@ -226,16 +226,16 @@ fn v2_observe_encodes_one_id_segment_and_preserves_endpoint_prefix() {
         serde_json::to_value(descriptor).unwrap()["url"],
         "https://api.kling.example/prefix/v1/videos/text2video/ab%3Fc%23d%25e"
     );
-    // The component retains single-segment encoding, while the pinned kernel
-    // intentionally refuses encoded separators. Do not weaken that host gate.
-    for (id, encoded) in [("a/b", "a%2Fb"), ("a\\b", "a%5Cb")] {
-        let descriptor = KlingTaskReferenceV2
-            .build_observe_request(&config, "real-model", id, &locator)
-            .unwrap();
-        assert!(descriptor.url.ends_with(encoded));
-        assert!(config.authorize(&descriptor).is_err());
-    }
-    for id in [String::new(), ".".to_owned(), "..".to_owned(), "x".repeat(8193)] {
+    // An encoded backslash is still refused by the kernel gate. Since protocol 0.5.0 the gate
+    // admits `%2F` inside one segment (for ARN model ids), so the component refuses a task id
+    // containing `/` itself: no task id needs one, and many upstreams decode `%2F` as a path
+    // separator.
+    let descriptor = KlingTaskReferenceV2
+        .build_observe_request(&config, "real-model", "a\\b", &locator)
+        .unwrap();
+    assert!(descriptor.url.ends_with("a%5Cb"));
+    assert!(config.authorize(&descriptor).is_err());
+    for id in [String::new(), ".".to_owned(), "..".to_owned(), "x".repeat(8193), "a/b".to_owned()] {
         let error = KlingTaskReferenceV2
             .build_observe_request(&config, "real-model", &id, &locator)
             .unwrap_err();

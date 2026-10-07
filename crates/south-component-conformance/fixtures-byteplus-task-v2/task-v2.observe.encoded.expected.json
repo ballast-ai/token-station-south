@@ -1,6 +1,6 @@
 {
   "method": "GET",
-  "url": "https://ark.byteplus.example/api/v3/contents/generations/tasks/a%2Fb",
+  "url": "https://ark.byteplus.example/api/v3/contents/generations/tasks/a%20b%3Fc%23%25",
   "auth": {
     "scheme": "bearer",
     "secret": "provider_api_key"

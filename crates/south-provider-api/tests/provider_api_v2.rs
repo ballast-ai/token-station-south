@@ -125,9 +125,9 @@ fn reference_manifest() -> ComponentManifestV1 {
             fixtures: "fixtures/".to_owned(),
         },
         compatibility: CompatibilityDeclarationV1 {
-            ir_schema_id: "token-station-protocol@0.4.0/v0.3.0".to_owned(),
-            kernel_version: "0.3.0".to_owned(),
-            kernel_revision: "6822aab1dea54ef646cb2206595cd4955ff9764a".to_owned(),
+            ir_schema_id: "token-station-protocol@0.5.0/v0.4.0".to_owned(),
+            kernel_version: "0.4.0".to_owned(),
+            kernel_revision: "8e34f5a089d0b9c7273b49ddb6952dd87e960019".to_owned(),
             wit_package: WIT_PACKAGE.to_owned(),
             south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
             runtime_abi: None,
@@ -150,8 +150,8 @@ fn the_reference_component_manifest_signs_the_contract() {
     assert_eq!(metadata.api_version, PROVIDER_WORLD);
 
     let tuple = manifest.compatibility_tuple();
-    assert_eq!(tuple.ir_schema_id, "token-station-protocol@0.4.0/v0.3.0");
-    assert_eq!(tuple.kernel_version, "0.3.0");
+    assert_eq!(tuple.ir_schema_id, "token-station-protocol@0.5.0/v0.4.0");
+    assert_eq!(tuple.kernel_version, "0.4.0");
     assert_eq!(tuple.wit_package, WIT_PACKAGE);
     assert_eq!(tuple.wit_world, PROVIDER_WORLD);
     assert_eq!(tuple.conformance_suite, COMPONENT_BEHAVIOR_SUITE);
@@ -454,9 +454,9 @@ fn an_unauthenticated_component_may_declare_no_arms_and_no_secrets() {
 
 fn host_expectations() -> HostExpectationsV1 {
     HostExpectationsV1 {
-        ir_schema_id: "token-station-protocol@0.4.0/v0.3.0".to_owned(),
-        kernel_version: "0.3.0".to_owned(),
-        kernel_revision: "6822aab1dea54ef646cb2206595cd4955ff9764a".to_owned(),
+        ir_schema_id: "token-station-protocol@0.5.0/v0.4.0".to_owned(),
+        kernel_version: "0.4.0".to_owned(),
+        kernel_revision: "8e34f5a089d0b9c7273b49ddb6952dd87e960019".to_owned(),
         south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
     }
 }
@@ -710,9 +710,9 @@ fn task_manifest() -> ComponentManifestV1 {
             fixtures: "fixtures/".to_owned(),
         },
         compatibility: CompatibilityDeclarationV1 {
-            ir_schema_id: "token-station-protocol@0.4.0/v0.3.0".to_owned(),
-            kernel_version: "0.3.0".to_owned(),
-            kernel_revision: "6822aab1dea54ef646cb2206595cd4955ff9764a".to_owned(),
+            ir_schema_id: "token-station-protocol@0.5.0/v0.4.0".to_owned(),
+            kernel_version: "0.4.0".to_owned(),
+            kernel_revision: "8e34f5a089d0b9c7273b49ddb6952dd87e960019".to_owned(),
             wit_package: TASK_WIT_PACKAGE.to_owned(),
             south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
             runtime_abi: None,

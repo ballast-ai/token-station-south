@@ -27,7 +27,7 @@ fn host() -> HostRangeV1 {
         south_runtime_min: "0.43.0".to_owned(),
         south_runtime: "0.45.0".to_owned(),
         kernel_contracts: BTreeMap::from([
-            ("canonical_ir".to_owned(), 2),
+            ("canonical_ir".to_owned(), 3),
             ("error_catalog".to_owned(), 1),
             ("stream".to_owned(), 2),
         ]),
@@ -52,7 +52,7 @@ fn a_component_inside_the_range_is_admitted_at_both_bounds() {
     // Provenance does not decide: a different kernel revision or IR id is still admitted.
     let mut provenance = manifest();
     provenance.compatibility.kernel_revision = "0".repeat(40);
-    provenance.compatibility.ir_schema_id = "token-station-protocol@0.4.1/v0.3.1".to_owned();
+    provenance.compatibility.ir_schema_id = "token-station-protocol@0.5.1/v0.4.1".to_owned();
     assert_eq!(compatibility_admits(&provenance, &host()), Ok(()));
 }
 
