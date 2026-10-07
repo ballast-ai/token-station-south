@@ -27,7 +27,7 @@ fn host() -> HostRangeV1 {
         south_runtime_min: "0.43.0".to_owned(),
         south_runtime: "0.45.0".to_owned(),
         kernel_contracts: BTreeMap::from([
-            ("canonical_ir".to_owned(), 2),
+            ("canonical_ir".to_owned(), 3),
             ("error_catalog".to_owned(), 1),
             ("stream".to_owned(), 2),
         ]),

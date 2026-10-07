@@ -85,7 +85,7 @@ fn the_manifest_secret_header_rules_are_the_host_halfs() {
 fn reference_manifest() -> ComponentManifestV1 {
     ComponentManifestV1 {
         name: "provider-openai-compatible".to_owned(),
-        version: "2.3.0".to_owned(),
+        version: "2.4.0".to_owned(),
         api_version: PROVIDER_WORLD.to_owned(),
         providers: vec![
             "openai-compatible".to_owned(),
@@ -121,9 +121,9 @@ fn reference_manifest() -> ComponentManifestV1 {
             fixtures: "fixtures/".to_owned(),
         },
         compatibility: CompatibilityDeclarationV1 {
-            ir_schema_id: "token-station-protocol@0.4.0/v0.3.0".to_owned(),
-            kernel_version: "0.3.0".to_owned(),
-            kernel_revision: "6822aab1dea54ef646cb2206595cd4955ff9764a".to_owned(),
+            ir_schema_id: "token-station-protocol@0.5.0/v0.4.0".to_owned(),
+            kernel_version: "0.4.0".to_owned(),
+            kernel_revision: "8e34f5a089d0b9c7273b49ddb6952dd87e960019".to_owned(),
             wit_package: WIT_PACKAGE.to_owned(),
             south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
             runtime_abi: None,
@@ -260,9 +260,9 @@ fn gate_one_rejects_a_repackaged_identity() {
 fn the_tuple_handshake_refuses_any_mismatch_in_tuple_order() {
     let manifest = reference_manifest();
     let expectations = HostExpectationsV1 {
-        ir_schema_id: "token-station-protocol@0.4.0/v0.3.0".to_owned(),
-        kernel_version: "0.3.0".to_owned(),
-        kernel_revision: "6822aab1dea54ef646cb2206595cd4955ff9764a".to_owned(),
+        ir_schema_id: "token-station-protocol@0.5.0/v0.4.0".to_owned(),
+        kernel_version: "0.4.0".to_owned(),
+        kernel_revision: "8e34f5a089d0b9c7273b49ddb6952dd87e960019".to_owned(),
         south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
     };
     assert_eq!(compatibility_matches(&manifest, &expectations), Ok(()));

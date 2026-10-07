@@ -1,12 +1,12 @@
 {
   "schema_version": 5,
   "release": {
-    "version": "0.45.0",
+    "version": "0.46.0",
     "stability": "library_slice"
   },
   "runtime_abi": 1,
   "kernel_contracts": {
-    "canonical_ir": 2,
+    "canonical_ir": 3,
     "error_catalog": 1,
     "stream": 2
   },

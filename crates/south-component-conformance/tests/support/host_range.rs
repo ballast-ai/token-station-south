@@ -31,9 +31,9 @@ pub const SOUTH_RUNTIME_FLOOR: &str = "0.43.0";
 
 /// The IR, kernel release and kernel revision this release distributes. The range handshake records
 /// them for provenance only; the exact handshake still compares them.
-const IR_SCHEMA_ID: &str = "token-station-protocol@0.4.0/v0.3.0";
-const KERNEL_VERSION: &str = "0.3.0";
-const KERNEL_REVISION: &str = "6822aab1dea54ef646cb2206595cd4955ff9764a";
+const IR_SCHEMA_ID: &str = "token-station-protocol@0.5.0/v0.4.0";
+const KERNEL_VERSION: &str = "0.4.0";
+const KERNEL_REVISION: &str = "8e34f5a089d0b9c7273b49ddb6952dd87e960019";
 
 fn repo_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().and_then(Path::parent).expect("repo root")

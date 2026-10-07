@@ -459,7 +459,7 @@ fn compatibility_manifest_describes_the_library_slice() {
     assert_eq!(
         manifest.kernel_contracts,
         BTreeMap::from([
-            ("canonical_ir".to_owned(), 2),
+            ("canonical_ir".to_owned(), 3),
             ("error_catalog".to_owned(), 1),
             ("stream".to_owned(), 2),
         ])
