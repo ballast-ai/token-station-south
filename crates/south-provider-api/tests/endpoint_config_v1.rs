@@ -382,7 +382,7 @@ fn endpoint_values_recover_the_parameters_of_a_base_url() {
         Err(EndpointValuesErrorV1::NoEndpoint)
     );
 
-    // Copilot's plan is an enum with a default; the value is recovered as written.
+    // Copilot's plan is a required enum; the value is recovered as written.
     let copilot = openai();
     assert_eq!(
         copilot.endpoint_values("github-copilot", "https://api.business.githubcopilot.com"),
@@ -422,15 +422,17 @@ fn endpoint_values_refuse_an_ambiguous_split() {
 }
 
 /// Host feedback SF7 (§13.5 D7): Copilot's chat API host depends on the account's plan. The
-/// family's `plan` key admits only GitHub's three documented hosts and defaults to the individual
-/// one, so an operator who enters nothing gets a Pro / Pro+ host and no value can leave the domain.
+/// family's `plan` key admits only GitHub's three documented hosts, so no value can leave the
+/// domain. It is required and has no default (token-station-server feedback, 2026-10-07): with a
+/// default of `individual`, a Business or Enterprise operator who left it empty was routed to the
+/// Pro / Pro+ host and found out only when the upstream refused the request.
 #[test]
-fn the_shipped_copilot_endpoint_follows_the_plan_and_defaults_to_individual() {
+fn the_shipped_copilot_endpoint_follows_the_plan_and_requires_it() {
     let manifest = openai();
     assert_eq!(manifest.validate(), Ok(()));
     assert_eq!(
         manifest.fill_endpoint("github-copilot", &values(&[])),
-        Ok(Some("https://api.individual.githubcopilot.com".to_owned()))
+        Err(ConfigErrorV1::MissingKey("plan".to_owned()))
     );
     for (plan, host) in [
         ("individual", "https://api.individual.githubcopilot.com"),
