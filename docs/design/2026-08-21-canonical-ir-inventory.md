@@ -168,15 +168,20 @@ field on the IR (plan-visible), never a smuggled `extensions` key (§8, D5).
 | IR `Auth` (descriptor) | south arm | Who does the work |
 |---|---|---|
 | `Bearer{secret}` | `Bearer` | host resolves slot → south assembles `Authorization: Bearer` |
-| `Header{name, secret}` (name ∈ credential-header catalog) | `HeaderSecret(SecretHeaderV1)` (name ∈ frozen sanctioned enum) | as above, verbatim header |
+| `Header{name, secret}` (since protocol 0.5.0: any lowercase token outside the kernel's never-credential list; the 0.4.0 catalog names keep their case) | `HeaderSecret(SecretHeaderV1)` for the five sanctioned names; `DeclaredHeaderSecret` for a name the manifest declares in `secret_headers` (admission, B7b) | as above, verbatim header |
+| `BearerAndHeader{name, secret}` (protocol 0.5.0) | `BearerAndHeaderSecret(SecretHeaderV1)`, over a sanctioned name only (admission, B7b) | host resolves the slot once; south binds `authorization` and the header from that one value |
 | `OAuth{secret, scopes}` | `Bearer` after **host-side minting**, front-loaded before the funds marker (prelude `PreparedSecretResolverV1` pattern) | host mints; component never sees the exchange |
 | — (inexpressible in v1: SigV4) | `HostSigned` + `RequestFinalizer` (its own south slice, plan decision 8) | host signs the finalized bytes; component declares `emits` |
 
-Two catalogs must not drift: protocol's `CREDENTIAL_HEADERS` (redaction/refusal
-list) and south's `SecretHeaderV1` + `RESERVED_HEADERS` (sanctioned wire arms).
-Today sanctioned ⊂ credential-catalog holds. Gate ② carries a fixture asserting
-the inclusion at the pinned revisions, so a new sanctioned header cannot land
-without the redaction side knowing it (D4).
+Two catalogs must not drift: protocol's `CREDENTIAL_HEADERS` (the host's default
+redaction/refusal set; since 0.5.0 no longer the list of names a credential may be
+presented in) and south's `SecretHeaderV1` + `RESERVED_HEADERS` (sanctioned wire arms).
+Sanctioned ⊂ credential-catalog holds. A conformance test asserts the inclusion at
+the pinned revisions, so a new sanctioned header cannot land without the redaction
+side knowing it (D4). Since 0.5.0 the kernel decides only which names *can* carry a
+credential (`NEVER_CREDENTIAL_HEADERS` cannot); which names a package *may* use is the
+manifest's `secret_headers` and `admit_descriptor_auth`. South's undeclarable list
+contains the kernel's never-credential list, and the same test pins that too.
 
 The `host.sign` WIT import (HMAC over adapter-chosen bytes, never into
 `authorization`) is orthogonal to the Finalizer and survives for body/plain-

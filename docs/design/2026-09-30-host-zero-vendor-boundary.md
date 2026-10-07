@@ -2004,6 +2004,13 @@ also gain the #138 fixture, which changes no behavior.
   name, and every kernel `CREDENTIAL_HEADERS` name is either sanctioned or undeclarable, so the kernel's looser rule cannot
   open a name South forbids. A host that presents a credential in a declared name must redact it as well as the kernel's
   default set (`CREDENTIAL_HEADERS`).
+- **A gap the first pin found (Q40).** The kernel's documentation of `NEVER_CREDENTIAL_HEADERS` says admitting layers
+  may refuse more names and that South does, but South's undeclarable list lacked five of the kernel's names: `accept-encoding`, `forwarded`,
+  `http2-settings`, `via` and `www-authenticate`. A package could declare one at gate ①, and the kernel would then refuse
+  it in every descriptor, so the declaration could never work. Both copies of the list (`south-contracts` and
+  `south-provider-api`) gain the five names. No package declares any `secret_headers`, and before 0.5.0 no descriptor
+  could name a declared header, so the narrowing breaks no consumer; the auth contract and the reserved header policy keep
+  their numbers.
 
 **6. B7b: the `gemini-openai-compatible` family (§16 Q38).** The family lives in `provider-openai-compatible`, not in
 `provider-gemini` and not in a new package. Gemini's OpenAI-compatible surface (`/v1beta/openai/chat/completions`) takes
@@ -2028,10 +2035,10 @@ Converse, Converse-bearer and Gemini packs. A test pins the other half: a model 
 equivalents); they now expect an id with a slash to be admitted as one segment and keep refusing a backslash, a dot piece
 and an empty piece.
 
-**Known remaining risk (kernel record, not changed here).** `permits` does not refuse an encoded percent sign. A model id
-that itself contains `%2e%2e` is encoded by South as `%252e%252e` and admitted; an upstream that decodes the path twice
-would read `..`. Model ids come from the operator's catalog, not from clients, and the kernel records a later change as
-possible. South does not add its own rule on top.
+**Known remaining risk (kernel behavior, not changed here).** Reading the 0.5.0 source, `permits` decodes each escape once
+and does not refuse a decoded percent sign. A model id that itself contains `%2e%2e` is encoded by South as `%252e%252e`
+and admitted; an upstream that decodes the path twice would read `..`. Model ids come from the operator's catalog, not from
+clients. South does not add its own rule on top; a later kernel change could refuse an encoded percent sign.
 
 **Rejections and limits this change introduces** (every one is also in §16):
 
@@ -2039,7 +2046,8 @@ possible. South does not add its own rule on top.
 2. The combined arm in a task manifest (Q36).
 3. Packages built against the old kernel are refused by a host that records `canonical_ir` 3, and the new ones by a host
    that records 2: a one-way flag day, unchanged in kind from the 0.39.0 re-pin, which is why all fourteen re-stamp.
-4. Nothing else is newly refused. The `declared` / `host_values` grammar is the kernel's, applied when a fixture or a host
+4. Declaring `accept-encoding`, `forwarded`, `http2-settings`, `via` or `www-authenticate` as a secret header (Q40).
+5. Nothing else is newly refused. The `declared` / `host_values` grammar is the kernel's, applied when a fixture or a host
    deserializes a `ProviderConfig` or `ChatRequest`.
 
 **What the host does after the release** (re-pin and the two follow-ons that were blocked on this):
@@ -2337,8 +2345,13 @@ Tags: S = south maintainers, L = lv, K = kernel.
   models it does not know to be ARNs (§13.7 item 7)? Recommended: enough. The rule keeps every descriptor at or below the
   endpoint whatever the upstream decodes, and the references already encode the model as one segment. South adds fixtures
   and no rule of its own. Remaining risk, recorded not fixed: a double-decoding upstream and a model id containing
-  `%2e%2e` (kernel record, known remaining work). **Taken as recommended; the kernel decision D5 asked lv to confirm at
-  its merge review.**
+  `%2e%2e`. **Taken as recommended; it relaxes a shared security check, so lv confirms it when the re-pin is reviewed.**
+- **Q40 (S, L)** Should South's undeclarable secret-header list contain the kernel's whole never-credential list
+  (§13.7 item 5)? The kernel's documentation says South's list refuses more, and it lacked five names. Recommended: yes, in
+  both copies of the list, with a conformance test that pins the inclusion. It narrows what gate ① and
+  `DeclaredSecretHeaderV1::parse` accept, but nothing could use the five names (the kernel refuses them in a descriptor),
+  so the contract numbers stay. **Taken as recommended; flagged for the owner because it edits a contract-level list
+  without a number bump.**
 
 ## 17. Amendments found while drafting the component records (2026-09-30) — change log
 
