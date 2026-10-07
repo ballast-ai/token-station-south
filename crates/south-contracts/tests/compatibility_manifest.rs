@@ -421,11 +421,21 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 1
                 // green. The adoption record is held by that host's repository.
                 ("credential_recipe", "verified", Some(10)),
                 // eventstream_framing and request_signing (gate ③ of stream framing and signing,
-                // B2) stay not_verified until this host runs both suites against the framing
-                // executor and the declaration-selected finalizer of P21 S1 / S4. The suites
-                // existing in this repository are not adoption evidence.
-                ("eventstream_framing", "not_verified", None),
-                ("request_signing", "not_verified", None),
+                // B2) verified 2026-10-07 at v0.45.0: server dev-v2 `d3ce030c` (P21 S4 C6),
+                // pinned to the v0.45.0 tag (`7cf1761e`), runs south.eventstream-framing.v1 9/9
+                // and south.request-signing.v1 7/7 as unit tests under both its balance and quota
+                // billing forms, and its full local matrix of 86 legs is green. The framing
+                // harness drives the production code — the stream side through the reframing
+                // step the SSE relay wraps around the upstream byte source, the buffered side
+                // through the non-stream body decode of a `stream: none` + `aws-eventstream`
+                // component row — and found one host defect on its first run (messages before a
+                // bad frame in the same chunk were dropped), fixed in the same commit. The
+                // signing harness builds its finalizer through the same declaration → credential
+                // fields → finalizer functions the host's prepare stage and signing plan call,
+                // with only the clock injected. The adoption record is held by that host's
+                // repository.
+                ("eventstream_framing", "verified", Some(9)),
+                ("request_signing", "verified", Some(7)),
             ],
         ),
     ])
