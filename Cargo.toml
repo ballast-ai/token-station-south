@@ -20,7 +20,7 @@ serde_json = "1.0.140"
 # The runtime digests each package it admits (load_package_set) and the gate 2 report digests
 # the component it judged. Already in the graph through wasmtime (cranelift-codegen), so this
 # adds no crate.
-sha2 = "0.10.9"
+sha2 = "0.11.0"
 static_assertions = "1.1.0"
 thiserror = "2.0.12"
 token-station-protocol = { version = "0.4.0", git = "https://github.com/ballast-ai/token-station-kernel.git", rev = "f585bc83e5f8a31fbbc6535dd17c3ac8deec6a54" }
