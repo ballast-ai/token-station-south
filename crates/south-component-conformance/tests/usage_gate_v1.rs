@@ -43,6 +43,11 @@ enum Bend {
     NeverReportUsage,
     /// Reports more reasoning than output.
     ReasoningExceedsOutput,
+    /// Reports more explicit cache reads than cache reads, although the explicit reads are a
+    /// subset of the total (kernel protocol 0.5.0).
+    ExplicitReadsExceedReads,
+    /// Reports every cache read as an explicit one: the largest subset the partition allows.
+    EveryReadIsExplicit,
 }
 
 struct Bent(Bend);
@@ -87,6 +92,14 @@ impl ProviderComponentV1 for Bent {
                 response.usage.reasoning_tokens = response.usage.output_tokens + 1;
                 response
             }),
+            Bend::ExplicitReadsExceedReads => parsed.map(|mut response| {
+                response.usage.explicit_cache_read_tokens = response.usage.cache_read_tokens + 1;
+                response
+            }),
+            Bend::EveryReadIsExplicit => parsed.map(|mut response| {
+                response.usage.explicit_cache_read_tokens = response.usage.cache_read_tokens;
+                response
+            }),
         }
     }
 
@@ -112,7 +125,10 @@ impl StreamParserV1 for BentStream {
                 .into_iter()
                 .filter(|event| !matches!(event, StreamEvent::Usage { .. }))
                 .collect(),
-            Bend::DefaultMissingUsageToZero | Bend::ReasoningExceedsOutput => events,
+            Bend::DefaultMissingUsageToZero
+            | Bend::ReasoningExceedsOutput
+            | Bend::ExplicitReadsExceedReads
+            | Bend::EveryReadIsExplicit => events,
         })
     }
 }
@@ -259,6 +275,26 @@ fn reasoning_beyond_output_breaks_the_partition() {
                 && detail.contains("reasoning_tokens")),
         "{report}"
     );
+}
+
+/// Kernel protocol 0.5.0's `explicit_cache_read_tokens` is a subset of `cache_read_tokens`
+/// (`Usage::is_partitioned`); gate ② judges it as the kernel does.
+#[test]
+fn explicit_cache_reads_beyond_all_cache_reads_break_the_partition() {
+    let report =
+        run_provider_component_suite_v1(&Bent(Bend::ExplicitReadsExceedReads), &shipped_pack());
+    assert!(
+        failed(&report, CheckV1::UsagePartition)
+            .iter()
+            .any(|(case, detail)| case == "provider.response.usage"
+                && detail.contains("explicit_cache_read_tokens")),
+        "{report}"
+    );
+
+    // The largest legal subset is not a violation, and the report that carries it is the only
+    // one whose fixture comparison differs.
+    let report = run_provider_component_suite_v1(&Bent(Bend::EveryReadIsExplicit), &shipped_pack());
+    assert!(failed(&report, CheckV1::UsagePartition).is_empty(), "{report}");
 }
 
 #[test]

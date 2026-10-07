@@ -226,14 +226,21 @@ fn v2_observe_encodes_one_id_segment_and_preserves_endpoint_prefix() {
         serde_json::to_value(descriptor).unwrap()["url"],
         "https://api.kling.example/prefix/v1/videos/text2video/ab%3Fc%23d%25e"
     );
-    // The component retains single-segment encoding, while the pinned kernel
-    // intentionally refuses encoded separators. Do not weaken that host gate.
-    for (id, encoded) in [("a/b", "a%2Fb"), ("a\\b", "a%5Cb")] {
+    // The component keeps single-segment encoding. Kernel 0.5.0 admits an encoded slash inside
+    // one segment below the endpoint (issue #138), so an id holding a slash addresses one segment;
+    // a backslash, an empty piece and a dot piece stay refused by the host gate.
+    let descriptor =
+        KlingTaskReferenceV2.build_observe_request(&config, "real-model", "a/b", &locator).unwrap();
+    assert!(descriptor.url.ends_with("/a%2Fb"));
+    config.authorize(&descriptor).unwrap();
+    for (id, encoded) in
+        [("a\\b", "a%5Cb"), ("a//b", "a%2F%2Fb"), ("a/../b", "a%2F..%2Fb"), ("a/", "a%2F")]
+    {
         let descriptor = KlingTaskReferenceV2
             .build_observe_request(&config, "real-model", id, &locator)
             .unwrap();
         assert!(descriptor.url.ends_with(encoded));
-        assert!(config.authorize(&descriptor).is_err());
+        assert!(config.authorize(&descriptor).is_err(), "{id}");
     }
     for id in [String::new(), ".".to_owned(), "..".to_owned(), "x".repeat(8193)] {
         let error = KlingTaskReferenceV2

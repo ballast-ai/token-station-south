@@ -254,14 +254,17 @@ fn reference_input_diagnostics_preserve_safe_host_contract() {
 fn query_encoding_keeps_separators_inside_the_existing_authorization_gate() {
     let c = config();
     let l = TaskLocatorV2::new(1, "api/v1/tasks").unwrap();
-    for id in ["original?#%", "original/segment", "original\\segment"] {
+    // Kernel 0.5.0 admits an encoded slash inside one segment (issue #138), so an id holding a
+    // slash addresses one segment; a backslash, an empty piece and a dot piece stay refused.
+    for id in ["original?#%", "original/segment"] {
         let query = BailianTaskComponentV2.build_observe_request(&c, "wan", id, &l).unwrap();
-        if id.contains(['/', '\\']) {
-            assert!(c.authorize(&query).is_err());
-        } else {
-            c.authorize(&query).unwrap();
-            assert!(query.url.ends_with("original%3F%23%25"));
-        }
+        c.authorize(&query).unwrap();
+    }
+    let query = BailianTaskComponentV2.build_observe_request(&c, "wan", "original?#%", &l).unwrap();
+    assert!(query.url.ends_with("original%3F%23%25"));
+    for id in ["original\\segment", "original//segment", "original/../segment", "original/"] {
+        let query = BailianTaskComponentV2.build_observe_request(&c, "wan", id, &l).unwrap();
+        assert!(c.authorize(&query).is_err(), "{id}");
     }
     let mut wrong = c.clone();
     wrong.auth = Some(SecretRef::new("another-slot"));

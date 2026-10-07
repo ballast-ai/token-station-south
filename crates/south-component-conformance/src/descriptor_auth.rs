@@ -27,6 +27,10 @@ pub enum AdmittedAuthV1 {
     Bearer,
     /// `<header>: <secret>`, in one sanctioned secret-bearing header.
     HeaderSecret(SecretHeaderV1),
+    /// The same secret twice: `Authorization: Bearer <secret>` and `<header>: <secret>`, in one
+    /// sanctioned secret-bearing header (B7b, §4.3). A host maps it onto
+    /// `RawAuthV1::BearerAndHeaderSecret`.
+    BearerAndHeaderSecret(SecretHeaderV1),
     /// `<header>: <secret>`, in one header the manifest declares in `secret_headers` (B7a, §10).
     ///
     /// A host maps it onto `RawAuthV1::DeclaredHeaderSecret` and passes the manifest's whole
@@ -48,9 +52,16 @@ pub enum DescriptorAuthErrorV1 {
     BearerNotDeclared,
     /// The descriptor presents a header, which the manifest does not declare (`header_secret`).
     HeaderSecretNotDeclared,
+    /// The descriptor presents the combined Bearer-plus-header arm, which the manifest does not
+    /// declare (`bearer_and_header_secret`).
+    BearerAndHeaderNotDeclared,
     /// The descriptor names a header that is neither a sanctioned secret-bearing header nor one
     /// the manifest declares in `secret_headers`.
     HeaderNotSanctioned(String),
+    /// The combined arm names a header outside the five sanctioned ones. A header the manifest
+    /// declares in `secret_headers` is refused here too: auth contract 5 has no combined arm over
+    /// a declared name (§16 Q35).
+    CombinedHeaderNotSanctioned(String),
     /// The descriptor sends a header the manifest declares as secret-bearing through the ordinary
     /// header channel, where nothing redacts it (B7a, §10).
     SecretHeaderOnOrdinaryChannel(String),
@@ -72,9 +83,18 @@ impl fmt::Display for DescriptorAuthErrorV1 {
             Self::HeaderSecretNotDeclared => f.write_str(
                 "the descriptor presents a credential header, which the manifest does not declare",
             ),
+            Self::BearerAndHeaderNotDeclared => f.write_str(
+                "the descriptor presents the combined bearer-and-header arm, which the manifest \
+                 does not declare",
+            ),
             Self::HeaderNotSanctioned(name) => write!(
                 f,
                 "`{name}` is neither a sanctioned secret-bearing header nor declared in secret_headers"
+            ),
+            Self::CombinedHeaderNotSanctioned(name) => write!(
+                f,
+                "`{name}` is not a sanctioned secret-bearing header, and the combined arm admits \
+                 no other"
             ),
             Self::SecretHeaderOnOrdinaryChannel(name) => write!(
                 f,
@@ -102,6 +122,9 @@ impl Error for DescriptorAuthErrorV1 {}
 /// - `Auth::Header` requires the `header_secret` arm and a sanctioned header name, or one the
 ///   manifest declares in `secret_headers` (B7a, §10), which is admitted as
 ///   [`AdmittedAuthV1::DeclaredHeaderSecret`];
+/// - `Auth::BearerAndHeader` requires the `bearer_and_header_secret` arm and one of the five
+///   sanctioned header names (B7b, §4.3); a declared name is refused, because the contract's
+///   combined arm is closed over the sanctioned set;
 /// - no ordinary descriptor header may carry a declared secret header's name;
 /// - `Auth::OAuth` is admitted, as Bearer, only on a slot a credential recipe mints (§3.3) in the
 ///   section that applies to the configured family (§13.5 D2); the host's recipe executor produces
@@ -139,20 +162,23 @@ pub fn admit_descriptor_auth(
             if !manifest.auth_arms.contains("header_secret") {
                 return Err(DescriptorAuthErrorV1::HeaderSecretNotDeclared);
             }
-            if let Some(header) = SecretHeaderV1::ALL
-                .into_iter()
-                .find(|header| header.header_name().eq_ignore_ascii_case(name))
-            {
+            if let Some(header) = sanctioned(name) {
                 return Ok(AdmittedAuthV1::HeaderSecret(header));
             }
-            // B7b dependency: the kernel's `Auth::header` checks the name against its static
-            // `CREDENTIAL_HEADERS` while deserializing, so a component's descriptor naming a header
-            // outside that list cannot reach this point until the kernel chain (§10, B7b) moves the
-            // check here. Every name on that list is either sanctioned or undeclarable, so today
-            // only a descriptor built in-process can take this arm.
+            // Kernel protocol 0.5.0 admits any lowercase token outside its never-credential list
+            // while deserializing, so a component's descriptor can name a declared header. The
+            // kernel no longer says which names a package may use; this manifest declaration does.
             declared(manifest, name)
                 .map(AdmittedAuthV1::DeclaredHeaderSecret)
                 .ok_or_else(|| DescriptorAuthErrorV1::HeaderNotSanctioned(name.clone()))
+        }
+        Some(Auth::BearerAndHeader { name, .. }) => {
+            if !manifest.auth_arms.contains("bearer_and_header_secret") {
+                return Err(DescriptorAuthErrorV1::BearerAndHeaderNotDeclared);
+            }
+            sanctioned(name)
+                .map(AdmittedAuthV1::BearerAndHeaderSecret)
+                .ok_or_else(|| DescriptorAuthErrorV1::CombinedHeaderNotSanctioned(name.clone()))
         }
         Some(Auth::OAuth { secret, .. }) => {
             // Only the section that applies to this family mints (§13.5 D2).
@@ -166,6 +192,11 @@ pub fn admit_descriptor_auth(
             }
         }
     }
+}
+
+/// The sanctioned secret-bearing header matching `name` without case.
+fn sanctioned(name: &str) -> Option<SecretHeaderV1> {
+    SecretHeaderV1::ALL.into_iter().find(|header| header.header_name().eq_ignore_ascii_case(name))
 }
 
 /// The manifest's declared secret header matching `name` without case, when it passes the
