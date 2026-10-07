@@ -1280,7 +1280,7 @@ the link layer.
 | B7a | §10 instance declarations on the south side: declared secret headers, query parameters, quota headers, `DeclaredUserAgentV1`; the contract changes of §10 | P21 S7 | New instances no longer touch the south link layer | minor |
 | B5 | T21 guests, gaining modes phase by phase alongside B1–B4 and B7a | J2 standing pilot | All of J2b | Not published |
 | B6 | Responses upstream, Kiro, InvokeModel-Anthropic, catalog data, catalog world | P21 S6, S7 | J1 keeps falling | minor each |
-| B7b | Kernel chain: `Auth` combined arm, credential header catalog (§10), cache buckets | P21 S7 | New secret header names no longer touch the kernel | minor + kernel |
+| B7b | Kernel chain: `Auth` combined arm, credential header catalog (§10), cache buckets. **Landed 2026-10-08 (§13.7).** | P21 S7 | New secret header names no longer touch the kernel | minor + kernel |
 
 B1, B2 and B3 are independent of one another and can proceed in parallel; B4 depends on B2's descriptor auth
 admission; B7a depends only on B0 and, after the Q1 and Q10 rulings, is required for DP0; B6 depends on B1–B4 and
@@ -1524,7 +1524,8 @@ are now `not_verified` until the host re-runs them.
   descriptor's ordinary headers.
 - **Blocked on B7b:** the kernel's `Auth::header` still checks names against its static list while deserializing,
   and the only names it accepts beyond `SecretHeaderV1` are undeclarable. So no component descriptor can name a
-  declared header until B7b. A test pins this and is meant to fail when B7b lands.
+  declared header until B7b. A test pins this and is meant to fail when B7b lands. *(Landed 2026-10-08: §13.7 item 5
+  replaces that test.)*
 
 **Query parameters.** The manifest declares `query_parameters`: at most 16 entries, provider world only.
 - **Value syntax:** each declaration names one closed value syntax, `digits`, `token`, `date` or `enum`. `token` is
@@ -1924,6 +1925,138 @@ Breaking only in const-ness: `SandboxedComponentV1::new` and `inner` are no long
   multi-family packages; build the T21 eventstream guest for the J2 synthetic tests.
 - Keep R35 (signing only for verified first-party packages, §3.4).
 
+### 13.7 Kernel re-pin to protocol 0.5.0, the B7b closeout and issue #138 (2026-10-08)
+
+The kernel chain finished: `token-station-protocol` 0.5.0 (upstream tag `kernel-v0.5.0`, commit `8e34f5a0`, token-station
+#40 and #41) is mirrored as `ballast-ai/token-station-kernel` `v0.4.0` (commit `c2581f37`), and the mirror records
+`canonical_ir` 3. lv approved on 2026-10-08 that South re-pins, absorbs the API changes, finishes B7b, closes #138 and
+wires Q14, as two stacked pull requests. This section is the first: the re-pin, the version and `south_runtime` policy,
+B7b and #138. The Q14 value channel is wired in §13.8 and nothing here depends on it.
+
+**What the kernel changed, and what South does with each** (`f585bc83..c2581f37`, `crates/protocol`):
+
+| Kernel change | Effect on South |
+|---|---|
+| `Auth::BearerAndHeader { name, secret }`: the secret as `Authorization: Bearer` and verbatim in `name` | A descriptor can now ask for the combined arm. Admission is new (B7b, below). |
+| `Auth::header` and its deserialization admit any lowercase RFC 9110 token of at most 64 bytes outside the kernel's `NEVER_CREDENTIAL_HEADERS`; the 0.4.0 catalog names keep any case as written; `CREDENTIAL_HEADERS` and `is_credential_header` are public | The kernel no longer decides which names a package may use. A component's descriptor can name a header the manifest declares in `secret_headers`; `admit_descriptor_auth` decides (B7b). |
+| `Usage.explicit_cache_read_tokens`, a subset of `cache_read_tokens`, omitted from the wire at zero; `Usage::is_partitioned` | No reference reports it, so every package's wire is unchanged. The gate ② partition judge learns the subset rule so a package that starts reporting it is judged. |
+| `ProviderConfig.declared` and `ChatRequest.host_values` become `ComponentValues` (keys of 1 to 64 bytes of `[a-z0-9_]`, values of 1 to 4096 bytes of printable ASCII, validated on construction and on deserialization) | South builds neither outside fixtures and no fixture sets them. Wiring is §13.8. |
+| `ProviderEndpoint::permits` admits an encoded slash inside one segment below the endpoint path when every decoded piece is non-empty and neither `.` nor `..`; the endpoint path itself still refuses it | Issue #138. Two task reference tests that pinned the old refusal change with it (below). |
+
+**1. The pin.** `token-station-protocol = { version = "0.5.0", git = ".../token-station-kernel.git", rev = "c2581f37…" }`
+in the workspace `Cargo.toml` is the only kernel dependency (`token-station-router-core` is not a South dependency).
+The fourteen component lockfiles and `fuzz/Cargo.lock` re-resolve to it. `deny.toml` already allows the mirror. The only
+compile error the re-pin produced was the non-exhaustive match over `Auth` in `admit_descriptor_auth`.
+
+**2. The compatibility values.** The runtime reads the first three as provenance only; the range handshake compares
+`kernel_contracts` (§8.3), and `compatibility_admits` compares it by exact equality over the union of both key sets, so a
+package and a host disagree on any contract number, in either direction, and the package is refused. The mapping was
+read from the previous pin, not guessed: the mirror's `release.version` and `mirror.source_commit` at `f585bc83` were
+`0.3.0` and `6822aab1…`, the values the 0.39.0 packages declare.
+
+| Field | Was | Now | Source |
+|---|---|---|---|
+| `ir_schema_id` | `token-station-protocol@0.4.0/v0.3.0` | `token-station-protocol@0.5.0/v0.4.0` | protocol crate version, mirror release tag |
+| `kernel_version` | `0.3.0` | `0.4.0` | mirror `release.version` |
+| `kernel_revision` | `6822aab1dea54ef646cb2206595cd4955ff9764a` | `8e34f5a089d0b9c7273b49ddb6952dd87e960019` | mirror `mirror.source_commit` (the upstream commit of `kernel-v0.5.0`) |
+| `kernel_contracts` | `canonical_ir` 2, `error_catalog` 1, `stream` 2 | `canonical_ir` 3, `error_catalog` 1, `stream` 2 | mirror `contracts`; `stream` and `error_catalog` do not change |
+
+The root `compatibility.json` records `kernel_contracts.canonical_ir` 3 for the same reason. Its `contracts.canonical_ir`
+stays `null`: South consumes that contract and does not own it (2026-09-29 lesson).
+
+**3. `south_runtime` is 0.46.0 for all fourteen packages (§16 Q37).** A package's `south_runtime` is the oldest runtime
+that admits and correctly runs it (§13.6). Every package now declares `canonical_ir` 3, and a runtime of 0.45.0 or older
+records 2, so it refuses the package: through the range check, which sees a declared 3 against an expected 2, and
+through `south_runtime`, which a 0.45.0 host finds newer than its own. 0.46.0 is therefore the oldest runtime that admits
+the packages, and `check-declared-runtime.sh` would say so: under the `v0.45.0` tree it fails with a kernel contract
+mismatch. The tree must contain the runtime a package declares for that script and for `shipped_packages_v1` ("never
+newer than this release"), so this change bumps the workspace version, the internal path-dependency versions,
+`compatibility.json` `release.version` and the lockfiles to 0.46.0, which is what a release PR otherwise does alone. The
+release PR then adds only the release notes and the tag. Both stacked pull requests belong in one release: a tag between
+them would put the second one's changes into `component.wasm` under unchanged versions (every package links these
+crates), and the digest-stability check would demand another round of bumps.
+
+**4. Package identities.** Every `component.wasm` changes (new kernel, new workspace version) and every manifest changes
+(the tuple), so every package takes a new version. `provider-openai-compatible` 2.3.0 → **2.4.0** (new family and arm,
+below); the other thirteen take a patch bump with unchanged behavior: `provider-anthropic` 1.0.12,
+`provider-bedrock-converse` 1.0.9, `provider-bedrock-converse-bearer` 1.0.1, `provider-gemini` 1.1.8, `task-kling` 1.0.8,
+`task-kling-v2` 0.32.6, `task-minimax-v2` and `task-bailian-v2` 0.31.5, `task-byteplus-v2` 0.36.5, and `task-xai-v2`,
+`task-veo-v2`, `task-wan-image-v2` and `task-gmi-image-v2` 0.35.5. The Converse, Converse-bearer and Gemini packages
+also gain the #138 fixture, which changes no behavior.
+
+**5. B7b: the combined auth arm (§4.3, §16 Q4 option A).**
+
+- The provider world's auth vocabulary gains `bearer_and_header_secret`. The task worlds do not admit it: `TASK_AUTH_ARMS`
+  is the old four, because no task consumer needs it and a vocabulary word is a promise the task host path would have to
+  honor (§16 Q36). Gate ① refuses it in a task manifest as an unknown word, and `host_signed` still admits no other arm.
+- `admit_descriptor_auth` admits `Auth::BearerAndHeader` as `AdmittedAuthV1::BearerAndHeaderSecret(SecretHeaderV1)` when
+  the manifest declares `bearer_and_header_secret` and the descriptor's name is one of the five sanctioned secret headers
+  (any case). A host maps it onto `RawAuthV1::BearerAndHeaderSecret`; auth contract 5 already has the arm, so no
+  contract number changes. Without the arm in the manifest it is refused (`BearerAndHeaderNotDeclared`). The arm is
+  independent of `bearer` and `header_secret`: declaring either does not admit the combined descriptor.
+- A name the manifest declares in `secret_headers` is **refused** on the combined arm
+  (`CombinedHeaderNotSanctioned`). The contract's combined arm is closed over the sanctioned set, and widening it needs an
+  auth-contract bump (`BearerAndDeclaredHeaderSecret`, auth 6) for a consumer that does not exist (§16 Q35).
+- Declared secret header names now reach descriptors. A deserialized `Auth::Header` naming a header in the manifest's
+  `secret_headers` is admitted as `DeclaredHeaderSecret`; the same name undeclared is `HeaderNotSanctioned`. The placeholder
+  test `until_b7b_no_component_descriptor_can_name_a_declared_header` is replaced by tests of exactly these cases. Two
+  pins keep the layers honest: South's `UNDECLARABLE_SECRET_HEADER_NAMES` contains every kernel `NEVER_CREDENTIAL_HEADERS`
+  name, and every kernel `CREDENTIAL_HEADERS` name is either sanctioned or undeclarable, so the kernel's looser rule cannot
+  open a name South forbids. A host that presents a credential in a declared name must redact it as well as the kernel's
+  default set (`CREDENTIAL_HEADERS`).
+
+**6. B7b: the `gemini-openai-compatible` family (§16 Q38).** The family lives in `provider-openai-compatible`, not in
+`provider-gemini` and not in a new package. Gemini's OpenAI-compatible surface (`/v1beta/openai/chat/completions`) takes
+an OpenAI-shaped body and demands the key twice, as `Authorization: Bearer` and in `x-goog-api-key` (2026-09-08
+record). `provider-gemini` builds native `generateContent` URLs and bodies and presents `x-goog-api-key` alone, so it
+cannot serve that surface; a new package would copy the OpenAI-compatible translation for one different descriptor field.
+The family reuses the translation unchanged and differs in two declarations: its descriptor presents
+`Auth::BearerAndHeader` over `x-goog-api-key`, and its endpoint template is
+`https://generativelanguage.googleapis.com/v1beta/openai`. The package's `auth_arms` become `bearer`,
+`bearer_and_header_secret` and `header_secret`. A host that wants the family must take `provider-openai-compatible` 2.4.0,
+which needs this runtime (§16 Q20's caveat applies again).
+
+**7. Issue #138.** The Converse and Gemini references already encode the model as one path segment, so an inference-profile
+ARN such as `arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-x` becomes `…%2F…`. Kernel 0.5.0
+admits it (option 1 of the issue, in its generic form: the kernel does not know `request_facts`, and the tail rule gives
+the same guarantee that the target stays at or below the endpoint). Gate ② already runs `authorize` on every request case
+(`EndpointConfinement`), so the closeout is data: `provider.request.model-id-with-a-slash-stays-one-segment` in the
+Converse, Converse-bearer and Gemini packs. A test pins the other half: a model whose pieces would traverse (`a/../b`,
+`..`) or collapse (`a//b`) is built into a descriptor `authorize` refuses. Run against the previous pin, the new rows fail
+`EndpointConfinement` for both packages (the mutation check under "Evidence"). Two task reference tests pinned the old refusal of
+`%2F` in a task id (`v2_observe_encodes_one_id_segment_and_preserves_endpoint_prefix` and the MiniMax and Bailian
+equivalents); they now expect an id with a slash to be admitted as one segment and keep refusing a backslash, a dot piece
+and an empty piece.
+
+**Known remaining risk (kernel record, not changed here).** `permits` does not refuse an encoded percent sign. A model id
+that itself contains `%2e%2e` is encoded by South as `%252e%252e` and admitted; an upstream that decodes the path twice
+would read `..`. Model ids come from the operator's catalog, not from clients, and the kernel records a later change as
+possible. South does not add its own rule on top.
+
+**Rejections and limits this change introduces** (every one is also in §16):
+
+1. The combined arm over a declared header name (Q35).
+2. The combined arm in a task manifest (Q36).
+3. Packages built against the old kernel are refused by a host that records `canonical_ir` 3, and the new ones by a host
+   that records 2: a one-way flag day, unchanged in kind from the 0.39.0 re-pin, which is why all fourteen re-stamp.
+4. Nothing else is newly refused. The `declared` / `host_values` grammar is the kernel's, applied when a fixture or a host
+   deserializes a `ProviderConfig` or `ChatRequest`.
+
+**What the host does after the release** (re-pin and the two follow-ons that were blocked on this):
+
+- Re-pin South and the kernel mirror (`c2581f37`), set `canonical_ir` 3 in `HostRangeV1.kernel_contracts`, and take every
+  fourteen package at its new version: a host cannot mix the two kernel lines.
+- Follow the Rust type changes: `AdmittedAuthV1::BearerAndHeaderSecret`, `DescriptorAuthErrorV1::BearerAndHeaderNotDeclared`
+  and `CombinedHeaderNotSanctioned`, `PROVIDER_AUTH_ARMS` and `TASK_AUTH_ARMS`, and the kernel's `Auth::BearerAndHeader`,
+  `Usage.explicit_cache_read_tokens`, `ProviderConfig.declared` and `ChatRequest.host_values`.
+- R17 (an upstream model id with `/`, for example a Bedrock inference-profile ARN) lifts with the re-pin; add a host test
+  with an ARN model through Converse. The Bearer sibling serves the same ids.
+- Redact a declared secret header name as well as the kernel's default set before presenting a credential in it. R10
+  (declared secret headers) still waits for the host's S7.
+- Bedrock's dialect name (§16 Q30): the host's Claude-dialect handling keyed on the name `bedrock` must follow the package
+  declarations, or `bedrock-bearer` rows lose it.
+- R24 (a recipe that exports `attributes`) and R9b (more than one slot) are unchanged by this section; R24 moves with §13.8.
+
 ## 14. Existing text to revise in step
 
 - ARCHITECTURE.md:117-126: change the concluding sentence to "execution, material, reachable destinations and the
@@ -1998,6 +2131,8 @@ Tags: S = south maintainers, L = lv, K = kernel.
   Note (2026-10-01): that half now includes the §3.4 trust rules and the §3.5 host invariants.
 - **Q4 (S, K)** The combined arm: add a variant to the kernel's `Auth` (recommended), or an interim family-level
   mirror in the OpenAI-compatible package (§4.3).
+  **Resolved (2026-10-08): option A.** Kernel protocol 0.5.0 has `Auth::BearerAndHeader`; South admits it and serves it
+  from a `gemini-openai-compatible` family (§13.7, Q35, Q36, Q38).
 - **Q5 (S, K)** Refining DP5: a `runtime_abi` epoch (recommended) or south going straight to 1.0; the IR line as
   exact equality on the kernel's published contract numbers (recommended), or a range once the kernel publishes what
   each contract increment added and the host refuses requests using newer additions; contracts made additive, or
@@ -2062,6 +2197,10 @@ Tags: S = south maintainers, L = lv, K = kernel.
   amendment of the fence and D5 admitting one nested reserved key per type. Either way the host strips
   client-supplied keys that collide with a reserved name. Keys the compatible reference already reads are existing
   precedent, recorded as such by the Responses record, not a ruling on this question.
+  **Kernel half done (2026-10-08): typed fields.** Protocol 0.5.0 carries `ProviderConfig.declared` (per provider and per
+  attempt) and `ChatRequest.host_values` (per request), both as the validated `ComponentValues` map (keys of 1 to 64
+  bytes of `[a-z0-9_]`, values of 1 to 4096 bytes of printable ASCII). The `extensions` fence is unchanged. South's half
+  is the manifest vocabulary that declares and exports into them (§13.8).
 - **Q15 (S)** Reopen the 2026-08-20 controlled-user-agent ruling: may a user-agent value come from a manifest value
   validated at gate ① (`DeclaredUserAgentV1`, §10) rather than only from host program text? Recommended: yes, with
   the value grammar unchanged and a fuzz obligation on the new parser.
@@ -2172,6 +2311,34 @@ Tags: S = south maintainers, L = lv, K = kernel.
 - **Q34 (S)** May a host enable `signing` for a package it has not verified as first-party (host feedback SF19, host
   Q-S4-7)? Recommended: no, until package signing exists (§3.4, Q11), because the finalizer signs any request the
   component builds for the template's host. **Ruled (lv, 2026-10-05): as recommended**; recorded in §3.4.
+- **Q35 (S, L)** May the combined Bearer-plus-header arm carry a header the package declares in `secret_headers`
+  (§13.7)? Auth contract 5 has the combined arm only over the five sanctioned names, and the only consumer (Gemini's
+  OpenAI-compatible surface) uses a sanctioned one. Recommended: no; refuse it at admission
+  (`CombinedHeaderNotSanctioned`) until a package needs it, then add `ProviderAuthV1::BearerAndDeclaredHeaderSecret`
+  (auth contract 6, additive) in the same change as that package. Adding a contract variant for a consumer that does not
+  exist would be a guess about its shape. **Taken as recommended under the owner's standing rule; needs lv only if a
+  consumer appears.**
+- **Q36 (S)** Do the task worlds admit `bearer_and_header_secret` (§13.7)? Recommended: no. `TASK_AUTH_ARMS` is the old four
+  words; the task-v2 world already admits only `bearer` and `header_secret` on the host path, and a task manifest
+  declaring the new word is refused as an unknown word. **Taken as recommended.**
+- **Q37 (S, L)** What does a package rebuilt against a new kernel contract declare as `south_runtime` (§13.7 item 3)?
+  Recommended: the release that first records that contract, here 0.46.0, because a runtime recording the old number
+  refuses the package, so the oldest runtime that admits it is the new one. The same change bumps the workspace version so
+  the tree contains the declared runtime, which `check-declared-runtime.sh` and `shipped_packages_v1` require. Consequence
+  for the owner: the stacked Q14 pull request and this one belong in one release; a tag between them forces a second round
+  of package bumps. **Taken as recommended; flagged for the owner because the workspace bump lands in a feature pull
+  request instead of the release pull request.**
+- **Q38 (S)** Where does Gemini's OpenAI-compatible surface live (§13.7 item 6)? Options: a family in
+  `provider-openai-compatible` (recommended: the translation is identical and only the auth and endpoint differ); a family
+  in `provider-gemini` (refused: that package builds native URLs and bodies, and a second wire in one package makes
+  `request_facts` and `stream_framing`, which are per package or per family, carry two shapes); a new package (refused:
+  fifteen packages and a build, release line and fixture pack for one descriptor field). **Taken as recommended.**
+- **Q39 (S, K)** Is the kernel's generic encoded-slash rule enough for #138, or should South keep refusing `%2F` for
+  models it does not know to be ARNs (§13.7 item 7)? Recommended: enough. The rule keeps every descriptor at or below the
+  endpoint whatever the upstream decodes, and the references already encode the model as one segment. South adds fixtures
+  and no rule of its own. Remaining risk, recorded not fixed: a double-decoding upstream and a model id containing
+  `%2e%2e` (kernel record, known remaining work). **Taken as recommended; the kernel decision D5 asked lv to confirm at
+  its merge review.**
 
 ## 17. Amendments found while drafting the component records (2026-09-30) — change log
 
