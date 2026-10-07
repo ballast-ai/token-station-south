@@ -1977,8 +1977,8 @@ them would put the second one's changes into `component.wasm` under unchanged ve
 crates), and the digest-stability check would demand another round of bumps.
 
 **4. Package identities.** Every `component.wasm` changes (new kernel, new workspace version) and every manifest changes
-(the tuple), so every package takes a new version. `provider-openai-compatible` 2.3.0 → **2.4.0** (new family and arm,
-below); the other thirteen take a patch bump with unchanged behavior: `provider-anthropic` 1.0.12,
+(the tuple), so every package takes a new version. `provider-openai-compatible` 2.3.0 (merged after 0.45.0, whose release
+carries 2.2.1) → **2.4.0** (new family and arm, below); the other thirteen take a patch bump with unchanged behavior: `provider-anthropic` 1.0.12,
 `provider-bedrock-converse` 1.0.9, `provider-bedrock-converse-bearer` 1.0.1, `provider-gemini` 1.1.8, `task-kling` 1.0.8,
 `task-kling-v2` 0.32.6, `task-minimax-v2` and `task-bailian-v2` 0.31.5, `task-byteplus-v2` 0.36.5, and `task-xai-v2`,
 `task-veo-v2`, `task-wan-image-v2` and `task-gmi-image-v2` 0.35.5. The Converse, Converse-bearer and Gemini packages
@@ -2021,7 +2021,10 @@ The family reuses the translation unchanged and differs in two declarations: its
 `Auth::BearerAndHeader` over `x-goog-api-key`, and its endpoint template is
 `https://generativelanguage.googleapis.com/v1beta/openai`. The package's `auth_arms` become `bearer`,
 `bearer_and_header_secret` and `header_secret`. A host that wants the family must take `provider-openai-compatible` 2.4.0,
-which needs this runtime (§16 Q20's caveat applies again).
+which needs this runtime (§16 Q20's caveat applies again). Gate 2 gains two rows in the OpenAI-compatible pack,
+`provider.request.gemini-openai-compatible` and `provider.request.gemini-openai-compatible-stream`; no response or stream row
+is added, because the family parses with the plain family's code, and no capture of the Gemini surface's responses backs that
+claim beyond the documented OpenAI wire. The gate 2 test that pinned the package's arm set follows the manifest.
 
 **7. Issue #138.** The Converse and Gemini references already encode the model as one path segment, so an inference-profile
 ARN such as `arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-x` becomes `…%2F…`. Kernel 0.5.0
@@ -2064,6 +2067,32 @@ clients. South does not add its own rule on top; a later kernel change could ref
 - Bedrock's dialect name (§16 Q30): the host's Claude-dialect handling keyed on the name `bedrock` must follow the package
   declarations, or `bedrock-bearer` rows lose it.
 - R24 (a recipe that exports `attributes`) and R9b (more than one slot) are unchanged by this section; R24 moves with §13.8.
+
+**Evidence (2026-10-08, branch `feature/kernel-repin`).** Every command below was judged by its own exit code, all 0.
+
+- `cargo fmt --all -- --check`; `cargo clippy --workspace --all-targets --all-features -- -D warnings`;
+  `cargo nextest run --workspace --all-features` with `PROPTEST_CASES=32` (1185 passed, 1 skipped); the doctests;
+  `cargo test --workspace --no-default-features`; `cargo check --manifest-path fuzz/Cargo.toml --all-targets --locked`;
+  `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features`; `rustup run 1.96.0 cargo check --workspace
+  --all-targets`; `scripts/check-boundaries.sh` (self-test and run); `python3 -m unittest discover -s scripts -p 'test_*.py'`;
+  `scripts/check-language.sh` (self-test, tracked files, and `--commits origin/main..HEAD`); `cargo deny`, `cargo audit` and
+  `cargo machete` for the workspace and `fuzz/`.
+- A local run of the release workflow's steps with the tag `v0.46.0`: all fourteen build scripts; the gate 2 reports from
+  the sandbox parity tests (`SOUTH_GATE2_REPORT_DIR`); the archives; `scripts/check-declared-runtime.sh --dist` and
+  `--build` (all fourteen load under the runtime they declare, 0.46.0, which is this tree); `release_index.py generate
+  --require-gate2-reports`; and `release_index.py compare` against the `v0.45.0` index (every package changed version, as
+  the check requires; `provider-openai-compatible` goes 2.2.1 to 2.4.0 against the published index).
+- Mutations, each restored with `cp` and `touch` and checked with `git diff --quiet`: removing the combined word from the
+  provider vocabulary (`combined_auth_arm_v1` fails); admission no longer requiring the manifest arm
+  (`the_combined_arm_is_admitted_for_a_sanctioned_header_and_a_declaring_manifest` fails); dropping `via` from South's
+  undeclarable list (`south_forbids_everything_the_kernel_never_lets_carry_a_credential` fails); the partition forgetting the
+  explicit-read subset (`explicit_cache_reads_beyond_all_cache_reads_break_the_partition` fails); the task world given the
+  provider vocabulary (`a_task_manifest_may_not_declare_the_combined_arm` fails); the Gemini family presenting a single
+  header (`gemini_openai_compatible_v1` fails in two tests).
+- Issue #138 against the previous pin: a scratch worktree of `origin/main` (kernel 0.4.0) carrying only the six new fixtures
+  and `encoded_model_segment_v1.rs` fails five tests, among them gate 2 of all three packs
+  (`endpoint_confinement` and `descriptor_auth_within_manifest` fail on `provider.request.model-id-with-a-slash-stays-one-segment`
+  with "outside the configured endpoint"). On this branch the same rows pass.
 
 ## 14. Existing text to revise in step
 

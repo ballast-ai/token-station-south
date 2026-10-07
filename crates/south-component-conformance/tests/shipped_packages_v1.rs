@@ -600,6 +600,8 @@ fn host_feedback_sf12_to_sf17_retires_every_published_044_package_identity() {
 #[test]
 fn the_kernel_repin_retires_every_published_045_identity_and_declares_the_new_runtime() {
     for (name, published) in [
+        // 2.3.0 was merged after 0.45.0 and never released; 2.2.1 is the published identity.
+        ("provider-openai-compatible", "2.2.1"),
         ("provider-openai-compatible", "2.3.0"),
         ("provider-anthropic", "1.0.11"),
         ("provider-gemini", "1.1.7"),
