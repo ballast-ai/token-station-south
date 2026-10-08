@@ -2027,10 +2027,18 @@ Converse, Converse-bearer and Gemini packs. A test pins the other half: a model 
 `..`) or collapse (`a//b`) is built into a descriptor `authorize` refuses. Run against the previous pin, the new rows fail
 `EndpointConfinement` for all three packages (the check under "Evidence").
 
+**Amendment (2026-10-08, host feedback SF26, §13.9).** This closed only the kernel layer. A host sends every raw call
+through `south-contracts`' `RelativePathV1`, whose grammar refused any escape decoding to `/`, so the row's descriptor
+passed gate ② and could not be sent: the host's re-pin to v0.46.0 found it with an ARN model through Converse. HTTP
+contract version eleven admits the encoded slash in a relative path under the same D5 rule (§13.9, §16 Q46); with it,
+#138 is closed for a host as well.
+
 **Known remaining risk (kernel behavior, not changed here).** Reading the 0.5.0 source, `permits` decodes each escape once
 and does not refuse a decoded percent sign. A model id that itself contains `%2e%2e` is encoded by South as `%252e%252e`
 and admitted; an upstream that decodes the path twice would read `..`. Model ids come from the operator's catalog, not from
 clients. South does not add its own rule on top; a later kernel change could refuse an encoded percent sign.
+(2026-10-08, §13.9: on the host's send path the risk is already closed one layer down. `RelativePathV1` refuses any
+escape decoding to `%`, so `%252e%252e` cannot be sent; SF26 keeps that refusal.)
 
 **Rejections and limits this change introduces** (every one is also in §16):
 
@@ -2050,7 +2058,9 @@ clients. South does not add its own rule on top; a later kernel change could ref
   and `CombinedHeaderNotSanctioned`, `PROVIDER_AUTH_ARMS` and `TASK_AUTH_ARMS`, and the kernel's `Auth::BearerAndHeader`,
   `Usage.explicit_cache_read_tokens`, `ProviderConfig.declared` and `ChatRequest.host_values`.
 - R17 (an upstream model id with `/`, for example a Bedrock inference-profile ARN) lifts with the re-pin; add a host test
-  with an ARN model through Converse. The Bearer sibling serves the same ids.
+  with an ARN model through Converse. The Bearer sibling serves the same ids. **Corrected 2026-10-08:** it did not lift
+  with v0.46.0, because `RelativePathV1` still refused the encoded slash (host feedback SF26); it lifts with HTTP
+  contract version eleven (§13.9).
 - Redact a declared secret header name as well as the kernel's default set before presenting a credential in it. R10
   (declared secret headers) still waits for the host's S7.
 - Bedrock's dialect name (§16 Q30): the host's Claude-dialect handling keyed on the name `bedrock` must follow the package
@@ -2229,6 +2239,88 @@ unless a line says otherwise.
   fails `a_component_acting_on_an_undeclared_key_is_red`; the reference interpreter ignoring `persisted` fails
   `a_credential_exports_its_attributes_from_its_fields_and_persist_keeps_the_last_value`; and in gate ③'s self-test each
   of the two new faults fails exactly its guarded case.
+
+### 13.9 Host feedback SF26: an encoded slash in a relative path (2026-10-08)
+
+The host's re-pin to v0.46.0 (token-station-server, branch `p21-repin-046`) added the test §13.7 asked for, an ARN model
+through Converse, and found #138 half closed. Kernel protocol 0.5.0's `ProviderEndpoint::permits` admits `%2F` inside
+one segment below the endpoint (D5), so the descriptor passes gate ② `authorize`. But a host sends nothing except
+through the HTTP contract: every raw call (`RawProviderCallV1` and its signed, GET and multipart siblings) carries its
+path as a `RelativePathV1`, and so does every task-v2 locator. `RelativePathV1::parse` refused any escape decoding to `.`,
+`/`, `\` or `%`, so the request failed after the gate and before dispatch. The host refuses such rows at seal time
+(its R17) until South closes the gap. On 2026-10-08 the owner (lv) approved the change.
+
+**Rule.** A relative path admits `%2F` or `%2f` inside one segment exactly as the kernel does below an endpoint: the
+decoded segment is split on `/`, and every piece must be non-empty and neither `.` nor `..`. So
+`model/arn:aws:bedrock:us-east-1:123456789012:inference-profile%2Fus.anthropic.x/converse` and
+`v1beta/models/tunedModels%2Ffixture-tuned-1:generateContent` parse; `v1/%2Fb`, `v1/a%2F`, `v1/a%2F%2Fb`,
+`v1/a%2F..%2Fb` and `v1/a%2F.` do not. Everything else is unchanged and stays stricter than the kernel:
+
+- An escape decoding to `\` or `%` is refused anywhere, as before. The kernel admits a decoded `%`; the contract does
+  not, so a double-decoding upstream can never be handed a second escape (`%252F`, `%252e%252e`; §13.7's remaining risk
+  and §16 Q39).
+- An escape decoding to `.` is refused anywhere, as before. The kernel admits `a%2eb`; the contract has never needed it,
+  and refusing it keeps a dot piece spelled only one way.
+- The endpoint path never admits an encoded slash, in the kernel or here (`ProviderEndpointV1::parse` is unchanged).
+
+**The join.** `resolve_against_with_query` appends the path to the endpoint with `Url::set_path` and rechecks the
+reparsed URL. The `url` crate keeps `%2F` in a path byte for byte (it neither decodes it nor treats it as a separator),
+so the recheck reads the same segment the grammar admitted, and `inside_base` still compares the prefix of the
+unnormalized path. A test pins that the resolved URL is the endpoint followed by the relative path unchanged.
+
+**Task-v2 locators inherit the rule (§16 Q46).** `TaskLocatorV2` reuses the `RelativePathV1` grammar, so a locator route
+such as `v1/tasks/a%2Fb` now parses. That is deliberate. A locator is replayed through the same contract as any other
+request, the kernel gate applies D5 to task descriptors as well, and the policy that task ids never travel as `%2F`
+already lives where the id is encoded: each of the seven segment-encoding task-v2 components refuses an id containing
+`/` before building a request (kernel re-pin record §4.1, pinned by `task_id_separator_v2`). A locator-only refusal
+would be a second grammar for the same path with nothing to protect.
+
+**Contract and versioning.** `HTTP_CONTRACT_VERSION` 10 → 11, and `compatibility.json` records `http` 11. The change
+widens admission: a version-ten relative path is exactly a version-eleven one without the escape, every previously
+accepted path is accepted unchanged, and this follows every earlier widening of the request grammar (versions two to
+ten each took a number). No package declares the HTTP contract and admission does not compare it, so no package is
+refused by it, and no conformance suite changes, so no `host_capabilities` entry moves. The auth, task and kernel
+contract numbers are unchanged.
+
+**Package identities.** `south-contracts` is linked into every component through
+`south-component-conformance`, and the task-v2 references build their locators with `TaskLocatorV2::new`, so the
+grammar is inside those packages. A same-path rebuild of all fourteen packages before and after the change showed a
+different `component.wasm` for exactly the eight task-v2 packages; the five provider packages and `task-kling`
+(task-adapter-v1) are byte-identical and keep their versions. The eight take a patch bump with unchanged behavior (none
+of them builds a route containing an escape): `task-kling-v2` 0.32.7, `task-minimax-v2` and `task-bailian-v2` 0.31.6,
+`task-byteplus-v2` 0.36.6, and `task-xai-v2`, `task-veo-v2`, `task-wan-image-v2` and `task-gmi-image-v2` 0.35.6. Each
+keeps `south_runtime` 0.46.0: nothing in the package relies on the new grammar, since only the host parses the paths it
+sends.
+
+**What the host does after the release:** re-pin, lift R17 (serve the ARN model through Converse and the Bearer sibling)
+and keep the test that found the gap, inverted: `RelativePathV1` now admits the path, and a host test should send it.
+
+**Evidence (2026-10-08, branch `p21-sf26-relative-path` on `d114de1`).** Every command below was judged by its own exit
+code. Exit 0 unless a line says otherwise.
+
+- `cargo fmt --all -- --check`; `cargo clippy --workspace --all-targets --all-features -- -D warnings`;
+  `cargo nextest run --workspace --all-features` with `PROPTEST_CASES=32` (1206 passed, 1 skipped); the doctests;
+  `cargo test --workspace --no-default-features`; `cargo check --manifest-path fuzz/Cargo.toml --all-targets --locked`;
+  `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features`; `rustup run 1.96.0 cargo check --workspace
+  --all-targets`; `scripts/check-boundaries.sh` (self-test and run); `python3 -m unittest discover -s scripts -p 'test_*.py'`;
+  `scripts/check-language.sh` (self-test, tracked files, and `--commits origin/main..HEAD`); `cargo deny`, `cargo audit`
+  and `cargo machete` for the workspace and `fuzz/`; all fourteen component build scripts; and
+  `scripts/check-declared-runtime.sh --build` (every package loads under the runtime it declares, 0.46.0).
+- Tests: the admitted and refused relative paths mirror the kernel's own D5 cases (`http_contract_v1`); an endpoint path
+  still refuses `%2F`; the resolved URL keeps the escape; the relative-path property generates encoded-slash and dot
+  fragments and checks that an admitted path, read with every `%2F` decoded, has no empty or dot segment (the fuzz
+  target `contract_parsers` asserts the same); a locator route inherits the rule (`task_contract_v2`); and
+  `encoded_model_segment_v1` sends the #138 row of the Converse, Converse-bearer and Gemini packs through
+  `RelativePathV1` and `resolve_against`, which give back the URL `authorize` judged, byte for byte, while the models that
+  would traverse or collapse are refused by the contract as well as by the kernel.
+- Against the previous contract (`origin/main`'s `lib.rs` with the new tests) seven tests fail, among them
+  `a_model_with_a_slash_resolves_through_the_relative_path_contract` and
+  `relative_path_admits_an_encoded_slash_inside_one_segment`.
+- Mutations, each restored with `cp` and `touch`: dropping the empty-piece check fails four tests (among them
+  `relative_path_refuses_an_encoded_slash_that_could_leave_the_binding_or_collapse` and
+  `a_model_that_would_traverse_or_collapse_is_refused_by_the_relative_path_contract`); dropping the dot-piece check fails
+  three; letting the endpoint path admit the escape fails `an_endpoint_path_never_admits_an_encoded_slash`; admitting a
+  decoded `%` fails four, among them `endpoint_rejects_unsafe_path_segments`.
 
 ## 14. Existing text to revise in step
 
@@ -2547,6 +2639,16 @@ Tags: S = south maintainers, L = lv, K = kernel.
   choose between recording a `persist` attribute's last value when the host builds the map or when it stores the
   fields: the runner reads after every write. **Taken as recommended under the owner's standing rule; flagged for the
   owner because a verified host capability becomes `not_verified`.**
+- **Q46 (S, L)** How far does the relative-path contract follow kernel D5 (host feedback SF26, §13.9)? Options: (A) admit
+  `%2F` inside one segment under exactly the kernel's piece rule and keep refusing escapes decoding to `.`, `\` and `%`,
+  in every relative path including task-v2 locators (recommended); (B) the same, with locators refusing `%2F` (refused:
+  a second grammar for one path, and the task-id policy already lives in the components that encode the id, kernel
+  re-pin record §4.1); (C) the whole kernel rule, admitting a decoded `%` and `a%2eb` as well (refused: it would hand a
+  double-decoding upstream a second escape, which §16 Q39 left as a recorded risk); (D) leave the contract strict and
+  keep #138 unsendable (refused: it is the gap the host found). As a widening of the request grammar it takes HTTP
+  contract version eleven, following versions two to ten. **Approved by lv on 2026-10-08 (the change itself); the
+  locator inheritance and the contract number were taken as recommended under the owner's standing rule and are
+  flagged for the owner because they relax a shared security check.**
 
 ## 17. Amendments found while drafting the component records (2026-09-30) — change log
 
@@ -2642,3 +2744,5 @@ into the body. Where each landed:
   unchanged version is withdrawn (Q25).
 - 2026-10-08, the Q14 value channel: new §13.8 and §16 Q41–Q45; §3.3's attributes table and paragraph, §7.3's config
   channel paragraph, §13.1's interim config rule and the Q14 item of §14 point to §13.8; Q14 records the South half.
+- 2026-10-08, host feedback SF26: new §13.9 and §16 Q46; §13.7 item 7 gains an amendment, its remaining-risk paragraph a
+  note, and its host steps a correction of the R17 bullet.
