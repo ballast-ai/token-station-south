@@ -2617,7 +2617,8 @@ South tag; hosts depend on South by tag, so nothing resolves differently.
   names a workspace crate other than these three (a component that started linking a workspace-versioned crate would
   be re-identified by every release again), or records a version the crate does not declare.
 - `south-component-conformance`'s optional dependency on `south-provider-runtime` (the `sandbox` feature, off in every
-  component) carries no version requirement, so a release bump does not edit the conformance crate's manifest.
+  component) is the lower bound `>=0.49.0` rather than an exact release (`cargo deny` refuses a path dependency with
+  no version), so a release bump does not edit the conformance crate's manifest.
 
 **Release procedure.**
 
