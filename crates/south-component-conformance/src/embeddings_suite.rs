@@ -9,8 +9,9 @@
 //! decide, not only what the component said.
 //!
 //! The suite always runs with the package's manifest: its capabilities decide whether a requested
-//! `dimensions` binds the vector length and what the batch and dimensions rows must show, and its
-//! `auth_arms` are what `DescriptorAuthWithinManifest` judges against.
+//! `dimensions` binds the vector length and what the batch and dimensions rows must show, its
+//! `auth_arms` are what `DescriptorAuthWithinManifest` judges against, and its declared keys are
+//! what `UndeclaredValuesIgnored` stays clear of.
 
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -48,6 +49,10 @@ pub const EMBEDDINGS_REQUIRED_ROWS_V1: [&str; 10] = [
 
 /// The key injected to prove a component tolerates a newer peer's field.
 const UNKNOWN_FIELD: &str = "__conformance_unknown_field";
+
+/// The prefix of the key injected to prove a component ignores a `declared` key its package does
+/// not declare; a numeric suffix keeps it clear of any key the package declares.
+const UNDECLARED_VALUE: &str = "conformance_undeclared_";
 
 /// What one case produced as JSON; `Err` is a fixture or boundary failure, never the component's
 /// own refusal, which is a value (`{"error": ...}`).
@@ -227,7 +232,7 @@ pub fn run_embeddings_component_suite_v1(
         outcomes.push(unknown_field_tolerance(&suite, case, &first));
 
         match case.family {
-            EmbeddingsFamilyV1::Request => outcomes.extend(request_checks(&suite, case)),
+            EmbeddingsFamilyV1::Request => outcomes.extend(request_checks(&suite, case, &first)),
             EmbeddingsFamilyV1::Response => {
                 outcomes.extend(response_checks(&suite, case));
             }
@@ -326,17 +331,19 @@ fn unknown_field_tolerance(
     }
 }
 
-/// `EndpointConfinement` and `DescriptorAuthWithinManifest` on what the component built. A case
-/// the component refuses built nothing to judge.
-fn request_checks(suite: &Suite<'_>, case: &EmbeddingsCaseV1) -> Vec<OutcomeV1> {
+/// `UndeclaredValuesIgnored` on every request case, and `EndpointConfinement` and
+/// `DescriptorAuthWithinManifest` on what the component built. A case the component refuses built
+/// nothing to judge for the last two.
+fn request_checks(suite: &Suite<'_>, case: &EmbeddingsCaseV1, first: &Invoked) -> Vec<OutcomeV1> {
+    let mut outcomes = vec![undeclared_values_ignored(suite, case, first)];
     let Ok(input) = parse::<RequestInput>(&case.input) else {
-        return Vec::new();
+        return outcomes;
     };
     let Ok(prepared) = suite.build(&input) else {
-        return Vec::new();
+        return outcomes;
     };
     let descriptor = &prepared.descriptor;
-    vec![
+    outcomes.extend([
         match input.provider_config.authorize(descriptor) {
             Ok(()) => OutcomeV1::passed(CheckV1::EndpointConfinement, &case.name),
             Err(refusal) => {
@@ -351,7 +358,56 @@ fn request_checks(suite: &Suite<'_>, case: &EmbeddingsCaseV1) -> Vec<OutcomeV1> 
                 refusal.to_string(),
             ),
         },
-    ]
+    ]);
+    outcomes
+}
+
+/// Adds a key the manifest does not declare to `ProviderConfig.declared` and requires the same
+/// answer, a refusal included (the provider suite's check, embeddings record §16). The key is valid
+/// under the kernel's `ComponentValues` grammar, so only the declaration tells it apart from one
+/// the component may read. The embeddings world has no `host_values`.
+fn undeclared_values_ignored(
+    suite: &Suite<'_>,
+    case: &EmbeddingsCaseV1,
+    first: &Invoked,
+) -> OutcomeV1 {
+    let check = CheckV1::UndeclaredValuesIgnored;
+    let family = case.input.pointer("/provider_config/provider").and_then(Value::as_str);
+    let declared = family.map(|family| suite.manifest.declared_keys(family)).unwrap_or_default();
+    // One more candidate than there are declared keys, so one is always free.
+    let key = (0..=declared.len())
+        .map(|index| format!("{UNDECLARED_VALUE}{index}"))
+        .find(|key| !declared.contains(key.as_str()))
+        .unwrap_or_default();
+    let mut mutated = case.input.clone();
+    let Some(Value::Object(config)) = mutated.pointer_mut("/provider_config") else {
+        return OutcomeV1::failed(
+            check,
+            &case.name,
+            "fixture has no object at `/provider_config` to carry `declared`",
+        );
+    };
+    let entry = config.entry("declared").or_insert_with(|| Value::Object(serde_json::Map::new()));
+    let Value::Object(values) = entry else {
+        return OutcomeV1::failed(
+            check,
+            &case.name,
+            "`/provider_config/declared` is not an object",
+        );
+    };
+    values.insert(key.clone(), Value::String("undeclared".to_owned()));
+    if suite.invoke(case, &mutated) == *first {
+        OutcomeV1::passed(check, &case.name)
+    } else {
+        OutcomeV1::failed(
+            check,
+            &case.name,
+            format!(
+                "adding the undeclared key `declared.{key}` changed the answer; a component reads \
+                 only the keys its package declares"
+            ),
+        )
+    }
 }
 
 /// `LocatorResolves` on a response case the fixture calls valid, and `UsageNeverDefaulted` on a
