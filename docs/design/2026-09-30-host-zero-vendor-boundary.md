@@ -2630,7 +2630,26 @@ South tag; hosts depend on South by tag, so nothing resolves differently.
    `component.wasm`, every package takes a version bump, as 0.47.0 to 0.49.0 did.
 3. A data-only release (catalog data, docs, host-side crates) bumps no package.
 
-**Evidence (2026-10-08).** EVIDENCE_PLACEHOLDER
+**Evidence (2026-10-08).** Same-path rebuilds of all seventeen packages (macOS, one checkout path and target
+directory throughout; local digests are compared only with local digests, since they never equal the release CI's):
+
+- `origin/main` (`82014a8`), built twice: identical, so the build is deterministic.
+- This change: all seventeen `component.wasm` identical to `origin/main`.
+- This change with only a release bump to 0.50.0 (`[workspace.package] version`, `compatibility.json`, the
+  requirements on workspace-versioned crates in `south-testkit`, `south-transport-reqwest` and `fuzz/`): all seventeen
+  identical to `origin/main`, and no component lockfile changed. On `origin/main` the same bump changed all seventeen
+  (§13.11).
+- The converse, on top of that bump: `south-contracts` alone moved to 0.49.1 (the build rewrote the seventeen
+  lockfiles): all seventeen differ, so a change to one of the three crates still re-identifies every package and the
+  digest-stability check still demands the bumps.
+- On the 0.50.0 tree, the version-reading tests (`compatibility_manifest`, `shipped_packages_v1`, `provider_api_v2`,
+  `component_conformance_v1`, `gemini_sandbox_parity_v1`; 94 tests) pass, and the gate ② report the Gemini parity test
+  wrote names `south_release` 0.50.0.
+- Mutations, each restored from a copy: a component lockfile naming `south-north-codec`, a crate version moved without
+  its lockfiles, and `south-provider-api` back on `version.workspace = true` each fail
+  `components_link_only_independently_versioned_workspace_crates` with its own message; dropping the `south_release`
+  check from `release_index.py` fails `test_report_naming_another_release_is_refused`.
+- The repository's full check set passes (the pull request lists each command and its exit code).
 
 ## 14. Existing text to revise in step
 
