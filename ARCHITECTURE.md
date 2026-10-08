@@ -201,7 +201,17 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-该库独立 Rust 版本为 0.1.0；八个库与组件运行时当前为 v0.48.0。
+该库独立 Rust 版本为 0.1.0；八个库与组件运行时当前为 v0.49.0。
+**v0.49.0**: host feedback SF27 (release record `docs/design/2026-10-08-release-0.49.0.md`, boundary record
+§13.10). `provider-gemini` 1.1.11 takes a stream's `Usage` only from its terminal chunk (a candidate carries
+`finishReason`); an intermediate `usageMetadata` is checked (an object, counts never decreasing) but never emitted, and
+any frame after the terminal chunk is refused, so Vertex AI native streams pass. The shared crates every guest links
+changed, so the other sixteen packages take a patch bump with unchanged behavior and keep their `south_runtime`:
+`provider-openai-compatible` 2.4.3, `provider-anthropic` 1.0.15, `provider-bedrock-converse` 1.0.12,
+`provider-bedrock-converse-bearer` 1.0.4, `task-kling` 1.0.11, `task-kling-v2` 0.32.9, `task-minimax-v2` /
+`task-bailian-v2` 0.31.8, `task-byteplus-v2` 0.36.8, `task-xai-v2` / `task-veo-v2` / `task-wan-image-v2` /
+`task-gmi-image-v2` 0.35.8 (0.46.0), `embeddings-openai-compatible` / `embeddings-gemini` 1.0.2 (0.47.0) and
+`embeddings-vertex` 1.0.1 (0.48.0). No contract number changes; the kernel pin is unchanged.
 **v0.48.0**: the embeddings value channel and `embeddings-vertex` (release record
 `docs/design/2026-10-08-release-0.48.0.md`, embeddings record §16). Gate ① admits a family's `config_schema` and
 exported credential attributes in the `embeddings-adapter-v1` world, the two sources of `ProviderConfig.declared`, under
