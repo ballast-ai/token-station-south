@@ -2178,6 +2178,11 @@ the self-test host fails exactly the guarded case for each of two new faults (ev
 ignored). `token-station-server`'s `credential_recipe` entry in `compatibility.json` moves from `verified` (10 cases) to
 `not_verified` until it runs the twelve-case table.
 
+*(Re-verified 2026-10-08: server dev-v2 `62cbef28` implements `exported_attributes` in its gate ③ harness, and dev-v2
+`ca3caedb`, pinned to the v0.47.0 tag, passes the twelve cases under both its billing forms with its full local matrix
+of 89 legs green; a mutation that ignores persisted attribute values fails exactly
+`PersistedAttributeOutlivesItsField`. The entry is `verified` with 12 cases again.)*
+
 **Normative text revised in step (§14).** `2026-08-21-canonical-ir-inventory.md` §2, §6 and D5 gain a dated amendment;
 the WIT doc comments of `model-capabilities` and `build-http-request` in `provider-adapter.wit` describe `declared` and
 `host_values`, and `task-adapter.wit` says `declared` is empty there. §3.3 and §7.3 point here.

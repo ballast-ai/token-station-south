@@ -428,7 +428,17 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 1
                 // `ExportedAttributesFollowTheCredential` and `PersistedAttributeOutlivesItsField`
                 // and the harness the required `exported_attributes`, so the ten-case run no longer
                 // describes the twelve-case table.
-                ("credential_recipe", "not_verified", None),
+                //
+                // Restored 2026-10-08 against the twelve-case table: server dev-v2 `62cbef28`
+                // implements `exported_attributes` in its gate ③ harness
+                // (`host_adapter_passes_south_credential_recipe_conformance_v1` in
+                // `gateway/tests/south_adoption.rs`, which asserts 12 passed cases), and server
+                // dev-v2 `ca3caedb`, pinned to the v0.47.0 tag (`6cd3f51c`), runs
+                // south.credential-recipe.v1 12/12 under both its balance and quota billing forms
+                // with its full local matrix of 89 legs green. A mutation that ignores persisted
+                // attribute values turns exactly `PersistedAttributeOutlivesItsField` red. The
+                // adoption record is held by that host's repository.
+                ("credential_recipe", "verified", Some(12)),
                 // eventstream_framing and request_signing (gate ③ of stream framing and signing,
                 // B2) verified 2026-10-07 at v0.45.0: server dev-v2 `d3ce030c` (P21 S4 C6),
                 // pinned to the v0.45.0 tag (`7cf1761e`), runs south.eventstream-framing.v1 9/9
