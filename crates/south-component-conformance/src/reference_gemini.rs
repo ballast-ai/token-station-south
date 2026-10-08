@@ -375,20 +375,52 @@ fn synthetic_call_id(position: usize, name: &str) -> String {
 
 // -- stream ------------------------------------------------------------------
 
+/// The `usageMetadata` counts a stream is held to across chunks, in the order a
+/// decrease is reported (the total last, so the specific bucket is named first).
+const STREAM_USAGE_COUNTS: [&str; 6] = [
+    "promptTokenCount",
+    "candidatesTokenCount",
+    "thoughtsTokenCount",
+    "toolUsePromptTokenCount",
+    "cachedContentTokenCount",
+    "totalTokenCount",
+];
+
 /// One Gemini stream, mid-parse.
 ///
 /// Gemini streams whole candidates whose `parts` carry the increment, so the
-/// per-frame work is the same shape as the non-streaming parse. The terminal
-/// bookkeeping matches the other components: a frame carrying `finishReason`
-/// records it, and the terminal triple leaves on the frame that carries usage,
-/// or at EOF.
+/// per-frame work is the same shape as the non-streaming parse.
+///
+/// **The terminal chunk is the one carrying `finishReason`, not the one
+/// carrying `usageMetadata`** (host feedback SF27, host-zero-vendor-boundary
+/// §13.10). Vertex AI puts `usageMetadata` on every chunk, and an intermediate
+/// one may hold no count at all (`{"trafficType": "ON_DEMAND"}`) or running
+/// counts; only the terminal chunk's is the usage of the exchange. So:
+///
+/// - the terminal chunk emits `Finish`, then `Usage` parsed by the same strict
+///   [`usage_of`] as a non-streaming response when it carries `usageMetadata`,
+///   then `Done`. Without `usageMetadata` it emits no `Usage` at all, never a
+///   zero, and the host refuses the stream for want of evidence (gate ② row
+///   `provider.stream.no-usage`);
+/// - an intermediate `usageMetadata` is never emitted as usage. It must be an
+///   object, and each count it carries must be a non-negative integer no lower
+///   than the same count in an earlier chunk; the terminal chunk is held to
+///   the same rule, an omitted count reading zero as in [`usage_of`];
+/// - any frame after the terminal chunk is refused.
+///
+/// Emitting the running counts as usage would also fold to the right number in
+/// a consumer that keeps the last non-zero report, but it would make every
+/// consumer depend on that fold, and a stream cut before its terminal chunk
+/// would leave a partial count that reads like evidence. Terminal-only is the
+/// rule of the host's own wire parser (token-station-server 03 #90), so the
+/// component and the host agree on which chunk is the evidence.
 #[derive(Debug, Default)]
 struct GeminiSseParser {
     tail: Vec<u8>,
     tool_calls_seen: usize,
-    saw_finish: bool,
-    pending_finish: Option<FinishReason>,
-    done_emitted: bool,
+    /// The highest value seen so far of each of [`STREAM_USAGE_COUNTS`].
+    counts_seen: [u64; STREAM_USAGE_COUNTS.len()],
+    terminated: bool,
 }
 
 fn sse_frame_boundary(buffer: &[u8]) -> Option<(usize, usize)> {
@@ -400,20 +432,53 @@ fn sse_frame_boundary(buffer: &[u8]) -> Option<(usize, usize)> {
     }
 }
 
-impl GeminiSseParser {
-    const fn take_pending_finish(&mut self) -> Option<StreamEvent> {
-        if !self.saw_finish {
-            return None;
+/// The finish reason of a terminal chunk: any candidate with a non-null
+/// `finishReason` makes the chunk terminal, as in the host's wire rule.
+fn stream_finish_reason(frame: &Value) -> ComponentResultV1<Option<&str>> {
+    let Some(candidates) = frame["candidates"].as_array() else {
+        return Ok(None);
+    };
+    for reason in candidates.iter().map(|candidate| &candidate["finishReason"]) {
+        if reason.is_null() {
+            continue;
         }
-        self.saw_finish = false;
-        Some(StreamEvent::Finish {
-            finish_reason: self.pending_finish.take(),
-            // Gemini does not report which stop sequence fired.
-            stop_sequence: None,
-        })
+        return reason
+            .as_str()
+            .map(Some)
+            .ok_or_else(|| provider_protocol_error("the upstream finishReason is not a string"));
+    }
+    Ok(None)
+}
+
+impl GeminiSseParser {
+    /// Holds one chunk's `usageMetadata` to the cross-chunk rule. An
+    /// intermediate chunk is judged only on the counts it carries; the
+    /// terminal chunk's omitted counts read zero.
+    fn observe_counts(&mut self, meta: &Value, terminal: bool) -> ComponentResultV1<()> {
+        if !meta.is_object() {
+            return Err(provider_protocol_error("the upstream usageMetadata is not an object"));
+        }
+        for (key, seen) in STREAM_USAGE_COUNTS.iter().zip(self.counts_seen.iter_mut()) {
+            if !terminal && meta.get(*key).is_none_or(Value::is_null) {
+                continue;
+            }
+            let value = meta_count(meta, key)?;
+            if value < *seen {
+                return Err(provider_protocol_error(
+                    "the upstream usageMetadata counts decrease across the stream",
+                ));
+            }
+            *seen = value;
+        }
+        Ok(())
     }
 
     fn events_of(&mut self, frame: &Value) -> ComponentResultV1<Vec<StreamEvent>> {
+        if self.terminated {
+            return Err(provider_protocol_error(
+                "the upstream sent a stream frame after the terminal finishReason",
+            ));
+        }
         let mut events = Vec::new();
         let candidate = &frame["candidates"][0];
         let mut produced_call = false;
@@ -447,43 +512,36 @@ impl GeminiSseParser {
                 }
             }
         }
-        if let Some(reason) = candidate["finishReason"].as_str() {
-            self.saw_finish = true;
-            self.done_emitted = false;
-            self.pending_finish =
-                Some(finish_reason_of(reason, produced_call || self.tool_calls_seen > 0));
-        }
-        if frame["usageMetadata"].is_object() {
-            let finish = self.take_pending_finish();
-            let terminal = finish.is_some();
-            events.extend(finish);
-            events.push(StreamEvent::Usage { usage: usage_of(&frame["usageMetadata"])? });
-            if terminal {
-                events.push(StreamEvent::Done { finish_reason: None, stop_sequence: None });
-                self.done_emitted = true;
+        let meta = frame.get("usageMetadata");
+        let Some(reason) = stream_finish_reason(frame)? else {
+            if let Some(meta) = meta {
+                self.observe_counts(meta, false)?;
             }
+            return Ok(events);
+        };
+        self.terminated = true;
+        events.push(StreamEvent::Finish {
+            finish_reason: Some(finish_reason_of(
+                reason,
+                produced_call || self.tool_calls_seen > 0,
+            )),
+            // Gemini does not report which stop sequence fired.
+            stop_sequence: None,
+        });
+        if let Some(meta) = meta {
+            let usage = usage_of(meta)?;
+            self.observe_counts(meta, true)?;
+            events.push(StreamEvent::Usage { usage });
         }
+        events.push(StreamEvent::Done { finish_reason: None, stop_sequence: None });
         Ok(events)
     }
 }
 
 impl StreamParserV1 for GeminiSseParser {
     fn parse_chunk(&mut self, chunk: &[u8]) -> ComponentResultV1<Vec<StreamEvent>> {
-        if chunk.is_empty() {
-            if self.done_emitted {
-                self.done_emitted = false;
-                return Ok(Vec::new());
-            }
-            let Some(finish) = self.take_pending_finish() else {
-                return Ok(Vec::new());
-            };
-            self.done_emitted = true;
-            return Ok(vec![
-                finish,
-                StreamEvent::Done { finish_reason: None, stop_sequence: None },
-            ]);
-        }
-
+        // EOF adds nothing: the terminal chunk already closed the stream, and a
+        // stream that never sent one gets no synthetic terminal.
         self.tail.extend_from_slice(chunk);
         let mut events = Vec::new();
         while let Some((payload_end, frame_end)) = sse_frame_boundary(&self.tail) {
@@ -699,5 +757,189 @@ impl ProviderComponentV1 for GeminiReferenceV1 {
 
     fn stream_parser(&self) -> Box<dyn StreamParserV1> {
         Box::new(GeminiSseParser::default())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn frame(payload: &Value) -> String {
+        format!("data: {payload}\n\n")
+    }
+
+    fn text_chunk(text: &str, usage: Option<Value>) -> Value {
+        let mut chunk =
+            json!({"candidates": [{"content": {"role": "model", "parts": [{"text": text}]}}]});
+        if let Some(usage) = usage {
+            chunk["usageMetadata"] = usage;
+        }
+        chunk
+    }
+
+    fn terminal_chunk(usage: Option<Value>) -> Value {
+        let mut chunk = json!({"candidates": [{"content": {"role": "model", "parts": [{"text": ""}]},
+                                                "finishReason": "STOP"}]});
+        if let Some(usage) = usage {
+            chunk["usageMetadata"] = usage;
+        }
+        chunk
+    }
+
+    /// Feeds every frame through one parser and then EOF; the first error wins.
+    fn run(frames: &[Value]) -> ComponentResultV1<Vec<StreamEvent>> {
+        let mut parser = GeminiSseParser::default();
+        let mut events = Vec::new();
+        for payload in frames {
+            events.extend(parser.parse_chunk(frame(payload).as_bytes())?);
+        }
+        events.extend(parser.finish()?);
+        Ok(events)
+    }
+
+    fn usages(events: &[StreamEvent]) -> Vec<&Usage> {
+        events
+            .iter()
+            .filter_map(|event| match event {
+                StreamEvent::Usage { usage } => Some(usage),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn refused(frames: &[Value], what: &str) {
+        let error = run(frames).err().unwrap_or_else(|| panic!("{what}: must be refused"));
+        assert_eq!(error.code, ErrorCode::ProviderProtocolError, "{what}");
+    }
+
+    const fn full_counts() -> (u64, u64) {
+        (10, 5)
+    }
+
+    fn counts(prompt: u64, candidates: u64) -> Value {
+        json!({"promptTokenCount": prompt, "candidatesTokenCount": candidates,
+               "totalTokenCount": prompt + candidates})
+    }
+
+    #[test]
+    fn vertex_count_less_intermediate_usage_metadata_is_ignored() {
+        let traffic = json!({"trafficType": "ON_DEMAND"});
+        let (prompt, candidates) = full_counts();
+        let mut terminal = counts(prompt, candidates);
+        terminal["trafficType"] = json!("ON_DEMAND");
+        let events = run(&[
+            text_chunk("18C ", Some(traffic.clone())),
+            text_chunk("and sunny.", Some(traffic)),
+            terminal_chunk(Some(terminal)),
+        ])
+        .expect("a Vertex stream parses");
+        let usage = usages(&events);
+        assert_eq!(usage.len(), 1, "usage leaves on the terminal chunk only");
+        assert_eq!((usage[0].input_tokens, usage[0].output_tokens), (10, 5));
+        assert!(matches!(events.last(), Some(StreamEvent::Done { .. })));
+    }
+
+    #[test]
+    fn running_counts_on_intermediate_chunks_are_not_emitted_as_usage() {
+        let events =
+            run(&[text_chunk("18C ", Some(counts(10, 2))), terminal_chunk(Some(counts(10, 5)))])
+                .expect("running counts that only grow parse");
+        let usage = usages(&events);
+        assert_eq!(usage.len(), 1);
+        assert_eq!(usage[0].output_tokens, 5);
+    }
+
+    #[test]
+    fn a_terminal_chunk_without_usage_metadata_reports_no_usage() {
+        // No usage event, never a zero: the host refuses the stream for want of
+        // evidence (gate ② row `provider.stream.no-usage`).
+        let events = run(&[
+            text_chunk("hi", Some(json!({"trafficType": "ON_DEMAND"}))),
+            terminal_chunk(None),
+        ])
+        .expect("the stream itself parses");
+        assert!(usages(&events).is_empty());
+        assert!(matches!(events.last(), Some(StreamEvent::Done { .. })));
+    }
+
+    #[test]
+    fn the_terminal_usage_metadata_is_parsed_strictly() {
+        refused(
+            &[terminal_chunk(Some(json!({"trafficType": "ON_DEMAND"})))],
+            "a terminal usageMetadata without counts",
+        );
+        refused(
+            &[terminal_chunk(Some(json!({"promptTokenCount": 10, "candidatesTokenCount": 5,
+                                         "totalTokenCount": 16})))],
+            "a terminal total that does not add up",
+        );
+    }
+
+    #[test]
+    fn intermediate_counts_must_be_non_negative_integers() {
+        for bad in [json!(-1), json!(1.5), json!("3")] {
+            refused(
+                &[
+                    text_chunk("hi", Some(json!({"promptTokenCount": bad}))),
+                    terminal_chunk(Some(counts(10, 5))),
+                ],
+                "an intermediate count that is not a non-negative integer",
+            );
+        }
+        refused(
+            &[text_chunk("hi", Some(json!("ON_DEMAND"))), terminal_chunk(Some(counts(10, 5)))],
+            "an intermediate usageMetadata that is not an object",
+        );
+    }
+
+    #[test]
+    fn counts_never_decrease_across_chunks() {
+        refused(
+            &[
+                text_chunk("a", Some(counts(10, 3))),
+                text_chunk("b", Some(counts(10, 2))),
+                terminal_chunk(Some(counts(10, 5))),
+            ],
+            "an intermediate count that decreases",
+        );
+        refused(
+            &[text_chunk("a", Some(counts(10, 6))), terminal_chunk(Some(counts(10, 5)))],
+            "a terminal count below an intermediate one",
+        );
+        // The JSON mapping omits a zero count; a terminal chunk that omits one an
+        // earlier chunk reported is a decrease, not an omission.
+        refused(
+            &[
+                text_chunk("a", Some(json!({"thoughtsTokenCount": 4}))),
+                terminal_chunk(Some(counts(10, 5))),
+            ],
+            "a terminal chunk that omits a count an earlier chunk reported",
+        );
+    }
+
+    #[test]
+    fn a_chunk_after_the_terminal_one_is_refused() {
+        refused(
+            &[terminal_chunk(Some(counts(10, 5))), text_chunk("late", None)],
+            "a content chunk after the terminal one",
+        );
+        refused(
+            &[terminal_chunk(None), json!({"usageMetadata": counts(10, 5)})],
+            "a usage-only chunk after a terminal chunk that carried none",
+        );
+    }
+
+    #[test]
+    fn any_candidate_with_a_finish_reason_makes_the_chunk_terminal() {
+        let chunk = json!({"candidates": [
+            {"content": {"role": "model", "parts": [{"text": "hi"}]}},
+            {"content": {"role": "model", "parts": []}, "finishReason": "MAX_TOKENS"}
+        ], "usageMetadata": counts(10, 5)});
+        let events = run(&[chunk]).expect("parses");
+        assert_eq!(usages(&events).len(), 1);
+        assert!(events.iter().any(|event| matches!(
+            event,
+            StreamEvent::Finish { finish_reason: Some(FinishReason::Length), .. }
+        )));
     }
 }

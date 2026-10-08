@@ -94,6 +94,16 @@ not the content. The component emits `file_data.file_uri` without
 remote image — which the enterprise host does today — is a wrong answer where an
 absent field would have been a question.**
 
+### G7 — A stream's usage comes from its terminal chunk (2026-10-08)
+
+The terminal chunk is the one whose candidate carries `finishReason`, not the one
+carrying `usageMetadata`: Vertex AI puts `usageMetadata` on every chunk, and an
+intermediate one may hold no count at all. Only the terminal chunk's
+`usageMetadata` becomes `Usage`, parsed as strictly as a non-streaming response;
+earlier counts are checked (non-negative integers that never decrease) but never
+emitted; a frame after the terminal chunk is refused. Host feedback SF27,
+recorded in `2026-09-30-host-zero-vendor-boundary.md` §13.10.
+
 ## 4. Fixture pack
 
 `fixtures-gemini/`, sixteen cases across all five families. Its own pack: three

@@ -154,6 +154,11 @@ fn the_shipped_pack_still_carries_every_decided_behaviour() {
         "provider.stream.text-and-terminal",
         "provider.stream.eof-terminates-without-a-usage-frame",
         "provider.stream.an-unfinished-stream-gets-no-synthetic-terminal",
+        // SF27 — usage comes from the chunk that carries `finishReason`; an
+        // earlier `usageMetadata` (Vertex's count-less one, or running counts)
+        // is progress, not usage.
+        "provider.stream.vertex-intermediate-usage-metadata-carries-no-counts",
+        "provider.stream.intermediate-counts-are-progress-not-usage",
     ] {
         assert!(names.contains(required), "the pack lost `{required}`");
     }
