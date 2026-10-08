@@ -561,9 +561,9 @@ fn the_converse_credential_fields_and_headers_retire_the_published_044_identity(
 /// The shared conformance and provider-api crates changed for host feedback SF12–SF17
 /// (host-zero-vendor-boundary §13.6), and a same-path rebuild of every package before and after
 /// showed a different `component.wasm` for all thirteen, so every identity published with 0.44.0
-/// retires, or the release's digest-stability check would refuse it. Their `south_runtime` stays
-/// 0.44.0: under the declared-runtime discipline it names the oldest runtime a package needs, and
-/// none of them needs anything newer.
+/// retires, or the release's digest-stability check would refuse it. Under the declared-runtime
+/// discipline their `south_runtime` stayed 0.44.0 at 0.45.0; the kernel re-pin then raised it to
+/// 0.46.0 (see `the_kernel_repin_retires_every_published_045_package_identity`).
 #[test]
 fn host_feedback_sf12_to_sf17_retires_every_published_044_package_identity() {
     for (name, published) in [
@@ -589,17 +589,15 @@ fn host_feedback_sf12_to_sf17_retires_every_published_044_package_identity() {
         )
         .unwrap();
         assert_ne!(manifest.version, published, "{name} reused its published identity");
-        assert_eq!(
-            manifest.compatibility.south_runtime, "0.44.0",
-            "{name}: needs nothing newer than 0.44.0, so it declares 0.44.0"
-        );
     }
 }
 
 /// The kernel re-pin to mirror `v0.4.0` (protocol 0.5.0, `canonical_ir` 3; design record
 /// `docs/design/2026-10-08-kernel-repin-protocol-0.5.0.md`) changes every manifest's compatibility
 /// declaration, so every identity published with 0.45.0 retires. `provider-openai-compatible` had
-/// already moved to the unreleased 2.3.0 (#150), which this change does not retire again.
+/// already moved to the unreleased 2.3.0 (#150), which this change does not retire again. Every
+/// package now needs `canonical_ir` 3, which no runtime before 0.46.0 records, so under the
+/// declared-runtime discipline each declares `south_runtime` 0.46.0.
 #[test]
 fn the_kernel_repin_retires_every_published_045_package_identity() {
     for (name, published) in [
@@ -634,6 +632,10 @@ fn the_kernel_repin_retires_every_published_045_package_identity() {
         assert_eq!(
             manifest.compatibility.ir_schema_id, "token-station-protocol@0.5.0/v0.4.0",
             "{name}"
+        );
+        assert_eq!(
+            manifest.compatibility.south_runtime, "0.46.0",
+            "{name}: needs canonical_ir 3, which 0.46.0 is the first runtime to record"
         );
     }
 }
