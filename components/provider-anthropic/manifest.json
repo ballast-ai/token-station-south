@@ -1,6 +1,6 @@
 {
   "name": "provider-anthropic",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "api_version": "provider-adapter-v2",
   "providers": [
     "anthropic"

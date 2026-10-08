@@ -675,6 +675,71 @@ fn the_kernel_repin_retires_every_published_045_package_identity() {
     }
 }
 
+/// The embeddings world added modules to `south-contracts`, `south-provider-api` and
+/// `south-component-conformance`, which every guest links, and a same-path rebuild of every package
+/// before and after showed a different `component.wasm` for all fourteen, so every identity
+/// published with 0.46.0 retires, or the release's digest-stability check would refuse it. Their
+/// `south_runtime` stays 0.46.0: under the declared-runtime discipline it names the oldest runtime
+/// a package needs, and none of them needs anything newer.
+#[test]
+fn the_embeddings_world_retires_every_published_046_package_identity() {
+    for (name, published) in [
+        ("provider-openai-compatible", "2.4.0"),
+        ("provider-anthropic", "1.0.12"),
+        ("provider-gemini", "1.1.8"),
+        ("provider-bedrock-converse", "1.0.9"),
+        ("provider-bedrock-converse-bearer", "1.0.1"),
+        ("task-kling", "1.0.8"),
+        ("task-kling-v2", "0.32.6"),
+        ("task-minimax-v2", "0.31.5"),
+        ("task-bailian-v2", "0.31.5"),
+        ("task-xai-v2", "0.35.5"),
+        ("task-byteplus-v2", "0.36.5"),
+        ("task-veo-v2", "0.35.5"),
+        ("task-wan-image-v2", "0.35.5"),
+        ("task-gmi-image-v2", "0.35.5"),
+    ] {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_ne!(manifest.version, published, "{name} reused its published identity");
+        assert_eq!(
+            manifest.compatibility.south_runtime, "0.46.0",
+            "{name}: needs nothing newer than 0.46.0, so it declares 0.46.0"
+        );
+    }
+}
+
+/// The embeddings world is first known to the 0.47.0 runtime, so that is the oldest runtime that
+/// admits either embeddings package, and both declare it: a host that claims 0.46.0 refuses them
+/// through the declared runtime alone, even with embeddings contract 1 in its range.
+#[test]
+fn the_embeddings_packages_declare_the_first_runtime_with_the_world() {
+    let mut on_046 = host_range::host_range();
+    "0.46.0".clone_into(&mut on_046.south_runtime);
+    for name in ["embeddings-openai-compatible", "embeddings-gemini"] {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(manifest.compatibility.south_runtime, "0.47.0", "{name}");
+        assert!(
+            matches!(
+                compatibility_admits(&manifest, &on_046),
+                Err(CompatibilityMismatchV2::SouthRuntimeAboveHost { .. })
+            ),
+            "{name}"
+        );
+    }
+}
+
 /// Every package declares one kernel tuple, and its crate version is the one the workspace pins:
 /// the tuple is package content, so a re-pin that forgets one manifest (or the dependency) fails
 /// here rather than in a host.
