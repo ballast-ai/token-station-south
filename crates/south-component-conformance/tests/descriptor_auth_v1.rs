@@ -101,8 +101,8 @@ fn an_arm_the_manifest_does_not_declare_is_refused() {
 }
 
 /// A header the manifest declares in `secret_headers` is admitted as the declared arm (B7a,
-/// host-zero-vendor-boundary §10). The descriptor is built in-process here; the next test builds
-/// it the way a component's JSON reaches a host.
+/// host-zero-vendor-boundary §10). The descriptor is built in-process: see the next test for why a
+/// component cannot produce it yet.
 #[test]
 fn a_declared_secret_header_is_admitted_as_the_declared_arm() {
     let (config, mut descriptor) = built();
@@ -141,227 +141,62 @@ fn a_declared_secret_header_is_admitted_as_the_declared_arm() {
     );
 }
 
-/// B7b: protocol 0.5.0 moved the credential header name check out of the kernel, so a component's
-/// descriptor, deserialized from the JSON a component returns, can name a header the manifest
-/// declares in `secret_headers`. The placeholder test that pinned the opposite
-/// (`until_b7b_no_component_descriptor_can_name_a_declared_header`) is replaced by this one.
+/// Protocol 0.5.0 moved the name check out of the kernel: `Auth::header` admits any lowercase field
+/// name outside the kernel's never-credential list, so a descriptor a component serializes can now
+/// name a header outside `CREDENTIAL_HEADERS`, and this admission decides whether the package may
+/// use it. (Under protocol 0.4.0 the same wire shape failed to deserialize, and the declared arm
+/// was reachable only from descriptors built in-process.)
 #[test]
-fn a_deserialized_descriptor_naming_a_declared_header_is_admitted() {
-    let (config, descriptor) = built();
-    let mut declaring = manifest(&["bearer", "header_secret"]);
+fn a_deserialized_descriptor_reaches_the_declared_arm() {
+    let (config, mut descriptor) = built();
+    let mut declaring = manifest(&["header_secret"]);
     declaring.secret_headers = vec!["x-acme-key".to_owned()];
     assert_eq!(declaring.validate(), Ok(()));
 
-    let over_the_wire = |name: &str| -> HttpRequestDescriptor {
-        let mut wire = serde_json::to_value(&descriptor).unwrap();
-        wire["auth"] = serde_json::json!({
-            "scheme": "header", "name": name, "secret": slot(&config).as_str()
-        });
-        serde_json::from_value(wire).expect("a lowercase token outside the never list decodes")
-    };
-
+    let wire = |name: &str| serde_json::json!({ "scheme": "header", "name": name, "secret": slot(&config).as_str() });
+    descriptor.auth = Some(serde_json::from_value::<Auth>(wire("x-acme-key")).unwrap());
     assert_eq!(
-        admit_descriptor_auth(&declaring, &config, &over_the_wire("x-acme-key")),
+        admit_descriptor_auth(&declaring, &config, &descriptor),
         Ok(AdmittedAuthV1::DeclaredHeaderSecret(
             DeclaredSecretHeaderV1::parse("x-acme-key").unwrap()
         ))
     );
-    // The kernel now admits the name; whether this package may use it is the manifest's call.
+
+    // The kernel now lets an undeclared name through; this admission still refuses it.
+    descriptor.auth = Some(serde_json::from_value::<Auth>(wire("x-acme-other")).unwrap());
     assert_eq!(
-        admit_descriptor_auth(
-            &manifest(&["bearer", "header_secret"]),
-            &config,
-            &over_the_wire("x-acme-key")
-        ),
-        Err(DescriptorAuthErrorV1::HeaderNotSanctioned("x-acme-key".to_owned()))
-    );
-    assert_eq!(
-        admit_descriptor_auth(&declaring, &config, &over_the_wire("x-acme-other")),
+        admit_descriptor_auth(&declaring, &config, &descriptor),
         Err(DescriptorAuthErrorV1::HeaderNotSanctioned("x-acme-other".to_owned()))
     );
-    // A sanctioned name keeps its closed arm whatever the declaration says.
-    assert_eq!(
-        admit_descriptor_auth(&declaring, &config, &over_the_wire("x-goog-api-key")),
-        Ok(AdmittedAuthV1::HeaderSecret(SecretHeaderV1::XGoogApiKey))
-    );
-}
 
-/// The kernel still refuses, at deserialization, every name that cannot carry a credential, and
-/// keeps admitting the 0.4.0 catalog names that South forbids to declare. For those the
-/// manifest's rule, not the kernel's, is what stops them.
-#[test]
-fn the_kernel_refuses_unusable_names_and_south_forbids_the_catalog_names_it_keeps() {
-    let (config, descriptor) = built();
-    let wire = |name: &str| {
-        let mut wire = serde_json::to_value(&descriptor).unwrap();
-        wire["auth"] = serde_json::json!({
-            "scheme": "header", "name": name, "secret": slot(&config).as_str()
-        });
-        serde_json::from_value::<HttpRequestDescriptor>(wire)
-    };
-    let too_long = "k".repeat(65);
-    for name in
-        ["user-agent", "content-type", "host", "X-Acme-Key", "x acme", "", too_long.as_str()]
-    {
-        assert!(wire(name).is_err(), "the kernel must refuse `{name}` while deserializing");
+    // What the kernel still refuses never reaches admission.
+    for refused in ["user-agent", "content-type", "X-Acme-Key"] {
+        assert!(serde_json::from_value::<Auth>(wire(refused)).is_err(), "{refused}");
     }
 
-    // Admitted by the kernel for 0.4.0 compatibility, never declarable here, so never admitted.
-    let mut declaring = manifest(&["bearer", "header_secret"]);
-    for name in ["authorization", "proxy-authorization", "cookie", "set-cookie"] {
-        assert!(Auth::header(name, slot(&config)).is_ok(), "{name}: the kernel keeps accepting it");
-        assert!(south_provider_api::validate_secret_header_name(name).is_err());
-        // Even a manifest that skipped gate ① and listed the name declares nothing.
-        declaring.secret_headers = vec![name.to_owned()];
-        assert_eq!(
-            admit_descriptor_auth(&declaring, &config, &wire(name).unwrap()),
-            Err(DescriptorAuthErrorV1::HeaderNotSanctioned(name.to_owned())),
-            "{name}"
+    for kernel_only in ["authorization", "proxy-authorization", "cookie", "set-cookie"] {
+        assert!(Auth::header(kernel_only, slot(&config)).is_ok());
+        assert!(
+            south_provider_api::validate_secret_header_name(kernel_only).is_err(),
+            "{kernel_only} is a kernel credential header but must stay undeclarable"
         );
     }
 }
 
-/// The kernel's rule is looser than South's, and must stay so: every name the kernel refuses as
-/// never able to carry a credential is also undeclarable here, and every name of the kernel's
-/// default redaction set is either sanctioned or undeclarable. So the kernel's change cannot open
-/// a name South forbids (§13.7 item 5, Q40). The other direction holds too: every sanctioned name
-/// is in the kernel's redaction set, so a host that redacts by default redacts every closed arm.
+/// The kernel's combined arm (`Auth::BearerAndHeader`, protocol 0.5.0) is refused unless the manifest
+/// declares `bearer_and_header_secret` (B7b): admitting it for a package that declares only the
+/// arms it combines would present a credential in a way the package never named.
 #[test]
-fn south_forbids_everything_the_kernel_never_lets_carry_a_credential() {
-    for header in SecretHeaderV1::ALL {
-        assert!(
-            token_station_protocol::is_credential_header(header.header_name()),
-            "`{}` is sanctioned but outside the kernel's default redaction set",
-            header.header_name()
-        );
-    }
-    for name in token_station_protocol::NEVER_CREDENTIAL_HEADERS {
-        assert!(
-            south_provider_api::UNDECLARABLE_SECRET_HEADER_NAMES.contains(name),
-            "`{name}` is on the kernel's never-credential list but a package could declare it"
-        );
-        assert!(south_provider_api::validate_secret_header_name(name).is_err());
-    }
-    for name in token_station_protocol::CREDENTIAL_HEADERS {
-        let sanctioned = SecretHeaderV1::ALL
-            .iter()
-            .any(|header| header.header_name().eq_ignore_ascii_case(name));
-        assert!(
-            sanctioned || south_provider_api::UNDECLARABLE_SECRET_HEADER_NAMES.contains(name),
-            "`{name}` is in the kernel's redaction set and a package could declare it"
-        );
-    }
-}
-
-/// The combined arm (B7b, §4.3): the one secret as `Authorization: Bearer` and in a sanctioned
-/// header, admitted only for a manifest that declares `bearer_and_header_secret`.
-#[test]
-fn the_combined_arm_is_admitted_for_a_sanctioned_header_and_a_declaring_manifest() {
+fn a_bearer_and_header_descriptor_is_refused() {
     let (config, mut descriptor) = built();
-    let combined = manifest(&["bearer_and_header_secret"]);
-    descriptor.auth =
-        Some(Auth::bearer_and_header("x-goog-api-key", slot(&config)).expect("the Gemini pair"));
-    assert_eq!(
-        admit_descriptor_auth(&combined, &config, &descriptor),
-        Ok(AdmittedAuthV1::BearerAndHeaderSecret(SecretHeaderV1::XGoogApiKey))
-    );
-
-    // Every sanctioned name is admissible, in any case the kernel keeps.
-    for header in SecretHeaderV1::ALL {
-        descriptor.auth = Some(Auth::BearerAndHeader {
-            name: header.header_name().to_ascii_uppercase(),
-            secret: slot(&config),
-        });
-        assert_eq!(
-            admit_descriptor_auth(&combined, &config, &descriptor),
-            Ok(AdmittedAuthV1::BearerAndHeaderSecret(header)),
-            "{}",
-            header.header_name()
-        );
-    }
-
-    // Declaring the two arms it combines is not declaring it.
     descriptor.auth = Some(Auth::bearer_and_header("x-goog-api-key", slot(&config)).unwrap());
-    for arms in [&["bearer"][..], &["header_secret"], &["bearer", "header_secret"], &["oauth"]] {
+    for arms in [&["bearer"][..], &["header_secret"], &["bearer", "header_secret"]] {
         assert_eq!(
             admit_descriptor_auth(&manifest(arms), &config, &descriptor),
             Err(DescriptorAuthErrorV1::BearerAndHeaderNotDeclared),
             "{arms:?}"
         );
     }
-    // And declaring it admits neither of the single arms.
-    let (_, bearer) = built();
-    assert_eq!(
-        admit_descriptor_auth(&combined, &config, &bearer),
-        Err(DescriptorAuthErrorV1::BearerNotDeclared)
-    );
-    let mut header = bearer;
-    header.auth = Some(Auth::header("x-goog-api-key", slot(&config)).unwrap());
-    assert_eq!(
-        admit_descriptor_auth(&combined, &config, &header),
-        Err(DescriptorAuthErrorV1::HeaderSecretNotDeclared)
-    );
-}
-
-/// The contract's combined arm is closed over the five sanctioned names (§16 Q35): a name the
-/// manifest declares in `secret_headers` is refused on it, and so is one nobody declared.
-#[test]
-fn the_combined_arm_refuses_a_declared_or_unknown_header() {
-    let (config, mut descriptor) = built();
-    let mut declaring = manifest(&["bearer_and_header_secret", "header_secret"]);
-    declaring.secret_headers = vec!["x-acme-key".to_owned()];
-    assert_eq!(declaring.validate(), Ok(()));
-    for name in ["x-acme-key", "x-not-declared"] {
-        descriptor.auth = Some(Auth::bearer_and_header(name, slot(&config)).unwrap());
-        assert_eq!(
-            admit_descriptor_auth(&declaring, &config, &descriptor),
-            Err(DescriptorAuthErrorV1::CombinedHeaderNotSanctioned(name.to_owned())),
-            "{name}"
-        );
-    }
-    // The same declared name on the single header arm is still admitted.
-    descriptor.auth = Some(Auth::header("x-acme-key", slot(&config)).unwrap());
-    assert!(matches!(
-        admit_descriptor_auth(&declaring, &config, &descriptor),
-        Ok(AdmittedAuthV1::DeclaredHeaderSecret(_))
-    ));
-}
-
-/// The kernel itself refuses `authorization` as the second header of the combined arm, so a
-/// descriptor cannot even name it; a declared secret header on the ordinary channel is refused
-/// under the combined arm as under the others.
-#[test]
-fn the_combined_arm_keeps_the_ordinary_channel_rules() {
-    let (config, mut descriptor) = built();
-    assert!(Auth::bearer_and_header("authorization", slot(&config)).is_err());
-    assert!(
-        serde_json::from_str::<Auth>(
-            r#"{"scheme":"bearer_and_header","name":"authorization","secret":"k"}"#
-        )
-        .is_err()
-    );
-
-    let mut declaring = manifest(&["bearer_and_header_secret", "header_secret"]);
-    declaring.secret_headers = vec!["x-acme-key".to_owned()];
-    descriptor.auth = Some(Auth::bearer_and_header("x-goog-api-key", slot(&config)).unwrap());
-    descriptor.headers = KernelSafeHeaders::try_new([("X-Acme-Key", "smuggled")]).unwrap();
-    assert!(matches!(
-        admit_descriptor_auth(&declaring, &config, &descriptor),
-        Err(DescriptorAuthErrorV1::SecretHeaderOnOrdinaryChannel(_))
-    ));
-}
-
-/// A `host_signed` package carries no auth at all, the combined arm included.
-#[test]
-fn a_host_signed_package_refuses_the_combined_arm_like_any_other() {
-    let (config, mut descriptor) = built();
-    let mut signed = manifest(&["host_signed"]);
-    signed.emits = vec!["authorization".to_owned()];
-    descriptor.auth = Some(Auth::bearer_and_header("x-goog-api-key", slot(&config)).unwrap());
-    assert_eq!(
-        admit_descriptor_auth(&signed, &config, &descriptor),
-        Err(DescriptorAuthErrorV1::HostSignedCarriesAuth)
-    );
 }
 
 /// A declared name on the ordinary header channel is refused: nothing downstream redacts an
@@ -487,6 +322,158 @@ fn gate_two_refuses_a_package_whose_descriptors_present_an_undeclared_arm() {
             report.failures().any(|outcome| outcome.check == CheckV1::DescriptorAuthWithinManifest
                 && outcome.case == refused_case),
             "{arms:?}: {report}"
+        );
+    }
+}
+
+/// The kernel's rule is looser than South's, and must stay so: every name the kernel refuses as
+/// never able to carry a credential is also undeclarable here, and every name of the kernel's
+/// default redaction set is either sanctioned or undeclarable. So the kernel's change cannot open
+/// a name South forbids (§13.7 item 5, Q40). The other direction holds too: every sanctioned name
+/// is in the kernel's redaction set, so a host that redacts by default redacts every closed arm.
+#[test]
+fn south_forbids_everything_the_kernel_never_lets_carry_a_credential() {
+    for header in SecretHeaderV1::ALL {
+        assert!(
+            token_station_protocol::is_credential_header(header.header_name()),
+            "`{}` is sanctioned but outside the kernel's default redaction set",
+            header.header_name()
+        );
+    }
+    for name in token_station_protocol::NEVER_CREDENTIAL_HEADERS {
+        assert!(
+            south_provider_api::UNDECLARABLE_SECRET_HEADER_NAMES.contains(name),
+            "`{name}` is on the kernel's never-credential list but a package could declare it"
+        );
+        assert!(south_provider_api::validate_secret_header_name(name).is_err());
+    }
+    for name in token_station_protocol::CREDENTIAL_HEADERS {
+        let sanctioned = SecretHeaderV1::ALL
+            .iter()
+            .any(|header| header.header_name().eq_ignore_ascii_case(name));
+        assert!(
+            sanctioned || south_provider_api::UNDECLARABLE_SECRET_HEADER_NAMES.contains(name),
+            "`{name}` is in the kernel's redaction set and a package could declare it"
+        );
+    }
+}
+
+/// The combined arm (B7b, §4.3): the one secret as `Authorization: Bearer` and in a sanctioned
+/// header, admitted only for a manifest that declares `bearer_and_header_secret`.
+#[test]
+fn the_combined_arm_is_admitted_for_a_sanctioned_header_and_a_declaring_manifest() {
+    let (config, mut descriptor) = built();
+    let combined = manifest(&["bearer_and_header_secret"]);
+    descriptor.auth =
+        Some(Auth::bearer_and_header("x-goog-api-key", slot(&config)).expect("the Gemini pair"));
+    assert_eq!(
+        admit_descriptor_auth(&combined, &config, &descriptor),
+        Ok(AdmittedAuthV1::BearerAndHeaderSecret(SecretHeaderV1::XGoogApiKey))
+    );
+
+    // Every sanctioned name is admissible, in any case the kernel keeps.
+    for header in SecretHeaderV1::ALL {
+        descriptor.auth = Some(Auth::BearerAndHeader {
+            name: header.header_name().to_ascii_uppercase(),
+            secret: slot(&config),
+        });
+        assert_eq!(
+            admit_descriptor_auth(&combined, &config, &descriptor),
+            Ok(AdmittedAuthV1::BearerAndHeaderSecret(header)),
+            "{}",
+            header.header_name()
+        );
+    }
+
+    // Declaring it admits neither of the single arms (the converse, that declaring the two arms
+    // it combines is not declaring it, is `a_bearer_and_header_descriptor_is_refused`).
+    let (_, bearer) = built();
+    assert_eq!(
+        admit_descriptor_auth(&combined, &config, &bearer),
+        Err(DescriptorAuthErrorV1::BearerNotDeclared)
+    );
+    let mut header = bearer;
+    header.auth = Some(Auth::header("x-goog-api-key", slot(&config)).unwrap());
+    assert_eq!(
+        admit_descriptor_auth(&combined, &config, &header),
+        Err(DescriptorAuthErrorV1::HeaderSecretNotDeclared)
+    );
+}
+
+/// The contract's combined arm is closed over the five sanctioned names (§16 Q35): a name the
+/// manifest declares in `secret_headers` is refused on it, and so is one nobody declared.
+#[test]
+fn the_combined_arm_refuses_a_declared_or_unknown_header() {
+    let (config, mut descriptor) = built();
+    let mut declaring = manifest(&["bearer_and_header_secret", "header_secret"]);
+    declaring.secret_headers = vec!["x-acme-key".to_owned()];
+    assert_eq!(declaring.validate(), Ok(()));
+    for name in ["x-acme-key", "x-not-declared"] {
+        descriptor.auth = Some(Auth::bearer_and_header(name, slot(&config)).unwrap());
+        assert_eq!(
+            admit_descriptor_auth(&declaring, &config, &descriptor),
+            Err(DescriptorAuthErrorV1::CombinedHeaderNotSanctioned(name.to_owned())),
+            "{name}"
+        );
+    }
+    // The same declared name on the single header arm is still admitted.
+    descriptor.auth = Some(Auth::header("x-acme-key", slot(&config)).unwrap());
+    assert!(matches!(
+        admit_descriptor_auth(&declaring, &config, &descriptor),
+        Ok(AdmittedAuthV1::DeclaredHeaderSecret(_))
+    ));
+}
+
+/// The kernel itself refuses `authorization` as the second header of the combined arm, so a
+/// descriptor cannot even name it; a declared secret header on the ordinary channel is refused
+/// under the combined arm as under the others.
+#[test]
+fn the_combined_arm_keeps_the_ordinary_channel_rules() {
+    let (config, mut descriptor) = built();
+    assert!(Auth::bearer_and_header("authorization", slot(&config)).is_err());
+    assert!(
+        serde_json::from_str::<Auth>(
+            r#"{"scheme":"bearer_and_header","name":"authorization","secret":"k"}"#
+        )
+        .is_err()
+    );
+
+    let mut declaring = manifest(&["bearer_and_header_secret", "header_secret"]);
+    declaring.secret_headers = vec!["x-acme-key".to_owned()];
+    descriptor.auth = Some(Auth::bearer_and_header("x-goog-api-key", slot(&config)).unwrap());
+    descriptor.headers = KernelSafeHeaders::try_new([("X-Acme-Key", "smuggled")]).unwrap();
+    assert!(matches!(
+        admit_descriptor_auth(&declaring, &config, &descriptor),
+        Err(DescriptorAuthErrorV1::SecretHeaderOnOrdinaryChannel(_))
+    ));
+}
+
+/// A `host_signed` package carries no auth at all, the combined arm included.
+#[test]
+fn a_host_signed_package_refuses_the_combined_arm_like_any_other() {
+    let (config, mut descriptor) = built();
+    let mut signed = manifest(&["host_signed"]);
+    signed.emits = vec!["authorization".to_owned()];
+    descriptor.auth = Some(Auth::bearer_and_header("x-goog-api-key", slot(&config)).unwrap());
+    assert_eq!(
+        admit_descriptor_auth(&signed, &config, &descriptor),
+        Err(DescriptorAuthErrorV1::HostSignedCarriesAuth)
+    );
+}
+
+/// Admitted by the kernel for 0.4.0 compatibility and never declarable here: even a manifest that
+/// skipped gate ① and listed the name declares nothing, so admission refuses it.
+#[test]
+fn a_kernel_catalog_name_is_never_admitted_as_a_declared_header() {
+    let (config, mut descriptor) = built();
+    let mut declaring = manifest(&["bearer", "header_secret"]);
+    for name in ["authorization", "proxy-authorization", "cookie", "set-cookie"] {
+        descriptor.auth = Some(Auth::header(name, slot(&config)).unwrap());
+        declaring.secret_headers = vec![name.to_owned()];
+        assert_eq!(
+            admit_descriptor_auth(&declaring, &config, &descriptor),
+            Err(DescriptorAuthErrorV1::HeaderNotSanctioned(name.to_owned())),
+            "{name}"
         );
     }
 }

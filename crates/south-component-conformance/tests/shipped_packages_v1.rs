@@ -561,9 +561,9 @@ fn the_converse_credential_fields_and_headers_retire_the_published_044_identity(
 /// The shared conformance and provider-api crates changed for host feedback SF12–SF17
 /// (host-zero-vendor-boundary §13.6), and a same-path rebuild of every package before and after
 /// showed a different `component.wasm` for all thirteen, so every identity published with 0.44.0
-/// retires, or the release's digest-stability check would refuse it. (They then declared
-/// `south_runtime` 0.44.0, the oldest runtime that needed nothing newer; the kernel re-pin below
-/// moves every package past it.)
+/// retires, or the release's digest-stability check would refuse it. Their `south_runtime` stays
+/// 0.44.0: under the declared-runtime discipline it names the oldest runtime a package needs, and
+/// none of them needs anything newer.
 #[test]
 fn host_feedback_sf12_to_sf17_retires_every_published_044_package_identity() {
     for (name, published) in [
@@ -589,20 +589,21 @@ fn host_feedback_sf12_to_sf17_retires_every_published_044_package_identity() {
         )
         .unwrap();
         assert_ne!(manifest.version, published, "{name} reused its published identity");
+        assert_eq!(
+            manifest.compatibility.south_runtime, "0.44.0",
+            "{name}: needs nothing newer than 0.44.0, so it declares 0.44.0"
+        );
     }
 }
 
-/// The kernel re-pin to protocol 0.5.0 (host-zero-vendor-boundary §13.7) changes every
-/// `component.wasm` and every manifest's compatibility tuple, so every identity published with
-/// 0.45.0 retires, the new family and arm of `provider-openai-compatible` included. Each package
-/// declares `south_runtime` 0.46.0: a runtime that records the old `canonical_ir` refuses it, so
-/// 0.46.0 is the oldest runtime that admits it (Q37).
+/// The kernel re-pin to mirror `v0.4.0` (protocol 0.5.0, `canonical_ir` 3; design record
+/// `docs/design/2026-10-08-kernel-repin-protocol-0.5.0.md`) changes every manifest's compatibility
+/// declaration, so every identity published with 0.45.0 retires. `provider-openai-compatible` had
+/// already moved to the unreleased 2.3.0 (#150), which this change does not retire again.
 #[test]
-fn the_kernel_repin_retires_every_published_045_identity_and_declares_the_new_runtime() {
+fn the_kernel_repin_retires_every_published_045_package_identity() {
     for (name, published) in [
-        // 2.3.0 was merged after 0.45.0 and never released; 2.2.1 is the published identity.
         ("provider-openai-compatible", "2.2.1"),
-        ("provider-openai-compatible", "2.3.0"),
         ("provider-anthropic", "1.0.11"),
         ("provider-gemini", "1.1.7"),
         ("provider-bedrock-converse", "1.0.8"),
@@ -625,12 +626,14 @@ fn the_kernel_repin_retires_every_published_045_identity_and_declares_the_new_ru
         )
         .unwrap();
         assert_ne!(manifest.version, published, "{name} reused its published identity");
-        // Not an equality: a later release may legitimately re-stamp a package further.
-        let runtime: Vec<u64> =
-            manifest.compatibility.south_runtime.split('.').map(|p| p.parse().unwrap()).collect();
-        assert!(
-            runtime >= vec![0, 46, 0],
-            "{name}: built against canonical_ir 3, so no runtime older than 0.46.0 admits it"
+        assert_eq!(
+            manifest.compatibility.kernel_contracts.get("canonical_ir"),
+            Some(&3),
+            "{name}: built against protocol 0.5.0"
+        );
+        assert_eq!(
+            manifest.compatibility.ir_schema_id, "token-station-protocol@0.5.0/v0.4.0",
+            "{name}"
         );
     }
 }
@@ -668,57 +671,49 @@ fn every_shipped_package_declares_the_kernel_the_workspace_pins() {
     assert_eq!(tuples.len(), 1, "every package declares the same kernel tuple: {tuples:?}");
 }
 
-/// A runtime that records `canonical_ir` 2 refuses every shipped package, and does so twice over:
-/// through the contract number whatever runtime it claims to be, and through `south_runtime`
-/// when it claims to be the previous release. A runtime that records 3 admits them.
+/// A host that records the previous `canonical_ir` refuses every shipped package, through the
+/// contract number whichever runtime it claims to be; a host that records 3 admits them. This is
+/// the one-way flag day of a kernel re-pin (design record section 13.7).
 #[test]
-fn a_runtime_that_records_the_old_kernel_contract_refuses_every_shipped_package() {
+fn a_host_recording_the_old_kernel_contract_refuses_every_shipped_package() {
     let this_release = host_range::host_range();
     assert_eq!(this_release.kernel_contracts.get("canonical_ir"), Some(&3));
+    let mut previous = this_release.clone();
+    previous.kernel_contracts.insert("canonical_ir".to_owned(), 2);
     let mut seen = 0;
     for package in shipped_packages() {
         let manifest: ComponentManifestV1 =
             serde_json::from_str(&std::fs::read_to_string(package.join("manifest.json")).unwrap())
                 .unwrap();
-        let name = &manifest.name;
-        assert_eq!(compatibility_admits(&manifest, &this_release), Ok(()), "{name}");
-
-        // The previous release: it records canonical_ir 2 and runs 0.45.0.
-        let mut previous = this_release.clone();
-        previous.kernel_contracts.insert("canonical_ir".to_owned(), 2);
-        previous.south_runtime = "0.45.0".to_owned();
+        assert_eq!(compatibility_admits(&manifest, &this_release), Ok(()), "{}", manifest.name);
         assert!(
             matches!(
                 compatibility_admits(&manifest, &previous),
-                Err(CompatibilityMismatchV2::SouthRuntimeAboveHost { .. })
-            ),
-            "{name}: a 0.45.0 runtime must find the declared runtime newer than itself"
-        );
-        // Either fence alone is enough: a runtime that claims to be new but records the old
-        // contract, and one that records the new contract but claims to be old.
-        let mut old_contract_new_runtime = this_release.clone();
-        old_contract_new_runtime.kernel_contracts.insert("canonical_ir".to_owned(), 2);
-        assert!(
-            matches!(
-                compatibility_admits(&manifest, &old_contract_new_runtime),
                 Err(CompatibilityMismatchV2::KernelContract {
                     ref name,
                     declared: Some(3),
                     expected: Some(2),
                 }) if name == "canonical_ir"
             ),
-            "{name}"
-        );
-        let mut new_contract_old_runtime = this_release.clone();
-        new_contract_old_runtime.south_runtime = "0.45.0".to_owned();
-        assert!(
-            matches!(
-                compatibility_admits(&manifest, &new_contract_old_runtime),
-                Err(CompatibilityMismatchV2::SouthRuntimeAboveHost { .. })
-            ),
-            "{name}"
+            "{}",
+            manifest.name
         );
         seen += 1;
     }
     assert_eq!(seen, OFFICIAL_COMPONENTS.len());
+}
+
+/// `provider-openai-compatible` 2.3.0 was merged after 0.45.0 (#150) and never released; the
+/// `gemini-openai-compatible` family changes its manifest and its `component.wasm`, so it moves on.
+#[test]
+fn the_gemini_family_moves_the_unreleased_openai_compatible_identity() {
+    let manifest: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(
+            repo_root().join("components/provider-openai-compatible/manifest.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_ne!(manifest.version, "2.3.0");
+    assert!(manifest.providers.iter().any(|family| family == "gemini-openai-compatible"));
 }

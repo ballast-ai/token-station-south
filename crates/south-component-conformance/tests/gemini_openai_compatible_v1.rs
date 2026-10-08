@@ -159,7 +159,10 @@ fn gate_two_refuses_the_family_when_the_manifest_does_not_declare_the_combined_a
     assert_eq!(failed, BTreeSet::from(FIXTURES), "{report}");
     for failure in report.failures() {
         assert_eq!(failure.check, CheckV1::DescriptorAuthWithinManifest, "{failure}");
-        assert!(failure.detail().contains("combined bearer-and-header arm"), "{failure}");
+        assert!(
+            failure.detail().contains("bearer auth and a credential header together"),
+            "{failure}"
+        );
     }
 
     // With the arm declared, the same two cases pass both the match and the admission.

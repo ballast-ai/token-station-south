@@ -1930,8 +1930,10 @@ Breaking only in const-ness: `SandboxedComponentV1::new` and `inner` are no long
 The kernel chain finished: `token-station-protocol` 0.5.0 (upstream tag `kernel-v0.5.0`, commit `8e34f5a0`, token-station
 #40 and #41) is mirrored as `ballast-ai/token-station-kernel` `v0.4.0` (commit `c2581f37`), and the mirror records
 `canonical_ir` 3. lv approved on 2026-10-08 that South re-pins, absorbs the API changes, finishes B7b, closes #138 and
-wires Q14, as two stacked pull requests. This section is the first: the re-pin, the version and `south_runtime` policy,
-B7b and #138. The Q14 value channel is wired in §13.8 and nothing here depends on it.
+wires Q14. The re-pin itself, with its compatibility values, package identities and the `south_runtime` decision, landed
+first as #151 and is recorded in `2026-10-08-kernel-repin-protocol-0.5.0.md`; this section is what comes on top of it: the
+combined auth arm and the `gemini-openai-compatible` family (B7b), issue #138, and one gap the first test found (Q40). The
+Q14 value channel is wired in §13.8 and nothing here depends on it.
 
 **What the kernel changed, and what South does with each** (`f585bc83..c2581f37`, `crates/protocol`):
 
@@ -1941,48 +1943,33 @@ B7b and #138. The Q14 value channel is wired in §13.8 and nothing here depends 
 | `Auth::header` and its deserialization admit any lowercase RFC 9110 token of at most 64 bytes outside the kernel's `NEVER_CREDENTIAL_HEADERS`; the 0.4.0 catalog names keep any case as written; `CREDENTIAL_HEADERS` and `is_credential_header` are public | The kernel no longer decides which names a package may use. A component's descriptor can name a header the manifest declares in `secret_headers`; `admit_descriptor_auth` decides (B7b). |
 | `Usage.explicit_cache_read_tokens`, a subset of `cache_read_tokens`, omitted from the wire at zero; `Usage::is_partitioned` | No reference reports it, so every package's wire is unchanged. The gate ② partition judge learns the subset rule so a package that starts reporting it is judged. |
 | `ProviderConfig.declared` and `ChatRequest.host_values` become `ComponentValues` (keys of 1 to 64 bytes of `[a-z0-9_]`, values of 1 to 4096 bytes of printable ASCII, validated on construction and on deserialization) | South builds neither outside fixtures and no fixture sets them. Wiring is §13.8. |
-| `ProviderEndpoint::permits` admits an encoded slash inside one segment below the endpoint path when every decoded piece is non-empty and neither `.` nor `..`; the endpoint path itself still refuses it | Issue #138. Two task reference tests that pinned the old refusal change with it (below). |
+| `ProviderEndpoint::permits` admits an encoded slash inside one segment below the endpoint path when every decoded piece is non-empty and neither `.` nor `..`; the endpoint path itself still refuses it | Issue #138. The same rule would admit a task id containing `/` in an observe URL; #151 made the seven task-v2 components refuse it themselves (its record §4.1), so no task test moves here. |
 
-**1. The pin.** `token-station-protocol = { version = "0.5.0", git = ".../token-station-kernel.git", rev = "c2581f37…" }`
-in the workspace `Cargo.toml` is the only kernel dependency (`token-station-router-core` is not a South dependency).
-The fourteen component lockfiles and `fuzz/Cargo.lock` re-resolve to it. `deny.toml` already allows the mirror. The only
-compile error the re-pin produced was the non-exhaustive match over `Auth` in `admit_descriptor_auth`.
+**1. What #151 already did (§16 Q37).** The pin (`token-station-protocol` 0.5.0 at mirror `c2581f37`), the compatibility values
+(`ir_schema_id` `token-station-protocol@0.5.0/v0.4.0`, `kernel_version` `0.4.0`, `kernel_revision`
+`8e34f5a089d0b9c7273b49ddb6952dd87e960019` and `kernel_contracts.canonical_ir` 3, each derived there from the definitions in
+`manifest.rs` and the mirror's own `compatibility.json`), the patch bump of thirteen packages, and the decision to keep every
+package's `south_runtime` at 0.44.0 until the release step are recorded in that document (§1 to §5) and not repeated here. An
+independent derivation of the tuple from the previous pin's mapping gave the same values. The range handshake compares
+`kernel_contracts` by exact equality in both directions, so a host that records `canonical_ir` 2 refuses every package of
+this tree and a host that records 3 refuses every earlier one: a one-way flag day, which is why all fourteen packages moved
+together.
 
-**2. The compatibility values.** The runtime reads the first three as provenance only; the range handshake compares
-`kernel_contracts` (§8.3), and `compatibility_admits` compares it by exact equality over the union of both key sets, so a
-package and a host disagree on any contract number, in either direction, and the package is refused. The mapping was
-read from the previous pin, not guessed: the mirror's `release.version` and `mirror.source_commit` at `f585bc83` were
-`0.3.0` and `6822aab1…`, the values the 0.39.0 packages declare.
+**2. The consequence of that decision, and the release step.** A package declares `canonical_ir` 3 under `south_runtime`
+0.44.0, and `scripts/check-declared-runtime.sh --build` loads it under the `v0.44.0` tree, whose `compatibility.json` records
+2, so that script **fails until the release step** moves every package's `south_runtime` to 0.46.0 and the workspace version
+to 0.46.0 together (the tree must contain the runtime a package declares, which `shipped_packages_v1` also requires). This
+change does not hide that failure and does not move the field early. At the release step the oldest runtime that admits the
+packages is 0.46.0: a 0.45.0 host refuses them through the contract number and through a declared runtime newer than itself,
+and a test pins each fence on its own (`a_host_recording_the_old_kernel_contract_refuses_every_shipped_package` pins the
+first today; the second needs the declaration the release adds). Both stacked pull requests belong in one release: a tag
+between them would put the second one's changes into `component.wasm` under unchanged versions, and the digest-stability
+check would demand another round of bumps.
 
-| Field | Was | Now | Source |
-|---|---|---|---|
-| `ir_schema_id` | `token-station-protocol@0.4.0/v0.3.0` | `token-station-protocol@0.5.0/v0.4.0` | protocol crate version, mirror release tag |
-| `kernel_version` | `0.3.0` | `0.4.0` | mirror `release.version` |
-| `kernel_revision` | `6822aab1dea54ef646cb2206595cd4955ff9764a` | `8e34f5a089d0b9c7273b49ddb6952dd87e960019` | mirror `mirror.source_commit` (the upstream commit of `kernel-v0.5.0`) |
-| `kernel_contracts` | `canonical_ir` 2, `error_catalog` 1, `stream` 2 | `canonical_ir` 3, `error_catalog` 1, `stream` 2 | mirror `contracts`; `stream` and `error_catalog` do not change |
-
-The root `compatibility.json` records `kernel_contracts.canonical_ir` 3 for the same reason. Its `contracts.canonical_ir`
-stays `null`: South consumes that contract and does not own it (2026-09-29 lesson).
-
-**3. `south_runtime` is 0.46.0 for all fourteen packages (§16 Q37).** A package's `south_runtime` is the oldest runtime
-that admits and correctly runs it (§13.6). Every package now declares `canonical_ir` 3, and a runtime of 0.45.0 or older
-records 2, so it refuses the package: through the range check, which sees a declared 3 against an expected 2, and
-through `south_runtime`, which a 0.45.0 host finds newer than its own. 0.46.0 is therefore the oldest runtime that admits
-the packages, and `check-declared-runtime.sh` would say so: under the `v0.45.0` tree it fails with a kernel contract
-mismatch. The tree must contain the runtime a package declares for that script and for `shipped_packages_v1` ("never
-newer than this release"), so this change bumps the workspace version, the internal path-dependency versions,
-`compatibility.json` `release.version` and the lockfiles to 0.46.0, which is what a release PR otherwise does alone. The
-release PR then adds only the release notes and the tag. Both stacked pull requests belong in one release: a tag between
-them would put the second one's changes into `component.wasm` under unchanged versions (every package links these
-crates), and the digest-stability check would demand another round of bumps.
-
-**4. Package identities.** Every `component.wasm` changes (new kernel, new workspace version) and every manifest changes
-(the tuple), so every package takes a new version. `provider-openai-compatible` 2.3.0 (merged after 0.45.0, whose release
-carries 2.2.1) → **2.4.0** (new family and arm, below); the other thirteen take a patch bump with unchanged behavior: `provider-anthropic` 1.0.12,
-`provider-bedrock-converse` 1.0.9, `provider-bedrock-converse-bearer` 1.0.1, `provider-gemini` 1.1.8, `task-kling` 1.0.8,
-`task-kling-v2` 0.32.6, `task-minimax-v2` and `task-bailian-v2` 0.31.5, `task-byteplus-v2` 0.36.5, and `task-xai-v2`,
-`task-veo-v2`, `task-wan-image-v2` and `task-gmi-image-v2` 0.35.5. The Converse, Converse-bearer and Gemini packages
-also gain the #138 fixture, which changes no behavior.
+**3. Package identities.** This change moves exactly one: `provider-openai-compatible` 2.3.0 (merged by #150 after 0.45.0,
+which published 2.2.1; #151 left it there) → **2.4.0**, because the new family and arm change its manifest and its
+`component.wasm`. The other thirteen keep the versions #151 gave them: a fixture row (#138) is not package content, and the
+versions are unreleased, so a second bump would only skip numbers.
 
 **5. B7b: the combined auth arm (§4.3, §16 Q4 option A).**
 
@@ -1992,7 +1979,8 @@ also gain the #138 fixture, which changes no behavior.
 - `admit_descriptor_auth` admits `Auth::BearerAndHeader` as `AdmittedAuthV1::BearerAndHeaderSecret(SecretHeaderV1)` when
   the manifest declares `bearer_and_header_secret` and the descriptor's name is one of the five sanctioned secret headers
   (any case). A host maps it onto `RawAuthV1::BearerAndHeaderSecret`; auth contract 5 already has the arm, so no
-  contract number changes. Without the arm in the manifest it is refused (`BearerAndHeaderNotDeclared`). The arm is
+  contract number changes. Without the arm in the manifest it is refused with #151's `BearerAndHeaderNotDeclared`, which this change keeps for exactly
+  that case and builds on, with its two tests. The arm is
   independent of `bearer` and `header_secret`: declaring either does not admit the combined descriptor.
 - A name the manifest declares in `secret_headers` is **refused** on the combined arm
   (`CombinedHeaderNotSanctioned`). The contract's combined arm is closed over the sanctioned set, and widening it needs an
@@ -2033,10 +2021,7 @@ the same guarantee that the target stays at or below the endpoint). Gate ② alr
 (`EndpointConfinement`), so the closeout is data: `provider.request.model-id-with-a-slash-stays-one-segment` in the
 Converse, Converse-bearer and Gemini packs. A test pins the other half: a model whose pieces would traverse (`a/../b`,
 `..`) or collapse (`a//b`) is built into a descriptor `authorize` refuses. Run against the previous pin, the new rows fail
-`EndpointConfinement` for both packages (the mutation check under "Evidence"). Two task reference tests pinned the old refusal of
-`%2F` in a task id (`v2_observe_encodes_one_id_segment_and_preserves_endpoint_prefix` and the MiniMax and Bailian
-equivalents); they now expect an id with a slash to be admitted as one segment and keep refusing a backslash, a dot piece
-and an empty piece.
+`EndpointConfinement` for all three packages (the check under "Evidence").
 
 **Known remaining risk (kernel behavior, not changed here).** Reading the 0.5.0 source, `permits` decodes each escape once
 and does not refuse a decoded percent sign. A model id that itself contains `%2e%2e` is encoded by South as `%252e%252e`
@@ -2048,15 +2033,15 @@ clients. South does not add its own rule on top; a later kernel change could ref
 1. The combined arm over a declared header name (Q35).
 2. The combined arm in a task manifest (Q36).
 3. Packages built against the old kernel are refused by a host that records `canonical_ir` 3, and the new ones by a host
-   that records 2: a one-way flag day, unchanged in kind from the 0.39.0 re-pin, which is why all fourteen re-stamp.
+   that records 2: a one-way flag day, unchanged in kind from the 0.39.0 re-pin (#151).
 4. Declaring `accept-encoding`, `forwarded`, `http2-settings`, `via` or `www-authenticate` as a secret header (Q40).
 5. Nothing else is newly refused. The `declared` / `host_values` grammar is the kernel's, applied when a fixture or a host
    deserializes a `ProviderConfig` or `ChatRequest`.
 
 **What the host does after the release** (re-pin and the two follow-ons that were blocked on this):
 
-- Re-pin South and the kernel mirror (`c2581f37`), set `canonical_ir` 3 in `HostRangeV1.kernel_contracts`, and take every
-  fourteen package at its new version: a host cannot mix the two kernel lines.
+- Re-pin South and the kernel mirror (`c2581f37`), set `canonical_ir` 3 in `HostRangeV1.kernel_contracts`, and take all
+  fourteen packages at their released versions: a host cannot mix the two kernel lines.
 - Follow the Rust type changes: `AdmittedAuthV1::BearerAndHeaderSecret`, `DescriptorAuthErrorV1::BearerAndHeaderNotDeclared`
   and `CombinedHeaderNotSanctioned`, `PROVIDER_AUTH_ARMS` and `TASK_AUTH_ARMS`, and the kernel's `Auth::BearerAndHeader`,
   `Usage.explicit_cache_read_tokens`, `ProviderConfig.declared` and `ChatRequest.host_values`.
@@ -2358,13 +2343,13 @@ Tags: S = south maintainers, L = lv, K = kernel.
 - **Q36 (S)** Do the task worlds admit `bearer_and_header_secret` (§13.7)? Recommended: no. `TASK_AUTH_ARMS` is the old four
   words; the task-v2 world already admits only `bearer` and `header_secret` on the host path, and a task manifest
   declaring the new word is refused as an unknown word. **Taken as recommended.**
-- **Q37 (S, L)** What does a package rebuilt against a new kernel contract declare as `south_runtime` (§13.7 item 3)?
-  Recommended: the release that first records that contract, here 0.46.0, because a runtime recording the old number
-  refuses the package, so the oldest runtime that admits it is the new one. The same change bumps the workspace version so
-  the tree contains the declared runtime, which `check-declared-runtime.sh` and `shipped_packages_v1` require. Consequence
-  for the owner: the stacked Q14 pull request and this one belong in one release; a tag between them forces a second round
-  of package bumps. **Taken as recommended; flagged for the owner because the workspace bump lands in a feature pull
-  request instead of the release pull request.**
+- **Q37 (S, L)** What does a package rebuilt against a new kernel contract declare as `south_runtime`? The first draft
+  of this section recommended the release that first records the contract (0.46.0), with the workspace version moving in
+  the same change. **Ruled (lv, 2026-10-08), in #151: the field stays 0.44.0 until the release step**, when every package's
+  `south_runtime` and the workspace version move to 0.46.0 together; `scripts/check-declared-runtime.sh --build` is known to
+  fail until then and is not worked around. The reason the recommendation is still the end state: a runtime that records the
+  old contract refuses the package, so the oldest runtime that admits it is the first one that records the new contract.
+  The consequence for the owner is unchanged: the stacked Q14 pull request and this one belong in one release.
 - **Q38 (S)** Where does Gemini's OpenAI-compatible surface live (§13.7 item 6)? Options: a family in
   `provider-openai-compatible` (recommended: the translation is identical and only the auth and endpoint differ); a family
   in `provider-gemini` (refused: that package builds native URLs and bodies, and a second wire in one package makes

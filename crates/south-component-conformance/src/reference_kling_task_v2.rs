@@ -359,7 +359,9 @@ impl TaskComponentV2 for KlingTaskReferenceV2 {
         if !matches!(locator.route(), TEXT | IMAGE | OMNI | MOTION) {
             return Err(invalid("unsupported kling task locator"));
         }
-        if !valid_id(upstream_task_id) {
+        // Protocol 0.5.0 admits `%2F` inside one path segment (for ARN model ids); a task id never
+        // needs `/`, and many upstreams decode `%2F` as a separator, so refuse it here.
+        if !valid_id(upstream_task_id) || upstream_task_id.contains('/') {
             return Err(invalid("invalid kling upstream task id"));
         }
         let mut descriptor = HttpRequestDescriptor::new(

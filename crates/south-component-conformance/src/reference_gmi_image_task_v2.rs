@@ -298,7 +298,9 @@ impl TaskComponentV2 for GmiImageTaskComponentV2 {
         locator: &TaskLocatorV2,
     ) -> ComponentResultV1<HttpRequestDescriptor> {
         checked_locator(locator)?;
-        if !identifier(id) {
+        // Protocol 0.5.0 admits `%2F` inside one path segment (for ARN model ids); a task id never
+        // needs `/`, and many upstreams decode `%2F` as a separator, so refuse it here.
+        if !identifier(id) || id.contains('/') {
             return Err(invalid("invalid GMI request identifier"));
         }
         request(config, HttpMethod::Get, &format!("{QUEUE}/{}", encode_segment(id)), false)

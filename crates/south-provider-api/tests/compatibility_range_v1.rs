@@ -52,7 +52,7 @@ fn a_component_inside_the_range_is_admitted_at_both_bounds() {
     // Provenance does not decide: a different kernel revision or IR id is still admitted.
     let mut provenance = manifest();
     provenance.compatibility.kernel_revision = "0".repeat(40);
-    provenance.compatibility.ir_schema_id = "token-station-protocol@0.4.1/v0.3.1".to_owned();
+    provenance.compatibility.ir_schema_id = "token-station-protocol@0.5.1/v0.4.1".to_owned();
     assert_eq!(compatibility_admits(&provenance, &host()), Ok(()));
 }
 

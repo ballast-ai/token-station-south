@@ -446,10 +446,13 @@ impl TaskComponentV2 for MiniMaxTaskReferenceV2 {
     ) -> ComponentResultV1<HttpRequestDescriptor> {
         checked_locator(locator)?;
         if locator.route() == QUERY_V2 {
+            // Protocol 0.5.0 admits `%2F` inside one path segment (for ARN model ids); a task
+            // id never needs `/`, and many upstreams decode `%2F` as a separator, so refuse it.
             if id.is_empty()
                 || matches!(id, "." | "..")
                 || id.len() > south_contracts::MAX_ARTIFACT_REF_BYTES
                 || id.chars().any(char::is_control)
+                || id.contains('/')
             {
                 return Err(invalid("invalid MiniMax H3 task id"));
             }

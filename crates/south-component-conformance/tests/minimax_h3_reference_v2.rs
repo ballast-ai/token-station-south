@@ -47,19 +47,15 @@ fn h3_locator_is_stable_across_model_drift_and_uses_original_encoded_id() {
         assert!(req.url.contains("/v2/query/video_generation/id%3Fx%23%25"));
         assert_eq!(req.url.contains("GroupId=19000"), group);
         cfg.authorize(&req).unwrap();
-        // Kernel 0.5.0 admits an encoded slash inside one segment (issue #138), so an id holding a
-        // slash addresses one segment; a backslash, an empty piece and a dot piece stay refused.
         let req = MiniMaxTaskReferenceV2
-            .build_observe_request(&cfg, "changed", "id/slash", &locator)
+            .build_observe_request(&cfg, "changed", "id\\backslash", &locator)
             .unwrap();
-        assert!(req.url.contains("/v2/query/video_generation/id%2Fslash"));
-        cfg.authorize(&req).unwrap();
-        for id in ["id\\backslash", "id//slash", "id/../slash", "id/"] {
-            let req = MiniMaxTaskReferenceV2
-                .build_observe_request(&cfg, "changed", id, &locator)
-                .unwrap();
-            assert!(cfg.authorize(&req).is_err(), "{id}");
-        }
+        assert!(cfg.authorize(&req).is_err());
+        // Protocol 0.5.0 admits `%2F` inside one segment, so the component refuses `/` itself.
+        let error = MiniMaxTaskReferenceV2
+            .build_observe_request(&cfg, "changed", "id/slash", &locator)
+            .unwrap_err();
+        assert_eq!(error.message, "invalid MiniMax H3 task id");
     }
 }
 #[test]
