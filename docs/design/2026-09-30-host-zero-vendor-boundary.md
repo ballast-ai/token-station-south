@@ -2429,6 +2429,8 @@ were taken as that plan recommends: **Q-B6-1**, adopt the host's proposal SF24 (
 match rules, not per family; text families' maximum output stays out); **Q-B6-2**, South maintains the data and the host
 keeps operator overrides that may only tighten (host Q-S6-1). This section amends §7.5 and the `catalogs` sketch of §9.2,
 and answers the South half of Q7. Implemented on branch `b6-1-model-catalog`; nothing is released (see "Package identity").
+*(Amended 2026-10-08: the catalog first ships in release 0.50.0, which changes no package (§13.12); release record
+`2026-10-08-release-0.50.0.md`.)*
 
 **The document.** One JSON document per release:
 
