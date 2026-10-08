@@ -1,19 +1,31 @@
 # Image World: Synchronous Generation and Edit Share One World (image-adapter-v1)
 
-Status: **proposed — drafted for review by the host team (token-station-server P21/P22/P23), not accepted**
+Status: **accepted 2026-10-08** (rulings in §17; reconciled with south 0.50.0 in §18; implementation steps in §19);
+proposed 2026-09-30 by the host team (token-station-server P21/P22/P23)
 
 Date: 2026-09-30
 
-Revised: 2026-10-01 after independent review (see the revision note at the end).
+Revised: 2026-10-01 after independent review; 2026-10-08 rulings and 2026-10-09 reconciliation with 0.50.0 (see the
+revision notes at the end).
 
-Rulings: on 2026-09-30 the host owner (lv) ruled on Q4, Q7, Q10 and Q13 (§17), each as recommended. Q4 also needs
-the south maintainers. Questions decided by the south maintainers remain open.
+Rulings: on 2026-09-30 the host owner (lv) ruled on Q4, Q7, Q10 and Q13 (§17), each as recommended. On 2026-10-08 lv,
+acting for the south maintainers, ruled every question tagged for them as recommended (Q1, Q2, Q3, Q6, Q9, Q11, Q14,
+Q15, and the south half of Q4), ruled Q8, Q12 and Q16 as recommended for the south maintainers and for the server, and
+ruled Q5 the same way as embeddings E-Q5; on the same day lv ruled DI6 = A in the host plan P22 (§10.2). Each ruling is
+recorded under its question in §17. No ruling is reversed. §18 records three reconciliation findings that lv should see:
+the contract numbers in the Q14 ruling are stale (its substance stands; the bump is 11 → 12), and two points the
+rulings did not cover (R-1, R-2: the model catalog of 0.50.0 overlaps the capability facts of §7/§8), which need a
+further ruling before the world's capability type is frozen.
 
 
 Baseline: south `main` = `3c1501a` (its code is identical to v0.42.0, `3135e36`; the merge added only design
 records). Server line numbers come from host `a82c852b`; P22 / P18 were written at `d672b945` / `b660ea3f`, so their
 line numbers have drifted — re-verify in place before citing. Kernel line numbers come from the
 `token-station-protocol` revision south pins, `f585bc8` (`Cargo.toml:22`).
+
+Reconciliation baseline (2026-10-09): south `origin/main` = `6aa2813` = v0.50.0. The citations above and in §1–§17 are
+those of the baseline above; §18 lists the ones that moved and every assumption that changed. Host plans were read at
+token-station-server `fbee0ed7`; host line numbers were not re-verified.
 
 Citation convention: a south file name without a directory refers to this repository's crate sources — `lib.rs` and
 `task_v2.rs` are in `crates/south-contracts/src/`; `manifest.rs` is in `crates/south-provider-api/src/` and `*.wit` in
@@ -703,6 +715,8 @@ artifacts, and task contract 7's rule is not to reserve values that have no cons
 
 ### 10.2 Delivery order: verify-then-settle (DI6 = A)
 
+Ruled by lv on 2026-10-08 (host plan P22, DI6 = A); the host-side obligations below are unchanged by the ruling.
+
 `render`'s template decides whether each artifact is delivered as `b64_json` or as `url` (within the table of §7).
 Host obligations:
 
@@ -984,22 +998,280 @@ A South **minor**. Released worlds and contracts are unchanged; one transport sh
 
 | # | Question | Recommendation | Decided by |
 |---|---|---|---|
-| Q1 | Multipart part parser, elider, encoder and byte transforms as south host-side pure functions in `south-contracts::media`, or written by each host (§6.7) | South provides them with golden vectors and fuzz obligations; revise the "no encoder" half-sentence of 0.25.0 §2 and narrow "South has no business learning what a form field is" to the transport layer | south maintainers |
-| Q2 | Elision rules: declared paths + fallback threshold; the threshold value; `unknown` when the `$south.` namespace collides with the upstream; duplicate keys refused (§6.2) | As in §6.2, threshold 1 MiB | south maintainers |
-| Q3 | First-version contents of the closed transform table and body forms: `contracts.media` v1 carries the image and speech words, the `text` request body and the `sse` body form, released once (§6.4) | As listed, nothing reserved beyond them | south maintainers |
-| Q4 | Two worlds, or one synchronous media world (§16) | Separate, sharing `contracts.media` | lv — **ruled by lv, 2026-09-30: as recommended**; south maintainers — open |
-| Q5 | ARCHITECTURE.md's "a metering vocabulary must have a second consumer in sight" (`ARCHITECTURE.md:114-115`). **Not met today**: the release notes of 0.25.0 / 0.26.0 both state that the community host has no multipart surface and no byte-returning surface (`2026-09-09-multipart-request-body.md:189`, `2026-09-09-buffered-binary-response.md:302`). The same question is open as the boundary record Q9, the speech record Q9 and the embeddings record E-Q5 | Write P21 §7's "synchronous implementation recommended" into the release record as a written commitment, and mark `media_component_capabilities` `not_verified` until the community host lands; otherwise this vocabulary serves only one host and, under the current rules, should not be admitted | lv + south maintainers |
-| Q6 | Safe fetch: South provides the URL / address pure functions and the `south.safe-fetch.v1` host suite, including the IPv4-embedding IPv6 ranges (§11 D8b) | Provide them | south maintainers |
+| Q1 | Multipart part parser, elider, encoder and byte transforms as south host-side pure functions in `south-contracts::media`, or written by each host (§6.7) | South provides them with golden vectors and fuzz obligations; revise the "no encoder" half-sentence of 0.25.0 §2 and narrow "South has no business learning what a form field is" to the transport layer | south maintainers — **ruled 2026-10-08** (below) |
+| Q2 | Elision rules: declared paths + fallback threshold; the threshold value; `unknown` when the `$south.` namespace collides with the upstream; duplicate keys refused (§6.2) | As in §6.2, threshold 1 MiB | south maintainers — **ruled 2026-10-08** (below) |
+| Q3 | First-version contents of the closed transform table and body forms: `contracts.media` v1 carries the image and speech words, the `text` request body and the `sse` body form, released once (§6.4) | As listed, nothing reserved beyond them | south maintainers — **ruled 2026-10-08** (below) |
+| Q4 | Two worlds, or one synchronous media world (§16) | Separate, sharing `contracts.media` | lv — **ruled by lv, 2026-09-30: as recommended**; south maintainers — **ruled by lv for them, 2026-10-08: as recommended** (below) |
+| Q5 | ARCHITECTURE.md's "a metering vocabulary must have a second consumer in sight" (`ARCHITECTURE.md:114-115`). **Not met today**: the release notes of 0.25.0 / 0.26.0 both state that the community host has no multipart surface and no byte-returning surface (`2026-09-09-multipart-request-body.md:189`, `2026-09-09-buffered-binary-response.md:302`). The same question is open as the boundary record Q9, the speech record Q9 and the embeddings record E-Q5 | Write P21 §7's "synchronous implementation recommended" into the release record as a written commitment, and mark `media_component_capabilities` `not_verified` until the community host lands; otherwise this vocabulary serves only one host and, under the current rules, should not be admitted | lv + south maintainers — **ruled 2026-10-08** (below) |
+| Q6 | Safe fetch: South provides the URL / address pure functions and the `south.safe-fetch.v1` host suite, including the IPv4-embedding IPv6 ranges (§11 D8b) | Provide them | south maintainers — **ruled 2026-10-08** (below) |
 | Q7 | Does the synchronous path release the reservation on `rejected` (today the synchronous path is always `delivery_unknown`, while held releases on a first-round 4xx) | Keep the status quo during the dual run; afterwards unify as "`rejected` releases" | lv — **ruled by lv, 2026-09-30: as recommended**. Note (2026-10-01): the rule is now stated once in the boundary record §6.4 for every world with a `rejected` outcome |
-| Q8 | Tier words: are the dimensions (`resolution` / `quality`) closed; host price lists keyed by component tier words, with a per-model default word per dimension (a host schema change). **Now a prerequisite** of I2's xAI and I3-2's Nano Banana per-image rows (§8, §14) | Two closed dimensions; a new dimension goes through a `contracts.image` version; values fixed by the model row (Ideogram speed) are not tier words | south maintainers + server |
-| Q9 | "Settled count ≤ delivered + 1" stays in the host; the released `task-wan-image-v2` writes it into the component — reclaim it? | The image world keeps it in the host; the task side reclaims it at the next contract upgrade | south maintainers |
+| Q8 | Tier words: are the dimensions (`resolution` / `quality`) closed; host price lists keyed by component tier words, with a per-model default word per dimension (a host schema change). **Now a prerequisite** of I2's xAI and I3-2's Nano Banana per-image rows (§8, §14) | Two closed dimensions; a new dimension goes through a `contracts.image` version; values fixed by the model row (Ideogram speed) are not tier words | south maintainers + server — **ruled 2026-10-08** (below) |
+| Q9 | "Settled count ≤ delivered + 1" stays in the host; the released `task-wan-image-v2` writes it into the component — reclaim it? | The image world keeps it in the host; the task side reclaims it at the next contract upgrade | south maintainers — **ruled 2026-10-08** (below) |
 | Q10 | The generalised 400 text differs from native (the Nano Banana tier gate) | Accept; P22 I4 acceptance compares status code and timing instead | lv — **ruled by lv, 2026-09-30: as recommended** |
-| Q11 | Vertex authentication is settled by the boundary record §3 (credential recipe; the `minted` slot is presented as `bearer`; this world admits no `oauth` arm, §4). What remains: is `host_signed` never admitted in this world | `host_signed` has no consumer and is not admitted | south maintainers |
-| Q12 | Is the OpenAI-compatible fallback one component covering OpenAI / Azure OpenAI / DeepInfra / BytePlus / GLM, or one per provider | One component; differences via `supported_parameters` words | server + south |
+| Q11 | Vertex authentication is settled by the boundary record §3 (credential recipe; the `minted` slot is presented as `bearer`; this world admits no `oauth` arm, §4). What remains: is `host_signed` never admitted in this world | `host_signed` has no consumer and is not admitted | south maintainers — **ruled 2026-10-08** (below) |
+| Q12 | Is the OpenAI-compatible fallback one component covering OpenAI / Azure OpenAI / DeepInfra / BytePlus / GLM, or one per provider | One component; differences via `supported_parameters` words | server + south — **ruled 2026-10-08** (below) |
 | Q13 | Streaming image output (partial images) | Not included; a separate world version later | lv — **ruled by lv, 2026-09-30: as recommended** |
-| Q14 | Add `execute_multipart_binary_call_v1` (multipart POST, bytes response up to 64 MiB), taking HTTP contract 9 → 10 in one bump in this world's minor that also carries speech D3a's `TextPostRequestV1`; or raise the UTF-8 response limit (§6.3a, §16) | Add the twin; one bump carrying both new shapes | south maintainers |
-| Q15 | `url` artifacts as pointers into the upstream response rather than component-written URLs (§10.1), in every media world — the speech world's `url {pointer, media_type}` (speech §6) is covered by the same rule; and whether the task world should adopt it for URLs the host fetches | Pointers in both media worlds; assess the task world separately | south maintainers |
-| Q16 | Declared token buckets: every bucket a model declares must be present on a 2xx, or the round is `unknown` (§9.1); this parks responses the host settles low today | Adopt; the change is accepted by its own fixture, not by the dual run | south maintainers + server |
+| Q14 | Add `execute_multipart_binary_call_v1` (multipart POST, bytes response up to 64 MiB), taking HTTP contract 9 → 10 in one bump in this world's minor that also carries speech D3a's `TextPostRequestV1`; or raise the UTF-8 response limit (§6.3a, §16) | Add the twin; one bump carrying both new shapes | south maintainers — **ruled 2026-10-08** (below) |
+| Q15 | `url` artifacts as pointers into the upstream response rather than component-written URLs (§10.1), in every media world — the speech world's `url {pointer, media_type}` (speech §6) is covered by the same rule; and whether the task world should adopt it for URLs the host fetches | Pointers in both media worlds; assess the task world separately | south maintainers — **ruled 2026-10-08** (below) |
+| Q16 | Declared token buckets: every bucket a model declares must be present on a 2xx, or the round is `unknown` (§9.1); this parks responses the host settles low today | Adopt; the change is accepted by its own fixture, not by the dual run | south maintainers + server — **ruled 2026-10-08** (below) |
+
+### Rulings of 2026-10-08
+
+lv, the host owner, ruled on 2026-10-08 on every question tagged for the south maintainers, acting for them. Each
+ruling is as recommended in the table; the line after it states the consequence. Q7, Q10 and Q13 were ruled on
+2026-09-30 and are unchanged.
+
+- **Q1** — Ruled (lv for the south maintainers, 2026-10-08): as recommended. `south-contracts::media` provides
+  `parse_multipart_parts_v1`, `elide_v1`, `encode_multipart_v1` and the byte transforms, with golden vectors and fuzz
+  obligations. The "no encoder" half-sentence of `2026-09-09-multipart-request-body.md` §2 is revised and "South has no
+  business learning what a form field is" is narrowed to the transport layer; that edit to the 0.25.0 record is made
+  when S-I-1 lands (§19), not by this acceptance.
+- **Q2** — Ruled (lv for the south maintainers, 2026-10-08): as recommended. §6.2 is the rule: declared paths plus a
+  1 MiB fallback threshold, `unknown` when the `$south.` namespace collides with the upstream, duplicate keys refused.
+- **Q3** — Ruled (lv for the south maintainers, 2026-10-08): as recommended. `contracts.media` v1 carries the five image
+  words, the speech words `from_hex`, `concat` and `wav_pcm_s16le`, the `text` request body and the `sse` response
+  body form, released once; nothing is reserved beyond them, and a later word is a `contracts.media` version change.
+- **Q4** — Ruled (lv for the south maintainers, 2026-10-08): separate worlds sharing `contracts.media`, as recommended.
+  With lv's ruling of 2026-09-30 both halves are decided, and the "one synchronous media world" alternative (§16) is
+  closed.
+- **Q5** — Ruled (lv, 2026-10-08), the same ruling as embeddings E-Q5: the release record of the first media release
+  states in writing that a synchronous implementation in the community host is recommended (P21 §7), and the media
+  vocabulary capabilities are marked `not_verified` for the community host in `compatibility.json` until that host
+  lands it (the server stays `not_verified` until its own gate ③ run, as for embeddings). ARCHITECTURE.md's
+  "second consumer in sight" rule is thereby met by written commitment, not by a consumer. The table is named
+  `media_component_capabilities` here and carries one entry per world; its exact shape is fixed in S-I-8.
+- **Q6** — Ruled (lv for the south maintainers, 2026-10-08): as recommended. South provides `ArtifactUrlV1::parse`,
+  `is_forbidden_egress_address` and the host suite `south.safe-fetch.v1`, including the IPv4-embedding IPv6 ranges and
+  `fec0::/10`; execution stays in the host.
+- **Q8** — Ruled (lv for the south maintainers and, as host owner, for the server, 2026-10-08): as recommended. Two
+  closed dimensions, `resolution` and `quality`; a new dimension goes through a `contracts.image` version; a value
+  fixed by the model row (Ideogram speed) is not a tier word. The host's tier-keyed price list remains a prerequisite
+  of the xAI and Nano Banana per-image rows; as of 2026-10-09 the host has not started it (§18.5). The ruling does not
+  say where a model's default word and role limits are declared; that is R-1 and R-2 in §18.5.
+- **Q9** — Ruled (lv for the south maintainers, 2026-10-08): as recommended. The image world keeps "settled count ≤
+  delivered + 1" in the host; the task side reclaims the rule at its next contract upgrade, which is outside this
+  acceptance.
+- **Q11** — Ruled (lv for the south maintainers, 2026-10-08): as recommended. `host_signed` has no consumer in this
+  world and is not admitted; the `oauth` arm is not admitted either (§4).
+- **Q12** — Ruled (lv, as host owner and for the south maintainers, 2026-10-08): as recommended. One OpenAI-compatible
+  component covers OpenAI, Azure OpenAI, DeepInfra, BytePlus and GLM; differences travel as `supported_parameters`
+  words.
+- **Q14** — Ruled (lv for the south maintainers, 2026-10-08): as recommended. South adds
+  `execute_multipart_binary_call_v1` and does not raise the UTF-8 response limit; one HTTP contract bump in the media
+  minor carries both it and the speech record's `TextPostRequestV1` with its binary entry point. **Reconciliation
+  finding: the contract numbers in this ruling no longer stand as stated.** Contract 10 was taken by B7a in 0.43.0 and
+  11 by SF26 in 0.47.0, so the bump is 11 → 12 (§18.1). The substance of the ruling is unchanged. The "raw twin" the
+  record mentions has a further caveat, also in §18.1.
+- **Q15** — Ruled (lv for the south maintainers, 2026-10-08): as recommended. `url` artifacts are pointers into the
+  upstream response in both media worlds; the task world's exposure is assessed separately, outside this acceptance.
+- **Q16** — Ruled (lv, as host owner and for the south maintainers, 2026-10-08): as recommended. Every declared token
+  bucket must be present on a 2xx or the round is `unknown`; the change is accepted by its own fixture, not by the dual
+  run (§14).
+
+## 18. Reconciliation with 0.50.0 (2026-10-09)
+
+This record was written at v0.42.0. South shipped 0.43.0 (B7a: package-declared secret headers, query parameters, quota
+headers and user-agent; HTTP contract 10), 0.44.0 (S3b), 0.45.0 (S2/S4 prerequisites), 0.46.0 (kernel protocol 0.5.0,
+the value channel of boundary record §13.8, B7b), 0.47.0 (the embeddings world; SF26, HTTP contract 11), 0.48.0 (the
+embeddings value channel, `embeddings-vertex`), 0.49.0 (SF27) and 0.50.0 (the model catalog, Q47). Everything below was
+read from `origin/main` at `6aa2813`. Nothing of this world exists in the code yet: a search for `elide_v1`,
+`parse_multipart_parts_v1`, `decode_sse_v1`, `ArtifactUrlV1`, `is_forbidden_egress_address`, `safe-fetch` and
+`TextPostRequestV1` in `crates/`, `scripts/` and `compatibility.json` finds none. To avoid confusing two numbered
+questions, "Q14" below always means this record's Q14 (the multipart twin); the value channel is "boundary record
+§13.8".
+
+### 18.1 HTTP contract number and the multipart twin
+
+| Record assumes | Fact on main | Effect |
+|---|---|---|
+| `HTTP_CONTRACT_VERSION` is 9 and the media minor takes it to 10 (header of §6.3a, §14 first batch, §15, Q14; speech §5, §13, §14, Q1) | It is **11**: `crates/south-contracts/src/lib.rs:106`, `compatibility.json` `contracts.http`. Version 10 is B7a (#136, 0.43.0: `QueryParameterV1::Declared`, declared user-agent, quota headers). Version 11 is SF26 (#157, 0.47.0: `%2F` inside one relative-path segment, `lib.rs:99-105`). Two tests pin 11: `tests/http_contract_v1.rs:54`, `tests/declared_instances_v1.rs:26` | The one bump of this world is **11 → 12**, in the media minor, carrying `execute_multipart_binary_call_v1` and the speech `TextPostRequestV1` with its binary entry point. Every "contract 10" for these shapes in this record and in the speech record reads "contract 12". S-I-2 changes the two pinned tests |
+| "`execute_multipart_binary_call_v1` ... and its raw twin" (§6.3a rule 2, §15) | No raw twin of any binary entry point exists: `south-core/src/raw.rs` has none, and 0.26.0 decided "D7 — a raw twin. None for now" (`2026-09-09-buffered-binary-response.md:283-285`) | Open item for S-I-2, not a ruling change: the default is the 0.26.0 rule (typed entry point only, a raw form if an adopting host asks). The Q14 ruling is satisfied by the typed entry point |
+| The twin needs transport work | `AsyncBinaryHttpTransport::execute_binary` takes any `PreparedHttpRequestV1` (`south-core/src/lib.rs:650-657`); the text and binary entry points share `execute_buffered` (`:897`); the reqwest implementation is the shared `fetch_buffered` (`south-transport-reqwest/src/lib.rs:145-162`). 0.26.0 declined the *entry point* ("no multipart call site answers in bytes", `lib.rs:860-862`) | The twin is a thin entry point beside `execute_multipart_call_v1` (`:826`); the transport trait does not change. `TextPostRequestV1` is different: it adds a request-body shape and touches `south-contracts`, `south-core` and the reqwest transport |
+| "`Raising MAX_RESPONSE_BODY_BYTES`" and the other limits | Unchanged: 32 MiB JSON request (`lib.rs:156`), 32 MiB UTF-8 response (`:171`), 64 MiB binary response (`:181`), 100 MiB multipart request (`:165`) | none |
+
+### 18.2 `contracts.media`, `contracts.image` and embeddings contract 2
+
+`compatibility.json` `contracts` keys on main: `reserved_header_policy` 2, `http` 11, `auth` 5, `error` 2, `stream` 2,
+`provider_quota_metadata` 2, `response_diagnostic` 1, `response_transcript` 1, `canonical_ir` null, `task` 7,
+`embeddings` 1, and the limit tables `header_limits`, `provider_quota_metadata_limits`, `response_diagnostic_limits`,
+`response_transcript_limits`, `task_limits`. There is no `media`, `image` or `speech` key and no `media_limits` table.
+
+| Record assumes | Fact | Effect |
+|---|---|---|
+| Embeddings packages declare `contracts: {"media": 1, "embeddings": 1}` (§15, last bullet; speech §14) | The three shipped embeddings packages declare `{"embeddings": 1}` only (e.g. `components/embeddings-vertex/manifest.json`), because contract 1 carries no media (embeddings record §15). The host range is a map of version *sets* (`HostRangeV1.contracts`, `south-provider-api/src/manifest.rs:1350`), so a package may declare a key a host does not list only if the host knows it | The sentence stays true for contract 2 packages only. Image packages declare `{"media": 1, "image": 1}` |
+| The embeddings world depends on `contracts.media` v1 and ships in or after the image minor (embeddings record §12, E-Q8) | Embeddings contract 1 shipped in 0.47.0 **without** media (§15 there). Contract 2 adds `Media`, `TextBlob`, the `media` capability word, the `request.media` row and `ReferenceIntegrity`, using `contracts.media` v1 | The image minor is the prerequisite of embeddings contract 2, not the reverse. Order: S-I-1 (the `media` module) first; embeddings contract 2 may ship in the same minor as the image world or after it, and needs only the blob types, `elide_v1` and the `as_is` transform from it. Contract 1 packages are untouched: a host range that lists `embeddings` {1, 2} keeps serving them. Embeddings contract 2 is its own work item (S-I-9), not part of the first batch |
+| `contracts.image: 1`, `media_limits`, `conformance.image_component_v1_suite_id` are added (§15) | Embeddings added the same kinds of field and moved `schema_version` to 6 together with a new top-level `embeddings_component_capabilities` table (release 0.47.0 §2) | Same shape here, with `media_component_capabilities` (Q5); expect `schema_version` 6 → 7, to be confirmed in S-I-8 |
+
+### 18.3 The value channel (boundary record §13.8) and the media worlds
+
+Kernel protocol 0.5.0 adds `ProviderConfig.declared` (`token-station-protocol` `provider.rs:371` at the pinned
+`c2581f3`, `Cargo.toml:26`), and `ComponentValues` keys of 1 to 64 bytes of `[a-z0-9_]` with values of 1 to 4096 bytes of
+printable ASCII. South shipped the channel in 0.46.0 for the provider world and widened it to the embeddings world in
+0.48.0 (embeddings record §16). A media world's `prepare` and `model-capabilities` receive a `ProviderConfig` (§7), so
+they can read `declared` once gate ① admits its two sources there.
+
+| Record assumes | Fact | Effect |
+|---|---|---|
+| Vertex project and region come from "an exported credential attribute or non-secret config" (§13, Vertex row) | Gate ① refuses both in every world but the provider and embeddings worlds: `config_schema` at `manifest.rs:867` (`world.world != EMBEDDINGS_WORLD`), credential attributes at `values.rs:72` (`!= PROVIDER_WORLD && != EMBEDDINGS_WORLD`). `host_values` is provider-only by design (it lives on `ChatRequest`) | The image world needs the same widening embeddings got in 0.48.0: admit a family's `config_schema` and exported credential attributes, and nothing else (no `endpoint`, `host_values`, instance declarations, `signing`, `stream_framing`, `usage_evidence`, `request_facts`). Touch points: `validate_role` (`manifest.rs:849-905`; the `endpoint`/`config_schema` branch and a new image block that also calls `validate_endpoints` for the key rules, as `:890-901` does for embeddings), `validate_component_values` (`values.rs:59-`), and the host import link (`component.rs:214`) and import scan (`loader.rs:249-258`). Better than adding a third enumerated exclusion: a world property on `WorldSchemaV1` (§4 already asks for it for the host import). Gate ② gains `UndeclaredValuesIgnored` for the world, as embeddings did. Any package that uses the widening declares the `south_runtime` of the minor that ships it |
+| Vertex rows get `base_url` from the host | The embeddings-vertex pattern applies as is: the host passes the location's API origin (`https://{region}-aiplatform.googleapis.com`, or `https://aiplatform.googleapis.com` for `global`) and the component appends `/v1/projects/{project}/locations/{region}/publishers/google/models/{model}:generateContent`, each value one percent-encoded segment, so `EndpointConfinement` holds (embeddings record §16; `RelativePathV1` admits `%2F` inside a segment since contract 11) | none for the contract; the Vertex image component copies the rule, including the refusal when `base_url` is a Vertex origin the region does not select |
+| The media worlds may use the §10 instance declarations the speech record relies on (`query_parameters` for ElevenLabs `output_format`, speech D3b) | `validate_instances` (`south-provider-api/src/instances.rs:244-254`) refuses `query_parameters`, `quota_headers` and `user_agent` in every non-provider world. The image surface needs none of them: `GroupId` and `api-version` are sanctioned names (`lib.rs:1179-1204`), and a package-declared secret header needs only the `header_secret` arm, which every world with that arm already allows (`manifest.rs`, `validate_secret_headers`) | none for the image world. The speech world needs `query_parameters` admitted (speech §17) |
+
+### 18.4 Credential recipes and Vertex
+
+| Record assumes | Fact | Effect |
+|---|---|---|
+| Vertex waits for credential recipe v1 (B4) (§14 I3-3, §13) | B4 shipped in 0.43.0 (#135); the host passes the twelve-case recipe suite (`compatibility.json` `host_capabilities.token-station-server.credential_recipe` verified, 12 cases). `embeddings-vertex` declares the working Vertex recipe | The south-side prerequisite of I3-3 is met. What remains for Vertex images is the gate ① widening of §18.3 |
+| A Vertex arm needs a recipe of its own | `components/embeddings-vertex/manifest.json` declares recipe `vertex_sa`: an RS256 `jwt_sign` step over the key file's `/private_key` (`iss` = `client_email`, scope `https://www.googleapis.com/auth/cloud-platform`, `aud` = the token step's endpoint, `iat` now, `exp` now + 600), then an `oauth2_token` form step to `https://oauth2.googleapis.com/token`, presenting `access_token`, `refresh_margin_seconds` 300, `min_ttl_seconds` 301, and attribute `project_id` exported from the non-secret field imported from `/project_id`. Recipes are manifest data, not a shared artifact | Reusable as is for Vertex image generation (the scope covers `generateContent`): the image package copies the `credentials` section byte for byte, with its own `region` and `project` config keys (syntaxes `aws_region` and `gcp_project_id`). Each package also carries its own `credential.*` fixture pack (the four files under `fixtures-embeddings-vertex/` are the model), and the world's suite must call `credential_recipe_checks_v1`, as `embeddings_suite.rs` does |
+| `MediaAuthV1` header arm names one of `SecretHeaderV1` (§6.3) | The closed set is five names (`api-key`, `x-api-key`, `x-goog-api-key`, `xi-api-key`, `ocp-apim-subscription-key`; `lib.rs:993`), and auth contract 5 adds `ProviderAuthV1::DeclaredHeaderSecret` for a name a package declares in `secret_headers` (`lib.rs:1423-`). `admit_descriptor_auth` already admits both (`south-component-conformance/src/descriptor_auth.rs:140`) and a minted slot as Bearer (`Auth::OAuth`) | `admit_media_descriptor_auth` (§6.3) is built on that rule implementation, so it admits a declared name too; "`SecretHeaderV1`" in §6.3 reads "a sanctioned or package-declared secret header". The shared rule must be factored out of the kernel-typed function in S-I-5. This does not touch the Q11 ruling |
+
+### 18.5 The model catalog (0.50.0) against §7, §8 and Q8
+
+`catalogs/model-catalog.json` is `south.model-catalog.v1`: 37 entries, 60 rules, image and video models only, keyed by
+upstream model id with `exact`, `prefix` and `contains` rules, first match wins, and a `capabilities` object in **the
+host's** vocabulary that South carries verbatim and does not interpret (boundary record §13.11; reader
+`south_provider_runtime::ModelCatalogV1`). It has no prices and no provider names. It is data the host loads and pins;
+no component sees it, and no suite checks against it.
+
+The vocabulary it uses for the image models overlaps this record's capability facts:
+
+| This record | Catalog (`catalogs/model-catalog.json`) |
+|---|---|
+| Per-role input limits "move into the component" (§8: gpt-image-1 input images 16 / mask 1, xAI 3 or 5, Stability 1, Nano Banana reference images 1) | `media.roles.<role>.max`, with roles `input_image`, `reference_image`, `mask`: `gpt-image-1` input_image 16 and mask 1, `grok-imagine-image*` input_image, `stable-image-*` input_image 1, `gemini-3-pro-image` reference_image 1, `wan2.7-image` input_image 9 |
+| Tier dimension `resolution` and "a default word per dimension (Nano Banana: `resolution`, default `1k`)" declared in `model-capabilities` (§8, Q8) | `params.resolution.options` and `.default`: `gemini-3-pro-image` options `1K 2K 4K`, default `1K`; `gemini-3.1-flash-lite-image` options `1K`; `grok-imagine-image` `1k 2k`, default `1k` |
+| `requested_outputs`, `size` | `params.n.max/default`, `params.size.options`, `params.pixels.*` |
+
+The host, per its S6 plan (read-only, `fbee0ed7`), loads the catalog (loader, `south_package_set.rs:353`) and uses it for
+pre-dispatch admission on images and video, for its public model listing and for the playground form; it keeps its
+built-in profiles only as a fallback until a catalog is installed, and has not re-pinned to 0.50.0 (pinned to 0.49.0).
+The S6 plan hands "the per-`provider_type` input-role readers, `nano_banana_flat_tier_guard` and the no-tier fallback" to
+P22 and P25, and the host plans say nothing about how the catalog and an image component's `model-capabilities` divide
+the facts above. Today the host enforces `media.roles.*.max` and `params.resolution.options` before dispatch
+(`images/precheck.rs`, `engine/capabilities.rs`), does not enforce `resolution.default` anywhere it was found, and the
+Nano Banana gate (`precheck.rs:34-62`) still exists, keyed on provider type, not on the catalog.
+
+**What the catalog does not change.**
+
+- The tier price list (Q8) stays a host schema change: the catalog carries no price, and a tier word is a request-time
+  choice whose *price* is the host's (ARCHITECTURE.md:129-141). As of 2026-10-09 nothing of it is implemented or
+  scheduled in the host (price columns are fixed names, `image_price_1k` and `image_price_2k`, and `image_tier_price`
+  reads the `size` hint, not `resolution`). The xAI and Nano Banana per-image rows therefore still wait for it (§14).
+- `prepare`'s role *mapping* ("take the first key that appears", `precheck.rs:88-155`), the metering forms and token
+  buckets, response formats, elision paths and `repeat` are dialect facts the catalog does not carry.
+- The speech record is not affected (§17 there): the catalog is image and video only, and text was ruled out of it.
+
+**Reconciliation finding R-1: two places now declare the same facts.** §7 has `model-capabilities` return per-role
+limits, and §8 has it declare each model's tier dimensions with a default word, while the catalog already carries role
+maxima, `resolution` options and defaults for the same models, South maintains it, and the host enforces it. If both stay
+authoritative they will drift, and the conformance row `pre_dispatch_refusal` ("for every input role with a declared
+limit, an over-limit `prepare` fixture", §12.1) cannot hold for limits that live in data South does not interpret.
+No ruling covers this; Q8 decides the dimensions and the price list, not where limits and default words are declared.
+Options for lv, with the recommendation of this reconciliation:
+
+- **A (recommended).** Ranges, counts and default words live in the catalog, the host enforces them and reads the
+  default word for the tier-refusal rule of §8 from `params.resolution.default`. `model-capabilities` declares what is
+  dialect-bound: operations, the role-key mapping, metering forms and buckets, renderable response formats, elision
+  paths, `repeat`, and the *names* of the tier dimensions the component reports. `pre_dispatch_refusal` then covers only
+  refusals the component itself makes (for example an edit with a mask on Gemini). One source of truth; the catalog
+  needs an entry for every model the image components serve; it covers 37 ids today, and a model absent from it has
+  no declaration (boundary record §13.11: `None` means "no declaration", not "no capability").
+- **B.** The component stays authoritative as written in §7/§8 and the catalog's image entries drop those fields. Not
+  viable as stated: the catalog is shared with video models, which have no component world, and the host's S6 design
+  reads those fields.
+- **C.** Both, and a conformance cross-check that a component's declared limits never exceed the catalog entry for the
+  same model id. More machinery, and the catalog is not visible to the suite.
+
+**Reconciliation finding R-2: tier-word spelling.** §8 gives the grammar `[a-z0-9_.-]{1,32}` for tier words, but the
+catalog's resolution words are `1K`, `2K`, `4K` and `480P`, `720P`, `1080P`, `768P` in upper case for most models and
+`1k`, `2k` for xAI. A host price list keyed by the component's word must map to the catalog's spelling, or the
+component must report the word as the upstream and the catalog spell it. This is a spelling decision (lower-case
+normalization in the component, a case-insensitive comparison in the host, or widening the grammar) and not a design
+change; it must be settled in S-I-1, before `ImageFactsV1` is frozen.
+
+Until R-1 is ruled, S-I-1 does not freeze `ImageModelCapabilitiesV1`.
+
+### 18.6 `WorldSchemaV1`, `validate_role`, runtime and limits
+
+| Record assumes | Fact on main | Effect |
+|---|---|---|
+| One new row in `KNOWN_WORLDS` and a branch in `validate_role` (§15) | `WorldSchemaV1` has five fields (`world`, `wit_package`, `behavior_suite`, `capabilities`, `auth_arms`; `manifest.rs:69-80`); `KNOWN_WORLDS` has four rows (`:301-302`: provider, task-v1, task-v2, embeddings); `validate_role` (`:849`) is an if-chain on the world name with the embeddings carve-outs at `:867` and `:890-901`; `validate_component_values` and the host-import link repeat the enumeration (`values.rs:72`, `component.rs:214`, `loader.rs:249-258`), and `validate_instances` refuses the three instance declarations outside the provider world (`instances.rs:244-254`). `EMBEDDINGS_CAPABILITIES` (`:285`) is the model for a closed vocabulary with one mandatory word | The image row is `IMAGE_WORLD_SCHEMA` with capabilities `generate`, `edit` and auth arms `bearer`, `header_secret`; `validate_role` adds "at least one of `generate`, `edit`" and requires a provider family. The five enumerations above should become world properties in the same change (S-I-3) |
+| The host import is linked on `api_version != TASK_WORLD_V2` (`component.rs:182`) | The condition is now `!= TASK_WORLD_V2 && != EMBEDDINGS_WORLD` (`component.rs:214`); the import scan refuses any `token-station:` or `host` import for embeddings at `loader.rs:249-258` (task-v2: `:243-248`). `InstanceKind` has four variants (`:75-80`); bindings are one `bindgen!` module per world (`bindings.rs:47-53` for embeddings) | The image world becomes the third world without a host import; the scan refuses both namespaces for it too |
+| Runtime limits are unchanged: payload 16 MiB, memory 64 MiB, 2 s (`runtime.rs:26-34`); calls serialize through one instance (`component.rs:136`, `:674-686`) | Defaults unchanged (`runtime.rs:26-33`); the instance lock is `main: Mutex<InstanceHandle>` (`component.rs:165`), taken in `call` (`:788`). The embeddings measurement (release 0.47.0 §2.3) shows the host-side erase-and-skeleton pattern passes a 32 MiB base64 body in about 130 ms with the component call under 1 ms | The limits do not move. `elide_v1` has the same job as embeddings' extraction; S-I-1 records its timing on a 32 MiB base64 body in the release record, as E-Q1 did, and a result that makes elision impractical reopens Q2 |
+| Kernel types: `HttpRequestDescriptor` (`http.rs:350-361`), `HttpResponseParts` (`:382-391`), `ProviderConfig` | Pinned kernel protocol 0.5.0 (`c2581f3`, `Cargo.toml:26`). `HttpRequestDescriptor` `http.rs:441-452` still has `body: Option<Value>` and an absolute `url`; `HttpResponseParts` `:475-482` still has `body: String` with the comment that binary needs a `-v2` field; `Auth` has gained `BearerAndHeader` and accepts any lowercase header name outside the never-credential list. `ProviderConfig` (`provider.rs:339`) gains `declared` (`:371`) and keeps `models[].supported_parameters` (`capability.rs:59`) | The reasons for the media descriptor and view types (§1) are unchanged. The `Auth` change is the reason `admit_media_descriptor_auth` must apply the manifest's `secret_headers` check (§18.4) |
+| Q47 is not in this record | The three crates every component links (`south-contracts`, `south-provider-api`, `south-component-conformance`) carry their own versions since 0.50.0 (boundary record §13.12) | The media minor changes all three, so they take a version bump and every package takes a patch bump, as 0.47.0 and 0.48.0 did; S-I-8 includes the digest-stability test (`shipped_packages_v1`) |
+
+### 18.7 Citations that drifted
+
+The record's south citations moved as follows; text not listed is unchanged (`runtime.rs:26-34`, `task_v2.rs:296-303`
+and `:100-105`, `component_v2.rs:13-37`, `task-adapter-v2.wit`, `provider-adapter.wit`, `reference_wan_image_task_v2.rs`).
+Server citations were not re-verified.
+
+| Cited | Now |
+|---|---|
+| `lib.rs:59` (`HTTP_CONTRACT_VERSION` = 9) | `lib.rs:106` (= 11) |
+| `lib.rs:106`, `:115`, `:121`, `:131`, `:620` (body limits and the JSON check) | `lib.rs:156`, `:165`, `:171`, `:181`, `:729` |
+| `lib.rs:193` (`RESPONSE_TRANSCRIPT_DENIED_HEADERS`) | `lib.rs:251` (now `pub(crate)`) |
+| `lib.rs:427-458`, `:481` (`ProviderEndpointV1::parse`, `RelativePathV1`) | `lib.rs:519-525`, `:580-584` |
+| `lib.rs:745` ("does not parse multipart") | `lib.rs:849` |
+| `lib.rs:884-894` (`SecretHeaderV1`) | `lib.rs:993`; five names |
+| `lib.rs:1064-1090` (`QueryParameterV1`) | `lib.rs:1179-1204`; adds `FileId` and `Declared` |
+| `lib.rs:1309-1323` (`ProviderAuthV1`) | `lib.rs:1423-`; five arms (adds `BearerAndHeaderSecret`, `DeclaredHeaderSecret`) |
+| `lib.rs:1585`, `:1615` (`MultipartPostRequestV1`, its `content-type` rule) | `lib.rs:1729`, `:1759` |
+| `lib.rs:2331` (`BufferedBinaryResponseV1`) | `lib.rs:2519` |
+| `south-core/src/lib.rs:811-831`, `:845-850`, `:858` | `south-core/src/lib.rs:826`, `:860-862`, `:873` |
+| `south-transport-reqwest/src/lib.rs:95-96` | `:96-97` (and `:296-297`) |
+| `manifest.rs:74`, `:151-152`, `:401-430` | `manifest.rs:87`, `:301-302`, `:849-905` |
+| `component.rs:73-77`, `:136`, `:182`; `loader.rs:216-224` | `component.rs:75-80`, `:165`, `:214`; `loader.rs:243-258` |
+| `report.rs:19-64` (`CheckV1`) | `report.rs:19-135`; the variants named in §12.1 still exist |
+| `task_suite_v2.rs:125-218` | the runner starts at `task_suite_v2.rs:129` |
+| `ARCHITECTURE.md:103-116`, `:110`, `:114-115` | `ARCHITECTURE.md:129-141`, `:136`, `:140-141` |
+| Kernel `f585bc8` (`Cargo.toml:22`); `http.rs:350-361`, `:382-391` | Kernel `c2581f3` (`Cargo.toml:26`); `http.rs:441-452`, `:475-482` |
+
+## 19. First batch and implementation steps
+
+**What is already in main** (§18): the descriptor auth admission rule (`admit_descriptor_auth`), package-declared secret
+headers, the credential recipe machinery with a working Vertex recipe, the value channel in the provider and embeddings
+worlds, the pinned kernel types, the embeddings world as the structural model (contracts crate module, ABI, JSON codecs,
+suite, references, sandbox parity, packages, release), and the model catalog. **What is still to build**: everything of
+this world — the `media` and `image` contract modules and their pure functions, the HTTP contract 12 shapes, the WIT,
+manifest row, runtime world, gate ① widening, the suite and its references, the packages, and the release plumbing.
+
+**Content of the first batch**, applying §14 to main: the world; `contracts.media` v1 complete (§6.4, including the
+speech words, `text` body and `sse` form, which no image component uses); the multipart parser, elider and encoder;
+HTTP contract 12 with both new shapes; and the **Azure** component (generation and edit). The xAI component is **not**
+in the first batch while the host's tier-keyed price list is unscheduled (§14 I2: "I2 ships Azure alone and xAI moves
+after it"); it is S-I-7, conditional. Shipping an xAI package before the host adopts it, `not_verified` as the embeddings
+packages were, is possible but is a decision for lv; this record does not take it.
+
+Steps are in dependency order. "Host prerequisite" means work outside south that the step's *host cutover* (not its
+south acceptance) waits for; the south acceptance of every step is on south alone.
+
+| Step | Work | Files and crates | Acceptance |
+|---|---|---|---|
+| **S-I-1** Contract types and pure functions | New module `south-contracts::media`: request view and part list types, `MediaRequestDescriptorV1` with `MediaAuthV1`, the closed transforms of §6.4 (all of them, including `from_hex`, `concat`, `wav_pcm_s16le`), the response view and `response_body_form`, `MediaLimitsV1`, `parse_multipart_parts_v1`, `elide_v1`, `encode_multipart_v1`, `ArtifactUrlV1::parse`, `is_forbidden_egress_address`, and `decode_sse_v1` (released with this minor; the Responses record R1 also waits for it; the host's B6 plan recommends releasing it separately and earlier, its Q-B6-6, unruled, and if lv rules that it leaves this step). New module `south-contracts::image`: facts, `ImageMeteringV1`, `ImageOutcomeV1`, artifact forms, tier words. Revise the 0.25.0 record's "no encoder" half-sentence (Q1). **Gated by**: R-1 (where limits and default words are declared) and R-2 (tier-word spelling) must be ruled before `ImageModelCapabilitiesV1` and the tier-word grammar are frozen | `crates/south-contracts/src/` (`lib.rs` re-exports, new `media.rs`, `image.rs`; the SSE decoder beside `eventstream.rs`), golden vectors under `crates/south-contracts/tests/`, fuzz targets in `fuzz/fuzz_targets/` (`contract_parsers.rs` pattern), `docs/design/2026-09-09-multipart-request-body.md` | Golden vectors for each function; fuzz targets build (`cargo check --manifest-path fuzz/Cargo.toml --all-targets --locked`); `scripts/check-boundaries.sh`; timing of `elide_v1` and the multipart splitter on a 32 MiB base64 body recorded in the release record (the E-Q1 pattern); `south-contracts` version bump (Q47) |
+| **S-I-2** HTTP contract 12 | `HTTP_CONTRACT_VERSION` 11 → 12 with its doc entry; `execute_multipart_binary_call_v1` beside `execute_multipart_call_v1`; `TextPostRequestV1` with a binary execution entry point (carried for the speech record, Q1 there); the raw-twin question of §18.1; testkit runners; provider-suite rows (own suite or an existing one, for the maintainers) | `crates/south-contracts/src/lib.rs`, `crates/south-core/src/lib.rs` (and `raw.rs` if a raw form is wanted), `crates/south-transport-reqwest/src/lib.rs` (text body rendering only), `crates/south-testkit/src/provider_binary.rs`, `crates/south-provider-conformance`, `compatibility.json`, the two pinned tests `http_contract_v1.rs:54` and `declared_instances_v1.rs:26` | New suite rows pass in the testkit; contract 11 requests are exactly contract 12 requests that do not use the new shapes; `compatibility.json` `contracts.http` 12 and the crate capability strings updated; the host's `provider_binary` gate ③ result is not claimed for the new rows |
+| **S-I-3** WIT, manifest, gate ① | `wit/image-adapter.wit` (§7); `IMAGE_WIT_PACKAGE`, `IMAGE_WORLD`, `IMAGE_BEHAVIOR_SUITE`, `IMAGE_CAPABILITIES`, `IMAGE_WORLD_SCHEMA`, a `KNOWN_WORLDS` row, a `validate_role` branch; admit `config_schema` and credential attributes in this world (§18.3); turn the enumerated world exclusions of §18.6 into world properties; new `ManifestErrorV1` variant for "operation word required" (breaking for hosts matching it exhaustively, as 0.47.0's was) | `crates/south-provider-api/` (`wit/`, `src/manifest.rs`, `src/values.rs`, `src/lib.rs`, tests `provider_api_v2.rs`) | A manifest declaring neither `generate` nor `edit`, an unknown word, `host_values`, an `endpoint`, an instance declaration or the `oauth` arm is refused; a manifest with a family's `config_schema` and exported attributes is admitted; the existing four worlds' tests pass unchanged; `south-provider-api` version bump |
+| **S-I-4** Runtime world | `bindgen!` module, `InstanceKind::Image`, `call_model_capabilities`, `call_prepare`, `call_parse_response`, `call_render`; the host import is not linked and the import scan refuses `token-station:*` and any `host` interface for this world; limits unchanged | `crates/south-provider-runtime/src/` (`bindings.rs`, `component.rs`, `loader.rs`), a test guest `tests/guests/test-image`, test `image_world_v1.rs` | The `embeddings_world_v1.rs` cases ported: a guest importing `host` is refused, a guest with the wrong world is refused, payload above 16 MiB is refused, determinism; `declared_runtime_v1` still passes |
+| **S-I-5** Conformance suite `south.image-component.v1` | JSON codecs (the `image-v1.<family>.<case>` fixture format), the component trait, ABI and sandbox adapters, the suite with the required rows of §12.1 as additive `CheckV1` variants, `admit_media_descriptor_auth` built on a rule factored out of `admit_descriptor_auth`, `UndeclaredValuesIgnored`, `credential_recipe_checks_v1` for packages with a recipe, `reference_integrity`; gate ③ host suites in the style of the existing ones (`south.safe-fetch.v1` as its own host suite) | `crates/south-component-conformance/src/` (new `image_*.rs`, `abi_image.rs`, `component_image.rs`, `sandbox_image.rs`, `descriptor_auth.rs`, `report.rs`, `lib.rs`), `crates/south-testkit` for the safe-fetch host suite | A native reference passes every row; each required row has a mutation that fails it; the safe-fetch vectors of §11 are refused; `south-component-conformance` version bump |
+| **S-I-6** Azure component | Reference implementation and package for the Azure MAI / Foundry family: generation JSON, edit as multipart with the binary response, `header_secret` `api-key`, `inline base64`, `tokens` (a missing declared bucket is `unknown`) or `images`. Fixtures are transcribed from the server's native arm (`azure.rs`), the P13 S8 pattern, never back-derived | new `components/image-azure/` (package name proposed; manifest, `src/lib.rs`, lockfile), `crates/south-component-conformance/src/reference_azure_image.rs` and its fixture pack, tests `azure_image_suite.rs` and `azure_image_sandbox_parity.rs`, `scripts/build-image-azure-component.sh`, `.github/workflows/release.yml` | Suite green natively and inside the sandbox with identical ABI answers; the package declares `south_runtime` of the minor; **host prerequisite for cutover**: the host's generic media executor (not started), HTTP contract 12 linkage and the multipart encoder |
+| **S-I-7** xAI component (conditional) | xAI generation and edit: tier words, `tier_candidates`, evidence `upstream_cost`, request-side elision paths | `components/image-xai/`, reference and fixtures as S-I-6 | Suite green; **host prerequisite for the south release decision and for cutover**: the host's tier-keyed price list (Q8), not started and not scheduled as of 2026-10-09; until it lands the xAI rows stay on the native arm (§14) |
+| **S-I-8** Release | Version bumps of the three guest-linked crates (Q47) and a patch bump of every package with `south_runtime` unchanged where nothing needs the new world; `compatibility.json` (`contracts.media`, `contracts.image`, `media_limits`, suite fields, `media_component_capabilities` `not_verified`, `schema_version`); the written Q5 commitment; release record, README and ARCHITECTURE entries; the digest-stability test; the declared-runtime check; the release index | `compatibility.json`, `Cargo.toml` files and component lockfiles, `docs/design/<date>-release-<next>.md`, `README.md`, `ARCHITECTURE.md`, `crates/south-component-conformance/tests/shipped_packages_v1.rs`, `scripts/check-declared-runtime.sh` | The checks of the 0.47.0 / 0.48.0 releases (fmt, clippy, nextest, `check-boundaries.sh`, `check-language.sh`, unit tests of `scripts/`, fuzz build, wasm clippy, release replay under the tag, `release_index.py compare`) all pass |
+| **S-I-9** Embeddings contract 2 (separate work item) | `Media` and `TextBlob`, the `media` capability word, the `request.media` row, `ReferenceIntegrity`; uses the S-I-1 blob types and `elide_v1` | `crates/south-contracts/src/embeddings.rs`, `manifest.rs`, `embeddings_suite.rs`, embeddings packages | Contract 1 packages unchanged and still pass; ships in the S-I-8 minor or after it |
+
+Later batches, from §14, after the first: I3-1 (MiniMax, Bailian Qwen-Image, the OpenAI-compatible component; its edit
+needs S-I-2), I3-2 (Gemini; Nano Banana per-image rows need the host price list), I3-3 (Vertex; the south side needs
+only the gate ① widening of S-I-3 and the recipe of §18.4), I3-4 (Stability), I3-5 (Ideogram, needs the safe fetch
+executor in the host), I3-6 (the Reve bridge, with P18's Reve edit).
+
+**Prerequisites outside south, in one list** (the host owns each; none blocks a south step's acceptance):
+
+1. The host's tier-keyed price list and per-model default word handling (Q8): blocks S-I-7 and the per-image rows of
+   I3-2. Not started.
+2. The host's generic media executor — view building with `elide_v1`, multipart parse and encode, reference expansion
+   before admission, the binary entry points, verify-then-settle, GatewayHeld wiring: blocks the cutover of every
+   component. Not started (P22 I2–I4); the only host generic executor for a media world is the embeddings one.
+3. The host's safe fetch executor to the `south.safe-fetch.v1` rules (the missing IPv6 ranges of §11): blocks I3-5 and
+   the speech Bailian arm.
+4. A re-pin of the host to the media minor, and to 0.50.0 for the catalog (R-1).
 
 ## Revision note (2026-10-01)
 
@@ -1045,3 +1317,16 @@ A South **minor**. Released worlds and contracts are unchanged; one transport sh
 - Consistency pass, HTTP contract 10 (§6.3a, §15, Q14): one bump, in this world's minor, carrying both
   `execute_multipart_binary_call_v1` and speech's `TextPostRequestV1`; ASR uses the multipart binary twin.
 - Consistency pass, §15: the embeddings declaration is quoted correctly as `{"media": 1, "embeddings": 1}`.
+
+## Revision note (2026-10-09)
+
+- Header: `Status` is accepted; `Rulings` and `Revised` updated; a reconciliation baseline paragraph added.
+- §10.2: the date of the DI6 = A ruling (lv, 2026-10-08, host plan P22).
+- §17: rulings of 2026-10-08 recorded under their questions, with one-line consequences. No design decision changed.
+- §18 (new): reconciliation with 0.50.0. The HTTP contract bump is 11 → 12, not 9 → 10 (Q14's numbers are stale, its
+  substance stands); no raw twin of any binary entry point exists; embeddings contract 2 follows the image minor; gate ①
+  must admit the value channel in this world; Vertex reuses the `embeddings-vertex` recipe; two findings (R-1, R-2) on
+  the overlap of the model catalog with §7/§8 and on tier-word spelling need a ruling before the capability type is
+  frozen; a table of drifted citations.
+- §19 (new): the first batch applied to main, and steps S-I-1 to S-I-9 with files and acceptance, and the prerequisites
+  outside south.
