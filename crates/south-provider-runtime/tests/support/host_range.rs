@@ -60,9 +60,9 @@ pub fn host_range() -> HostRangeV1 {
 pub fn exact_expectations_for(manifest: &str) -> HostExpectationsV1 {
     let manifest: ComponentManifestV1 = serde_json::from_str(manifest).expect("manifest parses");
     HostExpectationsV1 {
-        ir_schema_id: "token-station-protocol@0.4.0/v0.3.0".to_owned(),
-        kernel_version: "0.3.0".to_owned(),
-        kernel_revision: "6822aab1dea54ef646cb2206595cd4955ff9764a".to_owned(),
+        ir_schema_id: "token-station-protocol@0.5.0/v0.4.0".to_owned(),
+        kernel_version: "0.4.0".to_owned(),
+        kernel_revision: "8e34f5a089d0b9c7273b49ddb6952dd87e960019".to_owned(),
         south_runtime: manifest.compatibility.south_runtime,
     }
 }

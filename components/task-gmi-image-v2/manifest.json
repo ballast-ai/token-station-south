@@ -1,6 +1,6 @@
 {
   "name": "task-gmi-image-v2",
-  "version": "0.35.4",
+  "version": "0.35.5",
   "api_version": "task-adapter-v2",
   "providers": [
     "gmi-image"
@@ -25,14 +25,14 @@
     "fixtures": "fixtures-gmi-image-task-v2/"
   },
   "compatibility": {
-    "ir_schema_id": "token-station-protocol@0.4.0/v0.3.0",
-    "kernel_version": "0.3.0",
-    "kernel_revision": "6822aab1dea54ef646cb2206595cd4955ff9764a",
+    "ir_schema_id": "token-station-protocol@0.5.0/v0.4.0",
+    "kernel_version": "0.4.0",
+    "kernel_revision": "8e34f5a089d0b9c7273b49ddb6952dd87e960019",
     "wit_package": "token-station:task-adapter@2.0.0",
     "south_runtime": "0.44.0",
     "runtime_abi": 1,
     "kernel_contracts": {
-      "canonical_ir": 2,
+      "canonical_ir": 3,
       "error_catalog": 1,
       "stream": 2
     },

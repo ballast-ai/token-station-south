@@ -141,27 +141,59 @@ fn a_declared_secret_header_is_admitted_as_the_declared_arm() {
     );
 }
 
-/// The kernel limitation B7b removes: `Auth::header` checks its name against the kernel's static
-/// `CREDENTIAL_HEADERS` while deserializing, so a component's descriptor cannot name a header
-/// outside that list, and every name on it is either sanctioned or undeclarable. Until B7b, the
-/// declared arm is reachable only from descriptors built in-process. When the kernel moves the
-/// check, this test fails and should be replaced by one that admits a deserialized descriptor.
+/// Protocol 0.5.0 moved the name check out of the kernel: `Auth::header` admits any lowercase field
+/// name outside the kernel's never-credential list, so a descriptor a component serializes can now
+/// name a header outside `CREDENTIAL_HEADERS`, and this admission decides whether the package may
+/// use it. (Under protocol 0.4.0 the same wire shape failed to deserialize, and the declared arm
+/// was reachable only from descriptors built in-process.)
 #[test]
-fn until_b7b_no_component_descriptor_can_name_a_declared_header() {
-    let (config, _) = built();
-    assert!(Auth::header("x-acme-key", slot(&config)).is_err());
-    // The same wire shape with a kernel-listed name deserializes, so the refusal is the name's.
-    let wire = |name: &str| {
-        serde_json::to_value(Auth::Header { name: name.to_owned(), secret: slot(&config) })
-    };
-    assert!(serde_json::from_value::<Auth>(wire("x-api-key").unwrap()).is_ok());
-    assert!(serde_json::from_value::<Auth>(wire("x-acme-key").unwrap()).is_err());
+fn a_deserialized_descriptor_reaches_the_declared_arm() {
+    let (config, mut descriptor) = built();
+    let mut declaring = manifest(&["header_secret"]);
+    declaring.secret_headers = vec!["x-acme-key".to_owned()];
+    assert_eq!(declaring.validate(), Ok(()));
+
+    let wire = |name: &str| serde_json::json!({ "scheme": "header", "name": name, "secret": slot(&config).as_str() });
+    descriptor.auth = Some(serde_json::from_value::<Auth>(wire("x-acme-key")).unwrap());
+    assert_eq!(
+        admit_descriptor_auth(&declaring, &config, &descriptor),
+        Ok(AdmittedAuthV1::DeclaredHeaderSecret(
+            DeclaredSecretHeaderV1::parse("x-acme-key").unwrap()
+        ))
+    );
+
+    // The kernel now lets an undeclared name through; this admission still refuses it.
+    descriptor.auth = Some(serde_json::from_value::<Auth>(wire("x-acme-other")).unwrap());
+    assert_eq!(
+        admit_descriptor_auth(&declaring, &config, &descriptor),
+        Err(DescriptorAuthErrorV1::HeaderNotSanctioned("x-acme-other".to_owned()))
+    );
+
+    // What the kernel still refuses never reaches admission.
+    for refused in ["user-agent", "content-type", "X-Acme-Key"] {
+        assert!(serde_json::from_value::<Auth>(wire(refused)).is_err(), "{refused}");
+    }
 
     for kernel_only in ["authorization", "proxy-authorization", "cookie", "set-cookie"] {
         assert!(Auth::header(kernel_only, slot(&config)).is_ok());
         assert!(
             south_provider_api::validate_secret_header_name(kernel_only).is_err(),
             "{kernel_only} is a kernel credential header but must stay undeclarable"
+        );
+    }
+}
+
+/// The kernel's combined arm (`Auth::BearerAndHeader`, protocol 0.5.0) is refused: no manifest arm
+/// declares it yet, so admitting it would present a credential in a way the package never named.
+#[test]
+fn a_bearer_and_header_descriptor_is_refused() {
+    let (config, mut descriptor) = built();
+    descriptor.auth = Some(Auth::bearer_and_header("x-goog-api-key", slot(&config)).unwrap());
+    for arms in [&["bearer"][..], &["header_secret"], &["bearer", "header_secret"]] {
+        assert_eq!(
+            admit_descriptor_auth(&manifest(arms), &config, &descriptor),
+            Err(DescriptorAuthErrorV1::BearerAndHeaderNotDeclared),
+            "{arms:?}"
         );
     }
 }

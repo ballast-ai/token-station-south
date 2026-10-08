@@ -6,7 +6,7 @@
   },
   "runtime_abi": 1,
   "kernel_contracts": {
-    "canonical_ir": 2,
+    "canonical_ir": 3,
     "error_catalog": 1,
     "stream": 2
   },

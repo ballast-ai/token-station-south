@@ -54,9 +54,9 @@ fn manifest_json_with_runtime(version: &str, south_runtime: &str) -> String {
         "permissions": { "network": false, "filesystem": false, "secrets": ["provider_api_key"] },
         "conformance": { "required_suite": "south.provider-component.v1", "fixtures": "fixtures/" },
         "compatibility": {
-            "ir_schema_id": "token-station-protocol@0.4.0/v0.3.0",
-            "kernel_version": "0.3.0",
-            "kernel_revision": "6822aab1dea54ef646cb2206595cd4955ff9764a",
+            "ir_schema_id": "token-station-protocol@0.5.0/v0.4.0",
+            "kernel_version": "0.4.0",
+            "kernel_revision": "8e34f5a089d0b9c7273b49ddb6952dd87e960019",
             "wit_package": "token-station:adapter@2.0.0",
             "south_runtime": south_runtime,
         },
@@ -310,9 +310,9 @@ fn each_stream_gets_its_own_instance_so_buffers_cannot_interleave() {
 
 fn expectations() -> HostExpectationsV1 {
     HostExpectationsV1 {
-        ir_schema_id: "token-station-protocol@0.4.0/v0.3.0".to_owned(),
-        kernel_version: "0.3.0".to_owned(),
-        kernel_revision: "6822aab1dea54ef646cb2206595cd4955ff9764a".to_owned(),
+        ir_schema_id: "token-station-protocol@0.5.0/v0.4.0".to_owned(),
+        kernel_version: "0.4.0".to_owned(),
+        kernel_revision: "8e34f5a089d0b9c7273b49ddb6952dd87e960019".to_owned(),
         south_runtime: "0.19.0".to_owned(),
     }
 }

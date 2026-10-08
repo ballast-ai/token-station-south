@@ -98,14 +98,14 @@ fn the_manifest_declares_exactly_what_the_dialect_uses() {
     assert_eq!(
         manifest.compatibility,
         CompatibilityDeclarationV1 {
-            ir_schema_id: "token-station-protocol@0.4.0/v0.3.0".to_owned(),
-            kernel_version: "0.3.0".to_owned(),
-            kernel_revision: "6822aab1dea54ef646cb2206595cd4955ff9764a".to_owned(),
+            ir_schema_id: "token-station-protocol@0.5.0/v0.4.0".to_owned(),
+            kernel_version: "0.4.0".to_owned(),
+            kernel_revision: "8e34f5a089d0b9c7273b49ddb6952dd87e960019".to_owned(),
             wit_package: WIT_PACKAGE.to_owned(),
             south_runtime: manifest.compatibility.south_runtime.clone(),
             runtime_abi: Some(south_provider_api::RUNTIME_ABI),
             kernel_contracts: std::collections::BTreeMap::from([
-                ("canonical_ir".to_owned(), 2),
+                ("canonical_ir".to_owned(), 3),
                 ("error_catalog".to_owned(), 1),
                 ("stream".to_owned(), 2),
             ]),

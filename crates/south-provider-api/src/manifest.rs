@@ -287,7 +287,7 @@ pub struct ConformanceSpecV1 {
 #[serde(deny_unknown_fields)]
 pub struct CompatibilityDeclarationV1 {
     /// Tuple 1 — the IR revision, `token-station-protocol@<crate>/<kernel-tag>`,
-    /// e.g. `token-station-protocol@0.4.0/v0.3.0`.
+    /// e.g. `token-station-protocol@0.5.0/v0.4.0`.
     pub ir_schema_id: String,
     /// Tuple 2a — the kernel distribution release, e.g. `0.2.0`.
     pub kernel_version: String,
