@@ -65,7 +65,8 @@ own token refresh and its own health probe (Appendix A). This record moves all p
 §3.3 maps what this package needs to where the boundary record now provides it; the first draft's proposals P-1…P-7
 have been taken into that record, and the labels are kept so that citations stay valid. What remains this record's
 own is one probe rule (P-8b), the two cases of the ruled cap rule (§8.3) and the Kiro-specific questions of §16.
-The attempt id waits on boundary Q14 (P-4, K-Q16).
+The attempt id waits on boundary Q14 (P-4, K-Q16). *(Settled 2026-10-08, boundary §13.8: the package declares
+`host_values: ["attempt_id"]` and reads `ChatRequest.host_values`.)*
 
 ## 1. Problem
 
@@ -169,7 +170,7 @@ citations stay valid; each now points to where the boundary record states the ru
 | P-1 | `request_facts.stream: "none"` — no stream switch, a 2xx is always a stream | Boundary §7.2 | §8.2 |
 | P-2 | `request_facts.output_cap: []` — no cap location; `RequestFactsHonoured` for an empty list is the cap mutation check | Boundary §7.2, §7.6; the cap rule §6.3 | §8.3, §11.2 |
 | P-3 | The `user_agent` value | Boundary §10 (`DeclaredUserAgentV1`), Q15, Q16 | §4.6 |
-| P-4 | A host-minted attempt id, fresh per upstream attempt, for `conversationId` | Open: boundary Q14 (per-request case); K-Q16 | §4.5 |
+| P-4 | A host-minted attempt id, fresh per upstream attempt, for `conversationId` | Settled 2026-10-08: boundary §13.8, `host_values: ["attempt_id"]`; K-Q16 | §4.5 |
 | P-5 | The buffered path: an `aws-eventstream` package whose family declares `stream: "none"` gets its 2xx eventstream body deframed whole and handed to `parse-response` as the canonical re-encoding | Boundary §5.2; the kernel comment amendment in §14 | §5.4 |
 | P-6 | Recipe vocabulary: `http_exchange` with a JSON body, recipe-level `select` with presence predicates, `requires`, `write_back` with an `optional` extraction, `on_status` class keys, import `seed`, field `default`, `endpoint_params`, value syntaxes `aws_region` and `aws_arn` | Boundary §3.3; trust §3.4; host invariants §3.5; host executor §3.6 | §7 |
 | P-7 | Package-level `usage_evidence: absent`, the all-zero `usage` rule and the gate ② check `AbsentFamilyEmitsNoUsage` | Boundary §6.2 items 2 and 4; the WIT comment amendment in §14 | §6, §11 |
@@ -745,7 +746,9 @@ Which form requires it is not settled by the host's code: one comment says it is
 (server:token_refresh.rs:1151-1166). The component takes no position; it forwards what the credential has.
 
 How the attribute reaches the component is boundary Q14 — the same S0 D5 question as the attempt id of §4.5. This
-package reads the attribute through whatever route that question settles.
+package reads the attribute through whatever route that question settles. *(Settled 2026-10-08, boundary §13.8: the
+attribute arrives in `ProviderConfig.declared` under its name; its field must declare `syntax: aws_arn`, which it
+does.)*
 
 ### 7.6 Trust, host invariants and probes
 
@@ -1136,7 +1139,8 @@ of these, lv ruled K-Q19 on 2026-10-01.
   record adds only what the package needs from the answer: an optional value the host fills on every
   provider-world call, a UUID minted fresh per upstream attempt. Recommendation, as in Q14: a typed field through
   the kernel chain, D5's own promotion path. Either way the host strips client-supplied keys that collide with
-  reserved names.
+  reserved names. **Settled (2026-10-08, boundary §13.8):** a typed `ChatRequest.host_values` (kernel protocol
+  0.5.0); the package declares `host_values: ["attempt_id"]`.
 - **K-Q17 (S, K) The two doc-comment amendments** (§3.2, §5.4, §6.1), listed in boundary §14. The WIT's "never a
   zero" usage rule becomes a rule for `reported` packages (south); the kernel's `HttpResponseParts.body` comment
   admits a south-defined canonical re-encoding of an eventstream body, or the kernel rules the sentence does not

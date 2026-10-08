@@ -264,7 +264,8 @@ The complete vocabulary:
 | recipe | `min_ttl_seconds`, `max_ttl_seconds` | Optional; may only narrow the host's clamp (§3.5) |
 | recipe | `select: [ { when: <predicate>, recipe }, …, { recipe } ]` | Ordered rules, first match wins, the last rule has no test; predicates `field_present`, `all_present`, `field_in` (ASCII case-insensitive). Presence predicates may test secret fields — presence only, never the value; `field_in` only non-secret fields |
 | recipe | a recipe holding only `select` | A selector: no steps, no `present`, no `rotates_refresh_material`; the slot may name it, and every recipe it names must itself be complete |
-| recipe | `attributes: { name: { field, export: true, persist } }` | Exported non-secret values (below) |
+| recipe | `attributes: { name: { field, export: true, persist } }` | Exported non-secret values (below); the field declares a syntax (§13.8) |
+| recipe | a selector's `attributes: { name: { selected_recipe: true, export: true } }` | Exports the name of the recipe the selector chose (§13.8, D6) |
 | value syntax | `aws_region`, `aws_arn`, `gcp_project_id`, `api_version_date`, `digits`, `token`, `printable_ascii` (bounded length), `enum[…]` | The closed set shared by credential fields, config keys (§7.3) and template parameters |
 
 Notes on the forms:
@@ -296,7 +297,8 @@ value and keeps using it when it is later absent). How the attribute reaches the
 `ProviderConfig` fence admits no such channel (canonical-ir-inventory.md:155-164 and D5 at :249-255;
 provider-adapter.wit:89-90). §16 Q14 asks for the route; the recommendation is a typed field through the kernel
 chain (D5's own promotion path), the alternative an explicit, argued amendment of the fence. Either way the host
-strips any client-supplied key that collides with a reserved name.
+strips any client-supplied key that collides with a reserved name. *(Settled 2026-10-08: the typed field
+`ProviderConfig.declared`, kernel protocol 0.5.0; South's vocabulary and builder are §13.8.)*
 
 Sketch (field names are a draft):
 
@@ -950,6 +952,8 @@ Keys consumed by the endpoint template never reach the component. Keys the compo
 api-version as a query value) need a channel into the component, and the current fence admits none (§7.1); Kiro's
 profile ARN is a credential attribute (§3.3), not a config key, and needs the same channel. That channel is §16 Q14,
 the same question as §3.3's attributes; the host strips any client-supplied key that collides with a reserved name.
+*(Settled 2026-10-08, §13.8: every config key of the family, the template's included, reaches the component in
+`ProviderConfig.declared`.)*
 
 ### 7.4 Per-model differences: dialect words; different response wires: separate packages
 
@@ -1316,7 +1320,7 @@ chose as follows.
   - South provides `validate_config_values`, `fill_endpoint` (path parameters encoded as one segment) and
     `endpoint_admits` (an operator-entered `base_url` checked against the template).
   - Until Q14 gives the component a channel, a config key may only feed the endpoint. Gate ① refuses a key the
-    template does not use, and `config_schema` without an endpoint.
+    template does not use, and `config_schema` without an endpoint. *(Lifted by §13.8.)*
 - **Deframer and re-encoding (§5.2).** `AwsEventStreamDeframerV1` is pull-based (`push`, then `next_message`), and
   its first error is sticky. It adds a 128 KiB header-block bound, as the AWS SDKs have. It is stricter than
   today's host:
@@ -2085,6 +2089,147 @@ code. Exit 0 unless a line says otherwise.
   (`endpoint_confinement` and `descriptor_auth_within_manifest` fail on `provider.request.model-id-with-a-slash-stays-one-segment`
   with "outside the configured endpoint"). On this branch the same rows pass.
 
+### 13.8 The Q14 value channel (2026-10-08)
+
+Kernel protocol 0.5.0 carries the two typed fields of §16 Q14: `ProviderConfig.declared` (per provider row and per
+attempt) and `ChatRequest.host_values` (per request), both `ComponentValues` (keys of 1 to 64 bytes of `[a-z0-9_]`,
+values of 1 to 4096 bytes of printable ASCII, checked on construction and on deserialization). This section is South's
+half: the manifest vocabulary that declares what goes into them, the host-side builder, and the gates. The kernel
+record (`token-station-doc` `docs/design/2026-10-05-kernel-q14-component-values.md`, D1 to D8) names the follow-on work;
+D6, D7 and D8 were adopted there as recommendations to South and are implemented as follows. It lands in the same
+release as §13.7 (§16 Q37).
+
+**What reaches `declared`.** For a family, the keys a host may place in `ProviderConfig.declared` are the family's
+`config_schema` keys and the attributes of the `credentials` section that applies to it (`credentials_for`):
+`ComponentManifestV1::declared_keys(family)`. `ComponentManifestV1::declared_values(family, config, attributes)` builds
+the map for one attempt: the operator's values through `validate_config_values` (a key's `default` stands in for an
+absent one; an optional key without one is left out), and the selected credential's exported attributes, each checked
+against its declaration (the field's syntax, or for a selector attribute a recipe the selector names). Every value
+syntax lies inside the kernel grammar, so the result always inserts into `ComponentValues`. An attribute belongs to one
+credential, so the host builds the map after it selects the credential and never caches it per row.
+
+- **Config keys may feed the component (lifts §13.1's interim rule).** Gate ① no longer refuses a key the endpoint
+  template does not use, nor `config_schema` without an endpoint. Every key of the family reaches `declared`, the
+  template's keys included: the filled endpoint already shows them in `base_url`, so passing them adds no information
+  and spares a per-key flag (§16 Q41). The endpoint rules are unchanged: a template parameter is still a required key or
+  one with a default.
+- **Attributes need a value syntax.** A field attribute's field must be non-secret (§3.4 rule 4, unchanged) and must now
+  declare a `syntax`, so its value fits the kernel grammar at gate ① rather than failing a host's insert (§16 Q43). No
+  shipped package exports an attribute, so the narrowing breaks none.
+- **D6: the selected recipe.** `AttributeV1` has two sources, exactly one per attribute: `field` (a complete recipe) or
+  `selected_recipe: true` (a selector only), whose value is the name of the recipe the selector chose. A selector may
+  now hold `select` and such attributes and nothing else; a selector attribute is never `persist` (it is always
+  present) and may not share a name with an attribute of any recipe it names. The value is a package constant and
+  shows only which rule matched, which the selector's presence predicates could already tell; Claude Code's login and
+  setup tokens are told apart this way under one slot (kernel D4). `AttributeV1.field` becomes `Option<String>` (§16
+  Q42).
+- **D8: one namespace.** Gate ① refuses a family whose config key and exported attribute share a name
+  (`ManifestErrorV1::DeclaredValueNameCollision`). A section scoped away from the family does not collide with it.
+
+**What reaches `host_values` (D7).** A manifest declares the `ChatRequest.host_values` keys its component reads in
+`host_values`, from the closed vocabulary `HOST_VALUES`. The first and only word is `attempt_id`: a UUID (RFC 9562
+version 4, lowercase and hyphenated) the host mints fresh for every upstream attempt, so a failover attempt gets a new
+one (the Kiro record's P-4). Gate ① refuses an unknown word and a repeat. A host fills exactly the declared words on
+every call and passes no other; a new word is a generic host feature (P21 §1.4 exception ①), never a per-vendor value.
+
+**Provider world only (§16 Q44).** `ChatRequest` exists only in the provider world, so `host_values` is refused
+elsewhere (`InstanceIsAProviderWorldDeclaration("host_values")`). `config_schema` already was provider-only; credential
+attributes in a task-world package are refused too (`"credential attributes"`), because no task host path builds
+`declared` from a recipe and a word nothing honors would be a promise, as for the combined auth arm (§16 Q36). The task
+WIT says `declared` is empty in that world.
+
+**Gate ②: `undeclared_values_ignored`.** For every request case of a package run with its manifest, the suite adds one
+key the manifest does not declare to `provider_config.declared` and one to `chat_request.host_values` (each valid under
+the kernel grammar) and requires the same output as without them, a refusal included. A component that acts on any
+other key is red; one that acts only on a declared key passes. All fourteen packages pass as built.
+
+**The reference interpreter.** `exported_attributes_v1(credentials, slot, fields, persisted)` derives what a credential
+exports from its stored fields alone, without a run, which is what a host places in `declared` on every attempt, minted
+value fresh or not: the selector's attribute, the chosen recipe's field attributes, and for a `persist` attribute whose
+field is absent the value in `persisted`; it also returns the values to store as the new last values. A minted run's
+`attributes` now include the selector's attribute.
+
+**Gate ③ `south.credential-recipe.v1`: two cases, twelve in all (§16 Q45).** A third recipe kind, `Attributed`, is a
+selector over two client-credentials recipes, chosen by whether `workspace` is present, that exports the recipe it
+chose (`credential_kind`); both recipes export `account_id` with `persist` and `label` without. The harness gains a
+required method, `CredentialRecipeSessionV1::exported_attributes`: what the host would place in `declared` for the next
+attempt, built from the stored generation by the host's own code. The step `ExpectAttributes` compares it exactly
+(mismatch category `Attributes`).
+
+1. `ExportedAttributesFollowTheCredential`: after an operator edit the selector's choice and every attribute follow the
+   new fields, and `label`, which has no `persist`, is gone. A host that caches attributes per row, or keeps every last
+   value, fails.
+2. `PersistedAttributeOutlivesItsField`: `account_id` keeps its last value when its field becomes absent, and a new value
+   replaces it. The runner reads the attributes after each write, so a host may record the last value when it builds
+   the map or when it stores the fields; the suite does not choose.
+
+Neither case reaches the token endpoint. The suite version stays 1, following the B7a precedent for additive cases, and
+the self-test host fails exactly the guarded case for each of two new faults (every attribute persisted; `persist`
+ignored). `token-station-server`'s `credential_recipe` entry in `compatibility.json` moves from `verified` (10 cases) to
+`not_verified` until it runs the twelve-case table.
+
+**Normative text revised in step (§14).** `2026-08-21-canonical-ir-inventory.md` §2, §6 and D5 gain a dated amendment;
+the WIT doc comments of `model-capabilities` and `build-http-request` in `provider-adapter.wit` describe `declared` and
+`host_values`, and `task-adapter.wit` says `declared` is empty there. §3.3 and §7.3 point here.
+
+**Versions and contracts.** No contract number changes. The manifest gains an optional `host_values` and
+`AttributeV1` an optional `selected_recipe`, both omitted when absent, so every shipped manifest is byte for byte
+unchanged; a runtime older than this release refuses a manifest that uses either (unknown field), which is what
+`south_runtime` declares. `south.credential-recipe.v1` stays version 1 and `south.provider-component.v1` gains a check,
+as earlier additive checks did. Package identities do not move again: #152 already gave all fourteen packages unreleased
+versions for this release (§13.7 item 3), and nothing here changes a manifest; whatever this change does to a
+`component.wasm` (the WIT doc comments) ships under those versions.
+
+**Breaking Rust API for hosts on re-pin.** `AttributeV1.field` is `Option<String>` and `AttributeV1` has
+`selected_recipe`; `ComponentManifestV1` has `host_values`; `ManifestErrorV1` has three new variants;
+`CredentialRecipeSessionV1` has the required `exported_attributes`; `CredentialRecipeKindV1`,
+`CredentialRecipeCaseIdV1`, `CredentialRecipeStepV1`, `CredentialRecipeMismatchCategoryV1` and `CheckV1` each gain a
+variant.
+
+**What the host does after the release** (with §13.7's list):
+
+- R24 lifts: build `declared` per attempt with `declared_values`, from the selected credential's exported attributes
+  (its own executor, with `persist`: keep the last value of a `persist` attribute and use it while the field is absent)
+  and the row's config values; remove S1's "a config key only feeds the endpoint" restriction.
+- Mint `attempt_id` for a package that declares it, fresh for every upstream attempt, and pass no undeclared host value.
+- Implement `exported_attributes` in the gate ③ harness and run the twelve-case `south.credential-recipe.v1`; record
+  `verified` with 12 cases only after that run.
+- Strip any client-supplied value that would collide with a declared key; the host, not the client, writes both maps.
+- R9b (more than one slot) stays: kernel D4 deferred it.
+
+**Rejections and limits this change introduces:**
+
+1. A field attribute whose field declares no syntax (Q43).
+2. `selected_recipe` on a complete recipe, a field attribute on a selector, a `persist` selector attribute, a selector
+   attribute named like an attribute of a recipe it names, and an attribute with both or neither source.
+3. A config key and an exported attribute with one name in one family (D8).
+4. A `host_values` word outside `attempt_id`, or repeated; `host_values` or credential attributes outside the provider
+   world (Q44).
+
+**Evidence (2026-10-08, branch `p21-q14` on `73b4264`).** Every command below was judged by its own exit code. Exit 0
+unless a line says otherwise.
+
+- `cargo fmt --all -- --check`; `cargo clippy --workspace --all-targets --all-features -- -D warnings`;
+  `cargo nextest run --workspace --all-features` with `PROPTEST_CASES=32` (1200 passed, 1 skipped); the doctests;
+  `cargo test --workspace --no-default-features`; `cargo check --manifest-path fuzz/Cargo.toml --all-targets --locked`;
+  `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features`; `rustup run 1.96.0 cargo check --workspace
+  --all-targets`; `scripts/check-boundaries.sh` (self-test and run); `python3 -m unittest discover -s scripts -p 'test_*.py'`;
+  `scripts/check-language.sh` (self-test, tracked files, and `--commits origin/main..HEAD`); `cargo deny`, `cargo audit`
+  and `cargo machete` for the workspace and `fuzz/`; all fourteen component build scripts.
+- `scripts/check-declared-runtime.sh --build` **fails (exit 1)**, as §13.7 recorded and for the same reason: every package
+  still declares `south_runtime` 0.44.0 with `canonical_ir` 3, and the `v0.44.0` runtime records 2. The release step moves
+  `south_runtime` and the workspace version to 0.46.0 (lv, 2026-10-08: not in this change).
+- The new WIT doc comments are not in any `component.wasm` (the built OpenAI-compatible component does not contain their
+  text).
+- Mutations, each restored with `cp` and `touch`: dropping the D8 collision check fails
+  `a_config_key_and_an_attribute_may_not_share_a_name`; dropping the syntax rule fails
+  `an_exported_field_declares_a_value_syntax`; dropping the selector-and-target name check fails
+  `a_selector_may_export_the_name_of_the_recipe_it_chose`; admitting any host value word fails
+  `the_host_value_vocabulary_is_closed_and_starts_with_the_attempt_id`; making `undeclared_values_ignored` always pass
+  fails `a_component_acting_on_an_undeclared_key_is_red`; the reference interpreter ignoring `persisted` fails
+  `a_credential_exports_its_attributes_from_its_fields_and_persist_keeps_the_last_value`; and in gate ③'s self-test each
+  of the two new faults fails exactly its guarded case.
+
 ## 14. Existing text to revise in step
 
 - ARCHITECTURE.md:117-126: change the concluding sentence to "execution, material, reachable destinations and the
@@ -2100,7 +2245,8 @@ code. Exit 0 unless a line says otherwise.
   rule.
 - Depending on Q14: `2026-08-21-canonical-ir-inventory.md` §6 and D5 and the `provider-config` doc comments in
   provider-adapter.wit:89-90 and task-adapter.wit:87-88 (if the fence is amended), or nothing (if a typed kernel
-  field is added).
+  field is added). *(Done 2026-10-08 in §13.8: a typed kernel field was added, and the inventory and the WIT
+  comments gained a note saying so.)*
 - Depending on Q15: `2026-08-20-controlled-user-agent.md` and the `ControlledUserAgentV1` documentation
   (lib.rs:1229-1243).
 - The kernel's `HttpResponseParts` comment (kernel:http.rs:379-382, "binary responses would need a `-v2` field"):
@@ -2229,6 +2375,10 @@ Tags: S = south maintainers, L = lv, K = kernel.
   attempt) and `ChatRequest.host_values` (per request), both as the validated `ComponentValues` map (keys of 1 to 64
   bytes of `[a-z0-9_]`, values of 1 to 4096 bytes of printable ASCII). The `extensions` fence is unchanged. South's half
   is the manifest vocabulary that declares and exports into them (§13.8).
+  **South half done (2026-10-08, §13.8):** `declared` holds the family's config keys and the applying section's exported
+  attributes (`declared_keys`, `declared_values`); `host_values` holds words of the closed vocabulary a manifest
+  declares (`attempt_id`); gate ② checks that a component ignores undeclared keys; gate ③ checks attribute export and
+  `persist`. The choices left open by the kernel record are Q41 to Q45.
 - **Q15 (S)** Reopen the 2026-08-20 controlled-user-agent ruling: may a user-agent value come from a manifest value
   validated at gate ① (`DeclaredUserAgentV1`, §10) rather than only from host program text? Recommended: yes, with
   the value grammar unchanged and a fuzz obligation on the new parser.
@@ -2372,6 +2522,31 @@ Tags: S = south maintainers, L = lv, K = kernel.
   `DeclaredSecretHeaderV1::parse` accept, but nothing could use the five names (the kernel refuses them in a descriptor),
   so the contract numbers stay. **Taken as recommended; flagged for the owner because it edits a contract-level list
   without a number bump.**
+- **Q41 (S)** Which config keys reach `ProviderConfig.declared` (§13.8)? Options: every key of the family, the endpoint
+  template's included (recommended: the filled endpoint already shows those in `base_url`, so nothing new is disclosed,
+  and no per-key flag is needed); only keys the template does not use (refused: a key used in both places could not be
+  read); a per-key opt-in flag (refused for now: a vocabulary word without a reason to say "no"). **Taken as recommended
+  under the owner's standing rule.** It supersedes §7.3's "keys consumed by the endpoint template never reach the
+  component", which described the fence before Q14.
+- **Q42 (S)** The shape of kernel D6 (§13.8). Options: an attribute on the selector, `selected_recipe: true`, whose value
+  is the chosen recipe's name (recommended: one declaration, always present, and it names exactly what D6 describes); a
+  constant attribute on each complete recipe (refused: a recipe that forgets it exports nothing, and the vocabulary has
+  no constant source today). **Taken as recommended under the owner's standing rule.**
+- **Q43 (S)** Must a field attribute's field declare a value syntax (§13.8)? Recommended: yes. The kernel refuses a value
+  outside `ComponentValues` when the host inserts it, so a field without a syntax could hold a value (non-ASCII, longer
+  than 4096 bytes, a JSON document) that passes gate ① and fails every request; with a syntax the value fits by
+  construction. It narrows gate ①, but no shipped package exports an attribute. **Taken as recommended; flagged for the
+  owner because it narrows an existing rule.**
+- **Q44 (S)** Do the task worlds admit `host_values` or credential attributes (§13.8)? Recommended: no. `ChatRequest`
+  exists only in the provider world, and no task host path builds `declared` from a recipe; as for Q36, a word is a
+  promise the task host path would have to honor. Widening is additive when a task consumer exists. **Taken as
+  recommended.**
+- **Q45 (S, L)** How does gate ③ learn the attributes (§13.8)? Recommended: two new cases in `south.credential-recipe.v1`
+  at version 1 (the B7a precedent for additive cases), driven through a new required harness method,
+  `exported_attributes`, so `token-station-server`'s entry goes to `not_verified` until it re-runs. The suite does not
+  choose between recording a `persist` attribute's last value when the host builds the map or when it stores the
+  fields: the runner reads after every write. **Taken as recommended under the owner's standing rule; flagged for the
+  owner because a verified host capability becomes `not_verified`.**
 
 ## 17. Amendments found while drafting the component records (2026-09-30) — change log
 
@@ -2465,3 +2640,5 @@ into the body. Where each landed:
   oldest runtime it needs; §3.4 rule 5 extends "wait for package signing" to `signing`; §5.4 records that the signing
   field check landed; §12 item 5 points to the implemented guest. §13.2's allowance for a manifest change under an
   unchanged version is withdrawn (Q25).
+- 2026-10-08, the Q14 value channel: new §13.8 and §16 Q41–Q45; §3.3's attributes table and paragraph, §7.3's config
+  channel paragraph, §13.1's interim config rule and the Q14 item of §14 point to §13.8; Q14 records the South half.

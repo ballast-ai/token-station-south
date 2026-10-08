@@ -54,12 +54,12 @@ does not cross the boundary. `Extensions` = `BTreeMap<String, serde_json::Value>
 
 | Type | Fields (all serde-default-tolerant) | Open-JSON positions |
 |---|---|---|
-| `ChatRequest` | `model: String`, `messages: Vec<Message>`, `tools: Vec<ToolDef>`, `response_format: Option<ResponseFormat>`, `tool_choice: Option<ToolChoice>`, `sampling: Sampling`, `stream: bool`, `extensions` | `ToolDef.parameters: Value`; `ResponseFormat::JsonSchema{json_schema: Value}`; `ToolChoice::Other(Value)`; `extensions` |
+| `ChatRequest` | `model: String`, `messages: Vec<Message>`, `tools: Vec<ToolDef>`, `response_format: Option<ResponseFormat>`, `tool_choice: Option<ToolChoice>`, `sampling: Sampling`, `stream: bool`, `host_values: ComponentValues` (protocol 0.5.0; §6 amendment), `extensions` | `ToolDef.parameters: Value`; `ResponseFormat::JsonSchema{json_schema: Value}`; `ToolChoice::Other(Value)`; `extensions` |
 | `Message` | `role: Role{system,user,assistant,tool}`, `content: Option<Content{Text(String) \| Parts(Vec<ContentPart>)}>`, `tool_calls: Vec<ToolCall>`, `tool_call_id: Option<String>`, `name: Option<String>`, `extensions` | `ContentPart::Unknown(Value)` (verbatim survival); `extensions` |
 | `ContentPart` | `Text{text}`, `ImageUrl{image_url:{url, detail?}}`, `Thinking{thinking, signature?}`, `RedactedThinking{data}`, `Unknown(Value)` | `Unknown` |
 | `ToolCall` | `id`, `name`, `arguments: String` (exact model bytes; never parsed at this layer) | — |
 | `Sampling` | `temperature?`, `top_p?`, `max_output_tokens?`, `stop: Vec<String>` | — |
-| `ProviderConfig` (policy-fenced subset, §6) | `provider: String`, `base_url: ProviderEndpoint`, `auth: Option<SecretRef>`, `models: Vec<ModelCapability>`, `extensions` | `extensions` |
+| `ProviderConfig` (policy-fenced subset, §6) | `provider: String`, `base_url: ProviderEndpoint`, `auth: Option<SecretRef>`, `models: Vec<ModelCapability>`, `declared: ComponentValues` (protocol 0.5.0; §6 amendment), `extensions` | `extensions` |
 | `StreamChunk` | `data` — see D2: the v1 `String` cannot carry eventstream bytes | — |
 | `HttpResponseParts` | `status: u16`, `headers: BTreeMap<String,String>`, `body: String`, `extensions` | `extensions` |
 
@@ -163,6 +163,19 @@ credential — the three things invariant 4 keeps sovereign. A component that
 needs one of these has mis-located a decision; the answer is a new declared
 field on the IR (plan-visible), never a smuggled `extensions` key (§8, D5).
 
+**Amendment (2026-10-08, Q14; host-zero-vendor-boundary record §13.8).** Kernel
+protocol 0.5.0 took that answer for the values a component legitimately needs
+and the fence did not admit. `ProviderConfig.declared` carries, per attempt,
+the family's `config_schema` keys and the attributes the selected credential
+exports (each from a field declared non-secret); `ChatRequest.host_values`
+carries host-minted values from a closed vocabulary (`attempt_id`). Both are
+`ComponentValues` maps (keys of 1 to 64 bytes of `[a-z0-9_]`, values of 1 to
+4096 bytes of printable ASCII), and the package's manifest declares every key
+in them: a host passes only declared keys and a component reads only those,
+which gate ② checks (`undeclared_values_ignored`). Nothing in the fenced list
+above enters either map: no secret, no funds, routing or credential policy.
+The fence is otherwise unchanged.
+
 ## 7. Auth mapping across the estate
 
 | IR `Auth` (descriptor) | south arm | Who does the work |
@@ -258,6 +271,11 @@ this) and must not *behave* on an extensions key: a key that changes component
 behavior is an undeclared contract and fails review. Promotion path: extensions
 key → typed IR field (community protocol release) → kernel sync → schema_id
 bump. Gate ② includes an unknown-field round-trip fixture per payload type.
+
+Amendment (2026-10-08, Q14): the promotion path was taken once, for
+`ProviderConfig.declared` and `ChatRequest.host_values` (§6 amendment). A
+component may behave on a key of those two typed fields when its package
+declares the key; `extensions` keys stay data.
 
 ## 9. provider-api promotion criteria (the S1 gate)
 

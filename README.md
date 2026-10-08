@@ -101,6 +101,12 @@ the [task adapter vocabulary](docs/design/2026-08-27-task-adapter-vocabulary.md)
   `south_component_conformance::DeclaredInstancesV1` turns an admitted manifest into the contract
   types (`QueryParameterV1::Declared`, `ProviderQuotaHeaderMapV1`, `DeclaredUserAgentV1`), and
   `ReqwestTransportV1::with_quota_headers` captures a package's declared quota headers.
+- The component value channel (Q14): a component reads `ProviderConfig.declared`, which holds its
+  family's `config_schema` keys and the attributes the selected credential exports (a field, or the
+  recipe a selector chose), and `ChatRequest.host_values`, which holds the host values the manifest
+  declares in `host_values` (today only `attempt_id`). `ComponentManifestV1::declared_keys` and
+  `declared_values` give a host the keys and the per-attempt map, and gate ② checks that a component
+  ignores every undeclared key.
 - `south-component-conformance` is gates ① and ② of the four-gate layering: package
   admission (manifest, reported identity, tuple handshake) and the
   `south.provider-component.v1` behavior suite (fixture-pinned translation, determinism,
