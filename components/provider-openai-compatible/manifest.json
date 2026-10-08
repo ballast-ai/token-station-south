@@ -1,11 +1,12 @@
 {
   "name": "provider-openai-compatible",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "api_version": "provider-adapter-v2",
   "providers": [
     "openai-compatible",
     "azure-openai-v1",
-    "github-copilot"
+    "github-copilot",
+    "gemini-openai-compatible"
   ],
   "capabilities": [
     "chat",
@@ -15,6 +16,7 @@
   ],
   "auth_arms": [
     "bearer",
+    "bearer_and_header_secret",
     "header_secret"
   ],
   "credentials": {
@@ -136,6 +138,7 @@
     }
   },
   "endpoint": {
+    "gemini-openai-compatible": "https://generativelanguage.googleapis.com/v1beta/openai",
     "github-copilot": "https://api.{plan}.githubcopilot.com"
   },
   "config_schema": {

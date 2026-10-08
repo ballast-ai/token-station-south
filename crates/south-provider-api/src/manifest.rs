@@ -79,6 +79,11 @@ pub const PROVIDER_CAPABILITIES: &[&str] = &["chat", "stream", "tool_call", "jso
 ///   host-minted (OAuth-shaped) credentials whose product is a bearer token.
 /// - `header_secret`: the resolved secret travels verbatim in one sanctioned
 ///   provider header, or in one the manifest declares in `secret_headers`.
+/// - `bearer_and_header_secret`: the same resolved secret travels twice, as
+///   `Authorization: Bearer <secret>` and verbatim in one sanctioned provider
+///   header (Gemini's OpenAI-compatible surface). The header is one of the
+///   five sanctioned names; a name the manifest declares in `secret_headers`
+///   is not admitted on this arm (2026-10-08 record, §16 Q35).
 /// - `oauth`: the host exchanges the named grant for a token before the funds
 ///   marker and presents it as a bearer token; the component never sees the
 ///   exchange.
@@ -86,7 +91,12 @@ pub const PROVIDER_CAPABILITIES: &[&str] = &["chat", "stream", "tool_call", "jso
 ///   the component returns its descriptor; the descriptor itself carries no
 ///   auth, and the manifest's `emits` set is the contract the finalizer's
 ///   output is diffed against (2026-08-27 manifest-schema record, D2–D3).
-pub const PROVIDER_AUTH_ARMS: &[&str] = &["bearer", "header_secret", "oauth", "host_signed"];
+pub const PROVIDER_AUTH_ARMS: &[&str] =
+    &["bearer", "bearer_and_header_secret", "header_secret", "oauth", "host_signed"];
+
+/// The task-v1 world's auth arm vocabulary: the provider world's without the
+/// combined `bearer_and_header_secret` arm, which no task consumer needs (§16 Q36).
+pub const TASK_AUTH_ARMS: &[&str] = &["bearer", "header_secret", "oauth", "host_signed"];
 
 /// The signed-header vocabulary a `host_signed` manifest may name in `emits`.
 ///
@@ -114,11 +124,13 @@ pub const MAX_SECRET_HEADERS: usize = 8;
 ///
 /// Every name south already reserves for another purpose: framing and
 /// hop-by-hop headers, `host`, `authorization`, cookies, `user-agent`, the
-/// signed headers, the five sanctioned secret headers, `accept`, and the
-/// response metadata the contracts read. Mirrors
-/// `south_contracts::UNDECLARABLE_SECRET_HEADER_NAMES`.
+/// signed headers, the five sanctioned secret headers, `accept`, the response
+/// metadata the contracts read, and the kernel's never-credential names
+/// (protocol 0.5.0), which the kernel refuses in a descriptor's `Auth` whatever
+/// a package declares. Mirrors `south_contracts::UNDECLARABLE_SECRET_HEADER_NAMES`.
 pub const UNDECLARABLE_SECRET_HEADER_NAMES: &[&str] = &[
     "accept",
+    "accept-encoding",
     "anthropic-ratelimit-tokens-limit",
     "anthropic-ratelimit-tokens-remaining",
     "anthropic-ratelimit-tokens-reset",
@@ -135,7 +147,9 @@ pub const UNDECLARABLE_SECRET_HEADER_NAMES: &[&str] = &[
     "content-type",
     "cookie",
     "expect",
+    "forwarded",
     "host",
+    "http2-settings",
     "keep-alive",
     "ocp-apim-subscription-key",
     "openai-organization",
@@ -154,6 +168,8 @@ pub const UNDECLARABLE_SECRET_HEADER_NAMES: &[&str] = &[
     "transfer-encoding",
     "upgrade",
     "user-agent",
+    "via",
+    "www-authenticate",
     "x-amz-content-sha256",
     "x-amz-date",
     "x-amz-security-token",
@@ -217,9 +233,9 @@ pub const TASK_REQUIRED_CAPABILITIES: &[&str] = &["submit", "observe", "render"]
 
 /// The task world, as gate ① validates it.
 ///
-/// Its auth arms are [`PROVIDER_AUTH_ARMS`] unchanged: a task component
-/// authenticates exactly as a chat one does — it names a credential and never
-/// holds one. `host_signed` matters more here than in chat, since Kling's
+/// Its auth arms are [`TASK_AUTH_ARMS`]: a task component authenticates as a
+/// chat one does — it names a credential and never holds one — except that the
+/// combined Bearer-plus-header arm is not admitted. `host_signed` matters more here than in chat, since Kling's
 /// HS256 JWT and Bedrock's `SigV4` are both task-side families (2026-09-18
 /// task-adapter-world record, D4).
 pub const TASK_WORLD_SCHEMA: WorldSchemaV1 = WorldSchemaV1 {
@@ -227,7 +243,7 @@ pub const TASK_WORLD_SCHEMA: WorldSchemaV1 = WorldSchemaV1 {
     wit_package: TASK_WIT_PACKAGE,
     behavior_suite: TASK_BEHAVIOR_SUITE,
     capabilities: TASK_CAPABILITIES,
-    auth_arms: PROVIDER_AUTH_ARMS,
+    auth_arms: TASK_AUTH_ARMS,
 };
 
 /// Task-v2 currently admits the two validated descriptor credential arms.

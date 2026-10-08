@@ -128,3 +128,24 @@
   构造一次 carrier 并缓存，随后 item、completed 和 continuation 只能复用该结果。
 - 映射失败进入 AwaitingError 时要释放 replay/content 大缓冲；仅回滚帧序号而保留失败载荷，
   会把已经拒绝的数据继续留在长寿命流状态中。
+
+## 2026-10-08: A neighbor's documented promise is a claim to test
+
+- The kernel's documentation of its never-credential header list said admitting layers may
+  refuse more names and that South does. South's undeclarable list lacked five of them, so a
+  manifest could declare a header name the kernel would refuse in every descriptor, a
+  declaration that could never work and that no check named. The first test written for the
+  re-pin, an inclusion check between the two lists, found it.
+- When a dependency's contract leans on "the other side is stricter", pin the inclusion in a
+  test on the side you own, in both directions where both hold. A sentence in the neighbor's
+  record is not evidence about your code.
+
+## 2026-10-08: A test that pins a refusal is pinning the dependency, not your code
+
+- Three task reference tests asserted that the kernel refused an encoded slash in a task id,
+  with the comment "do not weaken that host gate". They were right while the kernel refused it
+  and became wrong the moment the kernel decided otherwise, for a documented reason.
+- Pin what the component guarantees (it encodes one segment and never judges the id) and what
+  the gate guarantees today (a dot piece, an empty piece and a backslash are refused), and
+  keep the gate's own rule next to it. Do not pin the gate's old generosity or strictness as a
+  property of the component.

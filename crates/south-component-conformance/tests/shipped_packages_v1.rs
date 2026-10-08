@@ -8,7 +8,10 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use south_provider_api::ComponentManifestV1;
+use south_provider_api::{CompatibilityMismatchV2, ComponentManifestV1, compatibility_admits};
+
+#[path = "support/host_range.rs"]
+mod host_range;
 
 /// The official components this repository ships. Named, so that an empty or
 /// mistyped scan below cannot pass over nothing.
@@ -633,4 +636,84 @@ fn the_kernel_repin_retires_every_published_045_package_identity() {
             "{name}"
         );
     }
+}
+
+/// Every package declares one kernel tuple, and its crate version is the one the workspace pins:
+/// the tuple is package content, so a re-pin that forgets one manifest (or the dependency) fails
+/// here rather than in a host.
+#[test]
+fn every_shipped_package_declares_the_kernel_the_workspace_pins() {
+    let workspace = std::fs::read_to_string(repo_root().join("Cargo.toml")).unwrap();
+    let pin = workspace
+        .lines()
+        .find(|line| line.starts_with("token-station-protocol = "))
+        .expect("the workspace pins the protocol crate");
+    let pinned_version = pin.split("version = \"").nth(1).and_then(|rest| rest.split('"').next());
+    let pinned_version = pinned_version.expect("the pin names a version");
+
+    let mut tuples = BTreeSet::new();
+    for package in shipped_packages() {
+        let manifest: ComponentManifestV1 =
+            serde_json::from_str(&std::fs::read_to_string(package.join("manifest.json")).unwrap())
+                .unwrap();
+        let declared = manifest.compatibility;
+        assert!(
+            declared
+                .ir_schema_id
+                .starts_with(&format!("token-station-protocol@{pinned_version}/v")),
+            "{}: `{}` is not built against the pinned protocol {pinned_version}",
+            manifest.name,
+            declared.ir_schema_id
+        );
+        assert_eq!(declared.kernel_revision.len(), 40, "{}", manifest.name);
+        tuples.insert((declared.ir_schema_id, declared.kernel_version, declared.kernel_revision));
+    }
+    assert_eq!(tuples.len(), 1, "every package declares the same kernel tuple: {tuples:?}");
+}
+
+/// A host that records the previous `canonical_ir` refuses every shipped package, through the
+/// contract number whichever runtime it claims to be; a host that records 3 admits them. This is
+/// the one-way flag day of a kernel re-pin (design record section 13.7).
+#[test]
+fn a_host_recording_the_old_kernel_contract_refuses_every_shipped_package() {
+    let this_release = host_range::host_range();
+    assert_eq!(this_release.kernel_contracts.get("canonical_ir"), Some(&3));
+    let mut previous = this_release.clone();
+    previous.kernel_contracts.insert("canonical_ir".to_owned(), 2);
+    let mut seen = 0;
+    for package in shipped_packages() {
+        let manifest: ComponentManifestV1 =
+            serde_json::from_str(&std::fs::read_to_string(package.join("manifest.json")).unwrap())
+                .unwrap();
+        assert_eq!(compatibility_admits(&manifest, &this_release), Ok(()), "{}", manifest.name);
+        assert!(
+            matches!(
+                compatibility_admits(&manifest, &previous),
+                Err(CompatibilityMismatchV2::KernelContract {
+                    ref name,
+                    declared: Some(3),
+                    expected: Some(2),
+                }) if name == "canonical_ir"
+            ),
+            "{}",
+            manifest.name
+        );
+        seen += 1;
+    }
+    assert_eq!(seen, OFFICIAL_COMPONENTS.len());
+}
+
+/// `provider-openai-compatible` 2.3.0 was merged after 0.45.0 (#150) and never released; the
+/// `gemini-openai-compatible` family changes its manifest and its `component.wasm`, so it moves on.
+#[test]
+fn the_gemini_family_moves_the_unreleased_openai_compatible_identity() {
+    let manifest: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(
+            repo_root().join("components/provider-openai-compatible/manifest.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_ne!(manifest.version, "2.3.0");
+    assert!(manifest.providers.iter().any(|family| family == "gemini-openai-compatible"));
 }

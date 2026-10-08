@@ -1,0 +1,38 @@
+{
+  "provider_config": {
+    "provider": "bedrock-bearer",
+    "base_url": "https://bedrock-runtime.us-east-1.amazonaws.com",
+    "models": [
+      {
+        "model": "arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-sonnet-4-20250514-v1:0",
+        "tool": true,
+        "vision": true,
+        "json_schema": false,
+        "context_window": 200000,
+        "supported_parameters": [
+          "stop",
+          "temperature",
+          "top_p"
+        ]
+      }
+    ],
+    "auth": "provider_api_key"
+  },
+  "chat_request": {
+    "model": "arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-sonnet-4-20250514-v1:0",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Be terse."
+      },
+      {
+        "role": "user",
+        "content": "Weather in Beijing?"
+      }
+    ],
+    "sampling": {
+      "temperature": 0.2,
+      "max_output_tokens": 512
+    }
+  }
+}

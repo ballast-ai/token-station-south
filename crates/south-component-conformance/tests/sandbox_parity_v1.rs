@@ -89,8 +89,12 @@ fn one_loaded_package_serves_every_family_it_declares() {
         .iter()
         .map(|_| SandboxedComponentV1::shared(std::sync::Arc::clone(&loaded)))
         .collect();
-    assert_eq!(seams.len(), 3, "openai-compatible, azure-openai-v1 and github-copilot");
-    assert_eq!(std::sync::Arc::strong_count(&loaded), 4, "one instance, three seams");
+    assert_eq!(
+        seams.len(),
+        4,
+        "openai-compatible, azure-openai-v1, github-copilot and gemini-openai-compatible"
+    );
+    assert_eq!(std::sync::Arc::strong_count(&loaded), 5, "one instance, four seams");
     for seam in &seams {
         assert_eq!(seam.metadata(), loaded.metadata());
     }

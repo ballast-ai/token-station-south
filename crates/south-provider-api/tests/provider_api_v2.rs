@@ -6,7 +6,7 @@ use south_provider_api::{
     ADAPTER_WIT, COMPONENT_BEHAVIOR_SUITE, CompatibilityDeclarationV1, CompatibilityMismatchV1,
     ComponentManifestV1, ComponentPermissionsV1, ConformanceSpecV1, HostExpectationsV1,
     KNOWN_WORLDS, ManifestErrorV1, PROVIDER_AUTH_ARMS, PROVIDER_WORLD, PROVIDER_WORLD_SCHEMA,
-    TASK_ADAPTER_V2_WIT, TASK_ADAPTER_WIT, TASK_BEHAVIOR_SUITE, TASK_CAPABILITIES,
+    TASK_ADAPTER_V2_WIT, TASK_ADAPTER_WIT, TASK_AUTH_ARMS, TASK_BEHAVIOR_SUITE, TASK_CAPABILITIES,
     TASK_WIT_PACKAGE, TASK_WORLD, TASK_WORLD_SCHEMA, TASK_WORLD_SCHEMA_V2, TASK_WORLD_V2,
     UsageEvidenceV1, WIT_PACKAGE, compatibility_matches, known_world,
 };
@@ -671,8 +671,16 @@ fn the_task_world_is_known_and_carries_its_own_vocabulary() {
     assert_eq!(schema.wit_package, TASK_WIT_PACKAGE);
     assert_eq!(schema.behavior_suite, TASK_BEHAVIOR_SUITE);
     assert_eq!(schema.capabilities, TASK_CAPABILITIES);
-    // A task component authenticates exactly as a chat one does (record D4).
-    assert_eq!(schema.auth_arms, PROVIDER_AUTH_ARMS);
+    // A task component authenticates as a chat one does (record D4), except that the combined
+    // Bearer-plus-header arm is a provider-world word (record 13.7, Q36).
+    assert_eq!(schema.auth_arms, TASK_AUTH_ARMS);
+    let without_combined: Vec<&str> = PROVIDER_AUTH_ARMS
+        .iter()
+        .copied()
+        .filter(|arm| *arm != "bearer_and_header_secret")
+        .collect();
+    assert_eq!(schema.auth_arms, without_combined.as_slice());
+    assert!(PROVIDER_AUTH_ARMS.contains(&"bearer_and_header_secret"));
     assert_eq!(KNOWN_WORLDS.len(), 3, "provider and both task versions");
 }
 

@@ -651,10 +651,11 @@ fn count(usage: &Value, field: &str) -> u64 {
     usage[field].as_u64().unwrap_or(0)
 }
 
-const USAGE_FIELDS: [&str; 7] = [
+const USAGE_FIELDS: [&str; 8] = [
     "input_tokens",
     "output_tokens",
     "cache_read_tokens",
+    "explicit_cache_read_tokens",
     "cache_write_tokens",
     "cache_write_5m_tokens",
     "cache_write_1h_tokens",
@@ -667,10 +668,13 @@ fn is_zero(usage: &Value) -> bool {
 
 /// The partition the kernel's `Usage` promises, or why a report breaks it.
 fn partition_violation(usage: &Value) -> Option<&'static str> {
-    let [input, output, read, write, five_minute, one_hour, reasoning] =
+    let [input, output, read, explicit_read, write, five_minute, one_hour, reasoning] =
         USAGE_FIELDS.map(|field| count(usage, field));
     if read.checked_add(write).is_none_or(|cached| cached > input) {
         return Some("cache read and cache write exceed input_tokens");
+    }
+    if explicit_read > read {
+        return Some("explicit_cache_read_tokens exceeds cache_read_tokens");
     }
     if five_minute.checked_add(one_hour).is_none_or(|tiers| tiers > write) {
         return Some("the cache-write tiers exceed cache_write_tokens");

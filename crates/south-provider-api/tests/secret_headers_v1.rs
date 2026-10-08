@@ -17,7 +17,7 @@ fn shipped(package: &str) -> ComponentManifestV1 {
     serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
 }
 
-/// `provider-openai-compatible` declares `bearer` and `header_secret`.
+/// `provider-openai-compatible` declares `bearer`, `bearer_and_header_secret` and `header_secret`.
 fn declaring(names: &[&str]) -> ComponentManifestV1 {
     let mut manifest = shipped("provider-openai-compatible");
     manifest.secret_headers = names.iter().map(|name| (*name).to_owned()).collect();

@@ -58,6 +58,13 @@ const COPILOT_HEADERS: [(&str, &str); 6] = [
     ("x-vscode-user-agent-library-version", "electron-fetch"),
 ];
 
+// -- the gemini-openai-compatible family ------------------------------------
+
+/// The family for Gemini's OpenAI-compatible surface (`/v1beta/openai/chat/completions`): the same
+/// Chat Completions body as `openai-compatible`, with the key presented twice, as
+/// `Authorization: Bearer` and in `x-goog-api-key` (boundary §13.7 item 6).
+const GEMINI_OPENAI_COMPATIBLE: &str = "gemini-openai-compatible";
+
 // -- translation -------------------------------------------------------------
 
 fn finish_reason(raw: Option<&str>) -> Option<FinishReason> {
@@ -717,7 +724,7 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-openai-compatible".to_owned(),
-            version: "2.3.0".to_owned(),
+            version: "2.4.0".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
@@ -776,7 +783,10 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
             ("azure-openai-v1", Some(secret)) => {
                 Some(Auth::header("api-key", secret).map_err(internal)?)
             }
-            ("azure-openai-v1", None) => None,
+            (GEMINI_OPENAI_COMPATIBLE, Some(secret)) => {
+                Some(Auth::bearer_and_header("x-goog-api-key", secret).map_err(internal)?)
+            }
+            ("azure-openai-v1" | GEMINI_OPENAI_COMPATIBLE, None) => None,
             (dialect, _) => {
                 return Err(capability(format!("unsupported provider dialect `{dialect}`")));
             }

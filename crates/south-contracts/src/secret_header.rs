@@ -47,6 +47,9 @@ pub const MAX_DECLARED_SECRET_HEADERS: usize = 8;
 ///   sanctioned [`SecretHeaderV1`](crate::SecretHeaderV1) names, which need no declaration;
 /// - the response-side transcript denials (`proxy-authenticate`, `set-cookie2`);
 /// - `accept`, which the transport adds on its own behalf;
+/// - the rest of the kernel's never-credential list (protocol 0.5.0: `accept-encoding`, `forwarded`,
+///   `http2-settings`, `via`, `www-authenticate`), which the kernel refuses in a descriptor's
+///   `Auth` whatever a package declares, so declaring one could never work (§13.7, Q40);
 /// - `content-type`, `content-encoding` and `retry-after`, which describe or govern a response
 ///   the contracts read;
 /// - the closed response diagnostic and provider quota metadata names, which hosts read
@@ -56,6 +59,7 @@ pub const MAX_DECLARED_SECRET_HEADERS: usize = 8;
 /// cannot stay declarable by accident.
 pub const UNDECLARABLE_SECRET_HEADER_NAMES: &[&str] = &[
     "accept",
+    "accept-encoding",
     "anthropic-ratelimit-tokens-limit",
     "anthropic-ratelimit-tokens-remaining",
     "anthropic-ratelimit-tokens-reset",
@@ -72,7 +76,9 @@ pub const UNDECLARABLE_SECRET_HEADER_NAMES: &[&str] = &[
     "content-type",
     "cookie",
     "expect",
+    "forwarded",
     "host",
+    "http2-settings",
     "keep-alive",
     "ocp-apim-subscription-key",
     "openai-organization",
@@ -91,6 +97,8 @@ pub const UNDECLARABLE_SECRET_HEADER_NAMES: &[&str] = &[
     "transfer-encoding",
     "upgrade",
     "user-agent",
+    "via",
+    "www-authenticate",
     "x-amz-content-sha256",
     "x-amz-date",
     "x-amz-security-token",
@@ -304,7 +312,8 @@ mod tests {
             .chain(SecretHeaderV1::ALL.iter().map(SecretHeaderV1::header_name))
             .chain(ResponseDiagnosticFieldV1::ALL.iter().map(|field| field.as_header_name()))
             .chain(quota_names)
-            .chain(["accept", "content-type", "content-encoding", "retry-after"]);
+            .chain(["accept", "content-type", "content-encoding", "retry-after"])
+            .chain(["accept-encoding", "forwarded", "http2-settings", "via", "www-authenticate"]);
         for name in sources {
             assert!(
                 UNDECLARABLE_SECRET_HEADER_NAMES.contains(&name),
