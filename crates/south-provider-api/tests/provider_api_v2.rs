@@ -4,11 +4,13 @@ use std::collections::BTreeSet;
 
 use south_provider_api::{
     ADAPTER_WIT, COMPONENT_BEHAVIOR_SUITE, CompatibilityDeclarationV1, CompatibilityMismatchV1,
-    ComponentManifestV1, ComponentPermissionsV1, ConformanceSpecV1, HostExpectationsV1,
-    KNOWN_WORLDS, ManifestErrorV1, PROVIDER_AUTH_ARMS, PROVIDER_WORLD, PROVIDER_WORLD_SCHEMA,
-    TASK_ADAPTER_V2_WIT, TASK_ADAPTER_WIT, TASK_AUTH_ARMS, TASK_BEHAVIOR_SUITE, TASK_CAPABILITIES,
-    TASK_WIT_PACKAGE, TASK_WORLD, TASK_WORLD_SCHEMA, TASK_WORLD_SCHEMA_V2, TASK_WORLD_V2,
-    UsageEvidenceV1, WIT_PACKAGE, compatibility_matches, known_world,
+    ComponentManifestV1, ComponentPermissionsV1, ConformanceSpecV1, EMBEDDINGS_ADAPTER_WIT,
+    EMBEDDINGS_BEHAVIOR_SUITE, EMBEDDINGS_CAPABILITIES, EMBEDDINGS_WIT_PACKAGE, EMBEDDINGS_WORLD,
+    EMBEDDINGS_WORLD_SCHEMA, HostExpectationsV1, KNOWN_WORLDS, ManifestErrorV1, PROVIDER_AUTH_ARMS,
+    PROVIDER_WORLD, PROVIDER_WORLD_SCHEMA, TASK_ADAPTER_V2_WIT, TASK_ADAPTER_WIT, TASK_AUTH_ARMS,
+    TASK_BEHAVIOR_SUITE, TASK_CAPABILITIES, TASK_WIT_PACKAGE, TASK_WORLD, TASK_WORLD_SCHEMA,
+    TASK_WORLD_SCHEMA_V2, TASK_WORLD_V2, UsageEvidenceV1, WIT_PACKAGE, compatibility_matches,
+    known_world,
 };
 use wit_parser::{Resolve, Type, TypeDefKind};
 
@@ -205,12 +207,17 @@ fn rejects_a_credential_pasted_into_the_secrets_list() {
 /// own schema and to no other.
 #[test]
 fn every_known_world_resolves_to_its_own_schema_and_no_other() {
-    assert_eq!(KNOWN_WORLDS, &[PROVIDER_WORLD_SCHEMA, TASK_WORLD_SCHEMA, TASK_WORLD_SCHEMA_V2]);
+    assert_eq!(
+        KNOWN_WORLDS,
+        &[PROVIDER_WORLD_SCHEMA, TASK_WORLD_SCHEMA, TASK_WORLD_SCHEMA_V2, EMBEDDINGS_WORLD_SCHEMA]
+    );
     assert_eq!(known_world(PROVIDER_WORLD), Some(&PROVIDER_WORLD_SCHEMA));
     assert_eq!(known_world(TASK_WORLD), Some(&TASK_WORLD_SCHEMA));
     assert_eq!(known_world("provider-adapter-v1"), None);
     assert_eq!(known_world(TASK_WORLD_V2), Some(&TASK_WORLD_SCHEMA_V2));
     assert_eq!(known_world("task-adapter-v999"), None);
+    assert_eq!(known_world(EMBEDDINGS_WORLD), Some(&EMBEDDINGS_WORLD_SCHEMA));
+    assert_eq!(known_world("embeddings-adapter-v2"), None);
 }
 
 #[test]
@@ -682,7 +689,7 @@ fn the_task_world_is_known_and_carries_its_own_vocabulary() {
         .collect();
     assert_eq!(schema.auth_arms, without_combined.as_slice());
     assert!(PROVIDER_AUTH_ARMS.contains(&"bearer_and_header_secret"));
-    assert_eq!(KNOWN_WORLDS.len(), 3, "provider and both task versions");
+    assert_eq!(KNOWN_WORLDS.len(), 4, "provider, both task versions and embeddings");
 }
 
 fn task_manifest() -> ComponentManifestV1 {
@@ -871,4 +878,237 @@ fn usage_evidence_defaults_to_reported_and_is_a_provider_world_declaration() {
     let mut task = task_manifest();
     task.usage_evidence = UsageEvidenceV1::Absent;
     assert_eq!(task.validate(), Err(ManifestErrorV1::UsageEvidenceIsAProviderWorldDeclaration));
+}
+
+// -- The embeddings world (2026-09-30 embeddings-contract record, §4, §15) ----
+
+fn embeddings_manifest() -> ComponentManifestV1 {
+    let task = task_manifest();
+    ComponentManifestV1 {
+        name: "embeddings-openai-compatible".to_owned(),
+        api_version: EMBEDDINGS_WORLD.to_owned(),
+        providers: vec!["openai-compatible".to_owned()],
+        capabilities: ["embed", "batch", "dimensions"].into_iter().map(str::to_owned).collect(),
+        auth_arms: BTreeSet::from(["bearer".to_owned()]),
+        emits: Vec::new(),
+        conformance: ConformanceSpecV1 {
+            required_suite: EMBEDDINGS_BEHAVIOR_SUITE.to_owned(),
+            ..task.conformance
+        },
+        compatibility: CompatibilityDeclarationV1 {
+            wit_package: EMBEDDINGS_WIT_PACKAGE.to_owned(),
+            ..task.compatibility
+        },
+        ..task
+    }
+}
+
+#[test]
+fn the_embeddings_world_is_known_and_carries_its_own_vocabulary() {
+    let schema = known_world(EMBEDDINGS_WORLD).expect("the embeddings world is admitted");
+    assert_eq!(schema, &EMBEDDINGS_WORLD_SCHEMA);
+    assert_eq!(schema.world, "embeddings-adapter-v1");
+    assert_eq!(schema.wit_package, "token-station:embeddings-adapter@1.0.0");
+    assert_eq!(schema.behavior_suite, "south.embeddings-component.v1");
+    assert_eq!(schema.capabilities, EMBEDDINGS_CAPABILITIES);
+    assert_eq!(schema.capabilities, ["embed", "batch", "dimensions", "token_ids"]);
+    assert_eq!(schema.auth_arms, ["bearer", "header_secret"]);
+}
+
+#[test]
+fn embeddings_wit_has_only_pure_exports_and_no_host_import() {
+    let mut resolve = Resolve::new();
+    resolve
+        .push_str("embeddings-adapter.wit", EMBEDDINGS_ADAPTER_WIT)
+        .expect("embeddings WIT parses");
+    let (_, package) = resolve.packages.iter().next().expect("one package");
+    let name = &package.name;
+    let rendered = format!(
+        "{}:{}@{}",
+        name.namespace,
+        name.name,
+        name.version.as_ref().expect("package is versioned")
+    );
+    assert_eq!(rendered, EMBEDDINGS_WIT_PACKAGE);
+    let (_, world) =
+        resolve.worlds.iter().find(|(_, w)| w.name == EMBEDDINGS_WORLD).expect("embeddings world");
+    assert!(world.imports.is_empty(), "no host, signing or WASI import");
+    assert_eq!(world.exports.len(), 1, "exactly the embeddings-adapter interface");
+    let (_, interface) = resolve
+        .interfaces
+        .iter()
+        .find(|(_, i)| i.name.as_deref() == Some("embeddings-adapter"))
+        .expect("exports");
+    let mut functions: Vec<&str> = interface.functions.keys().map(String::as_str).collect();
+    functions.sort_unstable();
+    assert_eq!(
+        functions,
+        [
+            "build-embeddings-request",
+            "healthcheck",
+            "map-provider-error",
+            "metadata",
+            "parse-embeddings-response",
+        ]
+    );
+    let params = |name: &str| {
+        interface.functions[name].params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>()
+    };
+    assert_eq!(params("build-embeddings-request"), ["provider-config", "embeddings-request"]);
+    assert_eq!(params("parse-embeddings-response"), ["response-parts", "parse-context"]);
+    assert_eq!(params("map-provider-error"), ["response-parts"]);
+}
+
+#[test]
+fn an_embeddings_manifest_validates_and_reports_its_own_tuple() {
+    let manifest = embeddings_manifest();
+    assert_eq!(manifest.validate(), Ok(()));
+    let tuple = manifest.compatibility_tuple();
+    assert_eq!(tuple.wit_package, EMBEDDINGS_WIT_PACKAGE);
+    assert_eq!(tuple.wit_world, EMBEDDINGS_WORLD);
+    assert_eq!(tuple.conformance_suite, EMBEDDINGS_BEHAVIOR_SUITE);
+
+    let mut every_word = embeddings_manifest();
+    every_word.capabilities = EMBEDDINGS_CAPABILITIES.iter().map(|w| (*w).to_owned()).collect();
+    every_word.auth_arms = BTreeSet::from(["header_secret".to_owned()]);
+    assert_eq!(every_word.validate(), Ok(()));
+}
+
+#[test]
+fn embeddings_manifest_refuses_auth_arms_outside_its_vocabulary() {
+    for arm in ["oauth", "host_signed", "bearer_and_header_secret"] {
+        let mut manifest = embeddings_manifest();
+        manifest.auth_arms = BTreeSet::from([arm.to_owned()]);
+        assert_eq!(
+            manifest.validate(),
+            Err(ManifestErrorV1::AuthArmIsNotInTheWorldVocabulary {
+                auth_arm: arm.to_owned(),
+                world: EMBEDDINGS_WORLD.to_owned(),
+            })
+        );
+    }
+}
+
+#[test]
+fn an_embeddings_component_without_embed_is_refused() {
+    let mut manifest = embeddings_manifest();
+    manifest.capabilities.remove("embed");
+    assert_eq!(manifest.validate(), Err(ManifestErrorV1::EmbedCapabilityRequired));
+    assert_eq!(
+        ManifestErrorV1::EmbedCapabilityRequired.to_string(),
+        "every embeddings component must support `embed`"
+    );
+
+    let mut familyless = embeddings_manifest();
+    familyless.providers.clear();
+    assert_eq!(familyless.validate(), Err(ManifestErrorV1::ProviderFamilyRequired));
+}
+
+/// Contract 1 carries text and token ids only; `media` arrives with contract 2
+/// (record §15), so until then it is an unknown word like any other.
+#[test]
+fn media_is_not_in_the_contract_1_embeddings_vocabulary() {
+    let mut manifest = embeddings_manifest();
+    manifest.capabilities.insert("media".to_owned());
+    assert_eq!(
+        manifest.validate(),
+        Err(ManifestErrorV1::CapabilityIsNotInTheWorldVocabulary {
+            capability: "media".to_owned(),
+            world: EMBEDDINGS_WORLD.to_owned(),
+        })
+    );
+}
+
+#[test]
+fn embeddings_manifest_refuses_provider_only_declarations() {
+    let mut signed = embeddings_manifest();
+    signed.signing = Some(south_provider_api::SigningV1 {
+        scheme: south_provider_api::SigningSchemeV1::AwsSigv4,
+        service: "bedrock".to_owned(),
+        region: south_provider_api::TemplateParamV1 { template_param: "region".to_owned() },
+        credentials: std::collections::BTreeMap::new(),
+    });
+    assert!(matches!(signed.validate(), Err(ManifestErrorV1::InvalidSigning(_))));
+
+    let mut framed = embeddings_manifest();
+    framed.stream_framing = south_provider_api::StreamFramingV1::AwsEventstream;
+    assert_eq!(framed.validate(), Err(ManifestErrorV1::StreamFramingIsAProviderWorldDeclaration));
+
+    let mut endpoint = embeddings_manifest();
+    endpoint.endpoint.insert("openai-compatible".to_owned(), "https://api.example.test".to_owned());
+    assert_eq!(endpoint.validate(), Err(ManifestErrorV1::EndpointIsAProviderWorldDeclaration));
+
+    let mut evidence = embeddings_manifest();
+    evidence.usage_evidence = UsageEvidenceV1::Absent;
+    assert_eq!(evidence.validate(), Err(ManifestErrorV1::UsageEvidenceIsAProviderWorldDeclaration));
+
+    let mut facts = embeddings_manifest();
+    facts
+        .request_facts
+        .insert("openai-compatible".to_owned(), south_provider_api::RequestFactsV1::top_level());
+    assert_eq!(facts.validate(), Err(ManifestErrorV1::RequestFactsIsAProviderWorldDeclaration));
+
+    let mut instance = embeddings_manifest();
+    instance.user_agent.insert("openai-compatible".to_owned(), "acme/1.0".to_owned());
+    assert_eq!(
+        instance.validate(),
+        Err(ManifestErrorV1::InstanceIsAProviderWorldDeclaration("user_agent".to_owned()))
+    );
+}
+
+/// No world accepts another world's suite, package or capability words.
+#[test]
+fn the_embeddings_world_and_the_others_do_not_accept_each_others_declarations() {
+    let mut task_suite = embeddings_manifest();
+    task_suite.conformance.required_suite = TASK_BEHAVIOR_SUITE.to_owned();
+    assert!(matches!(
+        task_suite.validate(),
+        Err(ManifestErrorV1::ConformanceSuiteIsNotTheWorldSuite { .. })
+    ));
+
+    let mut chat_package = embeddings_manifest();
+    chat_package.compatibility.wit_package = WIT_PACKAGE.to_owned();
+    assert!(matches!(
+        chat_package.validate(),
+        Err(ManifestErrorV1::WitPackageIsNotTheWorldPackage { .. })
+    ));
+
+    for foreign in ["chat", "stream", "submit", "observe", "render", "artifact_fetch"] {
+        let mut manifest = embeddings_manifest();
+        manifest.capabilities.insert(foreign.to_owned());
+        assert!(
+            matches!(
+                manifest.validate(),
+                Err(ManifestErrorV1::CapabilityIsNotInTheWorldVocabulary { .. })
+            ),
+            "`{foreign}` is not an embeddings-world word"
+        );
+    }
+
+    for word in EMBEDDINGS_CAPABILITIES {
+        let mut chat = reference_manifest();
+        chat.capabilities.insert((*word).to_owned());
+        assert!(chat.validate().is_err(), "`{word}` is not a provider-world word");
+        let mut task = task_manifest();
+        task.capabilities.insert((*word).to_owned());
+        assert!(task.validate().is_err(), "`{word}` is not a task-world word");
+    }
+
+    let mut claims_task = embeddings_manifest();
+    claims_task.api_version = TASK_WORLD_V2.to_owned();
+    assert!(claims_task.validate().is_err(), "embeddings declarations do not make a task-v2 world");
+}
+
+/// Adding the embeddings world leaves every other world's manifest admitted.
+#[test]
+fn the_embeddings_world_coexists_with_the_other_worlds() {
+    assert_eq!(reference_manifest().validate(), Ok(()));
+    assert_eq!(task_manifest().validate(), Ok(()));
+    assert_eq!(embeddings_manifest().validate(), Ok(()));
+    let worlds: BTreeSet<&str> = KNOWN_WORLDS.iter().map(|schema| schema.world).collect();
+    let packages: BTreeSet<&str> = KNOWN_WORLDS.iter().map(|schema| schema.wit_package).collect();
+    let suites: BTreeSet<&str> = KNOWN_WORLDS.iter().map(|schema| schema.behavior_suite).collect();
+    assert_eq!(worlds.len(), KNOWN_WORLDS.len(), "every world name is distinct");
+    assert_eq!(packages.len(), KNOWN_WORLDS.len(), "every world has its own WIT package");
+    assert_eq!(suites.len(), KNOWN_WORLDS.len(), "every world has its own suite");
 }

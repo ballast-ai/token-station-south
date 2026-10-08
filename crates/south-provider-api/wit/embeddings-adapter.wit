@@ -1,0 +1,33 @@
+// Embeddings component ABI, version 1. All exports are pure translation; the host owns
+// credentials, HTTP, bytes, vector extraction, pricing and settlement.
+package token-station:embeddings-adapter@1.0.0;
+
+interface embeddings-adapter {
+    record adapter-metadata { name: string, version: string, api-version: string }
+    enum health-status { ready, degraded, unavailable }
+    record adapter-health { status: health-status, detail: option<string> }
+
+    type json = string;
+
+    metadata: func() -> adapter-metadata;
+    healthcheck: func() -> adapter-health;
+
+    // ProviderConfig, EmbeddingsRequestV1 -> PreparedEmbeddingsV1.
+    // A request the model or dialect cannot serve is a capability error here,
+    // before the host admits anything.
+    build-embeddings-request: func(provider-config: json, embeddings-request: json) -> result<json, json>;
+
+    // HttpResponseParts of a 2xx whose vectors the host has replaced with null per the
+    // prepared locator, plus the prepared parse-context -> EmbeddingsParsedV1.
+    // A body that cannot yield the facts is an error, never a zero.
+    parse-embeddings-response: func(response-parts: json, parse-context: json) -> result<json, json>;
+
+    // HttpResponseParts of a non-2xx -> { outcome: rejected | unknown, error: ErrorEnvelope }.
+    // `rejected` only when the response proves the upstream produced nothing.
+    map-provider-error: func(response-parts: json) -> result<json, json>;
+}
+
+// No host import: nothing here signs, and credentials are named in the descriptor.
+world embeddings-adapter-v1 {
+    export embeddings-adapter;
+}

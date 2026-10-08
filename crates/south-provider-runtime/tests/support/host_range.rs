@@ -4,9 +4,9 @@
 //! A package whose content does not change keeps its `south_runtime` across releases, so a test
 //! that loads a shipped package must not pin that field to the workspace version. This is the
 //! runtime crate's copy of `south-component-conformance/tests/support/host_range.rs`, reduced to
-//! what these tests use. This crate does not depend on `south-contracts`, so the task contract is
-//! read from `compatibility.json`, whose `contracts.task` the `compatibility_manifest` test in
-//! `south-contracts` pins to `TASK_CONTRACT_VERSION`.
+//! what these tests use. This crate does not depend on `south-contracts`, so the task and embeddings
+//! contracts are read from `compatibility.json`, whose `contracts` the `compatibility_manifest` test
+//! in `south-contracts` pins.
 
 #![allow(dead_code, reason = "each test binary mounting this module uses a different subset")]
 
@@ -48,10 +48,19 @@ pub fn host_range() -> HostRangeV1 {
         south_runtime_min: SOUTH_RUNTIME_FLOOR.to_owned(),
         south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
         kernel_contracts,
-        contracts: BTreeMap::from([(
-            "task".to_owned(),
-            BTreeSet::from([as_u32(&record["contracts"]["task"], "contracts.task")]),
-        )]),
+        contracts: BTreeMap::from([
+            (
+                "task".to_owned(),
+                BTreeSet::from([as_u32(&record["contracts"]["task"], "contracts.task")]),
+            ),
+            (
+                "embeddings".to_owned(),
+                BTreeSet::from([as_u32(
+                    &record["contracts"]["embeddings"],
+                    "contracts.embeddings",
+                )]),
+            ),
+        ]),
     }
 }
 

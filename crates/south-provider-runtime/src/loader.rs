@@ -246,12 +246,28 @@ fn gate_component(
             && ["token-station:adapter/host", "token-station:task-adapter/host"]
                 .iter()
                 .any(|prefix| name.starts_with(prefix));
-        if task_v2_signing || FORBIDDEN_IMPORTS.iter().any(|prefix| name.starts_with(prefix)) {
+        // The embeddings world imports nothing from any host: no South
+        // interface at all, and no `host` interface of any package, so a guest
+        // cannot reach a capability through another world's namespace or a
+        // look-alike one.
+        let embeddings_host = world == south_provider_api::EMBEDDINGS_WORLD
+            && (name.starts_with("token-station:") || is_host_interface(name));
+        if task_v2_signing
+            || embeddings_host
+            || FORBIDDEN_IMPORTS.iter().any(|prefix| name.starts_with(prefix))
+        {
             return Err(LoadErrorV1::ForbiddenImport(name.to_owned()));
         }
     }
 
     Ok(component)
+}
+
+/// Whether an import name is `<namespace>:<package>/host`, with or without a
+/// version.
+fn is_host_interface(name: &str) -> bool {
+    let unversioned = name.split_once('@').map_or(name, |(path, _)| path);
+    unversioned.rsplit_once('/').is_some_and(|(_, interface)| interface == "host")
 }
 
 pub fn read_file_limited(path: &Path, limit: u64) -> Result<Vec<u8>, UnreadableReasonV1> {

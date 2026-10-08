@@ -39,7 +39,10 @@ fn as_u32(value: &Value, what: &str) -> u32 {
 }
 
 /// The range of a host linking exactly this tree's runtime and accepting nothing older: the
-/// kernel contracts and the task contract it decodes come from this tree's `compatibility.json`.
+/// kernel contracts and the task and embeddings contracts it decodes come from this tree's
+/// `compatibility.json`. A runtime older than the embeddings world records no embeddings contract,
+/// and this file also runs in checkouts of those runtimes, so that contract is read only where
+/// the record has it.
 fn this_runtime_only() -> HostRangeV1 {
     let record: Value = serde_json::from_str(
         &std::fs::read_to_string(repo_root().join("compatibility.json"))
@@ -52,15 +55,22 @@ fn this_runtime_only() -> HostRangeV1 {
         .iter()
         .map(|(name, number)| (name.clone(), as_u32(number, name)))
         .collect();
+    let mut contracts = BTreeMap::from([(
+        "task".to_owned(),
+        BTreeSet::from([as_u32(&record["contracts"]["task"], "contracts.task")]),
+    )]);
+    if let Some(embeddings) = record["contracts"].get("embeddings") {
+        contracts.insert(
+            "embeddings".to_owned(),
+            BTreeSet::from([as_u32(embeddings, "contracts.embeddings")]),
+        );
+    }
     HostRangeV1 {
         runtime_abi: RUNTIME_ABI,
         south_runtime_min: env!("CARGO_PKG_VERSION").to_owned(),
         south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
         kernel_contracts,
-        contracts: BTreeMap::from([(
-            "task".to_owned(),
-            BTreeSet::from([as_u32(&record["contracts"]["task"], "contracts.task")]),
-        )]),
+        contracts,
     }
 }
 

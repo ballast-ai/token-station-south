@@ -62,15 +62,16 @@ pub use instances::{
 pub use manifest::{
     COMPONENT_BEHAVIOR_SUITE, CompatibilityDeclarationV1, CompatibilityMismatchV1,
     CompatibilityMismatchV2, CompatibilityTupleV1, ComponentManifestV1, ComponentMetadataV1,
-    ComponentPermissionsV1, ConformanceSpecV1, HostExpectationsV1, HostRangeV1, KNOWN_WORLDS,
-    MAX_OUTPUT_CAP_LOCATIONS, ManifestErrorV1, ModelLocationV1, PROVIDER_AUTH_ARMS,
-    PROVIDER_CAPABILITIES, PROVIDER_WORLD, PROVIDER_WORLD_SCHEMA, RUNTIME_ABI, RequestFactsV1,
-    SIGNED_HEADER_NAMES, SigningSchemeV1, SigningV1, StreamFramingV1, StreamLocationV1,
-    TASK_AUTH_ARMS, TASK_BEHAVIOR_SUITE, TASK_BEHAVIOR_SUITE_V2, TASK_CAPABILITIES,
-    TASK_REQUIRED_CAPABILITIES, TASK_WIT_PACKAGE, TASK_WIT_PACKAGE_V2, TASK_WORLD,
-    TASK_WORLD_SCHEMA, TASK_WORLD_SCHEMA_V2, TASK_WORLD_V2, TemplateParamV1, UsageEvidenceV1,
-    WIT_PACKAGE, WorldSchemaV1, compatibility_admits, compatibility_matches, known_world,
-    validate_component_name, validate_package_relative_path,
+    ComponentPermissionsV1, ConformanceSpecV1, EMBEDDINGS_BEHAVIOR_SUITE, EMBEDDINGS_CAPABILITIES,
+    EMBEDDINGS_WIT_PACKAGE, EMBEDDINGS_WORLD, EMBEDDINGS_WORLD_SCHEMA, HostExpectationsV1,
+    HostRangeV1, KNOWN_WORLDS, MAX_OUTPUT_CAP_LOCATIONS, ManifestErrorV1, ModelLocationV1,
+    PROVIDER_AUTH_ARMS, PROVIDER_CAPABILITIES, PROVIDER_WORLD, PROVIDER_WORLD_SCHEMA, RUNTIME_ABI,
+    RequestFactsV1, SIGNED_HEADER_NAMES, SigningSchemeV1, SigningV1, StreamFramingV1,
+    StreamLocationV1, TASK_AUTH_ARMS, TASK_BEHAVIOR_SUITE, TASK_BEHAVIOR_SUITE_V2,
+    TASK_CAPABILITIES, TASK_REQUIRED_CAPABILITIES, TASK_WIT_PACKAGE, TASK_WIT_PACKAGE_V2,
+    TASK_WORLD, TASK_WORLD_SCHEMA, TASK_WORLD_SCHEMA_V2, TASK_WORLD_V2, TemplateParamV1,
+    UsageEvidenceV1, WIT_PACKAGE, WorldSchemaV1, compatibility_admits, compatibility_matches,
+    known_world, validate_component_name, validate_package_relative_path,
 };
 
 // The component value channel (Q14, host-zero-vendor-boundary §13.8).
@@ -100,3 +101,8 @@ pub const TASK_ADAPTER_WIT: &str = include_str!("../wit/task-adapter.wit");
 
 /// Pure task-v2 exports with bounded recovery facts and explicit render context.
 pub const TASK_ADAPTER_V2_WIT: &str = include_str!("../wit/task-adapter-v2.wit");
+
+/// The embeddings component ABI, as WIT source: pure exports and no host
+/// import, in its own package so it versions independently of the chat and
+/// task worlds (2026-09-30 embeddings-contract record, D2).
+pub const EMBEDDINGS_ADAPTER_WIT: &str = include_str!("../wit/embeddings-adapter.wit");

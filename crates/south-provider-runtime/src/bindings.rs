@@ -43,3 +43,11 @@ pub mod task_v2 {
         world: "task-adapter-v2",
     });
 }
+
+/// Pure embeddings exports; this world imports nothing from the host.
+pub mod embeddings {
+    wasmtime::component::bindgen!({
+        path: "../south-provider-api/wit/embeddings-adapter.wit",
+        world: "embeddings-adapter-v1",
+    });
+}

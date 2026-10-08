@@ -1,5 +1,5 @@
 {
-  "schema_version": 5,
+  "schema_version": 6,
   "release": {
     "version": "0.46.0",
     "stability": "library_slice"
@@ -48,7 +48,8 @@
       "callback_url_bytes": 8192,
       "artifact_urls": 16,
       "artifact_ref_bytes": 8192
-    }
+    },
+    "embeddings": 1
   },
   "conformance": {
     "suite_id": "south.provider-call.v1",
@@ -80,7 +81,9 @@
     "task_component_v1_suite_id": "south.task-component.v1",
     "task_component_v1_suite": 1,
     "task_component_v2_suite_id": "south.task-component.v2",
-    "task_component_v2_suite": 1
+    "task_component_v2_suite": 1,
+    "embeddings_component_v1_suite_id": "south.embeddings-component.v1",
+    "embeddings_component_v1_suite": 1
   },
   "provider_api": {
     "wit_version": "token-station:adapter@2.0.0"
@@ -209,6 +212,18 @@
         "status": "not_verified"
       },
       "task_v2": {
+        "status": "not_verified"
+      }
+    }
+  },
+  "embeddings_component_capabilities": {
+    "token-station": {
+      "embeddings_v1": {
+        "status": "not_verified"
+      }
+    },
+    "token-station-server": {
+      "embeddings_v1": {
         "status": "not_verified"
       }
     }
