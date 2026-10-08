@@ -93,6 +93,33 @@ fn valid_relative_path_inputs() -> impl Strategy<Value = String> {
         .prop_map(|segments| segments.join("/"))
 }
 
+/// Relative paths whose segments are built from encoded-slash and dot fragments, so the D5 rule's
+/// boundaries (empty pieces, dot pieces, mixed case, neighbouring forbidden escapes) appear far
+/// more often than in arbitrary strings (host feedback SF26).
+fn encoded_slash_relative_path_inputs() -> impl Strategy<Value = String> {
+    proptest::collection::vec(
+        proptest::collection::vec(
+            prop_oneof![
+                Just("a"),
+                Just("b9"),
+                Just("."),
+                Just(".."),
+                Just(":"),
+                Just("%2F"),
+                Just("%2f"),
+                Just("%2e"),
+                Just("%25"),
+                Just("%5C"),
+                Just("%3A"),
+            ],
+            1..6,
+        )
+        .prop_map(|fragments| fragments.concat()),
+        1..4,
+    )
+    .prop_map(|segments| format!("v1/{}", segments.join("/")))
+}
+
 fn valid_credential_slot_inputs() -> impl Strategy<Value = String> {
     (
         proptest::sample::select(b"abcdefghijklmnopqrstuvwxyz"),
@@ -179,13 +206,25 @@ proptest! {
 
     #[test]
     fn accepted_relative_paths_are_bounded_and_resolve_inside_the_binding(
-        input in prop_oneof![any::<String>(), valid_relative_path_inputs()],
+        input in prop_oneof![
+            any::<String>(),
+            valid_relative_path_inputs(),
+            encoded_slash_relative_path_inputs(),
+        ],
     ) {
         if let Ok(path) = RelativePathV1::parse(&input) {
             prop_assert!(!path.as_str().is_empty());
             prop_assert!(path.as_str().is_ascii());
             prop_assert!(path.as_str().len() <= MAX_RELATIVE_PATH_BYTES);
             prop_assert_eq!(RelativePathV1::parse(path.as_str()), Ok(path.clone()));
+
+            // An upstream may decode `%2F` before routing. Read that way, an admitted path still
+            // has no empty or dot segment, so it cannot leave the binding or collapse a separator.
+            let decoded = path.as_str().replace("%2F", "/").replace("%2f", "/");
+            prop_assert!(
+                decoded.split('/').all(|segment| !matches!(segment, "" | "." | "..")),
+                "{} decodes to {}", path.as_str(), decoded
+            );
 
             let bindings = [
                 ("https://example.com/", "https", 443, "/"),

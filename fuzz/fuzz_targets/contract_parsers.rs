@@ -289,6 +289,10 @@ fuzz_target!(|data: &[u8]| {
             assert_eq!(resolved.port_or_known_default(), Some(effective_port));
             assert!(resolved.path().starts_with(base_path));
         }
+        // An upstream may decode `%2F` before routing; read that way, an admitted path still has
+        // no empty or dot segment (host feedback SF26, the kernel's D5 rule).
+        let decoded = path.as_str().replace("%2F", "/").replace("%2f", "/");
+        assert!(decoded.split('/').all(|segment| !matches!(segment, "" | "." | "..")));
         assert_eq!(RelativePathV1::parse(path.as_str()), Ok(path));
     }
 

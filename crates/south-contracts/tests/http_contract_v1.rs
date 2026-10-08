@@ -51,7 +51,7 @@ fn secret_header_all_covers_every_variant() {
 
 #[test]
 fn contract_versions_are_independently_versioned() {
-    assert_eq!(HTTP_CONTRACT_VERSION, 10);
+    assert_eq!(HTTP_CONTRACT_VERSION, 11);
     assert_eq!(AUTH_CONTRACT_VERSION, 5);
     assert_eq!(RESERVED_HEADER_POLICY_VERSION, 2);
     assert_eq!(PROVIDER_QUOTA_METADATA_CONTRACT_VERSION, 2);
@@ -273,6 +273,93 @@ fn relative_path_rejects_each_unsafe_path_class() {
             "unexpectedly accepted unsafe relative path"
         );
     }
+}
+
+/// Host feedback SF26: the kernel's D5 rule (`token-station-protocol` 0.5.0,
+/// `ProviderEndpoint::permits`) admits an encoded slash inside one segment below the endpoint, and
+/// a host can only send what this grammar admits. These cases mirror the kernel's own D5 tests.
+#[test]
+fn relative_path_admits_an_encoded_slash_inside_one_segment() {
+    let admitted = [
+        "model/a%2Fb/converse",
+        "model/a%2fb%2Fc/converse-stream",
+        "model/arn:aws:bedrock:us-east-1:123456789012:inference-profile%2Fus.anthropic.x/converse",
+        "v1beta/models/tunedModels%2Ffixture-tuned-1:generateContent",
+        "v1/a%2F.b%2Fc..d",
+        "a%2Fb",
+    ];
+
+    for input in admitted {
+        let path = RelativePathV1::parse(input)
+            .unwrap_or_else(|error| panic!("{input} must be admitted: {error:?}"));
+        assert_eq!(path.as_str(), input, "the escape is kept, never decoded");
+    }
+}
+
+#[test]
+fn relative_path_refuses_an_encoded_slash_that_could_leave_the_binding_or_collapse() {
+    let refused = [
+        // Decoded empty pieces read as repeated separators.
+        "v1/%2F",
+        "v1/%2Fb",
+        "v1/a%2F",
+        "v1/a%2F%2Fb",
+        "v1/a%2f%2fb",
+        "%2Fv1",
+        // Decoded dot pieces read as traversal.
+        "v1/a%2F..%2Fb",
+        "v1/x/..%2F..%2Fadmin",
+        "v1/a%2F.",
+        "v1/.%2Fa",
+        "v1/a%2F%2e%2e%2Fb",
+        // Escapes that stay refused whatever surrounds them.
+        "v1/%2e%2e",
+        "v1/a%2Fb%5Cc",
+        "v1/a%5Cb",
+        "v1/a%25b",
+        "v1/a%252Fb",
+        "v1/a%2F%25b",
+        "v1/a%2",
+        "v1/a%2Fb%",
+    ];
+
+    for input in refused {
+        assert_eq!(
+            RelativePathV1::parse(input),
+            Err(ContractErrorV1::InvalidRelativePath),
+            "{input} must be refused"
+        );
+    }
+}
+
+#[test]
+fn an_endpoint_path_never_admits_an_encoded_slash() {
+    for input in ["https://example.com/v1/a%2Fb", "https://example.com/a%2fb/"] {
+        assert_eq!(
+            ProviderEndpointV1::parse(input),
+            Err(ContractErrorV1::InvalidEndpoint),
+            "{input} must be refused"
+        );
+    }
+}
+
+/// The join keeps the escape: `url` does not decode `%2F` in a path, so the post-normalization
+/// recheck reads the same segment the grammar admitted, and the wire carries it unchanged.
+#[test]
+fn an_encoded_slash_survives_resolution_inside_the_binding() {
+    let endpoint =
+        ProviderEndpointV1::parse("https://bedrock-runtime.us-east-1.amazonaws.com/").unwrap();
+    let relative =
+        "model/arn:aws:bedrock:us-east-1:123456789012:inference-profile%2Fus.anthropic.x/converse";
+    let resolved = RelativePathV1::parse(relative).unwrap().resolve_against(&endpoint).unwrap();
+
+    assert_eq!(resolved.as_str(), format!("{}{relative}", endpoint.as_str()));
+    assert_eq!(resolved.path(), format!("/{relative}"));
+    assert_eq!(resolved.path_segments().map(Iterator::count), Some(3));
+
+    let endpoint = ProviderEndpointV1::parse("https://example.com/base/").unwrap();
+    let resolved = RelativePathV1::parse("v1/a%2fb").unwrap().resolve_against(&endpoint).unwrap();
+    assert_eq!(resolved.as_str(), "https://example.com/base/v1/a%2fb");
 }
 
 #[test]
