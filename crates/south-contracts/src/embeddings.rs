@@ -100,7 +100,8 @@ pub enum EmbeddingsContractErrorV1 {
     /// Vectors of one response differ in length.
     #[error("embeddings vectors differ in length")]
     VectorLengthMismatch,
-    /// A declared index is missing, not an integer, or the indices are not exactly `0..n`.
+    /// A declared index is missing, not an integer, or the indices are not exactly `0..n`; or
+    /// only some `NorthIdentical` items carry an index.
     #[error("invalid embeddings vector index")]
     InvalidIndex,
     /// The component's count, the extracted vectors and the request's inputs disagree.
@@ -178,7 +179,9 @@ pub enum EncodingV1 {
 /// The request a component builds from: the northbound request, parsed per record §3.
 ///
 /// Wire: `{"model":"m","inputs":[{"text":"a"}],"input_shape":"single","dimensions":null,
-/// "encoding_format":"float","user":null,"extra":{}}`; unknown fields are refused.
+/// "encoding_format":null,"user":null,"extra":{}}`; unknown fields are refused.
+/// `encoding_format` keeps whether the caller sent it, so a component that forwards the client
+/// body reproduces it exactly; [`EmbeddingsRequestV1::requested_encoding`] is the effective value.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "EmbeddingsRequestWire")]
 pub struct EmbeddingsRequestV1 {
@@ -186,7 +189,7 @@ pub struct EmbeddingsRequestV1 {
     inputs: Vec<EmbeddingInputV1>,
     input_shape: InputShapeV1,
     dimensions: Option<u32>,
-    encoding_format: EncodingV1,
+    encoding_format: Option<EncodingV1>,
     user: Option<String>,
     extra: Map<String, Value>,
 }
@@ -198,7 +201,7 @@ struct EmbeddingsRequestWire {
     inputs: Vec<EmbeddingInputV1>,
     input_shape: InputShapeV1,
     dimensions: Option<u32>,
-    encoding_format: EncodingV1,
+    encoding_format: Option<EncodingV1>,
     user: Option<String>,
     extra: Map<String, Value>,
 }
@@ -225,7 +228,7 @@ impl EmbeddingsRequestV1 {
         inputs: Vec<EmbeddingInputV1>,
         input_shape: InputShapeV1,
         dimensions: Option<u32>,
-        encoding_format: EncodingV1,
+        encoding_format: Option<EncodingV1>,
         user: Option<String>,
         extra: Map<String, Value>,
     ) -> Result<Self, EmbeddingsRequestErrorV1> {
@@ -268,10 +271,18 @@ impl EmbeddingsRequestV1 {
     pub const fn dimensions(&self) -> Option<u32> {
         self.dimensions
     }
-    /// The encoding the northbound caller wants.
+    /// The `encoding_format` the northbound caller sent; `None` when absent or `null`.
     #[must_use]
-    pub const fn encoding_format(&self) -> EncodingV1 {
+    pub const fn encoding_format(&self) -> Option<EncodingV1> {
         self.encoding_format
+    }
+    /// The encoding the northbound caller wants: the one it sent, else [`EncodingV1::Float`].
+    #[must_use]
+    pub const fn requested_encoding(&self) -> EncodingV1 {
+        match self.encoding_format {
+            Some(encoding) => encoding,
+            None => EncodingV1::Float,
+        }
     }
     /// The northbound `user`, unchanged.
     #[must_use]
@@ -307,7 +318,8 @@ impl fmt::Debug for EmbeddingsRequestV1 {
 /// the model is non-empty; `input` has a table shape; the input count is within bound; no input
 /// is a media `data:` URI; then `dimensions`, `encoding_format`, `user` and the unmodelled
 /// fields. An explicit JSON `null` for `dimensions`, `encoding_format` or `user` means the field
-/// is absent.
+/// is absent; `encoding_format` keeps whether it was sent, the default (`float`) is applied by
+/// [`EmbeddingsRequestV1::requested_encoding`].
 pub fn parse_embeddings_request_v1(
     body: &Value,
     upstream_model: &str,
@@ -328,10 +340,10 @@ pub fn parse_embeddings_request_v1(
         })
         .transpose()?;
     let encoding_format = match present("encoding_format") {
-        None => EncodingV1::Float,
+        None => None,
         Some(value) => match value.as_str() {
-            Some("float") => EncodingV1::Float,
-            Some("base64") => EncodingV1::Base64,
+            Some("float") => Some(EncodingV1::Float),
+            Some("base64") => Some(EncodingV1::Base64),
             _ => return Err(EmbeddingsRequestErrorV1::InvalidEncodingFormat),
         },
     };
@@ -536,7 +548,8 @@ impl From<JsonPointerV1> for String {
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum VectorLocatorV1 {
     /// The body is an `OpenAI` embeddings response: `/data`, each vector at `/embedding`, each
-    /// index at `/index`.
+    /// index at `/index`. The index is optional, as `OpenAI`-compatible servers differ: when
+    /// every item carries it, it orders the vectors; when none does, body order holds.
     NorthIdentical,
     /// `array` points at the element array; `vector` (and `index`, when declared) point within
     /// one element. A declared index orders the vectors.
@@ -851,9 +864,11 @@ impl fmt::Debug for ExtractedVectorsV1 {
 ///
 /// The encoding is detected per vector: an array of numbers is float, a string is padded standard
 /// base64 of little-endian f32 whose decoded length is a non-zero multiple of four; every value
-/// must be a finite f32. All vectors are non-empty and of one length. A declared index (always,
-/// for `NorthIdentical`) is a non-negative integer, the vectors are ordered by it, and the indices
-/// are exactly `0..n`, each once. The skeleton keeps every other field.
+/// must be a finite f32. All vectors are non-empty and of one length. An `Array` locator's
+/// declared index is required on every element: a non-negative integer, the vectors are ordered
+/// by it, and the indices are exactly `0..n`, each once. `NorthIdentical`'s `/index` is optional:
+/// when every item carries it, the same rule applies; when no item does, body order holds; a mix
+/// is [`EmbeddingsContractErrorV1::InvalidIndex`]. The skeleton keeps every other field.
 pub fn extract_vectors_v1(
     body: &[u8],
     locator: &VectorLocatorV1,
@@ -868,13 +883,13 @@ pub fn extract_vectors_v1(
             &mut skeleton,
             NORTH_DATA_POINTER,
             NORTH_VECTOR_POINTER,
-            Some(NORTH_INDEX_POINTER),
+            IndexRule::AllOrNone(NORTH_INDEX_POINTER),
         )?,
         VectorLocatorV1::Array { array, vector, index } => extract_array(
             &mut skeleton,
             array.as_str(),
             vector.as_str(),
-            index.as_ref().map(JsonPointerV1::as_str),
+            index.as_ref().map_or(IndexRule::Absent, |index| IndexRule::Required(index.as_str())),
         )?,
         VectorLocatorV1::Single { vector } => {
             vec![take_vector(skeleton.pointer_mut(vector.as_str()))?]
@@ -893,17 +908,40 @@ fn take_vector(slot: Option<&mut Value>) -> Result<EmbeddingVectorV1, Embeddings
     EmbeddingVectorV1::detect(std::mem::replace(slot, Value::Null))
 }
 
+/// How an array locator's per-element index orders the vectors.
+#[derive(Clone, Copy)]
+enum IndexRule<'a> {
+    /// No index: body order.
+    Absent,
+    /// Every element carries the index.
+    Required(&'a str),
+    /// Every element carries the index, or none does (body order); a mix is refused.
+    AllOrNone(&'a str),
+}
+
 fn extract_array(
     root: &mut Value,
     array: &str,
     vector: &str,
-    index: Option<&str>,
+    index: IndexRule<'_>,
 ) -> Result<Vec<EmbeddingVectorV1>, EmbeddingsContractErrorV1> {
     let items = root
         .pointer_mut(array)
         .and_then(Value::as_array_mut)
         .filter(|items| !items.is_empty())
         .ok_or(EmbeddingsContractErrorV1::VectorNotFound)?;
+    let index = match index {
+        IndexRule::Absent => None,
+        IndexRule::Required(pointer) => Some(pointer),
+        IndexRule::AllOrNone(pointer) => {
+            let carried = items.iter().filter(|item| item.pointer(pointer).is_some()).count();
+            match carried {
+                0 => None,
+                all if all == items.len() => Some(pointer),
+                _ => return Err(EmbeddingsContractErrorV1::InvalidIndex),
+            }
+        }
+    };
     let mut located = Vec::with_capacity(items.len());
     for item in items.iter_mut() {
         let position = index

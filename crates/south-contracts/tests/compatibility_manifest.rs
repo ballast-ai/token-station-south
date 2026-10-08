@@ -525,8 +525,7 @@ fn compatibility_manifest_describes_the_library_slice() {
         south_contracts::MAX_RESPONSE_TRANSCRIPT_TOTAL_BYTES
     );
     assert_eq!(manifest.contracts.task, south_contracts::TASK_CONTRACT_VERSION);
-    // EMBEDDINGS_CONTRACT_VERSION, added with the contract types
-    assert_eq!(manifest.contracts.embeddings, 1);
+    assert_eq!(manifest.contracts.embeddings, south_contracts::EMBEDDINGS_CONTRACT_VERSION);
     assert_eq!(manifest.contracts.task_limits.artifact_urls, south_contracts::MAX_ARTIFACT_URLS);
     assert_eq!(
         manifest.contracts.task_limits.artifact_ref_bytes,

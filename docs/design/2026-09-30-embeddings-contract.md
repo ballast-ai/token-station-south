@@ -92,7 +92,7 @@ pub struct EmbeddingsRequestV1 {
     inputs: Vec<EmbeddingInputV1>,    // 1..=MAX_EMBEDDING_INPUTS, parsed per the table below
     input_shape: InputShapeV1,        // Single | Array, per the table below
     dimensions: Option<u32>,          // > 0
-    encoding_format: EncodingV1,      // Float | Base64: the format the northbound caller wants
+    encoding_format: Option<EncodingV1>, // Float | Base64 as the caller sent it; None = absent (Float applies)
     user: Option<String>,
     extra: serde_json::Map<String, Value>, // every other top-level northbound field, unchanged and bounded
 }
@@ -177,7 +177,9 @@ between `data:` and the **first** `;base64,` and must match `type/subtype` optio
 parameters (RFC 2045 tokens); `media_type` is that text verbatim (today's detection and translation,
 embeddings.rs:26-42, translate_gemini.rs:53-57). The payload is not decoded. Every other string, including a `data:` URI
 that is not base64, is text. `dimensions` must be an integer above 0; `encoding_format` is `float` (the default) or
-`base64`; any other value is a 400 before admission. South supplies this parser as a pure function with golden vectors
+`base64`; any other value is a 400 before admission. The request keeps whether `encoding_format` was sent (absent and
+`null` are the same), because the OpenAI-compatible arm forwards the client body as sent and the dual run compares
+upstream bodies by JSON equality. South supplies this parser as a pure function with golden vectors
 (`parse_embeddings_request_v1`, E-Q9).
 
 On the `conformance` side:
@@ -285,7 +287,7 @@ batch shapes may differ):
 
 | Form | Meaning | Used for |
 |---|---|---|
-| `NorthIdentical` | The upstream body is already a northbound OpenAI embeddings response; the host validates it and, when no conversion is needed, returns it unchanged | OpenAI-compatible |
+| `NorthIdentical` | The upstream body is already a northbound OpenAI embeddings response; the host validates it and, when no conversion is needed, returns it unchanged. `index` is optional: when every item carries it, it orders the vectors; when none does, body order holds; a mix is a protocol error | OpenAI-compatible |
 | `Array { array, vector, index }` | `array` points at the vector array, `vector` is the pointer within an element, `index` is optional (when present, sort by it) | Gemini batch `/embeddings` + `/values`; Vertex `/predictions` + `/embeddings/values` |
 | `Single { vector }` | A single vector | Gemini single `/embedding/values` |
 

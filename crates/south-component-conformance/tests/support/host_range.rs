@@ -72,8 +72,10 @@ pub fn host_range() -> HostRangeV1 {
                 "task".to_owned(),
                 BTreeSet::from([u32::from(south_contracts::TASK_CONTRACT_VERSION)]),
             ),
-            // EMBEDDINGS_CONTRACT_VERSION, added with the contract types
-            ("embeddings".to_owned(), BTreeSet::from([1])),
+            (
+                "embeddings".to_owned(),
+                BTreeSet::from([u32::from(south_contracts::EMBEDDINGS_CONTRACT_VERSION)]),
+            ),
         ]),
     }
 }

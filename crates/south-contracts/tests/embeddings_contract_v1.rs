@@ -64,7 +64,8 @@ fn table_string_is_one_single_input() {
     assert_eq!(request.inputs(), &[text("hello")]);
     assert_eq!(request.input_shape(), InputShapeV1::Single);
     assert_eq!(request.model(), "upstream-model");
-    assert_eq!(request.encoding_format(), EncodingV1::Float);
+    assert_eq!(request.encoding_format(), None);
+    assert_eq!(request.requested_encoding(), EncodingV1::Float);
     assert_eq!(request.dimensions(), None);
     assert_eq!(request.user(), None);
     assert!(request.extra().is_empty());
@@ -251,21 +252,23 @@ fn dimensions_must_be_a_positive_u32() {
 }
 
 #[test]
-fn encoding_format_is_float_by_default_or_base64() {
-    for (value, expected) in [
-        (None, Ok(EncodingV1::Float)),
-        (Some(json!(null)), Ok(EncodingV1::Float)),
-        (Some(json!("float")), Ok(EncodingV1::Float)),
-        (Some(json!("base64")), Ok(EncodingV1::Base64)),
-        (Some(json!("FLOAT")), Err(EmbeddingsRequestErrorV1::InvalidEncodingFormat)),
-        (Some(json!("int8")), Err(EmbeddingsRequestErrorV1::InvalidEncodingFormat)),
-        (Some(json!(1)), Err(EmbeddingsRequestErrorV1::InvalidEncodingFormat)),
+fn encoding_format_keeps_its_presence_and_defaults_to_float() {
+    let error = EmbeddingsRequestErrorV1::InvalidEncodingFormat;
+    for (value, sent, requested) in [
+        (None, Ok(None), Ok(EncodingV1::Float)),
+        (Some(json!(null)), Ok(None), Ok(EncodingV1::Float)),
+        (Some(json!("float")), Ok(Some(EncodingV1::Float)), Ok(EncodingV1::Float)),
+        (Some(json!("base64")), Ok(Some(EncodingV1::Base64)), Ok(EncodingV1::Base64)),
+        (Some(json!("FLOAT")), Err(error), Err(error)),
+        (Some(json!("int8")), Err(error), Err(error)),
+        (Some(json!(1)), Err(error), Err(error)),
     ] {
         let mut body = json!({"input":"a"});
         if let Some(value) = value {
             body["encoding_format"] = value;
         }
-        assert_eq!(parse(&body).map(|request| request.encoding_format()), expected);
+        assert_eq!(parse(&body).map(|request| request.encoding_format()), sent, "{body}");
+        assert_eq!(parse(&body).map(|request| request.requested_encoding()), requested, "{body}");
     }
 }
 
@@ -341,16 +344,23 @@ fn request_wire_shape_is_pinned() {
     assert_eq!(serde_json::from_str::<EmbeddingsRequestV1>(golden).unwrap(), request);
 
     let minimal = parse(&json!({"input":"hi"})).unwrap();
-    let golden = r#"{"model":"upstream-model","inputs":[{"text":"hi"}],"input_shape":"single","dimensions":null,"encoding_format":"float","user":null,"extra":{}}"#;
+    let golden = r#"{"model":"upstream-model","inputs":[{"text":"hi"}],"input_shape":"single","dimensions":null,"encoding_format":null,"user":null,"extra":{}}"#;
     assert_eq!(serde_json::to_string(&minimal).unwrap(), golden);
     assert_eq!(serde_json::from_str::<EmbeddingsRequestV1>(golden).unwrap(), minimal);
+
+    // An explicit `float` stays distinct from an absent field on the wire.
+    let explicit = parse(&json!({"input":"hi","encoding_format":"float"})).unwrap();
+    let golden = r#"{"model":"upstream-model","inputs":[{"text":"hi"}],"input_shape":"single","dimensions":null,"encoding_format":"float","user":null,"extra":{}}"#;
+    assert_eq!(serde_json::to_string(&explicit).unwrap(), golden);
+    assert_eq!(serde_json::from_str::<EmbeddingsRequestV1>(golden).unwrap(), explicit);
+    assert_ne!(explicit, minimal);
 }
 
 #[test]
 fn request_decoding_rechecks_every_parser_invariant() {
     let base = json!({
         "model":"m","inputs":[{"text":"a"}],"input_shape":"single","dimensions":null,
-        "encoding_format":"float","user":null,"extra":{}
+        "encoding_format":null,"user":null,"extra":{}
     });
     assert!(serde_json::from_value::<EmbeddingsRequestV1>(base.clone()).is_ok());
     for (field, value) in [
@@ -378,15 +388,7 @@ fn request_decoding_rechecks_every_parser_invariant() {
 #[test]
 fn request_constructor_reports_the_same_errors_as_the_parser() {
     let build = |inputs: Vec<EmbeddingInputV1>, shape| {
-        EmbeddingsRequestV1::new(
-            "m".into(),
-            inputs,
-            shape,
-            None,
-            EncodingV1::Float,
-            None,
-            Map::new(),
-        )
+        EmbeddingsRequestV1::new("m".into(), inputs, shape, None, None, None, Map::new())
     };
     assert!(build(vec![text("a")], InputShapeV1::Single).is_ok());
     assert!(build(vec![text("a"), text("b")], InputShapeV1::Array).is_ok());
@@ -599,7 +601,7 @@ fn north_identical_orders_by_index_and_requires_exactly_zero_to_n() {
         r#"{"data":[{"index":0,"embedding":[1]},{"index":0,"embedding":[2]}]}"#,
         r#"{"data":[{"index":0,"embedding":[1]},{"index":2,"embedding":[2]}]}"#,
         r#"{"data":[{"index":1,"embedding":[1]}]}"#,
-        r#"{"data":[{"embedding":[1]}]}"#,
+        r#"{"data":[{"index":null,"embedding":[1]}]}"#,
         r#"{"data":[{"index":-1,"embedding":[1]}]}"#,
         r#"{"data":[{"index":"0","embedding":[1]}]}"#,
         r#"{"data":[{"index":0.0,"embedding":[1]}]}"#,
@@ -610,6 +612,45 @@ fn north_identical_orders_by_index_and_requires_exactly_zero_to_n() {
             "{body}"
         );
     }
+}
+
+#[test]
+fn north_identical_index_is_all_or_none() {
+    // Every item carries `index`: ordered by it (and required to be exactly `0..n`).
+    let every = br#"{"data":[{"index":1,"embedding":[2]},{"index":0,"embedding":[1]}]}"#;
+    let extracted = extract_vectors_v1(every, &VectorLocatorV1::NorthIdentical).unwrap();
+    assert_eq!(extracted.vectors()[0].to_f32(), vec![1.0]);
+    // No item carries `index`: body order, and the skeleton keeps the items as they were.
+    let none = br#"{"data":[{"embedding":[2]},{"object":"embedding","embedding":[1]}],"usage":{"prompt_tokens":2}}"#;
+    let extracted = extract_vectors_v1(none, &VectorLocatorV1::NorthIdentical).unwrap();
+    assert_eq!(extracted.vectors()[0].to_f32(), vec![2.0]);
+    assert_eq!(extracted.vectors()[1].to_f32(), vec![1.0]);
+    assert_eq!(
+        extracted.skeleton(),
+        &json!({"data":[{"embedding":null},{"object":"embedding","embedding":null}],"usage":{"prompt_tokens":2}})
+    );
+    assert!(extracted.returns_upstream_bytes(EncodingV1::Float));
+    // A mix is refused, in either order.
+    for mixed in [
+        r#"{"data":[{"index":0,"embedding":[1]},{"embedding":[2]}]}"#,
+        r#"{"data":[{"embedding":[1]},{"index":1,"embedding":[2]}]}"#,
+    ] {
+        assert_eq!(
+            extract_vectors_v1(mixed.as_bytes(), &VectorLocatorV1::NorthIdentical),
+            Err(EmbeddingsContractErrorV1::InvalidIndex),
+            "{mixed}"
+        );
+    }
+    // A declared `Array` index stays required on every element.
+    let locator = VectorLocatorV1::Array {
+        array: pointer("/data"),
+        vector: pointer("/embedding"),
+        index: Some(pointer("/index")),
+    };
+    assert_eq!(
+        extract_vectors_v1(br#"{"data":[{"embedding":[1]}]}"#, &locator),
+        Err(EmbeddingsContractErrorV1::InvalidIndex)
+    );
 }
 
 #[test]
