@@ -12,10 +12,12 @@ Rulings: on 2026-09-30 the host owner (lv) ruled on Q4, Q7, Q10 and Q13 (§17), 
 acting for the south maintainers, ruled every question tagged for them as recommended (Q1, Q2, Q3, Q6, Q9, Q11, Q14,
 Q15, and the south half of Q4), ruled Q8, Q12 and Q16 as recommended for the south maintainers and for the server, and
 ruled Q5 the same way as embeddings E-Q5; on the same day lv ruled DI6 = A in the host plan P22 (§10.2). Each ruling is
-recorded under its question in §17. No ruling is reversed. §18 records three reconciliation findings that lv should see:
-the contract numbers in the Q14 ruling are stale (its substance stands; the bump is 11 → 12), and two points the
-rulings did not cover (R-1, R-2: the model catalog of 0.50.0 overlaps the capability facts of §7/§8), which need a
-further ruling before the world's capability type is frozen.
+recorded under its question in §17. No ruling is reversed. §18 records three reconciliation findings: the contract
+numbers in the Q14 ruling are stale (its substance stands; the bump is 11 → 12), and two points the rulings did not
+cover (R-1, R-2: the model catalog of 0.50.0 overlaps the capability facts of §7/§8, and the spelling of tier words).
+lv ruled both on 2026-10-09: R-1 = A (the catalog is authoritative for per-role limits and default words) and R-2
+(tier words are case-sensitive, matched exactly, grammar widened to `[A-Za-z0-9_.-]{1,32}`); §7, §8, §12.1 and §19 are
+revised accordingly and marked "revised 2026-10-09 per R-1" or "per R-2".
 
 
 Baseline: south `main` = `3c1501a` (its code is identical to v0.42.0, `3135e36`; the merge added only design
@@ -408,15 +410,22 @@ world image-adapter-v1 {
 }
 ```
 
-- **`model-capabilities`**: static per-model declarations — supported operations, input roles and limits (§8),
-  renderable `response_format`s, the metering forms and token buckets it will report (§9.1), the tier dimensions that
-  may appear with each dimension's default word (§8), and request-side elision paths. The result depends on the
+- **`model-capabilities`** *(revised 2026-10-09 per R-1)*: static per-model declarations of what is bound to the
+  dialect — supported operations, the mapping from request keys to input roles (§8), renderable `response_format`s,
+  the metering forms and token buckets it will report (§9.1), the **names** of the tier dimensions it may report (§8),
+  `repeat`, and request-side elision paths. It does **not** return per-role limits, parameter ranges or default tier
+  words: those are catalog data (below). The result depends on the
   provider config as well as on the package (the catalog's `supported_parameters` words and other non-secret
   configuration), so the host caches it under the key **(package digest, digest of the canonical provider-config
   JSON)**, never under the package digest alone. When the host routes aliases or private deployments and the
   component cannot tell from the model name, follow the precedent of `2026-09-29-claude-model-dialect.md`: the
   catalog declares words in `ProviderConfig.models[].supported_parameters` and the component reads them (the
   dialect-word mechanism of the boundary record §7.4).
+  *(Added 2026-10-09 per R-1.)* **Limits and default words live in the model catalog** (`south.model-catalog.v1`,
+  boundary record §13.11): per-role maxima (`media.roles.<role>.max`), parameter options and the default word of a tier
+  dimension (`params.resolution.default`). The host reads them by upstream model id and enforces them before `prepare`;
+  South carries the document and does not interpret it. A model that is absent from the catalog has **no declaration**
+  (boundary record §13.11: "no declaration", not "no capability"), and the host applies no catalog limit or default to it.
 - **`prepare`**: a pure function the host calls **before admission and reservation**; it returns the pre-dispatch
   facts (§8), the request descriptor (§6.3), `repeat`, the `response_body_form` and response elision paths,
   `immutable_body_paths` (same semantics as task contract 6 §4), and a bounded `state` (≤ 8 KiB, no secrets, for use
@@ -470,7 +479,7 @@ there is no consumer.
 | `inputs` | counts per role `{input_image, reference_image, mask}`; closed vocabulary | `precheck.rs:88-155` interpreting keys and roles by `provider_type` |
 | `requested_outputs` | image count sent upstream × `repeat` | the per-arm branches where the host parses `n` itself |
 | `size` | `{width, height}`, when it can be determined | `image_size_hint` in `media.rs:31-36` |
-| `tier` | tier words by dimension `{resolution?, quality?}`, grammar `[a-z0-9_.-]{1,32}` | xAI's `size→resolution` normalisation (`xai.rs:338-409`), the Nano Banana resolution gate (`precheck.rs:34-62`) |
+| `tier` | tier words by dimension `{resolution?, quality?}`, grammar `[A-Za-z0-9_.-]{1,32}` (revised 2026-10-09 per R-2: words are case-sensitive and matched exactly; the component reports the upstream's spelling, such as `1K`, `720P` or xAI's `1k`) | xAI's `size→resolution` normalisation (`xai.rs:338-409`), the Nano Banana resolution gate (`precheck.rs:34-62`) |
 | `tier_candidates` | `{candidates: [...], default}`: the candidate set when the upstream decides the tier | the xAI candidate price cards (`media.rs:994-1025`) |
 | `metering_forms` | the metering forms this call will report on success (§9.1); must include every form in `context.metering_required` | half the job of the four copies of "is this token-priced" (§9.3) |
 | `bounds` | optional **tightening** bounds: `max_images`, `max_tokens{text_input, image_input, output}`, `max_credits` | the xAI branch in `execute.rs:181-187`; the `body_len` approximation in the token bound |
@@ -497,12 +506,16 @@ generation, `execute.rs:175`; `cap` on edits, `handlers.rs:980`) are provider-in
 images on generation; the allowance per media part replaces them, so a token-priced generation with a reference image
 is not sent to review for reporting image-input tokens.
 
-**Input roles and limits**: the component maps keys to roles (keeping today's "take the first key that appears"
-semantics, `precheck.rs:88-115`) and refuses in `prepare` (`invalid_request`) against the per-role limits declared in
-`model-capabilities`; the host **no longer** interprets key names. Today's limits come from the host's capability
-table (`capabilities.rs:1569-1620`: gpt-image-1 input images 16 / mask 1, xAI 3 or 5, Stability 1, Nano Banana
-reference images 1, …) and move into the component with it. The host keeps only provider-independent checks: total
-bytes within the northbound limit (100 MiB, `core/limits.rs:12`).
+**Input roles and limits** *(revised 2026-10-09 per R-1)*: the component maps keys to roles (keeping today's "take the
+first key that appears" semantics, `precheck.rs:88-115`) and reports the counts in `inputs`; the host **no longer**
+interprets key names. The per-role **limits** are catalog data, not component declarations: the model catalog carries
+them per upstream model id (`media.roles.<role>.max`: gpt-image-1 input images 16 / mask 1, xAI, Stability 1, Nano Banana
+reference images 1, …; today's source is the host's capability table, `capabilities.rs:1569-1620`, which the catalog
+was exported from), and the host enforces them against the `inputs` fact, as it does today against its profile. A
+model absent from the catalog has no declaration and no catalog limit applies. The component refuses in `prepare`
+(`invalid_request`) only what is bound to its dialect and cannot be expressed as a catalog range (for example an edit
+with a mask on Gemini). The host also keeps the provider-independent checks: total bytes within the northbound limit
+(100 MiB, `core/limits.rs:12`).
 
 **What a tier word is.** A tier word names a **request-time choice** that can differ between two requests to the same
 model row, and that the upstream serves (and usually bills) differently: `resolution` (`1k`, `2k`, `4k`, …) and
@@ -520,12 +533,18 @@ tier words is therefore a **host schema change** (§17 Q8), and it is a **prereq
 relies on tier words: I2's xAI and I3-2's Nano Banana per-image rows (§14). Until it lands, those rows stay on their
 native arms.
 
-**Tier refusal for per-image pricing** (replaces `nano_banana_flat_tier_guard`, once Q8 has landed): each model
-declares, in `model-capabilities`, its tier dimensions and a default word per dimension (Nano Banana: `resolution`,
-default `1k`). The host rule becomes generic: "for a per-image-priced row, every tier word `prepare` reports must have
-a price in that row's tier-keyed list; a row with **no** tier-keyed list accepts only requests whose tier words all
-equal the model's declared defaults; anything else is a 400 before admission". That reproduces today's gate — a
-single-price Nano Banana row refuses `2k` and accepts `1k` or no resolution (`precheck.rs:47-60`) — without the host
+**Tier refusal for per-image pricing** (replaces `nano_banana_flat_tier_guard`, once Q8 has landed; *revised
+2026-10-09 per R-1 and R-2*): `model-capabilities` declares the **names** of the tier dimensions a model may report
+(Nano Banana: `resolution`); the default word of a dimension is read by the host from the model catalog
+(`params.resolution.default`: `1K` for the Nano Banana entries), not declared by the component. Words are compared
+exactly, as spelled (R-2). The host rule becomes generic: "for a per-image-priced row, every tier word `prepare`
+reports must have a price in that row's tier-keyed list; a row with **no** tier-keyed list accepts only requests whose
+tier words all equal the catalog default word of that dimension for the model; anything else is a 400 before
+admission". A dimension for which the catalog has no default word (or a model the catalog does not describe) has no
+declaration, and this rule has nothing to compare with there (§18.5, open point O-1). That reproduces today's gate — a
+single-price Nano Banana row refuses `2k` and accepts `1k` or no resolution (`precheck.rs:47-60`; today's gate compares
+case-insensitively, while words are now matched exactly, so a component that accepts a client's `1k` reports the
+upstream's spelling `1K`) — without the host
 knowing which model is Nano Banana, and a model with no tier dimensions (MiniMax, Ideogram) is never refused by it.
 When a model declares a `resolution` dimension, the price is selected by the tier word and `size` is not used for
 price selection, so the two facts never pick different columns. **Cost**: the refusal text becomes generic host text,
@@ -816,7 +835,7 @@ determinism, unknown-field tolerance, `task_suite_v2.rs:125-218`), plus these **
 | `evidence_absent_is_null` | for every **evidence** fact the component can report (`images_reported` on `succeeded`, `upstream_cost`), at least one 2xx fixture missing it, whose outcome is `succeeded` with that fact `null` — never a filled-in number |
 | `terminal_only_from_the_wire` | at least one non-2xx fixture; no non-2xx may produce `succeeded` |
 | `auth_errors_are_not_retriable` | a `401` / `403` fixture whose outcome's error is not retriable (the existing `AuthErrorsAreNotRetriable` variant, `report.rs:57-63`); it applies here because error mapping is merged into `parse-response` |
-| `pre_dispatch_refusal` | for every input role with a declared limit, at least one over-limit `prepare` fixture that returns `invalid_request` and produces no descriptor |
+| `pre_dispatch_refusal` *(revised 2026-10-09 per R-1)* | for every refusal the component itself makes in `prepare` (a combination its dialect cannot express, such as an edit with a mask on Gemini), at least one fixture that returns `invalid_request` and produces no descriptor. Per-role maxima are catalog data enforced by the host and are not a suite row |
 | `reference_integrity` (a structural check, run on every output) | every `$south.ref` points to a blob that exists in the view; no `$south.blob` node appears in any output; every `$south.artifact` points to an existing artifact and uses an allowed delivery (§7); every `inline` and `url` pointer lands on a string in the response view; no output string exceeds the fallback threshold (the component must not smuggle bytes out of the sandbox) |
 | `endpoint_confinement` | the descriptor's `path` is relative and passes the grammar |
 
@@ -1047,7 +1066,9 @@ ruling is as recommended in the table; the line after it states the consequence.
   closed dimensions, `resolution` and `quality`; a new dimension goes through a `contracts.image` version; a value
   fixed by the model row (Ideogram speed) is not a tier word. The host's tier-keyed price list remains a prerequisite
   of the xAI and Nano Banana per-image rows; as of 2026-10-09 the host has not started it (§18.5). The ruling does not
-  say where a model's default word and role limits are declared; that is R-1 and R-2 in §18.5.
+  say where a model's default word and role limits are declared, or how a tier word is spelled; lv ruled both on
+  2026-10-09 (R-1 = A, R-2 exact and widened, §18.5), and the "per-model default word" of the Q8 table is the catalog's
+  `params.resolution.default` *(revised 2026-10-09 per R-1)*.
 - **Q9** — Ruled (lv for the south maintainers, 2026-10-08): as recommended. The image world keeps "settled count ≤
   delivered + 1" in the host; the task side reclaims the rule at its next contract upgrade, which is outside this
   acceptance.
@@ -1159,15 +1180,15 @@ Nano Banana gate (`precheck.rs:34-62`) still exists, keyed on provider type, not
   buckets, response formats, elision paths and `repeat` are dialect facts the catalog does not carry.
 - The speech record is not affected (§17 there): the catalog is image and video only, and text was ruled out of it.
 
-**Reconciliation finding R-1: two places now declare the same facts.** §7 has `model-capabilities` return per-role
-limits, and §8 has it declare each model's tier dimensions with a default word, while the catalog already carries role
+**Reconciliation finding R-1: two places now declare the same facts.** *(Ruled 2026-10-09: A, below.)* §7 had `model-capabilities` return per-role
+limits, and §8 had it declare each model's tier dimensions with a default word, while the catalog already carries role
 maxima, `resolution` options and defaults for the same models, South maintains it, and the host enforces it. If both stay
 authoritative they will drift, and the conformance row `pre_dispatch_refusal` ("for every input role with a declared
 limit, an over-limit `prepare` fixture", §12.1) cannot hold for limits that live in data South does not interpret.
 No ruling covers this; Q8 decides the dimensions and the price list, not where limits and default words are declared.
 Options for lv, with the recommendation of this reconciliation:
 
-- **A (recommended).** Ranges, counts and default words live in the catalog, the host enforces them and reads the
+- **A (recommended; ruled 2026-10-09).** Ranges, counts and default words live in the catalog, the host enforces them and reads the
   default word for the tier-refusal rule of §8 from `params.resolution.default`. `model-capabilities` declares what is
   dialect-bound: operations, the role-key mapping, metering forms and buckets, renderable response formats, elision
   paths, `repeat`, and the *names* of the tier dimensions the component reports. `pre_dispatch_refusal` then covers only
@@ -1180,14 +1201,31 @@ Options for lv, with the recommendation of this reconciliation:
 - **C.** Both, and a conformance cross-check that a component's declared limits never exceed the catalog entry for the
   same model id. More machinery, and the catalog is not visible to the suite.
 
-**Reconciliation finding R-2: tier-word spelling.** §8 gives the grammar `[a-z0-9_.-]{1,32}` for tier words, but the
+**Reconciliation finding R-2: tier-word spelling.** *(Ruled 2026-10-09, below.)* §8 gave the grammar `[a-z0-9_.-]{1,32}` for tier words, but the
 catalog's resolution words are `1K`, `2K`, `4K` and `480P`, `720P`, `1080P`, `768P` in upper case for most models and
 `1k`, `2k` for xAI. A host price list keyed by the component's word must map to the catalog's spelling, or the
 component must report the word as the upstream and the catalog spell it. This is a spelling decision (lower-case
 normalization in the component, a case-insensitive comparison in the host, or widening the grammar) and not a design
-change; it must be settled in S-I-1, before `ImageFactsV1` is frozen.
+change; it had to be settled in S-I-1, before `ImageFactsV1` is frozen.
 
-Until R-1 is ruled, S-I-1 does not freeze `ImageModelCapabilitiesV1`.
+**Ruled (lv, 2026-10-09): R-1 = A.** The catalog is authoritative for per-role maxima, parameter options and default
+words; `model-capabilities` declares only what is dialect-bound, and §7, §8 and §12.1 are revised accordingly. The
+consequence for the catalog: it must carry an entry for every model an image component serves (37 ids today), and
+the host's S6 loader already reads it.
+
+**Ruled (lv, 2026-10-09): R-2.** Tier words are case-sensitive and matched exactly, the grammar is widened to
+`[A-Za-z0-9_.-]{1,32}`, the component reports the upstream's spelling (`1K`, `720P`, xAI `1k`), and a host price list is
+keyed by the exact word. No case folding anywhere.
+
+**Open point O-1 (found while applying R-1; needs a decision, not guessed here).** The tier-refusal rule of §8 compares
+a reported word with the default word of the dimension. Under the earlier text the component declared that default for
+every model it served, so the rule always had a value to compare with. Under A the value exists only where the catalog
+has an entry with `params.resolution.default`, and the catalog is "no declaration" for a model it does not describe. For
+a per-image-priced row on a model the component says has a `resolution` dimension but the catalog has no default for (or
+no entry at all), the host has nothing to compare with: it may not refuse (under-charging if the upstream serves a
+higher tier than the flat price covers), or it may refuse every non-default word (but it does not know the default).
+Which of the two, or a requirement that such a row cannot be listed per image, is lv's decision before the host builds
+the rule; it does not affect any south step, because the rule is the host's.
 
 ### 18.6 `WorldSchemaV1`, `validate_role`, runtime and limits
 
@@ -1247,12 +1285,12 @@ south acceptance) waits for; the south acceptance of every step is on south alon
 
 | Step | Work | Files and crates | Acceptance |
 |---|---|---|---|
-| **S-I-1** Contract types and pure functions | New module `south-contracts::media`: request view and part list types, `MediaRequestDescriptorV1` with `MediaAuthV1`, the closed transforms of §6.4 (all of them, including `from_hex`, `concat`, `wav_pcm_s16le`), the response view and `response_body_form`, `MediaLimitsV1`, `parse_multipart_parts_v1`, `elide_v1`, `encode_multipart_v1`, `ArtifactUrlV1::parse`, `is_forbidden_egress_address`, and `decode_sse_v1` (released with this minor; the Responses record R1 also waits for it; the host's B6 plan recommends releasing it separately and earlier, its Q-B6-6, unruled, and if lv rules that it leaves this step). New module `south-contracts::image`: facts, `ImageMeteringV1`, `ImageOutcomeV1`, artifact forms, tier words. Revise the 0.25.0 record's "no encoder" half-sentence (Q1). **Gated by**: R-1 (where limits and default words are declared) and R-2 (tier-word spelling) must be ruled before `ImageModelCapabilitiesV1` and the tier-word grammar are frozen | `crates/south-contracts/src/` (`lib.rs` re-exports, new `media.rs`, `image.rs`; the SSE decoder beside `eventstream.rs`), golden vectors under `crates/south-contracts/tests/`, fuzz targets in `fuzz/fuzz_targets/` (`contract_parsers.rs` pattern), `docs/design/2026-09-09-multipart-request-body.md` | Golden vectors for each function; fuzz targets build (`cargo check --manifest-path fuzz/Cargo.toml --all-targets --locked`); `scripts/check-boundaries.sh`; timing of `elide_v1` and the multipart splitter on a 32 MiB base64 body recorded in the release record (the E-Q1 pattern); `south-contracts` version bump (Q47) |
+| **S-I-1** Contract types and pure functions | New module `south-contracts::media`: request view and part list types, `MediaRequestDescriptorV1` with `MediaAuthV1`, the closed transforms of §6.4 (all of them, including `from_hex`, `concat`, `wav_pcm_s16le`), the response view and `response_body_form`, `MediaLimitsV1`, `parse_multipart_parts_v1`, `elide_v1`, `encode_multipart_v1`, `ArtifactUrlV1::parse`, `is_forbidden_egress_address`, and `decode_sse_v1` (released with this minor; the Responses record R1 also waits for it; the host's B6 plan recommends releasing it separately and earlier, its Q-B6-6, unruled, and if lv rules that it leaves this step). New module `south-contracts::image`: facts, `ImageMeteringV1`, `ImageOutcomeV1`, artifact forms, tier words. Revise the 0.25.0 record's "no encoder" half-sentence (Q1). R-1 (A) and R-2 (exact, widened grammar) ruled 2026-10-09; `ImageModelCapabilitiesV1` carries only the dialect-bound fields listed in §7 | `crates/south-contracts/src/` (`lib.rs` re-exports, new `media.rs`, `image.rs`; the SSE decoder beside `eventstream.rs`), golden vectors under `crates/south-contracts/tests/`, fuzz targets in `fuzz/fuzz_targets/` (`contract_parsers.rs` pattern), `docs/design/2026-09-09-multipart-request-body.md` | Golden vectors for each function; fuzz targets build (`cargo check --manifest-path fuzz/Cargo.toml --all-targets --locked`); `scripts/check-boundaries.sh`; timing of `elide_v1` and the multipart splitter on a 32 MiB base64 body recorded in the release record (the E-Q1 pattern); `south-contracts` version bump (Q47) |
 | **S-I-2** HTTP contract 12 | `HTTP_CONTRACT_VERSION` 11 → 12 with its doc entry; `execute_multipart_binary_call_v1` beside `execute_multipart_call_v1`; `TextPostRequestV1` with a binary execution entry point (carried for the speech record, Q1 there); the raw-twin question of §18.1; testkit runners; provider-suite rows (own suite or an existing one, for the maintainers) | `crates/south-contracts/src/lib.rs`, `crates/south-core/src/lib.rs` (and `raw.rs` if a raw form is wanted), `crates/south-transport-reqwest/src/lib.rs` (text body rendering only), `crates/south-testkit/src/provider_binary.rs`, `crates/south-provider-conformance`, `compatibility.json`, the two pinned tests `http_contract_v1.rs:54` and `declared_instances_v1.rs:26` | New suite rows pass in the testkit; contract 11 requests are exactly contract 12 requests that do not use the new shapes; `compatibility.json` `contracts.http` 12 and the crate capability strings updated; the host's `provider_binary` gate ③ result is not claimed for the new rows |
 | **S-I-3** WIT, manifest, gate ① | `wit/image-adapter.wit` (§7); `IMAGE_WIT_PACKAGE`, `IMAGE_WORLD`, `IMAGE_BEHAVIOR_SUITE`, `IMAGE_CAPABILITIES`, `IMAGE_WORLD_SCHEMA`, a `KNOWN_WORLDS` row, a `validate_role` branch; admit `config_schema` and credential attributes in this world (§18.3); turn the enumerated world exclusions of §18.6 into world properties; new `ManifestErrorV1` variant for "operation word required" (breaking for hosts matching it exhaustively, as 0.47.0's was) | `crates/south-provider-api/` (`wit/`, `src/manifest.rs`, `src/values.rs`, `src/lib.rs`, tests `provider_api_v2.rs`) | A manifest declaring neither `generate` nor `edit`, an unknown word, `host_values`, an `endpoint`, an instance declaration or the `oauth` arm is refused; a manifest with a family's `config_schema` and exported attributes is admitted; the existing four worlds' tests pass unchanged; `south-provider-api` version bump |
 | **S-I-4** Runtime world | `bindgen!` module, `InstanceKind::Image`, `call_model_capabilities`, `call_prepare`, `call_parse_response`, `call_render`; the host import is not linked and the import scan refuses `token-station:*` and any `host` interface for this world; limits unchanged | `crates/south-provider-runtime/src/` (`bindings.rs`, `component.rs`, `loader.rs`), a test guest `tests/guests/test-image`, test `image_world_v1.rs` | The `embeddings_world_v1.rs` cases ported: a guest importing `host` is refused, a guest with the wrong world is refused, payload above 16 MiB is refused, determinism; `declared_runtime_v1` still passes |
 | **S-I-5** Conformance suite `south.image-component.v1` | JSON codecs (the `image-v1.<family>.<case>` fixture format), the component trait, ABI and sandbox adapters, the suite with the required rows of §12.1 as additive `CheckV1` variants, `admit_media_descriptor_auth` built on a rule factored out of `admit_descriptor_auth`, `UndeclaredValuesIgnored`, `credential_recipe_checks_v1` for packages with a recipe, `reference_integrity`; gate ③ host suites in the style of the existing ones (`south.safe-fetch.v1` as its own host suite) | `crates/south-component-conformance/src/` (new `image_*.rs`, `abi_image.rs`, `component_image.rs`, `sandbox_image.rs`, `descriptor_auth.rs`, `report.rs`, `lib.rs`), `crates/south-testkit` for the safe-fetch host suite | A native reference passes every row; each required row has a mutation that fails it; the safe-fetch vectors of §11 are refused; `south-component-conformance` version bump |
-| **S-I-6** Azure component | Reference implementation and package for the Azure MAI / Foundry family: generation JSON, edit as multipart with the binary response, `header_secret` `api-key`, `inline base64`, `tokens` (a missing declared bucket is `unknown`) or `images`. Fixtures are transcribed from the server's native arm (`azure.rs`), the P13 S8 pattern, never back-derived | new `components/image-azure/` (package name proposed; manifest, `src/lib.rs`, lockfile), `crates/south-component-conformance/src/reference_azure_image.rs` and its fixture pack, tests `azure_image_suite.rs` and `azure_image_sandbox_parity.rs`, `scripts/build-image-azure-component.sh`, `.github/workflows/release.yml` | Suite green natively and inside the sandbox with identical ABI answers; the package declares `south_runtime` of the minor; **host prerequisite for cutover**: the host's generic media executor (not started), HTTP contract 12 linkage and the multipart encoder |
+| **S-I-6** Azure component | Reference implementation and package for the Azure MAI / Foundry family: generation JSON, edit as multipart with the binary response, `header_secret` `api-key`, `inline base64`, `tokens` (a missing declared bucket is `unknown`) or `images`. Fixtures are transcribed from the server's native arm (`azure.rs`), the P13 S8 pattern, never back-derived | new `components/image-azure/` (package name proposed; manifest, `src/lib.rs`, lockfile), `crates/south-component-conformance/src/reference_azure_image.rs` and its fixture pack, tests `azure_image_suite.rs` and `azure_image_sandbox_parity.rs`, `scripts/build-image-azure-component.sh`, `.github/workflows/release.yml` | Suite green natively and inside the sandbox with identical ABI answers; the package declares `south_runtime` of the minor; **host prerequisite for cutover**: the host's generic media executor (not started), HTTP contract 12 linkage and the multipart encoder; the model catalog must carry an entry for every model an image component serves (37 ids today; the host's S6 loader already reads it) |
 | **S-I-7** xAI component (conditional) | xAI generation and edit: tier words, `tier_candidates`, evidence `upstream_cost`, request-side elision paths | `components/image-xai/`, reference and fixtures as S-I-6 | Suite green; **host prerequisite for the south release decision and for cutover**: the host's tier-keyed price list (Q8), not started and not scheduled as of 2026-10-09; until it lands the xAI rows stay on the native arm (§14) |
 | **S-I-8** Release | Version bumps of the three guest-linked crates (Q47) and a patch bump of every package with `south_runtime` unchanged where nothing needs the new world; `compatibility.json` (`contracts.media`, `contracts.image`, `media_limits`, suite fields, `media_component_capabilities` `not_verified`, `schema_version`); the written Q5 commitment; release record, README and ARCHITECTURE entries; the digest-stability test; the declared-runtime check; the release index | `compatibility.json`, `Cargo.toml` files and component lockfiles, `docs/design/<date>-release-<next>.md`, `README.md`, `ARCHITECTURE.md`, `crates/south-component-conformance/tests/shipped_packages_v1.rs`, `scripts/check-declared-runtime.sh` | The checks of the 0.47.0 / 0.48.0 releases (fmt, clippy, nextest, `check-boundaries.sh`, `check-language.sh`, unit tests of `scripts/`, fuzz build, wasm clippy, release replay under the tag, `release_index.py compare`) all pass |
 | **S-I-9** Embeddings contract 2 (separate work item) | `Media` and `TextBlob`, the `media` capability word, the `request.media` row, `ReferenceIntegrity`; uses the S-I-1 blob types and `elide_v1` | `crates/south-contracts/src/embeddings.rs`, `manifest.rs`, `embeddings_suite.rs`, embeddings packages | Contract 1 packages unchanged and still pass; ships in the S-I-8 minor or after it |
@@ -1271,7 +1309,9 @@ executor in the host), I3-6 (the Reve bridge, with P18's Reve edit).
    component. Not started (P22 I2–I4); the only host generic executor for a media world is the embeddings one.
 3. The host's safe fetch executor to the `south.safe-fetch.v1` rules (the missing IPv6 ranges of §11): blocks I3-5 and
    the speech Bailian arm.
-4. A re-pin of the host to the media minor, and to 0.50.0 for the catalog (R-1).
+4. A re-pin of the host to the media minor, and to 0.50.0 for the catalog (R-1 = A makes the catalog authoritative; it
+   must carry an entry for every model an image component serves, 37 ids today, and the host's S6 loader already reads
+   it).
 
 ## Revision note (2026-10-01)
 
@@ -1326,7 +1366,15 @@ executor in the host), I3-6 (the Reve bridge, with P18's Reve edit).
 - §18 (new): reconciliation with 0.50.0. The HTTP contract bump is 11 → 12, not 9 → 10 (Q14's numbers are stale, its
   substance stands); no raw twin of any binary entry point exists; embeddings contract 2 follows the image minor; gate ①
   must admit the value channel in this world; Vertex reuses the `embeddings-vertex` recipe; two findings (R-1, R-2) on
-  the overlap of the model catalog with §7/§8 and on tier-word spelling need a ruling before the capability type is
-  frozen; a table of drifted citations.
+  the overlap of the model catalog with §7/§8 and on tier-word spelling (ruled the same day, below); a table of drifted
+  citations.
 - §19 (new): the first batch applied to main, and steps S-I-1 to S-I-9 with files and acceptance, and the prerequisites
   outside south.
+- Rulings of 2026-10-09 (lv): **R-1 = A** and **R-2**. §7 `model-capabilities` no longer returns per-role limits or
+  default tier words (it declares the dialect-bound facts and the names of tier dimensions), and a note states that
+  limits and defaults are catalog data and that a model absent from the catalog has no declaration; §8 reads the
+  default word from the catalog (`params.resolution.default`) and rewrites "Input roles and limits"; §8 `tier` grammar is
+  `[A-Za-z0-9_.-]{1,32}`, case-sensitive, matched exactly; §12.1 `pre_dispatch_refusal` covers only refusals the
+  component makes itself; §17 Q8 and §18.5 record the rulings; §19 S-I-1 loses its gate and S-I-6 and the host
+  prerequisites list the catalog requirement. §13 and §14 assume no component-declared limit and are unchanged. Open
+  point O-1 (§18.5) is recorded for lv.
