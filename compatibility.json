@@ -183,8 +183,7 @@
         "cases": 6
       },
       "credential_recipe": {
-        "status": "verified",
-        "cases": 10
+        "status": "not_verified"
       },
       "eventstream_framing": {
         "status": "verified",

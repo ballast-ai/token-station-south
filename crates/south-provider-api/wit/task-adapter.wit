@@ -85,7 +85,8 @@ interface task-adapter {
     // ── Stage one: submit ───────────────────────────────────────────────────
 
     /// `provider-config`: `protocol::ProviderConfig` (the policy-fenced
-    /// four-field subset) · `task-request`: the caller's normalised request ·
+    /// four-field subset; `declared` is empty, because a task package
+    /// declares no config keys or attributes) · `task-request`: the caller's normalised request ·
     /// `host-minted`: `south_contracts::HostMintedValuesV1`
     /// -> `protocol::HttpRequestDescriptor`.
     ///

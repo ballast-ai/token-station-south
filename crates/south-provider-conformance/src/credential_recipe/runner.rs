@@ -81,6 +81,16 @@ pub trait CredentialRecipeSessionV1: Send + Sync {
 
     /// Reads the stored state from the authoritative store.
     fn stored(&self) -> CredentialRecipeFutureV1<'_, StoredCredentialV1>;
+
+    /// The attributes the credential exports now, exactly as the host would place them in
+    /// `ProviderConfig.declared` for the next attempt on it (§3.3, §13.8): built from the
+    /// currently stored generation through the host's own code, with `persist` applied. `None`
+    /// when the host fails to build them.
+    ///
+    /// The runner calls it after a write as well as after a read, so a host that caches attributes
+    /// per credential or per provider row instead of building them per attempt fails.
+    fn exported_attributes(&self)
+    -> CredentialRecipeFutureV1<'_, Option<BTreeMap<String, String>>>;
 }
 
 /// The result of resolving a slot, as the host classified it.
@@ -183,6 +193,8 @@ pub enum CredentialRecipeMismatchCategoryV1 {
     StoredExpiry,
     /// The kept previous generation differs.
     PreviousGeneration,
+    /// The exported attributes differ, or the host built none.
+    Attributes,
 }
 
 fixed_debug!(CredentialRecipeMismatchCategoryV1 {
@@ -195,6 +207,7 @@ fixed_debug!(CredentialRecipeMismatchCategoryV1 {
     StoredMinted => "StoredMinted",
     StoredExpiry => "StoredExpiry",
     PreviousGeneration => "PreviousGeneration",
+    Attributes => "Attributes",
 });
 
 /// One mismatch, without expected or observed values.
@@ -433,6 +446,11 @@ async fn run_case(
             CredentialRecipeStepV1::ExpectStored(expected) => {
                 let stored = session.stored().await;
                 compare_stored(&stored, expected, at, &mut recorder);
+            }
+            CredentialRecipeStepV1::ExpectAttributes(expected) => {
+                let exported = session.exported_attributes().await;
+                let differs = exported.as_ref() != Some(&as_map(expected));
+                recorder.record_if(differs, at, CredentialRecipeMismatchCategoryV1::Attributes);
             }
         }
     }

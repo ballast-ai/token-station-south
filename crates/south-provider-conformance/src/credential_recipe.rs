@@ -6,7 +6,9 @@
 //! alive are the host's: one exchange per refresh however many requests race for it, re-reading
 //! after the lock, compare-and-swap write-back with the loser re-reading the winner, the 60 s to
 //! 24 h TTL clamp, never wiping refresh material with an empty value, never retrying a credential
-//! the token endpoint called unusable, and never letting a health probe rotate a refresh chain.
+//! the token endpoint called unusable, never letting a health probe rotate a refresh chain, and
+//! exporting a credential's attributes from its current fields, with `persist` keeping the last
+//! value of an absent one (§3.3, §13.8).
 //! This suite drives a host's own generic recipe executor and credential store against a fake
 //! token endpoint the suite controls, and checks those invariants from the outside.
 //!
@@ -20,8 +22,9 @@
 use std::{collections::BTreeMap, fmt};
 
 use south_provider_api::{
-    CREDENTIAL_RECIPE_SCHEMA, ConstantV1, CredentialFieldV1, CredentialsV1, EncodingV1, ExtractV1,
-    PresentV1, RecipeV1, SlotV1, StepKindV1, StepV1, ValueSourceV1,
+    AttributeV1, CREDENTIAL_RECIPE_SCHEMA, ConstantV1, CredentialFieldV1, CredentialsV1,
+    EncodingV1, ExtractV1, PredicateV1, PresentV1, RecipeV1, SelectRuleV1, SlotV1, StepKindV1,
+    StepV1, ValueSourceV1, ValueSyntaxV1,
 };
 
 mod endpoint;
@@ -67,7 +70,7 @@ pub const CREDENTIAL_RECIPE_NARROW_MIN_TTL_SECONDS_V1: u32 = 120;
 /// See [`CREDENTIAL_RECIPE_NARROW_MIN_TTL_SECONDS_V1`].
 pub const CREDENTIAL_RECIPE_NARROW_MAX_TTL_SECONDS_V1: u32 = 3600;
 
-/// The two recipes the suite runs.
+/// The recipes the suite runs.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum CredentialRecipeKindV1 {
     /// Codex-like: one `oauth2_token` refresh step, JSON encoding, the refresh token rotates and is
@@ -76,12 +79,22 @@ pub enum CredentialRecipeKindV1 {
     /// Client-credentials: one `oauth2_token` step, form encoding, nothing rotates; the recipe
     /// narrows the clamp to 120 s – 3600 s.
     NonRotating,
+    /// Exported attributes (§3.3, §13.8): a selector over two client-credentials recipes, chosen
+    /// by whether `workspace` is present, that exports the recipe it chose
+    /// ([`CREDENTIAL_RECIPE_SELECTED_ATTRIBUTE_V1`]); both recipes export `account_id` with
+    /// `persist` and `label` without.
+    Attributed,
 }
 
 fixed_debug!(CredentialRecipeKindV1 {
     Rotating => "Rotating",
     NonRotating => "NonRotating",
+    Attributed => "Attributed",
 });
+
+/// The attribute [`CredentialRecipeKindV1::Attributed`]'s selector exports: the name of the recipe
+/// it chose, `client_credentials` or `workspace_credentials`.
+pub const CREDENTIAL_RECIPE_SELECTED_ATTRIBUTE_V1: &str = "credential_kind";
 
 impl CredentialRecipeKindV1 {
     /// The recipe's `credentials` section, exactly as a manifest would carry it.
@@ -90,6 +103,7 @@ impl CredentialRecipeKindV1 {
         match self {
             Self::Rotating => rotating_credentials(),
             Self::NonRotating => non_rotating_credentials(),
+            Self::Attributed => attributed_credentials(),
         }
     }
 
@@ -98,7 +112,7 @@ impl CredentialRecipeKindV1 {
     pub const fn identifying_param(self) -> &'static str {
         match self {
             Self::Rotating => "refresh_token",
-            Self::NonRotating => "client_secret",
+            Self::NonRotating | Self::Attributed => "client_secret",
         }
     }
 
@@ -107,7 +121,7 @@ impl CredentialRecipeKindV1 {
     pub const fn encoding(self) -> EncodingV1 {
         match self {
             Self::Rotating => EncodingV1::Json,
-            Self::NonRotating => EncodingV1::Form,
+            Self::NonRotating | Self::Attributed => EncodingV1::Form,
         }
     }
 }
@@ -240,6 +254,84 @@ fn non_rotating_credentials() -> CredentialsV1 {
             SlotV1::Minted("client_credentials".to_owned()),
         )]),
         recipes: BTreeMap::from([("client_credentials".to_owned(), recipe)]),
+    }
+}
+
+fn attributed_credentials() -> CredentialsV1 {
+    let token = |extra: Option<&str>| {
+        let mut params = BTreeMap::from([
+            ("grant_type".to_owned(), constant("client_credentials")),
+            ("client_id".to_owned(), from_field("client_id")),
+            ("client_secret".to_owned(), from_field("client_secret")),
+        ]);
+        if let Some(field) = extra {
+            params.insert(field.to_owned(), from_field(field));
+        }
+        let extract = BTreeMap::from([
+            ("access_token".to_owned(), pointer("/access_token", true, false)),
+            ("expires_at".to_owned(), expiry()),
+        ]);
+        token_step(EncodingV1::Form, params, extract, Vec::new())
+    };
+    let exported = |field: &str, persist: bool| AttributeV1 {
+        field: Some(field.to_owned()),
+        selected_recipe: false,
+        export: true,
+        persist,
+    };
+    let recipe = |step: StepV1, attributes: &[(&str, AttributeV1)]| RecipeV1 {
+        steps: vec![step],
+        present: Some(PresentV1::output("token.access_token")),
+        rotates_refresh_material: Some(false),
+        refresh_margin_seconds: Some(CREDENTIAL_RECIPE_REFRESH_MARGIN_SECONDS_V1),
+        attributes: attributes
+            .iter()
+            .map(|(name, attribute)| ((*name).to_owned(), attribute.clone()))
+            .collect(),
+        ..RecipeV1::default()
+    };
+    let selector = RecipeV1 {
+        select: vec![
+            SelectRuleV1 {
+                when: Some(PredicateV1::FieldPresent("workspace".to_owned())),
+                recipe: "workspace_credentials".to_owned(),
+            },
+            SelectRuleV1 { when: None, recipe: "client_credentials".to_owned() },
+        ],
+        attributes: BTreeMap::from([(
+            CREDENTIAL_RECIPE_SELECTED_ATTRIBUTE_V1.to_owned(),
+            AttributeV1 { field: None, selected_recipe: true, export: true, persist: false },
+        )]),
+        ..RecipeV1::default()
+    };
+    let exports =
+        [("account_id", exported("account_id", true)), ("label", exported("label", false))];
+    let attribute_field = |required: bool| CredentialFieldV1 {
+        syntax: Some(ValueSyntaxV1::Token),
+        ..field(false, required)
+    };
+    CredentialsV1 {
+        schema: CREDENTIAL_RECIPE_SCHEMA.to_owned(),
+        families: None,
+        fields: BTreeMap::from([
+            ("client_id".to_owned(), field(false, true)),
+            ("client_secret".to_owned(), field(true, true)),
+            ("account_id".to_owned(), attribute_field(false)),
+            ("label".to_owned(), attribute_field(false)),
+            ("workspace".to_owned(), attribute_field(false)),
+        ]),
+        require_one_of: Vec::new(),
+        import: BTreeMap::new(),
+        seed: None,
+        slots: BTreeMap::from([(
+            CREDENTIAL_RECIPE_SLOT_V1.to_owned(),
+            SlotV1::Minted("pick".to_owned()),
+        )]),
+        recipes: BTreeMap::from([
+            ("pick".to_owned(), selector),
+            ("client_credentials".to_owned(), recipe(token(None), &exports)),
+            ("workspace_credentials".to_owned(), recipe(token(Some("workspace")), &exports)),
+        ]),
     }
 }
 
@@ -479,6 +571,9 @@ pub enum CredentialRecipeStepV1 {
     ExpectEndpointCalls(usize),
     /// The store holds exactly this state.
     ExpectStored(CredentialStoredExpectedV1),
+    /// The credential exports exactly these attributes into `ProviderConfig.declared` now
+    /// ([`CredentialRecipeSessionV1::exported_attributes`]).
+    ExpectAttributes(&'static [(&'static str, &'static str)]),
 }
 
 impl fmt::Debug for CredentialRecipeStepV1 {
@@ -502,6 +597,10 @@ impl fmt::Debug for CredentialRecipeStepV1 {
             }
             Self::ExpectStored(expected) => {
                 formatter.debug_tuple("ExpectStored").field(expected).finish()
+            }
+            Self::ExpectAttributes(attributes) => {
+                let names: Vec<&str> = attributes.iter().map(|(name, _)| *name).collect();
+                formatter.debug_tuple("ExpectAttributes").field(&names).finish()
             }
         }
     }
@@ -532,6 +631,13 @@ pub enum CredentialRecipeCaseIdV1 {
     /// Two transient failures on the same generation, with no write in between, and the next resolve
     /// exchanges again and mints: a transient failure holds nothing (§13.5 D5, host feedback SF2).
     TransientFailureIsRetried,
+    /// The exported attributes follow the stored fields across an operator edit: the selector's
+    /// choice changes with them, an attribute without `persist` disappears with its field, and none
+    /// is cached from an earlier generation (§3.3, §13.8).
+    ExportedAttributesFollowTheCredential,
+    /// A `persist` attribute whose field becomes absent keeps its last value; a new value replaces
+    /// it (§3.3).
+    PersistedAttributeOutlivesItsField,
 }
 
 fixed_debug!(CredentialRecipeCaseIdV1 {
@@ -545,6 +651,8 @@ fixed_debug!(CredentialRecipeCaseIdV1 {
     CasLoserRereadsTheWinner => "CasLoserRereadsTheWinner",
     ProbeDoesNotRotate => "ProbeDoesNotRotate",
     TransientFailureIsRetried => "TransientFailureIsRetried",
+    ExportedAttributesFollowTheCredential => "ExportedAttributesFollowTheCredential",
+    PersistedAttributeOutlivesItsField => "PersistedAttributeOutlivesItsField",
 });
 
 /// One immutable canonical credential-recipe case.
@@ -631,6 +739,20 @@ const RT_2_FIELDS: &[(&str, &str)] = &[("refresh_token", RT_2)];
 const RT_3_FIELDS: &[(&str, &str)] = &[("refresh_token", RT_3)];
 const CLIENT_FIELDS: &[(&str, &str)] =
     &[("client_id", CLIENT_ID), ("client_secret", CLIENT_SECRET)];
+const ACCOUNT_1: &str = "south-test-only-account-1";
+const ACCOUNT_2: &str = "south-test-only-account-2";
+const LABEL: &str = "south-test-only-label";
+const ACCOUNT_1_IN_WORKSPACE: &[(&str, &str)] = &[
+    ("client_id", CLIENT_ID),
+    ("client_secret", CLIENT_SECRET),
+    ("account_id", ACCOUNT_1),
+    ("label", LABEL),
+    ("workspace", "south-test-only-workspace"),
+];
+const ACCOUNT_1_FIELDS: &[(&str, &str)] =
+    &[("client_id", CLIENT_ID), ("client_secret", CLIENT_SECRET), ("account_id", ACCOUNT_1)];
+const ACCOUNT_2_FIELDS: &[(&str, &str)] =
+    &[("client_id", CLIENT_ID), ("client_secret", CLIENT_SECRET), ("account_id", ACCOUNT_2)];
 
 const EXPIRED: i64 = -60;
 const HOUR: i64 = 3600;
@@ -896,6 +1018,56 @@ const FIXTURES: &[CredentialRecipeFixtureV1] = &[
             stored(RT_2_FIELDS, AT_1, HOUR),
         ],
         exchanges: &[RT_SEED, RT_SEED, RT_SEED],
+    },
+    // Attributes come from the stored fields, so neither case needs an exchange.
+    CredentialRecipeFixtureV1 {
+        case_id: CredentialRecipeCaseIdV1::ExportedAttributesFollowTheCredential,
+        recipe: CredentialRecipeKindV1::Attributed,
+        seed: generation(ACCOUNT_1_IN_WORKSPACE, None),
+        replies: &[],
+        steps: &[
+            CredentialRecipeStepV1::ExpectAttributes(&[
+                ("account_id", ACCOUNT_1),
+                ("credential_kind", "workspace_credentials"),
+                ("label", LABEL),
+            ]),
+            write(generation(ACCOUNT_2_FIELDS, None)),
+            CredentialRecipeStepV1::ExpectAttributes(&[
+                ("account_id", ACCOUNT_2),
+                ("credential_kind", "client_credentials"),
+            ]),
+            calls(0),
+        ],
+        exchanges: &[],
+    },
+    CredentialRecipeFixtureV1 {
+        case_id: CredentialRecipeCaseIdV1::PersistedAttributeOutlivesItsField,
+        recipe: CredentialRecipeKindV1::Attributed,
+        seed: generation(ACCOUNT_1_FIELDS, None),
+        replies: &[],
+        steps: &[
+            CredentialRecipeStepV1::ExpectAttributes(&[
+                ("account_id", ACCOUNT_1),
+                ("credential_kind", "client_credentials"),
+            ]),
+            write(generation(CLIENT_FIELDS, None)),
+            CredentialRecipeStepV1::ExpectAttributes(&[
+                ("account_id", ACCOUNT_1),
+                ("credential_kind", "client_credentials"),
+            ]),
+            write(generation(ACCOUNT_2_FIELDS, None)),
+            CredentialRecipeStepV1::ExpectAttributes(&[
+                ("account_id", ACCOUNT_2),
+                ("credential_kind", "client_credentials"),
+            ]),
+            write(generation(CLIENT_FIELDS, None)),
+            CredentialRecipeStepV1::ExpectAttributes(&[
+                ("account_id", ACCOUNT_2),
+                ("credential_kind", "client_credentials"),
+            ]),
+            calls(0),
+        ],
+        exchanges: &[],
     },
 ];
 

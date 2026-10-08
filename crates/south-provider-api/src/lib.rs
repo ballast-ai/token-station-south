@@ -38,6 +38,7 @@ mod config;
 mod credentials;
 mod instances;
 mod manifest;
+mod values;
 
 pub use config::{ConfigErrorV1, ConfigKeyV1, EndpointValuesErrorV1, ValueSyntaxV1};
 pub use credentials::{
@@ -71,6 +72,9 @@ pub use manifest::{
     WIT_PACKAGE, WorldSchemaV1, compatibility_admits, compatibility_matches, known_world,
     validate_component_name, validate_package_relative_path,
 };
+
+// The component value channel (Q14, host-zero-vendor-boundary §13.8).
+pub use values::{DeclaredValuesErrorV1, HOST_VALUE_ATTEMPT_ID, HOST_VALUES};
 
 // Declared secret headers (B7a, host-zero-vendor-boundary §10).
 pub use manifest::{

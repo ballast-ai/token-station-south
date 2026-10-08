@@ -116,6 +116,7 @@ fn reference_manifest() -> ComponentManifestV1 {
         query_parameters: Vec::new(),
         quota_headers: Vec::new(),
         user_agent: std::collections::BTreeMap::new(),
+        host_values: Vec::new(),
         permissions: ComponentPermissionsV1 {
             network: false,
             filesystem: false,

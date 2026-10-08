@@ -6,9 +6,10 @@
 //! `config_schema` keys, each with a value syntax from one closed set. South fills and checks the
 //! template, so both hosts build the same origin from the same operator values.
 //!
-//! Until the channel of §16 Q14 exists, a config key can only feed the endpoint template: a key
-//! the component itself would read has no way to reach it, so gate ① refuses a key the template
-//! does not use rather than admit a declaration that can never take effect.
+//! A config key may feed the endpoint template, the component, or both: since Q14 (§13.8) the
+//! host places every key of the family in `ProviderConfig.declared`
+//! ([`ComponentManifestV1::declared_values`]), so a key the template does not use, and a
+//! `config_schema` without an endpoint, are admitted.
 
 use std::collections::BTreeMap;
 
@@ -303,7 +304,6 @@ impl ComponentManifestV1 {
             }
             let keys = self.config_schema.get(family);
             let params = template_params(template).map_err(invalid)?;
-            let mut used = Vec::new();
             for (name, in_host) in params {
                 let Some(declaration) = keys.and_then(|keys| keys.get(name)) else {
                     return Err(invalid("an endpoint parameter is not a config key of the family"));
@@ -316,26 +316,7 @@ impl ComponentManifestV1 {
                 if in_host && !declaration.syntax.is_label_safe() {
                     return Err(invalid("a host parameter's syntax must fit inside a DNS label"));
                 }
-                used.push(name);
             }
-            if let Some(unused) =
-                keys.and_then(|keys| keys.keys().find(|key| !used.contains(&key.as_str())))
-            {
-                return Err(ManifestErrorV1::InvalidEndpoint {
-                    family: family.clone(),
-                    detail: format!(
-                        "config key `{unused}` is not used by the endpoint; until a channel into the component exists (§16 Q14), a config key can only feed the endpoint"
-                    ),
-                });
-            }
-        }
-        if let Some(family) =
-            self.config_schema.keys().find(|family| !self.endpoint.contains_key(*family))
-        {
-            return Err(ManifestErrorV1::InvalidEndpoint {
-                family: family.clone(),
-                detail: "config_schema without an endpoint has nothing to feed".to_owned(),
-            });
         }
         Ok(())
     }
