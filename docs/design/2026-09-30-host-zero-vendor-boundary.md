@@ -2536,7 +2536,9 @@ declared only when the provider's documentation states it, a dimension the docum
 not declared, and an input is declared only when the serving path forwards it ("declaration = enforcement",
 `capabilities.rs` module docs). The last condition is a fact about the host's and the package's forwarding that South's
 checks cannot see, and the JSON carries no comments, so the per-profile sources the host kept in `capabilities.rs` are
-not in the file. Q48 asks where provenance lives and who confirms forwarding.
+not in the file. Q48 asks where provenance lives and who confirms forwarding. *(Ruled 2026-10-08, §16 Q48: sources
+and dates in the pull request and the release record, forwarding confirmed by the host owner or package author, and
+the host's loader run over the candidate file before the release.)*
 
 **Package identity.** No package changes: no guest-linked crate is touched, and the same-path rebuild of all seventeen
 packages on this branch gives `component.wasm` digests identical to `origin/main` (`daca924`). The branch keeps the
@@ -2545,7 +2547,9 @@ workspace at 0.49.0, so it does not release. **Measured while preparing it:** bu
 no source change) also gives a different `component.wasm` for all seventeen, because the guest-linked crates' version
 enters their build. The release that first publishes the catalog must therefore patch-bump every package, as 0.49.0
 did, unless Q47 changes how those crates are versioned. That is why this change carries no release; when to cut it is
-the host plan's Q-B6-9.
+the host plan's Q-B6-9. *(Amended 2026-10-08, §13.12: Q47 was ruled (B), so the three crates now carry their own
+versions and a release that leaves them alone, such as the one that first publishes this catalog, re-identifies no
+package.)*
 
 **Not done here.** T21's catalog slice (§12 item 7) and the host's acceptance slice (S6 C5) need the host loader (C3).
 The catalog world (B6-5) is a separate block.
@@ -2576,6 +2580,57 @@ code; all exited 0.
   check, the schema check, the empty-match check or the one-key check each fails its own test; dropping the
   vanished-schema violation fails `test_a_vanished_catalog_schema_fails`, and dropping the verbatim comparison fails
   `test_a_published_catalog_must_equal_its_source`.
+
+### 13.12 Q47: the guest-linked crates carry their own versions (2026-10-08)
+
+**Ruled.** lv approved Q47 (B) on 2026-10-08, as recommended (§16 Q47).
+
+**The rule.** `south-contracts`, `south-provider-api` and `south-component-conformance`, the three workspace crates
+every component links, declare `version = "…"` in their own `Cargo.toml` instead of `version.workspace = true`, as
+`south-task-core` and `south-task-conformance` already did. They start at 0.49.0, the version they had, so their
+contribution to every `component.wasm` does not change now. A crate's version moves only when that crate changes; a
+South release that changes none of them keeps every package's `component.wasm`, and only packages whose own source or
+manifest changed take a new version. A release that does change one of them still changes every `component.wasm`, and
+the digest-stability check (released-artifacts record §8.4) still fails every package that kept its version; Q47
+removes only the re-identification that came from the version number alone.
+
+The runtime release is unchanged in meaning: it is `[workspace.package] version`, which the release workflow matches
+against the tag, `release_index.py` writes as `south_release`, `check-declared-runtime.sh` compares declarations with,
+and `compatibility.json` records as `release.version`. `south-provider-runtime`, `south-core`, `south-north-codec`,
+`south-provider-conformance`, `south-testkit` and `south-transport-reqwest` keep the workspace version. No package
+declares its `south_runtime` from a crate version (the declarations are literal strings in `manifest.json`, §13.6), and
+the host's range check compares those declarations with the host's own `south_runtime`, so no declaration and no
+admission changes. A host's `Cargo.lock` will from now on show these three crates at their own versions under a later
+South tag; hosts depend on South by tag, so nothing resolves differently.
+
+**What changed with it.**
+
+- Tests in the three crates that used `env!("CARGO_PKG_VERSION")` to mean "this release" now read the workspace
+  version from the workspace `Cargo.toml` (`host_range::south_release` in the conformance tests, a local helper in the
+  `south-contracts` and `south-provider-api` tests). Left as they were, they would have kept testing against 0.49.0
+  after the next release: `compatibility.json`'s `release.version` would have failed its test, the shipped-package
+  "no future runtime" bound would have refused a package declaring the new release, and every gate ② report would
+  have named 0.49.0 as its `south_release`.
+- `release_index.py` now refuses a gate ② report whose `south_release` is not the workspace version; it did not read
+  that field before, so the last of those three failures would have shipped silently.
+- `shipped_packages_v1::components_link_only_independently_versioned_workspace_crates` fails when a component lockfile
+  names a workspace crate other than these three (a component that started linking a workspace-versioned crate would
+  be re-identified by every release again), or records a version the crate does not declare.
+- `south-component-conformance`'s optional dependency on `south-provider-runtime` (the `sandbox` feature, off in every
+  component) carries no version requirement, so a release bump does not edit the conformance crate's manifest.
+
+**Release procedure.**
+
+1. A release bump moves `[workspace.package] version`, `compatibility.json`'s `release.version`, the version
+   requirements on the workspace-versioned crates (in `crates/*/Cargo.toml` and `fuzz/Cargo.toml`), the release
+   literal in `south-task-core`'s `rust_library_version_is_independent_of_component_runtime_identity`, and the docs.
+   It does not touch the three crates' versions or the requirements on them, and no component lockfile changes.
+2. A change to one of the three crates bumps that crate's version in the same change (patch for a compatible change,
+   minor otherwise), with the requirements on it and the seventeen component lockfiles. Because it changes every
+   `component.wasm`, every package takes a version bump, as 0.47.0 to 0.49.0 did.
+3. A data-only release (catalog data, docs, host-side crates) bumps no package.
+
+**Evidence (2026-10-08).** EVIDENCE_PLACEHOLDER
 
 ## 14. Existing text to revise in step
 
@@ -2666,7 +2721,7 @@ Tags: S = south maintainers, L = lv, K = kernel.
   maintainers.
   **South half (2026-10-08, §13.11): South maintains the data** (host plan Q-B6-2, taken as recommended when lv
   approved B6): one `south.model-catalog.v1` document per release, in the host's SF24 shape; the host keeps overrides
-  that may only tighten. How a data change is sourced and checked is Q48.
+  that may only tighten. How a data change is sourced and checked is Q48 (ruled 2026-10-08).
 - **Q8 (S)** Do the native reference implementations remain a supported production engine? If so, J3 needs the
   host to disable fallback explicitly (§8.5).
 - **Q9 (S, community host)** Reference-implementation strictness is a behavior change for the community host
@@ -2916,14 +2971,22 @@ Tags: S = south maintainers, L = lv, K = kernel.
   precedent), so a release that changes none of them keeps every package identity; (C) publish catalogs outside the
   release (refused: the index and its checksums are per release, and the host pins through the index). Recommended:
   (B), as its own change before the release that first carries the catalog, after measuring that it does keep the
-  bytes. Open.
+  bytes. **Ruled by lv on 2026-10-08: (B), as recommended.** Implemented in §13.12: the three crates declare their
+  own versions (0.49.0 today), tests read the release from the workspace manifest, the release index checks a gate ②
+  report's `south_release`, and a shipped-package test keeps components from linking any other workspace crate.
 - **Q48 (S, L)** How is a catalog data change sourced and checked (SF25)? The host's discipline needs, per capability,
   the provider documentation that states it and confirmation that the serving path forwards the input; the JSON holds
   neither, and the per-profile sources in the host's `capabilities.rs` did not travel with the export. Recommended: a
   data change names its sources (provider documentation and date) in its pull request and release record, a capability
   that depends on forwarding is added only after the host or package owner confirms it, and the host's loader runs over
   the candidate file before the release (its golden test, pointed at the new file). Whether provenance also gets a file
-  beside the catalog is open. Open.
+  beside the catalog is open. **Ruled by lv on 2026-10-08, as recommended:** (1) the pull request that changes catalog
+  data, and the release record that ships it, name for each changed entry the official provider documentation it
+  rests on and the date it was read; (2) a capability that only holds if the host or the package forwards the input
+  is added only after the host owner or the package author confirms the forwarding, and the pull request says who
+  confirmed it; (3) before a release that carries changed catalog data, the host's capability loader is run over the
+  candidate file (its golden test pointed at the new file), and the release record states the result. This is
+  procedure and changes no code or format. Whether provenance also gets a file beside the catalog stays open.
 - **Q49 (L)** What does the host do with a catalog whose digest matches but which its capability loader refuses (a
   vocabulary South does not check, §13.11)? Recommended: refuse startup, as for a digest mismatch, because a wrong
   catalog can admit or refuse requests wrongly while a missing one only turns prechecks off (W8). Host side. Open.
@@ -3030,3 +3093,6 @@ into the body. Where each landed:
   `finishReason`); `provider-gemini` 1.1.11, released in 0.49.0. The Gemini component record gains decision G7.
 - 2026-10-08, B6-2: the InvokeModel row of §11 points to its component record,
   `2026-10-08-bedrock-invoke-anthropic-component.md` (proposed; questions I-Q1–I-Q12).
+- 2026-10-08, Q47 and Q48 ruled by lv as recommended: new §13.12 (the three guest-linked crates carry their own
+  versions; the runtime release stays the workspace version; the release procedure). §13.11's package-identity and
+  maintenance paragraphs and Q7 gain notes; Q48 is procedure only, and its provenance-file sub-question stays open.

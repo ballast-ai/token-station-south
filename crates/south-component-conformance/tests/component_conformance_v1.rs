@@ -16,6 +16,9 @@ use south_provider_api::{
 use south_provider_api::{CompatibilityMismatchV1, HostExpectationsV1, compatibility_matches};
 use token_station_protocol::{Auth, SecretRef};
 
+#[path = "support/host_range.rs"]
+mod host_range;
+
 /// The manifest's `emits` vocabulary (`SIGNED_HEADER_NAMES`) is the wire-name
 /// projection of the host half's frozen `SignedHeaderV1` — repeated in
 /// `south-provider-api` because that crate depends on no other south crate.
@@ -131,7 +134,7 @@ fn reference_manifest() -> ComponentManifestV1 {
             kernel_version: "0.4.0".to_owned(),
             kernel_revision: "8e34f5a089d0b9c7273b49ddb6952dd87e960019".to_owned(),
             wit_package: WIT_PACKAGE.to_owned(),
-            south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
+            south_runtime: host_range::south_release().to_owned(),
             runtime_abi: None,
             kernel_contracts: std::collections::BTreeMap::new(),
             contracts: std::collections::BTreeMap::new(),
@@ -271,7 +274,7 @@ fn the_tuple_handshake_refuses_any_mismatch_in_tuple_order() {
         ir_schema_id: "token-station-protocol@0.5.0/v0.4.0".to_owned(),
         kernel_version: "0.4.0".to_owned(),
         kernel_revision: "8e34f5a089d0b9c7273b49ddb6952dd87e960019".to_owned(),
-        south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
+        south_runtime: host_range::south_release().to_owned(),
     };
     assert_eq!(compatibility_matches(&manifest, &expectations), Ok(()));
 

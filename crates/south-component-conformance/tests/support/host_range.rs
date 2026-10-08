@@ -3,7 +3,7 @@
 //!
 //! A package whose content does not change keeps its identity and its `south_runtime` across
 //! releases, so that field may lag the workspace version. A test that admits a shipped package with
-//! an exact tuple pinned to `env!("CARGO_PKG_VERSION")` would turn red on the first release where a
+//! an exact tuple pinned to the workspace version would turn red on the first release where a
 //! package keeps an older runtime, and force the re-stamp the range handshake exists to remove.
 //! Tests that load a shipped package therefore admit it the way a host does: through
 //! [`host_range`].
@@ -35,6 +35,24 @@ const IR_SCHEMA_ID: &str = "token-station-protocol@0.5.0/v0.4.0";
 const KERNEL_VERSION: &str = "0.4.0";
 const KERNEL_REVISION: &str = "8e34f5a089d0b9c7273b49ddb6952dd87e960019";
 
+/// The South release this tree builds: `[workspace.package] version` in the workspace
+/// `Cargo.toml`, the version the release workflow matches against the tag.
+///
+/// Not `CARGO_PKG_VERSION`: this crate is linked into every component and carries a version of its
+/// own that moves only when the crate changes (host-zero-vendor-boundary §16 Q47), so its package
+/// version is not the runtime release.
+pub fn south_release() -> &'static str {
+    let manifest: &'static str = include_str!("../../../../Cargo.toml");
+    manifest
+        .split_once("[workspace.package]")
+        .expect("the workspace manifest has a [workspace.package] table")
+        .1
+        .lines()
+        .take_while(|line| !line.starts_with('['))
+        .find_map(|line| line.strip_prefix("version = \"")?.strip_suffix('"'))
+        .expect("[workspace.package] declares a version")
+}
+
 fn repo_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().and_then(Path::parent).expect("repo root")
 }
@@ -65,7 +83,7 @@ pub fn host_range() -> HostRangeV1 {
     HostRangeV1 {
         runtime_abi: as_u32(&record["runtime_abi"], "runtime_abi"),
         south_runtime_min: SOUTH_RUNTIME_FLOOR.to_owned(),
-        south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
+        south_runtime: south_release().to_owned(),
         kernel_contracts,
         contracts: BTreeMap::from([
             (
@@ -111,7 +129,7 @@ pub fn triple(version: &str) -> (u64, u64, u64) {
 pub fn assert_released_runtime(manifest: &ComponentManifestV1) {
     let declared = &manifest.compatibility.south_runtime;
     assert!(
-        triple(declared) <= triple(env!("CARGO_PKG_VERSION")),
+        triple(declared) <= triple(south_release()),
         "{}: declares south runtime {declared}, newer than this release",
         manifest.name
     );

@@ -483,7 +483,10 @@ fn compatibility_manifest_describes_the_library_slice() {
             ("stream".to_owned(), 2),
         ])
     );
-    assert_eq!(manifest.release.version, env!("CARGO_PKG_VERSION"));
+    // The release is the workspace version, which the release workflow matches against the tag.
+    // Not `CARGO_PKG_VERSION`: every component links this crate, so it carries a version of its own
+    // that moves only when the crate changes (host-zero-vendor-boundary §16 Q47).
+    assert_eq!(manifest.release.version, workspace_version());
     assert_eq!(manifest.release.stability, "library_slice");
     assert_eq!(
         manifest.contracts.reserved_header_policy,
@@ -717,4 +720,17 @@ fn compatibility_manifest_describes_the_library_slice() {
             "legacy host summary diverged from provider_call for {host}"
         );
     }
+}
+
+/// `[workspace.package] version` in the workspace `Cargo.toml`.
+fn workspace_version() -> &'static str {
+    let manifest: &'static str = include_str!("../../../Cargo.toml");
+    manifest
+        .split_once("[workspace.package]")
+        .expect("the workspace manifest has a [workspace.package] table")
+        .1
+        .lines()
+        .take_while(|line| !line.starts_with('['))
+        .find_map(|line| line.strip_prefix("version = \"")?.strip_suffix('"'))
+        .expect("[workspace.package] declares a version")
 }

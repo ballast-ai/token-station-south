@@ -129,6 +129,13 @@ So the workflow reads the workspace version and fails when it differs from the t
 new check the slice introduces, and it exists because publishing is the first operation that makes
 the tag and the version two separate facts.
 
+Amended (2026-10-08, boundary record §13.12, §16 Q47): the crates every component links,
+`south-contracts`, `south-provider-api` and `south-component-conformance`, now carry versions of
+their own, so `CARGO_PKG_VERSION` in their tests is no longer the release. The tests that stood for
+the runtime with it, `sandbox_parity_v1.rs` among them, read `[workspace.package] version` from the
+workspace `Cargo.toml` instead (`host_range::south_release`), and the gate this section describes
+still reads that same version.
+
 ### 3.4 What does not change
 
 The three build scripts keep their current form. They are already the parity tests' entry point;
@@ -238,7 +245,9 @@ reads `manifest.json` and `component.wasm` from inside each archive and refuses 
 - an archive holds anything but those two regular files;
 - the archived manifest differs from `components/<name>/manifest.json`, or its `name` differs from the directory;
 - the tag differs from the workspace version;
-- a gate ② report is missing, failing, or describes other bytes (§8.3).
+- a gate ② report is missing, failing, describes other bytes (§8.3), or names a `south_release` other than the
+  workspace version (added 2026-10-08 with the boundary record's §16 Q47: the suite that writes the report runs in a
+  crate whose version is no longer the release).
 
 Field derivation, where §9.2 leaves it implicit:
 
@@ -304,6 +313,13 @@ fixed. But a component links the shared crates by path, so any change to code a 
 shared conformance references, changes its bytes and needs a version bump. A difference with no source change
 would show a build that is not reproducible. The step fails in that case too, and the cause has to be found before
 the release can go out.
+
+Amended (2026-10-08, boundary record §13.12, §16 Q47): a crate's version is part of what a component compiles. While
+every workspace crate took the workspace version, a release bump with no source change still changed every
+`component.wasm`, so every release had to bump every package. The three crates every component links now carry
+versions of their own that move only when they change, so a release that changes none of them keeps every package
+identity, and a release that changes one of them still changes every `component.wasm`, which this check turns into a
+required bump of every package.
 
 ### 8.5 Tests
 

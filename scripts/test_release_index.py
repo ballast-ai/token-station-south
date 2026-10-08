@@ -291,6 +291,16 @@ class GenerateTest(unittest.TestCase):
         with self.assertRaisesRegex(release_index.ReleaseIndexError, "`passed`"):
             self.ws.generate()
 
+    def test_report_naming_another_release_is_refused(self) -> None:
+        # A report that took the conformance crate's own version (§16 Q47) instead of the workspace
+        # version names a release its run was not part of.
+        manifest = provider_manifest()
+        wasm = b"w"
+        manifest_bytes = self.ws.add(manifest, wasm)
+        self.ws.add_report(manifest, manifest_bytes, wasm, south_release="0.42.0")
+        with self.assertRaisesRegex(release_index.ReleaseIndexError, "`south_release`"):
+            self.ws.generate()
+
     def test_report_for_another_suite_is_refused(self) -> None:
         manifest = provider_manifest()
         wasm = b"w"
