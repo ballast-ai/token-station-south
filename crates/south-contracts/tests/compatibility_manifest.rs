@@ -17,6 +17,7 @@ struct CompatibilityManifest {
     hosts: BTreeMap<String, String>,
     host_capabilities: BTreeMap<String, BTreeMap<String, HostCapability>>,
     task_component_capabilities: BTreeMap<String, BTreeMap<String, HostCapability>>,
+    embeddings_component_capabilities: BTreeMap<String, BTreeMap<String, HostCapability>>,
 }
 
 /// A host's status for one capability, plus the size of the conformance table that status was
@@ -64,6 +65,7 @@ struct Contracts {
     response_transcript_limits: ResponseTranscriptLimits,
     task: u16,
     task_limits: TaskLimits,
+    embeddings: u16,
 }
 
 #[derive(Debug, Deserialize)]
@@ -125,6 +127,8 @@ struct Conformance {
     task_component_v1_suite: u32,
     task_component_v2_suite_id: String,
     task_component_v2_suite: u32,
+    embeddings_component_v1_suite_id: String,
+    embeddings_component_v1_suite: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -456,7 +460,7 @@ fn compatibility_manifest_describes_the_library_slice() {
     let contents = fs::read_to_string(path).unwrap();
     let manifest: CompatibilityManifest = serde_json::from_str(&contents).unwrap();
 
-    assert_eq!(manifest.schema_version, 5);
+    assert_eq!(manifest.schema_version, 6);
     // The range handshake's epoch and the kernel contract numbers this release distributes
     // (docs/design/2026-09-30-host-zero-vendor-boundary.md §8.3); every shipped manifest declares
     // the same, which the conformance crate's shipped-package tests check.
@@ -521,6 +525,7 @@ fn compatibility_manifest_describes_the_library_slice() {
         south_contracts::MAX_RESPONSE_TRANSCRIPT_TOTAL_BYTES
     );
     assert_eq!(manifest.contracts.task, south_contracts::TASK_CONTRACT_VERSION);
+    assert_eq!(manifest.contracts.embeddings, south_contracts::EMBEDDINGS_CONTRACT_VERSION);
     assert_eq!(manifest.contracts.task_limits.artifact_urls, south_contracts::MAX_ARTIFACT_URLS);
     assert_eq!(
         manifest.contracts.task_limits.artifact_ref_bytes,
@@ -592,6 +597,11 @@ fn compatibility_manifest_describes_the_library_slice() {
     assert_eq!(manifest.conformance.task_component_v1_suite, 1);
     assert_eq!(manifest.conformance.task_component_v2_suite_id, "south.task-component.v2");
     assert_eq!(manifest.conformance.task_component_v2_suite, 1);
+    assert_eq!(
+        manifest.conformance.embeddings_component_v1_suite_id,
+        "south.embeddings-component.v1"
+    );
+    assert_eq!(manifest.conformance.embeddings_component_v1_suite, 1);
     assert_eq!(manifest.provider_api.wit_version.as_deref(), Some("token-station:adapter@2.0.0"));
     assert_eq!(manifest.provider_runtime.abi_version.as_deref(), Some("provider-adapter-v2"));
     let expected_crates = BTreeMap::from([
@@ -653,6 +663,16 @@ fn compatibility_manifest_describes_the_library_slice() {
             assert_eq!(capabilities[world].status, "not_verified");
             assert_eq!(capabilities[world].cases, None);
         }
+    }
+    // Neither host serves the embeddings world yet; the community host stays
+    // `not_verified` until it lands a synchronous implementation (embeddings
+    // contract record, E-Q5).
+    assert_eq!(manifest.embeddings_component_capabilities.len(), 2);
+    for host in ["token-station", "token-station-server"] {
+        let capabilities = &manifest.embeddings_component_capabilities[host];
+        assert_eq!(capabilities.len(), 1);
+        assert_eq!(capabilities["embeddings_v1"].status, "not_verified");
+        assert_eq!(capabilities["embeddings_v1"].cases, None);
     }
     let expected_capabilities = expected_host_capabilities();
     assert_eq!(manifest.host_capabilities.len(), expected_capabilities.len());

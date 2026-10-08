@@ -1,0 +1,10 @@
+{
+  "request_case": "embeddings.request.batch-dimensions",
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"embeddings\":[{\"values\":[1,2,3,4]},{\"values\":[5,6,7,8]}]}"
+  }
+}

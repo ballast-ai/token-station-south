@@ -96,6 +96,28 @@ locator，依据用量事实应用自身计价策略，并在公开返回前实�
 import，未验收的宿主签名能力也不据此宣称支持。
 详细说明和仍待完成的持久绑定／兼容恢复见[候选设计](docs/design/2026-09-20-task-adapter-v2-candidate.md)。
 
+### embeddings-adapter-v1 boundary (since 0.47.0)
+
+A fourth world sits beside provider-v2, task-v1 and task-v2: WIT package
+`token-station:embeddings-adapter@1.0.0`, world `embeddings-adapter-v1`, judged by
+`south.embeddings-component.v1`. It has a package of its own so chat-side changes never force an
+embeddings version signal. Its five exports (`metadata`, `healthcheck`, `build-embeddings-request`,
+`parse-embeddings-response`, `map-provider-error`) are pure translation and the world imports
+nothing: the loader refuses any `token-station:` or `host` import for it, and the runtime never
+links the signing host. The manifest admits the `bearer` and `header_secret` arms, requires `embed`
+and at least one provider family, and refuses every provider-world declaration as the task worlds
+do. Contract 1 carries text and token-id inputs only, so its vocabulary is `embed`, `batch`,
+`dimensions` and `token_ids`; `media` arrives with contract 2. The runtime stays JSON-only and
+routes by world (provider-v2 / task-v1 / task-v2 / embeddings-v1). The host keeps credentials,
+HTTP, vector extraction, pricing and settlement; both hosts are `not_verified` for this world in
+`compatibility.json`. As with task-v2, the IR-bearing `PreparedEmbeddingsV1`, its single JSON
+codec, the guest ABI shims, the sandbox seam and the suite live in `south-component-conformance`;
+the suite builds each response case's paired request and runs the host's extraction and checks,
+so its fixtures pin what a host decides. The native references for `embeddings-openai-compatible`
+and `embeddings-gemini` pass it, and so do their wasm packages under `components/`, which are thin
+guests over those references and agree with them byte for byte across the ABI. See the
+[embeddings contract record](docs/design/2026-09-30-embeddings-contract.md).
+
 South does not own routing, fallback across upstreams, retry budgets, admission, tenants, billing,
 quota ledgers, audit persistence, task persistence, credential sources, or tracing initialization.
 It never reads a database directly. Transport I/O, time, cancellation, component bytes, and runtime
@@ -176,7 +198,20 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-该库独立 Rust 版本为 0.1.0；八个库与组件运行时当前为 v0.46.0。
+该库独立 Rust 版本为 0.1.0；八个库与组件运行时当前为 v0.47.0。
+**v0.47.0**: the first release of the `embeddings-adapter-v1` world (`docs/design/2026-09-30-embeddings-contract.md`,
+v1 scope §15; release record `docs/design/2026-10-08-release-0.47.0.md`): embeddings contract 1 (text and token-id
+inputs only), suite `south.embeddings-component.v1`, the host functions `extract_vectors_v1`,
+`check_embeddings_response_v1` and `render_vectors_v1`, and the packages `embeddings-openai-compatible` 1.0.0 and
+`embeddings-gemini` 1.0.0, both `not_verified` for both hosts. The two packages declare `south_runtime` 0.47.0, the
+first runtime that knows the world. The shared crates every guest links changed, so the other fourteen packages take
+a patch bump with unchanged behavior and keep `south_runtime` 0.46.0: `provider-openai-compatible` 2.4.1,
+`provider-anthropic` 1.0.13, `provider-gemini` 1.1.9, `provider-bedrock-converse` 1.0.10,
+`provider-bedrock-converse-bearer` 1.0.2, `task-kling` 1.0.9, `task-kling-v2` 0.32.7, `task-minimax-v2` /
+`task-bailian-v2` 0.31.6, `task-byteplus-v2` 0.36.6, and `task-xai-v2` / `task-veo-v2` / `task-wan-image-v2` /
+`task-gmi-image-v2` 0.35.6. `compatibility.json` `schema_version` 6 adds `contracts.embeddings` and the
+`embeddings_component_capabilities` table. **Breaking for hosts on re-pin**: new `CheckV1` and `ManifestErrorV1`
+variants; the kernel pin is unchanged.
 **v0.46.0**: the kernel re-pin to protocol 0.5.0 (mirror `v0.4.0`, `c2581f37`, `canonical_ir` 3), B7b, #138 and the
 Q14 value channel (#151, #152, #154; `docs/design/2026-10-08-kernel-repin-protocol-0.5.0.md`,
 `docs/design/2026-09-30-host-zero-vendor-boundary.md` §13.7, §13.8, §16 Q35–Q45). Every manifest declares

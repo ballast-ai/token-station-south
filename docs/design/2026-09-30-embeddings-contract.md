@@ -1,6 +1,7 @@
 # The embeddings contract and the `embeddings-adapter-v1` world
 
-Status: proposed — drafted for review by the host team (token-station-server P21), not accepted
+Status: **accepted 2026-10-08** with the v1 scope of §15 (media inputs deferred to contract 2); proposed 2026-09-30
+by the host team (token-station-server P21)
 
 Date: 2026-09-30
 
@@ -20,7 +21,9 @@ world to v3) — both approved as recommended on 2026-09-30, as relayed by the h
 responses carry token counts) awaits measurement. The umbrella plan is P21 in the same directory (DP0, DP1).
 
 Rulings: on 2026-09-30 the host owner (lv) ruled on E-Q2, E-Q3 and E-Q6 (§14), and on 2026-10-01 on E-Q10 and
-E-Q11; each ruling is recorded under its question. Questions tagged S remain open for the south maintainers.
+E-Q11; each ruling is recorded under its question. On 2026-10-08 lv, acting for the south maintainers, ruled every
+question tagged S as recommended (E-Q7, which carried no recommendation, keeps today's behaviour), and ruled that v1
+ships text and token-id inputs only (§15).
 
 
 Baseline: south `origin/main` = v0.42.0 (`3135e36`); kernel `f585bc83` (protocol 0.4.0). Host line numbers refer
@@ -89,7 +92,7 @@ pub struct EmbeddingsRequestV1 {
     inputs: Vec<EmbeddingInputV1>,    // 1..=MAX_EMBEDDING_INPUTS, parsed per the table below
     input_shape: InputShapeV1,        // Single | Array, per the table below
     dimensions: Option<u32>,          // > 0
-    encoding_format: EncodingV1,      // Float | Base64: the format the northbound caller wants
+    encoding_format: Option<EncodingV1>, // Float | Base64 as the caller sent it; None = absent (Float applies)
     user: Option<String>,
     extra: serde_json::Map<String, Value>, // every other top-level northbound field, unchanged and bounded
 }
@@ -174,7 +177,9 @@ between `data:` and the **first** `;base64,` and must match `type/subtype` optio
 parameters (RFC 2045 tokens); `media_type` is that text verbatim (today's detection and translation,
 embeddings.rs:26-42, translate_gemini.rs:53-57). The payload is not decoded. Every other string, including a `data:` URI
 that is not base64, is text. `dimensions` must be an integer above 0; `encoding_format` is `float` (the default) or
-`base64`; any other value is a 400 before admission. South supplies this parser as a pure function with golden vectors
+`base64`; any other value is a 400 before admission. The request keeps whether `encoding_format` was sent (absent and
+`null` are the same), because the OpenAI-compatible arm forwards the client body as sent and the dual run compares
+upstream bodies by JSON equality. South supplies this parser as a pure function with golden vectors
 (`parse_embeddings_request_v1`, E-Q9).
 
 On the `conformance` side:
@@ -282,7 +287,7 @@ batch shapes may differ):
 
 | Form | Meaning | Used for |
 |---|---|---|
-| `NorthIdentical` | The upstream body is already a northbound OpenAI embeddings response; the host validates it and, when no conversion is needed, returns it unchanged | OpenAI-compatible |
+| `NorthIdentical` | The upstream body is already a northbound OpenAI embeddings response; the host validates it and, when no conversion is needed, returns it unchanged. `index` is optional: when every item carries it, it orders the vectors; when none does, body order holds; a mix is a protocol error | OpenAI-compatible |
 | `Array { array, vector, index }` | `array` points at the vector array, `vector` is the pointer within an element, `index` is optional (when present, sort by it) | Gemini batch `/embeddings` + `/values`; Vertex `/predictions` + `/embeddings/values` |
 | `Single { vector }` | A single vector | Gemini single `/embedding/values` |
 
@@ -555,6 +560,10 @@ under each billing form), compared item by item:
   them before admission (the contract limit).
 - `NorthIdentical` responses that need an encoding conversion are re-rendered (§8) and lose upstream fields beyond
   the OpenAI shape; the native arm returns them unchanged and unconverted.
+- An explicit `null` for `dimensions`, `encoding_format` or `user`: the contract carries it as absent, so the
+  OpenAI-compatible component does not forward the field; the native arm forwards the client body, nulls included.
+- The Gemini component percent-encodes the model as one URL path segment. For a model name made only of
+  `[A-Za-z0-9._-]` the URL is identical to the native arm's.
 
 Not a dual-run difference: during the dual run both arms park every non-2xx after dispatch as `delivery_unknown`
 (§4); a `rejected` classification starts releasing the reservation only after cutover (boundary record §6.4), when the
@@ -608,6 +617,9 @@ stopgap, but that is a J1 red item and must be cleared before E3.
   (recommended), or the component parsing the whole response (simpler to implement, but needs limits on batching or
   a relaxed payload limit and time limit for this world)? Suggest first measuring the timing of both approaches on a
   2048 × 3072 batch.
+  **Ruled (lv for the south maintainers, 2026-10-08): erasure, as recommended.** The timing of both approaches on a
+  2048 × 3072 batch is measured during E1 and recorded in the release record; a result that makes erasure impractical
+  reopens the question.
 - **E-Q2 (L)** DE3: if Gemini native responses carry token counts, switch to reporting `Reported`; is the fallback
   estimate then kept as a backstop for missing reports, or removed so that a missing report goes to
   `delivery_unknown`?
@@ -617,9 +629,13 @@ stopgap, but that is a J1 red item and must be cleared before E3.
   (this record's approach) and, per the boundary record's Q12, a generic host estimate on the chat side?
   **Ruled (lv, 2026-09-30): acceptable**; see the boundary record §16 Q12.
 - **E-Q4 (S)** Package granularity: three packages (recommended), or one package with three families.
+  **Ruled (lv for the south maintainers, 2026-10-08): three packages.**
 - **E-Q5 (S, community host)** ARCHITECTURE.md:114-115 requires a metering vocabulary to have "a second consumer in
   sight": does the community host have, or will it have, an embeddings surface? If not, this contract's usage
   vocabulary needs an explicit exemption from the maintainers.
+  **Ruled (lv for the south maintainers, 2026-10-08), the same ruling as image record Q5:** the release record states
+  in writing that a synchronous implementation in the community host is recommended (P21 §7), and the embeddings
+  world is marked `not_verified` for the community host in `compatibility.json` until that host lands it.
 - **E-Q6 (L)** `per_input_tokens` has no host consumer today (the host uses only the sum). Keep it optional
   (recommended; zero cost, and it gives Vertex's consistency check something to hold on to), or leave it unmodeled
   in v1?
@@ -627,12 +643,20 @@ stopgap, but that is a J1 red item and must be cleared before E3.
 - **E-Q7 (S)** `NorthIdentical` makes the host return the upstream bytes unchanged, which also passes the upstream's
   `model` field through unchanged (as the host does today); whether the host should instead uniformly rewrite it to
   the northbound model name must be settled consistently with the host's northbound conventions.
+  **Ruled (lv for the south maintainers, 2026-10-08): today's behaviour is kept** — the upstream `model` passes
+  through unchanged, so the dual run can compare bytes. The question carried no recommendation; rewriting is a later,
+  separate change to the host's northbound conventions.
 - **E-Q8 (S)** The embeddings world depends on `contracts.media` v1 for blob references (§3), coupling its release to
   the image world's first minor. Accept the coupling (recommended; the alternative is a second copy of the same
   grammar), or give embeddings its own reference grammar?
+  **Ruled (lv for the south maintainers, 2026-10-08): the coupling is accepted for media inputs, and v1 does not
+  carry media (§15).** Embeddings contract 1 has no blob references at all and ships independently of the image world;
+  media inputs and `TextBlob` arrive in embeddings contract 2, which uses `contracts.media` v1 and so ships in or after
+  the image world's first minor. No second copy of the reference grammar is made.
 - **E-Q9 (S)** South supplies the northbound parser, vector extraction and erasure, encoding detection and rendering
   as pure functions with golden vectors in `south-contracts` (§3, §5, §8), which both hosts call. Recommended; the
   alternative is a host suite that only tests each host's own implementation.
+  **Ruled (lv for the south maintainers, 2026-10-08): as recommended.**
 - **E-Q10 (L)** The bounds on unmodelled northbound fields (32 keys, 16 KiB) and the rule that a component may
   refuse such a field only with a fixture: acceptable?
   **Ruled (lv, 2026-10-01): accepted as proposed** — 32 keys, 16 KiB, and a component may refuse an unmodelled field
@@ -641,6 +665,24 @@ stopgap, but that is a J1 red item and must be cleared before E3.
   family declares its recipe and headers: serve it, or keep refusing?
   **Ruled (lv, 2026-10-01): the host has no special case for Copilot; whether Copilot rows are served on
   `/v1/embeddings` follows from whether the Copilot component declares embeddings support** (§6).
+
+## 15. v1 scope (ruled 2026-10-08)
+
+Contract 1 ships **text and token-id inputs only**, so that embeddings does not wait for the image world's
+`contracts.media` v1 (E-Q8):
+
+- `EmbeddingInputV1` has two variants, `Text(String)` and `TokenIds(Vec<u32>)`. `Media` and `TextBlob` are not in
+  contract 1; they are added by contract 2 together with blob references.
+- The northbound parser still recognizes the `data:<media type>;base64,` form (§3 table) and returns it as a
+  **media-input refusal**, distinct from a malformed request, so the host can answer 400 before admission with zero
+  upstream calls. Rows serving multimodal Gemini models stay on the native arm until contract 2; they remain a J1 item
+  and E3 cannot delete the Gemini arm's media path before then.
+- Without `TextBlob`, a request view above the runtime payload limit (16 MiB) cannot cross the sandbox. The host
+  answers 413 before admission. This is an intentional dual-run difference: the native arm accepts up to the host's
+  32 MiB JSON body limit.
+- The `media` capability word (§4 table) is not in contract 1's vocabulary; a package declaring it is refused at load
+  like any unknown word, and contract 2 adds it.
+- §10's `request.media` row and the `ReferenceIntegrity` check apply from contract 2.
 
 ## Revision note (2026-10-01)
 
@@ -674,3 +716,5 @@ stopgap, but that is a J1 red item and must be cleared before E3.
   - E-Q10 ruled by lv: accepted as proposed (32 keys, 16 KiB, refusal of an unmodelled field only with a fixture).
   - E-Q11 ruled by lv: no host special case for Copilot; serving Copilot rows on `/v1/embeddings` follows from the
     Copilot component's embeddings declaration. §6 states it in place of the open product decision.
+- 2026-10-08 (packages): §11 lists two more intentional differences the reference implementations make, an explicit
+  `null` for `dimensions`, `encoding_format` or `user` not forwarded, and the Gemini model percent-encoded in the URL.

@@ -49,8 +49,9 @@ fn as_u32(value: &Value, what: &str) -> u32 {
 /// The range a host linking this south release accepts.
 ///
 /// `runtime_abi` and `kernel_contracts` are read from `compatibility.json`, the record this release
-/// publishes, so the test host and the published record cannot drift apart. `contracts` is the
-/// task contract this release's codecs decode, and `south_runtime` is the release itself.
+/// publishes, so the test host and the published record cannot drift apart. `contracts` holds the
+/// task and embeddings contracts this release's codecs decode, and `south_runtime` is the release
+/// itself.
 pub fn host_range() -> HostRangeV1 {
     let source = std::fs::read_to_string(repo_root().join("compatibility.json"))
         .expect("compatibility.json reads");
@@ -66,10 +67,16 @@ pub fn host_range() -> HostRangeV1 {
         south_runtime_min: SOUTH_RUNTIME_FLOOR.to_owned(),
         south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
         kernel_contracts,
-        contracts: BTreeMap::from([(
-            "task".to_owned(),
-            BTreeSet::from([u32::from(south_contracts::TASK_CONTRACT_VERSION)]),
-        )]),
+        contracts: BTreeMap::from([
+            (
+                "task".to_owned(),
+                BTreeSet::from([u32::from(south_contracts::TASK_CONTRACT_VERSION)]),
+            ),
+            (
+                "embeddings".to_owned(),
+                BTreeSet::from([u32::from(south_contracts::EMBEDDINGS_CONTRACT_VERSION)]),
+            ),
+        ]),
     }
 }
 

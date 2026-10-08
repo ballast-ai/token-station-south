@@ -6,7 +6,8 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use south_provider_api::{
-    ComponentManifestV1, ComponentMetadataV1, PROVIDER_WORLD, TASK_WORLD, TASK_WORLD_V2,
+    ComponentManifestV1, ComponentMetadataV1, EMBEDDINGS_WORLD, PROVIDER_WORLD, TASK_WORLD,
+    TASK_WORLD_V2,
 };
 use wasmtime::Store;
 use wasmtime::component::{Component, Linker};
@@ -75,6 +76,7 @@ enum InstanceKind {
     Provider(Box<ProviderAdapterV2>),
     Task(Box<crate::bindings::task::TaskAdapterV1>),
     TaskV2(Box<crate::bindings::task_v2::TaskAdapterV2>),
+    Embeddings(Box<crate::bindings::embeddings::EmbeddingsAdapterV1>),
 }
 
 impl InstanceKind {
@@ -88,6 +90,9 @@ impl InstanceKind {
             )),
             Self::Task(_) => Err(wasmtime::Error::msg(
                 "this component exports `task-adapter-v1`; the provider face is not on it",
+            )),
+            Self::Embeddings(_) => Err(wasmtime::Error::msg(
+                "this component exports `embeddings-adapter-v1`; the provider face is not on it",
             )),
         }
     }
@@ -103,6 +108,9 @@ impl InstanceKind {
             Self::Provider(_) => Err(wasmtime::Error::msg(
                 "this component exports `provider-adapter-v2`; the task face is not on it",
             )),
+            Self::Embeddings(_) => Err(wasmtime::Error::msg(
+                "this component exports `embeddings-adapter-v1`; the task face is not on it",
+            )),
         }
     }
 
@@ -114,6 +122,26 @@ impl InstanceKind {
             )),
             Self::Provider(_) => Err(wasmtime::Error::msg(
                 "this component exports `provider-adapter-v2`; the task-v2 face is not on it",
+            )),
+            Self::Embeddings(_) => Err(wasmtime::Error::msg(
+                "this component exports `embeddings-adapter-v1`; the task-v2 face is not on it",
+            )),
+        }
+    }
+
+    /// The embeddings world's accessor, or the ABI-mismatch error naming what
+    /// was actually loaded.
+    fn embeddings(&self) -> wasmtime::Result<&crate::bindings::embeddings::EmbeddingsAdapterV1> {
+        match self {
+            Self::Embeddings(instance) => Ok(instance),
+            Self::Provider(_) => Err(wasmtime::Error::msg(
+                "this component exports `provider-adapter-v2`; the embeddings face is not on it",
+            )),
+            Self::Task(_) => Err(wasmtime::Error::msg(
+                "this component exports `task-adapter-v1`; the embeddings face is not on it",
+            )),
+            Self::TaskV2(_) => Err(wasmtime::Error::msg(
+                "this component exports `task-adapter-v2`; the embeddings face is not on it",
             )),
         }
     }
@@ -180,7 +208,10 @@ impl LoadedComponentV1 {
     ) -> Result<Self, LoadErrorV1> {
         let mut linker: Linker<Ctx> = Linker::new(runtime.engine());
         wasmtime_wasi::p2::add_to_linker_sync(&mut linker).map_err(LoadErrorV1::NotAComponent)?;
-        if manifest.api_version != TASK_WORLD_V2 {
+        // Only the provider and task-v1 worlds import `host`; task-v2 and
+        // embeddings are pure exports, so the linker never offers them a
+        // signing capability to find.
+        if manifest.api_version != TASK_WORLD_V2 && manifest.api_version != EMBEDDINGS_WORLD {
             wit_host::add_to_linker::<Ctx, wasmtime::component::HasSelf<Ctx>>(&mut linker, |ctx| {
                 ctx
             })
@@ -638,6 +669,82 @@ impl LoadedComponentV1 {
         })
     }
 
+    // ── The embeddings world's JSON face ────────────────────────────────
+    //
+    // Three calls, the same shape as the task-v2 face: bounded payloads, one
+    // instance, the guest's error channel left opaque. Each reaches the guest
+    // through `embeddings()`, so calling one on another world's component is
+    // the named ABI-mismatch error rather than a panic.
+
+    /// (`ProviderConfig`, `EmbeddingsRequestV1`) JSON → `PreparedEmbeddingsV1`
+    /// JSON, through the embeddings `build-embeddings-request` export.
+    ///
+    /// # Errors
+    /// Returns [`CallErrorV1`] on world mismatch, resource limit or guest failure.
+    pub fn call_build_embeddings_request(
+        &self,
+        config_json: &str,
+        request_json: &str,
+    ) -> Result<String, CallErrorV1> {
+        self.bounded(&[config_json, request_json])?;
+        let config_json = config_json.to_owned();
+        let request_json = request_json.to_owned();
+        self.call(|handle| {
+            handle
+                .instance
+                .embeddings()?
+                .token_station_embeddings_adapter_embeddings_adapter()
+                .call_build_embeddings_request(&mut handle.store, &config_json, &request_json)
+        })
+    }
+
+    /// (`HttpResponseParts` of a 2xx with its vectors erased, parse context)
+    /// JSON → `EmbeddingsParsedV1` JSON, through the embeddings
+    /// `parse-embeddings-response` export.
+    ///
+    /// # Errors
+    /// Returns [`CallErrorV1`] on world mismatch, resource limit or guest failure.
+    pub fn call_parse_embeddings_response(
+        &self,
+        parts_json: &str,
+        context_json: &str,
+    ) -> Result<String, CallErrorV1> {
+        self.bounded(&[parts_json, context_json])?;
+        let parts_json = parts_json.to_owned();
+        let context_json = context_json.to_owned();
+        self.call(|handle| {
+            handle
+                .instance
+                .embeddings()?
+                .token_station_embeddings_adapter_embeddings_adapter()
+                .call_parse_embeddings_response(&mut handle.store, &parts_json, &context_json)
+        })
+    }
+
+    /// `HttpResponseParts` of a non-2xx JSON → `{ outcome, error }` JSON,
+    /// through the embeddings `map-provider-error` export.
+    ///
+    /// Named apart from [`LoadedComponentV1::call_map_provider_error`], the
+    /// provider world's export of the same WIT name, as the task-v2 calls are
+    /// named apart from task-v1's.
+    ///
+    /// # Errors
+    /// Returns [`CallErrorV1`] on world mismatch, resource limit or guest failure.
+    pub fn call_map_embeddings_provider_error(
+        &self,
+        parts_json: &str,
+    ) -> Result<String, CallErrorV1> {
+        self.bounded(&[parts_json])?;
+        let parts_json = parts_json.to_owned();
+        self.call(|handle| {
+            handle
+                .instance
+                .embeddings()?
+                .token_station_embeddings_adapter_embeddings_adapter()
+                .call_map_provider_error(&mut handle.store, &parts_json)
+        })
+    }
+
     /// Opens one stream on its own instance.
     ///
     /// One instance per stream: `parse-stream-chunk` holds the unparsed tail
@@ -765,6 +872,11 @@ fn instantiate(
         TASK_WORLD_V2 => InstanceKind::TaskV2(Box::new(
             crate::bindings::task_v2::TaskAdapterV2::instantiate(&mut store, component, linker)?,
         )),
+        EMBEDDINGS_WORLD => InstanceKind::Embeddings(Box::new(
+            crate::bindings::embeddings::EmbeddingsAdapterV1::instantiate(
+                &mut store, component, linker,
+            )?,
+        )),
         PROVIDER_WORLD => InstanceKind::Provider(Box::new(ProviderAdapterV2::instantiate(
             &mut store, component, linker,
         )?)),
@@ -814,7 +926,7 @@ fn call_metadata(
     handle: &mut InstanceHandle,
 ) -> wasmtime::Result<ComponentMetadataV1> {
     handle.store.set_epoch_deadline(runtime.deadline_ticks());
-    // Both worlds export `metadata`, through their own accessor: the identity
+    // Every world exports `metadata`, each through its own accessor: the identity
     // gate is shared in shape and specific in call.
     let (name, version, api_version) = match &handle.instance {
         InstanceKind::Provider(instance) => {
@@ -832,6 +944,12 @@ fn call_metadata(
         InstanceKind::TaskV2(instance) => {
             let reported = instance
                 .token_station_task_adapter_task_adapter()
+                .call_metadata(&mut handle.store)?;
+            (reported.name, reported.version, reported.api_version)
+        }
+        InstanceKind::Embeddings(instance) => {
+            let reported = instance
+                .token_station_embeddings_adapter_embeddings_adapter()
                 .call_metadata(&mut handle.store)?;
             (reported.name, reported.version, reported.api_version)
         }

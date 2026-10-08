@@ -1,0 +1,30 @@
+{
+  "provider_config": {
+    "provider": "openai-compatible",
+    "base_url": "https://api.openai.com/v1",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "model": "text-embedding-3-small",
+    "inputs": [
+      {
+        "token_ids": [
+          1,
+          2,
+          3
+        ]
+      },
+      {
+        "token_ids": [
+          4,
+          5
+        ]
+      }
+    ],
+    "input_shape": "array",
+    "dimensions": null,
+    "encoding_format": null,
+    "user": null,
+    "extra": {}
+  }
+}

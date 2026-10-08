@@ -1,0 +1,38 @@
+{
+  "descriptor": {
+    "method": "POST",
+    "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent",
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "model": "models/gemini-embedding-001",
+      "content": {
+        "parts": [
+          {
+            "text": "The quick brown fox"
+          }
+        ]
+      }
+    },
+    "auth": {
+      "scheme": "header",
+      "name": "x-goog-api-key",
+      "secret": "provider_api_key"
+    }
+  },
+  "estimate": {
+    "fallback_input_tokens": 5,
+    "max_input_tokens": 5
+  },
+  "vectors": {
+    "kind": "single",
+    "vector": "/embedding/values"
+  },
+  "immutable_body_paths": [
+    "content",
+    "requests",
+    "model"
+  ],
+  "parse_context": null
+}

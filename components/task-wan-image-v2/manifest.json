@@ -1,6 +1,6 @@
 {
   "name": "task-wan-image-v2",
-  "version": "0.35.5",
+  "version": "0.35.6",
   "api_version": "task-adapter-v2",
   "providers": [
     "wan-image"

@@ -1,6 +1,6 @@
 {
   "name": "task-bailian-v2",
-  "version": "0.31.5",
+  "version": "0.31.6",
   "api_version": "task-adapter-v2",
   "providers": [
     "bailian"

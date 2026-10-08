@@ -1,0 +1,9 @@
+{
+  "usage": {
+    "source": "reported",
+    "input_tokens": 3,
+    "per_input_tokens": null
+  },
+  "vector_count": 1,
+  "upstream_model": "text-embedding-3-small"
+}

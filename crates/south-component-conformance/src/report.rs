@@ -75,7 +75,8 @@ pub enum CheckV1 {
     ///
     /// Usage is funds evidence: a zero the upstream never said would settle a
     /// call as free. The pointer is the fixture author's, so for a third-party
-    /// package the check proves only what the author pointed at.
+    /// package the check proves only what the author pointed at. In the
+    /// embeddings world, `not_reported` is the other honest answer (record §10).
     UsageNeverDefaulted,
     /// An `absent` package never reports usage: every response carries
     /// all-zero usage and no stream emits a usage event (§6.2 item 4).
@@ -117,6 +118,19 @@ pub enum CheckV1 {
     /// component that acted on another key would depend on a value no conforming host sends, or
     /// on one a different package's declaration put there.
     UndeclaredValuesIgnored,
+    /// The vector locator an embeddings request was prepared with, applied to the paired 2xx
+    /// response fixture, resolves exactly as many vectors as the request has inputs
+    /// (embeddings record §10).
+    ///
+    /// The host extracts vectors by the component's declaration; a locator that resolves the
+    /// wrong count turns every such call into a protocol error after dispatch.
+    LocatorResolves,
+    /// Each row the embeddings suite requires by name shows what its name says (embeddings
+    /// record §10): a single and a batch text request, dimensions placed in the body, a
+    /// capability refusal, unmodelled fields carried, a usage sample, missing usage answered by
+    /// the dialect's rule, a count mismatch refused, a rejected credential `rejected` and a 5xx
+    /// `unknown`. A missing row is a [`CheckV1::Coverage`] failure.
+    NamedRowAssertion,
 }
 
 impl CheckV1 {
@@ -139,6 +153,8 @@ impl CheckV1 {
             Self::RequestFactsHonoured => "request_facts_honoured",
             Self::CredentialRecipeMatch => "credential_recipe_match",
             Self::UndeclaredValuesIgnored => "undeclared_values_ignored",
+            Self::LocatorResolves => "locator_resolves",
+            Self::NamedRowAssertion => "named_row_assertion",
         }
     }
 }

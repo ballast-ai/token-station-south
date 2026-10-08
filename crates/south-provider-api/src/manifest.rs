@@ -44,6 +44,19 @@ pub const TASK_WORLD_V2: &str = "task-adapter-v2";
 /// The task-v2 component behavior suite.
 pub const TASK_BEHAVIOR_SUITE_V2: &str = "south.task-component.v2";
 
+/// The embeddings world's WIT package (compatibility tuple field 3).
+///
+/// A package of its own for the same reason as [`TASK_WIT_PACKAGE`]: a package
+/// version is shared by every world in it, so housing embeddings beside chat
+/// would let a chat-side change force an embeddings-side version signal
+/// (2026-09-30 embeddings-contract record, D2).
+pub const EMBEDDINGS_WIT_PACKAGE: &str = "token-station:embeddings-adapter@1.0.0";
+/// The embeddings world name, doubling as the manifest `api_version`
+/// (compatibility tuple field 4).
+pub const EMBEDDINGS_WORLD: &str = "embeddings-adapter-v1";
+/// The embeddings component behavior suite (compatibility tuple 6).
+pub const EMBEDDINGS_BEHAVIOR_SUITE: &str = "south.embeddings-component.v1";
+
 /// A component world this South knows, and the properties gate ① validates a
 /// manifest against once the manifest has declared which world it is for
 /// (2026-08-27 manifest-schema record, D1).
@@ -255,9 +268,38 @@ pub const TASK_WORLD_SCHEMA_V2: WorldSchemaV1 = WorldSchemaV1 {
     auth_arms: &["bearer", "header_secret"],
 };
 
+/// The embeddings world's capability vocabulary, for contract 1.
+///
+/// Each word states the most the component can do; a model that cannot serve
+/// a request is refused per request by `build-embeddings-request`.
+///
+/// - `embed`: the one **mandatory** word — the component builds embeddings
+///   requests at all.
+/// - `batch`: it accepts more than one input in one request.
+/// - `dimensions`: it honors the requested output dimensions.
+/// - `token_ids`: it accepts inputs given as token ids.
+///
+/// `media` is deliberately absent: contract 1 carries text and token-id inputs
+/// only, so a package declaring `media` is refused like any unknown word until
+/// contract 2 adds it (2026-09-30 embeddings-contract record, §15).
+pub const EMBEDDINGS_CAPABILITIES: &[&str] = &["embed", "batch", "dimensions", "token_ids"];
+
+/// The embeddings world, as gate ① validates it.
+///
+/// Its auth arms are the two descriptor credential arms; a minted credential
+/// still reaches the upstream as a bearer token, so `oauth` is not a separate
+/// arm here, and nothing in this world signs (§4).
+pub const EMBEDDINGS_WORLD_SCHEMA: WorldSchemaV1 = WorldSchemaV1 {
+    world: EMBEDDINGS_WORLD,
+    wit_package: EMBEDDINGS_WIT_PACKAGE,
+    behavior_suite: EMBEDDINGS_BEHAVIOR_SUITE,
+    capabilities: EMBEDDINGS_CAPABILITIES,
+    auth_arms: &["bearer", "header_secret"],
+};
+
 /// Every world this South can admit.
 pub const KNOWN_WORLDS: &[WorldSchemaV1] =
-    &[PROVIDER_WORLD_SCHEMA, TASK_WORLD_SCHEMA, TASK_WORLD_SCHEMA_V2];
+    &[PROVIDER_WORLD_SCHEMA, TASK_WORLD_SCHEMA, TASK_WORLD_SCHEMA_V2, EMBEDDINGS_WORLD_SCHEMA];
 
 /// Resolves a manifest's declared `api_version` to a world this South knows.
 #[must_use]
@@ -842,6 +884,14 @@ impl ComponentManifestV1 {
                 return Err(ManifestErrorV1::ProviderFamilyRequired);
             }
         }
+        if world.world == EMBEDDINGS_WORLD {
+            if !self.capabilities.contains("embed") {
+                return Err(ManifestErrorV1::EmbedCapabilityRequired);
+            }
+            if self.providers.is_empty() {
+                return Err(ManifestErrorV1::ProviderFamilyRequired);
+            }
+        }
         for provider in &self.providers {
             validate_component_name(provider)
                 .map_err(|_| ManifestErrorV1::InvalidProviderFamily(provider.clone()))?;
@@ -1169,6 +1219,8 @@ pub enum ManifestErrorV1 {
          stages are mandatory and only `artifact_fetch` is optional"
     )]
     TaskLifecycleCapabilityRequired { missing: String },
+    #[error("every embeddings component must support `embed`")]
+    EmbedCapabilityRequired,
     #[error(
         "usage_evidence is a provider-world declaration; other worlds meter through their own \
          contracts"

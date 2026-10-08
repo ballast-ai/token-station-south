@@ -1,0 +1,8 @@
+{
+  "outcome": "unknown",
+  "error": {
+    "code": "upstream_unavailable",
+    "http_status": 500,
+    "message": "the upstream is unavailable"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "capability",
+    "http_status": 400,
+    "message": "unsupported provider family `openai-compatible`"
+  }
+}

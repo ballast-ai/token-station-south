@@ -15,7 +15,9 @@ mod host_range;
 
 /// The official components this repository ships. Named, so that an empty or
 /// mistyped scan below cannot pass over nothing.
-const OFFICIAL_COMPONENTS: [&str; 14] = [
+const OFFICIAL_COMPONENTS: [&str; 16] = [
+    "embeddings-gemini",
+    "embeddings-openai-compatible",
     "provider-anthropic",
     "provider-bedrock-converse",
     "provider-bedrock-converse-bearer",
@@ -38,7 +40,8 @@ fn repo_root() -> &'static Path {
 
 /// Every directory under `components/` carrying a package manifest. Scanned
 /// rather than listed, so a component added later is covered on the day it
-/// lands instead of the day someone remembers this file.
+/// lands instead of the day someone remembers this file. A manifest without its
+/// guest crate is not a shipped package, and the first check below fails on it.
 fn shipped_packages() -> Vec<PathBuf> {
     let mut packages: Vec<PathBuf> = std::fs::read_dir(repo_root().join("components"))
         .expect("the components directory reads")
@@ -219,6 +222,36 @@ fn task_worlds_have_independent_unverified_host_adoption_records() {
         assert_eq!(manifest["conformance"][format!("{key}_suite_id")], suite);
         assert_eq!(manifest["conformance"][format!("{key}_suite")], 1);
     }
+}
+
+/// A gate ② pass of the two embeddings packages does not establish host adoption of the world:
+/// both hosts stay `not_verified` until each runs the world in production (the embeddings record
+/// §14 E-Q5 asks the community host for a synchronous implementation).
+#[test]
+fn the_embeddings_world_has_independent_unverified_host_adoption_records() {
+    let manifest: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(repo_root().join("compatibility.json")).unwrap(),
+    )
+    .unwrap();
+    let hosts = manifest["embeddings_component_capabilities"]
+        .as_object()
+        .expect("embeddings host capability table");
+    assert_eq!(hosts.len(), 2);
+    for host in ["token-station", "token-station-server"] {
+        let capabilities = hosts[host].as_object().unwrap();
+        assert_eq!(capabilities.len(), 1);
+        assert_eq!(capabilities["embeddings_v1"]["status"], "not_verified");
+        assert!(capabilities["embeddings_v1"].get("cases").is_none());
+    }
+    assert_eq!(
+        manifest["conformance"]["embeddings_component_v1_suite_id"],
+        "south.embeddings-component.v1"
+    );
+    assert_eq!(manifest["conformance"]["embeddings_component_v1_suite"], 1);
+    assert_eq!(
+        manifest["contracts"]["embeddings"],
+        u32::from(south_contracts::EMBEDDINGS_CONTRACT_VERSION)
+    );
 }
 
 /// `FileId` introduces a new runtime capability; no 0.29.0 content identity is reused.
@@ -472,11 +505,10 @@ fn every_shipped_package_declares_the_range_handshake() {
     let kernel_contracts: std::collections::BTreeMap<String, u32> =
         serde_json::from_value(compatibility["kernel_contracts"].clone()).unwrap();
     let mut seen = 0;
-    for entry in std::fs::read_dir(repo_root().join("components")).unwrap() {
-        let manifest: ComponentManifestV1 = serde_json::from_str(
-            &std::fs::read_to_string(entry.unwrap().path().join("manifest.json")).unwrap(),
-        )
-        .unwrap();
+    for package in shipped_packages() {
+        let manifest: ComponentManifestV1 =
+            serde_json::from_str(&std::fs::read_to_string(package.join("manifest.json")).unwrap())
+                .unwrap();
         let declared = &manifest.compatibility;
         assert_eq!(
             declared.runtime_abi,
@@ -488,6 +520,9 @@ fn every_shipped_package_declares_the_range_handshake() {
         let expected_contracts: std::collections::BTreeMap<String, u32> =
             if manifest.api_version.starts_with("task") {
                 [("task".to_owned(), u32::from(south_contracts::TASK_CONTRACT_VERSION))].into()
+            } else if manifest.api_version == south_provider_api::EMBEDDINGS_WORLD {
+                [("embeddings".to_owned(), u32::from(south_contracts::EMBEDDINGS_CONTRACT_VERSION))]
+                    .into()
             } else {
                 std::collections::BTreeMap::new()
             };
@@ -636,6 +671,71 @@ fn the_kernel_repin_retires_every_published_045_package_identity() {
         assert_eq!(
             manifest.compatibility.south_runtime, "0.46.0",
             "{name}: needs canonical_ir 3, which 0.46.0 is the first runtime to record"
+        );
+    }
+}
+
+/// The embeddings world added modules to `south-contracts`, `south-provider-api` and
+/// `south-component-conformance`, which every guest links, and a same-path rebuild of every package
+/// before and after showed a different `component.wasm` for all fourteen, so every identity
+/// published with 0.46.0 retires, or the release's digest-stability check would refuse it. Their
+/// `south_runtime` stays 0.46.0: under the declared-runtime discipline it names the oldest runtime
+/// a package needs, and none of them needs anything newer.
+#[test]
+fn the_embeddings_world_retires_every_published_046_package_identity() {
+    for (name, published) in [
+        ("provider-openai-compatible", "2.4.0"),
+        ("provider-anthropic", "1.0.12"),
+        ("provider-gemini", "1.1.8"),
+        ("provider-bedrock-converse", "1.0.9"),
+        ("provider-bedrock-converse-bearer", "1.0.1"),
+        ("task-kling", "1.0.8"),
+        ("task-kling-v2", "0.32.6"),
+        ("task-minimax-v2", "0.31.5"),
+        ("task-bailian-v2", "0.31.5"),
+        ("task-xai-v2", "0.35.5"),
+        ("task-byteplus-v2", "0.36.5"),
+        ("task-veo-v2", "0.35.5"),
+        ("task-wan-image-v2", "0.35.5"),
+        ("task-gmi-image-v2", "0.35.5"),
+    ] {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_ne!(manifest.version, published, "{name} reused its published identity");
+        assert_eq!(
+            manifest.compatibility.south_runtime, "0.46.0",
+            "{name}: needs nothing newer than 0.46.0, so it declares 0.46.0"
+        );
+    }
+}
+
+/// The embeddings world is first known to the 0.47.0 runtime, so that is the oldest runtime that
+/// admits either embeddings package, and both declare it: a host that claims 0.46.0 refuses them
+/// through the declared runtime alone, even with embeddings contract 1 in its range.
+#[test]
+fn the_embeddings_packages_declare_the_first_runtime_with_the_world() {
+    let mut on_046 = host_range::host_range();
+    "0.46.0".clone_into(&mut on_046.south_runtime);
+    for name in ["embeddings-openai-compatible", "embeddings-gemini"] {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(manifest.compatibility.south_runtime, "0.47.0", "{name}");
+        assert!(
+            matches!(
+                compatibility_admits(&manifest, &on_046),
+                Err(CompatibilityMismatchV2::SouthRuntimeAboveHost { .. })
+            ),
+            "{name}"
         );
     }
 }

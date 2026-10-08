@@ -1,0 +1,9 @@
+{
+  "usage": {
+    "source": "not_reported",
+    "input_tokens": null,
+    "per_input_tokens": null
+  },
+  "vector_count": 2,
+  "upstream_model": null
+}

@@ -1,0 +1,8 @@
+{
+  "outcome": "unknown",
+  "error": {
+    "code": "timeout",
+    "http_status": 408,
+    "message": "the upstream did not answer in time"
+  }
+}

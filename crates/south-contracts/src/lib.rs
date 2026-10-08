@@ -3,6 +3,7 @@
 //! Host-neutral contracts for provider execution.
 
 mod declared;
+mod embeddings;
 mod eventstream;
 mod secret_header;
 mod task;
@@ -14,6 +15,17 @@ pub use declared::{
     DeclaredUserAgentV1, MAX_DECLARED_QUERY_NAME_BYTES, MAX_QUERY_DIGITS, MAX_QUERY_ENUM_VALUES,
     MAX_QUOTA_HEADER_NAME_BYTES, PROVIDER_QUOTA_HEADER_DENIED_NAMES, ProviderQuotaHeaderMapV1,
     QueryValueSyntaxV1, UserAgentV1,
+};
+
+// Embeddings contract 1 (docs/design/2026-09-30-embeddings-contract.md, v1 scope §15).
+pub use embeddings::{
+    EMBEDDINGS_CONTRACT_VERSION, EmbeddingInputV1, EmbeddingVectorV1, EmbeddingsContractErrorV1,
+    EmbeddingsEstimateV1, EmbeddingsFailureOutcomeV1, EmbeddingsParsedV1, EmbeddingsRequestErrorV1,
+    EmbeddingsRequestV1, EmbeddingsUsageFactsV1, EncodingV1, ExtractedVectorsV1, InputShapeV1,
+    JsonPointerV1, MAX_EMBEDDING_INPUTS, MAX_EMBEDDINGS_EXTRA_BYTES, MAX_EMBEDDINGS_EXTRA_FIELDS,
+    MAX_EMBEDDINGS_PARSE_CONTEXT_BYTES, MAX_VECTOR_POINTER_BYTES, UsageSourceV1, VectorLocatorV1,
+    check_embeddings_response_v1, extract_vectors_v1, media_type_of, parse_embeddings_request_v1,
+    render_vectors_v1,
 };
 
 pub use eventstream::{

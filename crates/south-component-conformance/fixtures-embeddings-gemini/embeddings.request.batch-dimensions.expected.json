@@ -1,0 +1,56 @@
+{
+  "descriptor": {
+    "method": "POST",
+    "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents",
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "requests": [
+        {
+          "model": "models/gemini-embedding-001",
+          "content": {
+            "parts": [
+              {
+                "text": "a"
+              }
+            ]
+          },
+          "outputDimensionality": 4
+        },
+        {
+          "model": "models/gemini-embedding-001",
+          "content": {
+            "parts": [
+              {
+                "text": "b"
+              }
+            ]
+          },
+          "outputDimensionality": 4
+        }
+      ]
+    },
+    "auth": {
+      "scheme": "header",
+      "name": "x-goog-api-key",
+      "secret": "provider_api_key"
+    }
+  },
+  "estimate": {
+    "fallback_input_tokens": 2,
+    "max_input_tokens": 2
+  },
+  "vectors": {
+    "kind": "array",
+    "array": "/embeddings",
+    "vector": "/values",
+    "index": null
+  },
+  "immutable_body_paths": [
+    "content",
+    "requests",
+    "model"
+  ],
+  "parse_context": null
+}
