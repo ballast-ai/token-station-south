@@ -1,16 +1,26 @@
 # Speech World: TTS and ASR (speech-adapter-v1)
 
-Status: **proposed — drafted for review by the host team (token-station-server P21/P22/P23), not accepted**
+Status: **accepted 2026-10-08, with Q10 and Q11 open** (neither blocks the contract, §16; reconciled with south 0.50.0 in
+§17; implementation outline in §18); proposed 2026-09-30 by the host team (token-station-server P21/P22/P23)
 
 Date: 2026-09-30
 
-Revised: 2026-10-01 after independent review (see the revision note at the end).
+Revised: 2026-10-01 after independent review; 2026-10-08 rulings and 2026-10-09 reconciliation with 0.50.0 (see the
+revision notes at the end).
 
 Rulings: on 2026-09-30 the host owner (lv) ruled on Q3, Q4, Q5, Q6, Q7 and Q8 (§16), each as recommended. Q3 and Q8
 also need the south maintainers. On 2026-10-01 lv ruled that the ASR missing-duration fix goes into the component
 (§9; recorded under Q4), and that an ElevenLabs duration taken from the last timestamp is labeled estimated (Q12).
 Q10 and Q11 depend on other host plans and stay open.
+On 2026-10-08 lv, acting for the south maintainers, ruled as recommended on the south half of Q3 and Q8 and on Q1, Q2,
+Q13 and Q14, and ruled Q9 the same way as image Q5 and embeddings E-Q5 (§16). Q10 and Q11 stay open; neither blocks
+accepting this record, because neither changes anything the contract contains (§16 says what each one gates). No ruling
+is reversed; §17 records one reconciliation finding for lv: the contract numbers in the Q1 ruling are stale (its
+substance stands; the bump is 11 → 12).
 
+
+Reconciliation baseline (2026-10-09): south `origin/main` = `6aa2813` = v0.50.0; §17 lists what moved since the
+baseline below. Host plans were read at token-station-server `fbee0ed7`.
 
 Baseline: south `origin/main` = `3135e36` (v0.42.0). Server line numbers come from host `a82c852b`; P23 was written at
 `d672b945`, so its line numbers have drifted — re-verify in place before citing.
@@ -598,20 +608,152 @@ A South **minor**, sharing `contracts.media` with the image world:
 
 | # | Question | Recommendation | Decided by |
 |---|---|---|---|
-| Q1 | SSML: add `TextPostRequestV1` (in the image minor's single HTTP contract 10 bump, §14), or the host sends it itself (D3a) | Add it, in that bump | south maintainers |
-| Q2 | `output_format` (D3b): declared by the package per the boundary record §10, or added to `QueryParameterV1` | The §10 declaration; the closed-set addition only as a stop-gap if V3-1's ElevenLabs cutover precedes §10 | south maintainers |
-| Q3 | Decoding and container wrapping executed by host closed transforms, rather than P23 V1's "pure functions inside the component" (§6) | The host executes them | lv — **ruled by lv, 2026-09-30: as recommended** (P23 V1's text is amended accordingly); south maintainers (transform table, released complete in `contracts.media` v1, §14) — open |
+| Q1 | SSML: add `TextPostRequestV1` (in the image minor's single HTTP contract 10 bump, §14), or the host sends it itself (D3a) | Add it, in that bump | south maintainers — **ruled 2026-10-08** (below) |
+| Q2 | `output_format` (D3b): declared by the package per the boundary record §10, or added to `QueryParameterV1` | The §10 declaration; the closed-set addition only as a stop-gap if V3-1's ElevenLabs cutover precedes §10 | south maintainers — **ruled 2026-10-08** (below) |
+| Q3 | Decoding and container wrapping executed by host closed transforms, rather than P23 V1's "pure functions inside the component" (§6) | The host executes them | lv — **ruled by lv, 2026-09-30: as recommended** (P23 V1's text is amended accordingly); south maintainers (transform table, released complete in `contracts.media` v1, §14) — **ruled by lv for them, 2026-10-08: as recommended** (below) |
 | Q4 | When the ASR client asks for srt / vtt: `seconds: null` with estimation, or the end time of the last subtitle (which slightly undercounts silence) | Estimate, visibly in the ledger | lv — **ruled by lv, 2026-09-30: as recommended**. **Superseded in scope by lv's ruling of 2026-10-01**: the component asks for a duration-bearing format and renders srt / vtt itself (§9), so srt / vtt no longer lead to `null`; the 2026-09-30 ruling (estimate, visibly) still governs the residual `null` cases listed in §9 |
 | Q5 | "Character count" defined as the number of Unicode scalar values in the northbound `input`; the host checks `source = request` for exact equality | As stated | lv — **ruled by lv, 2026-09-30: as recommended** |
 | Q6 | Azure missing duration: keep `unknown` (502 today), or fold it into the generic estimation | Keep `unknown` | lv — **ruled by lv, 2026-09-30: as recommended** |
 | Q7 | Vertex silently downgrading mp3 and others to wav: copy it, or refuse in `prepare` | Copy it during the dual run; refuse afterwards | lv — **ruled by lv, 2026-09-30: as recommended** |
-| Q8 | Two separate worlds for image and speech, or one synchronous media world (image record Q4) | Separate | lv — **ruled by lv, 2026-09-30: as recommended**; south maintainers — open |
-| Q9 | A second consumer of the metering vocabulary: the community host today has no multipart surface and no byte-returning surface (`2026-09-09-multipart-request-body.md:189`, `2026-09-09-buffered-binary-response.md:302`), so per `ARCHITECTURE.md:114-115` the admission condition is not met at present. The same question is open as the image record Q5, the boundary record Q9 and the embeddings record E-Q5 | Take P21 §7's "synchronous implementation recommended" as the written commitment; otherwise do not admit for now | lv + south maintainers |
-| Q10 | Rows on non-OpenAI-compatible arms configured with only a token price: today they can be listed but every request is refused at admission with a "no price configured" 400 (no funds move); after migration the refusal comes from `prepare` and names the cause (§8) | Accept; list the affected rows with a read-only query before cutting over | lv |
-| Q11 | If P25 chooses A for the native ElevenLabs route, does it reuse this world's components and immutability declaration directly | Reuse | lv (P25) |
+| Q8 | Two separate worlds for image and speech, or one synchronous media world (image record Q4) | Separate | lv — **ruled by lv, 2026-09-30: as recommended**; south maintainers — **ruled by lv for them, 2026-10-08: as recommended** (below) |
+| Q9 | A second consumer of the metering vocabulary: the community host today has no multipart surface and no byte-returning surface (`2026-09-09-multipart-request-body.md:189`, `2026-09-09-buffered-binary-response.md:302`), so per `ARCHITECTURE.md:114-115` the admission condition is not met at present. The same question is open as the image record Q5, the boundary record Q9 and the embeddings record E-Q5 | Take P21 §7's "synchronous implementation recommended" as the written commitment; otherwise do not admit for now | lv + south maintainers — **ruled 2026-10-08** (below) |
+| Q10 | Rows on non-OpenAI-compatible arms configured with only a token price: today they can be listed but every request is refused at admission with a "no price configured" 400 (no funds move); after migration the refusal comes from `prepare` and names the cause (§8) | Accept; list the affected rows with a read-only query before cutting over | lv — **open**; blocks nothing in the contract (below) |
+| Q11 | If P25 chooses A for the native ElevenLabs route, does it reuse this world's components and immutability declaration directly | Reuse | lv (P25) — **open**; blocks nothing in the contract (below) |
 | Q12 | ASR duration with `basis = last_timestamp` (ElevenLabs): record it as a measurement (as today) or set `quantity_estimated = 1` (it undercounts trailing silence, the reason Q4 gave against the same method for subtitles) | Label it estimated; the amount is unchanged, only the ledger mark moves | lv — **ruled by lv, 2026-10-01: as recommended** (label it estimated, `quantity_estimated = 1`; the amount is unchanged; §9) |
-| Q13 | South supplies `decode_sse_v1` (rules in §6) as a pure function with golden vectors in `south-contracts`, which both hosts call | Supply it; place it in `south-contracts` under the fuzz obligation | south maintainers |
-| Q14 | The speech dialect words `speech.translate` and `speech.verbose_json` (§4): defined by this world's contract, or free-form words each component documents | Defined by the contract (closed, two words), so catalog data can set them without knowing the component | south maintainers |
+| Q13 | South supplies `decode_sse_v1` (rules in §6) as a pure function with golden vectors in `south-contracts`, which both hosts call | Supply it; place it in `south-contracts` under the fuzz obligation | south maintainers — **ruled 2026-10-08** (below) |
+| Q14 | The speech dialect words `speech.translate` and `speech.verbose_json` (§4): defined by this world's contract, or free-form words each component documents | Defined by the contract (closed, two words), so catalog data can set them without knowing the component | south maintainers — **ruled 2026-10-08** (below) |
+
+### Rulings of 2026-10-08
+
+lv, the host owner, ruled on 2026-10-08 on the questions tagged for the south maintainers, acting for them, each as
+recommended; the line after a ruling states the consequence. Q4 to Q7 and Q12 were ruled on 2026-09-30 and 2026-10-01
+and are unchanged.
+
+- **Q1** — Ruled (lv for the south maintainers, 2026-10-08): as recommended. South adds `TextPostRequestV1`, with a
+  binary execution entry point, in the single HTTP contract bump of the media minor. **The bump is 11 → 12, not 9 → 10**
+  (§17.1; the contract numbers in the record were stale, the substance of the ruling stands).
+- **Q2** — Ruled (lv for the south maintainers, 2026-10-08): as recommended. `output_format` is a package-declared
+  `query_parameters` entry per the boundary record §10; adding `OutputFormat` to `QueryParameterV1` remains only a
+  stop-gap. The declaration route needs gate ① to admit `query_parameters` in this world (§17.3), which is a manifest
+  change and not a contract change; with it, the stop-gap is not needed.
+- **Q3** — Ruled, south half (lv for the south maintainers, 2026-10-08): as recommended. The transform table and
+  container wrapping are executed by the host as closed transforms and released complete in `contracts.media` v1.
+  Together with lv's ruling of 2026-09-30 both halves are decided.
+- **Q8** — Ruled, south half (lv for the south maintainers, 2026-10-08): as recommended. Separate worlds for image and
+  speech; with the ruling of 2026-09-30 both halves are decided.
+- **Q9** — Ruled (lv, 2026-10-08), the same ruling as image Q5 and embeddings E-Q5 (it is the same question): the
+  release record of the first media release states in writing that a synchronous implementation in the community host is
+  recommended (P21 §7), and the media vocabulary capabilities are `not_verified` for the community host in
+  `compatibility.json` until that host lands it.
+- **Q13** — Ruled (lv for the south maintainers, 2026-10-08): as recommended. South supplies `decode_sse_v1` with golden
+  vectors in `south-contracts`, under the fuzz obligation; both hosts call it. It ships with the image minor (S-I-1).
+- **Q14** — Ruled (lv for the south maintainers, 2026-10-08): as recommended. The speech dialect words `speech.translate`
+  and `speech.verbose_json` are defined by the contract, closed to those two, so catalog data can set them without
+  knowing a component. See §17.5 on where such data can come from today.
+
+**Q10 and Q11 stay open, and neither blocks accepting this record.** They depend on other host plans (read at
+token-station-server `fbee0ed7`) and decide nothing the south contract contains:
+
+- **Q10 (lv)** concerns the host's cutover, not the contract. After migration a row on a non-OpenAI-compatible arm that
+  has only a token price is refused by `prepare` naming the cause (§8), which the contract already says. What Q10 gates
+  is the host's pre-cutover step: list the affected rows with a read-only query before each such TTS arm is cut over
+  (V3 and V4). Its premise is partly out of date: per the host's gap ledger (#91, 2026-10-08), the host now derives its
+  listing check from the selected arm, so such a row is judged "no price configured" when listed and can no longer be
+  listed and then refused at admission; the one known instance (a Bailian row) was repriced, and what remains undone is
+  an active scan for such rows already listed. §8's sentence "can be listed" describes the state before that fix.
+  The contract needs nothing beyond the `prepare` refusal.
+- **Q11 (lv, in host plan P25)** applies only if P25 chooses branch A (a generic native passthrough contract) for the
+  native ElevenLabs route. The host plans recommend branch B (retire it) for ElevenLabs and have not decided; nothing in
+  them selects A. The immutability declaration of §7 (`immutable_body_paths`, `immutable_form_fields`) is already what
+  an A-branch design would read, and the record already says so. No field specific to a native route is to be added
+  to this contract; a real branch-A design would be its own record.
+
+## 17. Reconciliation with 0.50.0 (2026-10-09)
+
+This record was written at v0.42.0; the image record's §18 lists what 0.43.0 to 0.50.0 changed and its section numbers
+are cited here. Everything below was read from `origin/main` at `6aa2813` (v0.50.0). Nothing of this world exists in
+the code yet (no `TextPostRequestV1`, `decode_sse_v1`, `from_hex`, `concat`, `wav_pcm_s16le`, `speech` module or WIT).
+
+### 17.1 HTTP contract number
+
+| Record assumes | Fact on main | Effect |
+|---|---|---|
+| The single bump is HTTP contract 9 → 10, released in the image minor (§5, §13, §14, Q1) | `HTTP_CONTRACT_VERSION` is 11 (`crates/south-contracts/src/lib.rs:106`): 10 is B7a (0.43.0), 11 is SF26 (0.47.0) (image record §18.1) | The bump is 11 → 12, in the media minor, carrying `execute_multipart_binary_call_v1` and `TextPostRequestV1` with its binary entry point. "Contract 10" for these shapes reads "contract 12" throughout this record |
+| The ASR arms use `execute_multipart_binary_call_v1` (§5) | The twin is a thin entry point over the shared `execute_buffered`; the reqwest binary transport already carries any prepared request (image record §18.1). No raw twin of any binary entry point exists (0.26.0 D7) | none for speech; the raw-twin question is the image record's S-I-2 |
+| `TextPostRequestV1` adds a request-body shape (§5, D3a) | The prepared request has a JSON and a multipart body arm (`south-core/src/lib.rs`, `PreparedHttpRequestV1`); the reqwest transport renders the multipart media type itself (`ARCHITECTURE.md:31`) | `TextPostRequestV1` is the larger half of the bump: contract type, a text body arm, the rendering of the `content-type` from the closed media type (`application/ssml+xml` only), a binary execution entry point, testkit runners and provider-suite rows |
+| The `OutputFormat` stop-gap (D3b) would join the bump | Not needed if Q2's declaration route is open (§17.3) | If it were needed it would join the same 11 → 12 bump |
+
+### 17.2 `contracts.media`, `contracts.speech` and ordering
+
+`compatibility.json` has no `media` or `speech` key yet (image record §18.2 lists the keys). Speech needs from the image
+world's work, and cannot ship before them: S-I-1 (the `media` module with the complete transform table including
+`from_hex`, `concat` and `wav_pcm_s16le`, the `text` body and `sse` form, the elider, parser and encoder,
+`decode_sse_v1`, the safe fetch pure functions), S-I-2 (HTTP contract 12) and the host suite `south.safe-fetch.v1` of
+S-I-5. The image minor releases `contracts.media` v1 complete, so speech adds nothing to it (§14); speech packages declare
+`{"media": 1, "speech": 1}`. The record allows the speech world to ship in the image minor or after it; the steps of §18
+are written to let either happen.
+
+### 17.3 Value channel, instance declarations and Vertex
+
+| Record assumes | Fact | Effect |
+|---|---|---|
+| Vertex TTS takes project and region from "an exported credential attribute or non-secret config" (§12) | Gate ① admits `config_schema` and exported credential attributes only in the provider and embeddings worlds (`south-provider-api/src/manifest.rs:867`, `values.rs:72`); the embeddings widening of 0.48.0 is the model (embeddings record §16) | Same widening for this world (image record §18.3); a Vertex TTS package then copies the `embeddings-vertex` configuration: keys `region` (`aws_region` syntax) and `project` (`gcp_project_id`), `base_url` the location's API origin, the component appends `/v1/projects/{project}/locations/{region}/publishers/google/models/{model}:generateContent` |
+| Credential recipe v1 (B4) is needed first (§12, §13 V4) | B4 shipped in 0.43.0; the recipe `vertex_sa` of `components/embeddings-vertex/manifest.json` (RS256 `jwt_sign`, then `oauth2_token`, scope `cloud-platform`, exports `project_id`) is reusable as is for Vertex TTS (image record §18.4); the package ships its own `credential.*` fixtures | The south-side prerequisite of V4 Vertex is met except the gate ① widening |
+| D3b: ElevenLabs `output_format` is declared as a `query_parameters` entry (boundary record §10) | `validate_instances` (`south-provider-api/src/instances.rs:244-254`) refuses `query_parameters`, `quota_headers` and `user_agent` outside the provider world, so the recommended route is closed in this world today. Everything else it needs exists: `QueryParameterV1::Declared` (`lib.rs:1202`, HTTP contract 10) and a `Token` value syntax (`declared.rs:76`) that admits `mp3_44100_128` (unreserved bytes include `_`) | Gate ① admits `query_parameters` in the speech world — that one declaration only; `quota_headers` and `user_agent` stay refused until a consumer exists. Then `OutputFormat` is not added. Azure's `api-version` and MiniMax's `GroupId` are sanctioned names and need nothing |
+| The two header names are in the compiled-in set; "once the boundary record §10 lands, secret header names are declared by the package" (§3) | §10 landed in 0.43.0: the closed set is five names including `xi-api-key` and `ocp-apim-subscription-key` (`lib.rs:993`), and a package may declare others in `secret_headers` (auth contract 5, `DeclaredHeaderSecret`) | The descriptor auth twin admits both (image record §18.4); no list in this world |
+
+### 17.4 Descriptor, runtime and gate ① shape
+
+The `WorldSchemaV1` row, `validate_role` branch ("at least one of `synthesize`, `transcribe`; `translate` implies
+`transcribe`") and runtime world are as the image record's §18.6 describes for an image row: `SPEECH_WORLD_SCHEMA`,
+capabilities `synthesize`, `transcribe`, `translate`, `artifact_fetch` and auth arms `bearer`, `header_secret`. The
+`artifact_fetch` precedent is now at `manifest.rs:230-242` (was `:109-121`). The speech world is the fourth world without
+a host import; the enumerated exclusions should be world properties by then. The runtime limits and the single-instance
+lock are as in the image record §18.6.
+
+### 17.5 The model catalog and the speech dialect words
+
+The 0.50.0 catalog (`south.model-catalog.v1`) carries image and video capabilities only, in the host's vocabulary, which
+South does not interpret; text was ruled out of it, and a `modality` field was not adopted (boundary record §13.11). It
+therefore has no place for `speech.translate` or `speech.verbose_json`. Today those words reach a component only through
+`ProviderConfig.models[].supported_parameters`, that is, from the operator's or the host catalog's model rows
+(`capability.rs:59` in the pinned kernel). §4's phrase "that the catalog or the operator sets" has only the second path
+available: carrying the words in a South catalog would be a new catalog schema and a change to the host's capability
+vocabulary and loader, and is not part of this record. The Q14 ruling (two closed words defined by the contract) stands
+unchanged, and so does §4's rule that the host refuses an operation not declared by both the component and the model.
+
+### 17.6 Citations that drifted
+
+| Cited | Now |
+|---|---|
+| `lib.rs:1585`, `:2331` (`MultipartPostRequestV1`, `BufferedBinaryResponseV1`) | `lib.rs:1729`, `:2519` |
+| `lib.rs:884-894`, `:1064-1090` (`SecretHeaderV1`, `QueryParameterV1`) | `lib.rs:993`, `:1179-1204` |
+| `manifest.rs:109-121` | `manifest.rs:230-242` |
+| `component.rs:136` | `component.rs:165` |
+| `ARCHITECTURE.md:110`, `:114-115` | `ARCHITECTURE.md:136`, `:140-141` |
+| image record `lib.rs` / `south-core` / `component.rs` / `loader.rs` citations (the speech record cites them through the image record's convention) | image record §18.7 |
+
+Unchanged: `runtime.rs:26-34`, `task_v2.rs:100-105`, `task-adapter-v2.wit:63-66`. Server citations were not re-verified;
+two host facts moved and are noted in the rulings above (Q10's premise) and in §18 (the host's generic executor).
+
+## 18. Implementation steps, at outline level
+
+Speech comes after the image world's first steps and reuses them; it adds its own contract module, a world, a suite and
+packages. Steps are in dependency order; "host prerequisite" is work outside south that the *host cutover* waits for.
+
+| Step | Work | Depends on | Acceptance |
+|---|---|---|---|
+| **S-S-0** Shared with the image world | S-I-1 (`media` module including the speech words, `decode_sse_v1`, safe fetch functions), S-I-2 (HTTP contract 12 with `TextPostRequestV1`), the `south.safe-fetch.v1` host suite of S-I-5. Nothing in speech is built twice | image record §19 | Those steps' own acceptance; the WAV container encoder and the hex and concat transforms have golden vectors even though no image component uses them |
+| **S-S-1** `speech` contract module | Facts (`characters {count, upper?}`, `metering_forms`, `reservation`, `output_media_type`), `SpeechMeteringV1` (characters with `source`, seconds with `basis`, tokens), outcomes, `SpeechArtifactV1` (`body`, `inline`, `segments`, `url`, `container`), the ASR delivery forms, the two dialect words, `immutable_form_fields`, `PreparedSpeechCallV1` | S-S-0 | Types and codecs with tests in `crates/south-contracts`; `south-contracts` version bump (Q47) |
+| **S-S-2** WIT, manifest, gate ①, runtime | `wit/speech-adapter.wit` (§7), `SPEECH_*` constants and schema row, `validate_role` branch; gate ① admits `config_schema`, credential attributes and `query_parameters` in this world (§17.3); runtime `bindgen!` module and instance kind; `UndeclaredValuesIgnored` row | S-S-1, image S-I-3 and S-I-4 | Refusal tests for unknown words, `host_values`, `endpoint`, `quota_headers`, `user_agent`; the embeddings-style runtime tests |
+| **S-S-3** Suite `south.speech-component.v1` and references | Codecs, trait, ABI and sandbox adapters, the required rows of §11 (`ssml_escaping`, `client_format_rendering`, `absent_duration_is_null_or_unknown`, `undeclared_operation_refused`, `second_hop_artifact`, `empty_audio_is_unknown`, the metering rows) as additive `CheckV1` variants; the host-obligation vectors for the WAV container and `decode_sse_v1` | S-S-2, image S-I-5 | A native reference passes every row and each row has a failing mutation; `south-component-conformance` version bump |
+| **S-S-4** Packages, by the record's batches (§13) | V3-1: xAI, Groq, OpenAI-compatible with SSE, then ElevenLabs (needs the `query_parameters` declaration); V3-2: MiMo, MiniMax; V3-3: the four ASR arms (need S-I-2's multipart binary twin and the parser and encoder); V4: Bailian (second hop), Vertex (the recipe of §17.3 and the WAV container), Azure SSML (needs `TextPostRequestV1`). Fixtures are transcribed from the server's native arms; the ASR duration cases marked "to be measured" in §9 (whisper-style usage seconds, an explicit ElevenLabs duration field, which models accept `verbose_json`) are measured while the fixtures are written and recorded in the package's fixture README | S-S-3 | Each package passes the suite natively and in the sandbox with identical ABI answers; **host prerequisites for every cutover**: the host's generic media executor (not started), the host's existing handling of `seconds: null` (the 60-second fallback marked estimated, kept as is), and the Q10 listing query for non-OpenAI TTS rows |
+| **S-S-5** Release | As the image record's S-I-8: crate and package version bumps (Q47), `compatibility.json` (`contracts.speech`, the suite fields, the speech entry in `media_component_capabilities`, `not_verified`), the written Q9 commitment, release record, README and ARCHITECTURE entries, digest-stability and declared-runtime checks, release index | S-S-4 (or its first batch) | The release checks of 0.47.0 and 0.48.0 pass |
+
+Host prerequisites outside south, in addition to the image record's list: the host's WAV container encoding and SSE
+decoding equal to south's vectors (in practice: the host calls the south functions), the three reservation algorithms
+keeping today's amounts with generic branch conditions (§8), and the translation acceptance with non-English audio, which
+stays a host test (§4).
 
 ## Revision note (2026-10-01)
 
@@ -652,3 +794,15 @@ A South **minor**, sharing `contracts.media` with the image world:
     state it.
   - §13 dual-run reconciliation records the resulting intentional difference: ElevenLabs rows carry
     `quantity_estimated = 1` where the native path records 0, the amount unchanged (Q12).
+
+## Revision note (2026-10-09)
+
+- Header: `Status` is accepted with Q10 and Q11 open; `Rulings` and `Revised` updated; a reconciliation baseline
+  paragraph added.
+- §16: rulings of 2026-10-08 recorded under Q1, Q2, Q3, Q8, Q9, Q13 and Q14 with their consequences; Q10 and Q11 stay
+  open with what each blocks (nothing in the contract; the host's cutover for Q10, a branch-A design for Q11). No design
+  decision changed.
+- §17 (new): reconciliation with 0.50.0. The HTTP contract bump is 11 → 12, not 9 → 10 (the substance of the Q1 ruling
+  stands); gate ① must admit `config_schema`, credential attributes and `query_parameters` in this world; Vertex TTS
+  reuses the `embeddings-vertex` recipe; the 0.50.0 catalog carries no speech data; a table of drifted citations.
+- §18 (new): outline of the implementation steps S-S-0 to S-S-5 and the prerequisites outside south.
