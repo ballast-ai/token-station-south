@@ -56,6 +56,7 @@ fn the_reference_passes_its_suite_with_its_manifest() {
         CheckV1::AuthErrorsAreNotRetriable,
         CheckV1::LocatorResolves,
         CheckV1::NamedRowAssertion,
+        CheckV1::UndeclaredValuesIgnored,
     ] {
         assert!(ran.contains(&check), "{check} never ran");
     }

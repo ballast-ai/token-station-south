@@ -684,6 +684,38 @@ Contract 1 ships **text and token-id inputs only**, so that embeddings does not 
   like any unknown word, and contract 2 adds it.
 - §10's `request.media` row and the `ReferenceIntegrity` check apply from contract 2.
 
+## 16. Values channel in this world (2026-10-08)
+
+§6 has Vertex take its project and region "from non-secret configuration or minted exported attributes", which assumes
+the Q14 value channel (boundary record §13.8). That channel shipped in 0.46.0 for the provider world only: gate ①
+refused `config_schema` and exported credential attributes in every other world, because no host path outside the
+provider world built `ProviderConfig.declared`. `build-embeddings-request` receives a `ProviderConfig` too (§4), and
+the embeddings host already mints the slot and obtains the exported attributes before it builds the request (§9 step
+1), so this world admits the two sources of `declared`, and nothing else:
+
+- **Admitted.** A family's `config_schema`, under the provider world's key rules (the family is one the package
+  declares; names are lowercase snake_case; the syntax comes from the closed set; only an optional key has a
+  `default`, of its own syntax), and `attributes` on credential recipes (a field attribute from a non-secret field that
+  declares a syntax, or a selector's `selected_recipe`). Both reach `declared` through
+  `ComponentManifestV1::declared_keys` / `declared_values` exactly as in the provider world, and D8 (one namespace: no
+  family uses one name as a config key and as an attribute) applies.
+- **Still refused.** `endpoint`: the URL stays the component's, under `base_url`, as for the other two dialects (§6).
+  `host_values`: it lives on `ChatRequest`, which this world does not have. The instance declarations
+  (`query_parameters`, `quota_headers`, `user_agent`), `signing`, `stream_framing`, `usage_evidence` and
+  `request_facts`, as before.
+- **The task worlds are unchanged.** They still refuse `config_schema` and credential attributes; their `declared` is
+  empty.
+- **Gate ②.** `south.embeddings-component.v1` gains the provider suite's `UndeclaredValuesIgnored`: for every request
+  case it adds one key the manifest does not declare to `provider_config.declared` and requires the same answer, a
+  refusal included. An additive check, so the suite stays version 1.
+- **The host's side** is the provider world's list in the boundary record's §13.8, for this world: build `declared` per attempt with
+  `declared_values` from the row's config values and the selected credential's exported attributes, pass no other key,
+  and strip any client-supplied value that collides with a declared key.
+
+No contract number changes, and the two packages 0.47.0 shipped declare neither source, so their manifests are
+unchanged. The 0.47.0 runtime refuses an embeddings manifest that declares either source, so the widening ships in
+0.48.0, and a package that uses it declares `south_runtime` 0.48.0, the oldest runtime that admits it.
+
 ## Revision note (2026-10-01)
 
 - Header: host baseline moved to `a82c852b` and every host citation updated to it; predecessors add the image record.
@@ -718,3 +750,5 @@ Contract 1 ships **text and token-id inputs only**, so that embeddings does not 
     Copilot component's embeddings declaration. §6 states it in place of the open product decision.
 - 2026-10-08 (packages): §11 lists two more intentional differences the reference implementations make, an explicit
   `null` for `dimensions`, `encoding_format` or `user` not forwarded, and the Gemini model percent-encoded in the URL.
+- 2026-10-08 (values channel): §16 admits `config_schema` and exported credential attributes in this world, which
+  §6's Vertex column assumed, and adds `UndeclaredValuesIgnored` to the suite.

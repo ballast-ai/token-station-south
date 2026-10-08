@@ -105,8 +105,9 @@ embeddings version signal. Its five exports (`metadata`, `healthcheck`, `build-e
 `parse-embeddings-response`, `map-provider-error`) are pure translation and the world imports
 nothing: the loader refuses any `token-station:` or `host` import for it, and the runtime never
 links the signing host. The manifest admits the `bearer` and `header_secret` arms, requires `embed`
-and at least one provider family, and refuses every provider-world declaration as the task worlds
-do. Contract 1 carries text and token-id inputs only, so its vocabulary is `embed`, `batch`,
+and at least one provider family, admits (from 0.48.0) the two sources of `ProviderConfig.declared`
+(a family's `config_schema` and exported credential attributes, which the task worlds refuse), and
+refuses every other provider-world declaration as the task worlds do. Contract 1 carries text and token-id inputs only, so its vocabulary is `embed`, `batch`,
 `dimensions` and `token_ids`; `media` arrives with contract 2. The runtime stays JSON-only and
 routes by world (provider-v2 / task-v1 / task-v2 / embeddings-v1). The host keeps credentials,
 HTTP, vector extraction, pricing and settlement; both hosts are `not_verified` for this world in
