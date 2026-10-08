@@ -7,7 +7,7 @@
 # feature stays off).
 [package]
 name = "provider-bedrock-converse-bearer"
-version = "1.0.2"
+version = "1.0.3"
 edition = "2021"
 publish = false
 

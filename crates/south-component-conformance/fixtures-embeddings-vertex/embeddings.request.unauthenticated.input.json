@@ -1,0 +1,23 @@
+{
+  "provider_config": {
+    "provider": "vertex-ai",
+    "base_url": "https://us-central1-aiplatform.googleapis.com",
+    "declared": {
+      "project_id": "fake-project-1",
+      "region": "us-central1"
+    }
+  },
+  "request": {
+    "model": "gemini-embedding-001",
+    "inputs": [
+      {
+        "text": "The quick brown fox"
+      }
+    ],
+    "input_shape": "single",
+    "dimensions": null,
+    "encoding_format": null,
+    "user": null,
+    "extra": {}
+  }
+}

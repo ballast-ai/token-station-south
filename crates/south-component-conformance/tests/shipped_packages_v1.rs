@@ -15,9 +15,10 @@ mod host_range;
 
 /// The official components this repository ships. Named, so that an empty or
 /// mistyped scan below cannot pass over nothing.
-const OFFICIAL_COMPONENTS: [&str; 16] = [
+const OFFICIAL_COMPONENTS: [&str; 17] = [
     "embeddings-gemini",
     "embeddings-openai-compatible",
+    "embeddings-vertex",
     "provider-anthropic",
     "provider-bedrock-converse",
     "provider-bedrock-converse-bearer",
@@ -714,6 +715,48 @@ fn the_embeddings_world_retires_every_published_046_package_identity() {
     }
 }
 
+/// The embeddings value channel and `embeddings-vertex` changed `south-provider-api` and
+/// `south-component-conformance`, which every guest links, and a same-path rebuild at `v0.47.0` and
+/// on the components commit (workspace still 0.47.0) gave a different `component.wasm` for all
+/// sixteen packages published with 0.47.0, so each identity retires, or the release's
+/// digest-stability check would refuse it. Each keeps its `south_runtime`: under the
+/// declared-runtime discipline it names the oldest runtime a package needs, and none of them needs
+/// anything newer than it did.
+#[test]
+fn the_embeddings_value_channel_retires_every_published_047_package_identity() {
+    for (name, published, runtime) in [
+        ("provider-openai-compatible", "2.4.1", "0.46.0"),
+        ("provider-anthropic", "1.0.13", "0.46.0"),
+        ("provider-gemini", "1.1.9", "0.46.0"),
+        ("provider-bedrock-converse", "1.0.10", "0.46.0"),
+        ("provider-bedrock-converse-bearer", "1.0.2", "0.46.0"),
+        ("task-kling", "1.0.9", "0.46.0"),
+        ("task-kling-v2", "0.32.7", "0.46.0"),
+        ("task-minimax-v2", "0.31.6", "0.46.0"),
+        ("task-bailian-v2", "0.31.6", "0.46.0"),
+        ("task-xai-v2", "0.35.6", "0.46.0"),
+        ("task-byteplus-v2", "0.36.6", "0.46.0"),
+        ("task-veo-v2", "0.35.6", "0.46.0"),
+        ("task-wan-image-v2", "0.35.6", "0.46.0"),
+        ("task-gmi-image-v2", "0.35.6", "0.46.0"),
+        ("embeddings-openai-compatible", "1.0.0", "0.47.0"),
+        ("embeddings-gemini", "1.0.0", "0.47.0"),
+    ] {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_ne!(manifest.version, published, "{name} reused its published identity");
+        assert_eq!(
+            manifest.compatibility.south_runtime, runtime,
+            "{name}: needs nothing newer than {runtime}, so it declares {runtime}"
+        );
+    }
+}
+
 /// The embeddings world is first known to the 0.47.0 runtime, so that is the oldest runtime that
 /// admits either embeddings package, and both declare it: a host that claims 0.46.0 refuses them
 /// through the declared runtime alone, even with embeddings contract 1 in its range.
@@ -738,6 +781,29 @@ fn the_embeddings_packages_declare_the_first_runtime_with_the_world() {
             "{name}"
         );
     }
+}
+
+/// `embeddings-vertex` declares a family's `config_schema` and an exported credential attribute,
+/// which gate ① first admits in the embeddings world in the 0.48.0 runtime (embeddings record §16),
+/// so that is the oldest runtime that admits it and the package declares it: a host that claims
+/// 0.47.0 refuses it through the declared runtime alone, even with embeddings contract 1 in its
+/// range.
+#[test]
+fn the_vertex_package_declares_the_first_runtime_with_the_embeddings_value_channel() {
+    let manifest: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(
+            repo_root().join("components").join("embeddings-vertex").join("manifest.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(manifest.compatibility.south_runtime, "0.48.0");
+    let mut on_047 = host_range::host_range();
+    "0.47.0".clone_into(&mut on_047.south_runtime);
+    assert!(matches!(
+        compatibility_admits(&manifest, &on_047),
+        Err(CompatibilityMismatchV2::SouthRuntimeAboveHost { .. })
+    ));
 }
 
 /// Every package declares one kernel tuple, and its crate version is the one the workspace pins:

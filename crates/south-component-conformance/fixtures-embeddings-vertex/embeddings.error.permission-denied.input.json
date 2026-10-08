@@ -1,0 +1,7 @@
+{
+  "status": 403,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"error\":{\"code\":403,\"message\":\"Permission 'aiplatform.endpoints.predict' denied on resource '//aiplatform.googleapis.com/projects/fake-project-1/locations/us-central1/publishers/google/models/gemini-embedding-001' (or it may not exist).\",\"status\":\"PERMISSION_DENIED\"}}"
+}

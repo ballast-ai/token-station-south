@@ -1,6 +1,6 @@
 {
   "name": "task-kling-v2",
-  "version": "0.32.7",
+  "version": "0.32.8",
   "api_version": "task-adapter-v2",
   "providers": [
     "kling"

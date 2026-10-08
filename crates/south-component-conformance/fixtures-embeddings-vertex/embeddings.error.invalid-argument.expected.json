@@ -1,0 +1,9 @@
+{
+  "outcome": "rejected",
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "the upstream refused the request as malformed",
+    "provider_message": "Unable to submit request because the input token count is 2100 but the model supports up to 2048."
+  }
+}

@@ -564,6 +564,14 @@ under each billing form), compared item by item:
   OpenAI-compatible component does not forward the field; the native arm forwards the client body, nulls included.
 - The Gemini component percent-encodes the model as one URL path segment. For a model name made only of
   `[A-Za-z0-9._-]` the URL is identical to the native arm's.
+- The Vertex component (§16): the model, project and region are each one percent-encoded segment (identical for
+  `[A-Za-z0-9._-]`); a response with more predictions than inputs is refused by the host's checks, where the native
+  arm billed and returned only the first; a single token-id sequence is a token-id refusal, where the native arm
+  counted its integers as inputs (both 400 before admission); a configuration without its region or project is a 500
+  naming the key, where the native arm answered 400; and a base URL that is a Vertex AI origin other than the
+  location's is refused before admission, where the native arm derived the host from the region and ignored the row's
+  URL. The recipe's assertion carries the native claims with the same values, in canonical order (boundary record
+  §13.3).
 
 Not a dual-run difference: during the dual run both arms park every non-2xx after dispatch as `delivery_unknown`
 (§4); a `rejected` classification starts releasing the reservation only after cutover (boundary record §6.4), when the
@@ -684,6 +692,57 @@ Contract 1 ships **text and token-id inputs only**, so that embeddings does not 
   like any unknown word, and contract 2 adds it.
 - §10's `request.media` row and the `ReferenceIntegrity` check apply from contract 2.
 
+## 16. Values channel in this world (2026-10-08)
+
+§6 has Vertex take its project and region "from non-secret configuration or minted exported attributes", which assumes
+the Q14 value channel (boundary record §13.8). That channel shipped in 0.46.0 for the provider world only: gate ①
+refused `config_schema` and exported credential attributes in every other world, because no host path outside the
+provider world built `ProviderConfig.declared`. `build-embeddings-request` receives a `ProviderConfig` too (§4), and
+the embeddings host already mints the slot and obtains the exported attributes before it builds the request (§9 step
+1), so this world admits the two sources of `declared`, and nothing else:
+
+- **Admitted.** A family's `config_schema`, under the provider world's key rules (the family is one the package
+  declares; names are lowercase snake_case; the syntax comes from the closed set; only an optional key has a
+  `default`, of its own syntax), and `attributes` on credential recipes (a field attribute from a non-secret field that
+  declares a syntax, or a selector's `selected_recipe`). Both reach `declared` through
+  `ComponentManifestV1::declared_keys` / `declared_values` exactly as in the provider world, and D8 (one namespace: no
+  family uses one name as a config key and as an attribute) applies.
+- **Still refused.** `endpoint`: the URL stays the component's, under `base_url`, as for the other two dialects (§6).
+  `host_values`: it lives on `ChatRequest`, which this world does not have. The instance declarations
+  (`query_parameters`, `quota_headers`, `user_agent`), `signing`, `stream_framing`, `usage_evidence` and
+  `request_facts`, as before.
+- **The task worlds are unchanged.** They still refuse `config_schema` and credential attributes; their `declared` is
+  empty.
+- **Gate ②.** `south.embeddings-component.v1` gains the provider suite's `UndeclaredValuesIgnored`: for every request
+  case it adds one key the manifest does not declare to `provider_config.declared` and requires the same answer, a
+  refusal included. An additive check, so the suite stays version 1.
+- **The host's side** is the provider world's list in the boundary record's §13.8, for this world: build `declared` per attempt with
+  `declared_values` from the row's config values and the selected credential's exported attributes, pass no other key,
+  and strip any client-supplied value that collides with a declared key.
+
+No contract number changes, and the two packages 0.47.0 shipped declare neither source, so their manifests are
+unchanged. The 0.47.0 runtime refuses an embeddings manifest that declares either source, so the widening ships in
+0.48.0, and a package that uses it declares `south_runtime` 0.48.0, the oldest runtime that admits it.
+
+**Vertex rows** (`embeddings-vertex`, family `vertex-ai`). The package declares two config keys, `region` (required;
+syntax `aws_region`, the lowercase DNS-label rule, which admits every Vertex location and `global`) and `project`
+(optional, `gcp_project_id`: the operator's override, today's `providers.group_id`), and its service-account recipe
+exports `project_id` from the non-secret field imported from the key file's `/project_id`. So `declared` holds
+`region`, `project_id` and, when set, `project`; the component uses `project` before `project_id`, the native arm's
+order.
+
+The host passes as `base_url` the location's API origin, `https://{region}-aiplatform.googleapis.com`, or
+`https://aiplatform.googleapis.com` for `global` (the native arm's `vertex_host_for_region`; the prefixed
+`global-aiplatform` host resolves and answers 404). The component appends
+`/v1/projects/{project}/locations/{region}/publishers/google/models/{model}:predict`, each value one percent-encoded
+segment, so the URL is always below `base_url` and `EndpointConfinement` holds by construction, with no endpoint
+template and no change to the check: the region chooses the host only through the origin the operator configured. When
+`base_url` is a Vertex AI API origin (its host is `aiplatform.googleapis.com` or ends in `-aiplatform.googleapis.com`)
+it must be the one the region selects, or the build is refused (a 500 naming both) before admission, which keeps the
+host and the `locations/` segment from disagreeing and catches the `global` prefix. Any other base URL, such as an egress
+proxy or a host's test server, is used as given. An endpoint template could not express the `global` exception anyway: a
+template parameter can choose a label but not drop the prefix.
+
 ## Revision note (2026-10-01)
 
 - Header: host baseline moved to `a82c852b` and every host citation updated to it; predecessors add the image record.
@@ -718,3 +777,7 @@ Contract 1 ships **text and token-id inputs only**, so that embeddings does not 
     Copilot component's embeddings declaration. §6 states it in place of the open product decision.
 - 2026-10-08 (packages): §11 lists two more intentional differences the reference implementations make, an explicit
   `null` for `dimensions`, `encoding_format` or `user` not forwarded, and the Gemini model percent-encoded in the URL.
+- 2026-10-08 (values channel): §16 admits `config_schema` and exported credential attributes in this world, which
+  §6's Vertex column assumed, and adds `UndeclaredValuesIgnored` to the suite.
+- 2026-10-08 (`embeddings-vertex`): §16 records the Vertex rows' values, base URL and confinement; §11 lists the
+  Vertex component's intentional differences.

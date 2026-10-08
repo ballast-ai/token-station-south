@@ -105,17 +105,20 @@ embeddings version signal. Its five exports (`metadata`, `healthcheck`, `build-e
 `parse-embeddings-response`, `map-provider-error`) are pure translation and the world imports
 nothing: the loader refuses any `token-station:` or `host` import for it, and the runtime never
 links the signing host. The manifest admits the `bearer` and `header_secret` arms, requires `embed`
-and at least one provider family, and refuses every provider-world declaration as the task worlds
-do. Contract 1 carries text and token-id inputs only, so its vocabulary is `embed`, `batch`,
+and at least one provider family, admits (from 0.48.0) the two sources of `ProviderConfig.declared`
+(a family's `config_schema` and exported credential attributes, which the task worlds refuse), and
+refuses every other provider-world declaration as the task worlds do. Contract 1 carries text and token-id inputs only, so its vocabulary is `embed`, `batch`,
 `dimensions` and `token_ids`; `media` arrives with contract 2. The runtime stays JSON-only and
 routes by world (provider-v2 / task-v1 / task-v2 / embeddings-v1). The host keeps credentials,
 HTTP, vector extraction, pricing and settlement; both hosts are `not_verified` for this world in
 `compatibility.json`. As with task-v2, the IR-bearing `PreparedEmbeddingsV1`, its single JSON
 codec, the guest ABI shims, the sandbox seam and the suite live in `south-component-conformance`;
 the suite builds each response case's paired request and runs the host's extraction and checks,
-so its fixtures pin what a host decides. The native references for `embeddings-openai-compatible`
-and `embeddings-gemini` pass it, and so do their wasm packages under `components/`, which are thin
-guests over those references and agree with them byte for byte across the ABI. See the
+so its fixtures pin what a host decides. The native references for `embeddings-openai-compatible`,
+`embeddings-gemini` and `embeddings-vertex` pass it, and so do their wasm packages under
+`components/`, which are thin guests over those references and agree with them byte for byte across
+the ABI. `embeddings-vertex` reads its location and project from `ProviderConfig.declared` and mints
+its bearer through a service-account credential recipe. See the
 [embeddings contract record](docs/design/2026-09-30-embeddings-contract.md).
 
 South does not own routing, fallback across upstreams, retry budgets, admission, tenants, billing,
@@ -198,7 +201,21 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-该库独立 Rust 版本为 0.1.0；八个库与组件运行时当前为 v0.47.0。
+该库独立 Rust 版本为 0.1.0；八个库与组件运行时当前为 v0.48.0。
+**v0.48.0**: the embeddings value channel and `embeddings-vertex` (release record
+`docs/design/2026-10-08-release-0.48.0.md`, embeddings record §16). Gate ① admits a family's `config_schema` and
+exported credential attributes in the `embeddings-adapter-v1` world, the two sources of `ProviderConfig.declared`, under
+the provider world's rules; `host_values` and every other provider-world declaration stay refused, and the task worlds
+are unchanged. `south.embeddings-component.v1` gains `undeclared_values_ignored` (suite still version 1). The new
+package `embeddings-vertex` 1.0.0 (family `vertex-ai`, Vertex AI's `:predict`) reads `region` and `project` from
+`declared`, mints its bearer through a service-account credential recipe, and declares `south_runtime` 0.48.0, the
+first runtime whose gate ① admits those declarations; it is `not_verified` for both hosts. The shared crates every
+guest links changed, so the other sixteen packages take a patch bump with unchanged behavior and keep their
+`south_runtime`: `provider-openai-compatible` 2.4.2, `provider-anthropic` 1.0.14, `provider-gemini` 1.1.10,
+`provider-bedrock-converse` 1.0.11, `provider-bedrock-converse-bearer` 1.0.3, `task-kling` 1.0.10, `task-kling-v2`
+0.32.8, `task-minimax-v2` / `task-bailian-v2` 0.31.7, `task-byteplus-v2` 0.36.7, `task-xai-v2` / `task-veo-v2` /
+`task-wan-image-v2` / `task-gmi-image-v2` 0.35.7 (0.46.0), and `embeddings-openai-compatible` /
+`embeddings-gemini` 1.0.1 (0.47.0). No contract number changes; the kernel pin is unchanged.
 **v0.47.0**: the first release of the `embeddings-adapter-v1` world (`docs/design/2026-09-30-embeddings-contract.md`,
 v1 scope §15; release record `docs/design/2026-10-08-release-0.47.0.md`): embeddings contract 1 (text and token-id
 inputs only), suite `south.embeddings-component.v1`, the host functions `extract_vectors_v1`,

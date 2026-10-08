@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "internal",
+    "http_status": 500,
+    "message": "the base URL https://global-aiplatform.googleapis.com is not the Vertex AI endpoint of location `global`, which is https://aiplatform.googleapis.com"
+  }
+}

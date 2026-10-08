@@ -444,7 +444,8 @@ pub struct ComponentManifestV1 {
     /// `config_schema` keys (§7.3). Provider world only.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub endpoint: BTreeMap<String, String>,
-    /// Each family's non-secret configuration keys (§7.3). Provider world only.
+    /// Each family's non-secret configuration keys (§7.3). Provider and embeddings worlds (the
+    /// embeddings record §16): every key reaches the component in `ProviderConfig.declared`.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub config_schema: BTreeMap<String, BTreeMap<String, crate::ConfigKeyV1>>,
     // B7a (query, quota, user-agent): provider instances, §10. Provider world only.
@@ -862,7 +863,9 @@ impl ComponentManifestV1 {
             ));
         } else if !self.stream_framing.is_bytes() {
             return Err(ManifestErrorV1::StreamFramingIsAProviderWorldDeclaration);
-        } else if !self.endpoint.is_empty() || !self.config_schema.is_empty() {
+        } else if !self.endpoint.is_empty()
+            || (world.world != EMBEDDINGS_WORLD && !self.config_schema.is_empty())
+        {
             return Err(ManifestErrorV1::EndpointIsAProviderWorldDeclaration);
         } else if !self.usage_evidence.is_reported() {
             return Err(ManifestErrorV1::UsageEvidenceIsAProviderWorldDeclaration);
@@ -891,6 +894,10 @@ impl ComponentManifestV1 {
             if self.providers.is_empty() {
                 return Err(ManifestErrorV1::ProviderFamilyRequired);
             }
+            // The value channel (embeddings record §16): a family's non-secret keys reach the
+            // component in `ProviderConfig.declared`, under the provider world's key rules. With no
+            // endpoint here, only those rules apply.
+            self.validate_endpoints()?;
         }
         for provider in &self.providers {
             validate_component_name(provider)
@@ -1236,7 +1243,10 @@ pub enum ManifestErrorV1 {
     InvalidSigning(String),
     #[error("stream_framing is a provider-world declaration")]
     StreamFramingIsAProviderWorldDeclaration,
-    #[error("endpoint and config_schema are provider-world declarations")]
+    #[error(
+        "endpoint is a provider-world declaration, and config_schema a provider- or \
+         embeddings-world one"
+    )]
     EndpointIsAProviderWorldDeclaration,
     #[error("endpoint or config_schema for family `{family}`: {detail}")]
     InvalidEndpoint { family: String, detail: String },

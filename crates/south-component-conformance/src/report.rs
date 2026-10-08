@@ -112,7 +112,8 @@ pub enum CheckV1 {
     CredentialRecipeMatch,
     /// A request built with keys the manifest does not declare added to `ProviderConfig.declared`
     /// and `ChatRequest.host_values` equals the request built without them (Q14,
-    /// host-zero-vendor-boundary §13.8).
+    /// host-zero-vendor-boundary §13.8). In the embeddings world, which has no `host_values`, the
+    /// key goes into `declared` alone (embeddings record §16).
     ///
     /// A component may read only the keys its package declares; a host passes only those. A
     /// component that acted on another key would depend on a value no conforming host sends, or
