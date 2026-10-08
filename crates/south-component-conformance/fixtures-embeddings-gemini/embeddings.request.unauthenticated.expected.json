@@ -1,0 +1,33 @@
+{
+  "descriptor": {
+    "method": "POST",
+    "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent",
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "model": "models/gemini-embedding-001",
+      "content": {
+        "parts": [
+          {
+            "text": "abcd"
+          }
+        ]
+      }
+    }
+  },
+  "estimate": {
+    "fallback_input_tokens": 1,
+    "max_input_tokens": 1
+  },
+  "vectors": {
+    "kind": "single",
+    "vector": "/embedding/values"
+  },
+  "immutable_body_paths": [
+    "content",
+    "requests",
+    "model"
+  ],
+  "parse_context": null
+}

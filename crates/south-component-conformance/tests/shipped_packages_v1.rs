@@ -36,14 +36,18 @@ fn repo_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().and_then(Path::parent).expect("repo root")
 }
 
-/// Every directory under `components/` carrying a package manifest. Scanned
+/// Every directory under `components/` carrying a package manifest and its guest crate. Scanned
 /// rather than listed, so a component added later is covered on the day it
 /// lands instead of the day someone remembers this file.
+///
+/// A manifest without a guest crate is a package staged ahead of its build — the two embeddings
+/// packages, whose gate ② suite and references land before their wasm guests — and is not shipped
+/// until its `Cargo.toml` lands, when every check here starts to apply to it.
 fn shipped_packages() -> Vec<PathBuf> {
     let mut packages: Vec<PathBuf> = std::fs::read_dir(repo_root().join("components"))
         .expect("the components directory reads")
         .map(|entry| entry.expect("the directory entry reads").path())
-        .filter(|path| path.join("manifest.json").is_file())
+        .filter(|path| path.join("manifest.json").is_file() && path.join("Cargo.toml").is_file())
         .collect();
     packages.sort();
     packages
@@ -472,11 +476,10 @@ fn every_shipped_package_declares_the_range_handshake() {
     let kernel_contracts: std::collections::BTreeMap<String, u32> =
         serde_json::from_value(compatibility["kernel_contracts"].clone()).unwrap();
     let mut seen = 0;
-    for entry in std::fs::read_dir(repo_root().join("components")).unwrap() {
-        let manifest: ComponentManifestV1 = serde_json::from_str(
-            &std::fs::read_to_string(entry.unwrap().path().join("manifest.json")).unwrap(),
-        )
-        .unwrap();
+    for package in shipped_packages() {
+        let manifest: ComponentManifestV1 =
+            serde_json::from_str(&std::fs::read_to_string(package.join("manifest.json")).unwrap())
+                .unwrap();
         let declared = &manifest.compatibility;
         assert_eq!(
             declared.runtime_abi,

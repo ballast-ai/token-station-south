@@ -1,0 +1,26 @@
+{
+  "provider_config": {
+    "provider": "gemini",
+    "base_url": "https://generativelanguage.googleapis.com",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "model": "gemini-embedding-001",
+    "inputs": [
+      {
+        "text": "alpha"
+      },
+      {
+        "text": "beta"
+      },
+      {
+        "text": "gamma δ"
+      }
+    ],
+    "input_shape": "array",
+    "dimensions": null,
+    "encoding_format": null,
+    "user": null,
+    "extra": {}
+  }
+}

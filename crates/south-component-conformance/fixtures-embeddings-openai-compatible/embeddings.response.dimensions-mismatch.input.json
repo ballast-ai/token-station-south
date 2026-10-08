@@ -1,0 +1,10 @@
+{
+  "request_case": "embeddings.request.dimensions",
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"object\":\"list\",\"data\":[{\"object\":\"embedding\",\"index\":0,\"embedding\":[0.5,-0.5,0.25]}],\"model\":\"text-embedding-3-small\",\"usage\":{\"prompt_tokens\":3,\"total_tokens\":3}}"
+  }
+}

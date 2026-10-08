@@ -128,3 +128,21 @@ pub mod reference_gmi_image_task_v2;
 pub mod reference_veo_task_v2;
 pub mod reference_wan_image_task_v2;
 pub mod reference_xai_task_v2;
+
+// Embeddings contract 1 (docs/design/2026-09-30-embeddings-contract.md, v1 scope §15).
+pub mod abi_embeddings;
+mod component_embeddings;
+pub use component_embeddings::{EmbeddingsComponentV1, PreparedEmbeddingsV1};
+mod embeddings_fixture;
+pub use embeddings_fixture::{
+    EMBEDDINGS_FIXTURE_KIND_V1, EmbeddingsCaseV1, EmbeddingsFamilyV1, EmbeddingsFixturePackV1,
+};
+pub mod embeddings_json;
+mod embeddings_suite;
+pub use embeddings_suite::{
+    EMBEDDINGS_COMPONENT_SUITE_V1, EMBEDDINGS_REQUIRED_ROWS_V1, run_embeddings_component_suite_v1,
+};
+pub mod reference_gemini_embeddings;
+pub mod reference_openai_compatible_embeddings;
+#[cfg(feature = "sandbox")]
+pub mod sandbox_embeddings;

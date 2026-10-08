@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "capability",
+    "http_status": 400,
+    "message": "Gemini embeddings take text only; token-id inputs are not supported"
+  }
+}

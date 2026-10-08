@@ -1,0 +1,23 @@
+{
+  "provider_config": {
+    "provider": "openai-compatible",
+    "base_url": "https://api.openai.com/v1",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "model": "text-embedding-3-small",
+    "inputs": [
+      {
+        "text": "alpha"
+      },
+      {
+        "text": "beta"
+      }
+    ],
+    "input_shape": "array",
+    "dimensions": null,
+    "encoding_format": "base64",
+    "user": "user-7",
+    "extra": {}
+  }
+}

@@ -1,6 +1,10 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
+use south_component_conformance::embeddings_json::{
+    embeddings_parsed_json, parse_embeddings_parsed_json, parse_prepared_embeddings_json,
+    parse_provider_error_json, prepared_embeddings_json, provider_error_json,
+};
 use south_component_conformance::task_v2_json::{
     locator_json, observation_json, parse_locator_json, parse_observation_json,
     parse_prepared_task_json, parse_render_context_json, parse_submit_outcome_json,
@@ -198,8 +202,22 @@ fn fuzz_declared_instances(input: &str) {
 
 /// Embeddings contract 1: the northbound parser and vector extraction consume untrusted JSON
 /// (record §3, §5). An accepted request survives its wire codec, and extracted vectors survive
-/// rendering in either encoding bit for bit.
+/// rendering in either encoding bit for bit. The component-boundary frames (the prepared request,
+/// the parsed facts and the provider-error result) cross the unique codec without losing a fact.
 fn fuzz_embeddings(input: &str) {
+    if let Ok(prepared) = parse_prepared_embeddings_json(input) {
+        let encoded = prepared_embeddings_json(&prepared).expect("a decoded request must encode");
+        assert_eq!(parse_prepared_embeddings_json(&encoded.to_string()), Ok(prepared));
+    }
+    if let Ok(parsed) = parse_embeddings_parsed_json(input) {
+        let encoded = embeddings_parsed_json(&parsed).expect("decoded facts must encode");
+        assert_eq!(parse_embeddings_parsed_json(&encoded.to_string()), Ok(parsed));
+    }
+    if let Ok((outcome, error)) = parse_provider_error_json(input) {
+        let encoded = provider_error_json(outcome, &error).expect("a decoded result must encode");
+        assert_eq!(parse_provider_error_json(&encoded.to_string()), Ok((outcome, error)));
+    }
+
     if let Ok(body) = serde_json::from_str::<serde_json::Value>(input)
         && let Ok(request) = parse_embeddings_request_v1(&body, "fuzz")
     {

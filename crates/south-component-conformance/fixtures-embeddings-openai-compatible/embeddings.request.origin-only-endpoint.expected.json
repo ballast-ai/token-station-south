@@ -1,0 +1,29 @@
+{
+  "descriptor": {
+    "method": "POST",
+    "url": "https://api.openai.com/v1/embeddings",
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "model": "text-embedding-3-small",
+      "input": "root"
+    },
+    "auth": {
+      "scheme": "bearer",
+      "secret": "provider_api_key"
+    }
+  },
+  "estimate": {
+    "fallback_input_tokens": null,
+    "max_input_tokens": null
+  },
+  "vectors": {
+    "kind": "north_identical"
+  },
+  "immutable_body_paths": [
+    "input",
+    "model"
+  ],
+  "parse_context": null
+}

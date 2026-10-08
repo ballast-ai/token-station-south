@@ -1,0 +1,30 @@
+{
+  "descriptor": {
+    "method": "POST",
+    "url": "https://fixture.openai.azure.com/openai/v1/embeddings",
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "model": "embedding-deployment",
+      "input": "Synthetic canary"
+    },
+    "auth": {
+      "scheme": "header",
+      "name": "api-key",
+      "secret": "provider_api_key"
+    }
+  },
+  "estimate": {
+    "fallback_input_tokens": null,
+    "max_input_tokens": null
+  },
+  "vectors": {
+    "kind": "north_identical"
+  },
+  "immutable_body_paths": [
+    "input",
+    "model"
+  ],
+  "parse_context": null
+}

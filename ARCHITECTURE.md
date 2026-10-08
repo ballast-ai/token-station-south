@@ -110,7 +110,12 @@ do. Contract 1 carries text and token-id inputs only, so its vocabulary is `embe
 `dimensions` and `token_ids`; `media` arrives with contract 2. The runtime stays JSON-only and
 routes by world (provider-v2 / task-v1 / task-v2 / embeddings-v1). The host keeps credentials,
 HTTP, vector extraction, pricing and settlement; both hosts are `not_verified` for this world in
-`compatibility.json`. See the [embeddings contract record](docs/design/2026-09-30-embeddings-contract.md).
+`compatibility.json`. As with task-v2, the IR-bearing `PreparedEmbeddingsV1`, its single JSON
+codec, the guest ABI shims, the sandbox seam and the suite live in `south-component-conformance`;
+the suite builds each response case's paired request and runs the host's extraction and checks,
+so its fixtures pin what a host decides. The native references for `embeddings-openai-compatible`
+and `embeddings-gemini` pass it; their manifests are staged under `components/` ahead of their
+wasm guests. See the [embeddings contract record](docs/design/2026-09-30-embeddings-contract.md).
 
 South does not own routing, fallback across upstreams, retry budgets, admission, tenants, billing,
 quota ledgers, audit persistence, task persistence, credential sources, or tracing initialization.
