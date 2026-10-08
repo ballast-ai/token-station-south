@@ -33,7 +33,7 @@ dependencies = [
 
 [[package]]
 name = "embeddings-gemini"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "south-component-conformance",
  "wit-bindgen",
@@ -348,7 +348,7 @@ checksum = "f9395f0f0eee849a9b707b2f06bb92a6a422090e2123bb2ef8e87a0e61892a8e"
 
 [[package]]
 name = "south-component-conformance"
-version = "0.48.0"
+version = "0.49.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -359,7 +359,7 @@ dependencies = [
 
 [[package]]
 name = "south-contracts"
-version = "0.48.0"
+version = "0.49.0"
 dependencies = [
  "bytes",
  "http",
@@ -371,7 +371,7 @@ dependencies = [
 
 [[package]]
 name = "south-provider-api"
-version = "0.48.0"
+version = "0.49.0"
 dependencies = [
  "serde",
  "thiserror",

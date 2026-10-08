@@ -2327,6 +2327,93 @@ code. Exit 0 unless a line says otherwise.
   three; letting the endpoint path admit the escape fails `an_endpoint_path_never_admits_an_encoded_slash`; admitting a
   decoded `%` fails four, among them `endpoint_rejects_unsafe_path_segments`.
 
+### 13.10 Host feedback SF27: a Gemini stream's usage comes from its terminal chunk (2026-10-08)
+
+With IR billing as the default for `component` rows (P21 S5), the host found that **every Vertex AI native stream
+failed** through `provider-gemini` 1.1.9. Vertex's `streamGenerateContent?alt=sse` puts `usageMetadata` on every chunk;
+an intermediate one carries no count (`{"trafficType": "ON_DEMAND"}`), and only the terminal chunk, the one whose
+candidate carries `finishReason`, carries the counts. The reference stream parser took any chunk with a
+`usageMetadata` object for a usage report and parsed it with the strict `usage_of` of B1 (§6.6), which requires
+`promptTokenCount` and `totalTokenCount`, so the first intermediate chunk refused the whole stream as a protocol error.
+The host's own wire parser had already met the same shape and fixed it as its issue 03 #90 (token-station-server,
+`usage_evidence.rs`, `observe_gemini`). On 2026-10-08 the owner (lv) approved bringing the component to the same rule.
+
+**Rule.** The terminal chunk is the one in which any candidate carries a non-null `finishReason`, not the one carrying
+`usageMetadata`.
+
+- The terminal chunk emits `Finish`, then `Usage` parsed by the same strict `usage_of` as `parse_response` when it
+  carries `usageMetadata`, then `Done`. A non-string `finishReason` is a protocol error.
+- An intermediate `usageMetadata` is never emitted as `Usage`. It must be an object, and each count it carries
+  (`promptTokenCount`, `candidatesTokenCount`, `thoughtsTokenCount`, `toolUsePromptTokenCount`,
+  `cachedContentTokenCount`, `totalTokenCount`) must be a non-negative integer no lower than the same count in an
+  earlier chunk. The terminal chunk is held to the same non-decrease rule, an omitted count reading zero as in
+  `usage_of` (the JSON mapping omits zeros), so a terminal chunk that omits a count an earlier chunk reported non-zero
+  is refused.
+- Any frame after the terminal chunk is a protocol error. EOF adds nothing: a terminated stream is already closed, and
+  a stream that never sent a terminal chunk still gets no synthetic terminal.
+- `parse_response` (non-streaming) is unchanged and stays strict.
+
+**Why terminal-only, not running usage.** Emitting an intermediate chunk's counts as `Usage` would fold to the right
+number in a consumer that keeps the last non-zero report per field, but it makes every consumer depend on that fold,
+and a stream cut before its terminal chunk would leave a partial count that reads like evidence. Terminal-only is the
+host's wire rule, so the component and the host agree on which chunk is the evidence. The intermediate counts are still
+checked, because a decreasing running count is an upstream fault the host's wire parser refuses too.
+
+**One deliberate difference from the host's wire rule.** The host refuses a terminal chunk without `usageMetadata` at
+the wire. The component emits `Finish` and `Done` with **no** `Usage` event, never a zero, as it did before; the host
+then refuses the stream for want of usage evidence. This is the shape gate ② requires by name for a `reported`
+package (`provider.stream.no-usage`, §6.2 item 2): "no `Usage` event" is how a stream says "the upstream reported
+nothing" (§6.1 item 4), and a stream fixture cannot expect a component error. The outcome at the host is the same
+refusal. What changed is when the terminal sequence leaves: on the terminal chunk itself, where before a terminal chunk
+without usage held its `Finish` back for a later usage-only frame or EOF. Such a later frame is now refused, as the
+host's rule refuses it.
+
+**Fixtures and tests.** Two gate ② stream cases in `fixtures-gemini/`:
+`provider.stream.vertex-intermediate-usage-metadata-carries-no-counts` (Vertex's shape: two intermediate chunks with
+`{"trafficType": "ON_DEMAND"}`, a terminal chunk with `finishReason` and full counts, `modelVersion`, `createTime`,
+`responseId` and the `*TokensDetails` arrays) and `provider.stream.intermediate-counts-are-progress-not-usage` (running
+counts on an intermediate chunk, one `Usage` from the terminal chunk). Both are named in
+`the_shipped_pack_still_carries_every_decided_behaviour`, and the sandbox parity test runs them through the wasm
+package. The refusals cannot be stream fixtures, so they are unit tests in `reference_gemini.rs`: a terminal
+`usageMetadata` without counts or with a total that does not add up; an intermediate count that is negative, fractional
+or a string, and a `usageMetadata` that is not an object; a count that decreases between intermediate chunks, a terminal
+count below an intermediate one, and a terminal chunk that omits a count an earlier chunk reported; a content chunk and
+a usage-only chunk after the terminal one. Two more pin that a terminal chunk without `usageMetadata` yields no `Usage`
+and that any candidate's `finishReason` makes a chunk terminal.
+
+**Package identity.** `provider-gemini` changes behavior and takes a patch bump, 1.1.10 → 1.1.11, keeping
+`south_runtime` 0.46.0 (nothing in it relies on a newer runtime). This change was first prepared against 0.47.0 as
+1.1.9 → 1.1.10; #159 then shipped 0.48.0 first with `provider-gemini` already at 1.1.10 for its own shared-crate
+change, so SF27 takes the next number, 1.1.11, and ships in 0.49.0. Every guest links `south-component-conformance`,
+and a source change in it moves code placement: a same-path rebuild of all seventeen packages at `v0.48.0` and on the
+SF27 commit (workspace still 0.48.0) gave a different `component.wasm` for every one, so 0.49.0 gives the other sixteen
+a patch bump as well, each keeping its `south_runtime`, as the digest-stability check (§8.6) insists
+(`host_feedback_sf27_retires_every_published_048_package_identity`). None of them runs the changed code. See
+[release 0.49.0](2026-10-08-release-0.49.0.md).
+
+**What the host does after the release:** re-pin, and serve Vertex native streams (`gemini` rows on the Vertex endpoint)
+through the component under IR billing; keep its own 03 #90 rule on the wire path. The host's suite and fixture for
+03 #90 can also be run against the component's IR as a cross-check.
+
+**Evidence (2026-10-08, branch `p21-sf27-gemini-stream-usage` on `6cd3f51`).** Every command below was judged by its own exit
+code; all exited 0.
+
+- `cargo fmt --all -- --check`; `cargo clippy --workspace --all-targets --all-features -- -D warnings`;
+  `cargo nextest run --workspace --all-features` with `PROPTEST_CASES=32` (1313 passed, 2 skipped); the doctests;
+  `cargo test --workspace --no-default-features`; `cargo check --manifest-path fuzz/Cargo.toml --all-targets --locked`;
+  `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features`; `rustup run 1.96.0 cargo check --workspace
+  --all-targets`; `scripts/check-boundaries.sh` (self-test and run); `python3 -m unittest discover -s scripts -p 'test_*.py'`;
+  `scripts/check-language.sh` (self-test, tracked files, and `--commits origin/main..HEAD`); `cargo deny`, `cargo audit`
+  and `cargo machete` for the workspace and `fuzz/`; all sixteen component build scripts; and
+  `scripts/check-declared-runtime.sh --build` (every package loads under the runtime it declares).
+- Before the fix, the two new gate ② cases failed `FixtureMatch` and `StreamIncrementality` (the Vertex case with "the
+  upstream usageMetadata lacks a valid promptTokenCount or totalTokenCount", the running-count case with an extra
+  `Usage` of 2 output tokens), and seven of the eight new unit tests failed.
+- Mutations, each restored with `cp` and `touch`: putting back the old unconditional `usage_of` on every chunk fails
+  `gate_two_passes_over_the_shipped_pack`, the sandbox parity test and four unit tests; dropping the non-decrease check
+  fails `counts_never_decrease_across_chunks`; dropping the after-terminal refusal fails
+  `a_chunk_after_the_terminal_one_is_refused`.
+
 ## 14. Existing text to revise in step
 
 - ARCHITECTURE.md:117-126: change the concluding sentence to "execution, material, reachable destinations and the
@@ -2751,3 +2838,5 @@ into the body. Where each landed:
   channel paragraph, §13.1's interim config rule and the Q14 item of §14 point to §13.8; Q14 records the South half.
 - 2026-10-08, host feedback SF26: new §13.9 and §16 Q46; §13.7 item 7 gains an amendment, its remaining-risk paragraph a
   note, and its host steps a correction of the R17 bullet.
+- 2026-10-08, host feedback SF27: new §13.10. A Gemini stream's usage comes from its terminal chunk (the one carrying
+  `finishReason`); `provider-gemini` 1.1.11, released in 0.49.0. The Gemini component record gains decision G7.
