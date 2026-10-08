@@ -112,8 +112,15 @@ def world_default(manifest: dict, key: str, provider_default: str) -> str | None
     return None
 
 
-def verify_gate2_report(path: Path, manifest: dict, manifest_sha256: str, component_sha256: str) -> bytes:
-    """The report's bytes, after checking that it is a passing report about exactly this package."""
+def verify_gate2_report(
+    path: Path, manifest: dict, manifest_sha256: str, component_sha256: str, south_release: str
+) -> bytes:
+    """The report's bytes, after checking that it is a passing report about exactly this package.
+
+    `south_release` is the workspace version being released. The report must name it: the suite that
+    writes the report runs in a crate with a version of its own (boundary record §16 Q47), so a
+    report that took that crate's version instead would name a release the run was not part of.
+    """
     data = path.read_bytes()
     try:
         report = json.loads(data)
@@ -121,6 +128,7 @@ def verify_gate2_report(path: Path, manifest: dict, manifest_sha256: str, compon
         raise ReleaseIndexError(f"{path.name}: not JSON: {error}") from error
     expected = {
         "schema": GATE2_SCHEMA,
+        "south_release": south_release,
         "name": manifest.get("name"),
         "version": manifest.get("version"),
         "suite": manifest.get("conformance", {}).get("required_suite"),
@@ -139,7 +147,7 @@ def verify_gate2_report(path: Path, manifest: dict, manifest_sha256: str, compon
 
 
 def package_entry(
-    component_dir: Path, dist: Path, tag: str, require_gate2_reports: bool
+    component_dir: Path, dist: Path, tag: str, require_gate2_reports: bool, south_release: str
 ) -> tuple[dict, str]:
     """One package's index entry, and the archive file name it consumed."""
     package = component_dir.name
@@ -168,7 +176,7 @@ def package_entry(
 
     report_path = dist / gate2_report_name(package, tag)
     if report_path.is_file():
-        report = verify_gate2_report(report_path, manifest, manifest_sha256, component_sha256)
+        report = verify_gate2_report(report_path, manifest, manifest_sha256, component_sha256, south_release)
         gate2_report = report_path.name
         gate2_report_sha256 = sha256_hex(report)
     elif require_gate2_reports:
@@ -261,7 +269,7 @@ def generate(
     packages = []
     consumed = set()
     for component_dir in component_dirs:
-        entry, archive = package_entry(component_dir, dist, tag, require_gate2_reports)
+        entry, archive = package_entry(component_dir, dist, tag, require_gate2_reports, version)
         packages.append(entry)
         consumed.add(archive)
 

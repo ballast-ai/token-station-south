@@ -111,7 +111,7 @@ fn every_shipped_package_agrees_with_its_crate_and_names_no_future_release() {
             version.split('.').map(|part| part.parse().expect("a numeric triple")).collect()
         };
         assert!(
-            triple(&manifest.compatibility.south_runtime) <= triple(env!("CARGO_PKG_VERSION")),
+            triple(&manifest.compatibility.south_runtime) <= triple(host_range::south_release()),
             "{}: declares south runtime {}, newer than this release",
             manifest.name,
             manifest.compatibility.south_runtime
@@ -138,6 +138,84 @@ fn every_shipped_package_agrees_with_its_crate_and_names_no_future_release() {
 /// So this asserts the lists and the directory agree. A fifth component
 /// breaks this test until its build script and its `package` line exist,
 /// which is the only moment anyone is looking.
+/// The crates a component may link from this workspace, each with a version of its own
+/// (host-zero-vendor-boundary §16 Q47).
+///
+/// A workspace-versioned crate's version moves with every South release, and a crate's version
+/// enters the bytes of every component that links it: when this list was written, bumping the
+/// workspace version alone changed all seventeen `component.wasm` files. So a component may link
+/// only crates whose version moves when they change, and a release that changes none of them keeps
+/// every package identity.
+const GUEST_LINKED_CRATES: [&str; 3] =
+    ["south-component-conformance", "south-contracts", "south-provider-api"];
+
+/// The `[[package]]` entries of a lockfile that come from a path (no `source`), as
+/// `(name, version)`.
+fn locked_path_packages(lockfile: &str) -> Vec<(String, String)> {
+    lockfile
+        .split("[[package]]")
+        .skip(1)
+        .filter(|entry| !entry.lines().any(|line| line.starts_with("source = ")))
+        .map(|entry| {
+            let field = |key: &str| {
+                entry
+                    .lines()
+                    .find_map(|line| {
+                        line.strip_prefix(key)?.strip_prefix(" = \"")?.strip_suffix('"')
+                    })
+                    .unwrap_or_else(|| panic!("a lockfile entry has no `{key}`"))
+                    .to_owned()
+            };
+            (field("name"), field("version"))
+        })
+        .collect()
+}
+
+/// Every component links workspace crates only from [`GUEST_LINKED_CRATES`], at the version each
+/// declares, and none of those crates takes the workspace version.
+///
+/// The first half keeps the Q47 property from eroding unseen: a component that starts linking a
+/// workspace-versioned crate (the runtime, the north codec) would be re-identified by every release
+/// again, and nothing else would say so until a host re-pinned. The second half keeps each
+/// committed lockfile honest: the component builds are not `--locked`, so a stale entry would be
+/// rewritten on the build machine and the committed file would describe other bytes.
+#[test]
+fn components_link_only_independently_versioned_workspace_crates() {
+    let crates = repo_root().join("crates");
+    for name in GUEST_LINKED_CRATES {
+        let cargo_toml = std::fs::read_to_string(crates.join(name).join("Cargo.toml"))
+            .expect("the crate manifest reads");
+        assert!(
+            !cargo_toml.lines().any(|line| line.trim() == "version.workspace = true"),
+            "{name}: a component links this crate, so it carries its own version (Q47)"
+        );
+    }
+
+    for package in shipped_packages() {
+        let lockfile = std::fs::read_to_string(package.join("Cargo.lock"))
+            .expect("every component commits its lockfile");
+        let component = package.file_name().and_then(|name| name.to_str()).expect("a UTF-8 name");
+        for (name, version) in locked_path_packages(&lockfile) {
+            if name == component {
+                continue;
+            }
+            assert!(
+                GUEST_LINKED_CRATES.contains(&name.as_str()),
+                "{}: links the workspace crate {name}, whose version is not its own (Q47)",
+                package.display()
+            );
+            let declared = std::fs::read_to_string(crates.join(&name).join("Cargo.toml"))
+                .expect("the crate manifest reads");
+            assert_eq!(
+                version,
+                package_version(&declared),
+                "{}: the lockfile records {name} {version}, the crate declares another version",
+                package.display()
+            );
+        }
+    }
+}
+
 #[test]
 fn the_release_workflow_ships_every_official_component() {
     let workflow = std::fs::read_to_string(repo_root().join(".github/workflows/release.yml"))

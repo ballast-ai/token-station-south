@@ -102,7 +102,7 @@ impl Evidence {
         let record = json!({
             "schema": SCHEMA,
             "suite": report.suite(),
-            "south_release": env!("CARGO_PKG_VERSION"),
+            "south_release": crate::host_range::south_release(),
             "name": self.manifest["name"],
             "version": self.manifest["version"],
             "world": self.manifest["api_version"],

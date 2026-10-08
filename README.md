@@ -199,9 +199,12 @@ capabilities by upstream model id, read by `south_provider_runtime::ModelCatalog
 package keeps its version but its `component.wasm` or `manifest.json` digest differs from the
 previous release's index. A package's `south_runtime` is the oldest runtime it needs, not the
 release that carries it, and `scripts/check-declared-runtime.sh` loads each archived package under
-exactly that runtime before the release publishes (see CONTRIBUTING). See
+exactly that runtime before the release publishes (see CONTRIBUTING). The three crates every
+component links (`south-contracts`, `south-provider-api`, `south-component-conformance`) carry
+versions of their own rather than the workspace version, so a release that leaves them unchanged
+re-identifies no package. See
 [released component artifacts](docs/design/2026-09-10-released-component-artifacts.md) §8 and the
-[boundary record](docs/design/2026-09-30-host-zero-vendor-boundary.md) §13.6.
+[boundary record](docs/design/2026-09-30-host-zero-vendor-boundary.md) §13.6 and §13.12.
 
 
 ## Local verification

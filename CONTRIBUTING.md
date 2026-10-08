@@ -76,3 +76,23 @@ refused by every host that has not yet re-pinned, even when nothing in it needs 
   declares, in a checkout of that runtime's release tag: gate ①, the range handshake, the import scan and the
   identity probe. Release CI runs it on the published archives, and CI runs it on `release/*` pull requests. Run it
   locally before a release with `scripts/check-declared-runtime.sh --build` after the component build scripts.
+
+## The crates every component links carry their own versions
+
+Every component links `south-contracts`, `south-provider-api` and `south-component-conformance`, and a crate's
+version enters the bytes of every component that links it. These three crates therefore declare a `version` of their
+own instead of `version.workspace = true` (`docs/design/2026-09-30-host-zero-vendor-boundary.md` §13.12, §16 Q47), so
+a release that leaves them alone, such as one that only ships catalog data, keeps every package's `component.wasm`.
+
+- **A release bump** moves `[workspace.package] version`, `compatibility.json`'s `release.version`, and the version
+  requirements on the workspace-versioned crates (`south-core`, `south-testkit`, `south-provider-conformance`,
+  `south-north-codec`, `south-provider-runtime`). It does not touch these three crates' versions or the requirements
+  on them, and no component lockfile changes.
+- **A change to one of the three crates** bumps that crate's version in the same change (patch for a compatible
+  change, minor otherwise), updates the requirements on it and the component lockfiles, and, because it changes every
+  `component.wasm`, bumps every package's version; the release's digest-stability check fails a package that kept its
+  version.
+- **A component links no other workspace crate.** `shipped_packages_v1` fails when a component lockfile names a
+  workspace crate outside these three, or records a version the crate does not declare.
+- **The runtime release is the workspace version.** Tests read it from the workspace `Cargo.toml`, never from
+  `CARGO_PKG_VERSION` in one of these crates, and the release index refuses a gate ② report naming another release.

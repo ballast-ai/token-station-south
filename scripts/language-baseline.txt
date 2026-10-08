@@ -2,7 +2,7 @@
 # scripts/check-language.sh --regen. The gate fails when a count rises
 # or a new file appears; --regen refuses to raise a count, so this file
 # is a ratchet that only tightens. Translate, then regen.
-56	ARCHITECTURE.md
+55	ARCHITECTURE.md
 1	docs/design/2026-08-21-component-conformance.md
 1	docs/design/2026-09-08-bearer-with-header-secret-auth.md
 1	docs/design/2026-09-08-buffered-get-request.md

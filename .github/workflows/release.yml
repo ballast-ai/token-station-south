@@ -46,8 +46,11 @@ jobs:
         run: |
           set -euo pipefail
           tag="${GITHUB_REF_NAME#v}"
-          # Read the component runtime workspace version directly. Independently
-          # versioned Rust task libraries must not change component release identity;
+          # Read the component runtime workspace version directly. The task
+          # libraries and the three crates every component links
+          # (south-contracts, south-provider-api, south-component-conformance)
+          # carry versions of their own, so that a release which leaves them
+          # alone re-identifies no package (boundary record §16 Q47);
           # selecting an arbitrary package from cargo metadata would mix the two.
           version="$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml","rb"))["workspace"]["package"]["version"])')"
           if [ "$tag" != "$version" ]; then

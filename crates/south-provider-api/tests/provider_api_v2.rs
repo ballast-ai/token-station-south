@@ -132,7 +132,7 @@ fn reference_manifest() -> ComponentManifestV1 {
             kernel_version: "0.4.0".to_owned(),
             kernel_revision: "8e34f5a089d0b9c7273b49ddb6952dd87e960019".to_owned(),
             wit_package: WIT_PACKAGE.to_owned(),
-            south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
+            south_runtime: south_release().to_owned(),
             runtime_abi: None,
             kernel_contracts: std::collections::BTreeMap::new(),
             contracts: std::collections::BTreeMap::new(),
@@ -460,19 +460,34 @@ fn an_unauthenticated_component_may_declare_no_arms_and_no_secrets() {
 // only a live host knows — the manifest-side constants (`wit_package`, world
 // name, suite name) are already exact-validated by `accepts_manifest`.
 
+/// The South release this tree builds: `[workspace.package] version` in the workspace
+/// `Cargo.toml`. Not `CARGO_PKG_VERSION`: every component links this crate, so it carries a version
+/// of its own that moves only when the crate changes (host-zero-vendor-boundary §16 Q47).
+fn south_release() -> &'static str {
+    let manifest: &'static str = include_str!("../../../Cargo.toml");
+    manifest
+        .split_once("[workspace.package]")
+        .expect("the workspace manifest has a [workspace.package] table")
+        .1
+        .lines()
+        .take_while(|line| !line.starts_with('['))
+        .find_map(|line| line.strip_prefix("version = \"")?.strip_suffix('"'))
+        .expect("[workspace.package] declares a version")
+}
+
 fn host_expectations() -> HostExpectationsV1 {
     HostExpectationsV1 {
         ir_schema_id: "token-station-protocol@0.5.0/v0.4.0".to_owned(),
         kernel_version: "0.4.0".to_owned(),
         kernel_revision: "8e34f5a089d0b9c7273b49ddb6952dd87e960019".to_owned(),
-        south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
+        south_runtime: south_release().to_owned(),
     }
 }
 
 #[test]
 fn a_matching_tuple_is_admitted() {
     let mut manifest = reference_manifest();
-    manifest.compatibility.south_runtime = env!("CARGO_PKG_VERSION").to_owned();
+    manifest.compatibility.south_runtime = south_release().to_owned();
     assert_eq!(compatibility_matches(&manifest, &host_expectations()), Ok(()));
 }
 
@@ -483,7 +498,7 @@ fn a_matching_tuple_is_admitted() {
 fn every_host_known_field_is_refused_when_it_disagrees() {
     let base = || {
         let mut manifest = reference_manifest();
-        manifest.compatibility.south_runtime = env!("CARGO_PKG_VERSION").to_owned();
+        manifest.compatibility.south_runtime = south_release().to_owned();
         manifest
     };
 
@@ -531,7 +546,7 @@ fn a_component_from_the_previous_release_is_named_in_the_refusal() {
         panic!("a stale south_runtime must be refused");
     };
     assert_eq!(declared, "0.15.0");
-    assert_eq!(expected, env!("CARGO_PKG_VERSION"));
+    assert_eq!(expected, south_release());
 }
 
 // ── The task adapter world (2026-09-18 record) ───────────────────────────────
@@ -731,7 +746,7 @@ fn task_manifest() -> ComponentManifestV1 {
             kernel_version: "0.4.0".to_owned(),
             kernel_revision: "8e34f5a089d0b9c7273b49ddb6952dd87e960019".to_owned(),
             wit_package: TASK_WIT_PACKAGE.to_owned(),
-            south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
+            south_runtime: south_release().to_owned(),
             runtime_abi: None,
             kernel_contracts: std::collections::BTreeMap::new(),
             contracts: std::collections::BTreeMap::new(),
