@@ -79,6 +79,10 @@ pub const PROVIDER_CAPABILITIES: &[&str] = &["chat", "stream", "tool_call", "jso
 ///   host-minted (OAuth-shaped) credentials whose product is a bearer token.
 /// - `header_secret`: the resolved secret travels verbatim in one sanctioned
 ///   provider header, or in one the manifest declares in `secret_headers`.
+/// - `bearer_and_header_secret`: the one resolved secret travels twice, as
+///   `Authorization: Bearer <secret>` and verbatim in one sanctioned provider
+///   header (the kernel's `Auth::BearerAndHeader`, B7b). Gemini's
+///   OpenAI-compatible surface accepts a key only this way.
 /// - `oauth`: the host exchanges the named grant for a token before the funds
 ///   marker and presents it as a bearer token; the component never sees the
 ///   exchange.
@@ -86,7 +90,8 @@ pub const PROVIDER_CAPABILITIES: &[&str] = &["chat", "stream", "tool_call", "jso
 ///   the component returns its descriptor; the descriptor itself carries no
 ///   auth, and the manifest's `emits` set is the contract the finalizer's
 ///   output is diffed against (2026-08-27 manifest-schema record, D2–D3).
-pub const PROVIDER_AUTH_ARMS: &[&str] = &["bearer", "header_secret", "oauth", "host_signed"];
+pub const PROVIDER_AUTH_ARMS: &[&str] =
+    &["bearer", "header_secret", "bearer_and_header_secret", "oauth", "host_signed"];
 
 /// The signed-header vocabulary a `host_signed` manifest may name in `emits`.
 ///

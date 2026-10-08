@@ -91,6 +91,7 @@ fn reference_manifest() -> ComponentManifestV1 {
             "openai-compatible".to_owned(),
             "azure-openai-v1".to_owned(),
             "github-copilot".to_owned(),
+            "gemini-openai-compatible".to_owned(),
         ],
         capabilities: BTreeSet::from([
             "chat".to_owned(),
@@ -98,7 +99,11 @@ fn reference_manifest() -> ComponentManifestV1 {
             "tool_call".to_owned(),
             "json_schema".to_owned(),
         ]),
-        auth_arms: BTreeSet::from(["bearer".to_owned(), "header_secret".to_owned()]),
+        auth_arms: BTreeSet::from([
+            "bearer".to_owned(),
+            "header_secret".to_owned(),
+            "bearer_and_header_secret".to_owned(),
+        ]),
         emits: Vec::new(),
         secret_headers: Vec::new(),
         usage_evidence: UsageEvidenceV1::Reported,
@@ -210,6 +215,7 @@ fn the_copilot_declarations_apply_to_the_github_copilot_family_only() {
     assert!(manifest.credentials_for("github-copilot").is_some());
     assert_eq!(manifest.credentials_for("openai-compatible"), None);
     assert_eq!(manifest.credentials_for("azure-openai-v1"), None);
+    assert_eq!(manifest.credentials_for("gemini-openai-compatible"), None);
 
     let instances = south_component_conformance::DeclaredInstancesV1::from_manifest(&manifest)
         .expect("the shipped manifest passes gate ①");
@@ -219,6 +225,7 @@ fn the_copilot_declarations_apply_to_the_github_copilot_family_only() {
     );
     assert_eq!(instances.user_agent("openai-compatible"), None);
     assert_eq!(instances.user_agent("azure-openai-v1"), None);
+    assert_eq!(instances.user_agent("gemini-openai-compatible"), None);
 }
 
 /// The pack covers every family, so `Coverage` is a real gate, and the suite

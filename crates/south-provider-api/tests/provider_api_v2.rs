@@ -256,6 +256,25 @@ fn a_word_outside_the_declared_worlds_vocabulary_is_refused_by_name() {
     );
 }
 
+/// B7b (host-zero-vendor-boundary §4.3, option A): the combined arm is a provider-world word, so a
+/// package can declare that its descriptors present one credential as Bearer and in a header.
+#[test]
+fn the_provider_world_admits_the_combined_bearer_and_header_arm() {
+    assert!(PROVIDER_AUTH_ARMS.contains(&"bearer_and_header_secret"));
+    let mut combined = reference_manifest();
+    combined.auth_arms.insert("bearer_and_header_secret".to_owned());
+    assert_eq!(combined.validate(), Ok(()));
+
+    let mut alone = reference_manifest();
+    alone.auth_arms = BTreeSet::from(["bearer_and_header_secret".to_owned()]);
+    assert_eq!(alone.validate(), Ok(()));
+
+    // `host_signed` still stands alone.
+    let mut signed = host_signed_manifest();
+    signed.auth_arms.insert("bearer_and_header_secret".to_owned());
+    assert_eq!(signed.validate(), Err(ManifestErrorV1::HostSignedAdmitsNoOtherArm));
+}
+
 fn host_signed_manifest() -> ComponentManifestV1 {
     let mut manifest = reference_manifest();
     manifest.auth_arms = BTreeSet::from(["host_signed".to_owned()]);
@@ -819,7 +838,7 @@ fn task_v2_wit_has_only_pure_exports_and_explicit_recovery_inputs() {
 
 #[test]
 fn task_v2_manifest_refuses_auth_arms_outside_the_candidate_contract() {
-    for arm in ["oauth", "host_signed"] {
+    for arm in ["oauth", "host_signed", "bearer_and_header_secret"] {
         let mut manifest = task_manifest();
         manifest.api_version = TASK_WORLD_V2.to_owned();
         manifest.compatibility.wit_package = "token-station:task-adapter@2.0.0".to_owned();

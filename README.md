@@ -119,7 +119,7 @@ the [task adapter vocabulary](docs/design/2026-08-27-task-adapter-vocabulary.md)
   conformance crate's `sandbox` feature provides the typed seam over it, and `components/`
   packages each native reference as an official `wasm32-wasip2` component:
   `provider-openai-compatible` (`scripts/build-reference-component.sh`) covers the
-  OpenAI-compatible and Azure dialects, `provider-anthropic`
+  OpenAI-compatible, Azure, GitHub Copilot and Gemini OpenAI-compatible families, `provider-anthropic`
   (`scripts/build-anthropic-component.sh`) covers Anthropic Messages, and
   `provider-gemini` (`scripts/build-gemini-component.sh`) covers Gemini
   `generateContent` — including its streaming operation, which the dialect selects with a

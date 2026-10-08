@@ -1525,6 +1525,8 @@ are now `not_verified` until the host re-runs them.
 - **Blocked on B7b:** the kernel's `Auth::header` still checks names against its static list while deserializing,
   and the only names it accepts beyond `SecretHeaderV1` are undeclarable. So no component descriptor can name a
   declared header until B7b. A test pins this and is meant to fail when B7b lands.
+  Note (2026-10-08): B7b landed with the re-pin to protocol 0.5.0, and the test was replaced
+  (`2026-10-08-kernel-repin-protocol-0.5.0.md` §4).
 
 **Query parameters.** The manifest declares `query_parameters`: at most 16 entries, provider world only.
 - **Value syntax:** each declaration names one closed value syntax, `digits`, `token`, `date` or `enum`. `token` is
@@ -1998,6 +2000,9 @@ Tags: S = south maintainers, L = lv, K = kernel.
   Note (2026-10-01): that half now includes the §3.4 trust rules and the §3.5 host invariants.
 - **Q4 (S, K)** The combined arm: add a variant to the kernel's `Auth` (recommended), or an interim family-level
   mirror in the OpenAI-compatible package (§4.3).
+  Note (2026-10-08): option A is implemented. Kernel protocol 0.5.0 adds `Auth::BearerAndHeader`. South adds the
+  `bearer_and_header_secret` arm and the `gemini-openai-compatible` family
+  (`2026-10-08-b7b-combined-auth-arm.md`).
 - **Q5 (S, K)** Refining DP5: a `runtime_abi` epoch (recommended) or south going straight to 1.0; the IR line as
   exact equality on the kernel's published contract numbers (recommended), or a range once the kernel publishes what
   each contract increment added and the host refuses requests using newer additions; contracts made additive, or

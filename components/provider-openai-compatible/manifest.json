@@ -5,7 +5,8 @@
   "providers": [
     "openai-compatible",
     "azure-openai-v1",
-    "github-copilot"
+    "github-copilot",
+    "gemini-openai-compatible"
   ],
   "capabilities": [
     "chat",
@@ -15,6 +16,7 @@
   ],
   "auth_arms": [
     "bearer",
+    "bearer_and_header_secret",
     "header_secret"
   ],
   "credentials": {

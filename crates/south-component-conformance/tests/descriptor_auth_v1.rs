@@ -183,10 +183,11 @@ fn a_deserialized_descriptor_reaches_the_declared_arm() {
     }
 }
 
-/// The kernel's combined arm (`Auth::BearerAndHeader`, protocol 0.5.0) is refused: no manifest arm
-/// declares it yet, so admitting it would present a credential in a way the package never named.
+/// The kernel's combined arm (`Auth::BearerAndHeader`, protocol 0.5.0) is refused unless the
+/// manifest declares `bearer_and_header_secret`: declaring `bearer` and `header_secret` separately
+/// does not admit presenting one credential both ways (B7b, host-zero-vendor-boundary §4.3).
 #[test]
-fn a_bearer_and_header_descriptor_is_refused() {
+fn a_bearer_and_header_descriptor_needs_the_combined_arm() {
     let (config, mut descriptor) = built();
     descriptor.auth = Some(Auth::bearer_and_header("x-goog-api-key", slot(&config)).unwrap());
     for arms in [&["bearer"][..], &["header_secret"], &["bearer", "header_secret"]] {
@@ -196,6 +197,92 @@ fn a_bearer_and_header_descriptor_is_refused() {
             "{arms:?}"
         );
     }
+}
+
+/// With `bearer_and_header_secret` declared, the combined arm is admitted as
+/// [`AdmittedAuthV1::BearerAndHeaderSecret`], which a host maps onto
+/// `RawAuthV1::BearerAndHeaderSecret`, from a descriptor built in-process or deserialized from
+/// the kernel wire shape a component emits.
+#[test]
+fn the_combined_arm_is_admitted_when_declared() {
+    let (config, mut descriptor) = built();
+    let combined = manifest(&["bearer_and_header_secret"]);
+    assert_eq!(combined.validate(), Ok(()));
+
+    descriptor.auth = Some(Auth::bearer_and_header("x-goog-api-key", slot(&config)).unwrap());
+    assert_eq!(
+        admit_descriptor_auth(&combined, &config, &descriptor),
+        Ok(AdmittedAuthV1::BearerAndHeaderSecret(SecretHeaderV1::XGoogApiKey))
+    );
+
+    let wire = serde_json::json!({
+        "scheme": "bearer_and_header",
+        "name": "x-goog-api-key",
+        "secret": slot(&config).as_str(),
+    });
+    descriptor.auth = Some(serde_json::from_value::<Auth>(wire).unwrap());
+    assert_eq!(
+        admit_descriptor_auth(&combined, &config, &descriptor),
+        Ok(AdmittedAuthV1::BearerAndHeaderSecret(SecretHeaderV1::XGoogApiKey))
+    );
+
+    // The combined arm admits neither half alone.
+    descriptor.auth = Some(Auth::bearer(slot(&config)));
+    assert_eq!(
+        admit_descriptor_auth(&combined, &config, &descriptor),
+        Err(DescriptorAuthErrorV1::BearerNotDeclared)
+    );
+    descriptor.auth = Some(Auth::header("x-goog-api-key", slot(&config)).unwrap());
+    assert_eq!(
+        admit_descriptor_auth(&combined, &config, &descriptor),
+        Err(DescriptorAuthErrorV1::HeaderSecretNotDeclared)
+    );
+}
+
+/// The combined arm names only a sanctioned secret header: the contract's
+/// `ProviderAuthV1::BearerAndHeaderSecret` is closed over `SecretHeaderV1` (2026-09-08 combined-arm
+/// record, D1), so a header the manifest declares in `secret_headers` is refused here, as is any
+/// other name the kernel lets through.
+#[test]
+fn the_combined_arm_names_only_a_sanctioned_header() {
+    let (config, mut descriptor) = built();
+    let mut declaring = manifest(&["bearer_and_header_secret", "header_secret"]);
+    declaring.secret_headers = vec!["x-acme-key".to_owned()];
+    assert_eq!(declaring.validate(), Ok(()));
+
+    for name in ["x-acme-key", "x-acme-other"] {
+        descriptor.auth = Some(Auth::bearer_and_header(name, slot(&config)).unwrap());
+        assert_eq!(
+            admit_descriptor_auth(&declaring, &config, &descriptor),
+            Err(DescriptorAuthErrorV1::HeaderNotSanctioned(name.to_owned())),
+            "{name}"
+        );
+    }
+
+    // Every sanctioned name is admitted, compared without case (the kernel keeps a catalog name
+    // as written, in any case).
+    for header in SecretHeaderV1::ALL {
+        descriptor.auth = Some(
+            Auth::bearer_and_header(header.header_name().to_ascii_uppercase(), slot(&config))
+                .unwrap(),
+        );
+        assert_eq!(
+            admit_descriptor_auth(&declaring, &config, &descriptor),
+            Ok(AdmittedAuthV1::BearerAndHeaderSecret(header)),
+            "{header:?}"
+        );
+    }
+}
+
+/// A `host_signed` package's descriptor still carries no auth, whatever the arm.
+#[test]
+fn a_host_signed_package_refuses_the_combined_arm() {
+    let (config, mut descriptor) = built();
+    descriptor.auth = Some(Auth::bearer_and_header("x-goog-api-key", slot(&config)).unwrap());
+    assert_eq!(
+        admit_descriptor_auth(&manifest(&["host_signed"]), &config, &descriptor),
+        Err(DescriptorAuthErrorV1::HostSignedCarriesAuth)
+    );
 }
 
 /// A declared name on the ordinary header channel is refused: nothing downstream redacts an
@@ -295,7 +382,7 @@ fn gate_two_refuses_a_package_whose_descriptors_present_an_undeclared_arm() {
     let shipped = run_provider_component_suite_v1_for_manifest(
         &OpenAiCompatibleReferenceV1,
         &pack,
-        &manifest(&["bearer", "header_secret"]),
+        &manifest(&["bearer", "header_secret", "bearer_and_header_secret"]),
     );
     let ran: Vec<_> = shipped
         .outcomes()
@@ -305,11 +392,13 @@ fn gate_two_refuses_a_package_whose_descriptors_present_an_undeclared_arm() {
     assert!(!ran.is_empty(), "the check never ran");
     assert!(ran.iter().all(|outcome| !outcome.is_failure()), "{shipped}");
 
-    // The reference presents Bearer for `openai-compatible` and `api-key` for Azure; a manifest
-    // that declares only one arm must see the other refused.
+    // The reference presents Bearer for `openai-compatible`, `api-key` for Azure and both Bearer and
+    // `x-goog-api-key` for `gemini-openai-compatible`; a manifest missing an arm must see the
+    // case that presents it refused.
     for (arms, refused_case) in [
-        (&["header_secret"][..], "provider.request.chat"),
-        (&["bearer"][..], "provider.request.azure-header-auth"),
+        (&["header_secret", "bearer_and_header_secret"][..], "provider.request.chat"),
+        (&["bearer", "bearer_and_header_secret"], "provider.request.azure-header-auth"),
+        (&["bearer", "header_secret"], "provider.request.gemini-openai-compatible"),
     ] {
         let report = run_provider_component_suite_v1_for_manifest(
             &OpenAiCompatibleReferenceV1,
