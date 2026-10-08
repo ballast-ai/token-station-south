@@ -47,6 +47,14 @@ fn locator_keeps_only_a_versioned_relative_route() {
         assert!(TaskLocatorV2::new(1, route).is_err(), "invalid route must fail");
     }
     assert!(TaskLocatorV2::new(2, "v1/tasks").is_err());
+    // A route follows the relative-path grammar exactly, including HTTP contract version
+    // eleven's encoded slash inside one segment (host feedback SF26). Task ids never travel that
+    // way: each task-v2 component refuses an id containing `/` before building a request
+    // (`task_id_separator_v2`), so the locator gains no rule of its own.
+    assert_eq!(TaskLocatorV2::new(1, "v1/tasks/a%2Fb").unwrap().route(), "v1/tasks/a%2Fb");
+    for route in ["v1/%2Fb", "v1/a%2F", "v1/a%2F..%2Fb", "v1/a%5Cb", "v1/a%25b"] {
+        assert!(TaskLocatorV2::new(1, route).is_err(), "{route} must fail");
+    }
     assert!(TaskLocatorV2::new(1, &"x".repeat(MAX_RELATIVE_PATH_BYTES + 1)).is_err());
 }
 

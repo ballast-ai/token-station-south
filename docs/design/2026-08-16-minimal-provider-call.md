@@ -130,6 +130,12 @@ appending the validated relative path to the normalized endpoint prefix, parses 
 `url` crate, then rechecks exact scheme, normalized host, effective port, and segment-aware base
 path prefix before resolving a credential. No Bearer value exists during URL processing.
 
+Amendment (2026-10-08, HTTP contract version eleven, host feedback SF26): a relative path admits
+`%2F` / `%2f` inside one segment when every piece of the decoded segment is non-empty and neither
+`.` nor `..` (the kernel's D5 rule), so an ARN model id can travel as one segment. The endpoint
+path still refuses it, and `%2e`, `%5c` and `%25` stay refused everywhere
+(`2026-09-30-host-zero-vendor-boundary.md` §13.9).
+
 ### Authentication
 
 Provider-facing code sees only `CredentialSlotV1` and `BearerAuthV1`. A host supplies an async

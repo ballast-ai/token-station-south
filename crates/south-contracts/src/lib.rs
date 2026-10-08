@@ -96,7 +96,14 @@ use url::Url;
 /// [`DeclaredUserAgentV1`] in the request's single [`UserAgentV1`] slot. A version-nine request is
 /// exactly a version-ten request that declares neither; every previously accepted declaration
 /// serializes byte-identically, and declared parameters follow the sanctioned ones on the wire.
-pub const HTTP_CONTRACT_VERSION: u16 = 10;
+///
+/// Version eleven (host feedback SF26) admits an encoded slash (`%2F` or `%2f`) inside one
+/// [`RelativePathV1`] segment under the kernel's D5 rule: the decoded segment is split on `/`, and
+/// every piece must be non-empty and neither `.` nor `..`. It is what lets a model id with a `/`,
+/// such as a Bedrock inference-profile ARN, travel as one segment. A version-ten relative path is
+/// exactly a version-eleven one without that escape; the endpoint path still refuses it, and
+/// escapes decoding to `.`, `\` or `%` stay refused everywhere.
+pub const HTTP_CONTRACT_VERSION: u16 = 11;
 
 /// The version of the provider authentication declaration contract.
 ///
@@ -576,6 +583,14 @@ pub struct RelativePathV1 {
 
 impl RelativePathV1 {
     /// Validates a provider-selected relative path.
+    ///
+    /// The path is non-empty ASCII with no leading `/`, query, fragment, empty or dot segment,
+    /// backslash, control or space byte, or scheme-like first segment. An escape decoding to `.`,
+    /// `\` or `%` is refused. Since HTTP contract version eleven, an escape decoding to `/` is
+    /// admitted inside one segment when every piece of the decoded segment is non-empty and neither
+    /// `.` nor `..`, the rule `token-station-protocol` 0.5.0 applies below an endpoint, so
+    /// `model/arn:aws:bedrock:us-east-1:123456789012:inference-profile%2Fus.anthropic.x/converse`
+    /// parses and `v1/a%2F..%2Fb` does not.
     pub fn parse(input: &str) -> Result<Self, ContractErrorV1> {
         if input.is_empty()
             || input.len() > MAX_RELATIVE_PATH_BYTES
@@ -583,7 +598,7 @@ impl RelativePathV1 {
             || input.starts_with('/')
             || input.contains(['?', '#'])
             || input.bytes().any(is_forbidden_path_byte)
-            || has_invalid_or_forbidden_percent_encoding(input)
+            || has_invalid_or_forbidden_percent_encoding(input, EncodedSlash::AdmitInSegment)
             || !has_safe_segments(input)
             || has_scheme_like_first_segment(input)
         {
@@ -3236,7 +3251,7 @@ fn validate_endpoint_path(path: &str) -> Result<(), ContractErrorV1> {
         || !path.starts_with('/')
         || (path != "/" && path.contains("//"))
         || path.bytes().any(is_forbidden_path_byte)
-        || has_invalid_or_forbidden_percent_encoding(path)
+        || has_invalid_or_forbidden_percent_encoding(path, EncodedSlash::Refuse)
     {
         return Err(ContractErrorV1::InvalidEndpoint);
     }
@@ -3266,11 +3281,36 @@ fn has_scheme_like_first_segment(path: &str) -> bool {
         && bytes.all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'-' | b'.'))
 }
 
-fn has_invalid_or_forbidden_percent_encoding(path: &str) -> bool {
-    let bytes = path.as_bytes();
+/// Whether an escape may decode to `/` inside one path segment.
+///
+/// An endpoint path never admits it. A relative path admits it under the kernel's D5 rule
+/// (`token-station-protocol` 0.5.0, `ProviderEndpoint::permits`; host feedback SF26): the decoded
+/// segment is split on `/`, and every piece must be non-empty and neither `.` nor `..`. Whether an
+/// upstream keeps the escape or decodes it, the target then stays at or below the endpoint.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum EncodedSlash {
+    Refuse,
+    AdmitInSegment,
+}
+
+/// Refuses a malformed escape, and any escape decoding to `.`, `\` or `%` in every position.
+///
+/// Those three stay refused even where the kernel admits some of them: a decoded `%` is what a
+/// double-decoding upstream would read as a second escape (boundary record §16 Q39), and an
+/// encoded `.` has no use a literal `.` does not cover. An escape decoding to `/` follows
+/// `EncodedSlash`.
+fn has_invalid_or_forbidden_percent_encoding(path: &str, encoded_slash: EncodedSlash) -> bool {
+    path.split('/').any(|segment| segment_has_invalid_or_forbidden_escape(segment, encoded_slash))
+}
+
+fn segment_has_invalid_or_forbidden_escape(segment: &str, encoded_slash: EncodedSlash) -> bool {
+    let bytes = segment.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut has_encoded_slash = false;
     let mut index = 0;
     while index < bytes.len() {
         if bytes[index] != b'%' {
+            decoded.push(bytes[index]);
             index += 1;
             continue;
         }
@@ -3280,13 +3320,17 @@ fn has_invalid_or_forbidden_percent_encoding(path: &str) -> bool {
         let Some(low) = bytes.get(index + 2).and_then(|byte| hex_nibble(*byte)) else {
             return true;
         };
-        let decoded = (high << 4) | low;
-        if matches!(decoded, b'.' | b'/' | b'\\' | b'%') {
-            return true;
+        let byte = (high << 4) | low;
+        match byte {
+            b'/' if encoded_slash == EncodedSlash::AdmitInSegment => has_encoded_slash = true,
+            b'.' | b'/' | b'\\' | b'%' => return true,
+            _ => {}
         }
+        decoded.push(byte);
         index += 3;
     }
-    false
+    has_encoded_slash
+        && decoded.split(|byte| *byte == b'/').any(|piece| matches!(piece, b"" | b"." | b".."))
 }
 
 const fn hex_nibble(byte: u8) -> Option<u8> {

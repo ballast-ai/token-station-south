@@ -18,7 +18,8 @@ use south_component_conformance::reference_gemini::GeminiReferenceV1;
 use south_component_conformance::{
     CheckV1, FixturePackV1, ProviderComponentV1, run_provider_component_suite_v1,
 };
-use token_station_protocol::{ChatRequest, DescriptorError, ProviderConfig};
+use south_contracts::{ContractErrorV1, ProviderEndpointV1, RelativePathV1};
+use token_station_protocol::{ChatRequest, DescriptorError, HttpRequestDescriptor, ProviderConfig};
 
 /// The row that closes the issue, present in the Converse, Converse-bearer and Gemini packs.
 const ROW: &str = "provider.request.model-id-with-a-slash-stays-one-segment";
@@ -148,5 +149,58 @@ fn a_model_that_would_traverse_or_collapse_is_refused_by_authorize() {
         request.model = "plain-model:1".to_owned();
         let descriptor = package.reference.build_http_request(&request, &config).unwrap();
         assert_eq!(config.authorize(&descriptor), Ok(()), "{}", package.name);
+    }
+}
+
+/// What a host sends: the descriptor's URL split into the bound endpoint and the relative path
+/// below it, the path parsed by the HTTP contract and joined back by `resolve_against`.
+fn host_relative_path(
+    config: &ProviderConfig,
+    descriptor: &HttpRequestDescriptor,
+) -> (ProviderEndpointV1, Result<RelativePathV1, ContractErrorV1>) {
+    let base = config.base_url.as_str();
+    let endpoint = ProviderEndpointV1::parse(&base).unwrap();
+    let below = descriptor.url.strip_prefix(base.trim_end_matches('/')).unwrap();
+    let below = below.split_once('?').map_or(below, |(path, _)| path);
+    (endpoint, RelativePathV1::parse(below.trim_start_matches('/')))
+}
+
+/// Host feedback SF26. Kernel 0.5.0 authorizing the row (above) was half of #138: every host raw
+/// call carries its path as a `RelativePathV1`, which refused any escape decoding to `/` until
+/// HTTP contract version eleven. The row's descriptor now goes through the contract end to end
+/// and resolves to the URL `authorize` judged, byte for byte.
+#[test]
+fn a_model_with_a_slash_resolves_through_the_relative_path_contract() {
+    for package in &PACKAGES {
+        let (config, request) = row_input(package);
+        let descriptor = package.reference.build_http_request(&request, &config).unwrap();
+        let (endpoint, path) = host_relative_path(&config, &descriptor);
+        let path = path.unwrap_or_else(|error| {
+            panic!("{}: {} must parse as a relative path: {error:?}", package.name, descriptor.url)
+        });
+        assert!(path.as_str().contains("%2F"), "{}: {}", package.name, path.as_str());
+        let resolved = path.resolve_against(&endpoint).unwrap();
+        assert_eq!(resolved.as_str(), descriptor.url, "{}", package.name);
+    }
+}
+
+/// The contract refuses what the kernel refuses for these models: a host cannot send a model
+/// whose pieces would traverse or collapse even if it skipped `authorize`.
+#[test]
+fn a_model_that_would_traverse_or_collapse_is_refused_by_the_relative_path_contract() {
+    for package in &PACKAGES {
+        let (config, mut request) = row_input(package);
+        for model in package.refused_models {
+            request.model = (*model).to_owned();
+            let descriptor = package.reference.build_http_request(&request, &config).unwrap();
+            let (_, path) = host_relative_path(&config, &descriptor);
+            assert_eq!(
+                path,
+                Err(ContractErrorV1::InvalidRelativePath),
+                "{}: `{model}` was built into {} and must be refused",
+                package.name,
+                descriptor.url
+            );
+        }
     }
 }
