@@ -201,7 +201,21 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-该库独立 Rust 版本为 0.1.0；八个库与组件运行时当前为 v0.47.0。
+该库独立 Rust 版本为 0.1.0；八个库与组件运行时当前为 v0.48.0。
+**v0.48.0**: the embeddings value channel and `embeddings-vertex` (release record
+`docs/design/2026-10-08-release-0.48.0.md`, embeddings record §16). Gate ① admits a family's `config_schema` and
+exported credential attributes in the `embeddings-adapter-v1` world, the two sources of `ProviderConfig.declared`, under
+the provider world's rules; `host_values` and every other provider-world declaration stay refused, and the task worlds
+are unchanged. `south.embeddings-component.v1` gains `undeclared_values_ignored` (suite still version 1). The new
+package `embeddings-vertex` 1.0.0 (family `vertex-ai`, Vertex AI's `:predict`) reads `region` and `project` from
+`declared`, mints its bearer through a service-account credential recipe, and declares `south_runtime` 0.48.0, the
+first runtime whose gate ① admits those declarations; it is `not_verified` for both hosts. The shared crates every
+guest links changed, so the other sixteen packages take a patch bump with unchanged behavior and keep their
+`south_runtime`: `provider-openai-compatible` 2.4.2, `provider-anthropic` 1.0.14, `provider-gemini` 1.1.10,
+`provider-bedrock-converse` 1.0.11, `provider-bedrock-converse-bearer` 1.0.3, `task-kling` 1.0.10, `task-kling-v2`
+0.32.8, `task-minimax-v2` / `task-bailian-v2` 0.31.7, `task-byteplus-v2` 0.36.7, `task-xai-v2` / `task-veo-v2` /
+`task-wan-image-v2` / `task-gmi-image-v2` 0.35.7 (0.46.0), and `embeddings-openai-compatible` /
+`embeddings-gemini` 1.0.1 (0.47.0). No contract number changes; the kernel pin is unchanged.
 **v0.47.0**: the first release of the `embeddings-adapter-v1` world (`docs/design/2026-09-30-embeddings-contract.md`,
 v1 scope §15; release record `docs/design/2026-10-08-release-0.47.0.md`): embeddings contract 1 (text and token-id
 inputs only), suite `south.embeddings-component.v1`, the host functions `extract_vectors_v1`,

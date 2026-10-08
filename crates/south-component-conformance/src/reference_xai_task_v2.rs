@@ -112,7 +112,7 @@ impl TaskComponentV2 for XaiTaskComponentV2 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "task-xai-v2".into(),
-            version: "0.35.6".into(),
+            version: "0.35.7".into(),
             api_version: "task-adapter-v2".into(),
         }
     }
