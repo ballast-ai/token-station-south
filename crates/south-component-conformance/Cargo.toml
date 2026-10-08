@@ -82,5 +82,17 @@ required-features = ["sandbox"]
 name = "gmi_image_task_sandbox_parity_v2"
 required-features = ["sandbox"]
 
+[[test]]
+name = "openai_compatible_embeddings_sandbox_parity"
+required-features = ["sandbox"]
+
+[[test]]
+name = "gemini_embeddings_sandbox_parity"
+required-features = ["sandbox"]
+
+[[test]]
+name = "embeddings_payload_measurement"
+required-features = ["sandbox"]
+
 [lints]
 workspace = true

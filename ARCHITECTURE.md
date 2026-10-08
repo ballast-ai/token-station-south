@@ -114,8 +114,9 @@ HTTP, vector extraction, pricing and settlement; both hosts are `not_verified` f
 codec, the guest ABI shims, the sandbox seam and the suite live in `south-component-conformance`;
 the suite builds each response case's paired request and runs the host's extraction and checks,
 so its fixtures pin what a host decides. The native references for `embeddings-openai-compatible`
-and `embeddings-gemini` pass it; their manifests are staged under `components/` ahead of their
-wasm guests. See the [embeddings contract record](docs/design/2026-09-30-embeddings-contract.md).
+and `embeddings-gemini` pass it, and so do their wasm packages under `components/`, which are thin
+guests over those references and agree with them byte for byte across the ABI. See the
+[embeddings contract record](docs/design/2026-09-30-embeddings-contract.md).
 
 South does not own routing, fallback across upstreams, retry budgets, admission, tenants, billing,
 quota ledgers, audit persistence, task persistence, credential sources, or tracing initialization.

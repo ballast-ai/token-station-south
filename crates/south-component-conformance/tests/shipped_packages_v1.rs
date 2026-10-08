@@ -15,7 +15,9 @@ mod host_range;
 
 /// The official components this repository ships. Named, so that an empty or
 /// mistyped scan below cannot pass over nothing.
-const OFFICIAL_COMPONENTS: [&str; 14] = [
+const OFFICIAL_COMPONENTS: [&str; 16] = [
+    "embeddings-gemini",
+    "embeddings-openai-compatible",
     "provider-anthropic",
     "provider-bedrock-converse",
     "provider-bedrock-converse-bearer",
@@ -36,18 +38,15 @@ fn repo_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().and_then(Path::parent).expect("repo root")
 }
 
-/// Every directory under `components/` carrying a package manifest and its guest crate. Scanned
+/// Every directory under `components/` carrying a package manifest. Scanned
 /// rather than listed, so a component added later is covered on the day it
-/// lands instead of the day someone remembers this file.
-///
-/// A manifest without a guest crate is a package staged ahead of its build — the two embeddings
-/// packages, whose gate ② suite and references land before their wasm guests — and is not shipped
-/// until its `Cargo.toml` lands, when every check here starts to apply to it.
+/// lands instead of the day someone remembers this file. A manifest without its
+/// guest crate is not a shipped package, and the first check below fails on it.
 fn shipped_packages() -> Vec<PathBuf> {
     let mut packages: Vec<PathBuf> = std::fs::read_dir(repo_root().join("components"))
         .expect("the components directory reads")
         .map(|entry| entry.expect("the directory entry reads").path())
-        .filter(|path| path.join("manifest.json").is_file() && path.join("Cargo.toml").is_file())
+        .filter(|path| path.join("manifest.json").is_file())
         .collect();
     packages.sort();
     packages
@@ -223,6 +222,36 @@ fn task_worlds_have_independent_unverified_host_adoption_records() {
         assert_eq!(manifest["conformance"][format!("{key}_suite_id")], suite);
         assert_eq!(manifest["conformance"][format!("{key}_suite")], 1);
     }
+}
+
+/// A gate ② pass of the two embeddings packages does not establish host adoption of the world:
+/// both hosts stay `not_verified` until each runs the world in production (the embeddings record
+/// §14 E-Q5 asks the community host for a synchronous implementation).
+#[test]
+fn the_embeddings_world_has_independent_unverified_host_adoption_records() {
+    let manifest: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(repo_root().join("compatibility.json")).unwrap(),
+    )
+    .unwrap();
+    let hosts = manifest["embeddings_component_capabilities"]
+        .as_object()
+        .expect("embeddings host capability table");
+    assert_eq!(hosts.len(), 2);
+    for host in ["token-station", "token-station-server"] {
+        let capabilities = hosts[host].as_object().unwrap();
+        assert_eq!(capabilities.len(), 1);
+        assert_eq!(capabilities["embeddings_v1"]["status"], "not_verified");
+        assert!(capabilities["embeddings_v1"].get("cases").is_none());
+    }
+    assert_eq!(
+        manifest["conformance"]["embeddings_component_v1_suite_id"],
+        "south.embeddings-component.v1"
+    );
+    assert_eq!(manifest["conformance"]["embeddings_component_v1_suite"], 1);
+    assert_eq!(
+        manifest["contracts"]["embeddings"],
+        u32::from(south_contracts::EMBEDDINGS_CONTRACT_VERSION)
+    );
 }
 
 /// `FileId` introduces a new runtime capability; no 0.29.0 content identity is reused.
@@ -491,6 +520,9 @@ fn every_shipped_package_declares_the_range_handshake() {
         let expected_contracts: std::collections::BTreeMap<String, u32> =
             if manifest.api_version.starts_with("task") {
                 [("task".to_owned(), u32::from(south_contracts::TASK_CONTRACT_VERSION))].into()
+            } else if manifest.api_version == south_provider_api::EMBEDDINGS_WORLD {
+                [("embeddings".to_owned(), u32::from(south_contracts::EMBEDDINGS_CONTRACT_VERSION))]
+                    .into()
             } else {
                 std::collections::BTreeMap::new()
             };

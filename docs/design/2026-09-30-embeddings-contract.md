@@ -560,6 +560,10 @@ under each billing form), compared item by item:
   them before admission (the contract limit).
 - `NorthIdentical` responses that need an encoding conversion are re-rendered (§8) and lose upstream fields beyond
   the OpenAI shape; the native arm returns them unchanged and unconverted.
+- An explicit `null` for `dimensions`, `encoding_format` or `user`: the contract carries it as absent, so the
+  OpenAI-compatible component does not forward the field; the native arm forwards the client body, nulls included.
+- The Gemini component percent-encodes the model as one URL path segment. For a model name made only of
+  `[A-Za-z0-9._-]` the URL is identical to the native arm's.
 
 Not a dual-run difference: during the dual run both arms park every non-2xx after dispatch as `delivery_unknown`
 (§4); a `rejected` classification starts releasing the reservation only after cutover (boundary record §6.4), when the
@@ -712,3 +716,5 @@ Contract 1 ships **text and token-id inputs only**, so that embeddings does not 
   - E-Q10 ruled by lv: accepted as proposed (32 keys, 16 KiB, refusal of an unmodelled field only with a fixture).
   - E-Q11 ruled by lv: no host special case for Copilot; serving Copilot rows on `/v1/embeddings` follows from the
     Copilot component's embeddings declaration. §6 states it in place of the open product decision.
+- 2026-10-08 (packages): §11 lists two more intentional differences the reference implementations make, an explicit
+  `null` for `dimensions`, `encoding_format` or `user` not forwarded, and the Gemini model percent-encoded in the URL.

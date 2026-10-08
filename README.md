@@ -175,6 +175,8 @@ directory shape the runtime loads — `manifest.json` beside `component.wasm`.
 | `task-veo-v2` | `veo-video` | `bash scripts/build-veo-task-v2-component.sh` | contract 6 candidate, unreleased |
 | `task-wan-image-v2` | `wan-image` | `bash scripts/build-wan-image-task-v2-component.sh` | contract 6 candidate, unreleased |
 | `task-gmi-image-v2` | `gmi-image` | `bash scripts/build-gmi-image-task-v2-component.sh` | contract 6 candidate, unreleased |
+| `embeddings-openai-compatible` | `openai-compatible`, `azure-openai-v1` | `bash scripts/build-embeddings-openai-compatible-component.sh` | embeddings contract 1, unreleased |
+| `embeddings-gemini` | `gemini` | `bash scripts/build-embeddings-gemini-component.sh` | embeddings contract 1, unreleased |
 
 Each pack's `README.md` records how its expectations were derived and how the
 component differs from the host's native arm — read that before changing a
