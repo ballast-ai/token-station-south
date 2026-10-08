@@ -2053,29 +2053,35 @@ clients. South does not add its own rule on top; a later kernel change could ref
   declarations, or `bedrock-bearer` rows lose it.
 - R24 (a recipe that exports `attributes`) and R9b (more than one slot) are unchanged by this section; R24 moves with §13.8.
 
-**Evidence (2026-10-08, branch `feature/kernel-repin`).** Every command below was judged by its own exit code, all 0.
+**Evidence (2026-10-08, branch `feature/kernel-repin` after merging #151).** Every command below was judged by its own exit
+code. Exit 0 unless a line says otherwise.
 
 - `cargo fmt --all -- --check`; `cargo clippy --workspace --all-targets --all-features -- -D warnings`;
-  `cargo nextest run --workspace --all-features` with `PROPTEST_CASES=32` (1185 passed, 1 skipped); the doctests;
+  `cargo nextest run --workspace --all-features` with `PROPTEST_CASES=32` (1188 passed, 1 skipped); the doctests;
   `cargo test --workspace --no-default-features`; `cargo check --manifest-path fuzz/Cargo.toml --all-targets --locked`;
   `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features`; `rustup run 1.96.0 cargo check --workspace
   --all-targets`; `scripts/check-boundaries.sh` (self-test and run); `python3 -m unittest discover -s scripts -p 'test_*.py'`;
   `scripts/check-language.sh` (self-test, tracked files, and `--commits origin/main..HEAD`); `cargo deny`, `cargo audit` and
   `cargo machete` for the workspace and `fuzz/`.
-- A local run of the release workflow's steps with the tag `v0.46.0`: all fourteen build scripts; the gate 2 reports from
-  the sandbox parity tests (`SOUTH_GATE2_REPORT_DIR`); the archives; `scripts/check-declared-runtime.sh --dist` and
-  `--build` (all fourteen load under the runtime they declare, 0.46.0, which is this tree); `release_index.py generate
-  --require-gate2-reports`; and `release_index.py compare` against the `v0.45.0` index (every package changed version, as
-  the check requires; `provider-openai-compatible` goes 2.2.1 to 2.4.0 against the published index).
+- The release workflow's steps run locally: all fourteen build scripts (0); the gate 2 reports from the sandbox parity tests
+  (0); the archives (0); `release_index.py generate --require-gate2-reports` (0) and `release_index.py compare` against the
+  `v0.45.0` index (0; every package changed version, and `provider-openai-compatible` goes 2.2.1 to 2.4.0 against the
+  published index). The index and the comparison were run under the tag `v0.45.0`, because the generator refuses a tag that
+  differs from the workspace version and this tree has not been bumped to 0.46.0 (the release step does that).
+  **`scripts/check-declared-runtime.sh --dist` and `--build` FAIL (exit 1), as #151 predicted:** all fourteen packages declare
+  `south_runtime` 0.44.0 and `canonical_ir` 3, and the `v0.44.0` runtime they are loaded under records `canonical_ir` 2
+  (`component declares kernel contract canonical_ir as Some(3); this host distributes Some(2)`). That is the known state
+  until the release step moves every package to 0.46.0; it is not worked around here.
 - Mutations, each restored with `cp` and `touch` and checked with `git diff --quiet`: removing the combined word from the
   provider vocabulary (`combined_auth_arm_v1` fails); admission no longer requiring the manifest arm
-  (`the_combined_arm_is_admitted_for_a_sanctioned_header_and_a_declaring_manifest` fails); dropping `via` from South's
-  undeclarable list (`south_forbids_everything_the_kernel_never_lets_carry_a_credential` fails); the partition forgetting the
-  explicit-read subset (`explicit_cache_reads_beyond_all_cache_reads_break_the_partition` fails); the task world given the
-  provider vocabulary (`a_task_manifest_may_not_declare_the_combined_arm` fails); the Gemini family presenting a single
-  header (`gemini_openai_compatible_v1` fails in two tests).
-- Issue #138 against the previous pin: a scratch worktree of `origin/main` (kernel 0.4.0) carrying only the six new fixtures
-  and `encoded_model_segment_v1.rs` fails five tests, among them gate 2 of all three packs
+  (`a_bearer_and_header_descriptor_is_refused` fails); the combined arm's unsanctioned-name refusal reported as "not
+  declared" (`the_combined_arm_refuses_a_declared_or_unknown_header` fails); dropping `via` from South's undeclarable list
+  (`south_forbids_everything_the_kernel_never_lets_carry_a_credential` fails); the partition forgetting the explicit-read
+  subset (`explicit_cache_reads_beyond_all_cache_reads_break_the_partition` fails); the task world given the provider
+  vocabulary (`a_task_manifest_may_not_declare_the_combined_arm` fails); the Gemini family presenting a single header
+  (`gemini_openai_compatible_v1` fails in two tests).
+- Issue #138 against the previous pin: a scratch worktree of the pre-#151 `origin/main` (kernel 0.4.0) carrying only the six
+  new fixtures and `encoded_model_segment_v1.rs` fails five tests, among them gate 2 of all three packs
   (`endpoint_confinement` and `descriptor_auth_within_manifest` fail on `provider.request.model-id-with-a-slash-stays-one-segment`
   with "outside the configured endpoint"). On this branch the same rows pass.
 
