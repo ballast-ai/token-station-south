@@ -176,7 +176,26 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-该库独立 Rust 版本为 0.1.0；八个库与组件运行时当前为 v0.45.0。
+该库独立 Rust 版本为 0.1.0；八个库与组件运行时当前为 v0.46.0。
+**v0.46.0**: the kernel re-pin to protocol 0.5.0 (mirror `v0.4.0`, `c2581f37`, `canonical_ir` 3), B7b, #138 and the
+Q14 value channel (#151, #152, #154; `docs/design/2026-10-08-kernel-repin-protocol-0.5.0.md`,
+`docs/design/2026-09-30-host-zero-vendor-boundary.md` §13.7, §13.8, §16 Q35–Q45). Every manifest declares
+`ir_schema_id` `token-station-protocol@0.5.0/v0.4.0`, `kernel_version` 0.4.0, `kernel_revision` `8e34f5a0…` and
+`canonical_ir` 3; `compatibility.json` records `kernel_contracts.canonical_ir` 3. Because no earlier runtime records that
+contract, every package declares `south_runtime` 0.46.0, the oldest runtime that admits it (Q37). Protocol 0.5.0 admits
+`%2F` inside one path segment (D5) for ARN model ids (#138, with a model-with-a-slash row in the Converse,
+Converse-bearer and Gemini packs); the seven task-v2 packages that encode a task id as one observe segment refuse an id
+containing `/`. B7b adds the provider-world auth arm `bearer_and_header_secret` and the `gemini-openai-compatible`
+family in `provider-openai-compatible`; five more kernel never-credential names become undeclarable secret headers
+(Q40). Q14 adds `ProviderConfig.declared` (config keys and exported credential attributes, via
+`ComponentManifestV1::declared_keys` / `declared_values`) and `ChatRequest.host_values` (`attempt_id`), gate ②
+`undeclared_values_ignored`, and two gate ③ credential-recipe cases (twelve; `token-station-server` goes `not_verified`
+until it runs them). Identities: `provider-openai-compatible` 2.2.1 → **2.4.0** (Copilot `plan` required, #150; the
+`gemini-openai-compatible` family), and patch bumps for the other thirteen: `provider-anthropic` 1.0.12,
+`provider-gemini` 1.1.8, `provider-bedrock-converse` 1.0.9, `provider-bedrock-converse-bearer` 1.0.1, `task-kling` 1.0.8,
+`task-kling-v2` 0.32.6, `task-minimax-v2` / `task-bailian-v2` 0.31.5, `task-byteplus-v2` 0.36.5, and `task-xai-v2` /
+`task-veo-v2` / `task-wan-image-v2` / `task-gmi-image-v2` 0.35.5. Hosts re-pinning must move the kernel pin and
+`HostRangeV1.kernel_contracts.canonical_ir` with the packages and follow the Rust API changes listed in §13.7 and §13.8.
 **v0.45.0**: the host's S2 / S4 prerequisites (`docs/design/2026-09-30-host-zero-vendor-boundary.md` §13.6, §16
 Q23–Q34, host feedback SF10–SF19). A package's `south_runtime` is now the oldest runtime it needs, not the release
 that carries it, so this release re-stamps no manifest: every package keeps `south_runtime` 0.44.0, the digest-stability
