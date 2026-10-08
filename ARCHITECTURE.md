@@ -114,9 +114,11 @@ HTTP, vector extraction, pricing and settlement; both hosts are `not_verified` f
 `compatibility.json`. As with task-v2, the IR-bearing `PreparedEmbeddingsV1`, its single JSON
 codec, the guest ABI shims, the sandbox seam and the suite live in `south-component-conformance`;
 the suite builds each response case's paired request and runs the host's extraction and checks,
-so its fixtures pin what a host decides. The native references for `embeddings-openai-compatible`
-and `embeddings-gemini` pass it, and so do their wasm packages under `components/`, which are thin
-guests over those references and agree with them byte for byte across the ABI. See the
+so its fixtures pin what a host decides. The native references for `embeddings-openai-compatible`,
+`embeddings-gemini` and `embeddings-vertex` pass it, and so do their wasm packages under
+`components/`, which are thin guests over those references and agree with them byte for byte across
+the ABI. `embeddings-vertex` reads its location and project from `ProviderConfig.declared` and mints
+its bearer through a service-account credential recipe. See the
 [embeddings contract record](docs/design/2026-09-30-embeddings-contract.md).
 
 South does not own routing, fallback across upstreams, retry budgets, admission, tenants, billing,
@@ -203,9 +205,10 @@ inspect 可调用共享 observe 推进一步，等待到期本身不改变任务
 **v0.47.0**: the first release of the `embeddings-adapter-v1` world (`docs/design/2026-09-30-embeddings-contract.md`,
 v1 scope §15; release record `docs/design/2026-10-08-release-0.47.0.md`): embeddings contract 1 (text and token-id
 inputs only), suite `south.embeddings-component.v1`, the host functions `extract_vectors_v1`,
-`check_embeddings_response_v1` and `render_vectors_v1`, and the packages `embeddings-openai-compatible` 1.0.0 and
-`embeddings-gemini` 1.0.0, both `not_verified` for both hosts. The two packages declare `south_runtime` 0.47.0, the
-first runtime that knows the world. The shared crates every guest links changed, so the other fourteen packages take
+`check_embeddings_response_v1` and `render_vectors_v1`, and the packages `embeddings-openai-compatible` 1.0.0,
+`embeddings-gemini` 1.0.0 and `embeddings-vertex` 1.0.0, all `not_verified` for both hosts; gate ① admits a family's
+`config_schema` and exported credential attributes in this world. The three packages declare `south_runtime` 0.47.0,
+the first runtime that knows the world. The shared crates every guest links changed, so the other fourteen packages take
 a patch bump with unchanged behavior and keep `south_runtime` 0.46.0: `provider-openai-compatible` 2.4.1,
 `provider-anthropic` 1.0.13, `provider-gemini` 1.1.9, `provider-bedrock-converse` 1.0.10,
 `provider-bedrock-converse-bearer` 1.0.2, `task-kling` 1.0.9, `task-kling-v2` 0.32.7, `task-minimax-v2` /

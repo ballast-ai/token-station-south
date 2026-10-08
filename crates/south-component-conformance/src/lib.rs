@@ -144,5 +144,6 @@ pub use embeddings_suite::{
 };
 pub mod reference_gemini_embeddings;
 pub mod reference_openai_compatible_embeddings;
+pub mod reference_vertex_embeddings;
 #[cfg(feature = "sandbox")]
 pub mod sandbox_embeddings;

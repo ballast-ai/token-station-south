@@ -564,6 +564,14 @@ under each billing form), compared item by item:
   OpenAI-compatible component does not forward the field; the native arm forwards the client body, nulls included.
 - The Gemini component percent-encodes the model as one URL path segment. For a model name made only of
   `[A-Za-z0-9._-]` the URL is identical to the native arm's.
+- The Vertex component (§16): the model, project and region are each one percent-encoded segment (identical for
+  `[A-Za-z0-9._-]`); a response with more predictions than inputs is refused by the host's checks, where the native
+  arm billed and returned only the first; a single token-id sequence is a token-id refusal, where the native arm
+  counted its integers as inputs (both 400 before admission); a configuration without its region or project is a 500
+  naming the key, where the native arm answered 400; and a base URL that is a Vertex AI origin other than the
+  location's is refused before admission, where the native arm derived the host from the region and ignored the row's
+  URL. The recipe's assertion carries the native claims with the same values, in canonical order (boundary record
+  §13.3).
 
 Not a dual-run difference: during the dual run both arms park every non-2xx after dispatch as `delivery_unknown`
 (§4); a `rejected` classification starts releasing the reservation only after cutover (boundary record §6.4), when the
@@ -715,6 +723,25 @@ the embeddings host already mints the slot and obtains the exported attributes b
 No contract number changes, and the two packages shipped before this change declare neither source, so their manifests
 are unchanged. The world is new in 0.47.0, so no older runtime has to refuse a manifest that uses the widening.
 
+**Vertex rows** (`embeddings-vertex`, family `vertex-ai`). The package declares two config keys, `region` (required;
+syntax `aws_region`, the lowercase DNS-label rule, which admits every Vertex location and `global`) and `project`
+(optional, `gcp_project_id`: the operator's override, today's `providers.group_id`), and its service-account recipe
+exports `project_id` from the non-secret field imported from the key file's `/project_id`. So `declared` holds
+`region`, `project_id` and, when set, `project`; the component uses `project` before `project_id`, the native arm's
+order.
+
+The host passes as `base_url` the location's API origin, `https://{region}-aiplatform.googleapis.com`, or
+`https://aiplatform.googleapis.com` for `global` (the native arm's `vertex_host_for_region`; the prefixed
+`global-aiplatform` host resolves and answers 404). The component appends
+`/v1/projects/{project}/locations/{region}/publishers/google/models/{model}:predict`, each value one percent-encoded
+segment, so the URL is always below `base_url` and `EndpointConfinement` holds by construction, with no endpoint
+template and no change to the check: the region chooses the host only through the origin the operator configured. When
+`base_url` is a Vertex AI API origin (its host is `aiplatform.googleapis.com` or ends in `-aiplatform.googleapis.com`)
+it must be the one the region selects, or the build is refused (a 500 naming both) before admission, which keeps the
+host and the `locations/` segment from disagreeing and catches the `global` prefix. Any other base URL, such as an egress
+proxy or a host's test server, is used as given. An endpoint template could not express the `global` exception anyway: a
+template parameter can choose a label but not drop the prefix.
+
 ## Revision note (2026-10-01)
 
 - Header: host baseline moved to `a82c852b` and every host citation updated to it; predecessors add the image record.
@@ -751,3 +778,5 @@ are unchanged. The world is new in 0.47.0, so no older runtime has to refuse a m
   `null` for `dimensions`, `encoding_format` or `user` not forwarded, and the Gemini model percent-encoded in the URL.
 - 2026-10-08 (values channel): §16 admits `config_schema` and exported credential attributes in this world, which
   §6's Vertex column assumed, and adds `UndeclaredValuesIgnored` to the suite.
+- 2026-10-08 (`embeddings-vertex`): §16 records the Vertex rows' values, base URL and confinement; §11 lists the
+  Vertex component's intentional differences.

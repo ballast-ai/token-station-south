@@ -1,0 +1,9 @@
+{
+  "outcome": "rejected",
+  "error": {
+    "code": "auth",
+    "http_status": 403,
+    "message": "the upstream rejected the credential",
+    "provider_message": "Permission 'aiplatform.endpoints.predict' denied on resource '//aiplatform.googleapis.com/projects/fake-project-1/locations/us-central1/publishers/google/models/gemini-embedding-001' (or it may not exist)."
+  }
+}

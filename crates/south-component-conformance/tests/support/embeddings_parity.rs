@@ -1,4 +1,4 @@
-//! Shared harness of the two embeddings sandbox parity tests and the E-Q1 measurement.
+//! Shared harness of the embeddings sandbox parity tests and the E-Q1 measurement.
 //!
 //! Each test builds its package's `component.wasm` with the package's own build script, loads it
 //! through the runtime the way a host linking this release does, and compares it with the native

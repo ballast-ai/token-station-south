@@ -1,0 +1,9 @@
+{
+  "outcome": "unknown",
+  "error": {
+    "code": "upstream_unavailable",
+    "http_status": 503,
+    "message": "the upstream is unavailable",
+    "provider_message": "The service is currently unavailable."
+  }
+}

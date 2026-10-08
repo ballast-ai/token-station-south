@@ -1,0 +1,9 @@
+{
+  "outcome": "rejected",
+  "error": {
+    "code": "rate_limit",
+    "http_status": 429,
+    "message": "the upstream rate limited this request",
+    "provider_message": "Quota exceeded for aiplatform.googleapis.com/online_prediction_requests_per_base_model."
+  }
+}

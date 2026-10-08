@@ -1,0 +1,11 @@
+{
+  "usage": {
+    "source": "reported",
+    "input_tokens": 13,
+    "per_input_tokens": [
+      13
+    ]
+  },
+  "vector_count": 1,
+  "upstream_model": null
+}

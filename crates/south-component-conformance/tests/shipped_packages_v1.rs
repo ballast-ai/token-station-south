@@ -15,9 +15,10 @@ mod host_range;
 
 /// The official components this repository ships. Named, so that an empty or
 /// mistyped scan below cannot pass over nothing.
-const OFFICIAL_COMPONENTS: [&str; 16] = [
+const OFFICIAL_COMPONENTS: [&str; 17] = [
     "embeddings-gemini",
     "embeddings-openai-compatible",
+    "embeddings-vertex",
     "provider-anthropic",
     "provider-bedrock-converse",
     "provider-bedrock-converse-bearer",
@@ -715,13 +716,13 @@ fn the_embeddings_world_retires_every_published_046_package_identity() {
 }
 
 /// The embeddings world is first known to the 0.47.0 runtime, so that is the oldest runtime that
-/// admits either embeddings package, and both declare it: a host that claims 0.46.0 refuses them
+/// admits any embeddings package, and each declares it: a host that claims 0.46.0 refuses them
 /// through the declared runtime alone, even with embeddings contract 1 in its range.
 #[test]
 fn the_embeddings_packages_declare_the_first_runtime_with_the_world() {
     let mut on_046 = host_range::host_range();
     "0.46.0".clone_into(&mut on_046.south_runtime);
-    for name in ["embeddings-openai-compatible", "embeddings-gemini"] {
+    for name in ["embeddings-openai-compatible", "embeddings-gemini", "embeddings-vertex"] {
         let manifest: ComponentManifestV1 = serde_json::from_str(
             &std::fs::read_to_string(
                 repo_root().join("components").join(name).join("manifest.json"),

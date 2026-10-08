@@ -1,0 +1,7 @@
+{
+  "status": 429,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"error\":{\"code\":429,\"message\":\"Quota exceeded for aiplatform.googleapis.com/online_prediction_requests_per_base_model.\",\"status\":\"RESOURCE_EXHAUSTED\"}}"
+}
