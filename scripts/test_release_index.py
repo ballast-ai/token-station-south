@@ -106,6 +106,15 @@ class Workspace:
         (self.dist / release_index.gate2_report_name(manifest["name"], TAG)).write_bytes(data)
         return data
 
+    def add_catalog(self, stem: str = "model-catalog", document: dict | None = None, published: bytes | None = None) -> bytes:
+        """Adds catalogs/<stem>.json and its published copy in dist; returns the source bytes."""
+        data = (json.dumps(document or {"schema": "south.model-catalog.v1", "entries": []}, indent=2) + "\n").encode()
+        catalogs = self.root / "catalogs"
+        catalogs.mkdir(exist_ok=True)
+        (catalogs / f"{stem}.json").write_bytes(data)
+        (self.dist / release_index.catalog_name(stem, TAG)).write_bytes(data if published is None else published)
+        return data
+
     def generate(self, **kwargs) -> dict:
         return release_index.generate(
             self.dist, self.components, TAG, self.root / "Cargo.toml", self.root / "compatibility.json", **kwargs
@@ -309,6 +318,95 @@ class GenerateTest(unittest.TestCase):
         self.assertEqual(json.loads(written)["packages"][0]["name"], "provider-gemini")
 
 
+class CatalogGenerateTest(unittest.TestCase):
+    """Boundary record §13.11: the release lists each catalog by schema, file and digest."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.ws = Workspace(Path(self.tmp.name))
+        self.ws.add(provider_manifest())
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def test_no_catalogs_directory_lists_none(self) -> None:
+        self.assertEqual(self.ws.generate()["catalogs"], [])
+
+    def test_a_catalog_is_listed_with_schema_file_and_digest(self) -> None:
+        data = self.ws.add_catalog()
+        self.assertEqual(
+            self.ws.generate()["catalogs"],
+            [
+                {
+                    "schema": "south.model-catalog.v1",
+                    "file": f"model-catalog-{TAG}.json",
+                    "sha256": hashlib.sha256(data).hexdigest(),
+                }
+            ],
+        )
+
+    def test_a_missing_published_catalog_is_refused(self) -> None:
+        self.ws.add_catalog()
+        (self.ws.dist / f"model-catalog-{TAG}.json").unlink()
+        with self.assertRaisesRegex(release_index.ReleaseIndexError, "is missing"):
+            self.ws.generate()
+
+    def test_a_published_catalog_must_equal_its_source(self) -> None:
+        self.ws.add_catalog(published=b'{"schema": "south.model-catalog.v1", "entries": []}\n')
+        with self.assertRaisesRegex(release_index.ReleaseIndexError, "verbatim"):
+            self.ws.generate()
+
+    def test_an_unknown_schema_is_refused(self) -> None:
+        self.ws.add_catalog(document={"schema": "south.model-catalog.v2", "entries": []})
+        with self.assertRaisesRegex(release_index.ReleaseIndexError, "south.model-catalog.v2"):
+            self.ws.generate()
+
+    def test_a_catalog_that_is_not_an_object_is_refused(self) -> None:
+        self.ws.add_catalog(document=["south.model-catalog.v1"])
+        with self.assertRaisesRegex(release_index.ReleaseIndexError, "schema None"):
+            self.ws.generate()
+
+    def test_two_catalogs_of_one_schema_are_refused(self) -> None:
+        self.ws.add_catalog("model-catalog")
+        self.ws.add_catalog("model-catalog-copy")
+        with self.assertRaisesRegex(release_index.ReleaseIndexError, "one catalog per schema"):
+            self.ws.generate()
+
+    def test_a_stray_catalog_file_is_refused(self) -> None:
+        self.ws.add_catalog()
+        (self.ws.dist / f"ghost-catalog-{TAG}.json").write_bytes(b"{}")
+        with self.assertRaisesRegex(release_index.ReleaseIndexError, "ghost-catalog"):
+            self.ws.generate()
+
+    def test_main_reads_the_catalogs_directory_beside_components(self) -> None:
+        self.ws.add_catalog()
+        root = self.ws.root
+        with contextlib.redirect_stdout(io.StringIO()):
+            code = release_index.main(
+                [
+                    "generate",
+                    f"--dist={root / 'dist'}",
+                    f"--components={root / 'components'}",
+                    f"--tag={TAG}",
+                    f"--cargo-toml={root / 'Cargo.toml'}",
+                    f"--compatibility={root / 'compatibility.json'}",
+                ]
+            )
+        self.assertEqual(code, 0)
+        written = json.loads((root / "dist" / "south-release-index.json").read_text(encoding="utf-8"))
+        self.assertEqual([catalog["schema"] for catalog in written["catalogs"]], ["south.model-catalog.v1"])
+
+    def test_the_repository_catalog_is_listed(self) -> None:
+        # The real catalogs/ directory: every file in it declares a known schema.
+        repository = Path(__file__).resolve().parent.parent / "catalogs"
+        for source in sorted(repository.glob("*.json")):
+            published = self.ws.dist / release_index.catalog_name(source.stem, TAG)
+            published.write_bytes(source.read_bytes())
+        entries = self.ws.generate(catalogs=repository)["catalogs"]
+        self.assertEqual([entry["schema"] for entry in entries], ["south.model-catalog.v1"])
+        self.assertEqual(entries[0]["file"], f"model-catalog-{TAG}.json")
+
+
 def index_of(*packages: tuple[str, ...]) -> dict:
     """An index of (name, version, component digest[, manifest digest]) entries."""
     entries = []
@@ -320,7 +418,54 @@ def index_of(*packages: tuple[str, ...]) -> dict:
     return {"schema": "south.release-index.v1", "packages": entries}
 
 
+def with_catalogs(index: dict, *catalogs: tuple[str, str]) -> dict:
+    """The index with (schema, digest) catalog entries."""
+    index["catalogs"] = [{"schema": schema, "file": f"{schema}.json", "sha256": digest} for schema, digest in catalogs]
+    return index
+
+
 class CompareTest(unittest.TestCase):
+    def test_an_index_without_catalogs_compares_as_empty(self) -> None:
+        log, violations = release_index.compare(
+            index_of(("a", "1.0.0", "aa")), with_catalogs(index_of(("a", "1.0.0", "aa")), ("s.v1", "c1"))
+        )
+        self.assertEqual(violations, [])
+        self.assertEqual(log, ["a 1.0.0: component.wasm unchanged", "catalog s.v1: new (s.v1.json)"])
+
+    def test_catalog_data_may_change_between_releases(self) -> None:
+        log, violations = release_index.compare(
+            with_catalogs(index_of(), ("s.v1", "c1")), with_catalogs(index_of(), ("s.v1", "c2"))
+        )
+        self.assertEqual(violations, [])
+        self.assertEqual(log, ["catalog s.v1: data changed (c1 -> c2)"])
+
+    def test_an_unchanged_catalog_is_logged(self) -> None:
+        log, violations = release_index.compare(
+            with_catalogs(index_of(), ("s.v1", "c1")), with_catalogs(index_of(), ("s.v1", "c1"))
+        )
+        self.assertEqual((log, violations), (["catalog s.v1: unchanged"], []))
+
+    def test_a_vanished_catalog_schema_fails(self) -> None:
+        # A schema bump that drops the old schema: hosts still loading s.v1 would lose the data.
+        log, violations = release_index.compare(
+            with_catalogs(index_of(), ("s.v1", "c1")), with_catalogs(index_of(), ("s.v2", "c2"))
+        )
+        self.assertEqual(log, ["catalog s.v2: new (s.v2.json)"])
+        self.assertEqual(len(violations), 1)
+        self.assertIn("catalog s.v1: published by the previous release but not by this one", violations[0])
+
+    def test_a_retired_catalog_schema_may_vanish(self) -> None:
+        retired = release_index.RETIRED_CATALOG_SCHEMAS
+        release_index.RETIRED_CATALOG_SCHEMAS = frozenset({"s.v1"})
+        try:
+            log, violations = release_index.compare(with_catalogs(index_of(), ("s.v1", "c1")), with_catalogs(index_of()))
+        finally:
+            release_index.RETIRED_CATALOG_SCHEMAS = retired
+        self.assertEqual((log, violations), (["catalog s.v1: retired"], []))
+
+    def test_no_catalog_schema_is_retired_today(self) -> None:
+        self.assertEqual(release_index.RETIRED_CATALOG_SCHEMAS, frozenset())
+
     def test_unchanged_version_with_unchanged_bytes_passes(self) -> None:
         log, violations = release_index.compare(index_of(("a", "1.0.0", "aa")), index_of(("a", "1.0.0", "aa")))
         self.assertEqual(violations, [])

@@ -983,6 +983,10 @@ B lets the two hosts share the catalog but turns "keeping up with providers' new
 burden; C costs south the least, but each host maintains its own copy, which contradicts DP0's rationale (sharing
 southbound work). Prices do not enter south (ARCHITECTURE.md:108-112).
 
+**Amended (2026-10-08, §13.11).** B is implemented as one document per release keyed by upstream model id and match
+rules (the host's proposal SF24), not one per family; it carries image and video capabilities only, so no family's
+maximum output is in it yet. South validates the document's shape; the meaning of `capabilities` stays with the host.
+
 ### 7.6 Conformance and versioning
 
 A new gate ② check, `RequestFactsHonoured`: every request fixture asserts that the IR cap appears in exactly one
@@ -1136,6 +1140,9 @@ manifest (never hand-written) and listed in `SHASUMS256.txt`:
 }
 ```
 
+Amended (2026-10-08, §13.11): a `catalogs` entry is `{ "schema", "file", "sha256" }`, one per catalog schema, with no
+`family`.
+
 The host's fetch script and startup gate discover packages through the index and verify them by digest; operators
 still pin packages by digest. `gate2_report_sha256` names the gate ② report south's CI produced for that exact
 `component_sha256`, published beside the archives, so a host can show that a first-party package passed gate ② at
@@ -1283,7 +1290,7 @@ the link layer.
 | B4 | Credential recipe v1: manifest section, trust rules, reference interpreter, gate ② fixtures, gate ③ host suite; the `Auth::OAuth` admission rule | P21 S3; P22 Vertex, P23 Vertex TTS | J2b① (minting part, first-party packages) | minor |
 | B7a | §10 instance declarations on the south side: declared secret headers, query parameters, quota headers, `DeclaredUserAgentV1`; the contract changes of §10 | P21 S7 | New instances no longer touch the south link layer | minor |
 | B5 | T21 guests, gaining modes phase by phase alongside B1–B4 and B7a | J2 standing pilot | All of J2b | Not published |
-| B6 | Responses upstream, Kiro, InvokeModel-Anthropic, catalog data, catalog world | P21 S6, S7 | J1 keeps falling | minor each |
+| B6 | Responses upstream, Kiro, InvokeModel-Anthropic, catalog data, catalog world. Catalog data (B6-1) implemented, not released (§13.11). | P21 S6, S7 | J1 keeps falling | minor each |
 | B7b | Kernel chain: `Auth` combined arm, credential header catalog (§10), cache buckets. **Landed 2026-10-08 (§13.7).** | P21 S7 | New secret header names no longer touch the kernel | minor + kernel |
 
 B1, B2 and B3 are independent of one another and can proceed in parallel; B4 depends on B2's descriptor auth
@@ -2414,6 +2421,162 @@ code; all exited 0.
   fails `counts_never_decrease_across_chunks`; dropping the after-terminal refusal fails
   `a_chunk_after_the_terminal_one_is_refused`.
 
+### 13.11 B6-1: the model catalog artifact, `south.model-catalog.v1` (2026-10-08)
+
+On 2026-10-08 the owner (lv) approved starting phase B6 with the catalog, B6-1 of the host's B6 plan
+(token-station-server, the P21 south B6 implementation plan of 2026-10-08, §3.1). Its two format questions
+were taken as that plan recommends: **Q-B6-1**, adopt the host's proposal SF24 (catalog keyed by upstream model id and
+match rules, not per family; text families' maximum output stays out); **Q-B6-2**, South maintains the data and the host
+keeps operator overrides that may only tighten (host Q-S6-1). This section amends §7.5 and the `catalogs` sketch of §9.2,
+and answers the South half of Q7. Implemented on branch `b6-1-model-catalog`; nothing is released (see "Package identity").
+
+**The document.** One JSON document per release:
+
+```json
+{
+  "schema": "south.model-catalog.v1",
+  "entries": [
+    { "match": [{ "contains": "seedance-2-0-fast" }, { "contains": "seedance-2-0-mini" }],
+      "capabilities": { "params": { "duration": { "min": 4, "max": 15 } } } },
+    { "match": [{ "contains": "seedance-2-0" }], "capabilities": { "…": "…" } },
+    { "match": [{ "exact": "gpt-image-2" }, { "exact": "gpt-image-2-2026-04-21" }], "capabilities": { "…": "…" } }
+  ]
+}
+```
+
+- `match` is a non-empty list of rules; a rule is an object with exactly one key, `exact` (the id equals the value),
+  `prefix` (the id starts with it) or `contains` (the id contains it), whose value is a non-empty string. Comparison is
+  case-sensitive. An entry applies when any of its rules matches.
+- **Entry order is significant**: a model id takes the first entry that matches it, so a more specific rule comes first
+  (`seedance-2-0-fast` before `seedance-2-0`). `None` means "no declaration", not "no capability".
+- `capabilities` is a JSON object in the host's capability vocabulary (parameter ranges, media roles and their
+  exclusivity, features, constraints), carried verbatim.
+- The ids are upstream model ids only: no provider names, no hosts, no family names (DP0).
+
+**Initial data.** `catalogs/model-catalog.json` is the host's export, **byte for byte**: token-station-server
+`gateway/src/modules/inference/engine/testdata/model_catalog.v1.json` at `f42bf11b` (P21 S6 C2), SHA-256
+`d54da284c6780065def520b8062c109aa6a58a7ab286256fa4621fa8299fecb7`, 28 181 bytes: 37 entries and 60 rules (50 `exact`,
+6 `prefix`, 4 `contains`), image and video models only. The host's golden test proves that loading this file gives, for 72
+probe ids, the same profile as its built-in catalog; the file is unchanged, so that proof carries over.
+
+**Why not per family (deviation from §7.5 and §9.2).** §7.5 option B sketched one catalog per provider family. The data
+that exists does not fit that key: the capabilities describe image and video models, which are served by task packages
+today and by the image world later, not by provider families; one upstream model id can be reachable through more than
+one family or package; and the host looks a profile up by upstream model id after it has chosen a route, using exactly
+these three rule kinds. A per-family split would duplicate entries or force a family on data that has none. One
+document keyed by model id is what the host consumes (host plan S6 §2.2) and what its golden test already pins.
+
+**Not adopted from the SF24 sketch: `modality`.** The host's plan §2.2 sketches a per-entry `modality` field; its actual
+export (the file above) has none, and the capability vocabulary already differs by kind (video durations and frame roles,
+image sizes and counts). The format therefore has no `modality`. Adding it later is a format change (below), because a
+strict reader refuses an unknown field.
+
+**Text is out.** The maximum output of text families that cannot send a cap (§7.2; Kiro, Codex) is not in this catalog:
+lv ruled that S6 does not touch text, so those values stay on the host's model rows. Whether text capabilities enter a
+catalog is a separate later item; Kiro's model list (Kiro K-Q13) is settled with the Kiro package (B6-3).
+
+**Shape versus meaning (Q-B6-2; host Q-S6-2).** South owns the document's shape and refuses, in
+`south_provider_runtime::ModelCatalogV1::parse`: bytes that are not JSON or not an object; a `schema` other than
+`south.model-catalog.v1`; a missing or unknown top-level field (`schema`, `entries`) or entry field (`match`,
+`capabilities`); an empty `match` list; a rule that is not exactly one key, has another kind, or has a value that is not
+a non-empty string (an empty `prefix` or `contains` would match every id and shadow every later entry); a rule that
+repeats an earlier rule of the same kind and value anywhere in the document (the later copy could never decide a lookup);
+and `capabilities` that is not an object. **South does not interpret `capabilities`**: the vocabulary is the host's
+admission policy and its validation is the host's (`Capabilities::validate`), so a vocabulary change on the host side
+needs no South contract change. The consequence is that a South data change can pass South's checks and still be refused
+by the host's loader; Q49 asks what the host does then, and Q48 asks how a data change is checked before release.
+
+**Versioning.** A change a `south.model-catalog.v1` reader could not read correctly (a renamed, removed or added field,
+a new rule kind, a changed rule meaning) takes a new schema id, `south.model-catalog.v2`. Data changes (models added,
+removed or re-described) keep the id and ship in an ordinary South release; there is no per-entry version. A schema bump
+publishes the new document beside the old one for at least one release; dropping the old one is a deliberate retirement
+(see "Comparing releases").
+
+**Where the type lives: `south-provider-runtime`.** The Rust reader is `ModelCatalogV1`, `ModelCatalogEntryV1`,
+`ModelMatchV1`, `ModelCatalogErrorV1` and `MODEL_CATALOG_SCHEMA_V1`, exported by `south-provider-runtime` beside
+`load_package_set`: it is release data a host loads with the packages, and the host already links this crate. It reads
+JSON values directly (the crate has no `serde` derive dependency) and writes the document form back with `to_value`. It
+was first written in `south-contracts`, and a same-path rebuild of all seventeen packages then gave a **different
+`component.wasm` for every one**, although no guest calls it: every guest links `south-contracts`,
+`south-provider-api` and `south-component-conformance`, and any source change there moves code placement (the same
+effect §13.10 recorded for the conformance crate). `south-provider-runtime` is linked by no guest (the conformance
+crate's `sandbox` feature stays off in components); with the type there, the same rebuild gives seventeen identical
+`component.wasm` files.
+
+**Release plumbing.** Each `catalogs/<name>.json` is published verbatim as `<name>-<tag>.json` (so
+`model-catalog-v0.50.0.json` for a 0.50.0 release), covered by `SHASUMS256.txt` and attached to the release. The index's
+`catalogs` list replaces the `{family, file, sha256}` sketch of §9.2 with one entry per schema:
+
+```json
+"catalogs": [{ "schema": "south.model-catalog.v1", "file": "model-catalog-v0.50.0.json", "sha256": "…" }]
+```
+
+Keyed by `schema` because a release carries one catalog per schema and there is no family; `file` and `sha256` are
+what a host fetches and verifies. `release_index.py generate` reads `catalogs/` and refuses: a published file that is
+missing or differs from its source, a document whose `schema` is not a known catalog schema (the list,
+`KNOWN_CATALOG_SCHEMAS`, holds only `south.model-catalog.v1`, so a new format is a change to the script and to this
+record, never a file dropped into `catalogs/`), two catalogs of one schema, and a `*-<tag>.json` file in `dist/` with no
+source. It reads only `schema`; the full shape check is `ModelCatalogV1`, run by the test suite on the same source file
+(`the_shipped_catalog_is_a_valid_document_that_round_trips`), and the byte comparison ties the published file to it.
+
+**Comparing releases.** `release_index.py compare` lists catalogs by schema: a new schema and a changed digest are
+logged and pass (data ships in releases); a schema the previous index listed and the current one does not is a
+**violation**, unless it is named in `RETIRED_CATALOG_SCHEMAS` (empty today), because a host loading that schema would
+lose its data on re-pin with nothing in the release saying so. An index without `catalogs` (every release before this
+change lists `[]`) compares as empty.
+
+**Host consumption (host S6 C3, for reference).** The host's fetch script discovers the catalog through the index,
+verifies it against the entry's `sha256` (and `SHASUMS256.txt`) and pins that digest as it pins packages; a mismatch
+refuses startup (the S2 rule for packages). A deployment without a catalog starts, logs W8 and runs without capability
+prechecks, as today for a model without a profile. Operator overrides on model rows may only tighten an entry; a model
+the catalog does not describe cannot be given a profile by an override (Q-S6-1).
+
+**Maintenance (Q7, SF25).** South maintains the data (Q-B6-2). The host's discipline moves with it: a capability is
+declared only when the provider's documentation states it, a dimension the documentation leaves open or contradicts is
+not declared, and an input is declared only when the serving path forwards it ("declaration = enforcement",
+`capabilities.rs` module docs). The last condition is a fact about the host's and the package's forwarding that South's
+checks cannot see, and the JSON carries no comments, so the per-profile sources the host kept in `capabilities.rs` are
+not in the file. Q48 asks where provenance lives and who confirms forwarding.
+
+**Package identity.** No package changes: no guest-linked crate is touched, and the same-path rebuild of all seventeen
+packages on this branch gives `component.wasm` digests identical to `origin/main` (`daca924`). The branch keeps the
+workspace at 0.49.0, so it does not release. **Measured while preparing it:** bumping the workspace version alone
+(0.49.0 to 0.50.0 in `Cargo.toml`, the crate path dependencies, `compatibility.json` and the component lockfiles, with
+no source change) also gives a different `component.wasm` for all seventeen, because the guest-linked crates' version
+enters their build. The release that first publishes the catalog must therefore patch-bump every package, as 0.49.0
+did, unless Q47 changes how those crates are versioned. That is why this change carries no release; when to cut it is
+the host plan's Q-B6-9.
+
+**Not done here.** T21's catalog slice (§12 item 7) and the host's acceptance slice (S6 C5) need the host loader (C3).
+The catalog world (B6-5) is a separate block.
+
+**Evidence (2026-10-08, branch `b6-1-model-catalog` on `daca924`).** Every command below was judged by its own exit
+code; all exited 0.
+
+- `cargo fmt --all -- --check`; `cargo clippy --workspace --all-targets --all-features -- -D warnings`;
+  `cargo nextest run --workspace --all-features` with `PROPTEST_CASES=32` (1348 passed, 2 skipped); the doctests;
+  `cargo test --workspace --no-default-features`; `cargo check --manifest-path fuzz/Cargo.toml --all-targets --locked`;
+  `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features`; `rustup run 1.96.0 cargo check --workspace
+  --all-targets`; `scripts/check-boundaries.sh` (self-test and run); `python3 -m unittest discover -s scripts -p
+  'test_*.py'` (50 tests); `scripts/check-language.sh` (self-test, tracked files, and `--commits origin/main..HEAD`);
+  `cargo deny`, `cargo audit` and `cargo machete` for the workspace and `fuzz/`; all seventeen component build scripts;
+  and `scripts/check-declared-runtime.sh --build`.
+- Same-path rebuilds of all seventeen packages: `origin/main` twice (identical, so the build is deterministic); with the
+  type in `south-contracts` (all seventeen differ); with the type in `south-provider-runtime` (all seventeen identical to
+  `origin/main`); and `origin/main` with only the workspace version moved to 0.50.0 (all seventeen differ).
+- Release replay under `v0.49.0` without publishing: the seventeen gate ② reports, the Package step as written in
+  `release.yml` (the catalog lands in `dist/` byte-identical to its source), `release_index.py generate
+  --require-gate2-reports` (`catalogs` lists `south.model-catalog.v1`, `model-catalog-v0.49.0.json`, `d54da284…`), and
+  `SHASUMS256.txt` covering the catalog (`sha256sum --check` passes). `compare` against an index generated by the
+  `origin/main` script over the same packages: seventeen packages unchanged, the catalog new, no violation. `compare`
+  against the published v0.49.0 index (checksum verified) logs the catalog as new and reports seventeen package
+  violations, because a local macOS build never reproduces the CI build's digests (`provider-gemini` 1.1.11 builds to
+  `8a05cc5a…` locally and `371b2707…` in the release); that comparison is only meaningful in release CI.
+- Mutations, each restored from a copy: dropping the repeated-rule check, the unknown-field check, the empty-value
+  check, the schema check, the empty-match check or the one-key check each fails its own test; dropping the
+  vanished-schema violation fails `test_a_vanished_catalog_schema_fails`, and dropping the verbatim comparison fails
+  `test_a_published_catalog_must_equal_its_source`.
+
 ## 14. Existing text to revise in step
 
 - ARCHITECTURE.md:117-126: change the concluding sentence to "execution, material, reachable destinations and the
@@ -2501,6 +2664,9 @@ Tags: S = south maintainers, L = lv, K = kernel.
   data; if it belongs to south, who keeps up with providers' new models (§7.5)?
   **Ruled for the host side (lv, 2026-09-30): a south data artifact.** Who maintains it remains open for the south
   maintainers.
+  **South half (2026-10-08, §13.11): South maintains the data** (host plan Q-B6-2, taken as recommended when lv
+  approved B6): one `south.model-catalog.v1` document per release, in the host's SF24 shape; the host keeps overrides
+  that may only tighten. How a data change is sourced and checked is Q48.
 - **Q8 (S)** Do the native reference implementations remain a supported production engine? If so, J3 needs the
   host to disable fallback explicitly (§8.5).
 - **Q9 (S, community host)** Reference-implementation strictness is a behavior change for the community host
@@ -2741,6 +2907,26 @@ Tags: S = south maintainers, L = lv, K = kernel.
   contract version eleven, following versions two to ten. **Approved by lv on 2026-10-08 (the change itself); the
   locator inheritance and the contract number were taken as recommended under the owner's standing rule and are
   flagged for the owner because they relax a shared security check.**
+- **Q47 (S, L)** Every South release re-identifies every package (§13.11). Bumping the workspace version alone, with no
+  source change, moves all seventeen `component.wasm` files, because the crates the guests link (`south-contracts`,
+  `south-provider-api`, `south-component-conformance`) take the workspace version. So a release that only ships catalog
+  data still makes every host re-pin every package, which dilutes digest pinning the way §15 feared for a catalog
+  compiled into the wasm. Options: (A) accept it, and every release patch-bumps every package as 0.49.0 did; (B) give
+  the guest-linked crates a version of their own that moves only when their source does (the `south-task-core`
+  precedent), so a release that changes none of them keeps every package identity; (C) publish catalogs outside the
+  release (refused: the index and its checksums are per release, and the host pins through the index). Recommended:
+  (B), as its own change before the release that first carries the catalog, after measuring that it does keep the
+  bytes. Open.
+- **Q48 (S, L)** How is a catalog data change sourced and checked (SF25)? The host's discipline needs, per capability,
+  the provider documentation that states it and confirmation that the serving path forwards the input; the JSON holds
+  neither, and the per-profile sources in the host's `capabilities.rs` did not travel with the export. Recommended: a
+  data change names its sources (provider documentation and date) in its pull request and release record, a capability
+  that depends on forwarding is added only after the host or package owner confirms it, and the host's loader runs over
+  the candidate file before the release (its golden test, pointed at the new file). Whether provenance also gets a file
+  beside the catalog is open. Open.
+- **Q49 (L)** What does the host do with a catalog whose digest matches but which its capability loader refuses (a
+  vocabulary South does not check, §13.11)? Recommended: refuse startup, as for a digest mismatch, because a wrong
+  catalog can admit or refuse requests wrongly while a missing one only turns prechecks off (W8). Host side. Open.
 
 ## 17. Amendments found while drafting the component records (2026-09-30) — change log
 
@@ -2838,5 +3024,7 @@ into the body. Where each landed:
   channel paragraph, §13.1's interim config rule and the Q14 item of §14 point to §13.8; Q14 records the South half.
 - 2026-10-08, host feedback SF26: new §13.9 and §16 Q46; §13.7 item 7 gains an amendment, its remaining-risk paragraph a
   note, and its host steps a correction of the R17 bullet.
+- 2026-10-08, B6-1 (host feedback SF24, SF25): new §13.11, the model catalog artifact `south.model-catalog.v1`, and §16
+  Q47–Q49. §7.5 and §9.2 gain amendment notes, the §13 B6 row a status, and Q7 its South half.
 - 2026-10-08, host feedback SF27: new §13.10. A Gemini stream's usage comes from its terminal chunk (the one carrying
   `finishReason`); `provider-gemini` 1.1.11, released in 0.49.0. The Gemini component record gains decision G7.

@@ -255,9 +255,12 @@ Field derivation, where §9.2 leaves it implicit:
 | `archive_sha256`, `manifest_sha256`, `component_sha256` | SHA-256 of the archive and of the two files inside it |
 | `gate2_report` | The report file published beside the archive, `<package>-<tag>.gate2.json`; `null` when none was produced |
 | `gate2_report_sha256` | SHA-256 of that report file |
+| `catalogs[]` | One `{schema, file, sha256}` per catalog: the document's `schema`, the published file `<name>-<tag>.json` copied verbatim from `catalogs/<name>.json`, and its SHA-256 (boundary record §13.11) |
 
 Packages are sorted by name, keys keep the order §9.2 shows, and the file ends with a newline, so the same inputs
-give the same bytes. `catalogs` is `[]` until the catalog data of B6 exists.
+give the same bytes. `catalogs` was `[]` until the catalog data of B6 existed; since B6-1 (2026-10-08) it lists
+the model catalog, `south.model-catalog.v1`, which the release also attaches and covers in `SHASUMS256.txt`, and the
+digest-stability comparison refuses a catalog schema that disappears without being retired (boundary record §13.11).
 
 ### 8.3 Gate ② reports
 

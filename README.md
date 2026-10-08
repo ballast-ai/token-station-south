@@ -192,7 +192,9 @@ contract 7 added, have their own records:
 Every release also attaches `south-release-index.json` (schema `south.release-index.v1`): each
 package's world, families, capabilities, auth arms, compatibility declaration and the digests of
 its archive, `manifest.json` and `component.wasm`, plus the digest of the gate ② report
-(`<package>-<tag>.gate2.json`) CI produced for that exact `component.wasm`.
+(`<package>-<tag>.gate2.json`) CI produced for that exact `component.wasm`, and under `catalogs`
+the model catalog (`model-catalog-<tag>.json`, schema `south.model-catalog.v1`: image and video
+capabilities by upstream model id, read by `south_provider_runtime::ModelCatalogV1`) with its digest.
 `scripts/release_index.py` generates it from the archived manifests, and the release fails when a
 package keeps its version but its `component.wasm` or `manifest.json` digest differs from the
 previous release's index. A package's `south_runtime` is the oldest runtime it needs, not the

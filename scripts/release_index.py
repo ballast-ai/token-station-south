@@ -3,11 +3,13 @@
 
 Four subcommands, all used by .github/workflows/release.yml:
 
-  generate           Reads the staged archives (and gate 2 reports) in a dist directory, cross-checks
-                     them against components/*/manifest.json, and writes south-release-index.json.
+  generate           Reads the staged archives (and gate 2 reports) and catalogs in a dist directory,
+                     cross-checks them against components/*/manifest.json and catalogs/*.json, and
+                     writes south-release-index.json.
   previous-tag       Reads release tag names on stdin and prints the latest one earlier than --current.
   compare            Fails when a package keeps its version between two indexes but its component.wasm
-                     or its manifest.json changed: the version must bump (§8.6, §13.6).
+                     or its manifest.json changed: the version must bump (§8.6, §13.6). Also fails
+                     when a catalog schema the previous index listed is gone and not retired (§13.11).
   declared-runtimes  Prints `<south_runtime> <package>` for every staged package, so
                      scripts/check-declared-runtime.sh can load each one under the runtime it declares
                      (§13.6). Refuses a declaration the check could not honour.
@@ -38,6 +40,14 @@ VERSION_TRIPLE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 # The first runtime with the range handshake (B3, §8.3): nothing older can admit a package that
 # declares `runtime_abi`, so no package may declare it as its minimum.
 RANGE_HANDSHAKE_RUNTIME = (0, 43, 0)
+# Catalog data (boundary record §7.5, §13.11). A catalog is listed by the schema id its document
+# declares; the release refuses a schema it does not know, so a new catalog format is a deliberate
+# change here and in the design record, never a file dropped into catalogs/.
+KNOWN_CATALOG_SCHEMAS = frozenset({"south.model-catalog.v1"})
+# A schema listed here may be absent from a release although the previous release published it.
+# Retiring one is a breaking change for hosts that load it (they lose the data, §13.11), so it
+# takes an entry here, made in the same change as its design record.
+RETIRED_CATALOG_SCHEMAS: frozenset[str] = frozenset()
 
 
 class ReleaseIndexError(Exception):
@@ -54,6 +64,11 @@ def archive_name(package: str, tag: str) -> str:
 
 def gate2_report_name(package: str, tag: str) -> str:
     return f"{package}-{tag}.gate2.json"
+
+
+def catalog_name(stem: str, tag: str) -> str:
+    """The published name of catalogs/<stem>.json."""
+    return f"{stem}-{tag}.json"
 
 
 def workspace_version(cargo_toml: Path) -> str:
@@ -185,6 +200,47 @@ def package_entry(
     return entry, archive
 
 
+def catalog_entries(catalogs: Path, dist: Path, tag: str) -> tuple[list[dict], set[str]]:
+    """The index's `catalogs` list, and the dist file names it consumed.
+
+    Each catalogs/<stem>.json must be published verbatim as <stem>-<tag>.json. Only the document's
+    `schema` is read here: the full shape check is the Rust contract (`south_contracts::ModelCatalogV1`)
+    run by the test suite over the same source file, and the byte comparison below ties the published
+    file to that source.
+    """
+    entries, consumed, schemas = [], set(), {}
+    sources = sorted(catalogs.glob("*.json")) if catalogs.is_dir() else []
+    for source in sources:
+        published = catalog_name(source.stem, tag)
+        path = dist / published
+        if not path.is_file():
+            raise ReleaseIndexError(f"catalogs/{source.name}: {published} is missing from {dist}")
+        data = path.read_bytes()
+        if data != source.read_bytes():
+            raise ReleaseIndexError(
+                f"{published}: differs from catalogs/{source.name}; the release must carry the catalog verbatim"
+            )
+        try:
+            document = json.loads(data)
+        except json.JSONDecodeError as error:
+            raise ReleaseIndexError(f"catalogs/{source.name}: not JSON: {error}") from error
+        schema = document.get("schema") if isinstance(document, dict) else None
+        if schema not in KNOWN_CATALOG_SCHEMAS:
+            raise ReleaseIndexError(
+                f"catalogs/{source.name}: schema {schema!r} is not one of {sorted(KNOWN_CATALOG_SCHEMAS)}"
+            )
+        if schema in schemas:
+            raise ReleaseIndexError(
+                f"catalogs/{source.name}: schema {schema} is already published by catalogs/{schemas[schema]}; "
+                "a release carries one catalog per schema"
+            )
+        schemas[schema] = source.name
+        entries.append({"schema": schema, "file": published, "sha256": sha256_hex(data)})
+        consumed.add(published)
+    entries.sort(key=lambda entry: entry["schema"])
+    return entries, consumed
+
+
 def generate(
     dist: Path,
     components: Path,
@@ -192,6 +248,7 @@ def generate(
     cargo_toml: Path,
     compatibility_json: Path,
     require_gate2_reports: bool = False,
+    catalogs: Path | None = None,
 ) -> dict:
     version = workspace_version(cargo_toml)
     if tag != f"v{version}":
@@ -212,13 +269,20 @@ def generate(
     if stray:
         raise ReleaseIndexError(f"archives with no components/<name>/manifest.json: {stray}")
 
+    catalog_list, catalog_files = catalog_entries(
+        catalogs if catalogs is not None else components.parent / "catalogs", dist, tag
+    )
+    stray = sorted(path.name for path in dist.glob(f"*-{tag}.json") if path.name not in catalog_files)
+    if stray:
+        raise ReleaseIndexError(f"catalog files with no catalogs/<name>.json: {stray}")
+
     packages.sort(key=lambda entry: entry["name"])
     return {
         "schema": INDEX_SCHEMA,
         "south_release": version,
         "runtime_abi": compatibility.get("runtime_abi"),
         "packages": packages,
-        "catalogs": [],
+        "catalogs": catalog_list,
     }
 
 
@@ -276,7 +340,36 @@ def compare(previous: dict, current: dict) -> tuple[list[str], list[str]]:
             log.append(f"{name} {version}: component.wasm unchanged")
     for name in sorted(set(before) - {package["name"] for package in current["packages"]}):
         log.append(f"{name}: no longer released")
+    compare_catalogs(previous.get("catalogs", []), current.get("catalogs", []), log, violations)
     return log, violations
+
+
+def compare_catalogs(previous: list[dict], current: list[dict], log: list[str], violations: list[str]) -> None:
+    """Catalog data may change in any release; a schema may not silently disappear (§13.11).
+
+    A changed digest under the same schema is ordinary: catalog data ships in releases. A schema the
+    previous release published and this one does not is a violation unless it is retired, because a
+    host loading that schema would lose the data on re-pin with nothing at the release saying so.
+    """
+    before = {catalog["schema"]: catalog for catalog in previous}
+    for catalog in current:
+        schema, digest = catalog["schema"], catalog["sha256"]
+        old = before.get(schema)
+        if old is None:
+            log.append(f"catalog {schema}: new ({catalog['file']})")
+        elif old["sha256"] != digest:
+            log.append(f"catalog {schema}: data changed ({old['sha256']} -> {digest})")
+        else:
+            log.append(f"catalog {schema}: unchanged")
+    for schema in sorted(set(before) - {catalog["schema"] for catalog in current}):
+        if schema in RETIRED_CATALOG_SCHEMAS:
+            log.append(f"catalog {schema}: retired")
+        else:
+            violations.append(
+                f"catalog {schema}: published by the previous release but not by this one; hosts loading it "
+                "would lose it on re-pin. Keep publishing it, or list it in RETIRED_CATALOG_SCHEMAS with a "
+                "design record"
+            )
 
 
 def declared_runtimes(root: Path, workspace: str) -> dict[str, list[str]]:
@@ -331,6 +424,7 @@ def main(argv: list[str] | None = None) -> int:
     gen = commands.add_parser("generate", help="write south-release-index.json")
     gen.add_argument("--dist", type=Path, required=True, help="the staged release directory")
     gen.add_argument("--components", type=Path, default=Path("components"))
+    gen.add_argument("--catalogs", type=Path, help="default: the catalogs/ directory beside --components")
     gen.add_argument("--tag", required=True, help="the release tag, vX.Y.Z")
     gen.add_argument("--cargo-toml", type=Path, default=Path("Cargo.toml"))
     gen.add_argument("--compatibility", type=Path, default=Path("compatibility.json"))
@@ -358,11 +452,17 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "generate":
             index = generate(
-                args.dist, args.components, args.tag, args.cargo_toml, args.compatibility, args.require_gate2_reports
+                args.dist,
+                args.components,
+                args.tag,
+                args.cargo_toml,
+                args.compatibility,
+                args.require_gate2_reports,
+                args.catalogs,
             )
             output = args.output or args.dist / INDEX_FILE
             output.write_text(render(index), encoding="utf-8")
-            print(f"wrote {output} ({len(index['packages'])} packages)")
+            print(f"wrote {output} ({len(index['packages'])} packages, {len(index['catalogs'])} catalogs)")
         elif args.command == "declared-runtimes":
             groups = declared_runtimes(args.root, workspace_version(args.cargo_toml))
             for runtime, packages in groups.items():
