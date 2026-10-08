@@ -1,0 +1,10 @@
+{
+  "request_case": "embeddings.request.dimensions",
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"predictions\":[{\"embeddings\":{\"statistics\":{\"truncated\":false,\"token_count\":13.0},\"values\":[0.1,0.2,0.3]}}]}"
+  }
+}

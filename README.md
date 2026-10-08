@@ -178,6 +178,7 @@ directory shape the runtime loads — `manifest.json` beside `component.wasm`.
 | `task-gmi-image-v2` | `gmi-image` | `bash scripts/build-gmi-image-task-v2-component.sh` | contract 6 candidate, unreleased |
 | `embeddings-openai-compatible` | `openai-compatible`, `azure-openai-v1` | `bash scripts/build-embeddings-openai-compatible-component.sh` | embeddings contract 1, from 0.47.0 |
 | `embeddings-gemini` | `gemini` | `bash scripts/build-embeddings-gemini-component.sh` | embeddings contract 1, from 0.47.0 |
+| `embeddings-vertex` | `vertex-ai` | `bash scripts/build-embeddings-vertex-component.sh` | embeddings contract 1, from 0.48.0 |
 
 Each pack's `README.md` records how its expectations were derived and how the
 component differs from the host's native arm — read that before changing a

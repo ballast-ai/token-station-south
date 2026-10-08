@@ -114,9 +114,11 @@ HTTP, vector extraction, pricing and settlement; both hosts are `not_verified` f
 `compatibility.json`. As with task-v2, the IR-bearing `PreparedEmbeddingsV1`, its single JSON
 codec, the guest ABI shims, the sandbox seam and the suite live in `south-component-conformance`;
 the suite builds each response case's paired request and runs the host's extraction and checks,
-so its fixtures pin what a host decides. The native references for `embeddings-openai-compatible`
-and `embeddings-gemini` pass it, and so do their wasm packages under `components/`, which are thin
-guests over those references and agree with them byte for byte across the ABI. See the
+so its fixtures pin what a host decides. The native references for `embeddings-openai-compatible`,
+`embeddings-gemini` and `embeddings-vertex` pass it, and so do their wasm packages under
+`components/`, which are thin guests over those references and agree with them byte for byte across
+the ABI. `embeddings-vertex` reads its location and project from `ProviderConfig.declared` and mints
+its bearer through a service-account credential recipe. See the
 [embeddings contract record](docs/design/2026-09-30-embeddings-contract.md).
 
 South does not own routing, fallback across upstreams, retry budgets, admission, tenants, billing,

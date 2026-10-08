@@ -1,0 +1,157 @@
+{
+  "name": "embeddings-vertex",
+  "version": "1.0.0",
+  "api_version": "embeddings-adapter-v1",
+  "providers": [
+    "vertex-ai"
+  ],
+  "capabilities": [
+    "dimensions",
+    "embed"
+  ],
+  "auth_arms": [
+    "bearer"
+  ],
+  "config_schema": {
+    "vertex-ai": {
+      "region": {
+        "syntax": "aws_region",
+        "required": true,
+        "description": "The Vertex AI location, such as us-central1, or global."
+      },
+      "project": {
+        "syntax": "gcp_project_id",
+        "description": "The Google Cloud project to call, when it is not the service account's own."
+      }
+    }
+  },
+  "credentials": {
+    "schema": "south.credential-recipe.v1",
+    "fields": {
+      "service_account": {
+        "secret": true,
+        "required": true,
+        "media": "application/json",
+        "description": "The service account key file (JSON) access tokens are minted with."
+      },
+      "project_id": {
+        "secret": false,
+        "required": true,
+        "syntax": "gcp_project_id",
+        "description": "The Google Cloud project the service account belongs to."
+      }
+    },
+    "import": {
+      "service_account": {
+        "file": "service-account-json",
+        "pointers": [
+          ""
+        ]
+      },
+      "project_id": {
+        "file": "service-account-json",
+        "pointers": [
+          "/project_id"
+        ]
+      }
+    },
+    "slots": {
+      "provider_api_key": {
+        "minted": "vertex_sa"
+      }
+    },
+    "recipes": {
+      "vertex_sa": {
+        "steps": [
+          {
+            "id": "assertion",
+            "kind": "jwt_sign",
+            "alg": "RS256",
+            "key": {
+              "field": "service_account",
+              "pointer": "/private_key"
+            },
+            "claims": {
+              "iss": {
+                "field": "service_account",
+                "pointer": "/client_email"
+              },
+              "scope": {
+                "const": "https://www.googleapis.com/auth/cloud-platform"
+              },
+              "aud": {
+                "endpoint_of": "token"
+              },
+              "iat": {
+                "now_plus": 0
+              },
+              "exp": {
+                "now_plus": 600
+              }
+            }
+          },
+          {
+            "id": "token",
+            "kind": "oauth2_token",
+            "encoding": "form",
+            "endpoint": "https://oauth2.googleapis.com/token",
+            "params": {
+              "grant_type": {
+                "const": "urn:ietf:params:oauth:grant-type:jwt-bearer"
+              },
+              "assertion": {
+                "output": "assertion.jwt"
+              }
+            },
+            "extract": {
+              "access_token": {
+                "pointer": "/access_token",
+                "secret": true
+              },
+              "expires_at": {
+                "relative_seconds": "/expires_in"
+              }
+            }
+          }
+        ],
+        "present": "token.access_token",
+        "rotates_refresh_material": false,
+        "refresh_margin_seconds": 300,
+        "min_ttl_seconds": 301,
+        "attributes": {
+          "project_id": {
+            "field": "project_id",
+            "export": true
+          }
+        }
+      }
+    }
+  },
+  "permissions": {
+    "network": false,
+    "filesystem": false,
+    "secrets": [
+      "provider_api_key"
+    ]
+  },
+  "conformance": {
+    "required_suite": "south.embeddings-component.v1",
+    "fixtures": "fixtures-embeddings-vertex/"
+  },
+  "compatibility": {
+    "ir_schema_id": "token-station-protocol@0.5.0/v0.4.0",
+    "kernel_version": "0.4.0",
+    "kernel_revision": "8e34f5a089d0b9c7273b49ddb6952dd87e960019",
+    "wit_package": "token-station:embeddings-adapter@1.0.0",
+    "south_runtime": "0.48.0",
+    "runtime_abi": 1,
+    "kernel_contracts": {
+      "canonical_ir": 3,
+      "error_catalog": 1,
+      "stream": 2
+    },
+    "contracts": {
+      "embeddings": 1
+    }
+  }
+}

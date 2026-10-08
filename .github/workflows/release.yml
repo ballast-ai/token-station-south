@@ -78,6 +78,7 @@ jobs:
           scripts/build-gmi-image-task-v2-component.sh
           scripts/build-embeddings-openai-compatible-component.sh
           scripts/build-embeddings-gemini-component.sh
+          scripts/build-embeddings-vertex-component.sh
 
       # Gate ② over the bytes just built: each sandbox parity test runs the
       # package's required suite against its component.wasm and, with
@@ -107,6 +108,7 @@ jobs:
             --test gmi_image_task_sandbox_parity_v2 \
             --test openai_compatible_embeddings_sandbox_parity \
             --test gemini_embeddings_sandbox_parity \
+            --test vertex_embeddings_sandbox_parity \
             -- --exact the_sandboxed_component_passes_gate_two_byte_for_byte
           ls -l "${SOUTH_GATE2_REPORT_DIR}"
 
@@ -145,6 +147,7 @@ jobs:
           package task-gmi-image-v2 task_gmi_image_v2.wasm
           package embeddings-openai-compatible embeddings_openai_compatible.wasm
           package embeddings-gemini embeddings_gemini.wasm
+          package embeddings-vertex embeddings_vertex.wasm
 
       # A package's south_runtime is the oldest runtime it needs, not this release
       # (boundary record §13.6). Each archived package is loaded under exactly the

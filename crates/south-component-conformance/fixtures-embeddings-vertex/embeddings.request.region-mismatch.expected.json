@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "internal",
+    "http_status": 500,
+    "message": "the base URL https://us-central1-aiplatform.googleapis.com is not the Vertex AI endpoint of location `europe-west4`, which is https://europe-west4-aiplatform.googleapis.com"
+  }
+}

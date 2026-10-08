@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "capability",
+    "http_status": 400,
+    "message": "Vertex embeddings accept exactly one input per request (got 2); send one request per text"
+  }
+}

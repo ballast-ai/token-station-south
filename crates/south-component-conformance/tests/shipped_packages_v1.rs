@@ -15,9 +15,10 @@ mod host_range;
 
 /// The official components this repository ships. Named, so that an empty or
 /// mistyped scan below cannot pass over nothing.
-const OFFICIAL_COMPONENTS: [&str; 16] = [
+const OFFICIAL_COMPONENTS: [&str; 17] = [
     "embeddings-gemini",
     "embeddings-openai-compatible",
+    "embeddings-vertex",
     "provider-anthropic",
     "provider-bedrock-converse",
     "provider-bedrock-converse-bearer",
@@ -738,6 +739,29 @@ fn the_embeddings_packages_declare_the_first_runtime_with_the_world() {
             "{name}"
         );
     }
+}
+
+/// `embeddings-vertex` declares a family's `config_schema` and an exported credential attribute,
+/// which gate ① first admits in the embeddings world in the 0.48.0 runtime (embeddings record §16),
+/// so that is the oldest runtime that admits it and the package declares it: a host that claims
+/// 0.47.0 refuses it through the declared runtime alone, even with embeddings contract 1 in its
+/// range.
+#[test]
+fn the_vertex_package_declares_the_first_runtime_with_the_embeddings_value_channel() {
+    let manifest: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(
+            repo_root().join("components").join("embeddings-vertex").join("manifest.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(manifest.compatibility.south_runtime, "0.48.0");
+    let mut on_047 = host_range::host_range();
+    "0.47.0".clone_into(&mut on_047.south_runtime);
+    assert!(matches!(
+        compatibility_admits(&manifest, &on_047),
+        Err(CompatibilityMismatchV2::SouthRuntimeAboveHost { .. })
+    ));
 }
 
 /// Every package declares one kernel tuple, and its crate version is the one the workspace pins:

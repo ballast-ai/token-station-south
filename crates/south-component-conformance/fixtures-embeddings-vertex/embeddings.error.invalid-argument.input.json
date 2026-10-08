@@ -1,0 +1,7 @@
+{
+  "status": 400,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"error\":{\"code\":400,\"message\":\"Unable to submit request because the input token count is 2100 but the model supports up to 2048.\",\"status\":\"INVALID_ARGUMENT\"}}"
+}
