@@ -43,14 +43,24 @@
 //! [`SecretSignerV1`] implementation never learns an undeclared name was
 //! asked for.
 //!
+//! # Release data
+//!
+//! [`ModelCatalogV1`] reads and validates the model catalog a release publishes beside its
+//! packages (`south.model-catalog.v1`; boundary record §7.5 and §13.11).
+//!
 //! Design record: `docs/design/2026-08-21-provider-runtime.md`.
 
 mod bindings;
+mod catalog;
 mod component;
 mod loader;
 mod package_set;
 mod runtime;
 
+// B6-1: the model catalog data artifact a release ships beside its packages (boundary record §13.11).
+pub use catalog::{
+    MODEL_CATALOG_SCHEMA_V1, ModelCatalogEntryV1, ModelCatalogErrorV1, ModelCatalogV1, ModelMatchV1,
+};
 pub use component::{ComponentStreamV1, LoadedComponentV1, NoSecretsV1, SecretSignerV1};
 pub use loader::{CallErrorV1, HostCompatibilityV1, LoadErrorV1, UnreadableReasonV1};
 pub use package_set::{

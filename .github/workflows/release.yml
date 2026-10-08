@@ -148,6 +148,13 @@ jobs:
           package embeddings-openai-compatible embeddings_openai_compatible.wasm
           package embeddings-gemini embeddings_gemini.wasm
           package embeddings-vertex embeddings_vertex.wasm
+          # Catalog data (boundary record §7.5, §13.11): each catalogs/<name>.json is
+          # published verbatim as <name>-<tag>.json; the index step below refuses a
+          # published catalog whose bytes differ from the source file.
+          shopt -s nullglob
+          for catalog in catalogs/*.json; do
+            cp "${catalog}" "dist/$(basename "${catalog}" .json)-${GITHUB_REF_NAME}.json"
+          done
 
       # A package's south_runtime is the oldest runtime it needs, not this release
       # (boundary record §13.6). Each archived package is loaded under exactly the
@@ -160,10 +167,11 @@ jobs:
           set -euo pipefail
           scripts/check-declared-runtime.sh --dist dist --tag "${GITHUB_REF_NAME}"
 
-      # Generated from the archived manifests, never hand-written. It refuses
-      # a missing archive, an archive without a components/ directory, a
-      # manifest that differs from the source tree, and a missing, failing or
-      # mismatched gate ② report.
+      # Generated from the archived manifests and the published catalogs, never
+      # hand-written. It refuses a missing archive, an archive without a
+      # components/ directory, a manifest that differs from the source tree, a
+      # missing, failing or mismatched gate ② report, and a catalog that is
+      # missing, differs from catalogs/, or declares an unknown schema.
       - name: Release index
         run: |
           set -euo pipefail
@@ -174,7 +182,9 @@ jobs:
       # A package whose version did not change must not change its
       # component.wasm bytes or its manifest.json (boundary record §8.6,
       # §13.6): compared against the previous release's index, and a
-      # difference fails the release.
+      # difference fails the release. A catalog's data may change between
+      # releases; a catalog schema the previous release published may not
+      # disappear unless it is listed as retired (§13.11).
       - name: Digest stability
         env:
           GH_TOKEN: ${{ github.token }}
@@ -205,9 +215,10 @@ jobs:
         run: |
           set -euo pipefail
           # sha256sum output, so a host verifies with `sha256sum --check` and
-          # no bespoke tooling. Covers the archives, the gate ② reports and
-          # the index.
-          (cd dist && sha256sum ./*.tar.gz ./*.gate2.json ./south-release-index.json > SHASUMS256.txt)
+          # no bespoke tooling. Covers the archives, the gate ② reports, the
+          # catalogs and the index.
+          (cd dist && sha256sum ./*.tar.gz ./*.gate2.json ./*-"${GITHUB_REF_NAME}".json \
+            ./south-release-index.json > SHASUMS256.txt)
           ls -l dist
 
       - name: Publish
@@ -230,6 +241,10 @@ jobs:
           `<package>-<tag>.gate2.json` is the gate ② report CI produced for
           that exact `component.wasm`; the index carries its digest.
 
+          `model-catalog-<tag>.json` (schema `south.model-catalog.v1`) is the
+          model catalog data: capabilities by upstream model id. The index lists
+          it under `catalogs` with its digest.
+
           Verify with `sha256sum --check SHASUMS256.txt`.
 
           These are first-party builds identified by checksum, not signature;
@@ -241,5 +256,6 @@ jobs:
           gh release create "${GITHUB_REF_NAME}" \
             --title "${GITHUB_REF_NAME}" \
             --notes-file dist/NOTES.md \
-            dist/*.tar.gz dist/*.gate2.json dist/south-release-index.json \
+            dist/*.tar.gz dist/*.gate2.json dist/*-"${GITHUB_REF_NAME}".json \
+            dist/south-release-index.json \
             dist/SHASUMS256.txt
