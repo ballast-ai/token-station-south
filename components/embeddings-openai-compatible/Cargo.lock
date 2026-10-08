@@ -33,7 +33,7 @@ dependencies = [
 
 [[package]]
 name = "embeddings-openai-compatible"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "south-component-conformance",
  "wit-bindgen",

@@ -33,7 +33,7 @@ dependencies = [
 
 [[package]]
 name = "embeddings-vertex"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "south-component-conformance",
  "wit-bindgen",

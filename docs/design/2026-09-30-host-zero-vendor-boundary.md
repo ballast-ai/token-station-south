@@ -2381,18 +2381,15 @@ count below an intermediate one, and a terminal chunk that omits a count an earl
 a usage-only chunk after the terminal one. Two more pin that a terminal chunk without `usageMetadata` yields no `Usage`
 and that any candidate's `finishReason` makes a chunk terminal.
 
-**Package identity.** `provider-gemini` changes behavior and takes a patch bump, 1.1.9 → 1.1.10, keeping
-`south_runtime` 0.46.0 (nothing in it relies on a newer runtime). Open pull request #159 (0.48.0) gives the package
-the same patch number, 1.1.10, for its own shared-crate change, so the two collide on `components/provider-gemini`'s
-`Cargo.toml`, `manifest.json` and `Cargo.lock` and on the version in `reference_gemini.rs`. Whichever of the two merges
-second increments `provider-gemini` once more on top of the first (1.1.11), and re-checks `Cargo.lock` and the release
-index comparison (`scripts/release_index.py compare`) against the previous release. A same-path rebuild of all
-sixteen packages before and after this change (only `reference_gemini.rs` differing) also showed a different
-`component.wasm` for the **other fifteen**: same size, a reordered layout, because every guest links
-`south-component-conformance` and a source change in it moves code placement. None of them runs the changed code. This
-change does not bump them; the release that carries it must, as the digest-stability check (§8.6) will insist. #159
-already gives all fifteen a patch bump for 0.48.0, so shipping SF27 in 0.48.0 needs no further bump; shipping it alone
-would.
+**Package identity.** `provider-gemini` changes behavior and takes a patch bump, 1.1.10 → 1.1.11, keeping
+`south_runtime` 0.46.0 (nothing in it relies on a newer runtime). This change was first prepared against 0.47.0 as
+1.1.9 → 1.1.10; #159 then shipped 0.48.0 first with `provider-gemini` already at 1.1.10 for its own shared-crate
+change, so SF27 takes the next number, 1.1.11, and ships in 0.49.0. Every guest links `south-component-conformance`,
+and a source change in it moves code placement: a same-path rebuild of all seventeen packages at `v0.48.0` and on the
+SF27 commit (workspace still 0.48.0) gave a different `component.wasm` for every one, so 0.49.0 gives the other sixteen
+a patch bump as well, each keeping its `south_runtime`, as the digest-stability check (§8.6) insists
+(`host_feedback_sf27_retires_every_published_048_package_identity`). None of them runs the changed code. See
+[release 0.49.0](2026-10-08-release-0.49.0.md).
 
 **What the host does after the release:** re-pin, and serve Vertex native streams (`gemini` rows on the Vertex endpoint)
 through the component under IR billing; keep its own 03 #90 rule on the wire path. The host's suite and fixture for
@@ -2842,4 +2839,4 @@ into the body. Where each landed:
 - 2026-10-08, host feedback SF26: new §13.9 and §16 Q46; §13.7 item 7 gains an amendment, its remaining-risk paragraph a
   note, and its host steps a correction of the R17 bullet.
 - 2026-10-08, host feedback SF27: new §13.10. A Gemini stream's usage comes from its terminal chunk (the one carrying
-  `finishReason`); `provider-gemini` 1.1.10. The Gemini component record gains decision G7.
+  `finishReason`); `provider-gemini` 1.1.11, released in 0.49.0. The Gemini component record gains decision G7.

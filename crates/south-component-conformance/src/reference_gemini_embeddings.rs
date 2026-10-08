@@ -42,7 +42,7 @@ use crate::{ComponentResultV1, EmbeddingsComponentV1, PreparedEmbeddingsV1};
 
 /// The package name and version this reference is published as.
 pub const NAME: &str = "embeddings-gemini";
-pub const VERSION: &str = "1.0.1";
+pub const VERSION: &str = "1.0.2";
 
 /// The family, as the provider world names it.
 const GEMINI: &str = "gemini";

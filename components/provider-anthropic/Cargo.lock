@@ -276,7 +276,7 @@ dependencies = [
 
 [[package]]
 name = "provider-anthropic"
-version = "1.0.14"
+version = "1.0.15"
 dependencies = [
  "south-component-conformance",
  "wit-bindgen",
