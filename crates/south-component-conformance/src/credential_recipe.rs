@@ -37,7 +37,12 @@
 //! 6. The outcome: the first `present` candidate that is present and non-empty, its expiry clamped
 //!    to the host's 60 s to 24 h range as narrowed by the recipe (§3.5), write-back values (an
 //!    absent or empty output keeps the stored value: the no-wipe invariant), and the exported
-//!    attributes, taken only from fields. With no candidate present the run is `transient`.
+//!    attributes, taken only from fields and, on a selector, the name of the recipe it chose
+//!    (§13.8). With no candidate present the run is `transient`.
+//!
+//! The attributes a credential exports do not depend on a run: [`exported_attributes_v1`] derives
+//! them from the stored fields alone, which is what a host places in `ProviderConfig.declared` on
+//! every attempt, minted value fresh or not, with `persist` applied.
 //!
 //! The expiry of a presented step output is the clock extracted by the step that produced it, or
 //! else `now + default_seconds`; with neither, the run is `transient`. A presented field (§13.5 D1)
@@ -159,8 +164,95 @@ pub struct MintedV1 {
     /// Fields the host writes back. A field whose output was absent or empty is not listed: the
     /// stored value stays (§3.5).
     pub write_back: BTreeMap<String, String>,
-    /// Exported attributes, taken from fields only.
+    /// Exported attributes: from fields, and from the selector the name of the recipe it chose.
     pub attributes: BTreeMap<String, String>,
+}
+
+/// The attributes one credential exports into `ProviderConfig.declared` (§3.3, §13.8).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct ExportedAttributesV1 {
+    /// Every exported value: a present field, the selected recipe, or a persisted value standing
+    /// in for an absent `persist` field.
+    pub values: BTreeMap<String, String>,
+    /// The `persist` attributes whose field is present now: what the host stores as their last
+    /// value, replacing the previous one.
+    pub persist: BTreeMap<String, String>,
+}
+
+/// The attributes the credential with stored `fields` exports for `slot`, as a host builds them for
+/// every attempt (§3.3, §13.8).
+///
+/// The slot's recipe is selected exactly as a run selects it; a field attribute takes the field's
+/// present value (a declared `default` included) and a selector's attribute the name of the recipe
+/// it chose. A `persist` attribute whose field is absent takes its value from `persisted` (the last
+/// value the host stored), and is otherwise absent. A slot that names a field or no recipe exports
+/// nothing.
+///
+/// # Errors
+///
+/// The configuration outcome a run would give when the stored fields break a rule or no selector
+/// rule matches.
+pub fn exported_attributes_v1(
+    credentials: &CredentialsV1,
+    slot: &str,
+    fields: &BTreeMap<String, String>,
+    persisted: &BTreeMap<String, String>,
+) -> Result<ExportedAttributesV1, RecipeOutcomeV1> {
+    let Some(SlotV1::Minted(name)) = credentials.slots.get(slot) else {
+        return Ok(ExportedAttributesV1::default());
+    };
+    let fields = resolve_fields(credentials, fields)?;
+    let chosen = select(credentials, name, &fields)?;
+    let mut exported = ExportedAttributesV1 {
+        values: attributes(credentials, &chosen, &fields),
+        persist: BTreeMap::new(),
+    };
+    for (attribute, declared) in &chosen.recipe.attributes {
+        if !declared.persist {
+            continue;
+        }
+        if let Some(value) = exported.values.get(attribute) {
+            exported.persist.insert(attribute.clone(), value.clone());
+        } else if let Some(value) = persisted.get(attribute).filter(|value| !value.is_empty()) {
+            exported.values.insert(attribute.clone(), value.clone());
+        }
+    }
+    Ok(exported)
+}
+
+/// A slot's recipe after its selector, if any, ran.
+#[derive(Clone, Copy)]
+struct Chosen<'a> {
+    /// The selector the slot names, when it names one.
+    selector: Option<&'a RecipeV1>,
+    name: &'a str,
+    recipe: &'a RecipeV1,
+}
+
+/// The exported attributes of `chosen` over present `fields`: a field attribute from a present
+/// non-secret field, a selector attribute as the chosen recipe's name.
+fn attributes(
+    credentials: &CredentialsV1,
+    chosen: &Chosen<'_>,
+    fields: &BTreeMap<&str, &str>,
+) -> BTreeMap<String, String> {
+    let from_selector = chosen
+        .selector
+        .into_iter()
+        .flat_map(|selector| selector.attributes.iter())
+        .filter(|(_, attribute)| attribute.export && attribute.selected_recipe)
+        .map(|(name, _)| (name.clone(), chosen.name.to_owned()));
+    let from_fields = chosen
+        .recipe
+        .attributes
+        .iter()
+        .filter(|(_, attribute)| attribute.export && !attribute.selected_recipe)
+        .filter_map(|(name, attribute)| {
+            let field = attribute.field.as_deref()?;
+            credentials.fields.get(field).filter(|declared| !declared.secret)?;
+            Some((name.clone(), (*fields.get(field)?).to_owned()))
+        });
+    from_selector.chain(from_fields).collect()
 }
 
 /// How a run ended. The `detail` strings are for people and are not part of a fixture.
@@ -302,11 +394,12 @@ fn mint(
             return Err(configuration(None, format!("slot `{slot}` is not minted by a recipe")));
         }
     };
-    let (name, recipe) = select(credentials, name, &fields)?;
-    *chosen = Some(name.to_owned());
+    let selected = select(credentials, name, &fields)?;
+    *chosen = Some(selected.name.to_owned());
     let mut run = Run {
         credentials,
-        recipe,
+        chosen: selected,
+        recipe: selected.recipe,
         fields,
         now: effects.now,
         outputs: BTreeMap::new(),
@@ -359,13 +452,13 @@ fn select<'a>(
     credentials: &'a CredentialsV1,
     name: &'a str,
     fields: &BTreeMap<&str, &str>,
-) -> Result<(&'a str, &'a RecipeV1), RecipeOutcomeV1> {
+) -> Result<Chosen<'a>, RecipeOutcomeV1> {
     let recipe = credentials
         .recipes
         .get(name)
         .ok_or_else(|| configuration(None, format!("no recipe `{name}`")))?;
     if recipe.select.is_empty() {
-        return Ok((name, recipe));
+        return Ok(Chosen { selector: None, name, recipe });
     }
     let present = |field: &String| fields.contains_key(field.as_str());
     let rule = recipe
@@ -390,7 +483,7 @@ fn select<'a>(
                 format!("selector `{name}` names no complete recipe `{}`", rule.recipe),
             )
         })?;
-    Ok((target.0.as_str(), target.1))
+    Ok(Chosen { selector: Some(recipe), name: target.0.as_str(), recipe: target.1 })
 }
 
 /// What a clock form read.
@@ -434,6 +527,7 @@ fn transition(step: &StepV1, status: u16) -> Transition<'_> {
 
 struct Run<'a> {
     credentials: &'a CredentialsV1,
+    chosen: Chosen<'a>,
     recipe: &'a RecipeV1,
     fields: BTreeMap<&'a str, &'a str>,
     now: i64,
@@ -839,23 +933,7 @@ impl Run<'_> {
                 Some((field.clone(), value))
             })
             .collect();
-        let attributes = self
-            .recipe
-            .attributes
-            .iter()
-            .filter(|(_, attribute)| {
-                attribute.export
-                    && self
-                        .credentials
-                        .fields
-                        .get(&attribute.field)
-                        .is_some_and(|field| !field.secret)
-            })
-            .filter_map(|(name, attribute)| {
-                let value = self.fields.get(attribute.field.as_str())?;
-                Some((name.clone(), (*value).to_owned()))
-            })
-            .collect();
+        let attributes = attributes(self.credentials, &self.chosen, &self.fields);
         Ok(MintedV1 {
             present,
             expires_at: self.now.saturating_add(ttl),

@@ -36,6 +36,10 @@ pub const PROVIDER_COMPONENT_SUITE_V1: &str = south_provider_api::COMPONENT_BEHA
 /// The key injected to prove a component tolerates a newer peer's field.
 const UNKNOWN_FIELD: &str = "__conformance_unknown_field";
 
+/// The prefix of the keys injected to prove a component ignores what its package does not declare;
+/// a numeric suffix keeps it clear of any key the package declares.
+const UNDECLARED_VALUE: &str = "conformance_undeclared_";
+
 /// What one component invocation produced, with a bad fixture told apart from
 /// a bad component.
 type Invoked = Result<Value, Failure>;
@@ -175,6 +179,7 @@ fn run_suite(
                 if let Some(manifest) = manifest {
                     outcomes.push(descriptor_auth_within_manifest(case, &built, manifest));
                     outcomes.push(request_facts_honoured(case, &built, manifest, &invoke));
+                    outcomes.push(undeclared_values_ignored(case, &built, manifest, &invoke));
                 }
             }
             ProviderFamilyV1::Error => {
@@ -338,6 +343,64 @@ fn descriptor_auth_within_manifest(
     match admit_descriptor_auth(manifest, &input.provider_config, &descriptor) {
         Ok(_) => OutcomeV1::passed(check, &case.name),
         Err(refusal) => OutcomeV1::failed(check, &case.name, refusal.to_string()),
+    }
+}
+
+/// Adds a key the manifest does not declare to `ProviderConfig.declared` and to
+/// `ChatRequest.host_values`, and requires the same request (Q14, §13.8).
+///
+/// Each key is valid under the kernel's `ComponentValues` grammar, so only the declaration tells
+/// it apart from one the component may read. A case whose original build failed must fail the same
+/// way.
+fn undeclared_values_ignored(
+    case: &CaseV1,
+    built: &Invoked,
+    manifest: &ComponentManifestV1,
+    invoke: &dyn Fn(&Value) -> Invoked,
+) -> OutcomeV1 {
+    let check = CheckV1::UndeclaredValuesIgnored;
+    let family = case.input.pointer("/provider_config/provider").and_then(Value::as_str);
+    let declared = family.map(|family| manifest.declared_keys(family)).unwrap_or_default();
+    // One more candidate than there are taken keys, so one is always free.
+    let undeclared = |taken: &dyn Fn(&str) -> bool, count: usize| {
+        (0..=count)
+            .map(|index| format!("{UNDECLARED_VALUE}{index}"))
+            .find(|key| !taken(key))
+            .unwrap_or_default()
+    };
+    let config_key = undeclared(&|key| declared.contains(key), declared.len());
+    let host_key = undeclared(
+        &|key| manifest.host_values.iter().any(|value| value == key),
+        manifest.host_values.len(),
+    );
+
+    let mut mutated = case.input.clone();
+    for (map, key) in [("/provider_config", "declared"), ("/chat_request", "host_values")] {
+        let Some(Value::Object(target)) = mutated.pointer_mut(map) else {
+            return OutcomeV1::failed(
+                check,
+                &case.name,
+                format!("fixture has no object at `{map}` to carry `{key}`"),
+            );
+        };
+        let entry = target.entry(key).or_insert_with(|| Value::Object(serde_json::Map::new()));
+        let Value::Object(values) = entry else {
+            return OutcomeV1::failed(check, &case.name, format!("`{map}/{key}` is not an object"));
+        };
+        let name = if key == "declared" { &config_key } else { &host_key };
+        values.insert(name.clone(), Value::String("undeclared".to_owned()));
+    }
+    if invoke(&mutated) == *built {
+        OutcomeV1::passed(check, &case.name)
+    } else {
+        OutcomeV1::failed(
+            check,
+            &case.name,
+            format!(
+                "adding the undeclared keys `declared.{config_key}` and `host_values.{host_key}` \
+                 changed the request; a component reads only the keys its package declares"
+            ),
+        )
     }
 }
 

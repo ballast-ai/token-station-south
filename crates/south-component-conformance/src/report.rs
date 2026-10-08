@@ -109,6 +109,14 @@ pub enum CheckV1 {
     /// A recipe that sends the refresh token to the wrong parameter, reads the wrong clock, or
     /// loses rotated refresh material passes gate ① and fails here.
     CredentialRecipeMatch,
+    /// A request built with keys the manifest does not declare added to `ProviderConfig.declared`
+    /// and `ChatRequest.host_values` equals the request built without them (Q14,
+    /// host-zero-vendor-boundary §13.8).
+    ///
+    /// A component may read only the keys its package declares; a host passes only those. A
+    /// component that acted on another key would depend on a value no conforming host sends, or
+    /// on one a different package's declaration put there.
+    UndeclaredValuesIgnored,
 }
 
 impl CheckV1 {
@@ -130,6 +138,7 @@ impl CheckV1 {
             Self::DescriptorAuthWithinManifest => "descriptor_auth_within_manifest",
             Self::RequestFactsHonoured => "request_facts_honoured",
             Self::CredentialRecipeMatch => "credential_recipe_match",
+            Self::UndeclaredValuesIgnored => "undeclared_values_ignored",
         }
     }
 }

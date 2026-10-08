@@ -419,7 +419,12 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 1
                 // south.credential-recipe.v1 10/10 in `gateway/tests/south_adoption.rs` under both
                 // its balance and quota billing forms, and its full local matrix of 86 legs is
                 // green. The adoption record is held by that host's repository.
-                ("credential_recipe", "verified", Some(10)),
+                //
+                // Demoted again 2026-10-08 (Q14, boundary record §13.8): the suite gained
+                // `ExportedAttributesFollowTheCredential` and `PersistedAttributeOutlivesItsField`
+                // and the harness the required `exported_attributes`, so the ten-case run no longer
+                // describes the twelve-case table.
+                ("credential_recipe", "not_verified", None),
                 // eventstream_framing and request_signing (gate ③ of stream framing and signing,
                 // B2) verified 2026-10-07 at v0.45.0: server dev-v2 `d3ce030c` (P21 S4 C6),
                 // pinned to the v0.45.0 tag (`7cf1761e`), runs south.eventstream-framing.v1 9/9

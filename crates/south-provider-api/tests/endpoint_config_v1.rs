@@ -145,11 +145,6 @@ fn gate_one_refuses_a_template_a_parameter_could_steer() {
             "an optional parameter",
         ),
         ("https://x.example.com/{missing}", Vec::new(), "an undeclared parameter"),
-        (
-            "https://x.example.com/{region}",
-            vec![("region", region()), ("unused", region())],
-            "a key the endpoint does not use (§16 Q14)",
-        ),
         ("https://x.example.com/{Region}", Vec::new(), "a malformed parameter name"),
         (
             "https://x.example.com/{region}",
@@ -166,11 +161,13 @@ fn gate_one_refuses_a_template_a_parameter_could_steer() {
         );
     }
 
-    let mut orphan = converse();
-    orphan.endpoint.clear();
-    assert!(
-        matches!(orphan.validate(), Err(ManifestErrorV1::InvalidEndpoint { .. })),
-        "config_schema without an endpoint"
+    // Since Q14 (§13.8) a key the endpoint does not use, and `config_schema` without an endpoint,
+    // are admitted: the component reads such a key from `ProviderConfig.declared`
+    // (`component_values_v1.rs`).
+    assert_eq!(
+        declaring("https://x.example.com/{region}", &[("region", region()), ("extra", region())])
+            .validate(),
+        Ok(())
     );
 }
 

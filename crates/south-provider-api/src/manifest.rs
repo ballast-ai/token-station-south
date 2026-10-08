@@ -419,6 +419,12 @@ pub struct ComponentManifestV1 {
     /// A family without an entry sends whatever the host sends today.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub user_agent: BTreeMap<String, String>,
+    /// The `ChatRequest.host_values` keys this package's component reads, from the closed
+    /// [`crate::HOST_VALUES`] vocabulary (Q14, host-zero-vendor-boundary §13.8 D7). A host fills
+    /// exactly these on every call and passes no other. A `Vec`, so a repeat is refused by name.
+    /// Absent means none. Provider world only.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub host_values: Vec<String>,
     pub permissions: ComponentPermissionsV1,
     pub conformance: ConformanceSpecV1,
     pub compatibility: CompatibilityDeclarationV1,
@@ -685,6 +691,7 @@ impl ComponentManifestV1 {
         self.validate_secret_headers()?;
         self.validate_role(world)?;
         self.validate_instances(world)?;
+        self.validate_component_values(world)?;
         self.validate_conformance(world)?;
         self.validate_compatibility(world)
     }
@@ -1216,6 +1223,16 @@ pub enum ManifestErrorV1 {
     InvalidQuotaHeader { header: String, detail: String },
     #[error("user_agent for family `{family}`: {detail}")]
     InvalidUserAgent { family: String, detail: String },
+    // Q14 (the component value channel, §13.8).
+    #[error("host value `{0}` is not in the host value vocabulary")]
+    HostValueIsNotInTheVocabulary(String),
+    #[error("host_values must not name the same value twice; `{0}` repeats")]
+    HostValueDeclaredTwice(String),
+    #[error(
+        "family `{family}` uses `{name}` both as a config key and as an exported attribute; they \
+         share one namespace in ProviderConfig.declared"
+    )]
+    DeclaredValueNameCollision { family: String, name: String },
 }
 
 // -- compatibility admission -------------------------------------------------

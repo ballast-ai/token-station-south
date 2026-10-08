@@ -11,8 +11,9 @@ use std::path::Path;
 
 use serde_json::{Value, json};
 use south_component_conformance::credential_recipe::{
-    FakeResponseV1, FixtureSignerV1, JwtSignerV1, RecipeEffectsV1, RecipeOutcomeV1, RecipeRunV1,
-    RenderedRequestV1, run_recipe_v1, stored_slot_value_v1,
+    ExportedAttributesV1, FakeResponseV1, FixtureSignerV1, JwtSignerV1, RecipeEffectsV1,
+    RecipeOutcomeV1, RecipeRunV1, RenderedRequestV1, exported_attributes_v1, run_recipe_v1,
+    stored_slot_value_v1,
 };
 use south_component_conformance::reference::OpenAiCompatibleReferenceV1;
 use south_component_conformance::{
@@ -1109,4 +1110,60 @@ fn the_provider_suite_runs_the_credential_checks_for_a_manifest_with_recipes() {
         &shipped("provider-openai-compatible"),
     );
     assert!(report.is_passing(), "{report}");
+}
+
+fn stored(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
+    pairs.iter().map(|(name, value)| ((*name).to_owned(), (*value).to_owned())).collect()
+}
+
+/// §13.8: what a credential exports into `ProviderConfig.declared` follows from its stored fields,
+/// not from a run; the selector exports the recipe it chose (D6); `persist` keeps the last value.
+#[test]
+fn a_credential_exports_its_attributes_from_its_fields_and_persist_keeps_the_last_value() {
+    let mut value = kiro();
+    value["recipes"]["kiro"]["attributes"] =
+        json!({ "auth_flow": { "selected_recipe": true, "export": true } });
+    let kiro_recipe = credentials(&value);
+    let slot = "provider_api_key";
+    let none = BTreeMap::new();
+
+    let exported = exported_attributes_v1(
+        &kiro_recipe,
+        slot,
+        &stored(&[("refresh_token", "fake-refresh"), ("profile_arn", ARN)]),
+        &none,
+    )
+    .unwrap();
+    assert_eq!(exported.values, stored(&[("auth_flow", "social"), ("profile_arn", ARN)]));
+    assert_eq!(exported.persist, stored(&[("profile_arn", ARN)]));
+
+    // The field is gone: the persisted value stands in, and nothing new is stored.
+    let idc = stored(&[("refresh_token", "fake-refresh"), ("auth_method", "idc")]);
+    let exported =
+        exported_attributes_v1(&kiro_recipe, slot, &idc, &stored(&[("profile_arn", ARN)])).unwrap();
+    assert_eq!(exported.values, stored(&[("auth_flow", "idc"), ("profile_arn", ARN)]));
+    assert!(exported.persist.is_empty());
+    // Nothing persisted: the attribute is absent, never empty.
+    let exported = exported_attributes_v1(&kiro_recipe, slot, &idc, &none).unwrap();
+    assert_eq!(exported.values, stored(&[("auth_flow", "idc")]));
+
+    // A minted run reports the same attributes, the selector's included.
+    let ok = json!({ "status": 200, "body": { "accessToken": "fake-kiro", "expiresIn": 3600 } });
+    let run = mint_once(
+        &kiro_recipe,
+        &[("refresh_token", "fake-refresh"), ("profile_arn", ARN)],
+        &json!({ "social": ok }),
+    );
+    assert_eq!(minted(&run).attributes, stored(&[("auth_flow", "social"), ("profile_arn", ARN)]));
+
+    // Stored fields that break a rule are the run's configuration error; a slot with no recipe
+    // exports nothing.
+    assert!(matches!(
+        exported_attributes_v1(&kiro_recipe, slot, &stored(&[("profile_arn", ARN)]), &none),
+        Err(RecipeOutcomeV1::Configuration { .. })
+    ));
+    assert_eq!(
+        exported_attributes_v1(&kiro_recipe, "other_slot", &idc, &none).unwrap(),
+        ExportedAttributesV1::default()
+    );
 }

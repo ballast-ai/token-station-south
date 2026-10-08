@@ -857,7 +857,8 @@ goes. No other identifying header exists in host code: there is no `user-agent` 
 fence admits no channel for it. The umbrella recommends a typed field through the kernel chain (S0 D5's own
 promotion path); the alternative is an explicit, argued amendment of the fence and D5. Either way the host strips
 any client-supplied key that collides with a reserved name. This record only needs the attribute to arrive; it
-takes whichever route Q14 settles.
+takes whichever route Q14 settles. *(Settled 2026-10-08, umbrella §13.8: the attribute arrives in
+`ProviderConfig.declared` under its name; its field must declare a value syntax.)*
 
 Host code that retires with this: the account-header companion (server:…/text_admission/sender.rs:814-830),
 `apply_codex_auth` (server:…/upstream.rs:260-271), and the `chatgpt-account-id` entry in the host's list of headers

@@ -276,14 +276,21 @@ pub enum PredicateV1 {
     },
 }
 
-/// An exported attribute.
+/// An exported attribute: a non-secret value the host places in `ProviderConfig.declared` under the
+/// attribute's name (§3.3, §13.8). Exactly one source.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AttributeV1 {
-    /// A field declared non-secret.
-    pub field: String,
+    /// On a complete recipe: a field declared non-secret, with a value syntax.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub field: Option<String>,
+    /// On a selector only: the value is the name of the recipe the selector chose (§13.8, D6). It
+    /// is a package constant and shows only which rule matched.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub selected_recipe: bool,
     pub export: bool,
-    /// The host keeps the last value and uses it when the field is later absent.
+    /// The host keeps the last value and uses it when the field is later absent. Field attributes
+    /// only: a selected recipe is always present.
     #[serde(default)]
     pub persist: bool,
 }
@@ -529,6 +536,43 @@ impl CredentialsV1 {
             .collect()
     }
 
+    /// The names of every attribute any recipe of the section exports, the selector's included:
+    /// the keys this section contributes to `ProviderConfig.declared` (§13.8).
+    #[must_use]
+    pub fn attribute_names(&self) -> BTreeSet<&str> {
+        self.recipes
+            .values()
+            .flat_map(|recipe| recipe.attributes.keys())
+            .map(String::as_str)
+            .collect()
+    }
+
+    /// Whether `value` is one the section's declarations of attribute `name` admit: the field's
+    /// syntax for a field attribute, a recipe the selector names for a selected-recipe attribute.
+    /// `None` when no recipe exports `name`.
+    #[must_use]
+    pub fn admits_attribute(&self, name: &str, value: &str) -> Option<bool> {
+        let mut declared = self
+            .recipes
+            .values()
+            .filter_map(|recipe| recipe.attributes.get(name).map(|attribute| (recipe, attribute)))
+            .peekable();
+        declared.peek()?;
+        Some(declared.any(|(recipe, attribute)| {
+            match &attribute.field {
+                _ if attribute.selected_recipe => {
+                    recipe.select.iter().any(|rule| rule.recipe == value)
+                }
+                Some(field) => self
+                    .fields
+                    .get(field)
+                    .and_then(|field| field.syntax.as_ref())
+                    .is_some_and(|syntax| syntax.admits(value)),
+                None => false,
+            }
+        }))
+    }
+
     /// Gate ① for the section (§3.7). `secret_slots` are the manifest's `permissions.secrets` and
     /// `providers` its families.
     pub(crate) fn validate(
@@ -690,19 +734,7 @@ impl CredentialsV1 {
                 return Err("a TTL bound may only narrow the host's 60 s to 24 h clamp".to_owned());
             }
         }
-        for (attribute, declared) in &recipe.attributes {
-            if !is_name(attribute) || !declared.export {
-                return Err(format!(
-                    "attribute `{attribute}` must be a snake_case name with export: true"
-                ));
-            }
-            // §3.4 rule 4: never from a secret field, never from an exchange response.
-            if self.is_secret(&declared.field) != Some(false) {
-                return Err(format!(
-                    "attribute `{attribute}` must come from a field declared non-secret"
-                ));
-            }
-        }
+        self.check_attributes(recipe)?;
 
         // Outputs each step makes available to later steps, in order.
         let mut outputs: BTreeSet<String> = BTreeSet::new();
@@ -761,6 +793,39 @@ impl CredentialsV1 {
         check_assertions(recipe)
     }
 
+    /// A complete recipe's attributes: each from exactly one field, declared non-secret and with a
+    /// value syntax (§3.4 rule 4, §13.8).
+    fn check_attributes(&self, recipe: &RecipeV1) -> Result<(), String> {
+        for (attribute, declared) in &recipe.attributes {
+            if !is_name(attribute) || !declared.export {
+                return Err(format!(
+                    "attribute `{attribute}` must be a snake_case name with export: true"
+                ));
+            }
+            let Some(field) = declared.field.as_deref().filter(|_| !declared.selected_recipe)
+            else {
+                return Err(format!(
+                    "attribute `{attribute}` of a complete recipe comes from exactly one field; \
+                     only a selector exports the selected recipe"
+                ));
+            };
+            // §3.4 rule 4: never from a secret field, never from an exchange response.
+            if self.is_secret(field) != Some(false) {
+                return Err(format!(
+                    "attribute `{attribute}` must come from a field declared non-secret"
+                ));
+            }
+            // §13.8: the value reaches `ProviderConfig.declared`, whose kernel grammar is 1 to
+            // 4096 bytes of printable ASCII; every value syntax lies inside it, free text does not.
+            if self.fields.get(field).is_none_or(|declared| declared.syntax.is_none()) {
+                return Err(format!(
+                    "attribute `{attribute}` must come from a field that declares a value syntax"
+                ));
+            }
+        }
+        Ok(())
+    }
+
     /// §13.5 D1: one to [`MAX_PRESENT_CANDIDATES`] distinct candidates; an output is produced by
     /// some step; a field is a declared secret field with a validity inside the host clamp.
     fn check_present(&self, present: &PresentV1, outputs: &BTreeSet<String>) -> Result<(), String> {
@@ -795,9 +860,28 @@ impl CredentialsV1 {
     }
 
     fn check_selector(&self, name: &str, recipe: &RecipeV1) -> Result<(), String> {
-        let only_select = RecipeV1 { select: recipe.select.clone(), ..RecipeV1::default() };
+        let only_select = RecipeV1 {
+            select: recipe.select.clone(),
+            attributes: recipe.attributes.clone(),
+            ..RecipeV1::default()
+        };
         if *recipe != only_select {
-            return Err("a selector holds only select".to_owned());
+            return Err("a selector holds only select and attributes".to_owned());
+        }
+        // §13.8 D6: a selector exports only the name of the recipe it chose, never a field (a
+        // complete recipe exports those), and that value is always present, so never persisted.
+        for (attribute, declared) in &recipe.attributes {
+            if !is_name(attribute)
+                || !declared.export
+                || !declared.selected_recipe
+                || declared.field.is_some()
+                || declared.persist
+            {
+                return Err(format!(
+                    "selector attribute `{attribute}` must be a snake_case name with \
+                     selected_recipe: true and export: true, no field and no persist"
+                ));
+            }
         }
         let (last, rules) = recipe.select.split_last().ok_or("select is empty")?;
         if last.when.is_some() || rules.iter().any(|rule| rule.when.is_none()) {
@@ -810,6 +894,16 @@ impl CredentialsV1 {
                 .ok_or_else(|| format!("select names no recipe `{}`", rule.recipe))?;
             if rule.recipe == name || !target.select.is_empty() {
                 return Err("a selector names only complete recipes".to_owned());
+            }
+            if let Some(shared) = recipe
+                .attributes
+                .keys()
+                .find(|attribute| target.attributes.contains_key(*attribute))
+            {
+                return Err(format!(
+                    "attribute `{shared}` is exported by both the selector and recipe `{}`",
+                    rule.recipe
+                ));
             }
             match &rule.when {
                 Some(PredicateV1::FieldPresent(field)) if self.is_secret(field).is_none() => {

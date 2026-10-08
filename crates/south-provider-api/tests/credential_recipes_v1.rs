@@ -624,3 +624,60 @@ fn every_slot_names_its_source_where_a_section_applies() {
                             "expires_at": { "epoch_seconds": "/exp" } });
     });
 }
+
+/// Kiro's selector exporting which recipe it chose (§13.8, D6): the value is a recipe name, a
+/// package constant, and shows only which predicate matched.
+fn kiro_exporting_its_flow() -> Value {
+    let mut credentials = kiro();
+    credentials["recipes"]["kiro"]["attributes"] =
+        json!({ "auth_flow": { "selected_recipe": true, "export": true } });
+    credentials
+}
+
+#[test]
+fn a_selector_may_export_the_name_of_the_recipe_it_chose() {
+    let package = "provider-openai-compatible";
+    assert_eq!(with(package, &kiro_exporting_its_flow()), Ok(()));
+
+    refuses("a selector exporting a field", package, kiro(), |c| {
+        c["recipes"]["kiro"]["attributes"] =
+            json!({ "profile": { "field": "profile_arn", "export": true } });
+    });
+    refuses("a complete recipe exporting the selected recipe", package, kiro(), |c| {
+        c["recipes"]["social"]["attributes"]["auth_flow"] =
+            json!({ "selected_recipe": true, "export": true });
+    });
+    refuses("both sources", package, kiro(), |c| {
+        c["recipes"]["kiro"]["attributes"] = json!({ "auth_flow":
+            { "selected_recipe": true, "field": "auth_method", "export": true } });
+    });
+    refuses("neither source", package, kiro(), |c| {
+        c["recipes"]["social"]["attributes"]["auth_flow"] = json!({ "export": true });
+    });
+    refuses("persisting the selected recipe", package, kiro(), |c| {
+        c["recipes"]["kiro"]["attributes"] =
+            json!({ "auth_flow": { "selected_recipe": true, "export": true, "persist": true } });
+    });
+    refuses("a selector attribute named like a target's attribute", package, kiro(), |c| {
+        c["recipes"]["kiro"]["attributes"] =
+            json!({ "profile_arn": { "selected_recipe": true, "export": true } });
+    });
+    refuses(
+        "a selector holding steps besides attributes",
+        package,
+        kiro_exporting_its_flow(),
+        |c| {
+            c["recipes"]["kiro"]["rotates_refresh_material"] = json!(false);
+        },
+    );
+}
+
+/// An exported value reaches `ProviderConfig.declared`, whose kernel grammar is 1 to 4096 bytes of
+/// printable ASCII, so the field it comes from must declare a value syntax (§13.8).
+#[test]
+fn an_exported_field_declares_a_value_syntax() {
+    let package = "provider-openai-compatible";
+    refuses("an attribute from a field without a syntax", package, codex(), |c| {
+        c["fields"]["account_id"].as_object_mut().unwrap().remove("syntax");
+    });
+}

@@ -18,7 +18,8 @@ use std::{
 use serde_json::Value;
 use south_provider_api::{
     ComponentManifestV1, ConstantV1, CredentialsV1, EncodingV1, HOST_MAX_TTL_SECONDS,
-    HOST_MIN_TTL_SECONDS, PresentCandidateV1, PresentV1, RecipeV1, SlotV1, StatusActionV1, StepV1,
+    HOST_MIN_TTL_SECONDS, PredicateV1, PresentCandidateV1, PresentV1, RecipeV1, SlotV1,
+    StatusActionV1, StepV1,
 };
 use south_provider_conformance::{
     CREDENTIAL_RECIPE_CONFORMANCE_SUITE_ID, CREDENTIAL_RECIPE_CONFORMANCE_SUITE_VERSION,
@@ -56,6 +57,8 @@ fn suite_identity_and_canonical_case_order_are_frozen() {
             Case::CasLoserRereadsTheWinner,
             Case::ProbeDoesNotRotate,
             Case::TransientFailureIsRetried,
+            Case::ExportedAttributesFollowTheCredential,
+            Case::PersistedAttributeOutlivesItsField,
         ]
     );
 }
@@ -66,7 +69,11 @@ fn both_recipes_pass_gate_one_inside_a_shipped_manifest() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../components/provider-openai-compatible/manifest.json");
     let shipped: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-    for kind in [CredentialRecipeKindV1::Rotating, CredentialRecipeKindV1::NonRotating] {
+    for kind in [
+        CredentialRecipeKindV1::Rotating,
+        CredentialRecipeKindV1::NonRotating,
+        CredentialRecipeKindV1::Attributed,
+    ] {
         let mut manifest = shipped.clone();
         manifest["credentials"] = serde_json::to_value(kind.credentials()).unwrap();
         let manifest: ComponentManifestV1 = serde_json::from_value(manifest).unwrap();
@@ -114,6 +121,10 @@ enum Fault {
     /// Treats a transient failure like `reauth_required`: the generation is latched until it
     /// changes (host feedback SF2).
     LatchesTransientFailure,
+    /// Keeps every attribute's last value, as if each declared `persist`.
+    PersistsEveryAttribute,
+    /// Keeps no attribute's last value: `persist` is ignored.
+    ForgetsPersistedAttributes,
 }
 
 struct ReferenceHost {
@@ -156,6 +167,8 @@ struct Row {
     minted: Option<(String, i64)>,
     version: u64,
     reauth_at: Option<u64>,
+    /// The last exported value of each attribute the host keeps (`persist`).
+    persisted: BTreeMap<String, String>,
 }
 
 impl Row {
@@ -420,6 +433,72 @@ impl CredentialRecipeSessionV1 for ReferenceSession {
             StoredCredentialV1::new(row.fields, row.previous, row.minted)
         })
     }
+
+    fn exported_attributes(
+        &self,
+    ) -> CredentialRecipeFutureV1<'_, Option<BTreeMap<String, String>>> {
+        Box::pin(async move { Some(self.attributes()) })
+    }
+}
+
+impl ReferenceSession {
+    /// The slot's recipe after its selector, and the selector, from the stored fields.
+    fn chosen<'s>(&'s self, fields: &BTreeMap<String, String>) -> (Option<&'s RecipeV1>, &'s str) {
+        let slot = south_provider_conformance::CREDENTIAL_RECIPE_SLOT_V1;
+        let Some(SlotV1::Minted(name)) = self.credentials.slots.get(slot) else {
+            panic!("slot {slot} is not minted");
+        };
+        let recipe = &self.credentials.recipes[name];
+        if recipe.select.is_empty() {
+            return (None, name);
+        }
+        let present = |field: &String| fields.get(field).is_some_and(|value| !value.is_empty());
+        let rule = recipe
+            .select
+            .iter()
+            .find(|rule| match &rule.when {
+                None => true,
+                Some(PredicateV1::FieldPresent(field)) => present(field),
+                Some(PredicateV1::AllPresent(all)) => all.iter().all(present),
+                Some(PredicateV1::FieldIn { .. }) => panic!("the suite's selector tests presence"),
+            })
+            .expect("the suite's selector ends with a rule without a test");
+        (Some(recipe), &rule.recipe)
+    }
+
+    fn attributes(&self) -> BTreeMap<String, String> {
+        let mut row = self.row.lock().unwrap_or_else(PoisonError::into_inner);
+        let (selector, name) = self.chosen(&row.fields);
+        let recipe = &self.credentials.recipes[name];
+        let mut exported: BTreeMap<String, String> = selector
+            .into_iter()
+            .flat_map(|selector| selector.attributes.keys())
+            .map(|attribute| (attribute.clone(), name.to_owned()))
+            .collect();
+        for (attribute, declared) in &recipe.attributes {
+            let persist = match self.fault {
+                Fault::PersistsEveryAttribute => true,
+                Fault::ForgetsPersistedAttributes => false,
+                _ => declared.persist,
+            };
+            let field = declared.field.as_ref().and_then(|field| row.fields.get(field)).cloned();
+            match field.filter(|value| !value.is_empty()) {
+                Some(value) => {
+                    if persist {
+                        row.persisted.insert(attribute.clone(), value.clone());
+                    }
+                    exported.insert(attribute.clone(), value);
+                }
+                None if persist => {
+                    if let Some(value) = row.persisted.get(attribute) {
+                        exported.insert(attribute.clone(), value.clone());
+                    }
+                }
+                None => {}
+            }
+        }
+        exported
+    }
 }
 
 async fn run(fault: Fault) -> Result<Vec<Case>, CredentialRecipeConformanceFailureV1> {
@@ -449,6 +528,8 @@ async fn each_broken_invariant_fails_exactly_the_case_that_guards_it() {
         (Fault::CasOverwrites, Case::CasLoserRereadsTheWinner),
         (Fault::ProbeRefreshes, Case::ProbeDoesNotRotate),
         (Fault::LatchesTransientFailure, Case::TransientFailureIsRetried),
+        (Fault::PersistsEveryAttribute, Case::ExportedAttributesFollowTheCredential),
+        (Fault::ForgetsPersistedAttributes, Case::PersistedAttributeOutlivesItsField),
     ];
     // Every case is guarded by exactly one fault here, so the table is fully discriminating.
     let guarded: Vec<_> = expectations.iter().map(|(_, case)| *case).collect();
