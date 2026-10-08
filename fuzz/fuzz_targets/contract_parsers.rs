@@ -8,7 +8,8 @@ use south_component_conformance::task_v2_json::{
 };
 use south_contracts::{
     AwsEventStreamDeframerV1, ControlledUserAgentV1, CredentialSlotV1, DeclaredQueryParameterV1,
-    DeclaredUserAgentV1, JsonBodyV1, MAX_CREDENTIAL_SLOT_BYTES, MAX_DECLARED_QUERY_NAME_BYTES,
+    DeclaredUserAgentV1, EmbeddingsRequestV1, EncodingV1, ExtractedVectorsV1, JsonBodyV1,
+    JsonPointerV1, MAX_CREDENTIAL_SLOT_BYTES, MAX_DECLARED_QUERY_NAME_BYTES, MAX_EMBEDDING_INPUTS,
     MAX_ENDPOINT_BYTES, MAX_JSON_REQUEST_BODY_BYTES, MAX_PROVIDER_QUOTA_METADATA_TOTAL_BYTES,
     MAX_PROVIDER_QUOTA_METADATA_VALUE_BYTES, MAX_QUERY_TOTAL_BYTES, MAX_QUOTA_HEADER_NAME_BYTES,
     MAX_RELATIVE_PATH_BYTES, MAX_RESPONSE_DIAGNOSTIC_TOTAL_BYTES,
@@ -18,8 +19,8 @@ use south_contracts::{
     ProviderEndpointV1, ProviderQuotaHeaderMapV1, ProviderQuotaMetadataFieldV1,
     ProviderQuotaMetadataV1, QueryParameterV1, QueryStringV1, QueryValueSyntaxV1,
     RESPONSE_DIAGNOSTIC_FIELD_COUNT, RelativePathV1, ResponseDiagnosticFieldV1,
-    ResponseDiagnosticsV1, ResponseTranscriptV1, deframe_aws_eventstream_v1,
-    reencode_eventstream_v1,
+    ResponseDiagnosticsV1, ResponseTranscriptV1, VectorLocatorV1, deframe_aws_eventstream_v1,
+    extract_vectors_v1, parse_embeddings_request_v1, reencode_eventstream_v1, render_vectors_v1,
 };
 
 const QUOTA_FIELDS: [ProviderQuotaMetadataFieldV1; 9] = [
@@ -195,6 +196,49 @@ fn fuzz_declared_instances(input: &str) {
     }
 }
 
+/// Embeddings contract 1: the northbound parser and vector extraction consume untrusted JSON
+/// (record §3, §5). An accepted request survives its wire codec, and extracted vectors survive
+/// rendering in either encoding bit for bit.
+fn fuzz_embeddings(input: &str) {
+    if let Ok(body) = serde_json::from_str::<serde_json::Value>(input)
+        && let Ok(request) = parse_embeddings_request_v1(&body, "fuzz")
+    {
+        assert!(!request.inputs().is_empty() && request.inputs().len() <= MAX_EMBEDDING_INPUTS);
+        let encoded = serde_json::to_string(&request).expect("a parsed request must encode");
+        let decoded = serde_json::from_str::<EmbeddingsRequestV1>(&encoded);
+        assert_eq!(decoded.ok(), Some(request));
+    }
+
+    let bits = |extracted: &ExtractedVectorsV1| -> Vec<Vec<u32>> {
+        let vector_bits = |vector: &south_contracts::EmbeddingVectorV1| {
+            vector.to_f32().into_iter().map(f32::to_bits).collect()
+        };
+        extracted.vectors().iter().map(vector_bits).collect()
+    };
+    let whole = || JsonPointerV1::parse("").expect("the empty pointer is valid");
+    let locators = [
+        VectorLocatorV1::NorthIdentical,
+        VectorLocatorV1::Single { vector: whole() },
+        VectorLocatorV1::Array { array: whole(), vector: whole(), index: None },
+    ];
+    for locator in &locators {
+        let Ok(extracted) = extract_vectors_v1(input.as_bytes(), locator) else {
+            continue;
+        };
+        assert!(!extracted.is_empty() && extracted.dimensions() > 0);
+        assert!(extracted.vectors().iter().all(|vector| vector.len() == extracted.dimensions()));
+        let expected = bits(&extracted);
+        for encoding in [EncodingV1::Float, EncodingV1::Base64] {
+            let rendered = render_vectors_v1(extracted.vectors(), encoding, "fuzz", 0)
+                .expect("extracted vectors must render");
+            let again = extract_vectors_v1(&rendered, &VectorLocatorV1::NorthIdentical)
+                .expect("a rendered body must extract");
+            assert!(again.returns_upstream_bytes(encoding));
+            assert_eq!(bits(&again), expected);
+        }
+    }
+}
+
 fuzz_target!(|data: &[u8]| {
     fuzz_eventstream(data);
 
@@ -325,6 +369,7 @@ fuzz_target!(|data: &[u8]| {
     }
 
     fuzz_declared_instances(input);
+    fuzz_embeddings(input);
 
     if let Ok(slot) = CredentialSlotV1::parse(input) {
         assert!(!slot.as_str().is_empty());

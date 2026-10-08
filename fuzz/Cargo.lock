@@ -355,6 +355,7 @@ name = "south-contracts-fuzz"
 version = "0.0.0"
 dependencies = [
  "libfuzzer-sys",
+ "serde_json",
  "south-component-conformance",
  "south-contracts",
  "south-north-codec",
