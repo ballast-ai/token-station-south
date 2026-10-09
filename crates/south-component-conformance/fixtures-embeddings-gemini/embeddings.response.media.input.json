@@ -1,0 +1,10 @@
+{
+  "request_case": "embeddings.request.media",
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"embedding\":{\"values\":[0.1,0.2]}}"
+  }
+}

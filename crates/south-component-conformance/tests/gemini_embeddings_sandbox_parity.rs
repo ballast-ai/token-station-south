@@ -98,3 +98,39 @@ fn the_task_v1_seam_refuses_a_loaded_embeddings_component() {
         "the refused component stays usable through its exact world"
     );
 }
+
+/// A package declaring `media` receives a media input through the seam, and the guest builds the
+/// same prepared request the native reference does.
+#[test]
+fn the_seam_hands_media_to_the_package_that_declares_it() {
+    use south_contracts::{EmbeddingInputV1, EmbeddingsRequestV1, InputShapeV1};
+    use token_station_protocol::ProviderConfig;
+
+    let sandboxed = embeddings_parity::sandboxed(PACKAGE, component_wasm());
+    let config: ProviderConfig = serde_json::from_str(
+        r#"{"provider":"gemini","base_url":"https://generativelanguage.googleapis.com","auth":"provider_api_key"}"#,
+    )
+    .unwrap();
+    let request = EmbeddingsRequestV1::new_v2(
+        "gemini-embedding-2-preview".into(),
+        vec![
+            EmbeddingInputV1::Text("caption".into()),
+            EmbeddingInputV1::Media { media_type: "video/mp4".into(), data: "AAAAIGZ0eXA=".into() },
+        ],
+        InputShapeV1::Array,
+        Some(8),
+        None,
+        None,
+        serde_json::Map::new(),
+    )
+    .unwrap();
+    let built = sandboxed.build_embeddings_request(&config, &request).unwrap();
+    assert_eq!(built, NATIVE.build_embeddings_request(&config, &request).unwrap());
+    // 2 for "caption" (7 bytes), 1024 for video.
+    assert_eq!(built.estimate.fallback_input_tokens(), Some(2 + 1024));
+    assert_eq!(
+        built.descriptor.body.as_ref().unwrap()["requests"][1]["content"]["parts"][0]["inline_data"]
+            ["data"],
+        "AAAAIGZ0eXA="
+    );
+}

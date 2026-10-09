@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "capability",
+    "http_status": 400,
+    "message": "Gemini model `gemini-embedding-001` is text-only and does not support image/png input"
+  }
+}

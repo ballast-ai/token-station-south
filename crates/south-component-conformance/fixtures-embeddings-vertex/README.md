@@ -45,3 +45,5 @@ Credential cases: `credential.clock.vertex-service-account` mints (`expires_in` 
 expiry of 120 s raised to the recipe's floor of 301 s, one past its 300 s refresh margin (the host refreshes 300 s
 before expiry, `REFRESH_BUFFER_SECS`); `vertex-missing-project` is a configuration error before any request; the two
 `on-status` cases are a 400 `invalid_grant` (`reauth_required`) and a 503 (`transient`).
+
+`request.refused-media`: a media input (embeddings contract 2, record §17.5) is a capability error: this package speaks contract 1 and declares no `media`.

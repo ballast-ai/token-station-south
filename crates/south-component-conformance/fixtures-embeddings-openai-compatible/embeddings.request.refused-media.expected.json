@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "capability",
+    "http_status": 400,
+    "message": "this embeddings package does not accept media inputs; media needs a package declaring the `media` capability (embeddings contract 2)"
+  }
+}

@@ -60,6 +60,15 @@ fn capability(detail: impl Into<String>) -> ErrorEnvelope {
     ErrorEnvelope::new(ErrorCode::Capability, 400, detail)
 }
 
+/// The refusal of a media input by a package that does not declare `media` (record §17.3). One
+/// wording for the contract 1 references and the sandbox seam, so a fixture pins it once.
+pub(crate) fn media_not_accepted() -> ErrorEnvelope {
+    capability(
+        "this embeddings package does not accept media inputs; media needs a package declaring \
+         the `media` capability (embeddings contract 2)",
+    )
+}
+
 fn provider_protocol_error(message: &'static str) -> ErrorEnvelope {
     ErrorEnvelope::new(ErrorCode::ProviderProtocolError, 502, message)
 }
@@ -76,10 +85,7 @@ fn embeddings_url(config: &ProviderConfig) -> ComponentResultV1<String> {
 fn input_of(request: &EmbeddingsRequestV1) -> ComponentResultV1<Value> {
     let inputs = request.inputs();
     if request.carries_media() {
-        return Err(capability(
-            "the OpenAI embeddings dialect takes text and token-id inputs; media inputs are not \
-             supported",
-        ));
+        return Err(media_not_accepted());
     }
     let all_text = inputs.iter().all(|input| matches!(input, EmbeddingInputV1::Text(_)));
     let all_ids = inputs.iter().all(|input| matches!(input, EmbeddingInputV1::TokenIds(_)));

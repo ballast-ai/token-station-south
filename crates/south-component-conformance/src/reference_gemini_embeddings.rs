@@ -1,7 +1,7 @@
 //! The native reference implementation of the `embeddings-gemini` component.
 //!
-//! Gemini's native `embedContent` / `batchEmbedContents` dialect under embeddings contract 1
-//! (`docs/design/2026-09-30-embeddings-contract.md` §6, §7.2).
+//! Gemini's native `embedContent` / `batchEmbedContents` dialect under embeddings contracts 1 and 2
+//! (`docs/design/2026-09-30-embeddings-contract.md` §6, §7.2, §17).
 //!
 //! Transcribed from token-station-server's native Gemini embeddings arm so a dual run agrees on
 //! the wire: `proxy_gemini_embeddings` in `gateway/src/modules/inference/handler/embeddings.rs`
@@ -12,13 +12,19 @@
 //!   `{"model": "models/{model}", "content": {"parts": [{"text": …}]}}`; an array goes to
 //!   `:batchEmbedContents` with one such object per input under `requests`. `dimensions` becomes
 //!   `outputDimensionality` on the single body or on every batch item.
+//! - Every input is one request object with one part: `{"text": …}` for text and, under
+//!   contract 2, `{"inline_data": {"mime_type": <media type>, "data": <the client's base64
+//!   string, unchanged>}}` for a media input (`embedding_input_to_gemini_part`). Text and media
+//!   mix freely in a batch. The model `gemini-embedding-001` is text-only and refuses media with
+//!   a capability error (see [`TEXT_ONLY_MODEL`]).
 //! - Token-id inputs cannot be expressed in `content.parts` and are a capability error; the
 //!   unmodelled northbound fields, `user` and `encoding_format` are ignored (the upstream
 //!   returns floats; the host renders the requested encoding).
 //! - Gemini reports no token counts (DE3 unmeasured), so usage is `NotReported` and the request
 //!   carries the native arm's estimate as the fallback: the sum over inputs of
-//!   `(utf8_len + 3) / 4`. `max_input_tokens` is the same value, so the reservation stays the
-//!   estimate (§7.3).
+//!   `(utf8_len + 3) / 4` for text and, for media, 512 for `audio/*`, 1024 for `video/*` and 258
+//!   for everything else (`estimate_media_tokens`). `max_input_tokens` is the same value, so the
+//!   reservation stays the estimate (§7.3).
 //!
 //! Differences from the native arm, all deliberate: a batch response lacking `embeddings` or
 //! carrying an empty vector is a protocol error (the host's extraction refuses it) where the
@@ -42,7 +48,15 @@ use crate::{ComponentResultV1, EmbeddingsComponentV1, PreparedEmbeddingsV1};
 
 /// The package name and version this reference is published as.
 pub const NAME: &str = "embeddings-gemini";
-pub const VERSION: &str = "1.0.2";
+pub const VERSION: &str = "1.1.0";
+
+/// The one model the host refuses media for (`gemini-embedding-001`, text-only), carried over from
+/// the native arm's hard-coded check in `handler/embeddings.rs`.
+///
+/// A **known hard-code**: record §3 wants this fact to be data (a dialect word on the model row or
+/// a catalog entry), but no channel carries it to an embeddings component today (record §17.5,
+/// open point E-O1). It is the model the native arm names, and no other.
+pub const TEXT_ONLY_MODEL: &str = "gemini-embedding-001";
 
 /// The family, as the provider world names it.
 const GEMINI: &str = "gemini";
@@ -73,37 +87,66 @@ fn pointer(text: &str) -> ComponentResultV1<JsonPointerV1> {
     JsonPointerV1::parse(text).map_err(internal)
 }
 
-/// The texts of the request; a token-id input has no faithful `content.parts` form.
-fn texts(request: &EmbeddingsRequestV1) -> ComponentResultV1<Vec<&str>> {
-    request
-        .inputs()
-        .iter()
-        .map(|input| match input {
-            EmbeddingInputV1::Text(text) => Ok(text.as_str()),
-            EmbeddingInputV1::TokenIds(_) => Err(capability(
-                "Gemini embeddings take text only; token-id inputs are not supported",
-            )),
-            EmbeddingInputV1::Media { .. } => {
-                Err(capability("Gemini embeddings take text only; media inputs are not supported"))
-            }
-        })
-        .collect()
+/// One request part: the text, or the media input's `inline_data`.
+fn part_of(input: &EmbeddingInputV1) -> ComponentResultV1<Value> {
+    match input {
+        EmbeddingInputV1::Text(text) => Ok(json!({"text": text})),
+        EmbeddingInputV1::Media { media_type, data } => {
+            Ok(json!({"inline_data": {"mime_type": media_type, "data": data}}))
+        }
+        EmbeddingInputV1::TokenIds(_) => {
+            Err(capability("Gemini embeddings take text only; token-id inputs are not supported"))
+        }
+    }
+}
+
+/// The parts of the request, in input order; a token-id input has no faithful `content.parts`
+/// form, and the text-only model refuses media.
+fn parts(request: &EmbeddingsRequestV1) -> ComponentResultV1<Vec<Value>> {
+    if request.model() == TEXT_ONLY_MODEL
+        && let Some(EmbeddingInputV1::Media { media_type, .. }) =
+            request.inputs().iter().find(|input| input.is_media())
+    {
+        return Err(capability(format!(
+            "Gemini model `{TEXT_ONLY_MODEL}` is text-only and does not support {media_type} input"
+        )));
+    }
+    request.inputs().iter().map(part_of).collect()
 }
 
 /// One `embedContent` request object: the single body, or one batch item.
-fn content_request(model_path: &str, text: &str, dimensions: Option<u32>) -> Value {
-    let mut item = json!({"model": model_path, "content": {"parts": [{"text": text}]}});
+fn content_request(model_path: &str, part: &Value, dimensions: Option<u32>) -> Value {
+    let mut item = json!({"model": model_path, "content": {"parts": [part]}});
     if let Some(dimensions) = dimensions {
         item["outputDimensionality"] = json!(dimensions);
     }
     item
 }
 
-/// The native arm's estimate: UTF-8 bytes, one token per four, rounded up, per input.
-fn estimate_of(texts: &[&str]) -> u64 {
-    texts
+/// The native arm's media estimate (`estimate_media_tokens`): by the media type's top-level type.
+fn media_tokens(media_type: &str) -> u64 {
+    if media_type.starts_with("audio/") {
+        512
+    } else if media_type.starts_with("video/") {
+        1024
+    } else {
+        258
+    }
+}
+
+/// The native arm's estimate: text is UTF-8 bytes, one token per four, rounded up; media is a
+/// constant per top-level type; summed over the inputs.
+fn estimate_of(request: &EmbeddingsRequestV1) -> u64 {
+    request
+        .inputs()
         .iter()
-        .map(|text| u64::try_from(text.len()).unwrap_or(u64::MAX).saturating_add(3) / 4)
+        .map(|input| match input {
+            EmbeddingInputV1::Text(text) => {
+                u64::try_from(text.len()).unwrap_or(u64::MAX).saturating_add(3) / 4
+            }
+            EmbeddingInputV1::Media { media_type, .. } => media_tokens(media_type),
+            EmbeddingInputV1::TokenIds(_) => 0,
+        })
         .fold(0, u64::saturating_add)
 }
 
@@ -124,14 +167,14 @@ impl EmbeddingsComponentV1 for GeminiEmbeddingsReferenceV1 {
         if config.provider != GEMINI {
             return Err(capability(format!("unsupported provider family `{}`", config.provider)));
         }
-        let texts = texts(request)?;
+        let parts = parts(request)?;
         let model = request.model();
         let model_path = format!("models/{model}");
         let dimensions = request.dimensions();
         let batch = request.input_shape() == InputShapeV1::Array;
         let (method, body, vectors) = if batch {
             let requests: Vec<Value> =
-                texts.iter().map(|text| content_request(&model_path, text, dimensions)).collect();
+                parts.iter().map(|part| content_request(&model_path, part, dimensions)).collect();
             let locator = VectorLocatorV1::Array {
                 array: pointer("/embeddings")?,
                 vector: pointer("/values")?,
@@ -139,11 +182,11 @@ impl EmbeddingsComponentV1 for GeminiEmbeddingsReferenceV1 {
             };
             ("batchEmbedContents", json!({"requests": requests}), locator)
         } else {
-            let [text] = texts.as_slice() else {
+            let [part] = parts.as_slice() else {
                 return Err(internal("a single-shaped request has one input"));
             };
             let locator = VectorLocatorV1::Single { vector: pointer("/embedding/values")? };
-            ("embedContent", content_request(&model_path, text, dimensions), locator)
+            ("embedContent", content_request(&model_path, part, dimensions), locator)
         };
         let url = format!(
             "{}/{API_VERSION}/models/{}:{method}",
@@ -158,7 +201,7 @@ impl EmbeddingsComponentV1 for GeminiEmbeddingsReferenceV1 {
             Some(secret) => Some(Auth::header("x-goog-api-key", secret).map_err(internal)?),
             None => None,
         };
-        let estimate = estimate_of(&texts);
+        let estimate = estimate_of(request);
         Ok(PreparedEmbeddingsV1 {
             descriptor,
             estimate: EmbeddingsEstimateV1::new(Some(estimate), Some(estimate)),

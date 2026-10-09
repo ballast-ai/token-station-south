@@ -1,0 +1,44 @@
+{
+  "provider_config": {
+    "provider": "gemini",
+    "base_url": "https://generativelanguage.googleapis.com",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "model": "gemini-embedding-2-preview",
+    "inputs": [
+      {
+        "text": "describe"
+      },
+      {
+        "media": {
+          "media_type": "image/jpeg",
+          "data": "/9j/4AAQSkZJRg=="
+        }
+      },
+      {
+        "media": {
+          "media_type": "audio/L16;rate=16000",
+          "data": "AAECAwQF"
+        }
+      },
+      {
+        "media": {
+          "media_type": "video/mp4",
+          "data": "AAAAIGZ0eXA="
+        }
+      },
+      {
+        "media": {
+          "media_type": "application/pdf",
+          "data": "JVBERi0xLjQ="
+        }
+      }
+    ],
+    "input_shape": "array",
+    "dimensions": 4,
+    "encoding_format": null,
+    "user": null,
+    "extra": {}
+  }
+}

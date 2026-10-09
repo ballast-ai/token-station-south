@@ -826,7 +826,6 @@ fn the_embeddings_value_channel_retires_every_published_047_package_identity() {
         ("task-wan-image-v2", "0.35.6", "0.46.0"),
         ("task-gmi-image-v2", "0.35.6", "0.46.0"),
         ("embeddings-openai-compatible", "1.0.0", "0.47.0"),
-        ("embeddings-gemini", "1.0.0", "0.47.0"),
     ] {
         let manifest: ComponentManifestV1 = serde_json::from_str(
             &std::fs::read_to_string(
@@ -867,7 +866,6 @@ fn host_feedback_sf27_retires_every_published_048_package_identity() {
         ("task-wan-image-v2", "0.35.7", "0.46.0"),
         ("task-gmi-image-v2", "0.35.7", "0.46.0"),
         ("embeddings-openai-compatible", "1.0.1", "0.47.0"),
-        ("embeddings-gemini", "1.0.1", "0.47.0"),
         ("embeddings-vertex", "1.0.0", "0.48.0"),
     ] {
         let manifest: ComponentManifestV1 = serde_json::from_str(
@@ -886,29 +884,28 @@ fn host_feedback_sf27_retires_every_published_048_package_identity() {
 }
 
 /// The embeddings world is first known to the 0.47.0 runtime, so that is the oldest runtime that
-/// admits either embeddings package, and both declare it: a host that claims 0.46.0 refuses them
-/// through the declared runtime alone, even with embeddings contract 1 in its range.
+/// admits the contract 1 text package, and it declares it: a host that claims 0.46.0 refuses it
+/// through the declared runtime alone, even with embeddings contract 1 in its range. (The Gemini
+/// package declares a later runtime, the one whose gate 1 admits `media`.)
 #[test]
 fn the_embeddings_packages_declare_the_first_runtime_with_the_world() {
     let mut on_046 = host_range::host_range();
     "0.46.0".clone_into(&mut on_046.south_runtime);
-    for name in ["embeddings-openai-compatible", "embeddings-gemini"] {
-        let manifest: ComponentManifestV1 = serde_json::from_str(
-            &std::fs::read_to_string(
-                repo_root().join("components").join(name).join("manifest.json"),
-            )
+    // `embeddings-gemini` moved on with contract 2 and declares a later runtime.
+    let name = "embeddings-openai-compatible";
+    let manifest: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(repo_root().join("components").join(name).join("manifest.json"))
             .unwrap(),
-        )
-        .unwrap();
-        assert_eq!(manifest.compatibility.south_runtime, "0.47.0", "{name}");
-        assert!(
-            matches!(
-                compatibility_admits(&manifest, &on_046),
-                Err(CompatibilityMismatchV2::SouthRuntimeAboveHost { .. })
-            ),
-            "{name}"
-        );
-    }
+    )
+    .unwrap();
+    assert_eq!(manifest.compatibility.south_runtime, "0.47.0", "{name}");
+    assert!(
+        matches!(
+            compatibility_admits(&manifest, &on_046),
+            Err(CompatibilityMismatchV2::SouthRuntimeAboveHost { .. })
+        ),
+        "{name}"
+    );
 }
 
 /// `embeddings-vertex` declares a family's `config_schema` and an exported credential attribute,
@@ -1012,4 +1009,22 @@ fn the_gemini_family_moves_the_unreleased_openai_compatible_identity() {
     .unwrap();
     assert_ne!(manifest.version, "2.3.0");
     assert!(manifest.providers.iter().any(|family| family == "gemini-openai-compatible"));
+}
+
+/// `embeddings-gemini` left the `south_runtime` those two retirement tests pin for it: it declares
+/// `media`, which only a runtime whose gate 1 knows the word admits (embeddings record §17.4), and
+/// every identity it published before (1.0.0 with 0.47.0, 1.0.1 with 0.48.0, 1.0.2 with 0.49.0)
+/// stays retired.
+#[test]
+fn embeddings_gemini_retires_its_published_identities_with_contract_2() {
+    let manifest: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(repo_root().join("components/embeddings-gemini/manifest.json"))
+            .unwrap(),
+    )
+    .unwrap();
+    for published in ["1.0.0", "1.0.1", "1.0.2"] {
+        assert_ne!(manifest.version, published, "embeddings-gemini reused a published identity");
+    }
+    assert!(manifest.capabilities.contains("media"));
+    assert_eq!(manifest.compatibility.contracts.get("embeddings"), Some(&2));
 }

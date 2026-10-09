@@ -95,9 +95,7 @@ fn pointer(text: &str) -> ComponentResultV1<JsonPointerV1> {
 /// The one text input `:predict` takes (the native arm's `vertex_embeddings_request`).
 fn single_text(request: &EmbeddingsRequestV1) -> ComponentResultV1<&str> {
     if request.carries_media() {
-        return Err(capability(
-            "Vertex embeddings take text input; media inputs are not supported",
-        ));
+        return Err(crate::reference_openai_compatible_embeddings::media_not_accepted());
     }
     let text = match request.inputs() {
         [EmbeddingInputV1::Text(text)] => text,

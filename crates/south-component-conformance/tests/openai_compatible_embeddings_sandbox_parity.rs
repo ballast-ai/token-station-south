@@ -99,3 +99,44 @@ fn the_task_seam_refuses_a_loaded_embeddings_component() {
         "the refused component stays usable through its exact world"
     );
 }
+
+/// The sandbox seam keeps a media input from a package that does not declare `media`: the answer
+/// is the seam's own capability error, not the guest's (record §17.3).
+#[test]
+fn the_seam_never_hands_a_media_input_to_a_contract_1_package() {
+    use south_contracts::{EmbeddingInputV1, EmbeddingsRequestV1, InputShapeV1};
+    use token_station_protocol::{ErrorCode, ProviderConfig};
+
+    let sandboxed = embeddings_parity::sandboxed(PACKAGE, component_wasm());
+    let config: ProviderConfig = serde_json::from_str(
+        r#"{"provider":"openai-compatible","base_url":"https://api.openai.com","auth":"provider_api_key"}"#,
+    )
+    .unwrap();
+    let request = EmbeddingsRequestV1::new_v2(
+        "text-embedding-3-small".into(),
+        vec![EmbeddingInputV1::Media { media_type: "image/png".into(), data: "AAAA".into() }],
+        InputShapeV1::Single,
+        None,
+        None,
+        None,
+        serde_json::Map::new(),
+    )
+    .unwrap();
+    let refused = sandboxed.build_embeddings_request(&config, &request).unwrap_err();
+    assert_eq!(refused.code, ErrorCode::Capability);
+    assert!(refused.message.contains("does not accept media inputs"), "{}", refused.message);
+    // The same refusal the native reference gives, so the suite sees one answer either way.
+    assert_eq!(Err(refused), NATIVE.build_embeddings_request(&config, &request));
+    // Text still reaches the guest.
+    let text = EmbeddingsRequestV1::new(
+        "text-embedding-3-small".into(),
+        vec![EmbeddingInputV1::Text("hi".into())],
+        InputShapeV1::Single,
+        None,
+        None,
+        None,
+        serde_json::Map::new(),
+    )
+    .unwrap();
+    assert!(sandboxed.build_embeddings_request(&config, &text).is_ok());
+}

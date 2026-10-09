@@ -55,6 +55,19 @@ impl EmbeddingsComponentV1 for SandboxedEmbeddingsComponentV1 {
         config: &ProviderConfig,
         request: &EmbeddingsRequestV1,
     ) -> ComponentResultV1<PreparedEmbeddingsV1> {
+        // A package that does not declare `media` (gate 1 ties the word to contract 2) never
+        // receives a media input: the guest of a contract 1 package could not tell it from text
+        // it has never seen (embeddings record §17.3). The host's answer is the same 400 as a
+        // model that takes no media, before anything crosses the boundary.
+        if request.carries_media()
+            && !self
+                .component
+                .manifest()
+                .capabilities
+                .contains(south_provider_api::EMBEDDINGS_MEDIA_CAPABILITY)
+        {
+            return Err(crate::reference_openai_compatible_embeddings::media_not_accepted());
+        }
         let raw = self
             .component
             .call_build_embeddings_request(&encode(config)?, &encode(request)?)

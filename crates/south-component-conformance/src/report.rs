@@ -132,6 +132,14 @@ pub enum CheckV1 {
     /// the dialect's rule, a count mismatch refused, a rejected credential `rejected` and a 5xx
     /// `unknown`. A missing row is a [`CheckV1::Coverage`] failure.
     NamedRowAssertion,
+    /// A request case holding a media input is built or refused as the package's `media`
+    /// capability says (embeddings record §17.6).
+    ///
+    /// A package declaring `media` builds it or refuses it with a `capability` error (a model that
+    /// takes no media); a package that does not declare `media` refuses it with a `capability`
+    /// error. Either answer other than these would put a media input in front of a dialect that
+    /// cannot carry it, or turn a per-model refusal into a failure the host cannot word.
+    MediaInputsFollowTheDeclaration,
 }
 
 impl CheckV1 {
@@ -156,6 +164,7 @@ impl CheckV1 {
             Self::UndeclaredValuesIgnored => "undeclared_values_ignored",
             Self::LocatorResolves => "locator_resolves",
             Self::NamedRowAssertion => "named_row_assertion",
+            Self::MediaInputsFollowTheDeclaration => "media_inputs_follow_the_declaration",
         }
     }
 }
