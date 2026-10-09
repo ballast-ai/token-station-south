@@ -55,6 +55,14 @@ missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 module_name_repetitions = "allow"
 
+# The tests JIT-compile real wasm components through wasmtime and Cranelift. At the default dev
+# opt-level 0 that compile alone took about 3.6 s per test process (0.5 s with optimized
+# dependencies, measured on one test), and 10-17 s on a 4-vCPU CI runner where several run at
+# once. Only third-party dependencies are optimized; the workspace crates keep the plain dev
+# profile, and the CI cache pays the one-time build cost.
+[profile.dev.package."*"]
+opt-level = 2
+
 [profile.release]
 lto = "thin"
 overflow-checks = true

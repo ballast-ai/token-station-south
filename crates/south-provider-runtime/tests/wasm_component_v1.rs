@@ -26,15 +26,19 @@ fn guest_wasm() -> &'static Path {
     static WASM: OnceLock<PathBuf> = OnceLock::new();
     WASM.get_or_init(|| {
         let guest_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/guests/test-provider");
-        let status = Command::new("cargo")
-            .args(["build", "--target", "wasm32-wasip2"])
-            .current_dir(&guest_dir)
-            .status()
-            .expect("cargo is on PATH");
-        assert!(
-            status.success(),
-            "the guest must build; run `rustup target add wasm32-wasip2` if the target is missing"
-        );
+        // `scripts/prebuild-components.sh` (the nextest setup script) has already built the guest.
+        if std::env::var_os("SOUTH_COMPONENTS_PREBUILT").is_none() {
+            let status = Command::new("cargo")
+                .args(["build", "--target", "wasm32-wasip2"])
+                .current_dir(&guest_dir)
+                .status()
+                .expect("cargo is on PATH");
+            assert!(
+                status.success(),
+                "the guest must build; run `rustup target add wasm32-wasip2` if the target is \
+                 missing"
+            );
+        }
         guest_dir.join("target/wasm32-wasip2/debug/test_provider.wasm")
     })
 }
