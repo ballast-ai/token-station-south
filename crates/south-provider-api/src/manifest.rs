@@ -57,6 +57,48 @@ pub const EMBEDDINGS_WORLD: &str = "embeddings-adapter-v1";
 /// The embeddings component behavior suite (compatibility tuple 6).
 pub const EMBEDDINGS_BEHAVIOR_SUITE: &str = "south.embeddings-component.v1";
 
+/// The image world's WIT package (compatibility tuple field 3).
+///
+/// A package of its own for the same reason as [`EMBEDDINGS_WIT_PACKAGE`]
+/// (2026-09-30 image-world record, D2).
+pub const IMAGE_WIT_PACKAGE: &str = "token-station:image-adapter@1.0.0";
+/// The image world name, doubling as the manifest `api_version`
+/// (compatibility tuple field 4).
+pub const IMAGE_WORLD: &str = "image-adapter-v1";
+/// The image component behavior suite (compatibility tuple 6).
+pub const IMAGE_BEHAVIOR_SUITE: &str = "south.image-component.v1";
+
+/// Whether a world's components reach the host's `host` interface, and what
+/// the runtime's import scan refuses for that world.
+///
+/// A property of the world rather than a list of world names in the runtime,
+/// so a new world states its posture once, here, and the linker and the
+/// import scan read it (2026-09-30 image-world record, §4 and §18.6).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HostImportV1 {
+    /// The runtime links the `host` interface (`sign`), and a guest may import
+    /// it. The provider and task-v1 worlds.
+    Linked,
+    /// The runtime does not link `host`, and the import scan refuses the two
+    /// `host` interfaces the signing worlds offer (`token-station:adapter/host`
+    /// and `token-station:task-adapter/host`), so a guest cannot borrow
+    /// signing through an older world's namespace. The task-v2 world.
+    Unlinked,
+    /// The runtime does not link `host`, and the import scan refuses every
+    /// `token-station:` import and every interface named `host` in any
+    /// package: the world imports nothing from a host. The embeddings and
+    /// image worlds.
+    Pure,
+}
+
+impl HostImportV1 {
+    /// Whether the runtime links the `host` interface for this world.
+    #[must_use]
+    pub const fn is_linked(self) -> bool {
+        matches!(self, Self::Linked)
+    }
+}
+
 /// A component world this South knows, and the properties gate ① validates a
 /// manifest against once the manifest has declared which world it is for
 /// (2026-08-27 manifest-schema record, D1).
@@ -65,6 +107,12 @@ pub const EMBEDDINGS_BEHAVIOR_SUITE: &str = "south.embeddings-component.v1";
 /// properties of the declared world, not constants of the schema. Each
 /// vocabulary is closed on purpose: a word a world does not know is a version
 /// mismatch, not a request to honour.
+///
+/// So is which declarations beyond the vocabulary a world admits, and whether
+/// it reaches the host import: gate ① and the runtime read these properties
+/// instead of comparing world names, so a new world is one row in
+/// [`KNOWN_WORLDS`] and not an exclusion added at every check (2026-09-30
+/// image-world record, §18.6).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WorldSchemaV1 {
     /// The world name a manifest declares in `api_version` (tuple 4).
@@ -77,6 +125,23 @@ pub struct WorldSchemaV1 {
     pub capabilities: &'static [&'static str],
     /// That world's auth arm vocabulary.
     pub auth_arms: &'static [&'static str],
+    /// Whether the runtime links the `host` interface for this world, and what
+    /// its import scan refuses.
+    pub host_import: HostImportV1,
+    /// Whether the world's host builds `ProviderConfig.declared` (the value
+    /// channel, host-zero-vendor-boundary §13.8): a manifest may declare a
+    /// family's `config_schema` and credential attributes to export. Without
+    /// it gate ① refuses both.
+    pub value_channel: bool,
+    /// Whether the world admits the declarations that shape a chat request:
+    /// `endpoint`, `host_values`, `signing`, `stream_framing`,
+    /// `usage_evidence` and `request_facts`. Without it gate ① refuses each
+    /// as a provider-world declaration.
+    pub request_declarations: bool,
+    /// Whether the world admits the B7a instance declarations
+    /// (`query_parameters`, `quota_headers`, `user_agent`; §10). Without it
+    /// gate ① refuses each as a provider-world declaration.
+    pub instance_declarations: bool,
 }
 
 /// The provider world's capability vocabulary.
@@ -225,6 +290,10 @@ pub const PROVIDER_WORLD_SCHEMA: WorldSchemaV1 = WorldSchemaV1 {
     behavior_suite: COMPONENT_BEHAVIOR_SUITE,
     capabilities: PROVIDER_CAPABILITIES,
     auth_arms: PROVIDER_AUTH_ARMS,
+    host_import: HostImportV1::Linked,
+    value_channel: true,
+    request_declarations: true,
+    instance_declarations: true,
 };
 
 /// The task world's capability vocabulary.
@@ -257,6 +326,10 @@ pub const TASK_WORLD_SCHEMA: WorldSchemaV1 = WorldSchemaV1 {
     behavior_suite: TASK_BEHAVIOR_SUITE,
     capabilities: TASK_CAPABILITIES,
     auth_arms: TASK_AUTH_ARMS,
+    host_import: HostImportV1::Linked,
+    value_channel: false,
+    request_declarations: false,
+    instance_declarations: false,
 };
 
 /// Task-v2 currently admits the two validated descriptor credential arms.
@@ -266,6 +339,10 @@ pub const TASK_WORLD_SCHEMA_V2: WorldSchemaV1 = WorldSchemaV1 {
     behavior_suite: TASK_BEHAVIOR_SUITE_V2,
     capabilities: TASK_CAPABILITIES,
     auth_arms: &["bearer", "header_secret"],
+    host_import: HostImportV1::Unlinked,
+    value_channel: false,
+    request_declarations: false,
+    instance_declarations: false,
 };
 
 /// The embeddings world's capability vocabulary, for contracts 1 and 2.
@@ -305,11 +382,52 @@ pub const EMBEDDINGS_WORLD_SCHEMA: WorldSchemaV1 = WorldSchemaV1 {
     behavior_suite: EMBEDDINGS_BEHAVIOR_SUITE,
     capabilities: EMBEDDINGS_CAPABILITIES,
     auth_arms: &["bearer", "header_secret"],
+    host_import: HostImportV1::Pure,
+    value_channel: true,
+    request_declarations: false,
+    instance_declarations: false,
+};
+
+/// The image world's capability vocabulary: one word per operation, closed.
+///
+/// - `generate`: the component builds requests that create images from a
+///   prompt.
+/// - `edit`: the component builds requests that change or extend input
+///   images.
+///
+/// A component declares at least one (gate ① refuses it otherwise,
+/// [`ManifestErrorV1::ImageOperationRequired`]); a model that cannot serve an
+/// operation is refused per request by `prepare` (2026-09-30 image-world
+/// record, §7 and §15).
+pub const IMAGE_CAPABILITIES: &[&str] = &["generate", "edit"];
+
+/// The image world, as gate ① validates it.
+///
+/// Its auth arms are the two descriptor credential arms: a minted credential
+/// (Vertex) arrives through a `minted` slot and is presented as `bearer`, so
+/// `oauth` is not an arm here, and nothing in this world signs (§4). It admits
+/// the value channel, as the embeddings world does, and no other declaration
+/// beyond the vocabulary (§18.3).
+pub const IMAGE_WORLD_SCHEMA: WorldSchemaV1 = WorldSchemaV1 {
+    world: IMAGE_WORLD,
+    wit_package: IMAGE_WIT_PACKAGE,
+    behavior_suite: IMAGE_BEHAVIOR_SUITE,
+    capabilities: IMAGE_CAPABILITIES,
+    auth_arms: &["bearer", "header_secret"],
+    host_import: HostImportV1::Pure,
+    value_channel: true,
+    request_declarations: false,
+    instance_declarations: false,
 };
 
 /// Every world this South can admit.
-pub const KNOWN_WORLDS: &[WorldSchemaV1] =
-    &[PROVIDER_WORLD_SCHEMA, TASK_WORLD_SCHEMA, TASK_WORLD_SCHEMA_V2, EMBEDDINGS_WORLD_SCHEMA];
+pub const KNOWN_WORLDS: &[WorldSchemaV1] = &[
+    PROVIDER_WORLD_SCHEMA,
+    TASK_WORLD_SCHEMA,
+    TASK_WORLD_SCHEMA_V2,
+    EMBEDDINGS_WORLD_SCHEMA,
+    IMAGE_WORLD_SCHEMA,
+];
 
 /// Resolves a manifest's declared `api_version` to a world this South knows.
 #[must_use]
@@ -454,8 +572,9 @@ pub struct ComponentManifestV1 {
     /// `config_schema` keys (§7.3). Provider world only.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub endpoint: BTreeMap<String, String>,
-    /// Each family's non-secret configuration keys (§7.3). Provider and embeddings worlds (the
-    /// embeddings record §16): every key reaches the component in `ProviderConfig.declared`.
+    /// Each family's non-secret configuration keys (§7.3). Every world with
+    /// [`WorldSchemaV1::value_channel`] (provider, embeddings and image; the embeddings record
+    /// §16): every key reaches the component in `ProviderConfig.declared`.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub config_schema: BTreeMap<String, BTreeMap<String, crate::ConfigKeyV1>>,
     // B7a (query, quota, user-agent): provider instances, §10. Provider world only.
@@ -864,6 +983,8 @@ impl ComponentManifestV1 {
             if self.providers.is_empty() {
                 return Err(ManifestErrorV1::ProviderFamilyRequired);
             }
+        }
+        if world.request_declarations {
             self.validate_request_facts()?;
             self.validate_endpoints()?;
             self.validate_signing_declaration()?;
@@ -874,7 +995,7 @@ impl ComponentManifestV1 {
         } else if !self.stream_framing.is_bytes() {
             return Err(ManifestErrorV1::StreamFramingIsAProviderWorldDeclaration);
         } else if !self.endpoint.is_empty()
-            || (world.world != EMBEDDINGS_WORLD && !self.config_schema.is_empty())
+            || (!world.value_channel && !self.config_schema.is_empty())
         {
             return Err(ManifestErrorV1::EndpointIsAProviderWorldDeclaration);
         } else if !self.usage_evidence.is_reported() {
@@ -912,9 +1033,21 @@ impl ComponentManifestV1 {
                     return Err(ManifestErrorV1::MediaCapabilityRequiresContract2 { declared });
                 }
             }
-            // The value channel (embeddings record §16): a family's non-secret keys reach the
-            // component in `ProviderConfig.declared`, under the provider world's key rules. With no
-            // endpoint here, only those rules apply.
+        }
+        if world.world == IMAGE_WORLD {
+            // Neither word means the component builds no request at all (image record §15).
+            if !IMAGE_CAPABILITIES.iter().any(|word| self.capabilities.contains(*word)) {
+                return Err(ManifestErrorV1::ImageOperationRequired);
+            }
+            if self.providers.is_empty() {
+                return Err(ManifestErrorV1::ProviderFamilyRequired);
+            }
+        }
+        // The value channel (embeddings record §16, image record §18.3): a family's non-secret
+        // keys reach the component in `ProviderConfig.declared`, under the provider world's key
+        // rules. A world with request declarations checked them with its endpoints above; with no
+        // endpoint, only the key rules apply.
+        if world.value_channel && !world.request_declarations {
             self.validate_endpoints()?;
         }
         for provider in &self.providers {
@@ -1251,6 +1384,11 @@ pub enum ManifestErrorV1 {
          (embeddings contract 1 carries no media inputs); the manifest declares {declared:?}"
     )]
     MediaCapabilityRequiresContract2 { declared: Option<u32> },
+    /// An image-world manifest declares neither `generate` nor `edit`
+    /// (2026-09-30 image-world record, §15). Added with the image world: a
+    /// host that matches this enum exhaustively must add the arm on re-pin.
+    #[error("every image component must support `generate`, `edit` or both")]
+    ImageOperationRequired,
     #[error(
         "usage_evidence is a provider-world declaration; other worlds meter through their own \
          contracts"

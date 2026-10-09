@@ -38,7 +38,7 @@ use crate::{ComponentResultV1, EmbeddingsComponentV1, PreparedEmbeddingsV1};
 
 /// The package name and version this reference is published as.
 pub const NAME: &str = "embeddings-openai-compatible";
-pub const VERSION: &str = "1.0.3";
+pub const VERSION: &str = "1.0.4";
 
 /// The two families, as the provider world names them.
 const OPENAI_COMPATIBLE: &str = "openai-compatible";

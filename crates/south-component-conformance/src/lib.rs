@@ -50,7 +50,9 @@ pub mod anthropic_dialect;
 mod base64;
 mod descriptor_auth;
 mod url_segment;
-pub use descriptor_auth::{AdmittedAuthV1, DescriptorAuthErrorV1, admit_descriptor_auth};
+pub use descriptor_auth::{
+    AdmittedAuthV1, DescriptorAuthErrorV1, admit_descriptor_auth, admit_media_descriptor_auth,
+};
 // B7a (query, quota, user-agent): a manifest's declared instances as contract types.
 mod declared_instances;
 pub use declared_instances::{
@@ -133,20 +135,30 @@ pub mod reference_xai_task_v2;
 
 // Embeddings contract 1 (docs/design/2026-09-30-embeddings-contract.md, v1 scope §15).
 pub mod abi_embeddings;
+pub mod abi_image;
 mod component_embeddings;
+mod component_image;
 pub use component_embeddings::{EmbeddingsComponentV1, PreparedEmbeddingsV1};
+pub use component_image::{ImageComponentV1, ImageOutcomeV1, ImageRenderedV1};
 mod embeddings_fixture;
 pub use embeddings_fixture::{
     EMBEDDINGS_FIXTURE_KIND_V1, EmbeddingsCaseV1, EmbeddingsFamilyV1, EmbeddingsFixturePackV1,
 };
 pub mod embeddings_json;
 mod embeddings_suite;
+pub mod image_fixture;
+pub mod image_json;
+pub mod image_suite;
 pub use embeddings_suite::{
     EMBEDDINGS_COMPONENT_SUITE_V1, EMBEDDINGS_MEDIA_ROW_V2, EMBEDDINGS_REQUIRED_ROWS_V1,
     run_embeddings_component_suite_v1,
 };
+pub use image_suite::{IMAGE_COMPONENT_SUITE_V1, run_image_component_suite_v1};
+pub mod reference_azure_image;
 pub mod reference_gemini_embeddings;
 pub mod reference_openai_compatible_embeddings;
 pub mod reference_vertex_embeddings;
 #[cfg(feature = "sandbox")]
 pub mod sandbox_embeddings;
+#[cfg(feature = "sandbox")]
+pub mod sandbox_image;

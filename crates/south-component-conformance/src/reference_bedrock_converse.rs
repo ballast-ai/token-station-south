@@ -824,7 +824,7 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-bedrock-converse".to_owned(),
-            version: "1.0.13".to_owned(),
+            version: "1.0.14".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
@@ -984,7 +984,7 @@ impl ProviderComponentV1 for BedrockConverseBearerReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-bedrock-converse-bearer".to_owned(),
-            version: "1.0.5".to_owned(),
+            version: "1.0.6".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }

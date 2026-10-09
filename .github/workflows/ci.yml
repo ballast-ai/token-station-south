@@ -43,6 +43,7 @@ jobs:
             components/embeddings-gemini
             components/embeddings-openai-compatible
             components/embeddings-vertex
+            components/image-azure
             components/provider-anthropic
             components/provider-bedrock-converse
             components/provider-bedrock-converse-bearer
@@ -61,6 +62,7 @@ jobs:
             crates/south-provider-runtime/tests/guests/t09-canary-task
             crates/south-provider-runtime/tests/guests/t21-unseen-eventstream
             crates/south-provider-runtime/tests/guests/test-embeddings
+            crates/south-provider-runtime/tests/guests/test-image
             crates/south-provider-runtime/tests/guests/test-provider
             fuzz
           save-if: ${{ github.ref == 'refs/heads/main' }}

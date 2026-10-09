@@ -1,0 +1,72 @@
+[
+  {
+    "model": "MAI-Image-2.5",
+    "operations": [
+      "generate",
+      "edit"
+    ],
+    "input_roles": [
+      {
+        "key": "image",
+        "role": "input_image"
+      },
+      {
+        "key": "image[]",
+        "role": "input_image"
+      },
+      {
+        "key": "mask",
+        "role": "mask"
+      }
+    ],
+    "response_formats": [
+      "b64_json"
+    ],
+    "metering_forms": [
+      "tokens",
+      "images"
+    ],
+    "token_buckets": [
+      "total_input",
+      "total_output"
+    ],
+    "tier_dimensions": [],
+    "repeat": false,
+    "request_elision_paths": []
+  },
+  {
+    "model": "MAI-Image-2.5-Flash",
+    "operations": [
+      "generate",
+      "edit"
+    ],
+    "input_roles": [
+      {
+        "key": "image",
+        "role": "input_image"
+      },
+      {
+        "key": "image[]",
+        "role": "input_image"
+      },
+      {
+        "key": "mask",
+        "role": "mask"
+      }
+    ],
+    "response_formats": [
+      "b64_json"
+    ],
+    "metering_forms": [
+      "tokens",
+      "images"
+    ],
+    "token_buckets": [
+      "total_input",
+      "total_output"
+    ],
+    "tier_dimensions": [],
+    "repeat": false,
+    "request_elision_paths": []
+  }
+]

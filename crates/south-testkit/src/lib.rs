@@ -51,9 +51,11 @@ mod header_auth;
 mod host_signed;
 mod provider_binary;
 mod provider_get;
+mod provider_media_binary;
 mod provider_multipart;
 mod quota;
 mod raw;
+mod safe_fetch;
 mod stream;
 
 pub use host_signed::{
@@ -102,6 +104,15 @@ pub use provider_get::{
     ProviderGetMismatchV1, ProviderGetObservationV1, ReferenceAssembledProviderGetExecutorV1,
     parse_reference_get_input, run_provider_get_conformance_v1,
 };
+pub use provider_media_binary::{
+    AssembledProviderMediaBinaryExecutionFutureV1, AssembledProviderMediaBinaryExecutorV1,
+    MAX_PROVIDER_MEDIA_BINARY_MISMATCHES_V1, ProviderMediaBinaryConformanceFailureV1,
+    ProviderMediaBinaryConformanceReportV1, ProviderMediaBinaryEvidenceV1,
+    ProviderMediaBinaryMismatchCategoryV1, ProviderMediaBinaryMismatchV1,
+    ProviderMediaBinaryObservationV1, ProviderMediaBinaryRequestV1,
+    ReferenceAssembledProviderMediaBinaryExecutorV1, parse_reference_media_binary_input,
+    run_provider_media_binary_conformance_v1,
+};
 pub use provider_multipart::{
     AssembledProviderMultipartExecutionFutureV1, AssembledProviderMultipartExecutorV1,
     MAX_PROVIDER_MULTIPART_MISMATCHES_V1, ProviderMultipartConformanceFailureV1,
@@ -119,6 +130,13 @@ pub use quota::{
     run_provider_quota_metadata_conformance_v1,
 };
 
+pub use safe_fetch::{
+    MAX_SAFE_FETCH_MISMATCHES_V1, ReferenceSafeFetchExecutorV1, SAFE_FETCH_RUNNER_GRACE_V1,
+    SafeFetchArtifactV1, SafeFetchConformanceFailureV1, SafeFetchConformanceReportV1,
+    SafeFetchExecutorV1, SafeFetchFutureV1, SafeFetchMismatchCategoryV1, SafeFetchMismatchV1,
+    SafeFetchPortsV1, SafeFetchResolveErrorV1, SafeFetchTransportErrorV1, SafeFetchWireBodyV1,
+    SafeFetchWireRequestV1, SafeFetchWireResponseV1, run_safe_fetch_conformance_v1,
+};
 pub use stream::{
     AssembledProviderStreamExecutorV1, AssembledStreamExecutionFutureV1,
     MAX_PROVIDER_STREAM_MISMATCHES_V1, ProviderStreamConformanceFailureV1,
@@ -752,6 +770,10 @@ const fn map_contract_error(error: ContractErrorV1) -> ProviderCallFailureCodeV1
         | ContractErrorV1::ContentTypeHeaderNotPermitted => {
             ProviderCallFailureCodeV1::InvalidRelativePath
         }
+        // The text shape's media type outside the closed set (HTTP contract version twelve) is
+        // the same preparation-time, zero-call declaration failure, and folds the same way — not
+        // into `InvalidJsonBody`, for the reason given for the multipart variants above.
+        ContractErrorV1::UnsupportedTextMediaType => ProviderCallFailureCodeV1::InvalidRelativePath,
         // B7a: a declared query parameter refused at construction is the same preparation-time,
         // zero-call declaration failure as an invalid sanctioned value, and folds the same way.
         ContractErrorV1::InvalidQueryDeclaration => ProviderCallFailureCodeV1::InvalidRelativePath,

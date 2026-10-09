@@ -477,3 +477,124 @@ fn a_kernel_catalog_name_is_never_admitted_as_a_declared_header() {
         );
     }
 }
+
+/// A media descriptor (image record §6.3) for the chat fixture's upstream, with the given auth.
+fn media(auth: &str, headers: &str) -> south_contracts::media::MediaRequestDescriptorV1 {
+    south_contracts::media::MediaRequestDescriptorV1::parse(
+        &format!(
+            r#"{{"method":"POST","path":"v1/images/generations"{auth}{headers},"body":"empty"}}"#
+        ),
+        &south_contracts::media::MediaLimitsV1::V1,
+    )
+    .unwrap()
+}
+
+#[test]
+fn a_media_descriptor_is_admitted_by_the_same_rule() {
+    use south_component_conformance::admit_media_descriptor_auth;
+    let (config, _) = built();
+    let slot = slot(&config);
+    let both = manifest(&["bearer", "header_secret"]);
+    let bearer = media(&format!(r#","auth":{{"arm":"bearer","slot":"{}"}}"#, slot.as_str()), "");
+    assert_eq!(admit_media_descriptor_auth(&both, &config, &bearer), Ok(AdmittedAuthV1::Bearer));
+    let header = media(
+        &format!(
+            r#","auth":{{"arm":"header_secret","header":"api-key","slot":"{}"}}"#,
+            slot.as_str()
+        ),
+        "",
+    );
+    assert_eq!(
+        admit_media_descriptor_auth(&both, &config, &header),
+        Ok(AdmittedAuthV1::HeaderSecret(SecretHeaderV1::ApiKey))
+    );
+    assert_eq!(
+        admit_media_descriptor_auth(&manifest(&["header_secret"]), &config, &bearer),
+        Err(DescriptorAuthErrorV1::BearerNotDeclared)
+    );
+    assert_eq!(
+        admit_media_descriptor_auth(&manifest(&["bearer"]), &config, &header),
+        Err(DescriptorAuthErrorV1::HeaderSecretNotDeclared)
+    );
+    let unknown = media(
+        &format!(
+            r#","auth":{{"arm":"header_secret","header":"x-token","slot":"{}"}}"#,
+            slot.as_str()
+        ),
+        "",
+    );
+    assert_eq!(
+        admit_media_descriptor_auth(&both, &config, &unknown),
+        Err(DescriptorAuthErrorV1::HeaderNotSanctioned("x-token".to_owned()))
+    );
+    let mut declaring = both;
+    declaring.secret_headers = vec!["x-token".to_owned()];
+    assert_eq!(
+        admit_media_descriptor_auth(&declaring, &config, &unknown),
+        Ok(AdmittedAuthV1::DeclaredHeaderSecret(DeclaredSecretHeaderV1::parse("x-token").unwrap()))
+    );
+    let smuggled = media(
+        &format!(r#","auth":{{"arm":"bearer","slot":"{}"}}"#, slot.as_str()),
+        r#","headers":[{"name":"x-token","value":"v"}]"#,
+    );
+    assert_eq!(
+        admit_media_descriptor_auth(&declaring, &config, &smuggled),
+        Err(DescriptorAuthErrorV1::SecretHeaderOnOrdinaryChannel("x-token".to_owned()))
+    );
+}
+
+#[test]
+fn a_media_descriptor_slot_is_checked_like_the_kernel_checks_one() {
+    use south_component_conformance::admit_media_descriptor_auth;
+    let (config, _) = built();
+    let both = manifest(&["bearer", "header_secret"]);
+    assert_eq!(
+        admit_media_descriptor_auth(&both, &config, &media("", "")),
+        Err(DescriptorAuthErrorV1::NotAuthorized(DescriptorError::MissingCredential))
+    );
+    let other = media(r#","auth":{"arm":"bearer","slot":"other"}"#, "");
+    assert_eq!(
+        admit_media_descriptor_auth(&both, &config, &other),
+        Err(DescriptorAuthErrorV1::NotAuthorized(DescriptorError::UndeclaredCredential {
+            named: SecretRef::new("other"),
+            declared: slot(&config),
+        }))
+    );
+    let mut open = config;
+    open.auth = None;
+    assert_eq!(
+        admit_media_descriptor_auth(&both, &open, &other),
+        Err(DescriptorAuthErrorV1::NotAuthorized(DescriptorError::UnexpectedCredential {
+            named: SecretRef::new("other"),
+        }))
+    );
+    assert_eq!(admit_media_descriptor_auth(&both, &open, &media("", "")), Ok(AdmittedAuthV1::None));
+}
+
+#[test]
+fn a_media_bearer_on_a_minted_slot_is_admitted_without_the_bearer_arm() {
+    use south_component_conformance::admit_media_descriptor_auth;
+    let (config, _) = built();
+    let mut minting = manifest(&["header_secret"]);
+    minting.credentials = Some(
+        serde_json::from_value(serde_json::json!({
+            "schema": "south.credential-recipe.v1",
+            "fields": { "secret_key": { "secret": true, "required": true } },
+            "slots": { slot(&config).as_str(): { "minted": "token" } },
+            "recipes": { "token": {
+                "steps": [{ "id": "jwt", "kind": "jwt_sign", "alg": "HS256",
+                            "key": { "field": "secret_key" }, "claims": { "exp": { "now_plus": 60 } } }],
+                "present": "jwt.jwt", "rotates_refresh_material": false,
+                "default_seconds": 60 } }
+        }))
+        .unwrap(),
+    );
+    let bearer =
+        media(&format!(r#","auth":{{"arm":"bearer","slot":"{}"}}"#, slot(&config).as_str()), "");
+    assert_eq!(admit_media_descriptor_auth(&minting, &config, &bearer), Ok(AdmittedAuthV1::Bearer));
+    minting.credentials.as_mut().unwrap().slots.clear();
+    assert_eq!(
+        admit_media_descriptor_auth(&minting, &config, &bearer),
+        Err(DescriptorAuthErrorV1::BearerNotDeclared)
+    );
+}

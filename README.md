@@ -52,7 +52,8 @@ the [task adapter vocabulary](docs/design/2026-08-27-task-adapter-vocabulary.md)
 
 - `south-contracts` defines bounded HTTP (the JSON POST request, the body-less GET request, and
   the multipart POST request, whose opaque bytes travel under a media type the contract renders
-  from a validated boundary),
+  from a validated boundary, and since HTTP contract 12 the SSML text POST request, whose bounded
+  UTF-8 body travels under `application/ssml+xml`, a media type from a closed set),
   Bearer, sanctioned header-secret, combined Bearer-plus-header-secret, and package-declared
   header-secret authentication (auth contract 5, whose declared names join the reserved headers
   and leave the response transcript for that package's calls), stable
@@ -62,8 +63,9 @@ the [task adapter vocabulary](docs/design/2026-08-27-task-adapter-vocabulary.md)
   user-agent request declarations.
 - `south-core` binds a validated endpoint to one credential slot, resolves the host-owned secret,
   and applies cancellation and caller deadlines around prepared buffered and streaming JSON POST
-  calls, buffered body-less GET calls, buffered multipart POST calls, and JSON POST calls whose
-  response is buffered as opaque bytes rather than proved to be UTF-8. Its
+  calls, buffered body-less GET calls, buffered multipart POST calls, and JSON POST, multipart
+  POST and SSML text POST calls whose response is buffered as opaque bytes rather than proved to
+  be UTF-8 (the last two since HTTP contract 12). Its
   `raw` module is the shared host prelude: a borrowed raw-call type, string-in contract parsing
   that names the failing field, zero-side-effect one-shot wrappers, and the pre-resolved and
   size-bounding credential resolver adapters both hosts previously hand-rolled — plus the
@@ -73,7 +75,8 @@ the [task adapter vocabulary](docs/design/2026-08-27-task-adapter-vocabulary.md)
 - `south-transport-reqwest` executes hardened buffered and byte-streaming JSON POST requests,
   buffered body-less GET requests, buffered multipart POST requests (emitting the media type
   the prepared request renders, and sharing the body's allocation rather than copying it), and
-  binary-response JSON POST requests under their own larger body cap,
+  SSML text POST requests under the `application/ssml+xml` media type the contract renders, and
+  binary-response requests under their own larger body cap,
   applies the request's sanctioned user-agent declaration exactly once, applies every auth header
   the prepared request carries (one for the credential arms, the finalizer's diffed set for the
   host-signed arm), adds exactly `TRANSPORT_ADDED_HEADERS_V1` and nothing else, captures only the
@@ -84,13 +87,19 @@ the [task adapter vocabulary](docs/design/2026-08-27-task-adapter-vocabulary.md)
 - `south-provider-conformance` publishes immutable `south.provider-call.v1`,
   `south.provider-stream.v1`, `south.provider-quota-metadata.v1`, `south.header-auth.v1`,
   `south.controlled-query.v1`, `south.controlled-user-agent.v1`, `south.provider-get.v1`,
-  `south.provider-multipart.v1`, and `south.provider-binary.v1` fixtures, while `south-testkit`
+  `south.provider-multipart.v1`, `south.provider-binary.v1`, and `south.provider-media-binary.v1`
+  fixtures, while `south-testkit`
   runs them against assembled host executors. It also carries the host-implemented
   `south.credential-recipe.v1` suite (gate ③ of credential recipes): a harness the host wraps around
   its own recipe executor and credential store, an in-process fake token endpoint, and the runner.
   Two more gate ③ suites are host-implemented the same way: `south.eventstream-framing.v1` (the host's
   framing executor: `bytes` versus `aws-eventstream`, canonical re-encoding, faults, the buffered path) and
   `south.request-signing.v1` (the declaration-selected SigV4 finalizer, verified by recomputing the signature).
+  The media worlds' gate ③ suite `south.safe-fetch.v1` holds the host's artifact-URL fetch executor to the image
+  record's §11 rules: its fixtures here describe a whole fake network (resolver answers, servers, a system proxy),
+  and the `south-testkit` runner hands those fakes to the host's executor and judges what it resolved, where it
+  connected, what it sent and what it returned, with a reference executor built on `ArtifactUrlV1::parse` and
+  `is_forbidden_egress_address`.
 - `south-provider-api` owns the v2 provider component ABI: the WIT package
   `token-station:adapter@2.0.0` (world `provider-adapter-v2`, JSON payloads named by
   canonical type, raw-bytes stream chunks) and the component `manifest.json` schema
@@ -165,6 +174,7 @@ it carries — adoption is recorded per host in `compatibility.json`.
 | `0.50.0` | The model catalog (B6-1, #161): `catalogs/model-catalog.json` ships as `model-catalog-v0.50.0.json`, is covered by `SHASUMS256.txt`, and is listed in `south-release-index.json` under `catalogs` with schema `south.model-catalog.v1` (image and video capabilities by upstream model id, read by `south_provider_runtime::ModelCatalogV1`); the first release whose `catalogs` is not `[]`. The first release under Q47 (#163): `south-contracts`, `south-provider-api` and `south-component-conformance` carry their own versions (still 0.49.0), so no package changes: all seventeen keep their version, `manifest.json`, `component.wasm` and `south_runtime`. No contract number changes; the kernel pin is unchanged. Not breaking for hosts on re-pin. | [release](docs/design/2026-10-08-release-0.50.0.md), [boundary record](docs/design/2026-09-30-host-zero-vendor-boundary.md) §13.11, §13.12 |
 | `0.51.0` | Embeddings contract 2: media inputs inline and bounded, independent of `contracts.media` and the image world (E-Q8 and D3 superseded for media). `EmbeddingInputV1::Media`, `parse_embeddings_request_v2`, the `media` capability word (gate ① requires `contracts: {"embeddings": 2}` with it), the inline `embeddings.request.media` row and `MediaInputsFollowTheDeclaration`; contract 1 behavior and wire shapes unchanged. `embeddings-gemini` 1.1.0 carries Gemini's multimodal models (`south_runtime` 0.51.0). A host admitting a `media` package must give its embeddings runtime at least 192 MiB of guest memory (`RuntimeLimitsV1::for_embeddings_media()`; the default 64 MiB traps above 7.9 MiB of base64) and answer 413 above a 15 MiB request view (E-O2). `south-contracts`, `south-provider-api` and `south-component-conformance` take 0.50.0 under Q47, so the other sixteen packages take a patch bump. | [release](docs/design/2026-10-09-release-0.51.0.md), [record](docs/design/2026-09-30-embeddings-contract.md) §17 |
 | `0.51.1` | Runtime fix for the host's gap #101: a guest trap no longer panics the calling tokio task, and a trapped component answers its next call. `south-provider-runtime` registers its own non-blocking `wasi:io` streams and poll functions after `add_to_linker_sync` (the synchronous WASI shims run `Handle::block_on` inside any tokio runtime, and a guest reaches them when it flushes its panic or allocation-failure message to stderr), and replaces the shared instance of a component at the start of the call that follows any guest error (wasmtime never re-enters a trapped instance). A guest that sleeps on a clock is now a trap at once instead of a blocked host thread. No package, contract, `south_runtime`, public API or guest-linked crate changes: Q47 does not apply, all eighteen packages keep their version and bytes. Not breaking for hosts on re-pin. | [release](docs/design/2026-10-09-release-0.51.1.md) |
+| `0.52.0` | The image world, first batch: `contracts.media` v1 (the elider, the multipart parser and encoder, the closed transform vocabulary of both media worlds, the media request descriptor and its template expansion, the request and response views, the artifact URL grammar and the forbidden egress ranges, with golden vectors), `contracts.image` v1, HTTP contract 12 (`execute_multipart_binary_call_v1`, `TextPostRequestV1` and `execute_text_binary_call_v1`), the `image-adapter-v1` world with no host import, gate ② `south.image-component.v1` (five new rows), gate ③ `south.provider-media-binary.v1` and `south.safe-fetch.v1`, and the package `image-azure` (1.0.0, `azure-mai`, generation and edit), which declares `south_runtime` `0.52.0` and is `not_verified` for both hosts. `south-contracts`, `south-provider-api` and `south-component-conformance` move to 0.51.0, so every other package takes a patch bump with unchanged behavior and keeps its `south_runtime`. `compatibility.json` `schema_version` 7. **Breaking for hosts on re-pin** (`RequestBodyRefV1::Text`, `ManifestErrorV1::ImageOperationRequired`, new public fields on `WorldSchemaV1`, five `CheckV1` variants). | [release](docs/design/2026-10-10-release-0.52.0.md), [image world record](docs/design/2026-09-30-image-world.md) |
 
 ## Component packages
 
@@ -184,6 +194,7 @@ directory shape the runtime loads — `manifest.json` beside `component.wasm`.
 | `embeddings-openai-compatible` | `openai-compatible`, `azure-openai-v1` | `bash scripts/build-embeddings-openai-compatible-component.sh` | embeddings contract 1, from 0.47.0 |
 | `embeddings-gemini` | `gemini` | `bash scripts/build-embeddings-gemini-component.sh` | embeddings contract 2 (inline media inputs), from 0.51.0; contract 1 text before |
 | `embeddings-vertex` | `vertex-ai` | `bash scripts/build-embeddings-vertex-component.sh` | embeddings contract 1, from 0.48.0 |
+| `image-azure` | `azure-mai` | `bash scripts/build-image-azure-component.sh` | media contract 1 and image contract 1, from 0.52.0 |
 | `provider-anthropic-bedrock-invoke` | `anthropic-bedrock-invoke` | `bash scripts/build-anthropic-bedrock-invoke-component.sh` | Bedrock InvokeModel (Anthropic), `host_signed` with `aws-sigv4`; unreleased (B6-2) |
 
 Each pack's `README.md` records how its expectations were derived and how the

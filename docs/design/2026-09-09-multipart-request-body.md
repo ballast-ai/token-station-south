@@ -49,6 +49,14 @@ carry a bounded, opaque byte body under a media type it renders itself. Everythi
 to own about a JSON POST — routing, retry, admission, persistence, credential sources — it
 equally refuses to own about a multipart POST.
 
+> **Scope narrowed (2026-10-09, image world record §6.6 and Q1, ruled 2026-10-08).** This claim
+> binds the **transport layer**: [`MultipartBodyV1`] still carries opaque, already-encoded bytes
+> and still does not parse them. The media worlds' **world layer** (`contracts.media` v1) does
+> learn what a form field is: south supplies `parse_multipart_parts_v1` and
+> `encode_multipart_v1` as host-side pure functions, because a component describes an edit's
+> parts by reference and both hosts must split and encode them identically. The encoder's
+> output is still handed to the transport as a `MultipartBodyV1`.
+
 The security question this raises honestly: an opaque body is a wider door than a validated JSON
 one. Three things keep it bounded, and §3 makes each of them mechanical rather than advisory:
 the byte cap, the media type being a **closed declaration** rather than a free-form header, and
@@ -205,7 +213,7 @@ grammars.
   *decode* that body so South could *re-encode* it, which changes the boundary, discards the
   host's careful "never touch a binary part" work, and breaks the byte-identity-with-legacy
   discipline every adoption so far has rested on. South also has no business learning what a form
-  field is.
+  field is. *(For the transport type only; see the scope note in §2.)*
 - **D3 — South renders `content-type` from the declaration, and the type refuses a
   `content-type` in its ordinary headers.** As designed. The alternative — let the host
   pass it as a header, as the JSON arm does — is safe only because a JSON body is validated; with

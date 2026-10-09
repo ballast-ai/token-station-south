@@ -11,9 +11,12 @@
 use std::error::Error;
 use std::fmt;
 
+use south_contracts::media::{MediaAuthV1, MediaRequestDescriptorV1};
 use south_contracts::{DeclaredSecretHeaderV1, SecretHeaderV1};
 use south_provider_api::{ComponentManifestV1, SlotV1};
-use token_station_protocol::{Auth, DescriptorError, HttpRequestDescriptor, ProviderConfig};
+use token_station_protocol::{
+    Auth, DescriptorError, HttpRequestDescriptor, ProviderConfig, SecretRef,
+};
 
 /// The presentation an admitted descriptor asks the host for.
 ///
@@ -143,24 +146,106 @@ pub fn admit_descriptor_auth(
     descriptor: &HttpRequestDescriptor,
 ) -> Result<AdmittedAuthV1, DescriptorAuthErrorV1> {
     config.authorize(descriptor).map_err(DescriptorAuthErrorV1::NotAuthorized)?;
-    if let Some((name, _)) =
-        descriptor.headers.iter().find(|(name, _)| declared(manifest, name).is_some())
-    {
-        return Err(DescriptorAuthErrorV1::SecretHeaderOnOrdinaryChannel(name.clone()));
+    let presentation = descriptor.auth.as_ref().map(|auth| match auth {
+        Auth::Bearer { .. } => Presentation::Bearer,
+        Auth::Header { name, .. } => Presentation::Header(name),
+        Auth::BearerAndHeader { name, .. } => Presentation::BearerAndHeader(name),
+        Auth::OAuth { secret, .. } => Presentation::OAuth(secret.as_str()),
+    });
+    admit_presentation(
+        manifest,
+        config,
+        descriptor.headers.iter().map(|(name, _)| name.as_str()),
+        presentation,
+    )
+}
+
+/// Admits a media descriptor's auth (image record §6.3, §18.4): the twin of
+/// [`admit_descriptor_auth`] for [`MediaRequestDescriptorV1`], built on the same rule so the two
+/// cannot drift.
+///
+/// A media descriptor has no absolute URL — its path is relative, so it cannot leave the
+/// configured endpoint — but its slot is checked exactly as [`ProviderConfig::authorize`] checks
+/// a kernel descriptor's: a slot on an upstream configured without one, a missing slot on one
+/// configured with one, and a slot other than the configured one are refused. Then the shared
+/// rule: the arm must be declared, the header must be sanctioned or declared in
+/// `secret_headers`, no ordinary header may carry a declared secret header's name, and a slot a
+/// credential recipe mints is presented as Bearer.
+///
+/// # Errors
+///
+/// Returns the first [`DescriptorAuthErrorV1`] found.
+pub fn admit_media_descriptor_auth(
+    manifest: &ComponentManifestV1,
+    config: &ProviderConfig,
+    descriptor: &MediaRequestDescriptorV1,
+) -> Result<AdmittedAuthV1, DescriptorAuthErrorV1> {
+    let named = descriptor.auth().map(|auth| SecretRef::new(auth.slot()));
+    match (config.auth.as_ref(), named) {
+        (None, Some(named)) => {
+            return Err(DescriptorAuthErrorV1::NotAuthorized(
+                DescriptorError::UnexpectedCredential { named },
+            ));
+        }
+        (Some(_), None) => {
+            return Err(DescriptorAuthErrorV1::NotAuthorized(DescriptorError::MissingCredential));
+        }
+        (Some(slot), Some(named)) if &named != slot => {
+            return Err(DescriptorAuthErrorV1::NotAuthorized(
+                DescriptorError::UndeclaredCredential { named, declared: slot.clone() },
+            ));
+        }
+        (None, None) | (Some(_), Some(_)) => {}
+    }
+    let presentation = descriptor.auth().map(|auth| match auth {
+        MediaAuthV1::Bearer { slot } if slot_is_minted(manifest, config, slot) => {
+            Presentation::OAuth(slot.as_str())
+        }
+        MediaAuthV1::Bearer { .. } => Presentation::Bearer,
+        MediaAuthV1::HeaderSecret { header, .. } => Presentation::Header(header.as_str()),
+    });
+    admit_presentation(
+        manifest,
+        config,
+        descriptor.headers().iter().map(|(name, _)| name),
+        presentation,
+    )
+}
+
+/// How a descriptor asks for its credential to be presented, independent of the descriptor's own
+/// shape.
+#[derive(Clone, Copy)]
+enum Presentation<'a> {
+    Bearer,
+    Header(&'a str),
+    BearerAndHeader(&'a str),
+    /// A slot a credential recipe may mint, presented as Bearer.
+    OAuth(&'a str),
+}
+
+/// The rule both descriptor shapes share, after their slot checks.
+fn admit_presentation<'a>(
+    manifest: &ComponentManifestV1,
+    config: &ProviderConfig,
+    mut ordinary_headers: impl Iterator<Item = &'a str>,
+    presentation: Option<Presentation<'_>>,
+) -> Result<AdmittedAuthV1, DescriptorAuthErrorV1> {
+    if let Some(name) = ordinary_headers.find(|name| declared(manifest, name).is_some()) {
+        return Err(DescriptorAuthErrorV1::SecretHeaderOnOrdinaryChannel(name.to_owned()));
     }
     if manifest.auth_arms.contains("host_signed") {
-        return match descriptor.auth {
+        return match presentation {
             None => Ok(AdmittedAuthV1::HostSigned),
             Some(_) => Err(DescriptorAuthErrorV1::HostSignedCarriesAuth),
         };
     }
-    match &descriptor.auth {
+    match presentation {
         None => Ok(AdmittedAuthV1::None),
-        Some(Auth::Bearer { .. }) if manifest.auth_arms.contains("bearer") => {
+        Some(Presentation::Bearer) if manifest.auth_arms.contains("bearer") => {
             Ok(AdmittedAuthV1::Bearer)
         }
-        Some(Auth::Bearer { .. }) => Err(DescriptorAuthErrorV1::BearerNotDeclared),
-        Some(Auth::Header { name, .. }) => {
+        Some(Presentation::Bearer) => Err(DescriptorAuthErrorV1::BearerNotDeclared),
+        Some(Presentation::Header(name)) => {
             if !manifest.auth_arms.contains("header_secret") {
                 return Err(DescriptorAuthErrorV1::HeaderSecretNotDeclared);
             }
@@ -172,28 +257,31 @@ pub fn admit_descriptor_auth(
             // outside `CREDENTIAL_HEADERS`; this check decides whether the package may use it.
             declared(manifest, name)
                 .map(AdmittedAuthV1::DeclaredHeaderSecret)
-                .ok_or_else(|| DescriptorAuthErrorV1::HeaderNotSanctioned(name.clone()))
+                .ok_or_else(|| DescriptorAuthErrorV1::HeaderNotSanctioned(name.to_owned()))
         }
-        Some(Auth::BearerAndHeader { name, .. }) => {
+        Some(Presentation::BearerAndHeader(name)) => {
             if !manifest.auth_arms.contains("bearer_and_header_secret") {
                 return Err(DescriptorAuthErrorV1::BearerAndHeaderNotDeclared);
             }
             sanctioned(name)
                 .map(AdmittedAuthV1::BearerAndHeaderSecret)
-                .ok_or_else(|| DescriptorAuthErrorV1::CombinedHeaderNotSanctioned(name.clone()))
+                .ok_or_else(|| DescriptorAuthErrorV1::CombinedHeaderNotSanctioned(name.to_owned()))
         }
-        Some(Auth::OAuth { secret, .. }) => {
-            // Only the section that applies to this family mints (§13.5 D2).
-            let minted = manifest.credentials_for(&config.provider).is_some_and(|credentials| {
-                matches!(credentials.slots.get(secret.as_str()), Some(SlotV1::Minted(_)))
-            });
-            if minted {
+        Some(Presentation::OAuth(slot)) => {
+            if slot_is_minted(manifest, config, slot) {
                 Ok(AdmittedAuthV1::Bearer)
             } else {
                 Err(DescriptorAuthErrorV1::OAuthNotAdmitted)
             }
         }
     }
+}
+
+/// Whether the section that applies to this family mints `slot` (§13.5 D2).
+fn slot_is_minted(manifest: &ComponentManifestV1, config: &ProviderConfig, slot: &str) -> bool {
+    manifest
+        .credentials_for(&config.provider)
+        .is_some_and(|credentials| matches!(credentials.slots.get(slot), Some(SlotV1::Minted(_))))
 }
 
 /// The sanctioned secret-bearing header matching `name` without case.

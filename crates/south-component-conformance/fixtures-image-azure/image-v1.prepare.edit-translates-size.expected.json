@@ -1,0 +1,72 @@
+{
+  "facts": {
+    "operation": "edit",
+    "inputs": {
+      "input_image": 1,
+      "reference_image": 0,
+      "mask": 0
+    },
+    "requested_outputs": 1,
+    "tier": {},
+    "metering_forms": [
+      "tokens"
+    ],
+    "size": {
+      "width": 1024,
+      "height": 1024
+    }
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "mai/v1/images/edits",
+    "auth": {
+      "arm": "header_secret",
+      "header": "api-key",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "multipart": {
+        "parts": [
+          {
+            "name": "model",
+            "value": "MAI-Image-2.5"
+          },
+          {
+            "name": "prompt",
+            "value": "add a hat"
+          },
+          {
+            "name": "image",
+            "blob": "b0",
+            "transform": "as_is",
+            "filename": "cat.png",
+            "media_type": "image/png"
+          },
+          {
+            "name": "n",
+            "value": "1"
+          },
+          {
+            "name": "width",
+            "value": "1024"
+          },
+          {
+            "name": "height",
+            "value": "1024"
+          }
+        ]
+      }
+    }
+  },
+  "repeat": 1,
+  "response_body_form": "json",
+  "response_elision_paths": [
+    "/data/*/b64_json"
+  ],
+  "immutable_body_paths": [],
+  "state": {
+    "metering_required": [
+      "tokens"
+    ]
+  }
+}

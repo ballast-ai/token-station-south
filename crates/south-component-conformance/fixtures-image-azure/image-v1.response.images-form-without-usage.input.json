@@ -1,0 +1,14 @@
+{
+  "prepare_case": "image-v1.prepare.generate-auto-size-images-form",
+  "response": {
+    "status": 200,
+    "body": {
+      "created": 1700000000,
+      "data": [
+        {
+          "b64_json": "iVBORw0KGgoAAAANSUhEUg=="
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,343 @@
+{
+  "contract": "media",
+  "version": 1,
+  "note": "Golden vectors of contracts.media v1 (image record §6, §11). A host that does not link south-contracts reproduces every output byte for byte (host obligation §12.3). Byte strings are given as UTF-8 text in `*_text` fields or as standard base64 in `*_base64` fields. Limits are MediaLimitsV1::V1 unless a case sets `inline_string_bytes`.",
+  "elide": [
+    {
+      "name": "declared-wildcard-paths",
+      "document_text": "{\"prompt\":\"a cat\",\"images\":[{\"url\":\"x\"},{\"url\":\"data:image/png;base64,AAAA\"}]}",
+      "declared": [
+        "/images/*/url"
+      ],
+      "view": "{\"prompt\":\"a cat\",\"images\":[{\"url\":{\"$south.blob\":{\"id\":\"b0\",\"bytes\":1,\"head\":\"x\"}}},{\"url\":{\"$south.blob\":{\"id\":\"b1\",\"bytes\":26,\"head\":\"data:image/png;base64,AAAA\"}}}]}",
+      "blobs_text": [
+        "x",
+        "data:image/png;base64,AAAA"
+      ]
+    },
+    {
+      "name": "compact-source-order-and-number-text",
+      "document_text": " { \"b\" : 1.50e+3 , \"a\" : [ \"x\\u0041\" , -0 , true , null ] } ",
+      "declared": [],
+      "view": "{\"b\":1.50e+3,\"a\":[\"x\\u0041\",-0,true,null]}",
+      "blobs_text": []
+    },
+    {
+      "name": "fallback-threshold-counts-decoded-bytes",
+      "document_text": "[\"\\u00e9\\u00e9\\u00e9abc\",\"12345678\"]",
+      "declared": [],
+      "inline_string_bytes": 8,
+      "view": "[{\"$south.blob\":{\"id\":\"b0\",\"bytes\":9,\"head\":\"éééabc\"}},\"12345678\"]",
+      "blobs_text": [
+        "éééabc"
+      ]
+    },
+    {
+      "name": "escaped-path-tokens-and-indexes",
+      "document_text": "{\"a/b\":[\"x\",\"y\"],\"c~d\":\"z\"}",
+      "declared": [
+        "/a~1b/1",
+        "/c~0d"
+      ],
+      "view": "{\"a/b\":[\"x\",{\"$south.blob\":{\"id\":\"b0\",\"bytes\":1,\"head\":\"y\"}}],\"c~d\":{\"$south.blob\":{\"id\":\"b1\",\"bytes\":1,\"head\":\"z\"}}}",
+      "blobs_text": [
+        "y",
+        "z"
+      ]
+    },
+    {
+      "name": "head-escaping-is-serde-json-escaping",
+      "document_text": "{\"t\":\"line\\none \\\"q\\\"\\u0001\"}",
+      "declared": [
+        "/t"
+      ],
+      "view": "{\"t\":{\"$south.blob\":{\"id\":\"b0\",\"bytes\":13,\"head\":\"line\\none \\\"q\\\"\\u0001\"}}}",
+      "blobs_text": [
+        "line\none \"q\"\u0001"
+      ]
+    },
+    {
+      "name": "non-strings-on-declared-paths-stay",
+      "document_text": "{\"n\":12.0,\"o\":{}}",
+      "declared": [
+        "/n",
+        "/o"
+      ],
+      "view": "{\"n\":12.0,\"o\":{}}",
+      "blobs_text": []
+    }
+  ],
+  "elide_refusals": [
+    {
+      "name": "duplicate-key-after-unescaping",
+      "document_text": "{\"a\":1,\"\\u0061\":2}",
+      "error": "duplicate_key"
+    },
+    {
+      "name": "reserved-key",
+      "document_text": "{\"x\":{\"$south.ref\":1}}",
+      "error": "reserved_key"
+    },
+    {
+      "name": "not-json",
+      "document_text": "{\"a\":1,}",
+      "error": "invalid_json"
+    },
+    {
+      "name": "lone-surrogate",
+      "document_text": "\"\\ud800\"",
+      "error": "invalid_json"
+    }
+  ],
+  "multipart_parse": [
+    {
+      "name": "text-and-files-in-order",
+      "boundary": "XyZ",
+      "body_base64": "LS1YeVoNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0icHJvbXB0Ig0KDQphICJjYXQiDQotLVh5Wg0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJpbWFnZVtdIjsgZmlsZW5hbWU9ImEucG5nIg0KQ29udGVudC1UeXBlOiBpbWFnZS9wbmc7IHg9MQ0KDQqJUE5HDQoaCgANCi0tWHlaDQpjb250ZW50LWRpc3Bvc2l0aW9uOiBGT1JNLURBVEE7IGZpbGVuYW1lPWIucG5nOyBuYW1lPWltYWdlW10NCg0KQkJCDQotLVh5Wi0tDQo=",
+      "view": "{\"multipart\":{\"parts\":[{\"kind\":\"text\",\"name\":\"prompt\",\"value\":\"a \\\"cat\\\"\"},{\"kind\":\"file\",\"name\":\"image[]\",\"blob\":\"b0\",\"filename\":\"a.png\",\"media_type\":\"image/png\",\"bytes\":9},{\"kind\":\"file\",\"name\":\"image[]\",\"blob\":\"b1\",\"filename\":\"b.png\",\"bytes\":3}]}}",
+      "blobs_base64": [
+        "iVBORw0KGgoA",
+        "QkJC"
+      ]
+    }
+  ],
+  "multipart_encode": [
+    {
+      "name": "text-file-and-transformed-file",
+      "boundary": "XyZ",
+      "blobs": [
+        {
+          "id": "b0",
+          "base64": "iVBORw=="
+        },
+        {
+          "id": "b1",
+          "text": "data:image/png;base64,aGk="
+        }
+      ],
+      "parts": [
+        {
+          "name": "prompt",
+          "value": "a \"cat\""
+        },
+        {
+          "name": "image",
+          "blob": "b0",
+          "transform": "as_is",
+          "filename": "in\".png",
+          "media_type": "image/png"
+        },
+        {
+          "name": "mask",
+          "blob": "b1",
+          "transform": "from_data_url",
+          "filename": "mask.png"
+        }
+      ],
+      "body_base64": "LS1YeVoNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0icHJvbXB0Ig0KDQphICJjYXQiDQotLVh5Wg0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJpbWFnZSI7IGZpbGVuYW1lPSJpbiUyMi5wbmciDQpDb250ZW50LVR5cGU6IGltYWdlL3BuZw0KDQqJUE5HDQotLVh5Wg0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJtYXNrIjsgZmlsZW5hbWU9Im1hc2sucG5nIg0KQ29udGVudC1UeXBlOiBhcHBsaWNhdGlvbi9vY3RldC1zdHJlYW0NCg0KaGkNCi0tWHlaLS0NCg=="
+    }
+  ],
+  "template_expand": [
+    {
+      "name": "data-url-reference-keeps-order",
+      "blobs": [
+        {
+          "id": "b0",
+          "text": "hi"
+        }
+      ],
+      "template": "{\"prompt\":\"x\",\"image\":{\"$south.ref\":{\"blob\":\"b0\",\"transform\":\"data_url\",\"media_type\":\"image/png\"}},\"n\":1}",
+      "body": "{\"prompt\":\"x\",\"image\":\"data:image/png;base64,aGk=\",\"n\":1}"
+    },
+    {
+      "name": "as-is-text-is-re-escaped",
+      "blobs": [
+        {
+          "id": "b0",
+          "text": "a \"quoted\"\nline"
+        }
+      ],
+      "template": "[{\"$south.ref\":{\"blob\":\"b0\",\"transform\":\"as_is\"}}]",
+      "body": "[\"a \\\"quoted\\\"\\nline\"]"
+    }
+  ],
+  "transforms": [
+    {
+      "transform": "base64",
+      "input_text": "hi",
+      "output_text": "aGk="
+    },
+    {
+      "transform": "from_base64",
+      "input_text": "aGk=",
+      "output_text": "hi"
+    },
+    {
+      "transform": "from_hex",
+      "input_text": "00ffA0",
+      "output_base64": "AP+g"
+    },
+    {
+      "transform": "from_data_url",
+      "input_text": "DATA:image/png;param=1;BASE64,aGk=",
+      "output_text": "hi"
+    },
+    {
+      "transform": "data_url",
+      "media_type": "image/png",
+      "input_text": "hi",
+      "output_text": "data:image/png;base64,aGk="
+    },
+    {
+      "transform": {
+        "wav_pcm_s16le": {
+          "sample_rate": 24000,
+          "channels": 1
+        }
+      },
+      "input_base64": "AQACAA==",
+      "output_base64": "UklGRigAAABXQVZFZm10IBAAAAABAAEAwF0AAIC7AAACABAAZGF0YQQAAAABAAIA"
+    }
+  ],
+  "transform_refusals": [
+    {
+      "transform": "from_base64",
+      "input_text": "aGk"
+    },
+    {
+      "transform": "from_base64",
+      "input_text": "aGl="
+    },
+    {
+      "transform": "from_base64",
+      "input_text": "a Gk="
+    },
+    {
+      "transform": "from_hex",
+      "input_text": "0"
+    },
+    {
+      "transform": "from_data_url",
+      "input_text": "data:image/png,aGk="
+    },
+    {
+      "transform": "data_url",
+      "input_text": "hi"
+    }
+  ],
+  "forbidden_addresses": [
+    "127.0.0.1",
+    "10.0.0.1",
+    "172.16.0.1",
+    "192.168.1.1",
+    "169.254.169.254",
+    "0.0.0.0",
+    "0.1.2.3",
+    "255.255.255.255",
+    "224.0.0.1",
+    "100.64.0.1",
+    "192.0.0.1",
+    "198.18.0.1",
+    "240.0.0.1",
+    "::1",
+    "::",
+    "ff02::1",
+    "fc00::1",
+    "fe80::1",
+    "fec0::1",
+    "::ffff:10.0.0.1",
+    "::10.0.0.1",
+    "64:ff9b::a00:1",
+    "64:ff9b:1::1",
+    "2002:a00:1::1"
+  ],
+  "allowed_addresses": [
+    "8.8.8.8",
+    "1.1.1.1",
+    "100.63.255.255",
+    "100.128.0.0",
+    "198.20.0.0",
+    "2606:4700::1111",
+    "::ffff:8.8.8.8",
+    "64:ff9b::808:808",
+    "2002:808:808::"
+  ],
+  "artifact_urls": [
+    {
+      "url": "https://cdn.example.com/a.png?x=1",
+      "error": null
+    },
+    {
+      "url": "http://cdn.example.com/a.png",
+      "error": "not_https"
+    },
+    {
+      "url": "https://user:pw@cdn.example.com/a",
+      "error": "userinfo"
+    },
+    {
+      "url": "https://x.LOCALHOST./a",
+      "error": "forbidden_host"
+    },
+    {
+      "url": "https://169.254.169.254/latest",
+      "error": "forbidden_address"
+    },
+    {
+      "url": "https://[64:ff9b::a00:1]/a",
+      "error": "forbidden_address"
+    }
+  ],
+  "render": {
+    "note": "contracts.image v1 render templates (§7, §10.2): check against the call's artifacts, then fill. Delivered bytes become plain standard base64; URLs are written as given.",
+    "artifacts": [
+      {
+        "form": "inline",
+        "pointer": "/data/0/b64_json",
+        "encoding": "base64",
+        "media_type": "image/png"
+      },
+      {
+        "form": "url",
+        "pointer": "/data/1/url"
+      }
+    ],
+    "fill": [
+      {
+        "name": "b64-and-url",
+        "template": "{\"created\":1,\"data\":[{\"b64_json\":{\"$south.artifact\":{\"index\":0,\"as\":\"b64_json\"}}},{\"url\":{\"$south.artifact\":{\"index\":1,\"as\":\"url\"}}}],\"usage\":{\"total_tokens\":3}}",
+        "delivered": [
+          {
+            "bytes_base64": "aGk="
+          },
+          {
+            "url": "https://cdn.example/a.png"
+          }
+        ],
+        "body": "{\"created\":1,\"data\":[{\"b64_json\":\"aGk=\"},{\"url\":\"https://cdn.example/a.png\"}],\"usage\":{\"total_tokens\":3}}"
+      }
+    ],
+    "check_refusals": [
+      {
+        "name": "inline-delivered-as-url",
+        "template": "[{\"$south.artifact\":{\"index\":0,\"as\":\"url\"}}]",
+        "error": "delivery"
+      },
+      {
+        "name": "index-out-of-range",
+        "template": "[{\"$south.artifact\":{\"index\":2,\"as\":\"b64_json\"}}]",
+        "error": "reference_integrity"
+      },
+      {
+        "name": "blob-placeholder-in-output",
+        "template": "[{\"$south.blob\":{\"id\":\"b0\"}}]",
+        "error": "reference_integrity"
+      },
+      {
+        "name": "marker-with-siblings",
+        "template": "[{\"$south.artifact\":{\"index\":0,\"as\":\"b64_json\"},\"x\":1}]",
+        "error": "reference_integrity"
+      }
+    ]
+  }
+}

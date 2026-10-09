@@ -1,0 +1,15 @@
+{
+  "provider_config": {
+    "provider": "openai-compatible",
+    "base_url": "https://example-resource.services.ai.azure.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "MAI-Image-2.5"
+      },
+      {
+        "model": "MAI-Image-2.5-Flash"
+      }
+    ]
+  }
+}

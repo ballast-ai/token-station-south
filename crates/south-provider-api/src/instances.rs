@@ -15,7 +15,7 @@ use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{ComponentManifestV1, ManifestErrorV1, PROVIDER_WORLD, ValueSyntaxV1, WorldSchemaV1};
+use crate::{ComponentManifestV1, ManifestErrorV1, ValueSyntaxV1, WorldSchemaV1};
 
 /// The fixed query names of `south_contracts::QueryParameterV1::ALL`, which a package may not
 /// declare again: one wire name has one grammar.
@@ -239,9 +239,10 @@ fn is_quota_header_name(name: &str) -> bool {
 }
 
 impl ComponentManifestV1 {
-    /// Gate ① for the B7a instance declarations.
+    /// Gate ① for the B7a instance declarations, which only a world with
+    /// [`WorldSchemaV1::instance_declarations`] (the provider world) admits.
     pub(crate) fn validate_instances(&self, world: &WorldSchemaV1) -> Result<(), ManifestErrorV1> {
-        if world.world != PROVIDER_WORLD {
+        if !world.instance_declarations {
             let declared = [
                 ("query_parameters", !self.query_parameters.is_empty()),
                 ("quota_headers", !self.quota_headers.is_empty()),

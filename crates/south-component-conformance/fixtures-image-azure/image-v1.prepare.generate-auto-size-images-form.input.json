@@ -1,0 +1,21 @@
+{
+  "provider_config": {
+    "provider": "azure-mai",
+    "base_url": "https://example-resource.services.ai.azure.com",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "json": {
+      "prompt": "a red fox",
+      "size": "auto",
+      "n": 1,
+      "response_format": ""
+    }
+  },
+  "context": {
+    "upstream_model": "MAI-Image-2.5",
+    "metering_required": [
+      "images"
+    ]
+  }
+}

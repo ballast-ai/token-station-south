@@ -51,3 +51,12 @@ pub mod embeddings {
         world: "embeddings-adapter-v1",
     });
 }
+
+/// Pure image exports; this world imports nothing from the host
+/// (2026-09-30 image-world record, D2).
+pub mod image {
+    wasmtime::component::bindgen!({
+        path: "../south-provider-api/wit/image-adapter.wit",
+        world: "image-adapter-v1",
+    });
+}

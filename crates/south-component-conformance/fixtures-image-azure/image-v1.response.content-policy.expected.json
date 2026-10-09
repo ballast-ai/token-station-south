@@ -1,0 +1,9 @@
+{
+  "outcome": "rejected",
+  "error": {
+    "code": "content_policy",
+    "http_status": 400,
+    "message": "the upstream refused on content-policy grounds",
+    "provider_message": "Your request was rejected by the safety system."
+  }
+}

@@ -18,6 +18,7 @@ struct CompatibilityManifest {
     host_capabilities: BTreeMap<String, BTreeMap<String, HostCapability>>,
     task_component_capabilities: BTreeMap<String, BTreeMap<String, HostCapability>>,
     embeddings_component_capabilities: BTreeMap<String, BTreeMap<String, HostCapability>>,
+    media_component_capabilities: BTreeMap<String, BTreeMap<String, HostCapability>>,
 }
 
 /// A host's status for one capability, plus the size of the conformance table that status was
@@ -66,6 +67,9 @@ struct Contracts {
     task: u16,
     task_limits: TaskLimits,
     embeddings: u16,
+    media: u16,
+    image: u16,
+    media_limits: south_contracts::media::MediaLimitsV1,
 }
 
 #[derive(Debug, Deserialize)]
@@ -115,12 +119,16 @@ struct Conformance {
     provider_multipart_suite: u32,
     provider_binary_suite_id: String,
     provider_binary_suite: u32,
+    provider_media_binary_suite_id: String,
+    provider_media_binary_suite: u32,
     credential_recipe_suite_id: String,
     credential_recipe_suite: u32,
     eventstream_framing_suite_id: String,
     eventstream_framing_suite: u32,
     request_signing_suite_id: String,
     request_signing_suite: u32,
+    safe_fetch_suite_id: String,
+    safe_fetch_suite: u32,
     provider_component_suite_id: String,
     provider_component_suite: u32,
     task_component_v1_suite_id: String,
@@ -129,6 +137,8 @@ struct Conformance {
     task_component_v2_suite: u32,
     embeddings_component_v1_suite_id: String,
     embeddings_component_v1_suite: u32,
+    image_component_v1_suite_id: String,
+    image_component_v1_suite: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -164,7 +174,7 @@ struct ProviderRuntime {
 /// status is not `verified`.
 type ExpectedCapability = (&'static str, &'static str, Option<usize>);
 
-fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 12]> {
+fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 14]> {
     BTreeMap::from([
         (
             "token-station",
@@ -212,6 +222,10 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 1
                 // 0.26.0) stays not_verified: the community host has no text-to-speech or
                 // image-generation surface, so nothing there answers in bytes.
                 ("provider_binary", "not_verified", None),
+                // provider_media_binary (a multipart or SSML text POST read as bytes, HTTP
+                // contract v12, the media minor) stays not_verified: the community host has no
+                // image-edit or speech surface.
+                ("provider_media_binary", "not_verified", None),
                 // credential_recipe (gate ③ of credential recipes, B4) stays not_verified: the
                 // community host has no recipe executor.
                 ("credential_recipe", "not_verified", None),
@@ -219,6 +233,10 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 1
                 // B2) stay not_verified: the community host has no eventstream or signed provider.
                 ("eventstream_framing", "not_verified", None),
                 ("request_signing", "not_verified", None),
+                // safe_fetch (gate ③ of the media worlds' second hop, image record §11 D8b) stays
+                // not_verified: the community host has no image or speech surface, so it fetches
+                // no artifact URL.
+                ("safe_fetch", "not_verified", None),
             ],
         ),
         // token-station-server provider_stream verified 2026-08-17: the durable
@@ -411,6 +429,11 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 1
                 // record is held by that host's repository; this manifest records only the
                 // resulting status.
                 ("provider_binary", "verified", Some(6)),
+                // provider_media_binary (HTTP contract v12, image record S-I-2) is new and no host
+                // has run it. The `provider_binary` result above was measured on the JSON POST
+                // pairing only and is deliberately not carried over to these rows (image record
+                // §19, S-I-2 acceptance).
+                ("provider_media_binary", "not_verified", None),
                 // token-station-server credential_recipe demoted 2026-10-05. It was verified the
                 // same day against the nine-case table (P21 S3a, C3: its generic recipe executor
                 // passed 9/9 at server `8777b84f`, host feedback SF6). The suite has since grown
@@ -455,6 +478,11 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 1
                 // repository.
                 ("eventstream_framing", "verified", Some(9)),
                 ("request_signing", "verified", Some(7)),
+                // safe_fetch (image record S-I-5) is new and no host has run it. The server's
+                // `guarded_asset_client` rechecks v4-mapped addresses only (image record §11), so
+                // the v4-compatible, NAT64, 6to4 and `fec0::/10` rows are host work before it can
+                // pass.
+                ("safe_fetch", "not_verified", None),
             ],
         ),
     ])
@@ -470,7 +498,7 @@ fn compatibility_manifest_describes_the_library_slice() {
     let contents = fs::read_to_string(path).unwrap();
     let manifest: CompatibilityManifest = serde_json::from_str(&contents).unwrap();
 
-    assert_eq!(manifest.schema_version, 6);
+    assert_eq!(manifest.schema_version, 7);
     // The range handshake's epoch and the kernel contract numbers this release distributes
     // (docs/design/2026-09-30-host-zero-vendor-boundary.md §8.3); every shipped manifest declares
     // the same, which the conformance crate's shipped-package tests check.
@@ -545,6 +573,11 @@ fn compatibility_manifest_describes_the_library_slice() {
         south_contracts::EMBEDDINGS_CONTRACT_VERSIONS.last()
     );
     assert_eq!(manifest.contracts.embeddings, south_contracts::EMBEDDINGS_CONTRACT_VERSION_V2);
+    // The media worlds' shared vocabulary and the image world (image record §15): the limits
+    // are the crate's own, so a bound that moves in one place and not the other fails here.
+    assert_eq!(manifest.contracts.media, south_contracts::media::MEDIA_CONTRACT_VERSION);
+    assert_eq!(manifest.contracts.image, south_contracts::image::IMAGE_CONTRACT_VERSION);
+    assert_eq!(manifest.contracts.media_limits, south_contracts::media::MediaLimitsV1::V1);
     assert_eq!(manifest.contracts.task_limits.artifact_urls, south_contracts::MAX_ARTIFACT_URLS);
     assert_eq!(
         manifest.contracts.task_limits.artifact_ref_bytes,
@@ -604,12 +637,19 @@ fn compatibility_manifest_describes_the_library_slice() {
     assert_eq!(manifest.conformance.provider_multipart_suite, 1);
     assert_eq!(manifest.conformance.provider_binary_suite_id, "south.provider-binary.v1");
     assert_eq!(manifest.conformance.provider_binary_suite, 1);
+    assert_eq!(
+        manifest.conformance.provider_media_binary_suite_id,
+        "south.provider-media-binary.v1"
+    );
+    assert_eq!(manifest.conformance.provider_media_binary_suite, 1);
     assert_eq!(manifest.conformance.credential_recipe_suite_id, "south.credential-recipe.v1");
     assert_eq!(manifest.conformance.credential_recipe_suite, 1);
     assert_eq!(manifest.conformance.eventstream_framing_suite_id, "south.eventstream-framing.v1");
     assert_eq!(manifest.conformance.eventstream_framing_suite, 1);
     assert_eq!(manifest.conformance.request_signing_suite_id, "south.request-signing.v1");
     assert_eq!(manifest.conformance.request_signing_suite, 1);
+    assert_eq!(manifest.conformance.safe_fetch_suite_id, "south.safe-fetch.v1");
+    assert_eq!(manifest.conformance.safe_fetch_suite, 1);
     assert_eq!(manifest.conformance.provider_component_suite_id, "south.provider-component.v1");
     assert_eq!(manifest.conformance.provider_component_suite, 1);
     assert_eq!(manifest.conformance.task_component_v1_suite_id, "south.task-component.v1");
@@ -621,6 +661,8 @@ fn compatibility_manifest_describes_the_library_slice() {
         "south.embeddings-component.v1"
     );
     assert_eq!(manifest.conformance.embeddings_component_v1_suite, 1);
+    assert_eq!(manifest.conformance.image_component_v1_suite_id, "south.image-component.v1");
+    assert_eq!(manifest.conformance.image_component_v1_suite, 1);
     assert_eq!(manifest.provider_api.wit_version.as_deref(), Some("token-station:adapter@2.0.0"));
     assert_eq!(manifest.provider_runtime.abi_version.as_deref(), Some("provider-adapter-v2"));
     let expected_crates = BTreeMap::from([
@@ -628,26 +670,26 @@ fn compatibility_manifest_describes_the_library_slice() {
         ("south-task-core", "task_workflow_orchestration_v1"),
         (
             "south-contracts",
-            "http_get_request_multipart_request_binary_response_auth_error_stream_quota_metadata_header_auth_controlled_query_user_agent_v1",
+            "http_get_request_multipart_request_text_request_binary_response_auth_error_stream_quota_metadata_header_auth_controlled_query_user_agent_v1",
         ),
         (
             "south-core",
-            "buffered_streaming_provider_call_buffered_get_call_buffered_multipart_call_buffered_binary_call_header_auth_controlled_query_user_agent_raw_prelude_signed_raw_call_get_raw_call_multipart_raw_call_v1",
+            "buffered_streaming_provider_call_buffered_get_call_buffered_multipart_call_buffered_binary_call_buffered_multipart_binary_call_buffered_text_binary_call_header_auth_controlled_query_user_agent_raw_prelude_signed_raw_call_get_raw_call_multipart_raw_call_v1",
         ),
         ("south-provider-api", "provider_adapter_v2_wit_manifest_v1"),
         ("south-component-conformance", "provider_component_gates_reference_v1"),
         (
             "south-provider-conformance",
-            "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_provider_get_provider_multipart_provider_binary_credential_recipe_eventstream_framing_request_signing_suites_v1",
+            "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_provider_get_provider_multipart_provider_binary_provider_media_binary_credential_recipe_eventstream_framing_request_signing_safe_fetch_suites_v1",
         ),
         ("south-provider-runtime", "sandboxed_component_execution_v1"),
         (
             "south-testkit",
-            "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_provider_get_provider_multipart_provider_binary_runners_raw_builder_signed_raw_builder_get_raw_builder_multipart_raw_builder_v1",
+            "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_provider_get_provider_multipart_provider_binary_provider_media_binary_safe_fetch_runners_raw_builder_signed_raw_builder_get_raw_builder_multipart_raw_builder_v1",
         ),
         (
             "south-transport-reqwest",
-            "buffered_streaming_json_post_buffered_get_buffered_multipart_buffered_binary_quota_metadata_header_auth_user_agent_transport_pair_v1",
+            "buffered_streaming_json_post_buffered_get_buffered_multipart_buffered_binary_buffered_text_quota_metadata_header_auth_user_agent_transport_pair_v1",
         ),
     ]);
     assert_eq!(manifest.crates.len(), expected_crates.len());
@@ -692,6 +734,15 @@ fn compatibility_manifest_describes_the_library_slice() {
         assert_eq!(capabilities.len(), 1);
         assert_eq!(capabilities["embeddings_v1"].status, "not_verified");
         assert_eq!(capabilities["embeddings_v1"].cases, None);
+    }
+    // Neither host serves the image world yet: the server's generic media executor is P22 I2–I4,
+    // and a gate ② pass is not host adoption (image record §15, Q5).
+    assert_eq!(manifest.media_component_capabilities.len(), 2);
+    for host in ["token-station", "token-station-server"] {
+        let capabilities = &manifest.media_component_capabilities[host];
+        assert_eq!(capabilities.len(), 1);
+        assert_eq!(capabilities["image_v1"].status, "not_verified");
+        assert_eq!(capabilities["image_v1"].cases, None);
     }
     let expected_capabilities = expected_host_capabilities();
     assert_eq!(manifest.host_capabilities.len(), expected_capabilities.len());

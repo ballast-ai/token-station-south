@@ -26,11 +26,11 @@ community policy      enterprise policy
 | `south-north-codec` | OpenAI Chat、Anthropic Messages 与 Responses 北向纯映射；typed 与 JSON façade 同源，宿主传入时间、身份及每流状态，准入、计费和 continuation 留宿主 |
 | `south-task-core` | 候选：独立 Rust 版本 0.1.0，无生产依赖；共享提交/观察/CAS 赢家回读/等待/取消顺序，宿主保留政策与复合原子效果 |
 | `south-task-conformance` | 候选：独立 Rust 版本 0.1.0，无生产依赖；公共原子效果故障套件，宿主适配真实 SQLite / PG 事务，无资金宿主明确不适用 |
-| `south-contracts` | Implemented bounded HTTP (JSON POST, body-less GET, and multipart POST request shapes, and a buffered binary response beside the UTF-8 one), Bearer, sanctioned header-secret, combined Bearer-plus-header-secret, and package-declared header-secret auth, stable error, byte-streaming, and closed quota metadata contracts, plus the sanctioned controlled query and controlled user-agent declarations |
-| `south-core` | Implemented host-neutral buffered and streaming provider-call orchestration and its buffered body-less GET, multipart and binary-response twins, plus the shared host prelude (`raw` module: raw-call type, its host-signed, GET and multipart twins, contract-parse orchestration, one-shot wrappers for all four, resolver adapters) |
-| `south-transport-reqwest` | Implemented hardened buffered and byte-streaming JSON POST transport, the same buffered transport for body-less GET and multipart POST requests (rendering the latter's media type and sharing its allocation) and for a JSON POST whose response is buffered as opaque bytes under its own larger cap, bounded quota metadata capture, sanctioned user-agent application, and one-config transport-pair construction |
-| `south-provider-conformance` | Implemented immutable provider-call, provider-stream, provider-quota-metadata, header-auth, controlled-query, controlled-user-agent, provider-get, provider-multipart, and provider-binary v1 fixtures, and the host-implemented credential-recipe v1 suite (harness, fake token endpoint, runner) |
-| `south-testkit` | Implemented assembled-executor conformance runners and reference executors for all nine suites, plus the owned raw-call, host-signed raw-call, raw-GET and raw-multipart builders for host tests |
+| `south-contracts` | Implemented bounded HTTP (JSON POST, body-less GET, multipart POST, and SSML text POST request shapes, and a buffered binary response beside the UTF-8 one), Bearer, sanctioned header-secret, combined Bearer-plus-header-secret, and package-declared header-secret auth, stable error, byte-streaming, and closed quota metadata contracts, plus the sanctioned controlled query and controlled user-agent declarations |
+| `south-core` | Implemented host-neutral buffered and streaming provider-call orchestration and its buffered body-less GET, multipart and binary-response twins, the multipart-binary and text-binary entry points of HTTP contract 12, plus the shared host prelude (`raw` module: raw-call type, its host-signed, GET and multipart twins, contract-parse orchestration, one-shot wrappers for all four, resolver adapters) |
+| `south-transport-reqwest` | Implemented hardened buffered and byte-streaming JSON POST transport, the same buffered transport for body-less GET, multipart POST and SSML text POST requests (rendering the latter two's media types and sharing their allocations) and for a JSON POST whose response is buffered as opaque bytes under its own larger cap, bounded quota metadata capture, sanctioned user-agent application, and one-config transport-pair construction |
+| `south-provider-conformance` | Implemented immutable provider-call, provider-stream, provider-quota-metadata, header-auth, controlled-query, controlled-user-agent, provider-get, provider-multipart, provider-binary, and provider-media-binary v1 fixtures, the safe-fetch v1 fake-network fixtures, and the host-implemented credential-recipe v1 suite (harness, fake token endpoint, runner) |
+| `south-testkit` | Implemented assembled-executor conformance runners and reference executors for all ten suites, the safe-fetch v1 runner with its fake resolver, connector and proxy environment and a reference executor, plus the owned raw-call, host-signed raw-call, raw-GET and raw-multipart builders for host tests |
 | `south-provider-api` | Implemented v2 provider component ABI: WIT package `token-station:adapter@2.0.0` (world `provider-adapter-v2`) plus the gate-① manifest schema with the seven-field compatibility tuple; depends on no other south crate by design |
 | `south-component-conformance` | Implemented gates ① and ② (package admission + `south.provider-component.v1` behavior suite) with the native `provider-openai-compatible`, `provider-anthropic` and `provider-gemini` references and a frozen fixture pack each; a sanctioned typed consumer of the Canonical IR, pinned to a kernel distribution tag |
 | `south-provider-runtime` | Implemented sandboxed component execution: gated loading, locked-down WASI, memory/deadline/payload/stream bounds, `host.sign` behind the manifest's secret allowlist — JSON-face only, never an IR consumer; the typed seam over it is the conformance crate's `sandbox` feature. Also reads the release's model catalog (`ModelCatalogV1`, `south.model-catalog.v1`), here because no guest links this crate |
@@ -202,7 +202,7 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.51.1; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.50.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.52.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.51.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
 **Unreleased (B6-2)**: the Bedrock InvokeModel Anthropic component (design record
 `docs/design/2026-10-08-bedrock-invoke-anthropic-component.md`, accepted 2026-10-09). The new package
 `provider-anthropic-bedrock-invoke` 1.0.0 (family `anthropic-bedrock-invoke`, `host_signed` with `aws-sigv4` as Converse
@@ -216,6 +216,12 @@ strict base64 codec replaces the credential recipe interpreter's. No release has
 no version of its own beyond the new package: `south-component-conformance` stays at the 0.50.0 #167 gave it, and every
 existing package keeps the single bump over v0.50.0 that #167 gave it (`provider-anthropic` 1.0.16 now also carries the
 two behavior changes above).
+**v0.52.0**: the image world, first batch (release record `docs/design/2026-10-10-release-0.52.0.md`, image world record
+§19). `contracts.media` v1 and `contracts.image` v1 (`south_contracts::media`, `south_contracts::image`), HTTP contract 12,
+the `image-adapter-v1` world (no host import; world exclusions are now `WorldSchemaV1` properties), gate ②
+`south.image-component.v1`, gate ③ `south.provider-media-binary.v1` and `south.safe-fetch.v1`, and the package
+`image-azure` 1.0.0 (`south_runtime` 0.52.0, `not_verified`). The three guest-linked crates move to 0.51.0; every other
+package takes a patch bump and keeps its `south_runtime`.
 **v0.51.1**: runtime fix for host gap #101 (release record `docs/design/2026-10-09-release-0.51.1.md`). A guest trap
 inside a tokio runtime used to panic the calling task, because `add_to_linker_sync` runs every blocking `wasi:io`
 function under `Handle::block_on` and a trapping guest flushes its panic or allocation-failure message to stderr; and

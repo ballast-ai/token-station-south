@@ -15,10 +15,11 @@ mod host_range;
 
 /// The official components this repository ships. Named, so that an empty or
 /// mistyped scan below cannot pass over nothing.
-const OFFICIAL_COMPONENTS: [&str; 18] = [
+const OFFICIAL_COMPONENTS: [&str; 19] = [
     "embeddings-gemini",
     "embeddings-openai-compatible",
     "embeddings-vertex",
+    "image-azure",
     "provider-anthropic",
     "provider-anthropic-bedrock-invoke",
     "provider-bedrock-converse",
@@ -611,6 +612,14 @@ fn every_shipped_package_declares_the_range_handshake() {
                     south_contracts::EMBEDDINGS_CONTRACT_VERSION
                 };
                 [("embeddings".to_owned(), u32::from(contract))].into()
+            } else if manifest.api_version == south_provider_api::IMAGE_WORLD {
+                // The image world speaks the shared media vocabulary and its own contract
+                // (image record §15).
+                [
+                    ("media".to_owned(), u32::from(south_contracts::media::MEDIA_CONTRACT_VERSION)),
+                    ("image".to_owned(), u32::from(south_contracts::image::IMAGE_CONTRACT_VERSION)),
+                ]
+                .into()
             } else {
                 std::collections::BTreeMap::new()
             };
@@ -955,9 +964,64 @@ fn the_invoke_package_declares_the_runtime_converse_declares() {
         .unwrap()
     };
     let invoke = read("provider-anthropic-bedrock-invoke");
-    assert_eq!(invoke.version, "1.0.0");
+    assert_eq!(invoke.version, "1.0.1");
     assert_eq!(invoke.compatibility.south_runtime, "0.46.0");
     assert_eq!(invoke.compatibility, read("provider-bedrock-converse").compatibility);
+}
+
+/// The image world changed `south-contracts`, `south-provider-api` and
+/// `south-component-conformance`, which every guest links (their own versions moved 0.50.0 →
+/// 0.51.0, Q47), and a same-path rebuild at `v0.51.1` and on the commit that moved them
+/// (workspace still 0.51.1) gave a different `component.wasm` for all eighteen packages published
+/// with 0.51.1, so each identity retires, or the release's digest-stability check would refuse it.
+/// Each keeps its `south_runtime`: none needs anything newer than it did.
+#[test]
+fn the_image_world_retires_every_published_0511_package_identity() {
+    for (name, published, runtime) in [
+        ("provider-openai-compatible", "2.4.4", "0.46.0"),
+        ("provider-anthropic", "1.0.16", "0.46.0"),
+        ("provider-anthropic-bedrock-invoke", "1.0.0", "0.46.0"),
+        ("provider-gemini", "1.1.12", "0.46.0"),
+        ("provider-bedrock-converse", "1.0.13", "0.46.0"),
+        ("provider-bedrock-converse-bearer", "1.0.5", "0.46.0"),
+        ("task-kling", "1.0.12", "0.46.0"),
+        ("task-kling-v2", "0.32.10", "0.46.0"),
+        ("task-minimax-v2", "0.31.9", "0.46.0"),
+        ("task-bailian-v2", "0.31.9", "0.46.0"),
+        ("task-xai-v2", "0.35.9", "0.46.0"),
+        ("task-byteplus-v2", "0.36.9", "0.46.0"),
+        ("task-veo-v2", "0.35.9", "0.46.0"),
+        ("task-wan-image-v2", "0.35.9", "0.46.0"),
+        ("task-gmi-image-v2", "0.35.9", "0.46.0"),
+        ("embeddings-openai-compatible", "1.0.3", "0.47.0"),
+        ("embeddings-gemini", "1.1.0", "0.51.0"),
+        ("embeddings-vertex", "1.0.2", "0.48.0"),
+    ] {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_ne!(manifest.version, published, "{name} reused its published identity");
+        assert_eq!(
+            manifest.compatibility.south_runtime, runtime,
+            "{name}: needs nothing newer than {runtime}, so it declares {runtime}"
+        );
+    }
+}
+
+/// `image-azure` is the first package of the image world, which the 0.52.0 runtime is the first
+/// to know, so that is the runtime it declares (boundary record §13.6).
+#[test]
+fn the_image_azure_package_declares_the_first_runtime_with_the_world() {
+    let manifest: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(repo_root().join("components/image-azure/manifest.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(manifest.compatibility.south_runtime, "0.52.0");
+    assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
 }
 
 /// The embeddings world is first known to the 0.47.0 runtime, so that is the oldest runtime that

@@ -1,0 +1,33 @@
+// Synchronous image generation and edit. All exports are pure translation.
+// The host owns bytes, credentials, HTTP, clock, pricing, persistence and delivery.
+package token-station:image-adapter@1.0.0;
+
+interface image-adapter {
+    record adapter-metadata { name: string, version: string, api-version: string }
+    enum health-status { ready, degraded, unavailable }
+    record adapter-health { status: health-status, detail: option<string> }
+
+    type json = string;
+
+    metadata: func() -> adapter-metadata;
+    healthcheck: func() -> adapter-health;
+
+    // ProviderConfig -> list<ImageModelCapabilitiesV1>.
+    // Deterministic in (package digest, provider config).
+    model-capabilities: func(provider-config: json) -> result<json, json>;
+
+    // ProviderConfig, MediaRequestViewV1, ImageCallContextV1 -> PreparedImageCallV1.
+    // Err(ErrorEnvelope) is a pre-dispatch refusal: nothing was sent, nothing may be reserved.
+    prepare: func(provider-config: json, request: json, context: json) -> result<json, json>;
+
+    // Prepared state, MediaResponseViewV1 (one upstream round) -> ImageOutcomeV1.
+    parse-response: func(state: json, response: json) -> result<json, json>;
+
+    // Prepared state, the succeeded round outcomes, ImageRenderContextV1 -> ImageRenderedV1.
+    render: func(state: json, outcomes: json, render-context: json) -> result<json, json>;
+}
+
+// No host import: this world has no signing consumer.
+world image-adapter-v1 {
+    export image-adapter;
+}

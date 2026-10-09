@@ -100,6 +100,15 @@ pub fn host_range() -> HostRangeV1 {
                     .map(u32::from)
                     .collect(),
             ),
+            // The image world's two contracts (image record §15).
+            (
+                "media".to_owned(),
+                BTreeSet::from([u32::from(south_contracts::media::MEDIA_CONTRACT_VERSION)]),
+            ),
+            (
+                "image".to_owned(),
+                BTreeSet::from([u32::from(south_contracts::image::IMAGE_CONTRACT_VERSION)]),
+            ),
         ]),
     }
 }

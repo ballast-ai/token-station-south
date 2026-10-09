@@ -14,12 +14,13 @@ use south_contracts::{
     MAX_RESPONSE_CONTENT_TYPE_BYTES, MAX_RESPONSE_RETRY_AFTER_BYTES, MultipartBodyV1,
     MultipartBoundaryV1, MultipartPostRequestV1, ProviderAuthV1, ProviderEndpointV1,
     ProviderQuotaHeaderMapV1, ProviderQuotaMetadataFieldV1, QueryParameterV1, QueryStringV1,
-    RelativePathV1, SafeHeaders, SecretHeaderV1, TransportErrorV1,
+    RelativePathV1, SafeHeaders, SecretHeaderV1, TextBodyV1, TextMediaTypeV1, TextPostRequestV1,
+    TransportErrorV1,
 };
 use south_core::{
     CredentialResolutionFuture, CredentialResolver, ProviderBindingV1, ProviderCallErrorV1,
-    SecretValue, execute_binary_call_v1, execute_get_call_v1, execute_multipart_call_v1,
-    execute_provider_call_v1,
+    SecretValue, execute_binary_call_v1, execute_get_call_v1, execute_multipart_binary_call_v1,
+    execute_multipart_call_v1, execute_provider_call_v1, execute_text_binary_call_v1,
 };
 use south_transport_reqwest::{ReqwestTransportConfigV1, ReqwestTransportV1};
 use tokio::{
@@ -1548,4 +1549,252 @@ async fn buffered_get_file_id_and_group_query_reaches_the_wire() {
     assert_eq!(resolver.calls.load(Ordering::SeqCst), 1);
     assert_eq!(result.status().as_u16(), 200);
     assert_eq!(result.body(), r#"{"status":"Success"}"#);
+}
+
+// ───────────────── HTTP contract v12: multipart and text POST read as bytes ─────────────────
+
+const MEDIA_BOUNDARY: &str = "media-binary-test-boundary";
+
+fn media_multipart_bytes() -> Vec<u8> {
+    format!(
+        "--{MEDIA_BOUNDARY}\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\n{BODY_SENTINEL}\r\n--{MEDIA_BOUNDARY}--\r\n"
+    )
+    .into_bytes()
+}
+
+fn media_multipart_request() -> MultipartPostRequestV1 {
+    MultipartPostRequestV1::try_new(
+        RelativePathV1::parse("v1/images/edits").expect("fixture path should be valid"),
+        SafeHeaders::try_from_iter([("x-test", HEADER_SENTINEL)])
+            .expect("fixture headers should be valid"),
+        MultipartBodyV1::parse(
+            media_multipart_bytes(),
+            MultipartBoundaryV1::parse(MEDIA_BOUNDARY).expect("fixture boundary should be valid"),
+        )
+        .expect("fixture body is delimited by its boundary"),
+        BearerAuthV1::new(
+            CredentialSlotV1::parse("primary").expect("fixture slot should be valid"),
+        ),
+    )
+    .expect("fixture headers carry no content-type")
+}
+
+async fn multipart_binary_call(
+    endpoint: &str,
+    transport: &ReqwestTransportV1,
+) -> Result<BufferedBinaryResponseV1, ProviderCallErrorV1> {
+    let resolver = StaticResolver::default();
+    let binding = ProviderBindingV1::new(
+        ProviderEndpointV1::parse(endpoint).expect("loopback endpoint should be valid"),
+        CredentialSlotV1::parse("primary").expect("fixture slot should be valid"),
+    );
+    execute_multipart_binary_call_v1(
+        &binding,
+        &media_multipart_request(),
+        &resolver,
+        transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+}
+
+/// The image edit surface's shape (image record §6.3a rule 2): a multipart POST reaches the
+/// socket exactly as on the UTF-8 multipart path — encoded bytes, rendered media type, one
+/// `content-type` — and the answer comes back as bytes the UTF-8 path would refuse.
+#[tokio::test]
+async fn multipart_binary_call_sends_the_rendered_media_type_and_returns_bytes_verbatim() {
+    let loopback = loopback_once(response(
+        "200 OK",
+        &[("content-type", "application/octet-stream")],
+        BINARY_BODY_SENTINEL,
+    ))
+    .await;
+    let transport = ReqwestTransportV1::new(config()).expect("transport should build");
+
+    let binary = multipart_binary_call(&loopback.endpoint, &transport)
+        .await
+        .expect("a multipart answer read as bytes is not required to be UTF-8");
+    let received = loopback.request.await.expect("server should report the request");
+    loopback.task.await.expect("server task should finish");
+
+    let body_bytes = media_multipart_bytes();
+    assert_eq!(received.request_line, "POST /base/v1/images/edits HTTP/1.1");
+    assert_eq!(
+        received.headers.get("content-type").map(String::as_str),
+        Some(format!("multipart/form-data; boundary={MEDIA_BOUNDARY}").as_str())
+    );
+    assert_eq!(
+        received.header_names.iter().filter(|name| name.as_str() == "content-type").count(),
+        1
+    );
+    assert_eq!(
+        received.headers.get("content-length").map(String::as_str),
+        Some(body_bytes.len().to_string().as_str())
+    );
+    assert_eq!(received.body, body_bytes);
+    assert_eq!(
+        received.headers.get("authorization").map(String::as_str),
+        Some("Bearer transport-secret-sentinel")
+    );
+    assert_eq!(binary.status(), StatusCode::OK);
+    assert_eq!(binary.body(), BINARY_BODY_SENTINEL);
+    assert_eq!(binary.content_type(), Some("application/octet-stream"));
+}
+
+/// The reason the twin exists: an image edit's JSON answer between the UTF-8 cap and the binary
+/// cap is delivered on the bytes path, where the UTF-8 multipart path refuses it after dispatch.
+#[tokio::test]
+async fn multipart_binary_call_admits_an_answer_the_utf8_multipart_path_refuses() {
+    let oversize_for_text = vec![b'a'; MAX_RESPONSE_BODY_BYTES + 1];
+    let wire = response("200 OK", &[("content-type", "application/json")], &oversize_for_text);
+    let transport = ReqwestTransportV1::new(config()).expect("transport should build");
+
+    let loopback = loopback_once(wire.clone()).await;
+    let binary = multipart_binary_call(&loopback.endpoint, &transport)
+        .await
+        .expect("a body between the two caps belongs to the binary arm");
+    assert_eq!(binary.body_len(), oversize_for_text.len());
+    loopback.request.await.expect("the loopback should report its request");
+    loopback.task.await.expect("the loopback task should finish");
+
+    let loopback = loopback_once(wire).await;
+    let resolver = StaticResolver::default();
+    let binding = ProviderBindingV1::new(
+        ProviderEndpointV1::parse(&loopback.endpoint).expect("loopback endpoint should be valid"),
+        CredentialSlotV1::parse("primary").expect("fixture slot should be valid"),
+    );
+    let error = execute_multipart_call_v1(
+        &binding,
+        &media_multipart_request(),
+        &resolver,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect_err("the same body must still be too large for the UTF-8 multipart path");
+    assert!(matches!(
+        error,
+        ProviderCallErrorV1::Transport(TransportErrorV1::ResponseBodyTooLarge)
+    ));
+    // Refused on the declared `content-length` before the body is read, so the writer may see a
+    // broken pipe; abandoned rather than joined, exactly as in the JSON twin of this test.
+    loopback.request.await.expect("the loopback should report its request");
+    loopback.task.abort();
+}
+
+const MEDIA_SSML: &str = "<speak version='1.0' xml:lang='en-US'>\
+<voice name='en-US-AvaNeural'>transport-body-sentinel &amp; more</voice></speak>";
+
+async fn text_binary_call(
+    endpoint: &str,
+    transport: &ReqwestTransportV1,
+    auth: ProviderAuthV1,
+) -> Result<BufferedBinaryResponseV1, ProviderCallErrorV1> {
+    let resolver = StaticResolver::default();
+    let binding = ProviderBindingV1::new(
+        ProviderEndpointV1::parse(endpoint).expect("loopback endpoint should be valid"),
+        CredentialSlotV1::parse("primary").expect("fixture slot should be valid"),
+    );
+    let request = TextPostRequestV1::try_new(
+        RelativePathV1::parse("cognitiveservices/v1").expect("fixture path should be valid"),
+        SafeHeaders::try_from_iter([("x-microsoft-outputformat", HEADER_SENTINEL)])
+            .expect("fixture headers should be valid"),
+        TextBodyV1::try_new(MEDIA_SSML.to_owned(), TextMediaTypeV1::Ssml)
+            .expect("fixture text is in bounds"),
+        auth,
+    )
+    .expect("fixture headers carry no content-type");
+    execute_text_binary_call_v1(
+        &binding,
+        &request,
+        &resolver,
+        transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+}
+
+/// The SSML shape (speech record D3a) on a real socket, under the header-secret arm Azure Speech
+/// uses: the text reaches the wire byte for byte under the one `content-type` the contract
+/// rendered, with no `authorization`, and the audio answer comes back as bytes.
+#[tokio::test]
+async fn text_binary_call_sends_ssml_under_its_rendered_media_type() {
+    let loopback =
+        loopback_once(response("200 OK", &[("content-type", "audio/mpeg")], BINARY_BODY_SENTINEL))
+            .await;
+    let transport = ReqwestTransportV1::new(config()).expect("transport should build");
+
+    let binary = text_binary_call(
+        &loopback.endpoint,
+        &transport,
+        ProviderAuthV1::HeaderSecret {
+            header: SecretHeaderV1::OcpApimSubscriptionKey,
+            slot: BearerAuthV1::new(
+                CredentialSlotV1::parse("primary").expect("fixture slot should be valid"),
+            ),
+        },
+    )
+    .await
+    .expect("a text call read as bytes should succeed");
+    let received = loopback.request.await.expect("server should report the request");
+    loopback.task.await.expect("server task should finish");
+
+    assert_eq!(received.request_line, "POST /base/cognitiveservices/v1 HTTP/1.1");
+    assert_eq!(
+        received.headers.get("content-type").map(String::as_str),
+        Some("application/ssml+xml"),
+        "the rendered media type, with no parameter appended"
+    );
+    assert_eq!(
+        received.header_names.iter().filter(|name| name.as_str() == "content-type").count(),
+        1
+    );
+    assert_eq!(
+        received.headers.get("content-length").map(String::as_str),
+        Some(MEDIA_SSML.len().to_string().as_str())
+    );
+    assert_eq!(received.body, MEDIA_SSML.as_bytes(), "the text reaches the wire unmodified");
+    assert_eq!(
+        received.headers.get("ocp-apim-subscription-key").map(String::as_str),
+        Some(SECRET_SENTINEL)
+    );
+    assert!(!received.headers.contains_key("authorization"));
+    assert_eq!(
+        received.headers.get("x-microsoft-outputformat").map(String::as_str),
+        Some(HEADER_SENTINEL)
+    );
+    assert_eq!(binary.status(), StatusCode::OK);
+    assert_eq!(binary.body(), BINARY_BODY_SENTINEL);
+    assert_eq!(binary.content_type(), Some("audio/mpeg"));
+}
+
+#[tokio::test]
+async fn text_binary_call_returns_a_rejection_body_as_bytes() {
+    let body = br#"{"error":"bad ssml"}"#;
+    let loopback =
+        loopback_once(response("400 Bad Request", &[("content-type", "application/json")], body))
+            .await;
+    let transport = ReqwestTransportV1::new(config()).expect("transport should build");
+
+    let response = text_binary_call(
+        &loopback.endpoint,
+        &transport,
+        ProviderAuthV1::Bearer(BearerAuthV1::new(
+            CredentialSlotV1::parse("primary").expect("fixture slot should be valid"),
+        )),
+    )
+    .await
+    .expect("a rejection is a normal buffered outcome");
+    let received = loopback.request.await.expect("server should report the request");
+    loopback.task.await.expect("server task should finish");
+
+    assert_eq!(
+        received.headers.get("authorization").map(String::as_str),
+        Some("Bearer transport-secret-sentinel")
+    );
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(response.body(), body);
 }
