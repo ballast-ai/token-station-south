@@ -618,7 +618,7 @@ package, and each has a fixture in both packs.
   whole-so-far usage, and a consumer that folds the reports with the kernel's last-nonzero `Usage::absorb` cannot take
   a tier back to zero (a 300 / 0 start and a 0 / 500 terminal fold to 300 / 500 under a total of 500). No
   well-behaved upstream repeats `cache_creation` with a different split, so this only matters for contradictory
-  evidence; a host that folds component reports should take the last report rather than fold them (L, §15.6).
+  evidence. Ruled 2026-10-09 (§15.6): the host's fold stays as it is.
 - **I-Q12.** An `error` event (`{"type": "error", "error": {"type": …, "message": …}}`) before the terminal `Done`
   ends the stream with `StreamEvent::Error`: the code from the Anthropic error-type table, else `upstream_unavailable`;
   HTTP status 502 and the provider message as Converse's in-stream errors carry them. The parser then closes: later
@@ -686,11 +686,17 @@ this record does not close.
   change differed for all seventeen, and with only `task-kling`'s own version reverted to 1.0.11 its `component.wasm`
   still differed from `2a58ba7`'s.
 
-### 15.6 Left for lv
+### 15.6 Rulings on this section (lv, 2026-10-09)
 
-- Whether a host folding component usage reports should take the last report instead of folding them with the
-  kernel's last-nonzero rule (§15.2); it only differs on contradictory tier splits.
-- The real capture of I-Q5 before the host's cutover, and the dual run of §11.2 (I-Q10).
+- **The gate ② suite extension (§15.4): accepted.** A stream case may expect `{"error": <envelope>}`, and the parser
+  must refuse the stream with exactly that envelope under every byte split.
+- **The host's fold of repeated component usage reports (§15.2): unchanged.** The host keeps the kernel's
+  last-nonzero `Usage::absorb` and its own check that cumulative output does not shrink. The self-contradictory tier
+  shape (for example 300 / 0 followed by 0 / 500) is refused by the host's existing rule that the 5-minute and 1-hour
+  tiers must add up to the cache-write total: the exchange goes to manual review and is never settled. The host adds a
+  test that pins that refusal on its side. No south change follows from this ruling.
+
+Still open, as before: the real capture of I-Q5 before the host's cutover, and the dual run of §11.2 (I-Q10).
 
 ## Appendix A. The native arm today (host material, server `f303ebd2`)
 
