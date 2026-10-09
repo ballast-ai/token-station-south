@@ -321,6 +321,10 @@ versions of their own that move only when they change, so a release that changes
 identity, and a release that changes one of them still changes every `component.wasm`, which this check turns into a
 required bump of every package.
 
+Amended (2026-10-09, boundary record §13.12 "Enforcement"): the crate's own bump is checked too.
+`scripts/check_crate_versions.py`, run before the build, fails the release when one of the three crates changed
+since the previous release tag and kept its version.
+
 ### 8.5 Tests
 
 `python3 -m unittest discover -s scripts -p 'test_*.py'` covers the generator, the comparison and the

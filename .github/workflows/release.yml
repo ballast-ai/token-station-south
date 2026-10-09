@@ -29,6 +29,10 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The guest-linked crate version check compares this tree with the
+          # previous release tag, so it needs the tags and their history.
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
         with:
           toolchain: 1.96.0
@@ -59,6 +63,15 @@ jobs:
             exit 1
           fi
           echo "tag ${GITHUB_REF_NAME} matches workspace version ${version}"
+
+      # The other half of Q47 (boundary record §13.12): south-contracts,
+      # south-provider-api and south-component-conformance carry their own
+      # versions, so one that changed since the previous release tag must carry a
+      # new one. Its packages would fail digest stability anyway; the crate would
+      # not, and a host's Cargo.lock would show the old version over new source.
+      # Fails on a shallow clone or any git error rather than skipping.
+      - name: Guest-linked crate versions
+        run: python3 scripts/check_crate_versions.py --tag "${GITHUB_REF_NAME}"
 
       # The same scripts the sandbox parity tests drive. A release must build
       # what CI proved, not a second recipe that could diverge from it.

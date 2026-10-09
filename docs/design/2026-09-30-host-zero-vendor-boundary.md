@@ -2540,7 +2540,7 @@ not declared, and an input is declared only when the serving path forwards it ("
 checks cannot see, and the JSON carries no comments, so the per-profile sources the host kept in `capabilities.rs` are
 not in the file. Q48 asks where provenance lives and who confirms forwarding. *(Ruled 2026-10-08, §16 Q48: sources
 and dates in the pull request and the release record, forwarding confirmed by the host owner or package author, and
-the host's loader run over the candidate file before the release.)*
+the host's loader run over the candidate file before the release. Ruled 2026-10-09: no separate provenance file.)*
 
 **Package identity.** No package changes: no guest-linked crate is touched, and the same-path rebuild of all seventeen
 packages on this branch gives `component.wasm` digests identical to `origin/main` (`daca924`). The branch keeps the
@@ -2632,6 +2632,38 @@ South tag; hosts depend on South by tag, so nothing resolves differently.
    minor otherwise), with the requirements on it and the seventeen component lockfiles. Because it changes every
    `component.wasm`, every package takes a version bump, as 0.47.0 to 0.49.0 did.
 3. A data-only release (catalog data, docs, host-side crates) bumps no package.
+
+**Enforcement (ruled by lv on 2026-10-09).** Rule 2 was first stated only here and in CONTRIBUTING. A crate changed
+without its bump would not have shipped unsafe packages, since its packages' digests change and the digest-stability
+check forces their bumps, but the crate's version in a host's `Cargo.lock` would have named the old crate over new
+source. lv ruled that the rule be checked mechanically. `scripts/check_crate_versions.py` compares each of the three
+crate directories at the tree being released with the latest `vX.Y.Z` tag earlier than the release, and fails when
+any file under the directory (its `Cargo.toml` included) differs while the crate's `package.version` is unchanged,
+naming the crate and the changed files. A version that moves without a source change passes. With no earlier tag it
+passes with a notice. It fails closed: a shallow clone (whose missing tags would read as "no earlier release"), any git
+error, a missing crate manifest, a crate that inherits the workspace version at the release, or a tag that is not
+`vX.Y.Z`. A previous release whose crate still inherited the workspace version (before 0.50.0) is read through the
+workspace version of that tag.
+
+- **Where it runs.** `release.yml` runs it on the tag, right after the tag-matches-workspace step and before any build
+  (`--tag "${GITHUB_REF_NAME}"`; the checkout now fetches full history). `ci.yml` runs it on `release/*` pull requests
+  in its own job, `crate-versions`, with `--unreleased`, which also refuses a workspace version that is already
+  tagged; only there does the workspace version name the release being cut, and elsewhere the comparison would be with
+  the release before the last one. This follows the declared-runtime check (§13.6), which runs on the published
+  archives in `release.yml` and on `release/*` pull requests in `ci.yml`.
+- **"Any file", including tests and fixtures.** The check does not tell build inputs from tests: a change that only
+  touches a crate's `tests/` also requires the bump, and the bump changes every `component.wasm`. Over the fourteen
+  releases from 0.36.0 to 0.50.0, twelve changed `src/` in these crates anyway; the two that did not are 0.37.0 (the
+  dependency requirements in one `Cargo.toml`) and 0.50.0, the Q47 transition itself, whose diff from 0.49.0 touches only tests and the
+  `Cargo.toml` lines that set the own version at the value the crates already had. Replayed now, the check fails 0.50.0
+  against 0.49.0 for that reason; it applies from the next release, whose baseline is `v0.50.0`.
+- **Tests.** `scripts/test_check_crate_versions.py`, run by CI's `quality` job with the other release tooling tests,
+  builds a throwaway repository per case: unchanged crates pass; a change without a bump fails naming the crate and
+  each file; a manifest-only change without a bump fails; a change with a bump passes; a bump without a change passes;
+  no earlier tag passes with a notice; a missing crate fails; plus the tag-selection, inheritance, shallow-clone, git
+  error and `--unreleased` cases. Mutation: replacing the version comparison with "always bumped" fails the four tests
+  that expect a refusal for a change without a bump; dropping the shallow-clone guard fails
+  `test_a_shallow_clone_fails`.
 
 **Evidence (2026-10-08).** Same-path rebuilds of all seventeen packages (macOS, one checkout path and target
 directory throughout; local digests are compared only with local digests, since they never equal the release CI's):
@@ -2996,6 +3028,8 @@ Tags: S = south maintainers, L = lv, K = kernel.
   bytes. **Ruled by lv on 2026-10-08: (B), as recommended.** Implemented in §13.12: the three crates declare their
   own versions (0.49.0 today), tests read the release from the workspace manifest, the release index checks a gate ②
   report's `south_release`, and a shipped-package test keeps components from linking any other workspace crate.
+  *(2026-10-09: lv ruled that the bump rule be enforced mechanically; `scripts/check_crate_versions.py` fails a
+  release in which one of the three crates changed without a new version, §13.12 "Enforcement".)*
 - **Q48 (S, L)** How is a catalog data change sourced and checked (SF25)? The host's discipline needs, per capability,
   the provider documentation that states it and confirmation that the serving path forwards the input; the JSON holds
   neither, and the per-profile sources in the host's `capabilities.rs` did not travel with the export. Recommended: a
@@ -3009,6 +3043,9 @@ Tags: S = south maintainers, L = lv, K = kernel.
   confirmed it; (3) before a release that carries changed catalog data, the host's capability loader is run over the
   candidate file (its golden test pointed at the new file), and the release record states the result. This is
   procedure and changes no code or format. Whether provenance also gets a file beside the catalog stays open.
+  **Provenance file ruled by lv on 2026-10-09: no separate file.** Provenance is not kept in a file beside the catalog;
+  the pull request that changes catalog data and the release notes or release record that ship it carry the sources
+  and the dates they were read, as in (1).
 - **Q49 (L)** What does the host do with a catalog whose digest matches but which its capability loader refuses (a
   vocabulary South does not check, §13.11)? Recommended: refuse startup, as for a digest mismatch, because a wrong
   catalog can admit or refuse requests wrongly while a missing one only turns prechecks off (W8). Host side. Open.
@@ -3118,3 +3155,7 @@ into the body. Where each landed:
 - 2026-10-08, Q47 and Q48 ruled by lv as recommended: new §13.12 (the three guest-linked crates carry their own
   versions; the runtime release stays the workspace version; the release procedure). §13.11's package-identity and
   maintenance paragraphs and Q7 gain notes; Q48 is procedure only, and its provenance-file sub-question stays open.
+- 2026-10-09, lv rulings: Q47's crate bump rule is enforced mechanically (§13.12 "Enforcement",
+  `scripts/check_crate_versions.py`, run by `release.yml` on the tag and by `ci.yml` on `release/*` pull requests), and
+  Q48's provenance-file sub-question is ruled: no separate file; pull requests and release notes carry the sources and
+  dates. Q47, Q48 and §13.11's maintenance paragraph gain notes.
