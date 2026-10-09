@@ -1,7 +1,7 @@
 # The embeddings contract and the `embeddings-adapter-v1` world
 
-Status: **accepted 2026-10-08** with the v1 scope of §15 (media inputs deferred to contract 2); proposed 2026-09-30
-by the host team (token-station-server P21)
+Status: **accepted 2026-10-08** with the v1 scope of §15 (media inputs deferred to contract 2); **contract 2, inline
+media inputs, ruled 2026-10-09 (§17)**; proposed 2026-09-30 by the host team (token-station-server P21)
 
 Date: 2026-09-30
 
@@ -23,7 +23,8 @@ responses carry token counts) awaits measurement. The umbrella plan is P21 in th
 Rulings: on 2026-09-30 the host owner (lv) ruled on E-Q2, E-Q3 and E-Q6 (§14), and on 2026-10-01 on E-Q10 and
 E-Q11; each ruling is recorded under its question. On 2026-10-08 lv, acting for the south maintainers, ruled every
 question tagged S as recommended (E-Q7, which carried no recommendation, keeps today's behaviour), and ruled that v1
-ships text and token-id inputs only (§15).
+ships text and token-id inputs only (§15). On 2026-10-09 lv ruled that contract 2 carries media inputs inline and
+bounded, independent of `contracts.media`, reversing E-Q8 and D3 for media (§17).
 
 
 Baseline: south `origin/main` = v0.42.0 (`3135e36`); kernel `f585bc83` (protocol 0.4.0). Host line numbers refer
@@ -69,7 +70,9 @@ embedding IR as a non-goal (2026-08-16-minimal-provider-call.md:38).
 - **D3 Bytes do not cross the component boundary, in either direction.** Media inputs reach the component as blob
   references from the shared media vocabulary and go back out as reference nodes (§3); vectors in the response are
   extracted by the host per the component's declaration, and the component sees only the response skeleton with the
-  vectors erased (§5).
+  vectors erased (§5). *(Superseded for media inputs on 2026-10-09 by §17: contract 2 carries a media input's base64
+  text inline, so it crosses the sandbox in the request view and out again in the descriptor body. The vector half of
+  D3 stands.)*
 - **D4 Usage**: the component reports the numbers the upstream reported, or declares "the upstream did not report"
   (`NotReported`) and supplies an **estimated fallback** when building the request; the host settles from this and
   labels estimates truthfully (§7).
@@ -135,7 +138,9 @@ pub enum EmbeddingsFailureOutcomeV1 { Rejected, Unknown }
 `UsageSourceV1::NotReported` is a per-call fact ("this response carried no usage"). It is deliberately not called
 `absent`: in the boundary record §6.2 item 4, `absent` names a family that never reports usage.
 
-**Media inputs use the shared media vocabulary.** A media input's bytes never enter the sandbox: the host hands the
+**Media inputs use the shared media vocabulary.** *(Superseded on 2026-10-09 by §17 for contract 2, which carries media
+inline and uses none of this paragraph's vocabulary; what follows is the blob form this record first proposed and
+contract 1 never shipped.)* A media input's bytes never enter the sandbox: the host hands the
 component a blob id, the media type and the length, and the component places the input in its descriptor body with a
 reference node `{"$south.ref": {"blob": "<id>", "transform": "as_is"}}`, which the host replaces before sealing. The
 placeholder and reference grammar, the `as_is` transform and the `reference_integrity` check are those of the image
@@ -495,7 +500,7 @@ the leaf crate's Gemini embeddings translation.
 | `request.single-text` / `request.batch-text` | Descriptor and prepared value (including locator, fallback estimate, `max_input_tokens` and immutable paths) match exactly |
 | `request.dimensions` | The dimensions land in the dialect's location |
 | `request.refused-capability` | Input the dialect does not support (token ids, media or too many inputs) → capability error |
-| `request.media` (components declaring `media`) | The media input appears in the body only as a reference node to its blob |
+| `request.media` (components declaring `media`) | The media input appears in the body only as a reference node to its blob. *(Contract 2, §17: the media input's `data` string appears in the body unchanged; there are no reference nodes.)* |
 | `request.extra-fields` | Unmodelled fields are forwarded, ignored or refused as the component documents |
 | `response.usage` | Usage sample: the `Reported` numbers, and `per_input_tokens` (when the dialect reports per input) |
 | `response.missing-usage` | Dialect without a fallback → error; dialect with a fallback → `NotReported` |
@@ -508,7 +513,7 @@ the leaf crate's Gemini embeddings translation.
 
 - `DescriptorAuthWithinManifest` (boundary record §4.4);
 - `ReferenceIntegrity` (image record §12.1): every reference node points at a blob of the request view, and no output
-  string exceeds the media fallback threshold;
+  string exceeds the media fallback threshold; *(not part of contract 2, which has no reference nodes, §17)*
 - `UsageNeverDefaulted`: response fixtures carry `usage_pointer`; the suite deletes that location and requires the
   component to report an error or `NotReported`, never a `Reported` zero;
 - `LocatorResolves`: the prepared locator, applied to the paired response fixture, resolves exactly as many vectors
@@ -591,12 +596,14 @@ stopgap, but that is a J1 red item and must be cleared before E3.
 - `compatibility.json`: `contracts` gains `embeddings: 1`, and `conformance` gains the suite id;
   `host_capabilities` records adoption per host.
 - The world uses `contracts.media` v1 for blob references and the `as_is` transform (§3), and adds nothing to it; it
-  therefore ships in or after the image world's first minor.
+  therefore ships in or after the image world's first minor. *(Superseded on 2026-10-09, §17: embeddings contract 2
+  does not use `contracts.media` and does not wait for the image world.)*
 - Host link layer: to install packages for this world, the host must link a south version that knows it — a
   one-time upgrade for a new northbound surface (P21 §1.4); after that, adding or removing embeddings providers
   touches only the package layer.
 - When this lands together with the compatibility range of the boundary record's §8, embeddings packages declare
-  `contracts: {"media": 1, "embeddings": 1}`.
+  `contracts: {"media": 1, "embeddings": 1}`. *(Superseded on 2026-10-09, §17: a contract 2 package declares
+  `contracts: {"embeddings": 2}`.)*
 
 ## 13. Rejected alternatives
 
@@ -609,7 +616,8 @@ stopgap, but that is a J1 red item and must be cleared before E3.
 - **The reservation bound from the outbound body's bytes** (this record's first draft): the component would set its
   own ceiling, and media inputs would reserve by base64 length, orders of magnitude above any estimate (§7.3).
 - **Media bytes inside the request type** (this record's first draft): they would cross the sandbox twice and fail
-  above the runtime payload limit (§3).
+  above the runtime payload limit (§3). *(Reversed for contract 2 on 2026-10-09, §17: lv accepted the double crossing
+  and the runtime payload limit as the bound.)*
 - **A request type with only the modelled fields** (this record's first draft): client fields the OpenAI-compatible
   arm forwards today would be dropped silently (§3).
 - **Declaring the vector encoding in the locator** (this record's first draft): fails after dispatch on upstreams
@@ -661,6 +669,9 @@ stopgap, but that is a J1 red item and must be cleared before E3.
   carry media (§15).** Embeddings contract 1 has no blob references at all and ships independently of the image world;
   media inputs and `TextBlob` arrive in embeddings contract 2, which uses `contracts.media` v1 and so ships in or after
   the image world's first minor. No second copy of the reference grammar is made.
+  **Superseded for media inputs (lv, 2026-10-09, §17):** contract 2 carries media inline and uses neither
+  `contracts.media` nor a reference grammar of any kind, so it does not wait for the image world's first minor. The
+  coupling this question accepted is not made; `TextBlob` is not part of contract 2.
 - **E-Q9 (S)** South supplies the northbound parser, vector extraction and erasure, encoding detection and rendering
   as pure functions with golden vectors in `south-contracts` (§3, §5, §8), which both hosts call. Recommended; the
   alternative is a host suite that only tests each host's own implementation.
@@ -680,7 +691,8 @@ Contract 1 ships **text and token-id inputs only**, so that embeddings does not 
 `contracts.media` v1 (E-Q8):
 
 - `EmbeddingInputV1` has two variants, `Text(String)` and `TokenIds(Vec<u32>)`. `Media` and `TextBlob` are not in
-  contract 1; they are added by contract 2 together with blob references.
+  contract 1; they are added by contract 2 together with blob references. *(Amended 2026-10-09, §17: contract 2 adds
+  `Media`, inline, and neither `TextBlob` nor blob references.)*
 - The northbound parser still recognizes the `data:<media type>;base64,` form (§3 table) and returns it as a
   **media-input refusal**, distinct from a malformed request, so the host can answer 400 before admission with zero
   upstream calls. Rows serving multimodal Gemini models stay on the native arm until contract 2; they remain a J1 item
@@ -690,7 +702,9 @@ Contract 1 ships **text and token-id inputs only**, so that embeddings does not 
   32 MiB JSON body limit.
 - The `media` capability word (§4 table) is not in contract 1's vocabulary; a package declaring it is refused at load
   like any unknown word, and contract 2 adds it.
-- §10's `request.media` row and the `ReferenceIntegrity` check apply from contract 2.
+- §10's `request.media` row and the `ReferenceIntegrity` check apply from contract 2. *(Amended 2026-10-09, §17: the
+  row applies from contract 2, in its inline form; `ReferenceIntegrity` does not apply, there being no reference
+  nodes.)*
 
 ## 16. Values channel in this world (2026-10-08)
 
@@ -743,6 +757,134 @@ host and the `locations/` segment from disagreeing and catches the `global` pref
 proxy or a host's test server, is used as given. An endpoint template could not express the `global` exception anyway: a
 template parameter can choose a label but not drop the prefix.
 
+## 17. Contract 2: inline media (ruled 2026-10-09)
+
+**The ruling.** On 2026-10-09 lv decided that the Gemini multimodal embedding models move to the component, and that
+embeddings contract 2 carries media inputs **inline and bounded**, independent of `contracts.media` and of the image
+world. For contract 2 this reverses E-Q8 ("accept the coupling to `contracts.media` v1; media as blob references") and
+D3 ("bytes do not cross the component boundary"). lv accepted the consequences: a media input's base64 text crosses the
+sandbox as one string twice, in the request view and out again in the descriptor body, and the bound is the runtime
+payload limit that already makes the host answer 413 before admission in contract 1 (§15). No new bound is introduced.
+A form of contract 2 built on `contracts.media` blobs, if one is ever wanted, is a future **contract 3**; nothing here
+forecloses it.
+
+### 17.1 What changes
+
+| Section | Change |
+|---|---|
+| §3 types | `EmbeddingInputV1` gains `Media { media_type: String, data: String }`. `TextBlob` and `BlobIdV1` are not added. The sketch's `Media { media_type, blob, encoded_bytes }` is not implemented |
+| §3 media vocabulary | Not used by contract 2: no placeholders, no reference nodes, no `as_is` transform, no media fallback threshold |
+| §3 northbound parsing | The `data:<media type>;base64,` detection rule is unchanged; contract 2's parser returns the string as a `Media` input where contract 1's refuses it (17.2) |
+| §4 manifest | The capability word `media` joins the embeddings vocabulary, and a package declaring it must declare `contracts: {"embeddings": 2}` (17.4) |
+| §5 | Unchanged. Vectors are still extracted and erased by the host |
+| §7.2, §7.3 | Unchanged. The Gemini component computes the media constants (17.5); the host bound for a media input is still its configured per-media-part allowance |
+| §10 | `request.media` applies in its inline form to components declaring `media` (17.6); `ReferenceIntegrity` does not apply |
+| §15 | Its v1 scope stands for contract 1. Contract 2 removes the media refusal and keeps the 413 rule |
+
+### 17.2 The Media input and the parse entry point
+
+`EmbeddingInputV1::Media { media_type, data }`, wire `{"media":{"media_type":"image/png","data":"iVBORw0KGgo="}}`
+(the existing variants are `{"text":"…"}` and `{"token_ids":[…]}`, and their wire shapes do not change).
+
+- `media_type` is the text between `data:` and the first `;base64,`, verbatim, and satisfies the §3 grammar
+  (`type/subtype` with optional `;name=value` parameters, each an RFC 2045 token).
+- `data` is the text after that first `;base64,`, verbatim. It is not decoded and not validated: it is the client's
+  string, so the Gemini body stays byte-equal to the native arm's. An empty payload is a `Media` input with an empty
+  `data`, as it is natively; the upstream refuses it.
+- Debug output prints the media type and the byte count of `data`, never the data.
+
+`parse_embeddings_request_v2(body, upstream_model)` is contract 2's entry point. It runs the same fixed order of checks
+as `parse_embeddings_request_v1` and differs in exactly one step: a string input matching the media rule becomes a
+`Media` input instead of the `MediaInputNotSupported` refusal. `input_shape` keeps its meaning (a single string, media
+or not, is `Single`; an array of strings, text and media mixed, is `Array`), and so does every other refusal. For a body
+without a media string the two parsers return equal requests. `parse_embeddings_request_v1` is unchanged: a host that
+routes a request to a contract 1 package keeps answering the media refusal of §15.
+
+A host chooses the entry point by the routed package: v2 when the package declares `media`, v1 otherwise.
+
+### 17.3 Versioning at the host seam
+
+- The contract numbers a south release decodes are 1 and 2. `EMBEDDINGS_CONTRACT_VERSION` keeps its value 1, the name
+  it has always had, so a host that built its range from it does not silently stop admitting contract 1 packages;
+  `EMBEDDINGS_CONTRACT_VERSION_V2` is 2, and `EMBEDDINGS_CONTRACT_VERSIONS` lists both for a host's range.
+- A request type exists once. `EmbeddingsRequestV1::new` is the contract 1 constructor and refuses a `Media` input
+  (`MediaInputNotSupported`); `new_v2` is the contract 2 constructor and accepts it. A contract 2 `Text` input must not
+  match the media rule, since the parser would have produced a `Media` input. The wire decoder is the contract 2 one,
+  because a guest of either contract decodes the same JSON and a contract 1 guest has to be able to answer a `Media`
+  input with a capability error rather than a decode failure.
+- `carries_media()` and `minimum_contract_version()` (2 with any media input, else 1) tell a seam what a request
+  needs. A contract 1 package must never receive a `Media` input: `SandboxedEmbeddingsComponentV1`, the sandbox seam
+  of `south-component-conformance`, answers a request holding media with a capability error (400, before any call
+  into the guest) unless the loaded package declares `media`. A host with its own seam applies the same rule.
+
+### 17.4 The compatibility rule and the manifest
+
+- A package declaring `contracts: {"embeddings": 2}` is refused by a host whose range lacks 2, by the range handshake
+  that already exists (`CompatibilityMismatchV2::Contract`). Contract 1 packages keep working on a host that admits
+  `{1, 2}`: contract 2 is additive, and a text request builds the same bytes under either.
+- `compatibility.json` records `contracts.embeddings` 2, the newest number this release decodes, as it records
+  `task` 7; it is not a statement that the release speaks only 2. A host's range is the set of numbers it decodes.
+- Gate ①: a package declaring the capability `media` must declare `contracts: {"embeddings": 2}` in its
+  compatibility declaration. A contract 1 package, or one declaring no embeddings contract, that declares `media` is
+  refused with a typed error naming the capability. A contract 2 package need not declare `media`.
+
+### 17.5 The Gemini media body and estimate
+
+Transcribed from the native arm (`openai_embeddings_to_gemini` / `embedding_input_to_gemini_part` in the host's
+`translate_gemini.rs`, `proxy_gemini_embeddings` in `embeddings.rs`). Every input becomes one request object with one
+part, whatever its kind: `{"text": …}` for text and `{"inline_data": {"mime_type": <media_type>, "data": <data>}}`
+for media. A single input goes to `:embedContent` as that one object; an array goes to `:batchEmbedContents` as
+`{"requests": [object, …]}`, text and media mixed freely. `model` is `models/{model}`; `outputDimensionality` is on the
+single body or on every batch item.
+
+The fallback estimate is the sum over inputs of `(utf8_len + 3) / 4` for text and, for media, 512 when `media_type`
+starts with `audio/`, 1024 when it starts with `video/` and 258 otherwise (the native `estimate_media_tokens`);
+`max_input_tokens` equals the fallback, so the reservation stays the estimate (§7.3).
+
+**A known hard-code carried over.** The host refuses media for the model `gemini-embedding-001`, which is text-only
+(`handler/embeddings.rs`, the check on `upstream_model`). §3 says which models accept media should be data, a dialect
+word on the model row or a catalog entry, but no channel carries such a fact to an embeddings component today:
+`ProviderConfig` carries no model-row words in this world and the model catalog holds image and video models only. The
+Gemini component therefore refuses media for `gemini-embedding-001` with a capability error, the one model the native
+arm hard-codes, and no other. When a channel exists the hard-code is replaced by data. Open point E-O1 for lv.
+
+The other two references (OpenAI-compatible, Vertex) accept no media and answer a `Media` input with a capability
+error before building anything.
+
+### 17.6 Conformance
+
+`embeddings.request.media` is a required row for a component whose manifest declares `media`, and only for one. It
+carries a `Media` input and must build; the row's assertion is that every `data` string of the request appears in the
+descriptor body unchanged (the host never decodes it). A component that does not declare `media` is not required to ship
+the row; if its pack carries one, the component must refuse it with a capability error. `Coverage` names the row
+for a media-declaring component. `ReferenceIntegrity` is not a check of this contract.
+
+### 17.7 What stays
+
+Blobs, `TextBlob`, `BlobIdV1`, reference nodes and the media fallback threshold are not in contract 2. Text above the
+threshold is not handed as a blob: it crosses inline like every other string and counts against the same limit.
+
+### 17.8 The bound
+
+The serialized request view is at most the runtime's per-call payload limit, 16 MiB
+(`RuntimeLimitsV1::default().max_payload_bytes`; `MAX_EMBEDDINGS_REQUEST_VIEW_BYTES` mirrors it for the hosts). A larger
+request is the host's 413 before admission, as in §15, and the intentional difference of §15 stands: the native arm
+accepts up to the host's 32 MiB JSON body limit. The parser does not enforce the limit, since it sees the northbound
+body, not the view. The limit applies to the descriptor frame as well, and the descriptor wraps the same text, so the
+largest request that crosses end to end is smaller than the limit by the wrapper (17.10).
+
+### 17.9 Intentional dual-run differences
+
+- A string of the form `data:…;base64,…` whose media type breaks the §3 grammar is text under contract 2 and was media
+  natively, which split at the first `;base64,` without checking the type.
+- The 16 MiB view limit against the native 32 MiB body (§15).
+- A request mixing text and media is accepted as `Array` (it always was natively); an array mixing strings and
+  integers is still refused.
+
+### 17.10 Measurement
+
+Recorded with the release (`docs/design/2026-10-09-release-0.51.0.md`).
+
 ## Revision note (2026-10-01)
 
 - Header: host baseline moved to `a82c852b` and every host citation updated to it; predecessors add the image record.
@@ -781,3 +923,7 @@ template parameter can choose a label but not drop the prefix.
   §6's Vertex column assumed, and adds `UndeclaredValuesIgnored` to the suite.
 - 2026-10-08 (`embeddings-vertex`): §16 records the Vertex rows' values, base URL and confinement; §11 lists the
   Vertex component's intentional differences.
+- 2026-10-09 (contract 2, ruled by lv): new §17 carries media inputs inline and bounded in embeddings contract 2,
+  independent of `contracts.media`. E-Q8 and D3 are marked superseded for media, with dated notes at §2 D3, §3, §10,
+  §12, §13, §14 E-Q8 and §15; the parse entry point, the versioning at the host seam, the manifest rule, the Gemini body
+  and estimate, the carried-over `gemini-embedding-001` hard-code, the `request.media` row and the bound are in §17.
