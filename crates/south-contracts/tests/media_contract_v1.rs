@@ -182,3 +182,53 @@ fn egress_vectors() {
         assert_eq!(result, expected, "{}", case["url"]);
     }
 }
+
+#[test]
+fn render_vectors() {
+    use south_contracts::image::{
+        DeliveredArtifactV1, ImageArtifactV1, ImageContractErrorV1, check_render_template_v1,
+        fill_render_template_v1,
+    };
+    let vectors = vectors();
+    let render = &vectors["render"];
+    let artifacts: Vec<ImageArtifactV1> =
+        serde_json::from_value(render["artifacts"].clone()).expect("artifacts");
+    for case in render["fill"].as_array().expect("cases") {
+        let template = case["template"].as_str().expect("template");
+        check_render_template_v1(template, &artifacts, &MediaLimitsV1::V1).expect("valid template");
+        let delivered: Vec<DeliveredArtifactV1> = case["delivered"]
+            .as_array()
+            .expect("delivered")
+            .iter()
+            .map(|item| {
+                item["url"].as_str().map_or_else(
+                    || {
+                        DeliveredArtifactV1::Bytes(base64(
+                            item["bytes_base64"].as_str().expect("bytes"),
+                        ))
+                    },
+                    |url| DeliveredArtifactV1::Url(url.to_owned()),
+                )
+            })
+            .collect();
+        let body = fill_render_template_v1(template, &delivered).expect("fills");
+        assert_eq!(body, case["body"].as_str().expect("body"), "{}", case["name"]);
+    }
+    for case in render["check_refusals"].as_array().expect("cases") {
+        let expected = match case["error"].as_str().expect("error") {
+            "delivery" => ImageContractErrorV1::Delivery,
+            "reference_integrity" => ImageContractErrorV1::ReferenceIntegrity,
+            other => panic!("unknown error {other}"),
+        };
+        assert_eq!(
+            check_render_template_v1(
+                case["template"].as_str().expect("template"),
+                &artifacts,
+                &MediaLimitsV1::V1
+            ),
+            Err(expected),
+            "{}",
+            case["name"]
+        );
+    }
+}

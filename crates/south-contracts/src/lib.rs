@@ -5,6 +5,7 @@
 mod declared;
 mod embeddings;
 mod eventstream;
+pub mod image;
 pub mod media;
 mod secret_header;
 mod task;

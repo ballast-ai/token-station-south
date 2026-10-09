@@ -287,5 +287,57 @@
       "url": "https://[64:ff9b::a00:1]/a",
       "error": "forbidden_address"
     }
-  ]
+  ],
+  "render": {
+    "note": "contracts.image v1 render templates (§7, §10.2): check against the call's artifacts, then fill. Delivered bytes become plain standard base64; URLs are written as given.",
+    "artifacts": [
+      {
+        "form": "inline",
+        "pointer": "/data/0/b64_json",
+        "encoding": "base64",
+        "media_type": "image/png"
+      },
+      {
+        "form": "url",
+        "pointer": "/data/1/url"
+      }
+    ],
+    "fill": [
+      {
+        "name": "b64-and-url",
+        "template": "{\"created\":1,\"data\":[{\"b64_json\":{\"$south.artifact\":{\"index\":0,\"as\":\"b64_json\"}}},{\"url\":{\"$south.artifact\":{\"index\":1,\"as\":\"url\"}}}],\"usage\":{\"total_tokens\":3}}",
+        "delivered": [
+          {
+            "bytes_base64": "aGk="
+          },
+          {
+            "url": "https://cdn.example/a.png"
+          }
+        ],
+        "body": "{\"created\":1,\"data\":[{\"b64_json\":\"aGk=\"},{\"url\":\"https://cdn.example/a.png\"}],\"usage\":{\"total_tokens\":3}}"
+      }
+    ],
+    "check_refusals": [
+      {
+        "name": "inline-delivered-as-url",
+        "template": "[{\"$south.artifact\":{\"index\":0,\"as\":\"url\"}}]",
+        "error": "delivery"
+      },
+      {
+        "name": "index-out-of-range",
+        "template": "[{\"$south.artifact\":{\"index\":2,\"as\":\"b64_json\"}}]",
+        "error": "reference_integrity"
+      },
+      {
+        "name": "blob-placeholder-in-output",
+        "template": "[{\"$south.blob\":{\"id\":\"b0\"}}]",
+        "error": "reference_integrity"
+      },
+      {
+        "name": "marker-with-siblings",
+        "template": "[{\"$south.artifact\":{\"index\":0,\"as\":\"b64_json\"},\"x\":1}]",
+        "error": "reference_integrity"
+      }
+    ]
+  }
 }

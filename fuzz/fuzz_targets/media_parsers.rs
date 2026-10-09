@@ -6,6 +6,10 @@
 
 use libfuzzer_sys::fuzz_target;
 use south_contracts::MultipartBoundaryV1;
+use south_contracts::image::{
+    DeliveredArtifactV1, ImageArtifactV1, ImageFactsV1, ImageMeteringV1, check_render_template_v1,
+    fill_render_template_v1, parse_image_model_capabilities_v1, parse_prepared_image_call_v1,
+};
 use south_contracts::media::{
     ArtifactUrlV1, BlobSetV1, MediaLimitsV1, MediaPartV1, MediaPartViewV1, MediaRequestDescriptorV1,
     MediaTransformV1, PathPatternV1, decode_base64, decode_hex, elide_v1, encode_base64,
@@ -104,6 +108,16 @@ fuzz_target!(|data: &[u8]| {
             if let Ok(text) = std::str::from_utf8(input) {
                 let _ = serde_json::from_str::<MediaTransformV1>(text);
                 let _ = serde_json::from_str::<Vec<MediaPartV1>>(text);
+                let _ = serde_json::from_str::<ImageFactsV1>(text);
+                let _ = serde_json::from_str::<ImageMeteringV1>(text);
+                let _ = parse_image_model_capabilities_v1(text);
+                let _ = parse_prepared_image_call_v1(text, &MediaLimitsV1::V1);
+                let artifacts = [ImageArtifactV1::Body { media_type: "image/png".to_owned() }];
+                if check_render_template_v1(text, &artifacts, &small).is_ok() {
+                    // A template that passes the check fills without a structural error.
+                    let delivered = [DeliveredArtifactV1::Bytes(vec![1, 2, 3])];
+                    fill_render_template_v1(text, &delivered).expect("a checked template fills");
+                }
             }
         }
     }
