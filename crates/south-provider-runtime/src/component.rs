@@ -6,8 +6,8 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use south_provider_api::{
-    ComponentManifestV1, ComponentMetadataV1, EMBEDDINGS_WORLD, PROVIDER_WORLD, TASK_WORLD,
-    TASK_WORLD_V2,
+    ComponentManifestV1, ComponentMetadataV1, EMBEDDINGS_WORLD, IMAGE_WORLD, PROVIDER_WORLD,
+    TASK_WORLD, TASK_WORLD_V2,
 };
 use wasmtime::Store;
 use wasmtime::component::{Component, Linker};
@@ -105,6 +105,7 @@ enum InstanceKind {
     Task(Box<crate::bindings::task::TaskAdapterV1>),
     TaskV2(Box<crate::bindings::task_v2::TaskAdapterV2>),
     Embeddings(Box<crate::bindings::embeddings::EmbeddingsAdapterV1>),
+    Image(Box<crate::bindings::image::ImageAdapterV1>),
 }
 
 impl InstanceKind {
@@ -121,6 +122,9 @@ impl InstanceKind {
             )),
             Self::Embeddings(_) => Err(world_mismatch(
                 "this component exports `embeddings-adapter-v1`; the provider face is not on it",
+            )),
+            Self::Image(_) => Err(world_mismatch(
+                "this component exports `image-adapter-v1`; the provider face is not on it",
             )),
         }
     }
@@ -139,6 +143,9 @@ impl InstanceKind {
             Self::Embeddings(_) => Err(world_mismatch(
                 "this component exports `embeddings-adapter-v1`; the task face is not on it",
             )),
+            Self::Image(_) => Err(world_mismatch(
+                "this component exports `image-adapter-v1`; the task face is not on it",
+            )),
         }
     }
 
@@ -153,6 +160,9 @@ impl InstanceKind {
             )),
             Self::Embeddings(_) => Err(world_mismatch(
                 "this component exports `embeddings-adapter-v1`; the task-v2 face is not on it",
+            )),
+            Self::Image(_) => Err(world_mismatch(
+                "this component exports `image-adapter-v1`; the task-v2 face is not on it",
             )),
         }
     }
@@ -170,6 +180,29 @@ impl InstanceKind {
             )),
             Self::TaskV2(_) => Err(world_mismatch(
                 "this component exports `task-adapter-v2`; the embeddings face is not on it",
+            )),
+            Self::Image(_) => Err(world_mismatch(
+                "this component exports `image-adapter-v1`; the embeddings face is not on it",
+            )),
+        }
+    }
+
+    /// The image world's accessor, or the ABI-mismatch error naming what was
+    /// actually loaded.
+    fn image(&self) -> wasmtime::Result<&crate::bindings::image::ImageAdapterV1> {
+        match self {
+            Self::Image(instance) => Ok(instance),
+            Self::Provider(_) => Err(world_mismatch(
+                "this component exports `provider-adapter-v2`; the image face is not on it",
+            )),
+            Self::Task(_) => Err(world_mismatch(
+                "this component exports `task-adapter-v1`; the image face is not on it",
+            )),
+            Self::TaskV2(_) => Err(world_mismatch(
+                "this component exports `task-adapter-v2`; the image face is not on it",
+            )),
+            Self::Embeddings(_) => Err(world_mismatch(
+                "this component exports `embeddings-adapter-v1`; the image face is not on it",
             )),
         }
     }
@@ -239,10 +272,10 @@ impl LoadedComponentV1 {
         // The synchronous WASI shims re-enter the ambient tokio runtime for every blocking
         // `wasi:io` call, which panics on a runtime thread; see `nonblocking_io`.
         crate::nonblocking_io::add_to_linker(&mut linker).map_err(LoadErrorV1::NotAComponent)?;
-        // Only the provider and task-v1 worlds import `host`; task-v2 and
-        // embeddings are pure exports, so the linker never offers them a
-        // signing capability to find.
-        if manifest.api_version != TASK_WORLD_V2 && manifest.api_version != EMBEDDINGS_WORLD {
+        // Only a world whose schema links `host` (provider and task-v1) is
+        // offered it; task-v2, embeddings and image are pure exports, so the
+        // linker never offers them a signing capability to find.
+        if crate::loader::host_import(&manifest.api_version).is_linked() {
             wit_host::add_to_linker::<Ctx, wasmtime::component::HasSelf<Ctx>>(&mut linker, |ctx| {
                 ctx
             })
@@ -776,6 +809,105 @@ impl LoadedComponentV1 {
         })
     }
 
+    // ── The image world's JSON face ─────────────────────────────────────
+    //
+    // Four calls, the same shape as the embeddings face: bounded payloads, one
+    // instance, the guest's error channel left opaque. Each reaches the guest
+    // through `image()`, so calling one on another world's component is the
+    // named ABI-mismatch error rather than a panic. Named `call_image_*`
+    // because the provider world exports `model-capabilities` and
+    // `parse-response` under the same WIT names.
+
+    /// `ProviderConfig` JSON → `list<ImageModelCapabilitiesV1>` JSON, through
+    /// the image `model-capabilities` export.
+    ///
+    /// # Errors
+    /// Returns [`CallErrorV1`] on world mismatch, resource limit or guest failure.
+    pub fn call_image_model_capabilities(&self, config_json: &str) -> Result<String, CallErrorV1> {
+        self.bounded(&[config_json])?;
+        let config_json = config_json.to_owned();
+        self.call(|handle| {
+            handle
+                .instance
+                .image()?
+                .token_station_image_adapter_image_adapter()
+                .call_model_capabilities(&mut handle.store, &config_json)
+        })
+    }
+
+    /// (`ProviderConfig`, `MediaRequestViewV1`, `ImageCallContextV1`) JSON →
+    /// `PreparedImageCallV1` JSON, through the image `prepare` export. A guest
+    /// error is a pre-dispatch refusal.
+    ///
+    /// # Errors
+    /// Returns [`CallErrorV1`] on world mismatch, resource limit or guest failure.
+    pub fn call_image_prepare(
+        &self,
+        config_json: &str,
+        request_json: &str,
+        context_json: &str,
+    ) -> Result<String, CallErrorV1> {
+        self.bounded(&[config_json, request_json, context_json])?;
+        let config_json = config_json.to_owned();
+        let request_json = request_json.to_owned();
+        let context_json = context_json.to_owned();
+        self.call(|handle| {
+            handle.instance.image()?.token_station_image_adapter_image_adapter().call_prepare(
+                &mut handle.store,
+                &config_json,
+                &request_json,
+                &context_json,
+            )
+        })
+    }
+
+    /// (prepared state, `MediaResponseViewV1` of one upstream round) JSON →
+    /// `ImageOutcomeV1` JSON, through the image `parse-response` export.
+    ///
+    /// # Errors
+    /// Returns [`CallErrorV1`] on world mismatch, resource limit or guest failure.
+    pub fn call_image_parse_response(
+        &self,
+        state_json: &str,
+        response_json: &str,
+    ) -> Result<String, CallErrorV1> {
+        self.bounded(&[state_json, response_json])?;
+        let state_json = state_json.to_owned();
+        let response_json = response_json.to_owned();
+        self.call(|handle| {
+            handle
+                .instance
+                .image()?
+                .token_station_image_adapter_image_adapter()
+                .call_parse_response(&mut handle.store, &state_json, &response_json)
+        })
+    }
+
+    /// (prepared state, succeeded round outcomes, `ImageRenderContextV1`) JSON
+    /// → `ImageRenderedV1` JSON, through the image `render` export.
+    ///
+    /// # Errors
+    /// Returns [`CallErrorV1`] on world mismatch, resource limit or guest failure.
+    pub fn call_image_render(
+        &self,
+        state_json: &str,
+        outcomes_json: &str,
+        render_context_json: &str,
+    ) -> Result<String, CallErrorV1> {
+        self.bounded(&[state_json, outcomes_json, render_context_json])?;
+        let state_json = state_json.to_owned();
+        let outcomes_json = outcomes_json.to_owned();
+        let render_context_json = render_context_json.to_owned();
+        self.call(|handle| {
+            handle.instance.image()?.token_station_image_adapter_image_adapter().call_render(
+                &mut handle.store,
+                &state_json,
+                &outcomes_json,
+                &render_context_json,
+            )
+        })
+    }
+
     /// Opens one stream on its own instance.
     ///
     /// One instance per stream: `parse-stream-chunk` holds the unparsed tail
@@ -925,6 +1057,9 @@ fn instantiate(
                 &mut store, component, linker,
             )?,
         )),
+        IMAGE_WORLD => InstanceKind::Image(Box::new(
+            crate::bindings::image::ImageAdapterV1::instantiate(&mut store, component, linker)?,
+        )),
         PROVIDER_WORLD => InstanceKind::Provider(Box::new(ProviderAdapterV2::instantiate(
             &mut store, component, linker,
         )?)),
@@ -998,6 +1133,12 @@ fn call_metadata(
         InstanceKind::Embeddings(instance) => {
             let reported = instance
                 .token_station_embeddings_adapter_embeddings_adapter()
+                .call_metadata(&mut handle.store)?;
+            (reported.name, reported.version, reported.api_version)
+        }
+        InstanceKind::Image(instance) => {
+            let reported = instance
+                .token_station_image_adapter_image_adapter()
                 .call_metadata(&mut handle.store)?;
             (reported.name, reported.version, reported.api_version)
         }

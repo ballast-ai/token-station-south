@@ -61,6 +61,7 @@ jobs:
             crates/south-provider-runtime/tests/guests/t09-canary-task
             crates/south-provider-runtime/tests/guests/t21-unseen-eventstream
             crates/south-provider-runtime/tests/guests/test-embeddings
+            crates/south-provider-runtime/tests/guests/test-image
             crates/south-provider-runtime/tests/guests/test-provider
             fuzz
           save-if: ${{ github.ref == 'refs/heads/main' }}

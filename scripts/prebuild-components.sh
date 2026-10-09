@@ -25,6 +25,7 @@ done
 # do not queue on one another's target directory lock.
 jobs+=("cd ${guests}/test-provider && cargo build --target wasm32-wasip2 && cargo build --release --target wasm32-wasip2")
 jobs+=("cd ${guests}/test-embeddings && cargo build --target wasm32-wasip2")
+jobs+=("cd ${guests}/test-image && cargo build --target wasm32-wasip2")
 jobs+=("cd ${guests}/t21-unseen-eventstream && cargo build --target wasm32-wasip2")
 # Bounded parallelism: every build already uses all cores, so more than a few at once only
 # thrashes the disk. The variable is cleared for the children in case the caller exported it.

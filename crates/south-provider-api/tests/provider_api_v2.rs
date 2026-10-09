@@ -7,11 +7,12 @@ use south_provider_api::{
     ComponentManifestV1, ComponentPermissionsV1, ConformanceSpecV1, EMBEDDINGS_ADAPTER_WIT,
     EMBEDDINGS_BEHAVIOR_SUITE, EMBEDDINGS_CAPABILITIES, EMBEDDINGS_MEDIA_CAPABILITY,
     EMBEDDINGS_MEDIA_CONTRACT, EMBEDDINGS_WIT_PACKAGE, EMBEDDINGS_WORLD, EMBEDDINGS_WORLD_SCHEMA,
-    HostExpectationsV1, KNOWN_WORLDS, ManifestErrorV1, PROVIDER_AUTH_ARMS, PROVIDER_WORLD,
-    PROVIDER_WORLD_SCHEMA, TASK_ADAPTER_V2_WIT, TASK_ADAPTER_WIT, TASK_AUTH_ARMS,
-    TASK_BEHAVIOR_SUITE, TASK_CAPABILITIES, TASK_WIT_PACKAGE, TASK_WORLD, TASK_WORLD_SCHEMA,
-    TASK_WORLD_SCHEMA_V2, TASK_WORLD_V2, UsageEvidenceV1, WIT_PACKAGE, compatibility_matches,
-    known_world,
+    HostExpectationsV1, HostImportV1, IMAGE_ADAPTER_WIT, IMAGE_BEHAVIOR_SUITE, IMAGE_CAPABILITIES,
+    IMAGE_WIT_PACKAGE, IMAGE_WORLD, IMAGE_WORLD_SCHEMA, KNOWN_WORLDS, ManifestErrorV1,
+    PROVIDER_AUTH_ARMS, PROVIDER_WORLD, PROVIDER_WORLD_SCHEMA, TASK_ADAPTER_V2_WIT,
+    TASK_ADAPTER_WIT, TASK_AUTH_ARMS, TASK_BEHAVIOR_SUITE, TASK_CAPABILITIES, TASK_WIT_PACKAGE,
+    TASK_WORLD, TASK_WORLD_SCHEMA, TASK_WORLD_SCHEMA_V2, TASK_WORLD_V2, UsageEvidenceV1,
+    WIT_PACKAGE, compatibility_matches, known_world,
 };
 use wit_parser::{Resolve, Type, TypeDefKind};
 
@@ -210,7 +211,13 @@ fn rejects_a_credential_pasted_into_the_secrets_list() {
 fn every_known_world_resolves_to_its_own_schema_and_no_other() {
     assert_eq!(
         KNOWN_WORLDS,
-        &[PROVIDER_WORLD_SCHEMA, TASK_WORLD_SCHEMA, TASK_WORLD_SCHEMA_V2, EMBEDDINGS_WORLD_SCHEMA]
+        &[
+            PROVIDER_WORLD_SCHEMA,
+            TASK_WORLD_SCHEMA,
+            TASK_WORLD_SCHEMA_V2,
+            EMBEDDINGS_WORLD_SCHEMA,
+            IMAGE_WORLD_SCHEMA
+        ]
     );
     assert_eq!(known_world(PROVIDER_WORLD), Some(&PROVIDER_WORLD_SCHEMA));
     assert_eq!(known_world(TASK_WORLD), Some(&TASK_WORLD_SCHEMA));
@@ -219,6 +226,8 @@ fn every_known_world_resolves_to_its_own_schema_and_no_other() {
     assert_eq!(known_world("task-adapter-v999"), None);
     assert_eq!(known_world(EMBEDDINGS_WORLD), Some(&EMBEDDINGS_WORLD_SCHEMA));
     assert_eq!(known_world("embeddings-adapter-v2"), None);
+    assert_eq!(known_world(IMAGE_WORLD), Some(&IMAGE_WORLD_SCHEMA));
+    assert_eq!(known_world("image-adapter-v2"), None);
 }
 
 #[test]
@@ -705,7 +714,7 @@ fn the_task_world_is_known_and_carries_its_own_vocabulary() {
         .collect();
     assert_eq!(schema.auth_arms, without_combined.as_slice());
     assert!(PROVIDER_AUTH_ARMS.contains(&"bearer_and_header_secret"));
-    assert_eq!(KNOWN_WORLDS.len(), 4, "provider, both task versions and embeddings");
+    assert_eq!(KNOWN_WORLDS.len(), 5, "provider, both task versions, embeddings and image");
 }
 
 fn task_manifest() -> ComponentManifestV1 {
@@ -1218,4 +1227,277 @@ fn the_embeddings_world_coexists_with_the_other_worlds() {
     assert_eq!(worlds.len(), KNOWN_WORLDS.len(), "every world name is distinct");
     assert_eq!(packages.len(), KNOWN_WORLDS.len(), "every world has its own WIT package");
     assert_eq!(suites.len(), KNOWN_WORLDS.len(), "every world has its own suite");
+}
+
+// -- The image world (2026-09-30 image-world record, §4, §7, §15, §18) -------
+
+fn image_manifest() -> ComponentManifestV1 {
+    let task = task_manifest();
+    ComponentManifestV1 {
+        name: "image-azure".to_owned(),
+        api_version: IMAGE_WORLD.to_owned(),
+        providers: vec!["azure-foundry".to_owned()],
+        capabilities: ["generate", "edit"].into_iter().map(str::to_owned).collect(),
+        auth_arms: BTreeSet::from(["header_secret".to_owned()]),
+        emits: Vec::new(),
+        conformance: ConformanceSpecV1 {
+            required_suite: IMAGE_BEHAVIOR_SUITE.to_owned(),
+            ..task.conformance
+        },
+        compatibility: CompatibilityDeclarationV1 {
+            wit_package: IMAGE_WIT_PACKAGE.to_owned(),
+            ..task.compatibility
+        },
+        ..task
+    }
+}
+
+#[test]
+fn the_image_world_is_known_and_carries_its_own_vocabulary() {
+    let schema = known_world(IMAGE_WORLD).expect("the image world is admitted");
+    assert_eq!(schema, &IMAGE_WORLD_SCHEMA);
+    assert_eq!(schema.world, "image-adapter-v1");
+    assert_eq!(schema.wit_package, "token-station:image-adapter@1.0.0");
+    assert_eq!(schema.behavior_suite, "south.image-component.v1");
+    assert_eq!(schema.capabilities, IMAGE_CAPABILITIES);
+    assert_eq!(schema.capabilities, ["generate", "edit"]);
+    assert_eq!(schema.auth_arms, ["bearer", "header_secret"]);
+}
+
+/// The exclusions gate ① and the runtime used to spell as lists of world names are properties
+/// of each world (image record §18.6). This pins every world's posture, so a change to one is a
+/// visible edit here rather than a side effect of adding a world.
+#[test]
+fn every_world_states_its_host_import_and_admitted_declarations() {
+    let posture = |schema: &south_provider_api::WorldSchemaV1| {
+        (
+            schema.host_import,
+            schema.value_channel,
+            schema.request_declarations,
+            schema.instance_declarations,
+        )
+    };
+    assert_eq!(posture(&PROVIDER_WORLD_SCHEMA), (HostImportV1::Linked, true, true, true));
+    assert_eq!(posture(&TASK_WORLD_SCHEMA), (HostImportV1::Linked, false, false, false));
+    assert_eq!(posture(&TASK_WORLD_SCHEMA_V2), (HostImportV1::Unlinked, false, false, false));
+    assert_eq!(posture(&EMBEDDINGS_WORLD_SCHEMA), (HostImportV1::Pure, true, false, false));
+    assert_eq!(posture(&IMAGE_WORLD_SCHEMA), (HostImportV1::Pure, true, false, false));
+    let linked: Vec<&str> = KNOWN_WORLDS
+        .iter()
+        .filter(|schema| schema.host_import.is_linked())
+        .map(|schema| schema.world)
+        .collect();
+    assert_eq!(linked, [PROVIDER_WORLD, TASK_WORLD]);
+}
+
+#[test]
+fn image_wit_has_only_pure_exports_and_no_host_import() {
+    let mut resolve = Resolve::new();
+    resolve.push_str("image-adapter.wit", IMAGE_ADAPTER_WIT).expect("image WIT parses");
+    let (_, package) = resolve.packages.iter().next().expect("one package");
+    let name = &package.name;
+    let rendered = format!(
+        "{}:{}@{}",
+        name.namespace,
+        name.name,
+        name.version.as_ref().expect("package is versioned")
+    );
+    assert_eq!(rendered, IMAGE_WIT_PACKAGE);
+    assert_eq!(resolve.worlds.len(), 1, "the package holds one world");
+    let (_, world) =
+        resolve.worlds.iter().find(|(_, w)| w.name == IMAGE_WORLD).expect("image world");
+    assert!(world.imports.is_empty(), "no host, signing or WASI import");
+    assert_eq!(world.exports.len(), 1, "exactly the image-adapter interface");
+    let (_, interface) = resolve
+        .interfaces
+        .iter()
+        .find(|(_, i)| i.name.as_deref() == Some("image-adapter"))
+        .expect("exports");
+    let mut functions: Vec<&str> = interface.functions.keys().map(String::as_str).collect();
+    functions.sort_unstable();
+    assert_eq!(
+        functions,
+        ["healthcheck", "metadata", "model-capabilities", "parse-response", "prepare", "render"]
+    );
+    let params = |name: &str| {
+        interface.functions[name].params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>()
+    };
+    assert_eq!(params("model-capabilities"), ["provider-config"]);
+    assert_eq!(params("prepare"), ["provider-config", "request", "context"]);
+    assert_eq!(params("parse-response"), ["state", "response"]);
+    assert_eq!(params("render"), ["state", "outcomes", "render-context"]);
+    // Every translation export answers `result<json, json>`: the guest's error is an envelope,
+    // never a trap.
+    for function in ["model-capabilities", "prepare", "parse-response", "render"] {
+        let result = interface.functions[function].result.expect("returns a value");
+        let Type::Id(id) = result else { panic!("{function} returns a result type") };
+        assert!(
+            matches!(resolve.types[id].kind, TypeDefKind::Result(_)),
+            "{function} returns result<json, json>"
+        );
+    }
+}
+
+#[test]
+fn an_image_manifest_validates_and_reports_its_own_tuple() {
+    let manifest = image_manifest();
+    assert_eq!(manifest.validate(), Ok(()));
+    let tuple = manifest.compatibility_tuple();
+    assert_eq!(tuple.wit_package, IMAGE_WIT_PACKAGE);
+    assert_eq!(tuple.wit_world, IMAGE_WORLD);
+    assert_eq!(tuple.conformance_suite, IMAGE_BEHAVIOR_SUITE);
+
+    // Either operation word alone is enough, under either admitted arm.
+    for (word, arm) in [("generate", "bearer"), ("edit", "header_secret")] {
+        let mut manifest = image_manifest();
+        manifest.capabilities = BTreeSet::from([word.to_owned()]);
+        manifest.auth_arms = BTreeSet::from([arm.to_owned()]);
+        assert_eq!(manifest.validate(), Ok(()), "{word} with {arm}");
+    }
+}
+
+#[test]
+fn an_image_component_without_an_operation_word_is_refused() {
+    let mut manifest = image_manifest();
+    manifest.capabilities.clear();
+    assert_eq!(manifest.validate(), Err(ManifestErrorV1::ImageOperationRequired));
+    assert_eq!(
+        ManifestErrorV1::ImageOperationRequired.to_string(),
+        "every image component must support `generate`, `edit` or both"
+    );
+
+    let mut familyless = image_manifest();
+    familyless.providers.clear();
+    assert_eq!(familyless.validate(), Err(ManifestErrorV1::ProviderFamilyRequired));
+}
+
+#[test]
+fn image_manifest_refuses_words_and_arms_outside_its_vocabulary() {
+    for word in ["telepathy", "embed", "chat", "submit", "variation"] {
+        let mut manifest = image_manifest();
+        manifest.capabilities.insert(word.to_owned());
+        assert_eq!(
+            manifest.validate(),
+            Err(ManifestErrorV1::CapabilityIsNotInTheWorldVocabulary {
+                capability: word.to_owned(),
+                world: IMAGE_WORLD.to_owned(),
+            })
+        );
+    }
+    for arm in ["oauth", "host_signed", "bearer_and_header_secret"] {
+        let mut manifest = image_manifest();
+        manifest.auth_arms = BTreeSet::from([arm.to_owned()]);
+        assert_eq!(
+            manifest.validate(),
+            Err(ManifestErrorV1::AuthArmIsNotInTheWorldVocabulary {
+                auth_arm: arm.to_owned(),
+                world: IMAGE_WORLD.to_owned(),
+            })
+        );
+    }
+    // The image words are the image world's alone.
+    for word in IMAGE_CAPABILITIES {
+        for mut manifest in [reference_manifest(), task_manifest(), embeddings_manifest()] {
+            manifest.capabilities.insert((*word).to_owned());
+            assert!(
+                matches!(
+                    manifest.validate(),
+                    Err(ManifestErrorV1::CapabilityIsNotInTheWorldVocabulary { .. })
+                ),
+                "`{word}` in {}",
+                manifest.api_version
+            );
+        }
+    }
+}
+
+/// The image world admits the value channel and nothing else beyond its vocabulary (§18.3).
+#[test]
+fn image_manifest_refuses_provider_only_declarations() {
+    let mut signed = image_manifest();
+    signed.signing = Some(south_provider_api::SigningV1 {
+        scheme: south_provider_api::SigningSchemeV1::AwsSigv4,
+        service: "bedrock".to_owned(),
+        region: south_provider_api::TemplateParamV1 { template_param: "region".to_owned() },
+        credentials: std::collections::BTreeMap::new(),
+    });
+    assert!(matches!(signed.validate(), Err(ManifestErrorV1::InvalidSigning(_))));
+
+    let mut framed = image_manifest();
+    framed.stream_framing = south_provider_api::StreamFramingV1::AwsEventstream;
+    assert_eq!(framed.validate(), Err(ManifestErrorV1::StreamFramingIsAProviderWorldDeclaration));
+
+    let mut endpoint = image_manifest();
+    endpoint.endpoint.insert("azure-foundry".to_owned(), "https://api.example.test".to_owned());
+    assert_eq!(endpoint.validate(), Err(ManifestErrorV1::EndpointIsAProviderWorldDeclaration));
+
+    let mut evidence = image_manifest();
+    evidence.usage_evidence = UsageEvidenceV1::Absent;
+    assert_eq!(evidence.validate(), Err(ManifestErrorV1::UsageEvidenceIsAProviderWorldDeclaration));
+
+    let mut facts = image_manifest();
+    facts
+        .request_facts
+        .insert("azure-foundry".to_owned(), south_provider_api::RequestFactsV1::top_level());
+    assert_eq!(facts.validate(), Err(ManifestErrorV1::RequestFactsIsAProviderWorldDeclaration));
+
+    let mut host_values = image_manifest();
+    host_values.host_values = vec!["attempt_id".to_owned()];
+    assert_eq!(
+        host_values.validate(),
+        Err(ManifestErrorV1::InstanceIsAProviderWorldDeclaration("host_values".to_owned()))
+    );
+
+    let mut agent = image_manifest();
+    agent.user_agent.insert("azure-foundry".to_owned(), "acme/1.0".to_owned());
+    assert_eq!(
+        agent.validate(),
+        Err(ManifestErrorV1::InstanceIsAProviderWorldDeclaration("user_agent".to_owned()))
+    );
+
+    let mut quota = image_manifest();
+    quota.quota_headers = vec![south_provider_api::QuotaHeaderDeclarationV1 {
+        header: "x-quota-remaining".to_owned(),
+        field: "x-ratelimit-remaining-tokens".to_owned(),
+    }];
+    assert_eq!(
+        quota.validate(),
+        Err(ManifestErrorV1::InstanceIsAProviderWorldDeclaration("quota_headers".to_owned()))
+    );
+
+    let mut query = image_manifest();
+    query.query_parameters = vec![south_provider_api::QueryParameterDeclarationV1 {
+        name: "output_format".to_owned(),
+        syntax: south_provider_api::QueryValueSyntaxV1::Token,
+    }];
+    assert_eq!(
+        query.validate(),
+        Err(ManifestErrorV1::InstanceIsAProviderWorldDeclaration("query_parameters".to_owned()))
+    );
+}
+
+/// No world accepts another world's suite or package, and adding the image world leaves every
+/// other world's manifest admitted.
+#[test]
+fn the_image_world_coexists_with_the_other_worlds() {
+    let mut embeddings_suite = image_manifest();
+    embeddings_suite.conformance.required_suite = EMBEDDINGS_BEHAVIOR_SUITE.to_owned();
+    assert!(matches!(
+        embeddings_suite.validate(),
+        Err(ManifestErrorV1::ConformanceSuiteIsNotTheWorldSuite { .. })
+    ));
+    let mut embeddings_package = image_manifest();
+    embeddings_package.compatibility.wit_package = EMBEDDINGS_WIT_PACKAGE.to_owned();
+    assert!(matches!(
+        embeddings_package.validate(),
+        Err(ManifestErrorV1::WitPackageIsNotTheWorldPackage { .. })
+    ));
+    let mut claims_embeddings = image_manifest();
+    claims_embeddings.api_version = EMBEDDINGS_WORLD.to_owned();
+    assert!(claims_embeddings.validate().is_err(), "image declarations make no embeddings world");
+
+    assert_eq!(reference_manifest().validate(), Ok(()));
+    assert_eq!(task_manifest().validate(), Ok(()));
+    assert_eq!(embeddings_manifest().validate(), Ok(()));
+    assert_eq!(image_manifest().validate(), Ok(()));
 }
