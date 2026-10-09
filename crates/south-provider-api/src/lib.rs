@@ -64,8 +64,9 @@ pub use manifest::{
     CompatibilityMismatchV2, CompatibilityTupleV1, ComponentManifestV1, ComponentMetadataV1,
     ComponentPermissionsV1, ConformanceSpecV1, EMBEDDINGS_BEHAVIOR_SUITE, EMBEDDINGS_CAPABILITIES,
     EMBEDDINGS_MEDIA_CAPABILITY, EMBEDDINGS_MEDIA_CONTRACT, EMBEDDINGS_WIT_PACKAGE,
-    EMBEDDINGS_WORLD, EMBEDDINGS_WORLD_SCHEMA, HostExpectationsV1, HostRangeV1, KNOWN_WORLDS,
-    MAX_OUTPUT_CAP_LOCATIONS, ManifestErrorV1, ModelLocationV1, PROVIDER_AUTH_ARMS,
+    EMBEDDINGS_WORLD, EMBEDDINGS_WORLD_SCHEMA, HostExpectationsV1, HostImportV1, HostRangeV1,
+    IMAGE_BEHAVIOR_SUITE, IMAGE_CAPABILITIES, IMAGE_WIT_PACKAGE, IMAGE_WORLD, IMAGE_WORLD_SCHEMA,
+    KNOWN_WORLDS, MAX_OUTPUT_CAP_LOCATIONS, ManifestErrorV1, ModelLocationV1, PROVIDER_AUTH_ARMS,
     PROVIDER_CAPABILITIES, PROVIDER_WORLD, PROVIDER_WORLD_SCHEMA, RUNTIME_ABI, RequestFactsV1,
     SIGNED_HEADER_NAMES, SigningSchemeV1, SigningV1, StreamFramingV1, StreamLocationV1,
     TASK_AUTH_ARMS, TASK_BEHAVIOR_SUITE, TASK_BEHAVIOR_SUITE_V2, TASK_CAPABILITIES,
@@ -107,3 +108,8 @@ pub const TASK_ADAPTER_V2_WIT: &str = include_str!("../wit/task-adapter-v2.wit")
 /// import, in its own package so it versions independently of the chat and
 /// task worlds (2026-09-30 embeddings-contract record, D2).
 pub const EMBEDDINGS_ADAPTER_WIT: &str = include_str!("../wit/embeddings-adapter.wit");
+
+/// The image component ABI, as WIT source: pure exports and no host import,
+/// in its own package so it versions independently of the other worlds
+/// (2026-09-30 image-world record, D2).
+pub const IMAGE_ADAPTER_WIT: &str = include_str!("../wit/image-adapter.wit");

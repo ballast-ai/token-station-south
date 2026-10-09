@@ -239,10 +239,10 @@ impl LoadedComponentV1 {
         // The synchronous WASI shims re-enter the ambient tokio runtime for every blocking
         // `wasi:io` call, which panics on a runtime thread; see `nonblocking_io`.
         crate::nonblocking_io::add_to_linker(&mut linker).map_err(LoadErrorV1::NotAComponent)?;
-        // Only the provider and task-v1 worlds import `host`; task-v2 and
-        // embeddings are pure exports, so the linker never offers them a
-        // signing capability to find.
-        if manifest.api_version != TASK_WORLD_V2 && manifest.api_version != EMBEDDINGS_WORLD {
+        // Only a world whose schema links `host` (provider and task-v1) is
+        // offered it; task-v2, embeddings and image are pure exports, so the
+        // linker never offers them a signing capability to find.
+        if crate::loader::host_import(&manifest.api_version).is_linked() {
             wit_host::add_to_linker::<Ctx, wasmtime::component::HasSelf<Ctx>>(&mut linker, |ctx| {
                 ctx
             })

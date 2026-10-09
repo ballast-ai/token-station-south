@@ -8,7 +8,8 @@ use std::sync::Arc;
 
 use south_provider_api::{
     CompatibilityMismatchV1, CompatibilityMismatchV2, ComponentManifestV1, ComponentMetadataV1,
-    HostExpectationsV1, HostRangeV1, ManifestErrorV1, compatibility_admits, compatibility_matches,
+    HostExpectationsV1, HostImportV1, HostRangeV1, ManifestErrorV1, compatibility_admits,
+    compatibility_matches, known_world,
 };
 use thiserror::Error;
 use wasmtime::component::{Component, ResourceTable};
@@ -238,29 +239,39 @@ fn gate_component(
     world: &str,
 ) -> Result<Component, LoadErrorV1> {
     let component = Component::new(runtime.engine(), wasm).map_err(LoadErrorV1::NotAComponent)?;
+    let posture = host_import(world);
 
     for (name, _) in component.component_type().imports(runtime.engine()) {
-        // Task-v2 has no admitted signing consumer. A guest cannot acquire
-        // that capability by importing an older world's host namespace.
-        let task_v2_signing = world == south_provider_api::TASK_WORLD_V2
-            && ["token-station:adapter/host", "token-station:task-adapter/host"]
-                .iter()
-                .any(|prefix| name.starts_with(prefix));
-        // The embeddings world imports nothing from any host: no South
-        // interface at all, and no `host` interface of any package, so a guest
-        // cannot reach a capability through another world's namespace or a
-        // look-alike one.
-        let embeddings_host = world == south_provider_api::EMBEDDINGS_WORLD
-            && (name.starts_with("token-station:") || is_host_interface(name));
-        if task_v2_signing
-            || embeddings_host
-            || FORBIDDEN_IMPORTS.iter().any(|prefix| name.starts_with(prefix))
-        {
+        let host_refused = match posture {
+            HostImportV1::Linked => false,
+            // Task-v2 has no admitted signing consumer. A guest cannot acquire
+            // that capability by importing an older world's host namespace.
+            HostImportV1::Unlinked => {
+                ["token-station:adapter/host", "token-station:task-adapter/host"]
+                    .iter()
+                    .any(|prefix| name.starts_with(prefix))
+            }
+            // The embeddings and image worlds import nothing from any host: no
+            // South interface at all, and no `host` interface of any package,
+            // so a guest cannot reach a capability through another world's
+            // namespace or a look-alike one.
+            HostImportV1::Pure => name.starts_with("token-station:") || is_host_interface(name),
+        };
+        if host_refused || FORBIDDEN_IMPORTS.iter().any(|prefix| name.starts_with(prefix)) {
             return Err(LoadErrorV1::ForbiddenImport(name.to_owned()));
         }
     }
 
     Ok(component)
+}
+
+/// The host-import posture of `world`, a property of the world
+/// ([`south_provider_api::WorldSchemaV1::host_import`]) rather than a list of
+/// names here. Gate ① has resolved the manifest's world before this is asked,
+/// so the fallback for a name it does not know is only the strictest posture,
+/// never a reachable answer.
+pub fn host_import(world: &str) -> HostImportV1 {
+    known_world(world).map_or(HostImportV1::Pure, |schema| schema.host_import)
 }
 
 /// Whether an import name is `<namespace>:<package>/host`, with or without a

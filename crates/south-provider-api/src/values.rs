@@ -17,18 +17,18 @@
 //! checks that a component ignores any other key (`undeclared_values_ignored`). Nothing secret
 //! travels in either map: an attribute comes only from a field declared non-secret (§3.4 rule 4).
 //!
-//! `declared` is built the same way in the embeddings world, whose `build-embeddings-request`
-//! receives a `ProviderConfig` too (`docs/design/2026-09-30-embeddings-contract.md` §16);
-//! `host_values` stays provider-only, and the task worlds receive an empty `declared`.
+//! `declared` is built the same way in every world with [`WorldSchemaV1::value_channel`]: the
+//! embeddings world, whose `build-embeddings-request` receives a `ProviderConfig` too
+//! (`docs/design/2026-09-30-embeddings-contract.md` §16), and the image world, whose
+//! `model-capabilities` and `prepare` do (`docs/design/2026-09-30-image-world.md` §18.3).
+//! `host_values` stays with the worlds that admit request declarations (the provider world), and
+//! the task worlds receive an empty `declared`.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use thiserror::Error;
 
-use crate::{
-    ComponentManifestV1, ConfigErrorV1, EMBEDDINGS_WORLD, ManifestErrorV1, PROVIDER_WORLD,
-    WorldSchemaV1,
-};
+use crate::{ComponentManifestV1, ConfigErrorV1, ManifestErrorV1, WorldSchemaV1};
 
 /// A host-minted identifier for one upstream attempt: a UUID (RFC 9562 version 4, lowercase and
 /// hyphenated), fresh for every attempt, so a failover attempt gets a new one.
@@ -53,23 +53,24 @@ pub enum DeclaredValuesErrorV1 {
 
 impl ComponentManifestV1 {
     /// Gate ① for the value channel: `host_values` from the closed vocabulary, once each, and only
-    /// in the provider world; credential attributes only in the worlds whose host builds
-    /// `declared` (provider and embeddings); and no family whose config key and exported attribute
+    /// in a world with [`WorldSchemaV1::request_declarations`] (the provider world); credential
+    /// attributes only in a world whose host builds `declared` ([`WorldSchemaV1::value_channel`]:
+    /// provider, embeddings and image); and no family whose config key and exported attribute
     /// share a name.
     pub(crate) fn validate_component_values(
         &self,
         world: &WorldSchemaV1,
     ) -> Result<(), ManifestErrorV1> {
         // `ChatRequest` exists only in the provider world.
-        if world.world != PROVIDER_WORLD && !self.host_values.is_empty() {
+        if !world.request_declarations && !self.host_values.is_empty() {
             return Err(ManifestErrorV1::InstanceIsAProviderWorldDeclaration(
                 "host_values".to_owned(),
             ));
         }
-        // An embeddings host builds `declared` per attempt, as a provider host does (embeddings
-        // record §16). No task host path builds it from a recipe; a word nothing honors would be a
-        // promise (as for the combined auth arm, §16 Q36).
-        if world.world != PROVIDER_WORLD && world.world != EMBEDDINGS_WORLD {
+        // An embeddings or image host builds `declared` per attempt, as a provider host does
+        // (embeddings record §16, image record §18.3). No task host path builds it from a recipe;
+        // a word nothing honors would be a promise (as for the combined auth arm, §16 Q36).
+        if !world.value_channel {
             if self
                 .credentials
                 .as_ref()
