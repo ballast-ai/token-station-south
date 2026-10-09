@@ -1,7 +1,8 @@
 # The Bedrock InvokeModel Anthropic component (`provider-anthropic-bedrock-invoke`)
 
-Status: proposed — drafted for review by the south maintainers and the host owner (token-station-server P21 B6-2),
-not accepted. Documentation only: no code, manifest, fixture or release changes with this record.
+Status: accepted and implemented. Drafted 2026-10-08 (#162); lv ruled the open questions on 2026-10-09 (§14), and the
+package, its reference, its fixture pack and the shared-code changes landed with B6-2 (§15). Not released: the release
+is a separate pull request (I-Q9).
 
 Date: 2026-10-08
 
@@ -45,9 +46,10 @@ chunk itself. This record moves that knowledge into one package.
 | 6 | Auth | `host_signed`, `aws-sigv4`, service `bedrock`, region from the endpoint template, credentials as Converse declares them (SF13); no Bearer sibling now (I-Q2) | §7 |
 | 7 | Errors | Bedrock exception names first (shared with Converse), Anthropic error types second, status last; exception and error frames end the stream | §8 |
 | 8 | Conformance | Gate ① needs nothing new; a new gate ② pack; gate ③ needs no new host suite | §9 |
-| 9 | Migration | Evidence first (Q-B6-4); then route model rows to the component, dual run as Converse C9, delete the native arm | §11 |
+| 9 | Migration | Build now (I-Q3); production evidence decides when the host cuts over. Route model rows to the component, dual run as Converse C9, delete the native arm | §11 |
 
-Twelve questions are open (§14), two of them preconditions for doing the work at all (I-Q2, I-Q3).
+The twelve questions of §14 are ruled (2026-10-09). Where the implementation departs from the text below, §15 says so;
+the text is kept as drafted.
 
 ## 1. Problem
 
@@ -94,7 +96,8 @@ So the boundary record's §11 row stands: a separate package sharing source with
 - **D7 SigV4 only in version 1.** A Bearer sibling follows only if production evidence shows Bearer-shaped
   credentials on `aws_claude` rows (I-Q2, host Q-B6-3).
 - **D8 No work before evidence.** If production carries no InvokeModel traffic, the host deletes the native arm
-  instead of migrating it and this package is not built (I-Q3, host Q-B6-4).
+  instead of migrating it and this package is not built (I-Q3, host Q-B6-4). **Overruled 2026-10-09 (I-Q3):** the
+  package is built now; evidence only decides when the host cuts over.
 
 ## 3. Package identity, world and manifest
 
@@ -502,49 +505,198 @@ with zero upstream calls and a pointer to the `component` row, as C11's R43 does
   the crate, every guest's lockfile and supply-chain checks would grow, for twenty lines of decoder.
 - **SigV4 and Bearer in one package, chosen by credential shape.** Refused by boundary Q30.
 
-## 14. Open questions
+## 14. Open questions (ruled 2026-10-09)
 
-Tags: S = south maintainers, L = lv. Each carries this record's recommendation.
+Tags: S = south maintainers, L = lv. Each carries this record's recommendation and, below it, lv's ruling of
+2026-10-09.
 
 - **I-Q1 (S, L) Names.** Package `provider-anthropic-bedrock-invoke` (the boundary record's example, already used
   in the host plan) with family `anthropic-bedrock-invoke`; or `provider-bedrock-invoke-anthropic` /
   `bedrock-invoke-anthropic`, which sorts beside the Converse packages. Recommended: the first, to match the
   existing references.
+  **Ruled 2026-10-09: as recommended** — `provider-anthropic-bedrock-invoke` 1.0.0, family `anthropic-bedrock-invoke`.
 - **I-Q2 (L) The Bearer API-key form** (host Q-B6-3). Recommended: SigV4 only in version 1; a `-bearer` sibling
   (§7.3) only if the evidence of I-Q3 shows Bearer-shaped `aws_claude` credentials in production. If such
   credentials exist and no sibling is built, the native arm cannot be deleted without stranding them.
+  **Ruled 2026-10-09: SigV4 only in version 1**; no `-bearer` sibling.
 - **I-Q3 (L) Is there InvokeModel traffic at all** (host Q-B6-4)? Recommended: no south work until the evidence of
   S4 C0.6 is in. With no traffic, the host deletes the native arm and this record is withdrawn.
+  **Ruled 2026-10-09, not as recommended: do not wait for production evidence; build it now.** The "withdraw if no
+  traffic" branch is dropped; the evidence only decides when the host cuts over.
 - **I-Q4 (S) Base64 in the reference.** Recommended: generalize the private decoder in `credential_recipe.rs` into
   a crate-private module with both alphabets, strict padding and refusal of non-zero trailing bits; RFC 4648 §10
   vectors; a property test against the `base64` crate as a dev-dependency only (the workspace already pins
   `base64` 0.23.1 for `south-north-codec`). Open: whether CONTRIBUTING's "untrusted parsers require a scheduled
   fuzz target" applies to a decoder inside a component reference; no existing stream parser in this crate has one.
+  **Ruled 2026-10-09: as recommended.** Implemented as `src/base64.rs` (§15.3). The fuzz question is decided in §15.3:
+  yes, the scheduled `contract_parsers` target gains the InvokeModel stream parser.
 - **I-Q5 (S, L) Fixture source.** Recommended: request and non-streaming rows from AWS's and Anthropic's
   documentation and the host's existing native-arm test bodies, marked as such; before the host's cutover (not
   before the south release), one capture of a real InvokeModel stream, a throttled stream and a model error, to
   confirm the `p` member, `amazon-bedrock-invocationMetrics`, the exception spelling and the non-2xx body shape.
   Who captures, and in which environment, is the owner's call (as Kiro's host Q-B6-5).
+  **Ruled 2026-10-09: as recommended** — fixtures from AWS's and Anthropic's documentation and the host's native-arm
+  test bodies, labelled as such (the pack's `README.md`); the real capture happens later, before the host's cutover, and
+  is not needed for this release.
 - **I-Q6 (S) The gate ② rows** of §9.2. Recommended as listed; the row for I-Q7 is added only if I-Q7 is taken.
+  **Ruled 2026-10-09: as listed, plus the I-Q7 row** (I-Q7 is taken). Implemented as §15.4 records.
 - **I-Q7 (S, L) Align the stream usage fold with the host's 03 #86 rule** (refuse a terminal non-zero bucket smaller
   than the start value)? Recommended: yes, in the shared `WireUsage::absorb`, so the component and the host judge
   the same evidence the same way; this makes `provider-anthropic` stricter too (a behavior change and an identity
   bump, with one stream fixture in each pack).
+  **Ruled 2026-10-09: align**, in the shared `WireUsage::absorb`, so `provider-anthropic` becomes stricter too — a
+  behavior change, with one stream fixture in each pack (§15.2).
 - **I-Q8 (S) T21.** Recommended: no new guest or mode (§9.4).
+  **Ruled 2026-10-09: no new T21 guest or mode.**
 - **I-Q9 (S, L) Release bundling** (host Q-B6-9). Recommended: ship B6-2 in the same minor as another change to the
   shared crates, so the seventeen identity bumps happen once; if B6-2 is ready alone, release it alone rather than
   wait.
+  **Ruled 2026-10-09: ship when ready** (host Q-B6-9: release per block when ready). The B6-2 pull request does not
+  release.
 - **I-Q10 (L) Messages-surface fidelity.** After cutover, Messages requests to these rows go through the IR instead
   of passthrough (§11.2). Recommended: measure it in the dual run with prompt-caching and beta-flag requests, and
   have the owner rule whether the loss is acceptable or the cutover waits for the IR to carry what is lost (a
   kernel-chain change). This is a host and kernel question that this package cannot answer.
+  **Ruled 2026-10-09:** measured in the host's dual run later; nothing to do in south now beyond this record.
 - **I-Q11 (S) Bedrock's own token counts** (`x-amzn-bedrock-*-token-count` headers, `amazon-bedrock-invocationMetrics`).
   Recommended: ignore them; the Anthropic usage object is richer (cache tiers) and is the evidence the native arm
   bills on. A cross-check would add a second judge with no bucket for cache.
+  **Ruled 2026-10-09: ignore them**; usage comes from the Anthropic usage object.
 - **I-Q12 (S) Unknown frames and the in-band Anthropic `error` event.** Recommended: keep ignoring unknown
   top-level events (the Converse precedent); map a decoded Anthropic `error` event to `StreamEvent::Error` in the
   shared state machine, which also fixes the §5.3 observation for `provider-anthropic` (a behavior change for that
   package, with a fixture in each pack).
+  **Ruled 2026-10-09: as recommended** — unknown top-level frames stay ignored; a decoded in-band `error` event maps to
+  `StreamEvent::Error` in the shared state machine, which also changes `provider-anthropic` (one fixture in each
+  pack; §15.2).
+
+## 15. Implementation (2026-10-09)
+
+B6-2, branch `b6-2-invoke-anthropic`, drafted on `origin/main` `2a58ba7` (v0.50.0) and rebased onto `ba2f3f8` (#166,
+#167, workspace 0.51.0, not tagged). Not released (I-Q9).
+
+### 15.1 What landed
+
+- **The package.** `components/provider-anthropic-bedrock-invoke/` (wit-bindgen shell, `manifest.json` as §3.3, its
+  own lockfile), `scripts/build-anthropic-bedrock-invoke-component.sh`, and the release workflow's build, gate ② report
+  and `package` lines, so a release builds, judges and lists it like the other seventeen. Its `south_runtime` is
+  0.46.0, as Converse's (§12); `scripts/check-declared-runtime.sh --build` loads it under the v0.46.0 runtime.
+- **The reference.** `reference_anthropic_bedrock_invoke.rs`, type `AnthropicBedrockInvokeReferenceV1`, `FAMILY`
+  `anthropic-bedrock-invoke`. It calls `reference_anthropic::checked_body_of` (the replay, dialect and forced-tool
+  checks, then the shared builder; `provider-anthropic` calls the same function) and post-processes the `Value` as §4.2
+  recommends. `parse_response` is `AnthropicReferenceV1::parse_response`. The stream parser splits frames with the
+  shared `sse_frame_boundary` / `frame_fields` and hands each decoded event to the shared `AnthropicSseParser`.
+- **Shared code made crate-visible** (§10): in `reference_anthropic.rs`, `checked_body_of`, `provider_protocol_error`,
+  `error_type_code` (the error-type table, extracted from `map_provider_error`), `status_code`, `message_of`,
+  `sse_frame_boundary`, `frame_fields`, and `AnthropicSseParser` with `events_of`, `end_of_stream`, `fail` and
+  `is_closed`; in `reference_bedrock_converse.rs`, `exception_code` and `exception_name` (the header-or-`__type`
+  normalization, extracted from Converse's `map_provider_error`). Converse's behavior is unchanged (its packs pass
+  unchanged).
+- **Tests.** `anthropic_bedrock_invoke_conformance_v1` (gate ① and ②, the manifest equal to Converse's but for
+  identity, family, fixtures and request facts, every decided row present, the derived rows recomputed from
+  `fixtures-anthropic/`, the error order, unknown events and nothing after a failure, the response equal to Messages',
+  and a chunking property test over arbitrary bytes), `anthropic_bedrock_invoke_sandbox_parity_v1` (the built
+  `component.wasm` passes gate ② byte for byte and writes its gate ② report), the usage judge
+  (`usage_ir_contract_v1`: the InvokeModel pack in the fixture sweep, opening each `bytes` envelope with the `base64`
+  crate, plus documentation cases), and the ARN row in `encoded_model_segment_v1`.
+
+### 15.2 Shared behavior changes (I-Q7, I-Q12)
+
+Both are in the Messages stream state machine, so they change `provider-anthropic` (1.0.16 over v0.50.0's 1.0.15) as well as the new
+package, and each has a fixture in both packs.
+
+- **I-Q7.** `WireUsage::absorb` follows the host's rule (`merge_anthropic_terminal_input_usage`, server
+  `crates/gateway-provider-protocol/src/usage_evidence.rs`): per bucket (uncached input, output, cache read, cache
+  write), a later zero keeps the earlier value, a later non-zero value at least the earlier one wins, and a later
+  non-zero value below an earlier non-zero one is a protocol error ("the upstream stream usage shrank a cumulative
+  token count"). The output side follows the host's `final_output < start` rule the same way. The cache-write total
+  and its 5-minute / 1-hour split move as one group, as the host moves them: a larger later total takes the later
+  group; an equal one takes the later split only when the earlier report had none. Rows:
+  `provider.stream.a-shrinking-cumulative-count-is-refused` in `fixtures-anthropic/` and in the new pack; the group
+  rule is judged by `usage_ir_contract_v1::anthropic_stream_folds_the_cache_write_tiers_as_one_group`.
+  **Found while implementing:** that judge must read the terminal report itself. Every report carries the
+  whole-so-far usage, and a consumer that folds the reports with the kernel's last-nonzero `Usage::absorb` cannot take
+  a tier back to zero (a 300 / 0 start and a 0 / 500 terminal fold to 300 / 500 under a total of 500). No
+  well-behaved upstream repeats `cache_creation` with a different split, so this only matters for contradictory
+  evidence. Ruled 2026-10-09 (§15.6): the host's fold stays as it is.
+- **I-Q12.** An `error` event (`{"type": "error", "error": {"type": …, "message": …}}`) before the terminal `Done`
+  ends the stream with `StreamEvent::Error`: the code from the Anthropic error-type table, else `upstream_unavailable`;
+  HTTP status 502 and the provider message as Converse's in-stream errors carry them. The parser then closes: later
+  frames and the EOF produce nothing, not even a pending `Finish` / `Done`, so `Error` is the last event as the kernel's
+  contract requires. Row: `provider.stream.in-band-error-ends-the-stream` in both packs. Unknown top-level eventstream
+  events stay ignored (§5.2 step 6).
+
+### 15.3 Base64 (I-Q4) and the fuzz target
+
+`src/base64.rs` (crate-private module) encodes and decodes both RFC 4648 alphabets. The decoder refuses a symbol outside
+the alphabet, a length that leaves one symbol over, padding the mode does not allow, and non-zero bits after the last
+whole byte. Modes: `Canonical` (exactly the padding that completes the group; the InvokeModel `bytes` field) and
+`Indifferent` (the canonical padding or less; RFC 7515 readers). Tests: the RFC 4648 §10 vectors in both alphabets, a
+refusal table, and property tests that every decision equals the `base64` crate's (`STANDARD`, `URL_SAFE` and their
+`PAD_INDIFFERENT` engines) and that the two round-trip each other. `base64` is a dev-dependency of
+`south-component-conformance` only; no runtime dependency was added. The credential recipe interpreter's private
+base64url codec now delegates to this module (`Indifferent`, URL-safe). That interpreter is the test-side reference
+gate ② runs `credential.*` cases through; it now refuses a JWT segment with non-zero trailing bits or excess padding,
+which no encoder writes, and every credential pack passes unchanged.
+
+**Fuzz target: yes.** CONTRIBUTING's rule is "untrusted parsers require property tests and a scheduled fuzz target",
+and this parser reads upstream bytes a host feeds it in production, which is the case the rule exists for. The cost is
+small: the scheduled `contract_parsers` target already fuzzes this crate's public JSON ABIs, so it gains
+`fuzz_invoke_stream`, which feeds the input to `AnthropicBedrockInvokeReferenceV1`'s stream parser raw (frame splitting,
+the envelope) and wrapped as one `chunk`'s base64 payload (the decoded-event path, the shared state machine), and
+asserts that chunking never changes the events or the first error. A seed `invoke-stream.txt` is added, and the CI
+step now copies every seed file rather than only `*.json`. The same property runs in the test suite as
+`any_chunking_of_any_body_gives_the_same_answer`. That no earlier stream parser in this crate had a fuzz target is a gap
+this record does not close.
+
+### 15.4 Gate ② rows (I-Q6)
+
+`fixtures-anthropic-bedrock-invoke/` holds 36 cases: every row of §9.2 and the I-Q7 row, plus the I-Q12 row. Its
+`README.md` labels each row's source (I-Q5). Departures from §9.2:
+
+- **The suite could not express the refusal rows (the record was wrong).** §9.2 lists four stream rows whose answer is
+  a refusal (`chunk-without-bytes-is-refused`, `chunk-with-invalid-base64-is-refused`,
+  `chunk-that-decodes-to-non-json-is-refused`, and the I-Q7 row), but `south.provider-component.v1` let only a
+  response case expect `{"error": <envelope>}`; a stream case could only expect an event array. The suite now accepts
+  the same form for a stream case: the parser must refuse the stream with exactly that envelope, and
+  `StreamIncrementality` requires the same refusal at every byte split. This is additive (every existing pack passes
+  unchanged; the suite id and number stay), and it is why gate ② can hold the refusal rows instead of unit tests.
+- **`parallel-tool-results…` is `parallel-tool-results-are-consecutive-user-turns`.** The Messages builder sends one
+  `user` turn per tool result (Anthropic combines consecutive same-role turns), not Converse's one shared message; the
+  row pins that, which is also what the native arm sends today.
+- **Derived rows.** Nine request rows are `fixtures-anthropic/` rows with the three edits;
+  `the_derived_request_rows_are_the_messages_rows_with_the_three_edits` recomputes them from that pack, so the two packs
+  cannot drift.
+
+### 15.5 Corrections to the text above
+
+- §8 step 3: the two references do not share one status table. The package uses `provider-anthropic`'s (which maps 529
+  to `capacity`; Converse's maps it to `internal`).
+- §5.2 step 5 and §15.2: the in-stream error envelope is Converse's (status 502, the fixed message of its code, the
+  provider message up to 256 characters). An in-band `error` after `Done` is ignored.
+- §0 row 8 and §9.2: the conformance suite gained the stream refusal form (§15.4), so "Gate ① needs nothing new" stays
+  true and gate ② needed one additive change.
+- §12: `south-component-conformance` changed, and every existing package's `component.wasm` with it (§13.12 of the
+  boundary record, Q47). Versions are judged against the last release, v0.50.0, and each moves once above it. B6-2 was
+  first written as its own bump (the crate to 0.49.1, each package one patch); after #167 (embeddings contract 2) had
+  already moved all three linked crates to 0.50.0 and every package once above v0.50.0, the rebase kept those
+  versions instead of stacking a second bump: `south-component-conformance` 0.50.0, `provider-anthropic` 1.0.16 (now
+  also carrying §15.2), the other packages at #167's versions, and the new package 1.0.0. Evidence that the shared
+  crate change alone re-identifies a package: on the pre-rebase tree, same-path rebuilds at `2a58ba7` and on this
+  change differed for all seventeen, and with only `task-kling`'s own version reverted to 1.0.11 its `component.wasm`
+  still differed from `2a58ba7`'s.
+
+### 15.6 Rulings on this section (lv, 2026-10-09)
+
+- **The gate ② suite extension (§15.4): accepted.** A stream case may expect `{"error": <envelope>}`, and the parser
+  must refuse the stream with exactly that envelope under every byte split.
+- **The host's fold of repeated component usage reports (§15.2): unchanged.** The host keeps the kernel's
+  last-nonzero `Usage::absorb` and its own check that cumulative output does not shrink. The self-contradictory tier
+  shape (for example 300 / 0 followed by 0 / 500) is refused by the host's existing rule that the 5-minute and 1-hour
+  tiers must add up to the cache-write total: the exchange goes to manual review and is never settled. The host adds a
+  test that pins that refusal on its side. No south change follows from this ruling.
+
+Still open, as before: the real capture of I-Q5 before the host's cutover, and the dual run of §11.2 (I-Q10).
 
 ## Appendix A. The native arm today (host material, server `f303ebd2`)
 

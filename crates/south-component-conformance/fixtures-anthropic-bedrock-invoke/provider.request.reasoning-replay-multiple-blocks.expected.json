@@ -1,0 +1,38 @@
+{
+  "method": "POST",
+  "url": "https://bedrock-runtime.us-east-1.amazonaws.com/model/anthropic.claude-sonnet-4-v1:0/invoke",
+  "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "x-amzn-bedrock-accept": "application/json"
+  },
+  "body": {
+    "anthropic_version": "bedrock-2023-05-31",
+    "messages": [
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "first",
+            "signature": "SIG-1"
+          },
+          {
+            "type": "thinking",
+            "thinking": "",
+            "signature": "SIG-EMPTY"
+          },
+          {
+            "type": "redacted_thinking",
+            "data": "OPAQUE"
+          },
+          {
+            "type": "text",
+            "text": "answer"
+          }
+        ]
+      }
+    ],
+    "max_tokens": 4096
+  }
+}

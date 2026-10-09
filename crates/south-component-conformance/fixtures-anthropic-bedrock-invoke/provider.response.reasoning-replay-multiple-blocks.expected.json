@@ -1,0 +1,59 @@
+{
+  "model": "claude-haiku-4-5-20251001",
+  "id": "msg_bdrk_01",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "first",
+            "signature": "SIG-1"
+          },
+          {
+            "type": "thinking",
+            "thinking": "",
+            "signature": "SIG-EMPTY"
+          },
+          {
+            "type": "redacted_thinking",
+            "data": "OPAQUE"
+          },
+          {
+            "type": "text",
+            "text": "answer"
+          }
+        ],
+        "reasoning_replay_block_layout": [
+          {
+            "kind": "content",
+            "ordinal": 0
+          },
+          {
+            "kind": "content",
+            "ordinal": 1
+          },
+          {
+            "kind": "content",
+            "ordinal": 2
+          },
+          {
+            "kind": "content",
+            "ordinal": 3
+          }
+        ],
+        "reasoning_replay_protocol_family": "claude-signed-thinking"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "input_tokens": 1,
+    "output_tokens": 2,
+    "cache_read_tokens": 0,
+    "cache_write_tokens": 0,
+    "reasoning_tokens": 0
+  }
+}

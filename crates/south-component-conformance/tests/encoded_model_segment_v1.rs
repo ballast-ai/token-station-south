@@ -11,6 +11,7 @@
 use std::path::Path;
 
 use serde_json::Value;
+use south_component_conformance::reference_anthropic_bedrock_invoke::AnthropicBedrockInvokeReferenceV1;
 use south_component_conformance::reference_bedrock_converse::{
     BedrockConverseBearerReferenceV1, BedrockConverseReferenceV1,
 };
@@ -21,7 +22,8 @@ use south_component_conformance::{
 use south_contracts::{ContractErrorV1, ProviderEndpointV1, RelativePathV1};
 use token_station_protocol::{ChatRequest, DescriptorError, HttpRequestDescriptor, ProviderConfig};
 
-/// The row that closes the issue, present in the Converse, Converse-bearer and Gemini packs.
+/// The row that closes the issue, present in the Converse, Converse-bearer, `InvokeModel` and Gemini
+/// packs.
 const ROW: &str = "provider.request.model-id-with-a-slash-stays-one-segment";
 
 struct Package {
@@ -38,7 +40,7 @@ struct Package {
 
 const EVERYWHERE: [&str; 5] = ["a/../b", "a//b", "/a", "a/./b", "a\\b"];
 
-const PACKAGES: [Package; 3] = [
+const PACKAGES: [Package; 4] = [
     Package {
         name: "provider-bedrock-converse",
         directory: "fixtures-bedrock-converse",
@@ -51,6 +53,13 @@ const PACKAGES: [Package; 3] = [
         directory: "fixtures-bedrock-converse-bearer",
         reference: &BedrockConverseBearerReferenceV1,
         url_suffix: "/model/arn:aws:bedrock:us-east-1:123456789012:inference-profile%2Fus.anthropic.claude-sonnet-4-20250514-v1:0/converse",
+        refused_models: &["a/../b", "a//b", "/a", "a/./b", "a\\b", "..", ".", "a/"],
+    },
+    Package {
+        name: "provider-anthropic-bedrock-invoke",
+        directory: "fixtures-anthropic-bedrock-invoke",
+        reference: &AnthropicBedrockInvokeReferenceV1,
+        url_suffix: "/model/arn:aws:bedrock:us-east-1:123456789012:inference-profile%2Fus.anthropic.claude-sonnet-4-20250514-v1:0/invoke",
         refused_models: &["a/../b", "a//b", "/a", "a/./b", "a\\b", "..", ".", "a/"],
     },
     Package {

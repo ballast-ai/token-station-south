@@ -47,6 +47,7 @@ pub use task_suite_v2::{
     TASK_COMPONENT_SUITE_V2, run_task_component_suite_v2, run_task_component_suite_v2_for_manifest,
 };
 pub mod anthropic_dialect;
+mod base64;
 mod descriptor_auth;
 mod url_segment;
 pub use descriptor_auth::{AdmittedAuthV1, DescriptorAuthErrorV1, admit_descriptor_auth};
@@ -65,6 +66,7 @@ mod fixture;
 mod reasoning_replay;
 pub mod reference;
 pub mod reference_anthropic;
+pub mod reference_anthropic_bedrock_invoke;
 pub mod reference_bedrock_converse;
 pub mod reference_gemini;
 pub mod reference_kling_task;

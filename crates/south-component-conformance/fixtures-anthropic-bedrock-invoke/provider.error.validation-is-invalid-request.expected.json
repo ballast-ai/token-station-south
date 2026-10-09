@@ -1,0 +1,6 @@
+{
+  "code": "invalid_request",
+  "http_status": 400,
+  "message": "the upstream refused the request as malformed",
+  "provider_message": "stream: Extra inputs are not permitted"
+}

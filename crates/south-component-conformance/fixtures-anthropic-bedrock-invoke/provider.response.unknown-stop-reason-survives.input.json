@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"id\":\"msg_bdrk_01\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude-haiku-4-5-20251001\",\"content\":[{\"type\":\"text\",\"text\":\"cut\"}],\"stop_reason\":\"model_context_window_exceeded\",\"stop_sequence\":null,\"usage\":{\"input_tokens\":12,\"output_tokens\":3}}"
+}

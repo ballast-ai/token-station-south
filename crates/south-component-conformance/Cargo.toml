@@ -29,6 +29,8 @@ token-station-protocol.workspace = true
 sandbox = ["dep:south-provider-runtime"]
 
 [dev-dependencies]
+# Only the base64 module's property test reads it: the decoder every guest links is the crate's own.
+base64.workspace = true
 proptest.workspace = true
 sha2.workspace = true
 
@@ -50,6 +52,10 @@ required-features = ["sandbox"]
 
 [[test]]
 name = "bedrock_converse_bearer_sandbox_parity_v1"
+required-features = ["sandbox"]
+
+[[test]]
+name = "anthropic_bedrock_invoke_sandbox_parity_v1"
 required-features = ["sandbox"]
 
 [[test]]
