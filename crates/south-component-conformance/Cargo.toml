@@ -107,6 +107,10 @@ name = "vertex_embeddings_sandbox_parity"
 required-features = ["sandbox"]
 
 [[test]]
+name = "azure_image_sandbox_parity"
+required-features = ["sandbox"]
+
+[[test]]
 name = "embeddings_payload_measurement"
 required-features = ["sandbox"]
 

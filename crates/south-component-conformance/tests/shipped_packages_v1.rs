@@ -15,10 +15,11 @@ mod host_range;
 
 /// The official components this repository ships. Named, so that an empty or
 /// mistyped scan below cannot pass over nothing.
-const OFFICIAL_COMPONENTS: [&str; 18] = [
+const OFFICIAL_COMPONENTS: [&str; 19] = [
     "embeddings-gemini",
     "embeddings-openai-compatible",
     "embeddings-vertex",
+    "image-azure",
     "provider-anthropic",
     "provider-anthropic-bedrock-invoke",
     "provider-bedrock-converse",

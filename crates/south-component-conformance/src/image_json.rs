@@ -86,6 +86,32 @@ pub fn image_outcome_json(outcome: &ImageOutcomeV1) -> Result<Value, String> {
     Ok(value)
 }
 
+/// Decodes the `outcomes` argument of `render`: a JSON array of outcome frames, at most one per
+/// round the contract admits (`MediaLimitsV1::V1.repeat`).
+///
+/// # Errors
+/// Returns why the array is refused: not an array, too many frames, or a refused frame.
+pub fn parse_image_outcomes_json(input: &str) -> Result<Vec<ImageOutcomeV1>, String> {
+    let frames: Vec<Value> =
+        serde_json::from_str(input).map_err(|_| "invalid image outcomes JSON")?;
+    if frames.len() > usize::from(MediaLimitsV1::V1.repeat) {
+        return Err("image outcomes exceed the round bound".into());
+    }
+    frames.iter().map(|frame| parse_image_outcome_json(&frame.to_string())).collect()
+}
+
+/// Encodes the `outcomes` argument of `render`, each frame as [`image_outcome_json`] writes it.
+///
+/// # Errors
+/// Returns why an outcome cannot be encoded, or that there are more than the round bound.
+pub fn image_outcomes_json(outcomes: &[ImageOutcomeV1]) -> Result<String, String> {
+    if outcomes.len() > usize::from(MediaLimitsV1::V1.repeat) {
+        return Err("image outcomes exceed the round bound".into());
+    }
+    let frames = outcomes.iter().map(image_outcome_json).collect::<Result<Vec<_>, _>>()?;
+    Ok(Value::Array(frames).to_string())
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RenderedWire {
