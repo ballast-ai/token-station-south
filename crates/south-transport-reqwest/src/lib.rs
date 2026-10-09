@@ -526,6 +526,10 @@ fn attach_body(
         Some(RequestBodyRefV1::Multipart(body)) => {
             builder.body(multipart_request_body(body.shared_owner()))
         }
+        // A text body (HTTP contract version twelve) is held in the same `Arc<str>` owner a JSON
+        // body is, so it goes to the wire through the same zero-copy path: the bytes the contract
+        // bounded are the bytes sent.
+        Some(RequestBodyRefV1::Text(body)) => builder.body(request_body(body.shared_owner())),
         None => builder,
     }
 }
@@ -547,7 +551,8 @@ fn attach_body(
 /// does — needs this name in its calculation.
 ///
 /// `content-type` is deliberately **not** on this list even though a multipart request puts one
-/// on the wire (HTTP contract version seven). The distinction this list draws is between what the
+/// on the wire (HTTP contract version seven), and so does a text request (version twelve). The
+/// distinction this list draws is between what the
 /// transport adds on its own behalf and what it emits because a request declared it: an auth
 /// header is not listed either, for the same reason. A signer that must account for the complete
 /// header set reads the prepared request — `content_type()` and `auth_headers()` — rather than
@@ -570,13 +575,14 @@ fn assemble_headers(request: &PreparedHttpRequestV1<'_>) -> Result<HeaderMap, Tr
     }
 
     // A body that carries its own media type is the single source of `content-type`: the
-    // multipart request shape refuses to carry that name in its ordinary headers, so inserting
-    // the rendered value here is what puts it on the wire exactly once, and it cannot disagree
-    // with the bytes because both come from the boundary the contract validated. The JSON and
-    // GET shapes report `None` and are assembled exactly as they were before version seven —
-    // their `content-type`, if any, is an ordinary header the host declared. The value is
-    // rendered from a validated boundary, so encoding it cannot fail; the error arm exists
-    // because `HeaderValue::from_str` is fallible.
+    // multipart and text request shapes refuse to carry that name in their ordinary headers, so
+    // inserting the rendered value here is what puts it on the wire exactly once, and it cannot
+    // disagree with the bytes because both come from what the contract validated — the boundary
+    // for multipart, the closed media type for text (version twelve). The JSON and GET shapes
+    // report `None` and are assembled exactly as they were before version seven — their
+    // `content-type`, if any, is an ordinary header the host declared. The value is rendered
+    // from a validated boundary or a closed spelling, so encoding it cannot fail; the error arm
+    // exists because `HeaderValue::from_str` is fallible.
     if let Some(content_type) = request.content_type() {
         let value =
             HeaderValue::from_str(content_type).map_err(|_| TransportErrorV1::RequestFailed)?;
@@ -800,7 +806,7 @@ mod tests {
         time::Duration,
     };
 
-    use south_contracts::JsonBodyV1;
+    use south_contracts::{JsonBodyV1, TextBodyV1, TextMediaTypeV1};
 
     use super::{
         AuthHeaderOwner, auth_header_value, auth_header_value_from_owner, effective_timeout,
@@ -866,5 +872,21 @@ mod tests {
         assert_eq!(body.as_ptr(), original_pointer);
         drop(contract_body);
         assert_eq!(body.as_ref(), br#"{"body":"shared-owner-sentinel"}"#);
+    }
+
+    /// HTTP contract version twelve: a text body travels in the JSON body's owner type, so it
+    /// reaches the wire as the contract's own allocation rather than a copy of it.
+    #[test]
+    fn text_request_body_keeps_the_shared_contract_allocation() {
+        const SSML: &str = "<speak>text-shared-owner-sentinel</speak>";
+        let contract_body = TextBodyV1::try_new(SSML.to_owned(), TextMediaTypeV1::Ssml)
+            .expect("fixture body should be valid");
+        let original_pointer = contract_body.as_str().as_ptr();
+
+        let body = request_body(contract_body.shared_owner());
+
+        assert_eq!(body.as_ptr(), original_pointer);
+        drop(contract_body);
+        assert_eq!(body.as_ref(), SSML.as_bytes());
     }
 }

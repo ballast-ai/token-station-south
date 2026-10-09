@@ -6,11 +6,12 @@ use south_contracts::{
     MAX_CREDENTIAL_SLOT_BYTES, MAX_ENDPOINT_BYTES, MAX_JSON_REQUEST_BODY_BYTES,
     MAX_MULTIPART_BOUNDARY_BYTES, MAX_QUERY_VALUE_BYTES, MAX_RELATIVE_PATH_BYTES,
     MAX_RESPONSE_BODY_BYTES, MAX_RESPONSE_CONTENT_TYPE_BYTES, MAX_RESPONSE_RETRY_AFTER_BYTES,
-    MAX_USER_AGENT_BYTES, MultipartBodyV1, MultipartBoundaryV1, MultipartPostRequestV1,
-    PROVIDER_QUOTA_METADATA_CONTRACT_VERSION, PreparationErrorV1, ProviderAuthV1,
-    ProviderEndpointV1, QueryParameterV1, QueryStringV1, RESERVED_HEADER_POLICY_VERSION,
-    RelativePathV1, STREAM_CONTRACT_VERSION, SafeHeaders, SecretHeaderV1, SignedHeaderSetErrorV1,
-    SignedHeaderSetV1, SignedHeaderV1, TransportErrorV1, UserAgentV1,
+    MAX_TEXT_REQUEST_BODY_BYTES, MAX_USER_AGENT_BYTES, MultipartBodyV1, MultipartBoundaryV1,
+    MultipartPostRequestV1, PROVIDER_QUOTA_METADATA_CONTRACT_VERSION, PreparationErrorV1,
+    ProviderAuthV1, ProviderEndpointV1, QueryParameterV1, QueryStringV1,
+    RESERVED_HEADER_POLICY_VERSION, RelativePathV1, STREAM_CONTRACT_VERSION, SafeHeaders,
+    SecretHeaderV1, SignedHeaderSetErrorV1, SignedHeaderSetV1, SignedHeaderV1, TextBodyV1,
+    TextMediaTypeV1, TextPostRequestV1, TransportErrorV1, UserAgentV1,
 };
 
 const SENTINEL: &str = "must-not-appear-7f23a";
@@ -51,7 +52,7 @@ fn secret_header_all_covers_every_variant() {
 
 #[test]
 fn contract_versions_are_independently_versioned() {
-    assert_eq!(HTTP_CONTRACT_VERSION, 11);
+    assert_eq!(HTTP_CONTRACT_VERSION, 12);
     assert_eq!(AUTH_CONTRACT_VERSION, 5);
     assert_eq!(RESERVED_HEADER_POLICY_VERSION, 2);
     assert_eq!(PROVIDER_QUOTA_METADATA_CONTRACT_VERSION, 2);
@@ -1637,4 +1638,189 @@ fn multipart_request_debug_shows_shape_only() {
     assert!(rendered.starts_with("MultipartPostRequestV1 {"));
     assert!(!rendered.contains(SENTINEL));
     assert!(!rendered.contains(SENTINEL_BOUNDARY));
+}
+
+// ───────────────── text request body (HTTP contract v12) ─────────────────
+
+const SSML: &str = "<speak version='1.0' xml:lang='en-US'>\
+<voice name='en-US-AvaNeural'>Hi &amp; bye</voice></speak>";
+
+fn ssml_body(text: &str) -> TextBodyV1 {
+    TextBodyV1::try_new(text.to_owned(), TextMediaTypeV1::Ssml).expect("fixture text is in bounds")
+}
+
+#[test]
+fn the_text_media_type_set_is_closed_and_spelled_exactly() {
+    assert_eq!(TextMediaTypeV1::ALL, [TextMediaTypeV1::Ssml]);
+    assert_eq!(TextMediaTypeV1::Ssml.as_str(), "application/ssml+xml");
+    assert_eq!(TextMediaTypeV1::parse("application/ssml+xml"), Ok(TextMediaTypeV1::Ssml));
+    // The value is rendered, never forwarded, so only the rendered spelling is admitted: no
+    // other casing, no parameter this contract would then silently drop, and no other type.
+    for refused in [
+        "",
+        "Application/SSML+XML",
+        "application/ssml+xml; charset=utf-8",
+        " application/ssml+xml",
+        "application/xml",
+        "text/plain",
+        "application/json",
+    ] {
+        assert_eq!(
+            TextMediaTypeV1::parse(refused),
+            Err(ContractErrorV1::UnsupportedTextMediaType),
+            "{refused:?} is outside the closed set"
+        );
+    }
+    assert_eq!(ContractErrorV1::UnsupportedTextMediaType.code(), "UNSUPPORTED_TEXT_MEDIA_TYPE");
+}
+
+/// The transport bound and the media descriptor's `text` bound are one number, so a descriptor
+/// the expander accepts always fits the shape it is sent through; and the descriptor's media
+/// type list is exactly this closed set.
+#[test]
+fn the_text_body_bounds_agree_with_the_media_descriptor() {
+    assert_eq!(MAX_TEXT_REQUEST_BODY_BYTES, 1024 * 1024);
+    assert_eq!(MAX_TEXT_REQUEST_BODY_BYTES, south_contracts::media::MAX_MEDIA_TEXT_BODY_BYTES);
+    let descriptor_types = south_contracts::media::MEDIA_TEXT_BODY_MEDIA_TYPES.to_vec();
+    let contract_types: Vec<_> = TextMediaTypeV1::ALL.iter().map(|media| media.as_str()).collect();
+    assert_eq!(descriptor_types, contract_types);
+}
+
+#[test]
+fn a_text_body_is_bounded_shares_one_allocation_and_redacts_its_debug() {
+    let body = ssml_body(SSML);
+    assert_eq!(body.as_str(), SSML);
+    assert_eq!(body.len(), SSML.len());
+    assert!(!body.is_empty());
+    assert_eq!(body.media_type(), TextMediaTypeV1::Ssml);
+    assert_eq!(body.content_type(), "application/ssml+xml");
+    let shared = body.shared_owner();
+    assert_eq!(shared.as_ptr(), body.as_str().as_ptr());
+
+    // Exactly the bound is accepted, one byte past it is refused with the shared size code.
+    let at_bound = "a".repeat(MAX_TEXT_REQUEST_BODY_BYTES);
+    assert!(TextBodyV1::try_new(at_bound, TextMediaTypeV1::Ssml).is_ok());
+    let above = "a".repeat(MAX_TEXT_REQUEST_BODY_BYTES + 1);
+    assert_eq!(
+        TextBodyV1::try_new(above, TextMediaTypeV1::Ssml).err(),
+        Some(ContractErrorV1::RequestBodyTooLarge)
+    );
+    // The bound is bytes, not characters: a multi-byte character straddling it is refused.
+    let straddling = format!("{}é", "a".repeat(MAX_TEXT_REQUEST_BODY_BYTES - 1));
+    assert_eq!(
+        TextBodyV1::try_new(straddling, TextMediaTypeV1::Ssml).err(),
+        Some(ContractErrorV1::RequestBodyTooLarge)
+    );
+    // Empty is a well-formed instance of the shape; the upstream judges it.
+    assert!(ssml_body("").is_empty());
+
+    let rendered = format!("{:?}", ssml_body(SENTINEL));
+    assert!(rendered.starts_with("TextBodyV1 {"));
+    assert!(!rendered.contains(SENTINEL), "Debug must not leak body content: {rendered}");
+}
+
+#[test]
+fn a_text_request_renders_its_own_media_type_and_refuses_a_second_source() {
+    let path = RelativePathV1::parse("cognitiveservices/v1").unwrap();
+    let slot = CredentialSlotV1::parse("azure.speech").unwrap();
+
+    let request = TextPostRequestV1::try_new(
+        path.clone(),
+        SafeHeaders::try_from_iter([(
+            "x-microsoft-outputformat",
+            "audio-24khz-48kbitrate-mono-mp3",
+        )])
+        .unwrap(),
+        ssml_body(SSML),
+        BearerAuthV1::new(slot.clone()),
+    )
+    .expect("ordinary headers without a content-type are accepted");
+    assert_eq!(request.relative_path().as_str(), "cognitiveservices/v1");
+    assert_eq!(request.body().content_type(), "application/ssml+xml");
+    assert_eq!(request.body().as_str(), SSML);
+    assert_eq!(request.headers().get("content-type"), None);
+    assert!(request.query().is_none() && request.user_agent().is_none());
+
+    // The second source is refused under any casing and whatever value it carries — the
+    // correct one included, so the refusal cannot be passed by the value happening to be wrong.
+    for (name, value) in [
+        ("content-type", "application/ssml+xml"),
+        ("Content-Type", "application/json"),
+        ("CONTENT-TYPE", "text/plain"),
+    ] {
+        assert_eq!(
+            TextPostRequestV1::try_new(
+                path.clone(),
+                SafeHeaders::try_from_iter([(name, value)]).unwrap(),
+                ssml_body(SSML),
+                BearerAuthV1::new(slot.clone()),
+            )
+            .err(),
+            Some(ContractErrorV1::ContentTypeHeaderNotPermitted),
+            "{name} must be refused"
+        );
+    }
+}
+
+#[test]
+fn a_text_request_carries_every_credential_arm_query_and_user_agent() {
+    let build = |auth: ProviderAuthV1| {
+        TextPostRequestV1::try_new(
+            RelativePathV1::parse("cognitiveservices/v1").unwrap(),
+            SafeHeaders::default(),
+            ssml_body(SSML),
+            auth,
+        )
+        .expect("valid")
+    };
+    let slot = CredentialSlotV1::parse("primary").unwrap();
+    assert!(matches!(
+        build(ProviderAuthV1::Bearer(BearerAuthV1::new(slot.clone()))).auth(),
+        ProviderAuthV1::Bearer(_)
+    ));
+    assert!(matches!(
+        build(ProviderAuthV1::HeaderSecret {
+            header: SecretHeaderV1::OcpApimSubscriptionKey,
+            slot: BearerAuthV1::new(slot.clone()),
+        })
+        .auth(),
+        ProviderAuthV1::HeaderSecret { header: SecretHeaderV1::OcpApimSubscriptionKey, .. }
+    ));
+    assert!(matches!(
+        build(ProviderAuthV1::HostSigned {
+            slot: BearerAuthV1::new(slot.clone()),
+            emits: SignedHeaderSetV1::new(&[SignedHeaderV1::Authorization]).unwrap(),
+        })
+        .auth(),
+        ProviderAuthV1::HostSigned { .. }
+    ));
+
+    let query =
+        QueryStringV1::try_from_iter([(QueryParameterV1::ApiVersion, "2025-04-01-preview")])
+            .unwrap();
+    let agent = ControlledUserAgentV1::try_from_static("south-test/1.0").unwrap();
+    let request = build(ProviderAuthV1::Bearer(BearerAuthV1::new(slot)))
+        .with_query(query.clone())
+        .with_user_agent(agent);
+    assert_eq!(request.query(), Some(&query));
+    assert_eq!(
+        request.user_agent().map(|agent| agent.as_str().to_owned()),
+        Some("south-test/1.0".to_owned())
+    );
+}
+
+#[test]
+fn text_request_debug_shows_shape_only() {
+    let request = TextPostRequestV1::try_new(
+        RelativePathV1::parse(&format!("v1/{SENTINEL}")).unwrap(),
+        SafeHeaders::try_from_iter([("x-test", SENTINEL)]).unwrap(),
+        ssml_body(&format!("<speak>{SENTINEL}</speak>")),
+        BearerAuthV1::new(CredentialSlotV1::parse(SENTINEL).unwrap()),
+    )
+    .unwrap();
+    let rendered = format!("{request:?}");
+    assert!(rendered.starts_with("TextPostRequestV1 {"));
+    assert!(rendered.contains("http_contract_version: 12"));
+    assert!(!rendered.contains(SENTINEL));
+    assert!(!rendered.contains("speak"));
 }

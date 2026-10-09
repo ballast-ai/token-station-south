@@ -107,7 +107,19 @@ use url::Url;
 /// such as a Bedrock inference-profile ARN, travel as one segment. A version-ten relative path is
 /// exactly a version-eleven one without that escape; the endpoint path still refuses it, and
 /// escapes decoding to `.`, `\` or `%` stay refused everywhere.
-pub const HTTP_CONTRACT_VERSION: u16 = 11;
+///
+/// Version twelve (the media minor: image record §6.3a and §18.1, speech record D3a) carries the
+/// two shapes the media worlds need, in one bump. On the request side it admits
+/// [`TextPostRequestV1`], a bounded UTF-8 body under a media type from a closed set this contract
+/// renders ([`TextMediaTypeV1`], `application/ssml+xml` only), beside the other three shapes. On
+/// the orchestration side it admits reading a multipart POST's answer as bytes, and gives the
+/// text shape only a bytes-reading entry point, because every media-world call reads its response
+/// as bytes (image record §6.3a rule 1). Neither type in this crate changes for the second half:
+/// [`MultipartPostRequestV1`] and [`BufferedBinaryResponseV1`] already existed, and only the entry
+/// point pairing them is new. A version-eleven request is exactly a version-twelve request that is
+/// not a `TextPostRequestV1`; the JSON, GET and multipart shapes and both response types are
+/// untouched.
+pub const HTTP_CONTRACT_VERSION: u16 = 12;
 
 /// The version of the provider authentication declaration contract.
 ///
@@ -170,6 +182,15 @@ pub const MAX_MULTIPART_REQUEST_BODY_BYTES: usize = 100 * 1024 * 1024;
 
 /// The maximum byte length of one multipart boundary, per RFC 2046 §5.1.1.
 pub const MAX_MULTIPART_BOUNDARY_BYTES: usize = 70;
+
+/// The maximum byte length of one text request body (HTTP contract version twelve).
+///
+/// One mebibyte, the same number as the media descriptor's `text` body bound
+/// ([`media::MAX_MEDIA_TEXT_BODY_BYTES`]), so a descriptor the media expander accepts always
+/// fits the transport shape it is sent through. The one body this shape exists for is a speech
+/// synthesis document, whose text the adopting host already bounds far below this; a larger
+/// bound would buy nothing but a larger allocation per request.
+pub const MAX_TEXT_REQUEST_BODY_BYTES: usize = 1024 * 1024;
 
 /// The maximum byte length of a buffered UTF-8 response body.
 pub const MAX_RESPONSE_BODY_BYTES: usize = 32 * 1024 * 1024;
@@ -954,6 +975,141 @@ impl fmt::Debug for MultipartBodyV1 {
             .debug_struct("MultipartBodyV1")
             .field("byte_count", &self.bytes.len())
             .field("boundary", &self.boundary)
+            .finish_non_exhaustive()
+    }
+}
+
+/// The closed set of media types a [`TextBodyV1`] may carry (HTTP contract version twelve).
+///
+/// Closed and fieldless for the reason [`SecretHeaderV1`] is: each variant is a vetted wire
+/// format with a call site behind it, and adding one is a deliberate contract bump with a
+/// conformance case, not a host-side configuration. The set holds exactly one type today — SSML,
+/// for the one speech-synthesis upstream that takes its input as a markup document rather than
+/// JSON (speech record D3a). An open string would let a host send any body under any label, and
+/// the label is the only thing an upstream reads before deciding how to parse the bytes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TextMediaTypeV1 {
+    /// `application/ssml+xml` (W3C Speech Synthesis Markup Language).
+    Ssml,
+}
+
+impl TextMediaTypeV1 {
+    /// Every admitted media type, in declaration order.
+    ///
+    /// Tests that must cover the whole set iterate this constant, so a new variant reaches them
+    /// without anyone remembering to list it.
+    pub const ALL: [Self; 1] = [Self::Ssml];
+
+    /// Parses one media type from its exact lowercase wire spelling.
+    ///
+    /// Exact rather than case-insensitive, and without parameters: the value is rendered by this
+    /// contract, never forwarded, so the only spelling that matters is the one it renders, and
+    /// accepting `Application/SSML+XML; charset=…` would admit a parameter this contract then
+    /// silently drops. The media descriptor's `text` body applies the same exact comparison.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ContractErrorV1::UnsupportedTextMediaType`] for any other value.
+    pub fn parse(input: &str) -> Result<Self, ContractErrorV1> {
+        Self::ALL
+            .into_iter()
+            .find(|media_type| media_type.as_str() == input)
+            .ok_or(ContractErrorV1::UnsupportedTextMediaType)
+    }
+
+    /// Returns the exact media type this contract renders as the request's `content-type`.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Ssml => "application/ssml+xml",
+        }
+    }
+}
+
+/// A bounded UTF-8 request body under a media type this contract renders (HTTP contract version
+/// twelve).
+///
+/// The text twin of [`MultipartBodyV1`]: the contract does not parse the document — South does not
+/// read SSML, and a component that writes one does its own escaping (speech record D3a) — but it
+/// holds what can be checked without becoming a parser: that the bytes are UTF-8, which the
+/// `String` the constructor takes already proves, that they fit [`MAX_TEXT_REQUEST_BODY_BYTES`],
+/// and that the media type sent beside them comes from the closed [`TextMediaTypeV1`] set. The
+/// `content-type` is rendered from that value, so a host cannot put a body on the wire under a
+/// label this contract did not choose.
+#[derive(PartialEq, Eq)]
+pub struct TextBodyV1 {
+    text: Arc<str>,
+    media_type: TextMediaTypeV1,
+}
+
+impl TextBodyV1 {
+    /// Validates one text body against the length bound.
+    ///
+    /// An empty text is admitted. The shape is bytes under a label, and an empty document is a
+    /// well-formed instance of that; whether an upstream accepts it is that upstream's answer to
+    /// give, exactly as for a JSON body of `{}`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ContractErrorV1::RequestBodyTooLarge`] above [`MAX_TEXT_REQUEST_BODY_BYTES`].
+    pub fn try_new(text: String, media_type: TextMediaTypeV1) -> Result<Self, ContractErrorV1> {
+        if text.len() > MAX_TEXT_REQUEST_BODY_BYTES {
+            return Err(ContractErrorV1::RequestBodyTooLarge);
+        }
+        Ok(Self { text: Arc::from(text), media_type })
+    }
+
+    /// Returns the exact validated text.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.text
+    }
+
+    /// Shares the validated backing allocation with an asynchronous transport.
+    ///
+    /// The same owner type as [`JsonBodyV1::shared_owner`], so a transport sends both bodies
+    /// through one path without a copy.
+    #[must_use]
+    pub fn shared_owner(&self) -> Arc<str> {
+        Arc::clone(&self.text)
+    }
+
+    /// Returns the declared media type.
+    #[must_use]
+    pub const fn media_type(&self) -> TextMediaTypeV1 {
+        self.media_type
+    }
+
+    /// Returns the rendered media type, exactly [`TextMediaTypeV1::as_str`].
+    ///
+    /// Named like [`MultipartBodyV1::content_type`] so a transport reads both bodies' labels
+    /// through one accessor. No parameter is appended: the closed set's spellings are complete
+    /// media types, and a `charset` would be a second statement of the UTF-8 guarantee the type
+    /// already makes.
+    #[must_use]
+    pub const fn content_type(&self) -> &'static str {
+        self.media_type.as_str()
+    }
+
+    /// Returns the request body's byte length.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.text.len()
+    }
+
+    /// Returns whether the request body is empty.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.text.is_empty()
+    }
+}
+
+impl fmt::Debug for TextBodyV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("TextBodyV1")
+            .field("byte_count", &self.text.len())
+            .field("media_type", &self.media_type)
             .finish_non_exhaustive()
     }
 }
@@ -1829,6 +1985,119 @@ impl fmt::Debug for MultipartPostRequestV1 {
             .field("auth_contract_version", &AUTH_CONTRACT_VERSION)
             .field("header_count", &self.headers.len())
             .field("body_byte_count", &self.body.len())
+            .field("has_query", &self.query.is_some())
+            .field("has_user_agent", &self.user_agent.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
+/// A bounded provider request for one text POST (HTTP contract version twelve).
+///
+/// [`MultipartPostRequestV1`]'s field set with a [`TextBodyV1`] in place of the multipart one,
+/// and the same builders, grammars and `content-type` rule. A separate type rather than a third
+/// body arm on an existing shape, for the reason the multipart record's D1 gives: every frozen
+/// shape keeps exactly the body it was frozen with, and "a JSON POST whose body is SSML" is not
+/// constructible. It exists for one call site — speech synthesis from an SSML document (speech
+/// record D3a) — and that call site answers in audio, so `south-core` gives it a bytes-reading
+/// entry point only.
+#[derive(PartialEq, Eq)]
+pub struct TextPostRequestV1 {
+    relative_path: RelativePathV1,
+    headers: SafeHeaders,
+    body: TextBodyV1,
+    auth: ProviderAuthV1,
+    query: Option<QueryStringV1>,
+    user_agent: Option<UserAgentV1>,
+}
+
+impl TextPostRequestV1 {
+    /// Creates a request from independently validated, bounded fields.
+    ///
+    /// Fallible for the reason [`MultipartPostRequestV1::try_new`] is: this request renders its
+    /// own `content-type` from the body's closed media type, so the ordinary header channel must
+    /// not also carry one. Two sources for one header is how a body and its label come to
+    /// disagree, and for this shape the label is what tells an upstream to parse markup rather
+    /// than JSON.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ContractErrorV1::ContentTypeHeaderNotPermitted`] when `headers` carries a
+    /// `content-type` under any casing.
+    pub fn try_new(
+        relative_path: RelativePathV1,
+        headers: SafeHeaders,
+        body: TextBodyV1,
+        auth: impl Into<ProviderAuthV1>,
+    ) -> Result<Self, ContractErrorV1> {
+        if headers.get("content-type").is_some() {
+            return Err(ContractErrorV1::ContentTypeHeaderNotPermitted);
+        }
+        Ok(Self { relative_path, headers, body, auth: auth.into(), query: None, user_agent: None })
+    }
+
+    /// Attaches a sanctioned query declaration to this request.
+    #[must_use]
+    pub fn with_query(mut self, query: QueryStringV1) -> Self {
+        self.query = Some(query);
+        self
+    }
+
+    /// Returns the sanctioned query declaration, when one was attached.
+    #[must_use]
+    pub const fn query(&self) -> Option<&QueryStringV1> {
+        self.query.as_ref()
+    }
+
+    /// Attaches a sanctioned user-agent declaration to this request.
+    ///
+    /// Takes a host literal ([`ControlledUserAgentV1`]) or a declared manifest value
+    /// ([`DeclaredUserAgentV1`]). Either fills the one slot, replacing whatever it held.
+    #[must_use]
+    pub fn with_user_agent(mut self, user_agent: impl Into<UserAgentV1>) -> Self {
+        self.user_agent = Some(user_agent.into());
+        self
+    }
+
+    /// Returns the sanctioned user-agent declaration, when one was attached.
+    #[must_use]
+    pub const fn user_agent(&self) -> Option<&UserAgentV1> {
+        self.user_agent.as_ref()
+    }
+
+    /// Returns the provider-selected relative path.
+    #[must_use]
+    pub const fn relative_path(&self) -> &RelativePathV1 {
+        &self.relative_path
+    }
+
+    /// Returns the validated ordinary request headers, which never include `content-type`.
+    #[must_use]
+    pub const fn headers(&self) -> &SafeHeaders {
+        &self.headers
+    }
+
+    /// Returns the validated text body.
+    #[must_use]
+    pub const fn body(&self) -> &TextBodyV1 {
+        &self.body
+    }
+
+    /// Returns the provider authentication declaration.
+    #[must_use]
+    pub const fn auth(&self) -> &ProviderAuthV1 {
+        &self.auth
+    }
+}
+
+impl fmt::Debug for TextPostRequestV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("TextPostRequestV1")
+            .field("http_contract_version", &HTTP_CONTRACT_VERSION)
+            .field("auth_contract_version", &AUTH_CONTRACT_VERSION)
+            .field("header_count", &self.headers.len())
+            .field("body_byte_count", &self.body.len())
+            .field("media_type", &self.body.media_type())
             .field("has_query", &self.query.is_some())
             .field("has_user_agent", &self.user_agent.is_some())
             .finish_non_exhaustive()
@@ -3069,6 +3338,10 @@ pub enum ContractErrorV1 {
     /// A request that renders its own media type was given a `content-type` header to carry.
     #[error("content-type header is not permitted on this request shape")]
     ContentTypeHeaderNotPermitted,
+    /// A text body names a media type outside the closed [`TextMediaTypeV1`] set (HTTP contract
+    /// version twelve).
+    #[error("text body media type is not supported")]
+    UnsupportedTextMediaType,
     /// A declared secret header name violates the declaration rules (auth contract version five).
     #[error("declared secret header name is invalid")]
     InvalidSecretHeaderName,
@@ -3105,6 +3378,7 @@ impl ContractErrorV1 {
             Self::InvalidMultipartBoundary => "INVALID_MULTIPART_BOUNDARY",
             Self::InvalidMultipartBody => "INVALID_MULTIPART_BODY",
             Self::ContentTypeHeaderNotPermitted => "CONTENT_TYPE_HEADER_NOT_PERMITTED",
+            Self::UnsupportedTextMediaType => "UNSUPPORTED_TEXT_MEDIA_TYPE",
             Self::InvalidSecretHeaderName => "INVALID_SECRET_HEADER_NAME",
             Self::InvalidSecretHeaderSet => "INVALID_SECRET_HEADER_SET",
             Self::UndeclaredSecretHeader => "UNDECLARED_SECRET_HEADER",

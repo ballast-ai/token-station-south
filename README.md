@@ -52,7 +52,8 @@ the [task adapter vocabulary](docs/design/2026-08-27-task-adapter-vocabulary.md)
 
 - `south-contracts` defines bounded HTTP (the JSON POST request, the body-less GET request, and
   the multipart POST request, whose opaque bytes travel under a media type the contract renders
-  from a validated boundary),
+  from a validated boundary, and since HTTP contract 12 the SSML text POST request, whose bounded
+  UTF-8 body travels under `application/ssml+xml`, a media type from a closed set),
   Bearer, sanctioned header-secret, combined Bearer-plus-header-secret, and package-declared
   header-secret authentication (auth contract 5, whose declared names join the reserved headers
   and leave the response transcript for that package's calls), stable
@@ -62,8 +63,9 @@ the [task adapter vocabulary](docs/design/2026-08-27-task-adapter-vocabulary.md)
   user-agent request declarations.
 - `south-core` binds a validated endpoint to one credential slot, resolves the host-owned secret,
   and applies cancellation and caller deadlines around prepared buffered and streaming JSON POST
-  calls, buffered body-less GET calls, buffered multipart POST calls, and JSON POST calls whose
-  response is buffered as opaque bytes rather than proved to be UTF-8. Its
+  calls, buffered body-less GET calls, buffered multipart POST calls, and JSON POST, multipart
+  POST and SSML text POST calls whose response is buffered as opaque bytes rather than proved to
+  be UTF-8 (the last two since HTTP contract 12). Its
   `raw` module is the shared host prelude: a borrowed raw-call type, string-in contract parsing
   that names the failing field, zero-side-effect one-shot wrappers, and the pre-resolved and
   size-bounding credential resolver adapters both hosts previously hand-rolled — plus the
@@ -73,7 +75,8 @@ the [task adapter vocabulary](docs/design/2026-08-27-task-adapter-vocabulary.md)
 - `south-transport-reqwest` executes hardened buffered and byte-streaming JSON POST requests,
   buffered body-less GET requests, buffered multipart POST requests (emitting the media type
   the prepared request renders, and sharing the body's allocation rather than copying it), and
-  binary-response JSON POST requests under their own larger body cap,
+  SSML text POST requests under the `application/ssml+xml` media type the contract renders, and
+  binary-response requests under their own larger body cap,
   applies the request's sanctioned user-agent declaration exactly once, applies every auth header
   the prepared request carries (one for the credential arms, the finalizer's diffed set for the
   host-signed arm), adds exactly `TRANSPORT_ADDED_HEADERS_V1` and nothing else, captures only the
@@ -84,7 +87,8 @@ the [task adapter vocabulary](docs/design/2026-08-27-task-adapter-vocabulary.md)
 - `south-provider-conformance` publishes immutable `south.provider-call.v1`,
   `south.provider-stream.v1`, `south.provider-quota-metadata.v1`, `south.header-auth.v1`,
   `south.controlled-query.v1`, `south.controlled-user-agent.v1`, `south.provider-get.v1`,
-  `south.provider-multipart.v1`, and `south.provider-binary.v1` fixtures, while `south-testkit`
+  `south.provider-multipart.v1`, `south.provider-binary.v1`, and `south.provider-media-binary.v1`
+  fixtures, while `south-testkit`
   runs them against assembled host executors. It also carries the host-implemented
   `south.credential-recipe.v1` suite (gate ③ of credential recipes): a harness the host wraps around
   its own recipe executor and credential store, an in-process fake token endpoint, and the runner.

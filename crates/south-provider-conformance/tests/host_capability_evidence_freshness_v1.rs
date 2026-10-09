@@ -21,8 +21,9 @@ use std::{collections::BTreeMap, fs, path::PathBuf};
 use south_provider_conformance::{
     controlled_query_fixtures_v1, controlled_user_agent_fixtures_v1, credential_recipe_fixtures_v1,
     eventstream_framing_fixtures_v1, header_auth_fixtures_v1, provider_binary_fixtures_v1,
-    provider_call_fixtures_v1, provider_get_fixtures_v1, provider_multipart_fixtures_v1,
-    provider_quota_metadata_fixtures_v1, provider_stream_fixtures_v1, request_signing_fixtures_v1,
+    provider_call_fixtures_v1, provider_get_fixtures_v1, provider_media_binary_fixtures_v1,
+    provider_multipart_fixtures_v1, provider_quota_metadata_fixtures_v1,
+    provider_stream_fixtures_v1, request_signing_fixtures_v1,
 };
 
 /// Every capability the manifest may annotate.
@@ -41,6 +42,7 @@ enum CapabilityV1 {
     ProviderGet,
     ProviderMultipart,
     ProviderBinary,
+    ProviderMediaBinary,
     CredentialRecipe,
     EventStreamFraming,
     RequestSigning,
@@ -59,6 +61,7 @@ impl CapabilityV1 {
             Self::ProviderGet => "provider_get",
             Self::ProviderMultipart => "provider_multipart",
             Self::ProviderBinary => "provider_binary",
+            Self::ProviderMediaBinary => "provider_media_binary",
             Self::CredentialRecipe => "credential_recipe",
             Self::EventStreamFraming => "eventstream_framing",
             Self::RequestSigning => "request_signing",
@@ -77,6 +80,7 @@ impl CapabilityV1 {
             Self::ProviderGet => provider_get_fixtures_v1().len(),
             Self::ProviderMultipart => provider_multipart_fixtures_v1().len(),
             Self::ProviderBinary => provider_binary_fixtures_v1().len(),
+            Self::ProviderMediaBinary => provider_media_binary_fixtures_v1().len(),
             Self::CredentialRecipe => credential_recipe_fixtures_v1().len(),
             Self::EventStreamFraming => eventstream_framing_fixtures_v1().len(),
             Self::RequestSigning => request_signing_fixtures_v1().len(),
@@ -84,7 +88,7 @@ impl CapabilityV1 {
     }
 
     /// Every capability, so the test can prove the manifest annotates exactly this set.
-    const fn all() -> [Self; 12] {
+    const fn all() -> [Self; 13] {
         [
             Self::ProviderCall,
             Self::ProviderStream,
@@ -95,6 +99,7 @@ impl CapabilityV1 {
             Self::ProviderGet,
             Self::ProviderMultipart,
             Self::ProviderBinary,
+            Self::ProviderMediaBinary,
             Self::CredentialRecipe,
             Self::EventStreamFraming,
             Self::RequestSigning,

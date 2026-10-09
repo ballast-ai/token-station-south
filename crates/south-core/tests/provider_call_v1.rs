@@ -14,14 +14,15 @@ use south_contracts::{
     CredentialSlotV1, GetRequestV1, JsonBodyV1, JsonPostRequestV1, MultipartBodyV1,
     MultipartBoundaryV1, MultipartPostRequestV1, PreparationErrorV1, ProviderAuthV1,
     ProviderEndpointV1, QueryParameterV1, QueryStringV1, RelativePathV1, SafeHeaders,
-    SecretHeaderV1, SignedHeaderSetV1, SignedHeaderV1, TransportErrorV1,
+    SecretHeaderV1, SignedHeaderSetV1, SignedHeaderV1, TextBodyV1, TextMediaTypeV1,
+    TextPostRequestV1, TransportErrorV1,
 };
 use south_core::{
     AsyncBinaryHttpTransport, AsyncHttpTransport, BinaryTransportFutureV1,
     CredentialResolutionErrorV1, CredentialResolutionFuture, CredentialResolver,
-    PreparedHttpRequestV1, ProviderBindingV1, ProviderCallErrorV1, SecretValue, TransportFuture,
-    execute_binary_call_v1, execute_get_call_v1, execute_multipart_call_v1,
-    execute_provider_call_v1,
+    PreparedHttpRequestV1, ProviderBindingV1, ProviderCallErrorV1, RequestBodyRefV1, SecretValue,
+    TransportFuture, execute_binary_call_v1, execute_get_call_v1, execute_multipart_binary_call_v1,
+    execute_multipart_call_v1, execute_provider_call_v1, execute_text_binary_call_v1,
 };
 use static_assertions::{assert_impl_all, assert_not_impl_any};
 use tokio::sync::oneshot;
@@ -1447,5 +1448,232 @@ async fn a_cancelled_token_pre_empts_the_binary_arm_before_the_transport() {
     .expect_err("a cancelled call never reaches a transport");
 
     assert!(matches!(error, ProviderCallErrorV1::Preparation(PreparationErrorV1::Cancelled)));
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 0);
+}
+
+// ───────────────── multipart and text POST read as bytes (HTTP contract v12) ─────────────────
+
+/// What a bytes-reading transport was handed for a body-carrying request: the four facts the two
+/// version-twelve entry points are judged on.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct BodyObservation {
+    method: Method,
+    url: Url,
+    content_type: Option<String>,
+    body: Vec<u8>,
+    is_text_arm: bool,
+    auth_header_name: String,
+}
+
+#[derive(Default)]
+struct BodyRecordingBinaryTransport {
+    calls: AtomicUsize,
+    observation: Mutex<Option<BodyObservation>>,
+}
+
+impl BodyRecordingBinaryTransport {
+    fn observed(&self) -> BodyObservation {
+        self.observation.lock().expect("lock").clone().expect("the transport was reached")
+    }
+}
+
+impl AsyncBinaryHttpTransport for BodyRecordingBinaryTransport {
+    fn execute_binary<'a>(
+        &'a self,
+        prepared: &'a PreparedHttpRequestV1<'_>,
+        _remaining_timeout: Duration,
+    ) -> BinaryTransportFutureV1<'a> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        let (auth_header_name, _) =
+            prepared.auth_headers().next().expect("both credential arms bind one auth header");
+        *self.observation.lock().expect("lock") = Some(BodyObservation {
+            method: prepared.method().clone(),
+            url: prepared.url().clone(),
+            content_type: prepared.content_type().map(str::to_owned),
+            body: prepared.body().map(RequestBodyRefV1::as_bytes).unwrap_or_default().to_vec(),
+            is_text_arm: matches!(prepared.body(), Some(RequestBodyRefV1::Text(_))),
+            auth_header_name: auth_header_name.to_owned(),
+        });
+        Box::pin(async {
+            Ok(BufferedBinaryResponseV1::try_from_parts(
+                StatusCode::OK,
+                BINARY_SENTINEL.to_vec(),
+                Some("application/octet-stream".to_owned()),
+                None,
+            )
+            .expect("fixture response is valid"))
+        })
+    }
+}
+
+const SSML_SENTINEL: &str = "<speak><voice name='v'>body-sentinel &amp; more</voice></speak>";
+
+fn text_request(
+    slot: &str,
+    auth: impl FnOnce(BearerAuthV1) -> ProviderAuthV1,
+) -> TextPostRequestV1 {
+    TextPostRequestV1::try_new(
+        RelativePathV1::parse(PATH_SENTINEL).expect("fixture path should be valid"),
+        SafeHeaders::try_from_iter([("x-test", HEADER_SENTINEL)])
+            .expect("fixture headers should be valid"),
+        TextBodyV1::try_new(SSML_SENTINEL.to_owned(), TextMediaTypeV1::Ssml)
+            .expect("fixture text is in bounds"),
+        auth(BearerAuthV1::new(CredentialSlotV1::parse(slot).expect("fixture slot"))),
+    )
+    .expect("fixture headers carry no content-type")
+}
+
+/// The multipart twin changes nothing before the wire: the prepared request a bytes-reading
+/// transport receives is the one the UTF-8 multipart path prepares — same method, URL, rendered
+/// media type and bytes — and only the answer's shape differs.
+#[tokio::test]
+async fn the_multipart_binary_entry_point_prepares_what_the_utf8_multipart_path_prepares() {
+    let binding = binding("https://example.com/base/", SLOT_SENTINEL);
+    let request = multipart_request(PATH_SENTINEL, SLOT_SENTINEL);
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+
+    let utf8 = RecordingTransport::default();
+    execute_multipart_call_v1(
+        &binding,
+        &request,
+        &ImmediateResolver::default(),
+        &utf8,
+        deadline,
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("the UTF-8 multipart path succeeds");
+
+    let binary = BodyRecordingBinaryTransport::default();
+    let response = execute_multipart_binary_call_v1(
+        &binding,
+        &request,
+        &ImmediateResolver::default(),
+        &binary,
+        deadline,
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("the multipart answer is read as bytes");
+
+    let text = utf8.observation.lock().expect("lock").clone().expect("observed");
+    let observed = binary.observed();
+    assert_eq!(observed.method, Method::POST);
+    assert_eq!(observed.method, text.method);
+    assert_eq!(observed.url, text.url);
+    assert_eq!(observed.body, text.body.as_bytes());
+    assert_eq!(observed.body, multipart_body().as_bytes());
+    assert_eq!(
+        observed.content_type.as_deref(),
+        Some(format!("multipart/form-data; boundary={MULTIPART_BOUNDARY}").as_str())
+    );
+    assert!(!observed.is_text_arm);
+    assert_eq!(observed.auth_header_name, text.auth_header_name);
+    assert_eq!(response.body(), BINARY_SENTINEL);
+    assert_eq!(binary.calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn the_text_binary_entry_point_prepares_one_post_whose_media_type_south_renders() {
+    let transport = BodyRecordingBinaryTransport::default();
+    let request = text_request(SLOT_SENTINEL, |slot| ProviderAuthV1::HeaderSecret {
+        header: SecretHeaderV1::OcpApimSubscriptionKey,
+        slot,
+    });
+
+    let response = execute_text_binary_call_v1(
+        &binding("https://example.com/base/", SLOT_SENTINEL),
+        &request,
+        &ImmediateResolver::default(),
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("a valid text call succeeds");
+
+    let observed = transport.observed();
+    assert_eq!(observed.method, Method::POST);
+    assert_eq!(observed.url.as_str(), "https://example.com/base/path-sentinel");
+    assert_eq!(observed.content_type.as_deref(), Some("application/ssml+xml"));
+    assert_eq!(observed.body, SSML_SENTINEL.as_bytes());
+    assert!(observed.is_text_arm);
+    assert_eq!(observed.auth_header_name, "ocp-apim-subscription-key");
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.body(), BINARY_SENTINEL);
+}
+
+#[tokio::test]
+async fn the_text_binary_entry_point_refuses_a_slot_mismatch_before_resolver_and_transport() {
+    let transport = BodyRecordingBinaryTransport::default();
+    let resolver = ImmediateResolver::default();
+
+    let error = execute_text_binary_call_v1(
+        &binding("https://example.com/base/", SLOT_SENTINEL),
+        &text_request("different-slot-sentinel", ProviderAuthV1::Bearer),
+        &resolver,
+        &transport,
+        tokio::time::Instant::now() + Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .expect_err("a requested slot that is not the bound one cannot reach a transport");
+
+    assert!(matches!(
+        error,
+        ProviderCallErrorV1::Preparation(PreparationErrorV1::CredentialBindingMismatch)
+    ));
+    assert_eq!(resolver.calls.load(Ordering::SeqCst), 0);
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 0);
+}
+
+/// Neither version-twelve entry point has a signed twin, so both must refuse the host-signed arm
+/// rather than send it unauthenticated.
+#[tokio::test]
+async fn both_version_twelve_entry_points_refuse_the_host_signed_arm() {
+    let signed = |slot| ProviderAuthV1::HostSigned {
+        slot,
+        emits: SignedHeaderSetV1::new(&[SignedHeaderV1::Authorization]).expect("declaration"),
+    };
+    let binding = binding("https://example.com/base/", SLOT_SENTINEL);
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+
+    let transport = BodyRecordingBinaryTransport::default();
+    let multipart = MultipartPostRequestV1::try_new(
+        RelativePathV1::parse(PATH_SENTINEL).expect("fixture path"),
+        SafeHeaders::default(),
+        multipart_body(),
+        signed(BearerAuthV1::new(CredentialSlotV1::parse(SLOT_SENTINEL).expect("slot"))),
+    )
+    .expect("valid");
+    let error = execute_multipart_binary_call_v1(
+        &binding,
+        &multipart,
+        &ImmediateResolver::default(),
+        &transport,
+        deadline,
+        &CancellationToken::new(),
+    )
+    .await
+    .expect_err("the unsigned multipart bytes path cannot serve a signed request");
+    assert!(matches!(
+        error,
+        ProviderCallErrorV1::Preparation(PreparationErrorV1::UnsupportedAuthShape)
+    ));
+
+    let error = execute_text_binary_call_v1(
+        &binding,
+        &text_request(SLOT_SENTINEL, signed),
+        &ImmediateResolver::default(),
+        &transport,
+        deadline,
+        &CancellationToken::new(),
+    )
+    .await
+    .expect_err("the unsigned text path cannot serve a signed request");
+    assert!(matches!(
+        error,
+        ProviderCallErrorV1::Preparation(PreparationErrorV1::UnsupportedAuthShape)
+    ));
     assert_eq!(transport.calls.load(Ordering::SeqCst), 0);
 }

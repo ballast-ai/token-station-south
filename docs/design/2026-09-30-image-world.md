@@ -1110,6 +1110,15 @@ questions, "Q14" below always means this record's Q14 (the multipart twin); the 
 | The twin needs transport work | `AsyncBinaryHttpTransport::execute_binary` takes any `PreparedHttpRequestV1` (`south-core/src/lib.rs:650-657`); the text and binary entry points share `execute_buffered` (`:897`); the reqwest implementation is the shared `fetch_buffered` (`south-transport-reqwest/src/lib.rs:145-162`). 0.26.0 declined the *entry point* ("no multipart call site answers in bytes", `lib.rs:860-862`) | The twin is a thin entry point beside `execute_multipart_call_v1` (`:826`); the transport trait does not change. `TextPostRequestV1` is different: it adds a request-body shape and touches `south-contracts`, `south-core` and the reqwest transport |
 | "`Raising MAX_RESPONSE_BODY_BYTES`" and the other limits | Unchanged: 32 MiB JSON request (`lib.rs:156`), 32 MiB UTF-8 response (`:171`), 64 MiB binary response (`:181`), 100 MiB multipart request (`:165`) | none |
 
+**Implemented (S-I-2).** `HTTP_CONTRACT_VERSION` is 12. The two open items were settled on the defaults: typed
+entry points only (`execute_multipart_binary_call_v1`, `execute_text_binary_call_v1`), no raw, signed or streaming
+twin; and the new rows are their own suite, `south.provider-media-binary.v1` (six cases), so the case counts of
+`south.provider-multipart.v1` (5) and `south.provider-binary.v1` (6) that hosts verified are unchanged. Two additions
+the records did not name: the closed media type is a contract enum, `TextMediaTypeV1` (`application/ssml+xml` only,
+parsed by exact spelling), and an unknown one is refused with a new `ContractErrorV1::UnsupportedTextMediaType`
+(`ContractErrorV1` has been `#[non_exhaustive]` since 0.25.0). The text body bound is
+`MAX_TEXT_REQUEST_BODY_BYTES` = 1 MiB, equal to `media::MAX_MEDIA_TEXT_BODY_BYTES`.
+
 ### 18.2 `contracts.media`, `contracts.image` and embeddings contract 2
 
 `compatibility.json` `contracts` keys on main: `reserved_header_policy` 2, `http` 11, `auth` 5, `error` 2, `stream` 2,
