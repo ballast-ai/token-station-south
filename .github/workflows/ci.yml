@@ -10,6 +10,12 @@ on:
 permissions:
   contents: read
 
+# A new push to a pull request supersedes that pull request's still-running CI. Every other event
+# (a push to main, the weekly schedule) gets its own group, so it always runs to completion.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   quality:
     runs-on: ubuntu-latest
@@ -25,6 +31,39 @@ jobs:
       - uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2
         with:
           tool: cargo-nextest,cargo-deny,cargo-audit,cargo-machete
+      # Without a cache every run compiles wasmtime and the other dependencies from scratch, in
+      # the lint, test, no-default-features and doc steps alike. The root workspace, the fuzz
+      # workspace, every wasm guest component and every runtime-test guest are separate cargo
+      # workspaces with their own `target/`, so each is listed. Only main saves the cache: a pull
+      # request restores main's, and never evicts it with a cache of its own.
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: |
+            .
+            components/embeddings-gemini
+            components/embeddings-openai-compatible
+            components/embeddings-vertex
+            components/provider-anthropic
+            components/provider-bedrock-converse
+            components/provider-bedrock-converse-bearer
+            components/provider-gemini
+            components/provider-openai-compatible
+            components/task-bailian-v2
+            components/task-byteplus-v2
+            components/task-gmi-image-v2
+            components/task-kling
+            components/task-kling-v2
+            components/task-minimax-v2
+            components/task-veo-v2
+            components/task-wan-image-v2
+            components/task-xai-v2
+            crates/south-provider-runtime/tests/guests/t03-canary-provider
+            crates/south-provider-runtime/tests/guests/t09-canary-task
+            crates/south-provider-runtime/tests/guests/t21-unseen-eventstream
+            crates/south-provider-runtime/tests/guests/test-embeddings
+            crates/south-provider-runtime/tests/guests/test-provider
+            fuzz
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Format
         run: cargo fmt --all -- --check
       - name: Clippy
