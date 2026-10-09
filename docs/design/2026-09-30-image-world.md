@@ -1391,6 +1391,33 @@ What the record left to the implementation, as built on branch `feature/image-wo
   base64 string at a declared path gives a 167-byte view in 55 ms; `parse_multipart_parts_v1` splits a 33,554,652-byte
   body in 9 ms (`tests/media_elision_measurement.rs`). Q2 stays closed.
 
+## Implementation note: S-I-3 and S-I-4, the world (2026-10-09)
+
+What the record left to the implementation, as built on branch `image/s-i-34`, for review:
+
+- **World properties.** `WorldSchemaV1` gains four fields, and every check §18.6 lists reads them instead of a world
+  name: `host_import` (`HostImportV1`: `Linked` for provider and task-v1; `Unlinked` for task-v2, whose scan refuses
+  only the two signing `host` interfaces; `Pure` for embeddings and image, whose scan refuses every `token-station:`
+  import and every `host` interface), `value_channel` (provider, embeddings, image: `config_schema` and exported
+  credential attributes), `request_declarations` (provider: `endpoint`, `host_values`, `signing`, `stream_framing`,
+  `usage_evidence`, `request_facts`) and `instance_declarations` (provider: `query_parameters`, `quota_headers`,
+  `user_agent`; split from the previous one so the speech world can take `query_parameters` alone, speech §17). Task-v2
+  keeps its narrower scan rather than joining `Pure`, so the four existing worlds behave exactly as before, error
+  order included. Adding public fields breaks a host that builds a `WorldSchemaV1` literal; none in this repository
+  does. The capability rules (`chat`, the three task stages, `embed`, one operation word) stay keyed by world name:
+  each has its own error variant.
+- **`ManifestErrorV1::ImageOperationRequired`**: "every image component must support `generate`, `edit` or both".
+  Breaking for a host that matches the enum exhaustively; the release record (S-I-8) lists it as 0.47.0 listed
+  `EmbedCapabilityRequired`.
+- **Runtime call names**: `call_image_model_capabilities`, `call_image_prepare`, `call_image_parse_response`,
+  `call_image_render`. The provider world already has `call_model_capabilities` and `call_parse_response` under the
+  same WIT names, so the image face is prefixed throughout, as the embeddings face named its `map-provider-error`
+  apart.
+- **The test guest** `tests/guests/test-image` is built by `scripts/prebuild-components.sh` like the other runtime
+  guests, and `image_world_v1` is in the nextest setup-script filter. Its manifest declares no south contract, since
+  `compatibility.json` records `contracts.media` and `contracts.image` only at S-I-8.
+- No crate version is bumped in these steps; S-I-8 bumps `south-provider-api` with the other guest-linked crates.
+
 ## Revision note (2026-10-09)
 
 - Header: `Status` is accepted; `Rulings` and `Revised` updated; a reconciliation baseline paragraph added.
