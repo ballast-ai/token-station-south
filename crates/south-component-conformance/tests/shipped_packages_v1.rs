@@ -958,6 +958,33 @@ fn the_embeddings_packages_declare_the_first_runtime_with_the_world() {
     );
 }
 
+/// `embeddings-gemini` declares the `media` capability and embeddings contract 2, which gate ① first
+/// admits in the 0.51.0 runtime (embeddings record §17.4), so that is the oldest runtime that admits
+/// it and the package declares it: a host that claims 0.50.0 refuses it through the declared runtime
+/// alone, even with contract 2 in its range. Contract 1 hosts refuse it through the contract number.
+#[test]
+fn the_gemini_package_declares_the_first_runtime_with_media_and_contract_2() {
+    let manifest: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(repo_root().join("components/embeddings-gemini/manifest.json"))
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(manifest.compatibility.south_runtime, "0.51.0");
+    assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
+    let mut on_050 = host_range::host_range();
+    "0.50.0".clone_into(&mut on_050.south_runtime);
+    assert!(matches!(
+        compatibility_admits(&manifest, &on_050),
+        Err(CompatibilityMismatchV2::SouthRuntimeAboveHost { .. })
+    ));
+    let mut contract_1_only = host_range::host_range();
+    contract_1_only.contracts.insert("embeddings".to_owned(), BTreeSet::from([1]));
+    assert!(matches!(
+        compatibility_admits(&manifest, &contract_1_only),
+        Err(CompatibilityMismatchV2::Contract { declared: 2, .. })
+    ));
+}
+
 /// `embeddings-vertex` declares a family's `config_schema` and an exported credential attribute,
 /// which gate ① first admits in the embeddings world in the 0.48.0 runtime (embeddings record §16),
 /// so that is the oldest runtime that admits it and the package declares it: a host that claims

@@ -107,8 +107,9 @@ nothing: the loader refuses any `token-station:` or `host` import for it, and th
 links the signing host. The manifest admits the `bearer` and `header_secret` arms, requires `embed`
 and at least one provider family, admits (from 0.48.0) the two sources of `ProviderConfig.declared`
 (a family's `config_schema` and exported credential attributes, which the task worlds refuse), and
-refuses every other provider-world declaration as the task worlds do. Contract 1 carries text and token-id inputs only, so its vocabulary is `embed`, `batch`,
-`dimensions` and `token_ids`; `media` arrives with contract 2. The runtime stays JSON-only and
+refuses every other provider-world declaration as the task worlds do. Contract 1 carries text and token-id inputs only (vocabulary `embed`, `batch`, `dimensions`, `token_ids`);
+contract 2 (since 0.51.0) adds inline media inputs and the `media` word, which a package may declare only with
+`contracts: {"embeddings": 2}`, and a host admitting such a package gives the world at least 192 MiB of guest memory. The runtime stays JSON-only and
 routes by world (provider-v2 / task-v1 / task-v2 / embeddings-v1). The host keeps credentials,
 HTTP, vector extraction, pricing and settlement; both hosts are `not_verified` for this world in
 `compatibility.json`. As with task-v2, the IR-bearing `PreparedEmbeddingsV1`, its single JSON
@@ -201,7 +202,15 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.50.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.49.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.51.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.50.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**v0.51.0**: embeddings contract 2, inline media inputs (release record `docs/design/2026-10-09-release-0.51.0.md`,
+embeddings record §17). `EmbeddingInputV1::Media` and `parse_embeddings_request_v2` carry a `data:<media type>;base64,`
+input undecoded; the `media` capability word needs `contracts: {"embeddings": 2}`; `embeddings-gemini` 1.1.0
+(`south_runtime` 0.51.0) builds Gemini's `inline_data` parts. A host admitting a `media` package builds its embeddings
+runtime with at least 192 MiB of guest memory (`RuntimeLimitsV1::for_embeddings_media()`; south's default is
+unchanged) and answers 413 above a 15 MiB request view (E-O2). The three crates every component links took 0.50.0
+under Q47, so the other sixteen packages take a patch bump with unchanged behavior and `south_runtime`. The
+`gemini-embedding-001` text-only refusal is a hard-code carried over from the native arm (open item E-O1).
 **v0.50.0**: the model catalog (release record `docs/design/2026-10-08-release-0.50.0.md`, boundary record §13.11,
 §13.12). `catalogs/model-catalog.json` is published as `model-catalog-v0.50.0.json` and listed in the release index
 under `catalogs` (`south.model-catalog.v1`, read by `south_provider_runtime::ModelCatalogV1`). It is the first release
