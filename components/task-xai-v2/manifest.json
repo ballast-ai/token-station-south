@@ -1,6 +1,6 @@
 {
   "name": "task-xai-v2",
-  "version": "0.35.8",
+  "version": "0.35.9",
   "api_version": "task-adapter-v2",
   "providers": [
     "xai-video"
