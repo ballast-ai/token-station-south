@@ -327,9 +327,11 @@ fn the_embeddings_world_has_independent_unverified_host_adoption_records() {
         "south.embeddings-component.v1"
     );
     assert_eq!(manifest["conformance"]["embeddings_component_v1_suite"], 1);
+    // The newest contract the release decodes; the shipped contract 1 packages declare 1 and the
+    // host range lists both (`host_range`).
     assert_eq!(
         manifest["contracts"]["embeddings"],
-        u32::from(south_contracts::EMBEDDINGS_CONTRACT_VERSION)
+        u32::from(south_contracts::EMBEDDINGS_CONTRACT_VERSION_V2)
     );
 }
 
@@ -600,8 +602,14 @@ fn every_shipped_package_declares_the_range_handshake() {
             if manifest.api_version.starts_with("task") {
                 [("task".to_owned(), u32::from(south_contracts::TASK_CONTRACT_VERSION))].into()
             } else if manifest.api_version == south_provider_api::EMBEDDINGS_WORLD {
-                [("embeddings".to_owned(), u32::from(south_contracts::EMBEDDINGS_CONTRACT_VERSION))]
-                    .into()
+                // Only a package that accepts media speaks contract 2 (embeddings record §17.4);
+                // the others stay at the contract 1 they were published with.
+                let contract = if manifest.capabilities.contains("media") {
+                    south_contracts::EMBEDDINGS_CONTRACT_VERSION_V2
+                } else {
+                    south_contracts::EMBEDDINGS_CONTRACT_VERSION
+                };
+                [("embeddings".to_owned(), u32::from(contract))].into()
             } else {
                 std::collections::BTreeMap::new()
             };
