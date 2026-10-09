@@ -20,6 +20,8 @@ thiserror.workspace = true
 url.workspace = true
 
 [dev-dependencies]
+# Only the media codec's property test reads it: the codec every guest links is the crate's own.
+base64.workspace = true
 proptest.workspace = true
 serde = { workspace = true, features = ["derive"] }
 static_assertions.workspace = true

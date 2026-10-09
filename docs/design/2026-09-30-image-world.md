@@ -1285,7 +1285,7 @@ south acceptance) waits for; the south acceptance of every step is on south alon
 
 | Step | Work | Files and crates | Acceptance |
 |---|---|---|---|
-| **S-I-1** Contract types and pure functions | New module `south-contracts::media`: request view and part list types, `MediaRequestDescriptorV1` with `MediaAuthV1`, the closed transforms of §6.4 (all of them, including `from_hex`, `concat`, `wav_pcm_s16le`), the response view and `response_body_form`, `MediaLimitsV1`, `parse_multipart_parts_v1`, `elide_v1`, `encode_multipart_v1`, `ArtifactUrlV1::parse`, `is_forbidden_egress_address`, and `decode_sse_v1` (released with this minor; the Responses record R1 also waits for it; the host's B6 plan recommends releasing it separately and earlier, its Q-B6-6, unruled, and if lv rules that it leaves this step). New module `south-contracts::image`: facts, `ImageMeteringV1`, `ImageOutcomeV1`, artifact forms, tier words. Revise the 0.25.0 record's "no encoder" half-sentence (Q1). R-1 (A) and R-2 (exact, widened grammar) ruled 2026-10-09; `ImageModelCapabilitiesV1` carries only the dialect-bound fields listed in §7 | `crates/south-contracts/src/` (`lib.rs` re-exports, new `media.rs`, `image.rs`; the SSE decoder beside `eventstream.rs`), golden vectors under `crates/south-contracts/tests/`, fuzz targets in `fuzz/fuzz_targets/` (`contract_parsers.rs` pattern), `docs/design/2026-09-09-multipart-request-body.md` | Golden vectors for each function; fuzz targets build (`cargo check --manifest-path fuzz/Cargo.toml --all-targets --locked`); `scripts/check-boundaries.sh`; timing of `elide_v1` and the multipart splitter on a 32 MiB base64 body recorded in the release record (the E-Q1 pattern); `south-contracts` version bump (Q47) |
+| **S-I-1** Contract types and pure functions | New module `south-contracts::media`: request view and part list types, `MediaRequestDescriptorV1` with `MediaAuthV1`, the closed transforms of §6.4 (all of them, including `from_hex`, `concat`, `wav_pcm_s16le`), the response view and `response_body_form`, `MediaLimitsV1`, `parse_multipart_parts_v1`, `elide_v1`, `encode_multipart_v1`, `ArtifactUrlV1::parse`, `is_forbidden_egress_address`, but **not** `decode_sse_v1`: lv ruled the host's B6 plan Q-B6-6 on 2026-10-09 (release it separately and earlier, as a small minor, so the Responses record R1 does not wait for this world), so it leaves this step; the `sse` response body form stays in the `contracts.media` v1 vocabulary and its view is built by that decoder. New module `south-contracts::image`: facts, `ImageMeteringV1`, `ImageOutcomeV1`, artifact forms, tier words. Revise the 0.25.0 record's "no encoder" half-sentence (Q1). R-1 (A) and R-2 (exact, widened grammar) ruled 2026-10-09; `ImageModelCapabilitiesV1` carries only the dialect-bound fields listed in §7 | `crates/south-contracts/src/` (`lib.rs` re-exports, new `media.rs`, `image.rs`; the SSE decoder beside `eventstream.rs`), golden vectors under `crates/south-contracts/tests/`, fuzz targets in `fuzz/fuzz_targets/` (`contract_parsers.rs` pattern), `docs/design/2026-09-09-multipart-request-body.md` | Golden vectors for each function; fuzz targets build (`cargo check --manifest-path fuzz/Cargo.toml --all-targets --locked`); `scripts/check-boundaries.sh`; timing of `elide_v1` and the multipart splitter on a 32 MiB base64 body recorded in the release record (the E-Q1 pattern); `south-contracts` version bump (Q47) |
 | **S-I-2** HTTP contract 12 | `HTTP_CONTRACT_VERSION` 11 → 12 with its doc entry; `execute_multipart_binary_call_v1` beside `execute_multipart_call_v1`; `TextPostRequestV1` with a binary execution entry point (carried for the speech record, Q1 there); the raw-twin question of §18.1; testkit runners; provider-suite rows (own suite or an existing one, for the maintainers) | `crates/south-contracts/src/lib.rs`, `crates/south-core/src/lib.rs` (and `raw.rs` if a raw form is wanted), `crates/south-transport-reqwest/src/lib.rs` (text body rendering only), `crates/south-testkit/src/provider_binary.rs`, `crates/south-provider-conformance`, `compatibility.json`, the two pinned tests `http_contract_v1.rs:54` and `declared_instances_v1.rs:26` | New suite rows pass in the testkit; contract 11 requests are exactly contract 12 requests that do not use the new shapes; `compatibility.json` `contracts.http` 12 and the crate capability strings updated; the host's `provider_binary` gate ③ result is not claimed for the new rows |
 | **S-I-3** WIT, manifest, gate ① | `wit/image-adapter.wit` (§7); `IMAGE_WIT_PACKAGE`, `IMAGE_WORLD`, `IMAGE_BEHAVIOR_SUITE`, `IMAGE_CAPABILITIES`, `IMAGE_WORLD_SCHEMA`, a `KNOWN_WORLDS` row, a `validate_role` branch; admit `config_schema` and credential attributes in this world (§18.3); turn the enumerated world exclusions of §18.6 into world properties; new `ManifestErrorV1` variant for "operation word required" (breaking for hosts matching it exhaustively, as 0.47.0's was) | `crates/south-provider-api/` (`wit/`, `src/manifest.rs`, `src/values.rs`, `src/lib.rs`, tests `provider_api_v2.rs`) | A manifest declaring neither `generate` nor `edit`, an unknown word, `host_values`, an `endpoint`, an instance declaration or the `oauth` arm is refused; a manifest with a family's `config_schema` and exported attributes is admitted; the existing four worlds' tests pass unchanged; `south-provider-api` version bump |
 | **S-I-4** Runtime world | `bindgen!` module, `InstanceKind::Image`, `call_model_capabilities`, `call_prepare`, `call_parse_response`, `call_render`; the host import is not linked and the import scan refuses `token-station:*` and any `host` interface for this world; limits unchanged | `crates/south-provider-runtime/src/` (`bindings.rs`, `component.rs`, `loader.rs`), a test guest `tests/guests/test-image`, test `image_world_v1.rs` | The `embeddings_world_v1.rs` cases ported: a guest importing `host` is refused, a guest with the wrong world is refused, payload above 16 MiB is refused, determinism; `declared_runtime_v1` still passes |
@@ -1357,6 +1357,39 @@ executor in the host), I3-6 (the Reve bridge, with P18's Reve edit).
 - Consistency pass, HTTP contract 10 (§6.3a, §15, Q14): one bump, in this world's minor, carrying both
   `execute_multipart_binary_call_v1` and speech's `TextPostRequestV1`; ASR uses the multipart binary twin.
 - Consistency pass, §15: the embeddings declaration is quoted correctly as `{"media": 1, "embeddings": 1}`.
+
+## Implementation note: S-I-1a, the `media` module (2026-10-09)
+
+What the record left to the implementation, as built on branch `feature/image-world`, for review:
+
+- **`decode_sse_v1` is out of S-I-1** (Q-B6-6, ruled 2026-10-09; see §19). `ResponseBodyFormV1::Sse` exists, and
+  `build_media_response_view_v1` refuses it (`SseUnavailable`) until that decoder ships.
+- **Limits added to `media_limits`**: at most 64 parts in a multipart request view or descriptor, at most 8 KiB of
+  header block per part, `state` at most 8 KiB, JSON nesting at most 128 levels (`MAX_MEDIA_JSON_DEPTH`).
+- **The JSON tree.** `elide_v1` and the template expander share one strict RFC 8259 parser that keeps source order,
+  every number's and every string's source text; a view or an expanded body is that text re-emitted compactly. A
+  `serde_json::Value` round trip was not used: it re-sorts keys and re-renders numbers, which a host in another
+  language could not reproduce. Strings the elider writes (`head`, and an expanded reference) use `serde_json`'s
+  escaping, stated in the vectors.
+- **Multipart parsing** accepts what clients send and refuses the rest: no preamble, CRLF line breaks, a close
+  delimiter followed by nothing, CRLF or LF; a `form-data` disposition with a non-empty `name`; `filename` or
+  `filename*` makes a file part (`filename*`'s value is not decoded); a text part must be UTF-8; a
+  `content-transfer-encoding` other than `binary`, `8bit` or `7bit` is refused. Repeated names keep their order.
+- **Multipart encoding** writes `Content-Disposition` with `name` (and `filename`), escapes `"`, CR and LF as `%22`,
+  `%0D`, `%0A` (the HTML form-data rule), writes a file part's `Content-Type` (`application/octet-stream` when the
+  descriptor gives none), and refuses a content that contains the boundary, so the host retries with another.
+- **Descriptor wire shape**: `{method, path, query?: [{name, value}], headers?: [{name, value}], auth?, body}`, the
+  body `{"json": {"template": …}} | {"multipart": {"parts": […]}} | {"text": {"media_type", "text"}} | "empty"`.
+  Query names are the five sanctioned `QueryParameterV1` names only (§18.3: this world declares none). A reference
+  node is `{"$south.ref": {"blob", "transform", "media_type"?}}`; `media_type` is what `data_url` writes, and
+  `concat` is never the transform of one reference.
+- **Safe fetch**: `64:ff9b:1::/48` (RFC 8215 local use) is refused as a whole prefix, because a translator may place
+  the embedded address anywhere after the /48; the well-known `64:ff9b::/96` is rechecked as IPv4, as §11 says.
+- **Codecs** are crate-private (no `base64` runtime dependency in a crate every component links); their decisions are
+  pinned against the `base64` crate by a property test.
+- **Timing** (Apple M4, release build, best of five): `elide_v1` on a 33,554,483-byte JSON document carrying a 32 MiB
+  base64 string at a declared path gives a 167-byte view in 55 ms; `parse_multipart_parts_v1` splits a 33,554,652-byte
+  body in 9 ms (`tests/media_elision_measurement.rs`). Q2 stays closed.
 
 ## Revision note (2026-10-09)
 

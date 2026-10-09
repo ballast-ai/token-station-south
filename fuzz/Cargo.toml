@@ -27,4 +27,10 @@ name = "contract_parsers"
 path = "fuzz_targets/contract_parsers.rs"
 test = false
 
+[[bin]]
+doc = false
+name = "media_parsers"
+path = "fuzz_targets/media_parsers.rs"
+test = false
+
 [workspace]
