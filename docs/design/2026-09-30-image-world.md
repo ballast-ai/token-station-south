@@ -1427,6 +1427,35 @@ What the record left to the implementation, as built on branch `image/s-i-34`, f
   `compatibility.json` records `contracts.media` and `contracts.image` only at S-I-8.
 - No crate version is bumped in these steps; S-I-8 bumps `south-provider-api` with the other guest-linked crates.
 
+## Implementation note: S-I-5 and S-I-6 (2026-10-10)
+
+What the record left to the implementation, as built on branch `feature/image-world`, for review:
+
+- **Fixture shapes** (`image_fixture.rs`). `capabilities`: `{"provider_config"}` → the list or `{"error"}`.
+  `prepare`: `{"provider_config", "request": <request view>, "context"}` → the prepared call or `{"error"}`.
+  `response`: `{"prepare_case", "response": {"status", "headers"?, "body"? | "body_base64"?, "content_type"?}}` —
+  the raw upstream answer; the suite prepares the named case and builds the view a host would, with the declared body
+  form and elision paths, so a fixture pins what a host sees. `render`: `{"response_cases", "context"}`. A response
+  sidecar `{"missing": "<fact>"}` / `{"absent": "<fact>"}` marks the `missing_meter_is_not_zero` /
+  `evidence_absent_is_null` rows.
+- **Rows** (`image_suite.rs`): the five new `CheckV1` variants `metering_sample`, `missing_meter_is_not_zero`,
+  `evidence_absent_is_null`, `pre_dispatch_refusal`, `reference_integrity`, plus the existing coverage, fixture match,
+  determinism, unknown-field tolerance (context and request view), `UndeclaredValuesIgnored`,
+  `DescriptorAuthWithinManifest` (through `admit_media_descriptor_auth`), `EndpointConfinement`,
+  `TerminalOnlyFromTheWire` and `AuthErrorsAreNotRetriable`. The §9.4 item 1 host check (every required fact of every
+  required form) runs on each `succeeded` round and reports under `missing_meter_is_not_zero`.
+- **`admit_media_descriptor_auth`** shares one presentation rule with `admit_descriptor_auth` (refactored, the existing
+  sixteen admission cases unchanged); a media descriptor's slot is checked as the kernel's `authorize` checks one.
+- **`image-azure`**: family `azure-mai`; operations `generate`, `edit`; `header_secret` `api-key`; metering `tokens` or
+  `images`; declared buckets `total_input` and `total_output` (every OpenAI-images usage block carries both), the
+  breakdown reported when present and folded by the host otherwise (the native arm's #184 R1 rule, now host pricing).
+  The client body is the upstream body with each image delivered by the host: `parse-response` keeps the elided body
+  with each image `null` in `extras`, and `render` puts the artifact markers back. Deliberate differences from the native
+  arm are listed in `reference_azure_image.rs`: a missing declared bucket, a negative or fractional count, and a prompt
+  above the fallback threshold are refused or `unknown` where the native arm settled, clamped or forwarded them.
+- **The model catalog** already carries the five MAI image ids (`MAI-Image-2.5`, …, from the host's `azure_mai_image`
+  profile), matched case-sensitively; the fixtures route those ids.
+
 ## Revision note (2026-10-09)
 
 - Header: `Status` is accepted; `Rulings` and `Revised` updated; a reconciliation baseline paragraph added.
