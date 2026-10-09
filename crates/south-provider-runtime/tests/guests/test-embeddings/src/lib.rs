@@ -29,6 +29,27 @@ fn parse(input: &str, what: &str) -> Result<Value, String> {
         .map_err(|_| error_envelope(500, &format!("{what} is not JSON")).to_string())
 }
 
+/// Honours the magic keys that make this guest hostile on demand, the same
+/// three the provider test guest has: hang forever, allocate past the limit,
+/// panic. Carried in the provider config of `build-embeddings-request`.
+fn obey_magic(value: &Value) {
+    if value.get("__hang").is_some() {
+        // Burn forever; the host's epoch deadline is what stops this.
+        loop {
+            std::hint::black_box(0);
+        }
+    }
+    if let Some(mb) = value.get("__grow_mb").and_then(Value::as_u64) {
+        // Touch every page so the growth is real, not just reserved.
+        let mut hog: Vec<u8> = Vec::new();
+        hog.resize(usize::try_from(mb).unwrap_or(usize::MAX) * 1024 * 1024, 1);
+        std::hint::black_box(&hog);
+    }
+    if value.get("__panic").is_some() {
+        panic!("the input told me to");
+    }
+}
+
 impl Guest for TestEmbeddings {
     fn metadata() -> AdapterMetadata {
         AdapterMetadata {
@@ -48,6 +69,7 @@ impl Guest for TestEmbeddings {
     ) -> Result<String, String> {
         let config = parse(&provider_config, "provider-config")?;
         let request = parse(&embeddings_request, "embeddings-request")?;
+        obey_magic(&config);
         Ok(json!({
             "descriptor": {
                 "method": "POST",

@@ -19,6 +19,8 @@ wasmtime-wasi.workspace = true
 [dev-dependencies]
 proptest.workspace = true
 serde_json.workspace = true
+# The guest-trap tests call from a tokio worker and a current-thread runtime.
+tokio = { workspace = true, features = ["rt", "rt-multi-thread"] }
 
 [lints]
 workspace = true

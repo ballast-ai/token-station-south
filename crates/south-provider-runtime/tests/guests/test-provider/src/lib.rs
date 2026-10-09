@@ -139,6 +139,13 @@ impl Guest for TestProvider {
     }
 
     fn parse_stream_chunk(chunk: Vec<u8>) -> Result<String, String> {
+        // A chunk that is a JSON object can carry the same magic keys as the
+        // other calls; real SSE chunks begin with `data:` and never match.
+        if chunk.first() == Some(&b'{') {
+            if let Ok(value) = serde_json::from_slice::<Value>(&chunk) {
+                obey_magic(&value);
+            }
+        }
         let mut buffer = STREAM_BUFFER.lock().expect("single-threaded guest");
         buffer.extend_from_slice(&chunk);
 
