@@ -1,10 +1,13 @@
-//! Embeddings contract 1: the IR-independent request, estimate, usage and vector-locator types,
-//! and the northbound parsing, vector extraction and rendering both hosts execute.
+//! Embeddings contracts 1 and 2: the IR-independent request, estimate, usage and vector-locator
+//! types, and the northbound parsing, vector extraction and rendering both hosts execute.
 //!
 //! Normative record: `docs/design/2026-09-30-embeddings-contract.md`. Contract 1 carries text and
-//! token-id inputs only (§15); a media input is recognized and refused, never carried. JSON is the
-//! wire for every type here, and the serde shapes are pinned by golden tests because two hosts and
-//! the guests must agree byte for byte.
+//! token-id inputs only (§15); [`parse_embeddings_request_v1`] recognizes a media input and
+//! refuses it. Contract 2 additionally carries a media input inline, bounded by the runtime
+//! payload limit (§17); [`parse_embeddings_request_v2`] returns it as
+//! [`EmbeddingInputV1::Media`]. Nothing else differs between the contracts. JSON is the wire for
+//! every type here, and the serde shapes are pinned by golden tests because two hosts and the
+//! guests must agree byte for byte.
 
 use crate::MAX_BINARY_RESPONSE_BODY_BYTES;
 use serde::{Deserialize, Serialize};
@@ -12,8 +15,23 @@ use serde_json::{Map, Number, Value};
 use std::{borrow::Cow, fmt};
 use thiserror::Error;
 
-/// The version of the embeddings contract (record §12).
+/// Embeddings contract 1, text and token-id inputs (record §12, §15).
+///
+/// Kept under the name it has always had, so a host that built its range from it keeps admitting
+/// contract 1 packages; the newest contract is [`EMBEDDINGS_CONTRACT_VERSION_V2`].
 pub const EMBEDDINGS_CONTRACT_VERSION: u16 = 1;
+/// Embeddings contract 2: contract 1 plus inline media inputs (record §17).
+pub const EMBEDDINGS_CONTRACT_VERSION_V2: u16 = 2;
+/// Every embeddings contract this crate decodes, oldest first. A host's range lists these, and
+/// `compatibility.json` records the last.
+pub const EMBEDDINGS_CONTRACT_VERSIONS: [u16; 2] =
+    [EMBEDDINGS_CONTRACT_VERSION, EMBEDDINGS_CONTRACT_VERSION_V2];
+/// The longest serialized request view a component receives (record §17.8).
+///
+/// This is the runtime's per-call payload limit, 16 MiB, which `south-provider-runtime` enforces
+/// in both directions. A larger request is the host's 413 before admission; the parsers, which
+/// see the northbound body and not the view, do not enforce it.
+pub const MAX_EMBEDDINGS_REQUEST_VIEW_BYTES: usize = 16 * 1024 * 1024;
 /// At most this many inputs per request (record §3; the published `OpenAI` limit).
 pub const MAX_EMBEDDING_INPUTS: usize = 2048;
 /// The serialized parse context a component hands back through the host is at most this long.
@@ -53,7 +71,8 @@ pub enum EmbeddingsRequestErrorV1 {
     /// `input` carries more than [`MAX_EMBEDDING_INPUTS`] inputs.
     #[error("too many embeddings inputs")]
     TooManyInputs,
-    /// An input is a base64 `data:` URI; contract 1 carries no media inputs (record §15).
+    /// An input is a base64 `data:` URI, or a [`EmbeddingInputV1::Media`], where the contract
+    /// carries no media inputs: contract 1 (record §15), or a request built for contract 1.
     #[error("media embeddings inputs are not supported")]
     MediaInputNotSupported,
     /// `dimensions` is not an integer in `1..=u32::MAX`.
@@ -116,25 +135,53 @@ pub enum EmbeddingsContractErrorV1 {
     NorthUsageMismatch,
 }
 
-/// One northbound input (record §15: contract 1 has no media or blob inputs).
+/// One northbound input (record §3; contract 1 has no media inputs, §15, and contract 2 carries
+/// them inline, §17).
 ///
-/// Wire: `{"text":"hello"}` or `{"token_ids":[1,2]}`.
+/// Wire: `{"text":"hello"}`, `{"token_ids":[1,2]}` or, in contract 2 only,
+/// `{"media":{"media_type":"image/png","data":"iVBORw0KGgo="}}`; unknown fields are refused.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub enum EmbeddingInputV1 {
     /// A non-empty text input that is not a media `data:` URI.
     Text(String),
     /// A non-empty token-id sequence.
     TokenIds(Vec<u32>),
+    /// A media input, contract 2 only (record §17.2): the northbound string
+    /// `data:<media_type>;base64,<data>` split at its first `;base64,`.
+    Media {
+        /// The text between `data:` and the first `;base64,`, verbatim; `type/subtype` with
+        /// optional `;name=value` parameters, each part an RFC 2045 token.
+        media_type: String,
+        /// The text after that first `;base64,`, verbatim: the client's base64 string, neither
+        /// decoded nor validated, and empty when the client sent nothing after the marker.
+        data: String,
+    },
 }
 impl EmbeddingInputV1 {
-    fn validate(&self) -> Result<(), EmbeddingsRequestErrorV1> {
-        match self {
-            Self::Text(text) if text.is_empty() => Err(EmbeddingsRequestErrorV1::InvalidInput),
-            Self::Text(text) if media_type_of(text).is_some() => {
+    /// Whether this input is a [`EmbeddingInputV1::Media`].
+    #[must_use]
+    pub const fn is_media(&self) -> bool {
+        matches!(self, Self::Media { .. })
+    }
+    fn validate(&self, media: MediaPolicy) -> Result<(), EmbeddingsRequestErrorV1> {
+        let invalid = EmbeddingsRequestErrorV1::InvalidInput;
+        match (self, media) {
+            (Self::Text(text), _) if text.is_empty() => Err(invalid),
+            (Self::Text(text), MediaPolicy::Refuse) if media_type_of(text).is_some() => {
                 Err(EmbeddingsRequestErrorV1::MediaInputNotSupported)
             }
-            Self::TokenIds(ids) if ids.is_empty() => Err(EmbeddingsRequestErrorV1::InvalidInput),
+            // The parser classifies such a string as `Media`; text holding one was built by hand.
+            (Self::Text(text), MediaPolicy::Inline) if media_type_of(text).is_some() => {
+                Err(invalid)
+            }
+            (Self::TokenIds(ids), _) if ids.is_empty() => Err(invalid),
+            (Self::Media { .. }, MediaPolicy::Refuse) => {
+                Err(EmbeddingsRequestErrorV1::MediaInputNotSupported)
+            }
+            (Self::Media { media_type, .. }, MediaPolicy::Inline) if !is_media_type(media_type) => {
+                Err(invalid)
+            }
             _ => Ok(()),
         }
     }
@@ -148,8 +195,22 @@ impl fmt::Debug for EmbeddingInputV1 {
             Self::TokenIds(ids) => {
                 formatter.debug_struct("TokenIds").field("count", &ids.len()).finish()
             }
+            Self::Media { media_type, data } => formatter
+                .debug_struct("Media")
+                .field("media_type", media_type)
+                .field("byte_count", &data.len())
+                .finish(),
         }
     }
+}
+
+/// Whether a request may hold media inputs: the one difference between the contracts.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum MediaPolicy {
+    /// Contract 1: a media input is refused.
+    Refuse,
+    /// Contract 2: a media input is carried inline.
+    Inline,
 }
 
 /// Whether the northbound `input` was one input or an array (record §3, §8).
@@ -179,7 +240,10 @@ pub enum EncodingV1 {
 /// The request a component builds from: the northbound request, parsed per record §3.
 ///
 /// Wire: `{"model":"m","inputs":[{"text":"a"}],"input_shape":"single","dimensions":null,
-/// "encoding_format":null,"user":null,"extra":{}}`; unknown fields are refused.
+/// "encoding_format":null,"user":null,"extra":{}}`; unknown fields are refused. The decoder is
+/// contract 2's ([`EmbeddingsRequestV1::new_v2`]): the frame is the same for both contracts, and a
+/// contract 1 guest must decode a media input to answer it with a capability error. The seam that
+/// calls a component keeps media from a contract 1 package ([`Self::carries_media`]).
 /// `encoding_format` keeps whether the caller sent it, so a component that forwards the client
 /// body reproduces it exactly; [`EmbeddingsRequestV1::requested_encoding`] is the effective value.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -208,7 +272,7 @@ struct EmbeddingsRequestWire {
 impl TryFrom<EmbeddingsRequestWire> for EmbeddingsRequestV1 {
     type Error = EmbeddingsRequestErrorV1;
     fn try_from(wire: EmbeddingsRequestWire) -> Result<Self, Self::Error> {
-        Self::new(
+        Self::new_v2(
             wire.model,
             wire.inputs,
             wire.input_shape,
@@ -221,9 +285,59 @@ impl TryFrom<EmbeddingsRequestWire> for EmbeddingsRequestV1 {
 }
 
 impl EmbeddingsRequestV1 {
-    /// Validates every invariant the northbound parser guarantees, so a request built by hand or
-    /// decoded from JSON cannot carry what [`parse_embeddings_request_v1`] would refuse.
+    /// Validates every invariant the contract 1 northbound parser guarantees, so a request built
+    /// by hand cannot carry what [`parse_embeddings_request_v1`] would refuse: a media input is
+    /// [`EmbeddingsRequestErrorV1::MediaInputNotSupported`]. Use [`Self::new_v2`] for contract 2.
     pub fn new(
+        model: String,
+        inputs: Vec<EmbeddingInputV1>,
+        input_shape: InputShapeV1,
+        dimensions: Option<u32>,
+        encoding_format: Option<EncodingV1>,
+        user: Option<String>,
+        extra: Map<String, Value>,
+    ) -> Result<Self, EmbeddingsRequestErrorV1> {
+        Self::build(
+            MediaPolicy::Refuse,
+            model,
+            inputs,
+            input_shape,
+            dimensions,
+            encoding_format,
+            user,
+            extra,
+        )
+    }
+    /// Validates every invariant [`parse_embeddings_request_v2`] guarantees, which are those of
+    /// [`Self::new`] except that a [`EmbeddingInputV1::Media`] is carried (record §17.3). Its
+    /// media type must satisfy the media-type rule of [`media_type_of`]; a `Text` input must not
+    /// match that rule, since the parser would have made it a `Media` input.
+    pub fn new_v2(
+        model: String,
+        inputs: Vec<EmbeddingInputV1>,
+        input_shape: InputShapeV1,
+        dimensions: Option<u32>,
+        encoding_format: Option<EncodingV1>,
+        user: Option<String>,
+        extra: Map<String, Value>,
+    ) -> Result<Self, EmbeddingsRequestErrorV1> {
+        Self::build(
+            MediaPolicy::Inline,
+            model,
+            inputs,
+            input_shape,
+            dimensions,
+            encoding_format,
+            user,
+            extra,
+        )
+    }
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the seven fields of the request plus the contract's media policy"
+    )]
+    fn build(
+        media: MediaPolicy,
         model: String,
         inputs: Vec<EmbeddingInputV1>,
         input_shape: InputShapeV1,
@@ -241,7 +355,7 @@ impl EmbeddingsRequestV1 {
         if inputs.len() > MAX_EMBEDDING_INPUTS {
             return Err(EmbeddingsRequestErrorV1::TooManyInputs);
         }
-        inputs.iter().try_for_each(EmbeddingInputV1::validate)?;
+        inputs.iter().try_for_each(|input| input.validate(media))?;
         if dimensions == Some(0) {
             return Err(EmbeddingsRequestErrorV1::InvalidDimensions);
         }
@@ -265,6 +379,22 @@ impl EmbeddingsRequestV1 {
     #[must_use]
     pub const fn input_shape(&self) -> InputShapeV1 {
         self.input_shape
+    }
+    /// Whether any input is a [`EmbeddingInputV1::Media`]. Only a package declaring the `media`
+    /// capability may receive such a request (record §17.3).
+    #[must_use]
+    pub fn carries_media(&self) -> bool {
+        self.inputs.iter().any(EmbeddingInputV1::is_media)
+    }
+    /// The lowest embeddings contract that can carry this request: contract 2 with any media
+    /// input, else contract 1.
+    #[must_use]
+    pub fn minimum_contract_version(&self) -> u16 {
+        if self.carries_media() {
+            EMBEDDINGS_CONTRACT_VERSION_V2
+        } else {
+            EMBEDDINGS_CONTRACT_VERSION
+        }
     }
     /// The requested vector length, above zero when present.
     #[must_use]
@@ -311,7 +441,7 @@ impl fmt::Debug for EmbeddingsRequestV1 {
 }
 
 /// Parses a northbound `/v1/embeddings` body per the normative table of record §3, under the
-/// v1 scope of §15.
+/// contract 1 scope of §15: a media input is refused.
 ///
 /// `upstream_model` is the model routing selected; the body's own `model` is neither read nor
 /// handed through. Checks run in a fixed order and the first failure wins: the body is an object;
@@ -324,11 +454,37 @@ pub fn parse_embeddings_request_v1(
     body: &Value,
     upstream_model: &str,
 ) -> Result<EmbeddingsRequestV1, EmbeddingsRequestErrorV1> {
+    parse_embeddings_request(MediaPolicy::Refuse, body, upstream_model)
+}
+
+/// Parses a northbound `/v1/embeddings` body for contract 2 (record §17.2).
+///
+/// Identical to [`parse_embeddings_request_v1`] in every check and in their order, except that a
+/// string matching the media rule of [`media_type_of`] becomes an [`EmbeddingInputV1::Media`]
+/// input, its `data` the text after the first `;base64,`, verbatim and undecoded, instead of the
+/// [`EmbeddingsRequestErrorV1::MediaInputNotSupported`] refusal. `input_shape` keeps its meaning:
+/// a media string alone is `Single`, an array of strings, text and media mixed, is `Array`. A
+/// body with no media string parses to the request contract 1 would return.
+///
+/// The parser does not bound the request: the serialized view must not exceed
+/// [`MAX_EMBEDDINGS_REQUEST_VIEW_BYTES`], which is the host's 413 before admission.
+pub fn parse_embeddings_request_v2(
+    body: &Value,
+    upstream_model: &str,
+) -> Result<EmbeddingsRequestV1, EmbeddingsRequestErrorV1> {
+    parse_embeddings_request(MediaPolicy::Inline, body, upstream_model)
+}
+
+fn parse_embeddings_request(
+    media: MediaPolicy,
+    body: &Value,
+    upstream_model: &str,
+) -> Result<EmbeddingsRequestV1, EmbeddingsRequestErrorV1> {
     let body = body.as_object().ok_or(EmbeddingsRequestErrorV1::InvalidBody)?;
     if upstream_model.is_empty() {
         return Err(EmbeddingsRequestErrorV1::InvalidModel);
     }
-    let (inputs, input_shape) = parse_inputs(body.get("input"))?;
+    let (inputs, input_shape) = parse_inputs(media, body.get("input"))?;
     let present = |key: &str| body.get(key).filter(|value| !value.is_null());
     let dimensions = present("dimensions")
         .map(|value| {
@@ -355,7 +511,8 @@ pub fn parse_embeddings_request_v1(
         .filter(|(key, _)| !MODELLED_FIELDS.contains(&key.as_str()))
         .map(|(key, value)| (key.clone(), value.clone()))
         .collect();
-    EmbeddingsRequestV1::new(
+    EmbeddingsRequestV1::build(
+        media,
         upstream_model.to_owned(),
         inputs,
         input_shape,
@@ -373,6 +530,7 @@ enum InputItem<'a> {
 }
 
 fn parse_inputs(
+    media: MediaPolicy,
     input: Option<&Value>,
 ) -> Result<(Vec<EmbeddingInputV1>, InputShapeV1), EmbeddingsRequestErrorV1> {
     let invalid = EmbeddingsRequestErrorV1::InvalidInput;
@@ -411,12 +569,20 @@ fn parse_inputs(
     }
     let inputs = items
         .into_iter()
-        .map(|item| match item {
-            InputItem::Text(text) if media_type_of(text).is_some() => {
+        .map(|item| match (item, media) {
+            (InputItem::Text(text), MediaPolicy::Refuse) if media_type_of(text).is_some() => {
                 Err(EmbeddingsRequestErrorV1::MediaInputNotSupported)
             }
-            InputItem::Text(text) => Ok(EmbeddingInputV1::Text(text.to_owned())),
-            InputItem::TokenIds(ids) => Ok(EmbeddingInputV1::TokenIds(ids)),
+            (InputItem::Text(text), MediaPolicy::Inline)
+                if let Some((media_type, data)) = split_media(text) =>
+            {
+                Ok(EmbeddingInputV1::Media {
+                    media_type: media_type.to_owned(),
+                    data: data.to_owned(),
+                })
+            }
+            (InputItem::Text(text), _) => Ok(EmbeddingInputV1::Text(text.to_owned())),
+            (InputItem::TokenIds(ids), _) => Ok(EmbeddingInputV1::TokenIds(ids)),
         })
         .collect::<Result<_, _>>()?;
     Ok((inputs, shape))
@@ -457,15 +623,27 @@ fn validate_extra(extra: &Map<String, Value>) -> Result<(), EmbeddingsRequestErr
 /// decoded. Every other string, including a `data:` URI without `;base64,`, is text.
 #[must_use]
 pub fn media_type_of(text: &str) -> Option<&str> {
-    let (media_type, _payload) = text.strip_prefix("data:")?.split_once(";base64,")?;
+    split_media(text).map(|(media_type, _payload)| media_type)
+}
+
+/// The media type and the payload of a media input, split at the first `;base64,`.
+fn split_media(text: &str) -> Option<(&str, &str)> {
+    let (media_type, payload) = text.strip_prefix("data:")?.split_once(";base64,")?;
+    is_media_type(media_type).then_some((media_type, payload))
+}
+
+/// The media-type grammar of [`media_type_of`]. A valid media type never contains `;base64,`
+/// (a comma is a `tspecial`), so splitting a rebuilt URI at its first marker returns it.
+fn is_media_type(media_type: &str) -> bool {
     let mut parts = media_type.split(';');
-    let (kind, subtype) = parts.next()?.split_once('/')?;
-    let valid = is_token(kind)
+    let Some((kind, subtype)) = parts.next().and_then(|first| first.split_once('/')) else {
+        return false;
+    };
+    is_token(kind)
         && is_token(subtype)
         && parts.all(|parameter| {
             parameter.split_once('=').is_some_and(|(name, value)| is_token(name) && is_token(value))
-        });
-    valid.then_some(media_type)
+        })
 }
 
 /// An RFC 2045 token: printable ASCII without space or `tspecials`.

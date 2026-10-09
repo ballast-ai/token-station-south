@@ -83,6 +83,9 @@ fn texts(request: &EmbeddingsRequestV1) -> ComponentResultV1<Vec<&str>> {
             EmbeddingInputV1::TokenIds(_) => Err(capability(
                 "Gemini embeddings take text only; token-id inputs are not supported",
             )),
+            EmbeddingInputV1::Media { .. } => {
+                Err(capability("Gemini embeddings take text only; media inputs are not supported"))
+            }
         })
         .collect()
 }

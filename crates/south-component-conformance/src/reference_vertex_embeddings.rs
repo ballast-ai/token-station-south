@@ -94,8 +94,16 @@ fn pointer(text: &str) -> ComponentResultV1<JsonPointerV1> {
 
 /// The one text input `:predict` takes (the native arm's `vertex_embeddings_request`).
 fn single_text(request: &EmbeddingsRequestV1) -> ComponentResultV1<&str> {
+    if request.carries_media() {
+        return Err(capability(
+            "Vertex embeddings take text input; media inputs are not supported",
+        ));
+    }
     let text = match request.inputs() {
         [EmbeddingInputV1::Text(text)] => text,
+        [EmbeddingInputV1::Media { .. }] => {
+            return Err(internal("a media input was checked above"));
+        }
         [EmbeddingInputV1::TokenIds(_)] => {
             return Err(capability(
                 "Vertex embeddings take text input; token-id arrays are not supported",

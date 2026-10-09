@@ -24,7 +24,8 @@ use south_contracts::{
     ProviderQuotaMetadataV1, QueryParameterV1, QueryStringV1, QueryValueSyntaxV1,
     RESPONSE_DIAGNOSTIC_FIELD_COUNT, RelativePathV1, ResponseDiagnosticFieldV1,
     ResponseDiagnosticsV1, ResponseTranscriptV1, VectorLocatorV1, deframe_aws_eventstream_v1,
-    extract_vectors_v1, parse_embeddings_request_v1, reencode_eventstream_v1, render_vectors_v1,
+    extract_vectors_v1, parse_embeddings_request_v1, parse_embeddings_request_v2,
+    reencode_eventstream_v1, render_vectors_v1,
 };
 
 const QUOTA_FIELDS: [ProviderQuotaMetadataFieldV1; 9] = [
@@ -200,8 +201,9 @@ fn fuzz_declared_instances(input: &str) {
     }
 }
 
-/// Embeddings contract 1: the northbound parser and vector extraction consume untrusted JSON
-/// (record §3, §5). An accepted request survives its wire codec, and extracted vectors survive
+/// Embeddings contracts 1 and 2: the northbound parsers and vector extraction consume untrusted
+/// JSON (record §3, §5, §17). An accepted request survives its wire codec, a contract 2 request
+/// differs from the contract 1 one only by carrying media, and extracted vectors survive
 /// rendering in either encoding bit for bit. The component-boundary frames (the prepared request,
 /// the parsed facts and the provider-error result) cross the unique codec without losing a fact.
 fn fuzz_embeddings(input: &str) {
@@ -225,6 +227,22 @@ fn fuzz_embeddings(input: &str) {
         let encoded = serde_json::to_string(&request).expect("a parsed request must encode");
         let decoded = serde_json::from_str::<EmbeddingsRequestV1>(&encoded);
         assert_eq!(decoded.ok(), Some(request));
+    }
+    if let Ok(body) = serde_json::from_str::<serde_json::Value>(input)
+        && let Ok(request) = parse_embeddings_request_v2(&body, "fuzz")
+    {
+        assert!(!request.inputs().is_empty() && request.inputs().len() <= MAX_EMBEDDING_INPUTS);
+        let encoded = serde_json::to_string(&request).expect("a parsed request must encode");
+        let decoded = serde_json::from_str::<EmbeddingsRequestV1>(&encoded);
+        assert_eq!(decoded.ok(), Some(request.clone()));
+        // Contract 1 refuses exactly the requests that carry media and agrees on the rest.
+        match parse_embeddings_request_v1(&body, "fuzz") {
+            Ok(v1) => assert!(!request.carries_media() && v1 == request),
+            Err(error) => assert!(
+                request.carries_media()
+                    && error == south_contracts::EmbeddingsRequestErrorV1::MediaInputNotSupported
+            ),
+        }
     }
 
     let bits = |extracted: &ExtractedVectorsV1| -> Vec<Vec<u32>> {
