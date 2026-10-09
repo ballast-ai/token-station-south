@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "response_format 'url' is not supported for Azure MAI image models; they only return b64_json"
+  }
+}

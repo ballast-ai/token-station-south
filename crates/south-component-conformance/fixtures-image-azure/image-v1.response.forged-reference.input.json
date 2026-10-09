@@ -1,0 +1,19 @@
+{
+  "prepare_case": "image-v1.prepare.generate-default-size",
+  "response": {
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "b64_json": {
+            "$south.blob": {
+              "id": "b9",
+              "bytes": 1,
+              "head": "x"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

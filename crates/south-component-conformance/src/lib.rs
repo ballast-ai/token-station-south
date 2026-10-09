@@ -145,11 +145,14 @@ pub use embeddings_fixture::{
 };
 pub mod embeddings_json;
 mod embeddings_suite;
+pub mod image_fixture;
 pub mod image_json;
+pub mod image_suite;
 pub use embeddings_suite::{
     EMBEDDINGS_COMPONENT_SUITE_V1, EMBEDDINGS_MEDIA_ROW_V2, EMBEDDINGS_REQUIRED_ROWS_V1,
     run_embeddings_component_suite_v1,
 };
+pub use image_suite::{IMAGE_COMPONENT_SUITE_V1, run_image_component_suite_v1};
 pub mod reference_azure_image;
 pub mod reference_gemini_embeddings;
 pub mod reference_openai_compatible_embeddings;

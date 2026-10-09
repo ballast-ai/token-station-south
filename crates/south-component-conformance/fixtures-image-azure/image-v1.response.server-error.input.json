@@ -1,0 +1,12 @@
+{
+  "prepare_case": "image-v1.prepare.generate-default-size",
+  "response": {
+    "status": 500,
+    "body": {
+      "error": {
+        "code": "InternalServerError",
+        "message": "Internal error"
+      }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "prepare_case": "image-v1.prepare.generate-default-size",
+  "response": {
+    "status": 200,
+    "body": {
+      "created": 1700000000,
+      "data": [],
+      "usage": {
+        "input_tokens": 1,
+        "output_tokens": 1
+      }
+    }
+  }
+}

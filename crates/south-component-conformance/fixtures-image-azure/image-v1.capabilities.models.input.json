@@ -1,0 +1,15 @@
+{
+  "provider_config": {
+    "provider": "azure-mai",
+    "base_url": "https://example-resource.services.ai.azure.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "mai-image-2.5"
+      },
+      {
+        "model": "mai-image-2.5-flash"
+      }
+    ]
+  }
+}

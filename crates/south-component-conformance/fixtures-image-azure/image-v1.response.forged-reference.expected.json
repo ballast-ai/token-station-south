@@ -1,0 +1,5 @@
+{
+  "outcome": "unknown",
+  "reason": "host: response body cannot be elided: document uses the reserved $south. key namespace",
+  "error": null
+}

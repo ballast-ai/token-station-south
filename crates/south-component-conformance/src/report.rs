@@ -140,6 +140,39 @@ pub enum CheckV1 {
     /// error. Either answer other than these would put a media input in front of a dialect that
     /// cannot carry it, or turn a per-model refusal into a failure the host cannot word.
     MediaInputsFollowTheDeclaration,
+    /// For every metering form a media package declares, at least one response case gives exact
+    /// metering facts with a `succeeded` outcome (image record §12.1, `metering_sample`).
+    ///
+    /// The samples are DP1's usage samples: transcribed from the native arm, they are the only
+    /// evidence that what the component reports is what the upstream billed.
+    MeteringSample,
+    /// For every required metering fact a media package can report — each declared token bucket,
+    /// `credits`, `images_reported` on `charged_failure` — a 2xx case missing it ends `unknown`
+    /// (image record §12.1, `missing_meter_is_not_zero`).
+    ///
+    /// A missing fact read as zero would settle a call as free.
+    MissingMeterIsNotZero,
+    /// For every evidence fact a media package reports, a 2xx case missing it still `succeeds`,
+    /// with that fact `null` (image record §12.1, `evidence_absent_is_null`).
+    ///
+    /// An evidence fact the upstream did not give must stay absent; a component that fills it in
+    /// would hand the host a number nobody reported.
+    EvidenceAbsentIsNull,
+    /// Every refusal a media package makes in `prepare` is an `invalid_request` or `capability`
+    /// error and produces no descriptor (image record §12.1, `pre_dispatch_refusal`).
+    ///
+    /// A refusal there is answered before anything is reserved or sent; any other code, or a
+    /// refusal after a descriptor, would blur the line between "never sent" and "sent and failed".
+    PreDispatchRefusal,
+    /// Every output of a media package keeps its references honest (image record §12.1,
+    /// `reference_integrity`): every `$south.ref` names a blob of the view, no `$south.blob`
+    /// appears in any output, every `$south.artifact` names an existing artifact with an allowed
+    /// delivery, every `inline` and `url` pointer lands on a string of the response, and no output
+    /// string exceeds the fallback threshold.
+    ///
+    /// The bytes stay out of the sandbox only if nothing the component returns can carry them, or
+    /// point the host at bytes the upstream did not send.
+    ReferenceIntegrity,
 }
 
 impl CheckV1 {
@@ -165,6 +198,11 @@ impl CheckV1 {
             Self::LocatorResolves => "locator_resolves",
             Self::NamedRowAssertion => "named_row_assertion",
             Self::MediaInputsFollowTheDeclaration => "media_inputs_follow_the_declaration",
+            Self::MeteringSample => "metering_sample",
+            Self::MissingMeterIsNotZero => "missing_meter_is_not_zero",
+            Self::EvidenceAbsentIsNull => "evidence_absent_is_null",
+            Self::PreDispatchRefusal => "pre_dispatch_refusal",
+            Self::ReferenceIntegrity => "reference_integrity",
         }
     }
 }

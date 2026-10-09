@@ -1,0 +1,32 @@
+{
+  "provider_config": {
+    "provider": "azure-mai",
+    "base_url": "https://example-resource.services.ai.azure.com",
+    "auth": "provider_api_key"
+  },
+  "context": {
+    "upstream_model": "mai-image-2.5",
+    "metering_required": [
+      "tokens"
+    ]
+  },
+  "request": {
+    "multipart": {
+      "parts": [
+        {
+          "kind": "text",
+          "name": "prompt",
+          "blob": "b0",
+          "bytes": 1048577,
+          "head": "aaaa"
+        },
+        {
+          "kind": "file",
+          "name": "image",
+          "blob": "b1",
+          "bytes": 10
+        }
+      ]
+    }
+  }
+}

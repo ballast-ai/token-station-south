@@ -1,0 +1,12 @@
+{
+  "prepare_case": "image-v1.prepare.generate-default-size",
+  "response": {
+    "status": 400,
+    "body": {
+      "error": {
+        "code": "content_policy_violation",
+        "message": "Your request was rejected by the safety system."
+      }
+    }
+  }
+}

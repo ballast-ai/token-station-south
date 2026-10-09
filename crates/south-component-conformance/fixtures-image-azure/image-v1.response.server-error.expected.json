@@ -1,0 +1,10 @@
+{
+  "outcome": "unknown",
+  "reason": "upstream status 500",
+  "error": {
+    "code": "upstream_unavailable",
+    "http_status": 500,
+    "message": "the upstream is unavailable",
+    "provider_message": "Internal error"
+  }
+}

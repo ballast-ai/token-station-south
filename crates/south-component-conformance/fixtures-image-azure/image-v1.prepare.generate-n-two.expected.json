@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "'n' = 2 is not supported for Azure MAI image models; they generate a single image per request (omit `n` or set it to 1)"
+  }
+}

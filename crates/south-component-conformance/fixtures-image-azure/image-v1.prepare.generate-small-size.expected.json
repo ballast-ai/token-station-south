@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "Azure MAI image requires width and height ≥ 768 (got 512x512)"
+  }
+}

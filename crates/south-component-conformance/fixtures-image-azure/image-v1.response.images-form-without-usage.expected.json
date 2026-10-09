@@ -1,0 +1,27 @@
+{
+  "outcome": "succeeded",
+  "artifacts": [
+    {
+      "form": "inline",
+      "pointer": "/data/0/b64_json",
+      "encoding": "base64",
+      "media_type": "image/png"
+    }
+  ],
+  "metering": {
+    "tokens": null,
+    "images_reported": null,
+    "credits": null,
+    "upstream_cost": null
+  },
+  "extras": {
+    "body": {
+      "created": 1700000000,
+      "data": [
+        {
+          "b64_json": null
+        }
+      ]
+    }
+  }
+}

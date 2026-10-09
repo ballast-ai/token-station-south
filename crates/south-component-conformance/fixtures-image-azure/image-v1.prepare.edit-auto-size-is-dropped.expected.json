@@ -1,0 +1,54 @@
+{
+  "facts": {
+    "operation": "edit",
+    "inputs": {
+      "input_image": 1,
+      "reference_image": 0,
+      "mask": 0
+    },
+    "requested_outputs": 1,
+    "tier": {},
+    "metering_forms": [
+      "images"
+    ]
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "mai/v1/images/edits",
+    "auth": {
+      "arm": "header_secret",
+      "header": "api-key",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "multipart": {
+        "parts": [
+          {
+            "name": "model",
+            "value": "mai-image-2.5"
+          },
+          {
+            "name": "prompt",
+            "value": "add a hat"
+          },
+          {
+            "name": "image[]",
+            "blob": "b0",
+            "transform": "as_is"
+          }
+        ]
+      }
+    }
+  },
+  "repeat": 1,
+  "response_body_form": "json",
+  "response_elision_paths": [
+    "/data/*/b64_json"
+  ],
+  "immutable_body_paths": [],
+  "state": {
+    "metering_required": [
+      "images"
+    ]
+  }
+}

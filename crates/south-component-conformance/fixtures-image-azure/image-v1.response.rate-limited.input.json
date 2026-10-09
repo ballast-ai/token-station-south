@@ -1,0 +1,15 @@
+{
+  "prepare_case": "image-v1.prepare.generate-default-size",
+  "response": {
+    "status": 429,
+    "body": {
+      "error": {
+        "code": "429",
+        "message": "Rate limit exceeded."
+      }
+    },
+    "headers": {
+      "retry-after": "7"
+    }
+  }
+}
