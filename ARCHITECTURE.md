@@ -202,7 +202,7 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.51.1; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.50.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.52.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.51.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
 **Unreleased (B6-2)**: the Bedrock InvokeModel Anthropic component (design record
 `docs/design/2026-10-08-bedrock-invoke-anthropic-component.md`, accepted 2026-10-09). The new package
 `provider-anthropic-bedrock-invoke` 1.0.0 (family `anthropic-bedrock-invoke`, `host_signed` with `aws-sigv4` as Converse
@@ -216,6 +216,12 @@ strict base64 codec replaces the credential recipe interpreter's. No release has
 no version of its own beyond the new package: `south-component-conformance` stays at the 0.50.0 #167 gave it, and every
 existing package keeps the single bump over v0.50.0 that #167 gave it (`provider-anthropic` 1.0.16 now also carries the
 two behavior changes above).
+**v0.52.0**: the image world, first batch (release record `docs/design/2026-10-10-release-0.52.0.md`, image world record
+§19). `contracts.media` v1 and `contracts.image` v1 (`south_contracts::media`, `south_contracts::image`), HTTP contract 12,
+the `image-adapter-v1` world (no host import; world exclusions are now `WorldSchemaV1` properties), gate ②
+`south.image-component.v1`, gate ③ `south.provider-media-binary.v1` and `south.safe-fetch.v1`, and the package
+`image-azure` 1.0.0 (`south_runtime` 0.52.0, `not_verified`). The three guest-linked crates move to 0.51.0; every other
+package takes a patch bump and keeps its `south_runtime`.
 **v0.51.1**: runtime fix for host gap #101 (release record `docs/design/2026-10-09-release-0.51.1.md`). A guest trap
 inside a tokio runtime used to panic the calling task, because `add_to_linker_sync` runs every blocking `wasi:io`
 function under `Handle::block_on` and a trapping guest flushes its panic or allocation-failure message to stderr; and

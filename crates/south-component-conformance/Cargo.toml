@@ -9,13 +9,13 @@ rust-version.workspace = true
 # Its own version, not the workspace's: every component links this crate, and its version
 # enters the component's bytes. It moves only when this crate changes, so a South release
 # that leaves it alone re-identifies no package (host-zero-vendor-boundary §16 Q47).
-version = "0.50.0"
+version = "0.51.0"
 
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
-south-contracts = { path = "../south-contracts", version = "0.50.0" }
-south-provider-api = { path = "../south-provider-api", version = "0.50.0" }
+south-contracts = { path = "../south-contracts", version = "0.51.0" }
+south-provider-api = { path = "../south-provider-api", version = "0.51.0" }
 # A lower bound, not the exact release: the runtime keeps the workspace version, and an exact
 # requirement would have to be edited in this manifest at every release (§16 Q47). Only the
 # `sandbox` feature, which no component enables, links it.

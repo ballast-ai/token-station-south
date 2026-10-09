@@ -59,6 +59,15 @@ pub fn host_range() -> HostRangeV1 {
                 "embeddings".to_owned(),
                 (1..=as_u32(&record["contracts"]["embeddings"], "contracts.embeddings")).collect(),
             ),
+            // The image world's two contracts (image record §15).
+            (
+                "media".to_owned(),
+                BTreeSet::from([as_u32(&record["contracts"]["media"], "contracts.media")]),
+            ),
+            (
+                "image".to_owned(),
+                BTreeSet::from([as_u32(&record["contracts"]["image"], "contracts.image")]),
+            ),
         ]),
     }
 }

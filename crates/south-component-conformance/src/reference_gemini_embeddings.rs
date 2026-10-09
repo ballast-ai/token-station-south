@@ -48,7 +48,7 @@ use crate::{ComponentResultV1, EmbeddingsComponentV1, PreparedEmbeddingsV1};
 
 /// The package name and version this reference is published as.
 pub const NAME: &str = "embeddings-gemini";
-pub const VERSION: &str = "1.1.0";
+pub const VERSION: &str = "1.1.1";
 
 /// The one model the host refuses media for (`gemini-embedding-001`, text-only), carried over from
 /// the native arm's hard-coded check in `handler/embeddings.rs`.

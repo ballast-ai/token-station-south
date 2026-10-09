@@ -52,7 +52,7 @@ use crate::{ComponentResultV1, EmbeddingsComponentV1, PreparedEmbeddingsV1};
 
 /// The package name and version this reference is published as.
 pub const NAME: &str = "embeddings-vertex";
-pub const VERSION: &str = "1.0.2";
+pub const VERSION: &str = "1.0.3";
 
 /// The family, as the host's task bindings name it.
 const VERTEX_AI: &str = "vertex-ai";

@@ -1,7 +1,7 @@
 {
-  "schema_version": 6,
+  "schema_version": 7,
   "release": {
-    "version": "0.51.1",
+    "version": "0.52.0",
     "stability": "library_slice"
   },
   "runtime_abi": 1,
@@ -49,7 +49,20 @@
       "artifact_urls": 16,
       "artifact_ref_bytes": 8192
     },
-    "embeddings": 2
+    "embeddings": 2,
+    "media": 1,
+    "image": 1,
+    "media_limits": {
+      "inline_string_bytes": 1048576,
+      "elision_paths": 32,
+      "elision_path_bytes": 256,
+      "blob_head_bytes": 64,
+      "repeat": 10,
+      "artifact_url_bytes": 8192,
+      "parts": 64,
+      "part_header_bytes": 8192,
+      "state_bytes": 8192
+    }
   },
   "conformance": {
     "suite_id": "south.provider-call.v1",
@@ -87,7 +100,9 @@
     "task_component_v2_suite_id": "south.task-component.v2",
     "task_component_v2_suite": 1,
     "embeddings_component_v1_suite_id": "south.embeddings-component.v1",
-    "embeddings_component_v1_suite": 1
+    "embeddings_component_v1_suite": 1,
+    "image_component_v1_suite_id": "south.image-component.v1",
+    "image_component_v1_suite": 1
   },
   "provider_api": {
     "wit_version": "token-station:adapter@2.0.0"
@@ -241,6 +256,18 @@
     },
     "token-station-server": {
       "embeddings_v1": {
+        "status": "not_verified"
+      }
+    }
+  },
+  "media_component_capabilities": {
+    "token-station": {
+      "image_v1": {
+        "status": "not_verified"
+      }
+    },
+    "token-station-server": {
+      "image_v1": {
         "status": "not_verified"
       }
     }
