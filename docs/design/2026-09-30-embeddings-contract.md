@@ -764,7 +764,9 @@ embeddings contract 2 carries media inputs **inline and bounded**, independent o
 world. For contract 2 this reverses E-Q8 ("accept the coupling to `contracts.media` v1; media as blob references") and
 D3 ("bytes do not cross the component boundary"). lv accepted the consequences: a media input's base64 text crosses the
 sandbox as one string twice, in the request view and out again in the descriptor body, and the bound is the runtime
-payload limit that already makes the host answer 413 before admission in contract 1 (§15). No new bound is introduced.
+payload limit that already makes the host answer 413 before admission in contract 1 (§15). *(Amended the same day by
+E-O2, §17.8: measurement showed that bound does not fit the default sandbox; lv ruled 192 MiB of guest memory and a
+15 MiB inline view bound.)*
 A form of contract 2 built on `contracts.media` blobs, if one is ever wanted, is a future **contract 3**; nothing here
 forecloses it.
 
@@ -779,7 +781,7 @@ forecloses it.
 | §5 | Unchanged. Vectors are still extracted and erased by the host |
 | §7.2, §7.3 | Unchanged. The Gemini component computes the media constants (17.5); the host bound for a media input is still its configured per-media-part allowance |
 | §10 | `request.media` applies in its inline form to components declaring `media` (17.6); `ReferenceIntegrity` does not apply |
-| §15 | Its v1 scope stands for contract 1. Contract 2 removes the media refusal and keeps the 413 rule |
+| §15 | Its v1 scope stands for contract 1. Contract 2 removes the media refusal and keeps the 413 rule, with a 15 MiB view bound and a 192 MiB guest memory obligation for the host (17.8) |
 
 ### 17.2 The Media input and the parse entry point
 
@@ -864,16 +866,38 @@ for a media-declaring component. `ReferenceIntegrity` is not a check of this con
 Blobs, `TextBlob`, `BlobIdV1`, reference nodes and the media fallback threshold are not in contract 2. Text above the
 threshold is not handed as a blob: it crosses inline like every other string and counts against the same limit.
 
-### 17.8 The bound
+### 17.8 The bound, the guest memory and the host obligations (E-O2, ruled 2026-10-09)
 
-The serialized request view is at most the runtime's per-call payload limit, 16 MiB
-(`RuntimeLimitsV1::default().max_payload_bytes`; `MAX_EMBEDDINGS_REQUEST_VIEW_BYTES` mirrors it for the hosts). A larger
-request is the host's 413 before admission, as in §15, and the intentional difference of §15 stands: the native arm
-accepts up to the host's 32 MiB JSON body limit. The parser does not enforce the limit, since it sees the northbound
-body, not the view. The limit applies to the descriptor frame as well, and the descriptor wraps the same text, so the
-largest request that crosses end to end is smaller than the limit by the wrapper. **Measured (17.10): the sandbox's
-64 MiB guest memory, not this limit, is what binds; a single media input of more than 7.9 MiB of base64 does not
-build.**
+**The bound as first ruled** was the runtime's per-call payload limit, 16 MiB, applied to the serialized request view
+with the host's 413 before admission, as in §15. **Measurement (17.10) showed it does not fit the sandbox**: with the
+default 64 MiB of guest memory a single media input above 7.9 MiB of base64 traps, and a 16 MiB view could not cross
+even with enough memory, because the runtime applies the same 16 MiB limit to the prepared frame the guest returns,
+which is longer than the view.
+
+**E-O2, ruled by lv on 2026-10-09: option 2.** The embeddings world gets more guest memory, as host-side
+configuration; south's default `RuntimeLimitsV1` does not change. The inline bound stays inside the runtime payload
+limit's family, with room for the output frame. The other options (a lower bound, a blob-based contract 3) were not
+chosen; contract 3 remains available to a later ruling.
+
+**Host obligations.** A host that admits a package declaring `media`:
+
+1. MUST build the embeddings-world runtime with guest memory of at least **192 MiB**
+   (`EMBEDDINGS_MEDIA_GUEST_MEMORY_BYTES` in `south-contracts`; `RuntimeLimitsV1::for_embeddings_media()` in
+   `south-provider-runtime` returns the default limits with only the memory raised, and a test keeps the two numbers
+   equal). The payload limit (16 MiB) and the call deadline (2 s) are unchanged. At the bound the guest peaks at 8 to 12
+   times the payload, and a runtime with the default 64 MiB (or 96 or 128 MiB) traps.
+2. MUST answer 413, before admission, a request whose serialized view (`serde_json::to_string` of the
+   `EmbeddingsRequestV1`) is longer than **15 MiB = 15,728,640 bytes** (`MAX_EMBEDDINGS_REQUEST_VIEW_BYTES`). The bound
+   is 1 MiB under the runtime's frame limit so that the prepared frame, which the runtime checks too, stays under it.
+   Measured at the bound: one input gives a frame 429 bytes longer than the view (margin 1,048,147 bytes to 16 MiB), two
+   inputs 573 bytes longer, and 2048 inputs 201,087 bytes longer (margin 849,405 bytes). The margin therefore carries up
+   to about 500 bytes of wrapper per input at 2048 inputs; Gemini's wrapper is about 100 bytes per input (the model
+   name `models/…` is repeated in every batch item, so a very long model name spends the margin faster).
+3. A host that routes a request to a package that does not declare `media` parses it with
+   `parse_embeddings_request_v1`, as before; the 192 MiB runtime serves contract 1 packages unchanged.
+
+The parser does not enforce the bound: it sees the northbound body, not the view. The native Gemini arm accepts up to
+the host's 32 MiB JSON body; the difference of §15 stands, with the new number.
 
 ### 17.9 Intentional dual-run differences
 
@@ -912,12 +936,22 @@ memory, 2 s deadline). Payloads are `QUJD` repeated, so the sizes are exact; the
   even with enough memory; the view that is certain to cross is smaller than the limit by the wrapper of the
   dialect, which grows with the number of inputs. The host's 413 check on the view alone is necessary, not sufficient.
 - Four copies of the text are structural: the input frame, the parsed request, the body being built and the output
-  frame. Even a guest with no other overhead would need about four times the payload in memory, so a 16 MiB payload
-  cannot fit in 64 MiB whatever the guest code does; it needs the memory limit raised or a payload bound lowered.
+  frame. Even a guest with no other overhead would need about four times the payload in memory, so a payload of
+  that size cannot fit in 64 MiB whatever the guest code does; it needs the memory limit raised (E-O2, §17.8).
 
-This is the measurement the ruling's last consequence called for. The bound as ruled (the 16 MiB view limit of §17.8)
-is not what the sandbox can carry; a choice between lowering the inline bound, raising the guest memory limit for this
-world, and a blob-based contract 3 is open (E-O2).
+**At the inline bound, in the runtime a host builds for `media` packages** (192 MiB; the view is exactly the 15 MiB
+bound; the other limits are the defaults):
+
+| Request | View | Prepared frame | Margin to 16 MiB | `parse_v2` | Native build + codec | Sandbox |
+|---|---|---|---|---|---|---|
+| 1 input | 15,728,640 B | 15,729,069 B | 1,048,147 B | 0.2 ms | 13.3 ms | ok, 24.5 ms |
+| 2 inputs | 15,728,634 B | 15,729,207 B | 1,048,009 B | 0.2 ms | 11.7 ms | ok, 22.9 ms |
+| 2048 inputs | 15,726,724 B | 15,927,811 B | 849,405 B | 0.7 ms | 16.3 ms | ok, 33.9 ms |
+
+The 15 MiB bound leaves enough margin and is kept. The 64 MiB failures above are the justification for the 192 MiB
+obligation. `inline_bound::a_request_at_the_inline_bound_builds_in_the_media_runtime` repeats the one-input row through
+the sandbox seam with the exported constants in the ordinary suite (about 2 s), beside a negative test that the default
+limits trap on a 12 MiB media input and one that a 4 MiB input builds under them.
 
 ## Revision note (2026-10-01)
 
@@ -964,4 +998,9 @@ world, and a blob-based contract 3 is open (E-O2).
 - 2026-10-09 (contract 2, measurement): §17.10 records the inline path through the sandbox. A 16 MiB media input does
   not build with the default 64 MiB guest memory; the largest single payload is 7.9 MiB, and the near-limit request
   builds with 192 MiB. The prepared frame is longer than the view, so the 16 MiB view limit is necessary but not
-  sufficient. The choice between a lower bound, more guest memory and a blob-based contract 3 is open (E-O2).
+  sufficient.
+- 2026-10-09 (E-O2, ruled by lv): option 2. A host admitting a package that declares `media` builds the embeddings
+  runtime with at least 192 MiB of guest memory (south's default limits are unchanged) and answers 413 above a 15 MiB
+  request view; both numbers are exported (`EMBEDDINGS_MEDIA_GUEST_MEMORY_BYTES`, `MAX_EMBEDDINGS_REQUEST_VIEW_BYTES`,
+  `RuntimeLimitsV1::for_embeddings_media`), verified at the bound with 1, 2 and 2048 inputs, and §17.8 and §17.10 are
+  rewritten around the ruling.

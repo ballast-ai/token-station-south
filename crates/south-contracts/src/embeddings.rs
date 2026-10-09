@@ -26,12 +26,23 @@ pub const EMBEDDINGS_CONTRACT_VERSION_V2: u16 = 2;
 /// `compatibility.json` records the last.
 pub const EMBEDDINGS_CONTRACT_VERSIONS: [u16; 2] =
     [EMBEDDINGS_CONTRACT_VERSION, EMBEDDINGS_CONTRACT_VERSION_V2];
-/// The longest serialized request view a component receives (record §17.8).
+/// The longest serialized request view a host admits to a component (record §17.8), 15 MiB.
 ///
-/// This is the runtime's per-call payload limit, 16 MiB, which `south-provider-runtime` enforces
-/// in both directions. A larger request is the host's 413 before admission; the parsers, which
-/// see the northbound body and not the view, do not enforce it.
-pub const MAX_EMBEDDINGS_REQUEST_VIEW_BYTES: usize = 16 * 1024 * 1024;
+/// A request above it is the host's 413 before admission; the parsers, which see the northbound
+/// body and not the view, do not enforce it. It sits 1 MiB under the runtime's per-call payload
+/// limit (16 MiB, `RuntimeLimitsV1::max_payload_bytes`), which the runtime enforces on the frame the
+/// guest returns as well as on the view it receives: the prepared request is longer than the view
+/// by the dialect's wrapper, about 430 bytes for one input and about 100 bytes more per input
+/// for Gemini, and the margin carries 2048 inputs with up to about 500 bytes of wrapper each.
+pub const MAX_EMBEDDINGS_REQUEST_VIEW_BYTES: usize = 15 * 1024 * 1024;
+/// The guest memory a host must give the embeddings runtime when it admits a package that
+/// declares `media` (record §17.8), 192 MiB.
+///
+/// The default 64 MiB traps on a media input above about 7.9 MiB: the guest holds the input frame,
+/// the parsed request, the body being built and the output frame, and its working memory was
+/// measured at 8 to 12 times the payload. `south_provider_runtime::RuntimeLimitsV1::for_embeddings_media`
+/// builds the limits with this value and every other limit unchanged.
+pub const EMBEDDINGS_MEDIA_GUEST_MEMORY_BYTES: usize = 192 * 1024 * 1024;
 /// At most this many inputs per request (record §3; the published `OpenAI` limit).
 pub const MAX_EMBEDDING_INPUTS: usize = 2048;
 /// The serialized parse context a component hands back through the host is at most this long.

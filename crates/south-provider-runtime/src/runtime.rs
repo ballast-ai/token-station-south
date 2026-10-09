@@ -21,6 +21,24 @@ pub struct RuntimeLimitsV1 {
     pub max_payload_bytes: usize,
 }
 
+/// The guest memory for the embeddings runtime of a host that admits a package declaring `media`
+/// (embeddings record §17.8): 192 MiB.
+///
+/// The default 64 MiB cannot carry an inline media input above about 7.9 MiB of base64.
+/// `south_contracts::EMBEDDINGS_MEDIA_GUEST_MEMORY_BYTES` is the same number for a host that does
+/// not link this crate, and a test keeps the two equal.
+pub const EMBEDDINGS_MEDIA_MEMORY_BYTES: usize = 192 * 1024 * 1024;
+
+impl RuntimeLimitsV1 {
+    /// The limits of an embeddings runtime that serves `media` packages (embeddings record
+    /// §17.8): the default limits with the guest memory raised to
+    /// [`EMBEDDINGS_MEDIA_MEMORY_BYTES`]. The payload limit and the call deadline are unchanged.
+    #[must_use]
+    pub fn for_embeddings_media() -> Self {
+        Self { memory_bytes: EMBEDDINGS_MEDIA_MEMORY_BYTES, ..Self::default() }
+    }
+}
+
 impl Default for RuntimeLimitsV1 {
     fn default() -> Self {
         Self {

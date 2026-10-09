@@ -7,9 +7,9 @@ use proptest::prelude::*;
 use serde_json::{Map, Value, json};
 use south_contracts::{
     EMBEDDINGS_CONTRACT_VERSION, EMBEDDINGS_CONTRACT_VERSION_V2, EMBEDDINGS_CONTRACT_VERSIONS,
-    EmbeddingInputV1, EmbeddingsRequestErrorV1, EmbeddingsRequestV1, InputShapeV1,
-    MAX_EMBEDDING_INPUTS, MAX_EMBEDDINGS_REQUEST_VIEW_BYTES, media_type_of,
-    parse_embeddings_request_v1, parse_embeddings_request_v2,
+    EMBEDDINGS_MEDIA_GUEST_MEMORY_BYTES, EmbeddingInputV1, EmbeddingsRequestErrorV1,
+    EmbeddingsRequestV1, InputShapeV1, MAX_EMBEDDING_INPUTS, MAX_EMBEDDINGS_REQUEST_VIEW_BYTES,
+    media_type_of, parse_embeddings_request_v1, parse_embeddings_request_v2,
 };
 
 fn parse(body: &Value) -> Result<EmbeddingsRequestV1, EmbeddingsRequestErrorV1> {
@@ -34,8 +34,10 @@ fn versioning_constants_are_pinned() {
     assert_eq!(EMBEDDINGS_CONTRACT_VERSION, 1);
     assert_eq!(EMBEDDINGS_CONTRACT_VERSION_V2, 2);
     assert_eq!(EMBEDDINGS_CONTRACT_VERSIONS, [1, 2]);
-    // The runtime's payload limit, mirrored for the hosts (record §17.8).
-    assert_eq!(MAX_EMBEDDINGS_REQUEST_VIEW_BYTES, 16 * 1024 * 1024);
+    // The host-facing numbers of record §17.8: the inline view bound, 1 MiB under the runtime's
+    // 16 MiB frame limit, and the guest memory a media package needs.
+    assert_eq!(MAX_EMBEDDINGS_REQUEST_VIEW_BYTES, 15_728_640);
+    assert_eq!(EMBEDDINGS_MEDIA_GUEST_MEMORY_BYTES, 192 * 1024 * 1024);
 }
 
 // §17.2: a media string is a `Media` input split at the first `;base64,`, payload verbatim.

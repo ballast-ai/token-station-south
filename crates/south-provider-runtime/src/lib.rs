@@ -67,4 +67,4 @@ pub use package_set::{
     AdmittedPackageV1, ContestedFamilyV1, PackageRefusalV1, PackageSetReportV1, RefusedPackageV1,
     load_package_set,
 };
-pub use runtime::{ComponentRuntimeV1, RuntimeLimitsV1};
+pub use runtime::{ComponentRuntimeV1, EMBEDDINGS_MEDIA_MEMORY_BYTES, RuntimeLimitsV1};

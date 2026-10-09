@@ -64,7 +64,12 @@ pub fn pack(package: &str) -> EmbeddingsFixturePackV1 {
 
 /// Loads the package through every load gate under this release's range handshake.
 pub fn load(package: &str, wasm: &Path) -> LoadedComponentV1 {
-    let runtime = ComponentRuntimeV1::new(RuntimeLimitsV1::default()).expect("engine builds");
+    load_with(package, wasm, RuntimeLimitsV1::default())
+}
+
+/// [`load`] under other runtime limits, such as a host's embeddings runtime for `media` packages.
+pub fn load_with(package: &str, wasm: &Path, limits: RuntimeLimitsV1) -> LoadedComponentV1 {
+    let runtime = ComponentRuntimeV1::new(limits).expect("engine builds");
     let wasm = std::fs::read(wasm).expect("the component reads");
     LoadedComponentV1::load_embedded(
         &runtime,
