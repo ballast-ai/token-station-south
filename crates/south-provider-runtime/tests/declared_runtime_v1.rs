@@ -39,7 +39,7 @@ fn as_u32(value: &Value, what: &str) -> u32 {
 }
 
 /// The range of a host linking exactly this tree's runtime and accepting nothing older: the
-/// kernel contracts and the task and embeddings contracts it decodes come from this tree's
+/// kernel contracts and the task, embeddings, media and image contracts it decodes come from this tree's
 /// `compatibility.json`. A runtime older than the embeddings world records no embeddings contract,
 /// and this file also runs in checkouts of those runtimes, so that contract is read only where
 /// the record has it.
@@ -66,6 +66,13 @@ fn this_runtime_only() -> HostRangeV1 {
             "embeddings".to_owned(),
             (1..=as_u32(embeddings, "contracts.embeddings")).collect(),
         );
+    }
+    // The image world's two contracts, from the first runtime that knows the world (0.52.0);
+    // read only where the record has them, for the reason given for embeddings.
+    for name in ["media", "image"] {
+        if let Some(number) = record["contracts"].get(name) {
+            contracts.insert(name.to_owned(), BTreeSet::from([as_u32(number, name)]));
+        }
     }
     HostRangeV1 {
         runtime_abi: RUNTIME_ABI,
