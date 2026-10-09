@@ -871,7 +871,9 @@ The serialized request view is at most the runtime's per-call payload limit, 16 
 request is the host's 413 before admission, as in §15, and the intentional difference of §15 stands: the native arm
 accepts up to the host's 32 MiB JSON body limit. The parser does not enforce the limit, since it sees the northbound
 body, not the view. The limit applies to the descriptor frame as well, and the descriptor wraps the same text, so the
-largest request that crosses end to end is smaller than the limit by the wrapper (17.10).
+largest request that crosses end to end is smaller than the limit by the wrapper. **Measured (17.10): the sandbox's
+64 MiB guest memory, not this limit, is what binds; a single media input of more than 7.9 MiB of base64 does not
+build.**
 
 ### 17.9 Intentional dual-run differences
 
@@ -881,9 +883,41 @@ largest request that crosses end to end is smaller than the limit by the wrapper
 - A request mixing text and media is accepted as `Array` (it always was natively); an array mixing strings and
   integers is still refused.
 
-### 17.10 Measurement
+### 17.10 Measurement (2026-10-09)
 
-Recorded with the release (`docs/design/2026-10-09-release-0.51.0.md`).
+`embeddings_payload_measurement::measure_inline_media` (ignored; release mode, `--features sandbox`) puts one base64
+media input through `parse_embeddings_request_v2`, the Gemini reference's `build_embeddings_request` with the codec,
+natively, and through `embeddings-gemini` 1.1.0 in the sandbox with the default limits (16 MiB payload, 64 MiB guest
+memory, 2 s deadline). Payloads are `QUJD` repeated, so the sizes are exact; the timings are the fastest of three.
+
+| Request | View | Prepared frame | `parse_v2` | Native build + codec | Sandbox, default limits |
+|---|---|---|---|---|---|
+| 1 input, 1 MiB payload | 1,048,756 B | 1,049,185 B | 0.0 ms | 0.6 ms | ok, 1.4 ms |
+| 1 input, 4 MiB payload | 4,194,484 B | 4,194,913 B | 0.1 ms | 2.3 ms | ok, 5.1 ms |
+| 1 input, 8 MiB payload | 8,388,788 B | 8,389,217 B | 0.1 ms | 4.4 ms | **trap** (guest memory exhausted) |
+| 1 input, 12 MiB payload | 12,583,092 B | 12,583,521 B | 0.2 ms | 6.6 ms | **trap** |
+| 1 input, view at the 16 MiB limit | 16,777,140 B | 16,777,569 B | 0.2 ms | 12.5 ms | **trap** |
+| 2 inputs, 7.9 MiB each | 16,515,298 B | 16,515,871 B | 0.2 ms | 10.7 ms | **trap** |
+| 2048 inputs, 7.9 KiB each | 16,349,316 B | 16,550,403 B | 0.6 ms | 15.6 ms | **trap** |
+
+- **A 16 MiB inline media input does not fit the sandbox with the default limits.** The largest single payload that
+  builds is **8,253,128 base64 characters (7.9 MiB)**, a view of 8,253,308 B, in 10.6 ms. The limit is the 64 MiB guest
+  memory, not the deadline (every successful call takes tens of milliseconds, against 2 s) and not the payload limit.
+- The same near-limit request (payload 16,773,120 characters, view 16,773,300 B, frame 16,773,729 B) succeeds when the
+  guest has more memory: 64, 96 and 128 MiB trap; **192 MiB and 256 MiB succeed in 21 ms**. So with the current guest
+  code the working memory is between 8 and 12 times the payload.
+- The prepared frame is longer than the view (by 429 B for one input, by about 201 KB for 2048 inputs), and the
+  runtime enforces its 16 MiB payload limit on the frame the guest returns as well as on the view it receives. A request
+  whose view is within a few hundred bytes of the limit is therefore refused on the way out (`payload too large`)
+  even with enough memory; the view that is certain to cross is smaller than the limit by the wrapper of the
+  dialect, which grows with the number of inputs. The host's 413 check on the view alone is necessary, not sufficient.
+- Four copies of the text are structural: the input frame, the parsed request, the body being built and the output
+  frame. Even a guest with no other overhead would need about four times the payload in memory, so a 16 MiB payload
+  cannot fit in 64 MiB whatever the guest code does; it needs the memory limit raised or a payload bound lowered.
+
+This is the measurement the ruling's last consequence called for. The bound as ruled (the 16 MiB view limit of §17.8)
+is not what the sandbox can carry; a choice between lowering the inline bound, raising the guest memory limit for this
+world, and a blob-based contract 3 is open (E-O2).
 
 ## Revision note (2026-10-01)
 
@@ -927,3 +961,7 @@ Recorded with the release (`docs/design/2026-10-09-release-0.51.0.md`).
   independent of `contracts.media`. E-Q8 and D3 are marked superseded for media, with dated notes at §2 D3, §3, §10,
   §12, §13, §14 E-Q8 and §15; the parse entry point, the versioning at the host seam, the manifest rule, the Gemini body
   and estimate, the carried-over `gemini-embedding-001` hard-code, the `request.media` row and the bound are in §17.
+- 2026-10-09 (contract 2, measurement): §17.10 records the inline path through the sandbox. A 16 MiB media input does
+  not build with the default 64 MiB guest memory; the largest single payload is 7.9 MiB, and the near-limit request
+  builds with 192 MiB. The prepared frame is longer than the view, so the 16 MiB view limit is necessary but not
+  sufficient. The choice between a lower bound, more guest memory and a blob-based contract 3 is open (E-O2).
