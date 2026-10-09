@@ -65,6 +65,34 @@ struct InstanceHandle {
     instance: InstanceKind,
 }
 
+/// The instance regular calls go through, and whether it can still be entered.
+struct MainInstance {
+    handle: InstanceHandle,
+    /// Set when the last call ended in anything but a normal return. wasmtime
+    /// refuses to enter an instance that trapped (`cannot enter component
+    /// instance`), whatever the trap was, so the next call replaces it first.
+    stale: bool,
+}
+
+/// A call into a world the component does not export.
+///
+/// Raised by the accessors below before the guest is entered, so unlike every
+/// other error of a guest call it says nothing about the instance's health.
+#[derive(Debug)]
+struct WorldMismatch(&'static str);
+
+impl fmt::Display for WorldMismatch {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.0)
+    }
+}
+
+impl std::error::Error for WorldMismatch {}
+
+fn world_mismatch(message: &'static str) -> wasmtime::Error {
+    wasmtime::Error::new(WorldMismatch(message))
+}
+
 /// Which world this instance exports.
 ///
 /// An enum rather than a second loader: the manifest gate, the import scan,
@@ -85,13 +113,13 @@ impl InstanceKind {
     fn provider(&self) -> wasmtime::Result<&ProviderAdapterV2> {
         match self {
             Self::Provider(instance) => Ok(instance),
-            Self::TaskV2(_) => Err(wasmtime::Error::msg(
+            Self::TaskV2(_) => Err(world_mismatch(
                 "this component exports `task-adapter-v2`; the provider face is not on it",
             )),
-            Self::Task(_) => Err(wasmtime::Error::msg(
+            Self::Task(_) => Err(world_mismatch(
                 "this component exports `task-adapter-v1`; the provider face is not on it",
             )),
-            Self::Embeddings(_) => Err(wasmtime::Error::msg(
+            Self::Embeddings(_) => Err(world_mismatch(
                 "this component exports `embeddings-adapter-v1`; the provider face is not on it",
             )),
         }
@@ -102,13 +130,13 @@ impl InstanceKind {
     fn task(&self) -> wasmtime::Result<&crate::bindings::task::TaskAdapterV1> {
         match self {
             Self::Task(instance) => Ok(instance),
-            Self::TaskV2(_) => Err(wasmtime::Error::msg(
+            Self::TaskV2(_) => Err(world_mismatch(
                 "this component exports `task-adapter-v2`; the task-v1 face is not on it",
             )),
-            Self::Provider(_) => Err(wasmtime::Error::msg(
+            Self::Provider(_) => Err(world_mismatch(
                 "this component exports `provider-adapter-v2`; the task face is not on it",
             )),
-            Self::Embeddings(_) => Err(wasmtime::Error::msg(
+            Self::Embeddings(_) => Err(world_mismatch(
                 "this component exports `embeddings-adapter-v1`; the task face is not on it",
             )),
         }
@@ -117,13 +145,13 @@ impl InstanceKind {
     fn task_v2(&self) -> wasmtime::Result<&crate::bindings::task_v2::TaskAdapterV2> {
         match self {
             Self::TaskV2(instance) => Ok(instance),
-            Self::Task(_) => Err(wasmtime::Error::msg(
+            Self::Task(_) => Err(world_mismatch(
                 "this component exports `task-adapter-v1`; the task-v2 face is not on it",
             )),
-            Self::Provider(_) => Err(wasmtime::Error::msg(
+            Self::Provider(_) => Err(world_mismatch(
                 "this component exports `provider-adapter-v2`; the task-v2 face is not on it",
             )),
-            Self::Embeddings(_) => Err(wasmtime::Error::msg(
+            Self::Embeddings(_) => Err(world_mismatch(
                 "this component exports `embeddings-adapter-v1`; the task-v2 face is not on it",
             )),
         }
@@ -134,13 +162,13 @@ impl InstanceKind {
     fn embeddings(&self) -> wasmtime::Result<&crate::bindings::embeddings::EmbeddingsAdapterV1> {
         match self {
             Self::Embeddings(instance) => Ok(instance),
-            Self::Provider(_) => Err(wasmtime::Error::msg(
+            Self::Provider(_) => Err(world_mismatch(
                 "this component exports `provider-adapter-v2`; the embeddings face is not on it",
             )),
-            Self::Task(_) => Err(wasmtime::Error::msg(
+            Self::Task(_) => Err(world_mismatch(
                 "this component exports `task-adapter-v1`; the embeddings face is not on it",
             )),
-            Self::TaskV2(_) => Err(wasmtime::Error::msg(
+            Self::TaskV2(_) => Err(world_mismatch(
                 "this component exports `task-adapter-v2`; the embeddings face is not on it",
             )),
         }
@@ -162,7 +190,7 @@ pub struct LoadedComponentV1 {
     signer: Arc<dyn SecretSignerV1 + Sync>,
     /// The instance regular calls go through. Streams get their own; see
     /// [`LoadedComponentV1::open_stream`].
-    main: Mutex<InstanceHandle>,
+    main: Mutex<MainInstance>,
 }
 
 impl LoadedComponentV1 {
@@ -240,7 +268,7 @@ impl LoadedComponentV1 {
             linker,
             manifest,
             signer,
-            main: Mutex::new(handle),
+            main: Mutex::new(MainInstance { handle, stale: false }),
         })
     }
 
@@ -762,15 +790,7 @@ impl LoadedComponentV1 {
         let Some(permit) = self.runtime.try_acquire_stream() else {
             return Err(CallErrorV1::StreamLimit);
         };
-        let ctx = component_ctx(&self.runtime, &self.manifest, &self.signer);
-        let handle = instantiate(
-            &self.runtime,
-            &self.component,
-            &self.linker,
-            ctx,
-            &self.manifest.api_version,
-        )
-        .map_err(|error| classify_trap(&error))?;
+        let handle = self.instantiate_fresh().map_err(|error| classify_trap(&error))?;
         Ok(ComponentStreamV1 { runtime: self.runtime.clone(), handle, _permit: permit })
     }
 
@@ -782,18 +802,43 @@ impl LoadedComponentV1 {
         Ok(())
     }
 
+    /// A new instance of the component with an empty store, under the runtime's limits.
+    ///
+    /// Instantiation runs the guest's start code, so it is bounded by the same epoch deadline
+    /// and memory limit as a call: a guest whose start code traps or loops cannot hang the host.
+    fn instantiate_fresh(&self) -> wasmtime::Result<InstanceHandle> {
+        let ctx = component_ctx(&self.runtime, &self.manifest, &self.signer);
+        instantiate(&self.runtime, &self.component, &self.linker, ctx, &self.manifest.api_version)
+    }
+
     fn call(
         &self,
         operation: impl FnOnce(&mut InstanceHandle) -> wasmtime::Result<Result<String, String>>,
     ) -> Result<String, CallErrorV1> {
-        // A poisoned component stays poisoned; report it as a trap rather
-        // than panicking in the host.
-        let Ok(mut handle) = self.main.lock() else {
-            return Err(CallErrorV1::Trap("component state is poisoned".to_owned()));
-        };
-        handle.store.set_epoch_deadline(self.runtime.deadline_ticks());
+        // The lock is never held across anything that can panic except `operation`, whose only
+        // host code is the caller's own signer. A signer that panicked leaves the mutex
+        // poisoned and the instance in an unknown state: take the guard anyway, and replace the
+        // instance like after a trap.
+        let mut main = self.main.lock().unwrap_or_else(|poisoned| {
+            self.main.clear_poison();
+            let mut main = poisoned.into_inner();
+            main.stale = true;
+            main
+        });
+        if main.stale {
+            main.handle = self.instantiate_fresh().map_err(|error| classify_trap(&error))?;
+            main.stale = false;
+        }
+        main.handle.store.set_epoch_deadline(self.runtime.deadline_ticks());
 
-        finish_call(self.runtime.limits().max_payload_bytes, operation(&mut handle))
+        let outcome = operation(&mut main.handle);
+        // An error from a guest call means the instance can no longer be entered: a trap, the
+        // deadline, a failed allocation, an error from a host function. Only the world mismatch,
+        // which never reached the guest, leaves it usable.
+        main.stale =
+            matches!(&outcome, Err(error) if error.downcast_ref::<WorldMismatch>().is_none());
+        drop(main);
+        finish_call(self.runtime.limits().max_payload_bytes, outcome)
     }
 }
 

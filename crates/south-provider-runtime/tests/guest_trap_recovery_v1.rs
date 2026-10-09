@@ -110,6 +110,10 @@ fn runtime() -> ComponentRuntimeV1 {
 }
 
 fn load_provider() -> LoadedComponentV1 {
+    load_provider_with(FixedSigner)
+}
+
+fn load_provider_with(signer: impl SecretSignerV1 + Sync) -> LoadedComponentV1 {
     let wasm = std::fs::read(provider_guest_wasm()).expect("guest bytes");
     let manifest =
         manifest("test-provider", "provider-adapter-v2", "token-station:adapter@2.0.0", &json!({}));
@@ -118,7 +122,7 @@ fn load_provider() -> LoadedComponentV1 {
         &manifest,
         &wasm,
         &host_range::host_range(),
-        FixedSigner,
+        signer,
     )
     .expect("the provider guest loads")
 }
@@ -360,4 +364,37 @@ trap_matrix! {
     multi_thread_runtime => Hosting::TokioWorker,
     current_thread_runtime => Hosting::TokioLocal,
     bare_thread => Hosting::BareThread,
+}
+
+/// The one host code that runs while the component's lock is held is the caller's own signer. If
+/// it panics, the call panics, as it must; the component must still answer afterwards.
+#[test]
+fn a_signer_that_panics_does_not_leave_the_component_unusable() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    struct PanicsOnce(AtomicBool);
+    impl SecretSignerV1 for PanicsOnce {
+        fn sign(&self, _: &str, _: &[u8], _: &str) -> Result<Vec<u8>, String> {
+            assert!(self.0.swap(true, Ordering::SeqCst), "the signer's own bug");
+            Ok(vec![1, 2, 3])
+        }
+    }
+
+    let component = load_provider_with(PanicsOnce(AtomicBool::new(false)));
+    let signing_request = json!({
+        "model": "test-1",
+        "messages": [],
+        "__sign": { "secret": "provider_api_key", "algorithm": "hmac-sha256" },
+    })
+    .to_string();
+
+    let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        component.call_build_http_request(&signing_request, &provider_config(&json!({})))
+    }));
+    assert!(panicked.is_err(), "the signer's panic belongs to the caller");
+
+    component
+        .call_build_http_request(&signing_request, &provider_config(&json!({})))
+        .expect("the next call replaces the instance the panic left behind and signs");
+    call(Carrier::Provider, &component, &json!({})).expect("and the component answers");
 }
