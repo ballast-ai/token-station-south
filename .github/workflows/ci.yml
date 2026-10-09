@@ -47,8 +47,9 @@ jobs:
         run: |
           scripts/check-boundaries.sh --self-test
           scripts/check-boundaries.sh
-      # The release index generator and the digest-stability check (release.yml).
-      # Standard-library Python with no setup; it runs in well under a second.
+      # The release index generator, the digest-stability check and the
+      # guest-linked crate version check (release.yml).
+      # Standard-library Python with no setup; it runs in a few seconds.
       - name: Release tooling
         run: python3 -m unittest discover -s scripts -p 'test_*.py'
       - name: Licenses and sources
@@ -113,6 +114,22 @@ jobs:
           done
       - name: Declared runtimes admit their packages
         run: scripts/check-declared-runtime.sh --build
+
+  # The Q47 crate version check (boundary record §13.12), which release.yml
+  # also runs on the tag: a guest-linked crate changed since the previous release
+  # tag must carry a new version. Only release branches run it, because only
+  # there does the workspace version name the release being cut; elsewhere it
+  # names the release already published, and the comparison would be with the
+  # release before that. Its own job so it costs a clone, not a component build.
+  crate-versions:
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Guest-linked crate versions
+        run: python3 scripts/check_crate_versions.py --unreleased
 
   fuzz:
     if: github.event_name == 'schedule'
