@@ -86,18 +86,62 @@ class CrateVersionCheckTest(unittest.TestCase):
         self.assertEqual(code, 0, err)
         self.assertIn("comparing guest-linked crates at HEAD with v0.50.0", out)
         for crate in CRATES:
-            self.assertIn(f"{crate} 0.49.0: unchanged since v0.50.0", out)
+            self.assertIn(f"{crate} 0.49.0: unchanged since v0.50.0 outside tests/", out)
+        self.assertNotIn("exempt", out)
 
     def test_changed_without_bump_fails_naming_crate_and_files(self) -> None:
         self.write("crates/south-provider-api/src/lib.rs", "pub fn g() {}\n")
-        self.write("crates/south-provider-api/tests/new.rs", "\n")
+        self.write("crates/south-provider-api/src/more.rs", "\n")
         self.commit()
         code, _, err = self.run_check()
         self.assertEqual(code, 1)
         self.assertIn("south-provider-api keeps version 0.49.0 from v0.50.0 but 2 files", err)
         self.assertIn("crates/south-provider-api/src/lib.rs", err)
-        self.assertIn("crates/south-provider-api/tests/new.rs", err)
+        self.assertIn("crates/south-provider-api/src/more.rs", err)
         self.assertNotIn("south-contracts keeps", err)
+
+    def test_a_tests_only_change_passes_listing_the_exempt_files(self) -> None:
+        self.write("crates/south-contracts/tests/a.rs", "\n")
+        self.write("crates/south-contracts/tests/support/b.rs", "\n")
+        self.commit()
+        code, out, err = self.run_check()
+        self.assertEqual(code, 0, err)
+        self.assertIn(
+            "south-contracts: 2 changed files under crates/south-contracts/tests/ are exempt:\n"
+            "  crates/south-contracts/tests/a.rs\n  crates/south-contracts/tests/support/b.rs",
+            out,
+        )
+        self.assertIn("south-contracts 0.49.0: unchanged since v0.50.0 outside tests/", out)
+
+    def test_tests_plus_another_change_fails_naming_only_the_non_exempt_files(self) -> None:
+        self.write("crates/south-contracts/tests/a.rs", "\n")
+        self.write("crates/south-contracts/src/lib.rs", "pub fn g() {}\n")
+        self.commit()
+        code, out, err = self.run_check()
+        self.assertEqual(code, 1)
+        self.assertIn(
+            "south-contracts keeps version 0.49.0 from v0.50.0 but 1 files under crates/south-contracts changed", err
+        )
+        self.assertIn("crates/south-contracts/src/lib.rs", err)
+        self.assertNotIn("tests/a.rs", err)
+        self.assertIn("crates/south-contracts/tests/a.rs", out)
+
+    def test_a_fixture_outside_tests_without_bump_fails(self) -> None:
+        # src/ may include_str! a fixture, so only tests/ is exempt.
+        self.write("crates/south-component-conformance/fixtures-gemini/case.json", "{}\n")
+        self.commit()
+        code, _, err = self.run_check()
+        self.assertEqual(code, 1)
+        self.assertIn("crates/south-component-conformance/fixtures-gemini/case.json", err)
+
+    def test_a_directory_merely_named_like_tests_is_not_exempt(self) -> None:
+        self.write("crates/south-contracts/src/tests/x.rs", "\n")
+        self.write("crates/south-contracts/tests-data/y.json", "\n")
+        self.commit()
+        code, _, err = self.run_check()
+        self.assertEqual(code, 1)
+        self.assertIn("crates/south-contracts/src/tests/x.rs", err)
+        self.assertIn("crates/south-contracts/tests-data/y.json", err)
 
     def test_a_manifest_only_change_without_bump_fails(self) -> None:
         self.write(

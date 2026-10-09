@@ -93,9 +93,11 @@ a release that leaves them alone, such as one that only ships catalog data, keep
   `component.wasm`, bumps every package's version; the release's digest-stability check fails a package that kept its
   version.
 - **How the crate bump is checked.** `scripts/check_crate_versions.py` compares the three crate directories with the
-  previous release tag and fails when any file in one of them changed (tests and fixtures included) while its version
-  did not, naming the crate and the files. Release CI runs it on the tag and CI runs it on `release/*` pull requests;
-  run `python3 scripts/check_crate_versions.py --unreleased` locally after the release bump.
+  previous release tag and fails when a file in one of them changed while its version did not, naming the crate and
+  the files. Files under the crate's `tests/` are exempt (lv 2026-10-09): tests are not compiled into components.
+  Fixtures and every other directory stay strict, since `src/` may embed them. Release CI runs it on the tag and CI
+  runs it on `release/*` pull requests; run `python3 scripts/check_crate_versions.py --unreleased` locally after the
+  release bump.
 - **A component links no other workspace crate.** `shipped_packages_v1` fails when a component lockfile names a
   workspace crate outside these three, or records a version the crate does not declare.
 - **The runtime release is the workspace version.** Tests read it from the workspace `Cargo.toml`, never from

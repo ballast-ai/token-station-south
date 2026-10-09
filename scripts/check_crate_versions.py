@@ -14,6 +14,11 @@ being cut. When any file under the directory differs (its `Cargo.toml` included)
 `package.version` did not change, the release fails, naming the crate and the changed files. A version that
 moved without a source change is allowed. With no earlier release tag the check is skipped with a notice.
 
+Files under the crate's `tests/` directory are exempt (lv, 2026-10-09): integration tests are not compiled into
+any component, so they do not change component bytes. A change only there passes with a notice that lists the
+exempted files. Nothing else is exempt: fixtures and other directories stay strict, because `src/` may embed them
+with `include_str!` or `include_bytes!`.
+
 Fail-closed: any git error, a shallow clone (whose missing tags would read as "no earlier release"), a crate
 directory or manifest missing at --ref, or a version that cannot be read fails the check.
 
@@ -127,8 +132,13 @@ def check(repo: Path, ref: str, tag: str | None, unreleased: bool = False) -> tu
             continue
         before = crate_version(repo, previous, crate, inherit=True)
         changed = git(repo, "diff", "--name-only", "--no-renames", previous, commit, "--", directory).splitlines()
+        exempt = [path for path in changed if path.startswith(f"{directory}/tests/")]
+        changed = [path for path in changed if path not in exempt]
+        if exempt:
+            listing = "".join(f"\n  {path}" for path in exempt)
+            log.append(f"{crate}: {len(exempt)} changed files under {directory}/tests/ are exempt:{listing}")
         if not changed:
-            log.append(f"{crate} {current}: unchanged since {previous}")
+            log.append(f"{crate} {current}: unchanged since {previous} outside tests/")
         elif before != current:
             log.append(f"{crate}: {before} -> {current}, {len(changed)} files changed")
         else:

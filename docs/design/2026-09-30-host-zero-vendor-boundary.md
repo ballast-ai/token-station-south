@@ -2639,7 +2639,8 @@ check forces their bumps, but the crate's version in a host's `Cargo.lock` would
 source. lv ruled that the rule be checked mechanically. `scripts/check_crate_versions.py` compares each of the three
 crate directories at the tree being released with the latest `vX.Y.Z` tag earlier than the release, and fails when
 any file under the directory (its `Cargo.toml` included) differs while the crate's `package.version` is unchanged,
-naming the crate and the changed files. A version that moves without a source change passes. With no earlier tag it
+naming the crate and the changed files; files under the crate's `tests/` are exempt (below). A version that moves
+without a source change passes. With no earlier tag it
 passes with a notice. It fails closed: a shallow clone (whose missing tags would read as "no earlier release"), any git
 error, a missing crate manifest, a crate that inherits the workspace version at the release, or a tag that is not
 `vX.Y.Z`. A previous release whose crate still inherited the workspace version (before 0.50.0) is read through the
@@ -2651,19 +2652,25 @@ workspace version of that tag.
   tagged; only there does the workspace version name the release being cut, and elsewhere the comparison would be with
   the release before the last one. This follows the declared-runtime check (§13.6), which runs on the published
   archives in `release.yml` and on `release/*` pull requests in `ci.yml`.
-- **"Any file", including tests and fixtures.** The check does not tell build inputs from tests: a change that only
-  touches a crate's `tests/` also requires the bump, and the bump changes every `component.wasm`. Over the fourteen
-  releases from 0.36.0 to 0.50.0, twelve changed `src/` in these crates anyway; the two that did not are 0.37.0 (the
-  dependency requirements in one `Cargo.toml`) and 0.50.0, the Q47 transition itself, whose diff from 0.49.0 touches only tests and the
-  `Cargo.toml` lines that set the own version at the value the crates already had. Replayed now, the check fails 0.50.0
-  against 0.49.0 for that reason; it applies from the next release, whose baseline is `v0.50.0`.
+- **`tests/` exempt (lv 2026-10-09); everything else strict.** A changed file under a crate's `tests/` directory
+  requires no bump: integration tests are not compiled into any component and do not change its bytes. The check
+  lists such files in a notice. Nothing else is exempt. Fixtures (`fixtures*/` in the conformance crate) and every
+  other directory stay strict, because `src/` may embed them with `include_str!` or `include_bytes!`, and a
+  directory merely named like `tests` (`src/tests/`, `tests-data/`) is not exempt. Over the fourteen releases from
+  0.36.0 to 0.50.0, twelve changed `src/` in these crates anyway; the two that did not are 0.37.0 (the dependency
+  requirements in one `Cargo.toml`) and 0.50.0, the Q47 transition itself. Even with the exemption, replaying the
+  check fails 0.50.0 against 0.49.0, because that transition rewrote each crate's `Cargo.toml` (the own version line,
+  set to the value the crates already had); the check applies from the next release, whose baseline is `v0.50.0`.
 - **Tests.** `scripts/test_check_crate_versions.py`, run by CI's `quality` job with the other release tooling tests,
   builds a throwaway repository per case: unchanged crates pass; a change without a bump fails naming the crate and
   each file; a manifest-only change without a bump fails; a change with a bump passes; a bump without a change passes;
-  no earlier tag passes with a notice; a missing crate fails; plus the tag-selection, inheritance, shallow-clone, git
-  error and `--unreleased` cases. Mutation: replacing the version comparison with "always bumped" fails the four tests
-  that expect a refusal for a change without a bump; dropping the shallow-clone guard fails
-  `test_a_shallow_clone_fails`.
+  no earlier tag passes with a notice; a missing crate fails; a `tests/`-only change passes and lists the exempt
+  files; a `tests/` change together with another change fails naming only the non-exempt files; a fixture changed
+  without a bump fails; `src/tests/` and `tests-data/` are not exempt; plus the tag-selection, inheritance,
+  shallow-clone, git error and `--unreleased` cases. Mutations: replacing the version comparison with "always bumped"
+  fails the seven tests that expect a refusal for a change without a bump; dropping the `tests/` exemption fails
+  `test_a_tests_only_change_passes_listing_the_exempt_files` (and the mixed-change test); dropping the shallow-clone
+  guard fails `test_a_shallow_clone_fails`.
 
 **Evidence (2026-10-08).** Same-path rebuilds of all seventeen packages (macOS, one checkout path and target
 directory throughout; local digests are compared only with local digests, since they never equal the release CI's):
@@ -3158,4 +3165,5 @@ into the body. Where each landed:
 - 2026-10-09, lv rulings: Q47's crate bump rule is enforced mechanically (§13.12 "Enforcement",
   `scripts/check_crate_versions.py`, run by `release.yml` on the tag and by `ci.yml` on `release/*` pull requests), and
   Q48's provenance-file sub-question is ruled: no separate file; pull requests and release notes carry the sources and
-  dates. Q47, Q48 and §13.11's maintenance paragraph gain notes.
+  dates. Q47, Q48 and §13.11's maintenance paragraph gain notes. Also ruled on review of the check: a change only
+  under a crate's `tests/` is exempt; fixtures and other directories stay strict.
