@@ -135,6 +135,7 @@ pub mod reference_xai_task_v2;
 
 // Embeddings contract 1 (docs/design/2026-09-30-embeddings-contract.md, v1 scope §15).
 pub mod abi_embeddings;
+pub mod abi_image;
 mod component_embeddings;
 mod component_image;
 pub use component_embeddings::{EmbeddingsComponentV1, PreparedEmbeddingsV1};
@@ -159,3 +160,5 @@ pub mod reference_openai_compatible_embeddings;
 pub mod reference_vertex_embeddings;
 #[cfg(feature = "sandbox")]
 pub mod sandbox_embeddings;
+#[cfg(feature = "sandbox")]
+pub mod sandbox_image;

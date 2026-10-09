@@ -43,6 +43,7 @@ jobs:
             components/embeddings-gemini
             components/embeddings-openai-compatible
             components/embeddings-vertex
+            components/image-azure
             components/provider-anthropic
             components/provider-bedrock-converse
             components/provider-bedrock-converse-bearer

@@ -96,6 +96,7 @@ jobs:
           scripts/build-embeddings-openai-compatible-component.sh
           scripts/build-embeddings-gemini-component.sh
           scripts/build-embeddings-vertex-component.sh
+          scripts/build-image-azure-component.sh
 
       # Gate ② over the bytes just built: each sandbox parity test runs the
       # package's required suite against its component.wasm and, with
@@ -127,6 +128,7 @@ jobs:
             --test openai_compatible_embeddings_sandbox_parity \
             --test gemini_embeddings_sandbox_parity \
             --test vertex_embeddings_sandbox_parity \
+            --test azure_image_sandbox_parity \
             -- --exact the_sandboxed_component_passes_gate_two_byte_for_byte
           ls -l "${SOUTH_GATE2_REPORT_DIR}"
 
@@ -167,6 +169,7 @@ jobs:
           package embeddings-openai-compatible embeddings_openai_compatible.wasm
           package embeddings-gemini embeddings_gemini.wasm
           package embeddings-vertex embeddings_vertex.wasm
+          package image-azure image_azure.wasm
           # Catalog data (boundary record §7.5, §13.11): each catalogs/<name>.json is
           # published verbatim as <name>-<tag>.json; the index step below refuses a
           # published catalog whose bytes differ from the source file.
@@ -247,8 +250,9 @@ jobs:
           set -euo pipefail
           cat > dist/NOTES.md <<'NOTES'
           Component packages built from this tag — provider components for the
-          chat world, task components for the task worlds, and embeddings
-          components for the embeddings world.
+          chat world, task components for the task worlds, embeddings
+          components for the embeddings world, and image components for the
+          image world.
 
           Each archive holds `manifest.json` and `component.wasm` at its root —
           the directory shape `south-provider-runtime` loads. Extract one and
