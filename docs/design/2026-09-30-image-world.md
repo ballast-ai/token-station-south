@@ -1427,6 +1427,33 @@ What the record left to the implementation, as built on branch `image/s-i-34`, f
   `compatibility.json` records `contracts.media` and `contracts.image` only at S-I-8.
 - No crate version is bumped in these steps; S-I-8 bumps `south-provider-api` with the other guest-linked crates.
 
+## Implementation note: S-I-5 (part), the safe fetch host suite (2026-10-09)
+
+`south.safe-fetch.v1` (version 1, 26 cases) is the gate ③ suite of §11 D8b and §12.3 item 3, landed ahead of the
+rest of S-I-5 because it depends only on S-I-1a's pure halves. Fixtures are in
+`crates/south-provider-conformance/src/safe_fetch.rs`; the runner, the fake ports and the reference executor are in
+`crates/south-testkit/src/safe_fetch.rs`. `compatibility.json` records it `not_verified` for both hosts.
+
+- **Shape.** Each fixture is a whole fake network: what the resolver answers per name (fixed, rebinding, or never),
+  what each server answers by TLS server name, and the system proxy the environment sets. The runner builds
+  `SafeFetchPortsV1` from it and calls the host's `SafeFetchExecutorV1::fetch(input, ports)` (a boxed `Send` future,
+  as for every other host suite). The executor resolves through `ports.resolve`, connects through
+  `ports.exchange(SocketAddr, request)` and treats `ports.system_proxy()` as its process proxy environment. All
+  boundary evidence (resolver queries, connected addresses, header names, server name and request target) is read
+  off the fakes by the runner, not reported by the adapter.
+- **Cases.** Every D8b vector (http, userinfo, `127.0.0.1`, `169.254.169.254`, a name resolving to a private range,
+  a name resolving to several addresses of which one is forbidden, `::ffff:10.0.0.1`, `::10.0.0.1`,
+  `64:ff9b::a00:1`, `2002:a00:1::1`, `fec0::1`, a 302 to an internal address, a proxy environment), plus
+  `localhost`, a name with no address, a resolver stall, a 301 to a public mirror, a 404, the plain success, DNS
+  rebinding (pinning), the declared media type over a disagreeing upstream one, the host limit (exact and one
+  over, across chunks), the 64 MiB cap above a larger host limit, an empty body, and a body stall. The IPv6 vectors
+  arrive as resolver answers, since a literal in the URL is already refused by `ArtifactUrlV1::parse`.
+- **Decisions the record left open.** A non-2xx, non-3xx status is a failure (`UpstreamStatus`); §11 names only
+  3xx. "Only `Accept`" means exactly one header besides `host`, named `accept`, with any value. The timeout is one
+  total deadline per fetch, resolution included; two rows end only by it, so the runner bounds each case at its
+  total timeout plus one second and records an overrun as `Deadline`. The failure codes mirror
+  `ArtifactUrlErrorV1` one for one, plus seven fetch codes.
+
 ## Revision note (2026-10-09)
 
 - Header: `Status` is accepted; `Rulings` and `Revised` updated; a reconciliation baseline paragraph added.

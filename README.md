@@ -95,6 +95,11 @@ the [task adapter vocabulary](docs/design/2026-08-27-task-adapter-vocabulary.md)
   Two more gate ③ suites are host-implemented the same way: `south.eventstream-framing.v1` (the host's
   framing executor: `bytes` versus `aws-eventstream`, canonical re-encoding, faults, the buffered path) and
   `south.request-signing.v1` (the declaration-selected SigV4 finalizer, verified by recomputing the signature).
+  The media worlds' gate ③ suite `south.safe-fetch.v1` holds the host's artifact-URL fetch executor to the image
+  record's §11 rules: its fixtures here describe a whole fake network (resolver answers, servers, a system proxy),
+  and the `south-testkit` runner hands those fakes to the host's executor and judges what it resolved, where it
+  connected, what it sent and what it returned, with a reference executor built on `ArtifactUrlV1::parse` and
+  `is_forbidden_egress_address`.
 - `south-provider-api` owns the v2 provider component ABI: the WIT package
   `token-station:adapter@2.0.0` (world `provider-adapter-v2`, JSON payloads named by
   canonical type, raw-bytes stream chunks) and the component `manifest.json` schema
