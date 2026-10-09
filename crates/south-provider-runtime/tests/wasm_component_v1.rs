@@ -200,8 +200,10 @@ fn a_hung_guest_is_cut_off_at_the_deadline_not_at_infinity() {
     );
 
     // The instance trapped, but the *component* must survive: the next call
-    // reports an error rather than panicking the host.
-    let _ = component.call_model_capabilities(&config_json(&json!({})));
+    // gets a fresh instance and answers.
+    component
+        .call_model_capabilities(&config_json(&json!({})))
+        .expect("the call after a deadline must succeed");
 }
 
 #[test]
@@ -213,6 +215,10 @@ fn a_guest_that_allocates_past_the_limit_traps_instead_of_pressuring_the_host() 
         .expect_err("256MB against a 64MB limit must fail");
 
     assert!(matches!(refused, CallErrorV1::Trap(_)), "got {refused:?}");
+
+    component
+        .call_model_capabilities(&config_json(&json!({})))
+        .expect("the call after an out-of-memory trap must succeed");
 }
 
 #[test]
@@ -224,6 +230,10 @@ fn a_panicking_guest_becomes_a_trap_not_a_host_panic() {
         .expect_err("a guest panic is a trap");
 
     assert!(matches!(refused, CallErrorV1::Trap(_)), "got {refused:?}");
+
+    component
+        .call_model_capabilities(&config_json(&json!({})))
+        .expect("the call after a panic must succeed");
 }
 
 #[test]

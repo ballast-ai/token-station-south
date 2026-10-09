@@ -58,6 +58,10 @@ fn obey_magic(value: &Value) {
     if value.get("__panic").is_some() {
         panic!("the input told me to");
     }
+    if let Some(ms) = value.get("__sleep_ms").and_then(Value::as_u64) {
+        // Waits on a clock pollable, which the host has no way to wait for.
+        std::thread::sleep(std::time::Duration::from_millis(ms));
+    }
 }
 
 impl Guest for TestProvider {
@@ -139,6 +143,13 @@ impl Guest for TestProvider {
     }
 
     fn parse_stream_chunk(chunk: Vec<u8>) -> Result<String, String> {
+        // A chunk that is a JSON object can carry the same magic keys as the
+        // other calls; real SSE chunks begin with `data:` and never match.
+        if chunk.first() == Some(&b'{') {
+            if let Ok(value) = serde_json::from_slice::<Value>(&chunk) {
+                obey_magic(&value);
+            }
+        }
         let mut buffer = STREAM_BUFFER.lock().expect("single-threaded guest");
         buffer.extend_from_slice(&chunk);
 

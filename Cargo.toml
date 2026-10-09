@@ -7,7 +7,7 @@ edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/GlimpseEngine/token-station-south"
 rust-version = "1.96"
-version = "0.51.0"
+version = "0.51.1"
 
 [workspace.dependencies]
 base64 = "0.23.1"
@@ -39,6 +39,7 @@ wasmtime = { version = "49", default-features = false, features = [
     "wat",
 ] }
 wasmtime-wasi = "49"
+wasmtime-wasi-io = { version = "49", default-features = false, features = ["std"] }
 wit-parser = "0.260"
 zeroize = "1.8.2"
 

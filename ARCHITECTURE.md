@@ -202,7 +202,7 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.51.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.50.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.51.1; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.50.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
 **Unreleased (B6-2)**: the Bedrock InvokeModel Anthropic component (design record
 `docs/design/2026-10-08-bedrock-invoke-anthropic-component.md`, accepted 2026-10-09). The new package
 `provider-anthropic-bedrock-invoke` 1.0.0 (family `anthropic-bedrock-invoke`, `host_signed` with `aws-sigv4` as Converse
@@ -216,6 +216,13 @@ strict base64 codec replaces the credential recipe interpreter's. No release has
 no version of its own beyond the new package: `south-component-conformance` stays at the 0.50.0 #167 gave it, and every
 existing package keeps the single bump over v0.50.0 that #167 gave it (`provider-anthropic` 1.0.16 now also carries the
 two behavior changes above).
+**v0.51.1**: runtime fix for host gap #101 (release record `docs/design/2026-10-09-release-0.51.1.md`). A guest trap
+inside a tokio runtime used to panic the calling task, because `add_to_linker_sync` runs every blocking `wasi:io`
+function under `Handle::block_on` and a trapping guest flushes its panic or allocation-failure message to stderr; and
+after any trap the component's shared instance could never be entered again. `nonblocking_io` registers replacements
+that drive the same `wasmtime-wasi-io` futures on the calling thread without parking it (a wait that cannot complete is a
+trap), and the call that follows a guest error replaces the shared instance. Only `south-provider-runtime` changes: no
+package, contract or guest-linked crate (Q47 does not apply), all eighteen packages keep their version and bytes.
 **v0.51.0**: embeddings contract 2, inline media inputs (release record `docs/design/2026-10-09-release-0.51.0.md`,
 embeddings record §17). `EmbeddingInputV1::Media` and `parse_embeddings_request_v2` carry a `data:<media type>;base64,`
 input undecoded; the `media` capability word needs `contracts: {"embeddings": 2}`; `embeddings-gemini` 1.1.0

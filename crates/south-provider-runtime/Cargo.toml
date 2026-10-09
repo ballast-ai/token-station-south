@@ -15,10 +15,13 @@ south-provider-api = { path = "../south-provider-api", version = "0.50.0" }
 thiserror.workspace = true
 wasmtime.workspace = true
 wasmtime-wasi.workspace = true
+wasmtime-wasi-io.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
 serde_json.workspace = true
+# The guest-trap tests call from a tokio worker and a current-thread runtime.
+tokio = { workspace = true, features = ["rt", "rt-multi-thread"] }
 
 [lints]
 workspace = true
