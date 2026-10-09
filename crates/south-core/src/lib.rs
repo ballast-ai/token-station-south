@@ -12,7 +12,7 @@ use south_contracts::{
     JsonPostRequestV1, MultipartBodyV1, MultipartPostRequestV1, PreparationErrorV1, ProviderAuthV1,
     ProviderEndpointV1, QueryStringV1, RelativePathV1, SafeHeaders, SignedHeaderSetV1,
     SignedHeaderV1, StreamChunkV1, StreamReadErrorV1, StreamRejectedV1, StreamingResponseHeadV1,
-    TransportErrorV1, UserAgentV1,
+    TextBodyV1, TextPostRequestV1, TransportErrorV1, UserAgentV1,
 };
 use thiserror::Error;
 use tokio::time::{Instant, timeout_at};
@@ -300,7 +300,8 @@ pub struct PreparedHttpRequestV1<'request> {
     /// has no body slot at all, rather than an empty one, so a transport cannot send `{}` or a
     /// zero-length payload where the contract promised nothing. Since version seven the `Some`
     /// arm also says *which* body shape it is, because a multipart body brings a media type the
-    /// transport must emit and a JSON one does not.
+    /// transport must emit and a JSON one does not. Version twelve adds the text arm, which
+    /// brings a rendered media type too.
     body: Option<RequestBodyRefV1<'request>>,
     auth_headers: Vec<BoundAuthHeader<'request>>,
     user_agent: Option<&'request UserAgentV1>,
@@ -317,6 +318,9 @@ pub enum RequestBodyRefV1<'request> {
     Json(&'request JsonBodyV1),
     /// Opaque bytes under a rendered media type, from a [`MultipartPostRequestV1`].
     Multipart(&'request MultipartBodyV1),
+    /// Bounded UTF-8 text under a rendered media type from a closed set, from a
+    /// [`TextPostRequestV1`] (HTTP contract version twelve).
+    Text(&'request TextBodyV1),
 }
 
 impl<'request> RequestBodyRefV1<'request> {
@@ -326,6 +330,7 @@ impl<'request> RequestBodyRefV1<'request> {
         match self {
             Self::Json(body) => body.as_str().as_bytes(),
             Self::Multipart(body) => body.as_bytes(),
+            Self::Text(body) => body.as_str().as_bytes(),
         }
     }
 
@@ -334,12 +339,14 @@ impl<'request> RequestBodyRefV1<'request> {
     /// `None` for JSON, deliberately: that shape's `content-type` travels through the ordinary
     /// header channel and has since version one, and hosts legitimately send values South does
     /// not get to normalize. Rendering one for them would be a wire change wearing a refactor's
-    /// clothes.
+    /// clothes. `Some` for the multipart and text arms, whose request types refuse to carry a
+    /// `content-type` in their ordinary headers, so this value is the only one on the wire.
     #[must_use]
     pub fn content_type(self) -> Option<&'request str> {
         match self {
             Self::Json(_) => None,
             Self::Multipart(body) => Some(body.content_type()),
+            Self::Text(body) => Some(body.content_type()),
         }
     }
 
@@ -349,10 +356,12 @@ impl<'request> RequestBodyRefV1<'request> {
         match self {
             Self::Json(body) => body.len(),
             Self::Multipart(body) => body.len(),
+            Self::Text(body) => body.len(),
         }
     }
 
-    /// Returns whether the body is empty — never true for a validated body of either shape.
+    /// Returns whether the body is empty — never true for a validated JSON or multipart body; a
+    /// text body may be empty (see [`TextBodyV1::try_new`]).
     #[must_use]
     pub fn is_empty(self) -> bool {
         self.len() == 0
@@ -361,12 +370,14 @@ impl<'request> RequestBodyRefV1<'request> {
 
 /// The method-neutral projection of a request the orchestration layer prepares.
 ///
-/// [`JsonPostRequestV1`], [`GetRequestV1`] and [`MultipartPostRequestV1`] are separate contract
-/// types on purpose (buffered-GET record D1, multipart record D1): the JSON shape keeps its
-/// mandatory JSON body, the GET shape has no body slot, and the multipart shape carries opaque
-/// bytes under a rendered media type. This private projection is where the three meet, so the
-/// binding check, the assembly of auth headers, and the finalizer view are written once. It owns
-/// nothing but the method — every other field borrows the request it was projected from.
+/// [`JsonPostRequestV1`], [`GetRequestV1`], [`MultipartPostRequestV1`] and [`TextPostRequestV1`]
+/// are separate contract types on purpose (buffered-GET record D1, multipart record D1): the JSON
+/// shape keeps its mandatory JSON body, the GET shape has no body slot, the multipart shape
+/// carries opaque bytes under a rendered media type, and the text shape carries bounded UTF-8
+/// under a rendered media type from a closed set. This private projection is where the four
+/// meet, so the binding check, the assembly of auth headers, and the finalizer view are written
+/// once. It owns nothing but the method — every other field borrows the request it was projected
+/// from.
 struct RequestParts<'request> {
     method: Method,
     relative_path: &'request RelativePathV1,
@@ -413,6 +424,20 @@ impl<'request> From<&'request MultipartPostRequestV1> for RequestParts<'request>
             query: request.query(),
             headers: request.headers(),
             body: Some(RequestBodyRefV1::Multipart(request.body())),
+            auth: request.auth(),
+            user_agent: request.user_agent(),
+        }
+    }
+}
+
+impl<'request> From<&'request TextPostRequestV1> for RequestParts<'request> {
+    fn from(request: &'request TextPostRequestV1) -> Self {
+        Self {
+            method: Method::POST,
+            relative_path: request.relative_path(),
+            query: request.query(),
+            headers: request.headers(),
+            body: Some(RequestBodyRefV1::Text(request.body())),
             auth: request.auth(),
             user_agent: request.user_agent(),
         }
@@ -564,8 +589,10 @@ impl PreparedHttpRequestV1<'_> {
     /// Returns the media type the transport must emit, when South renders one.
     ///
     /// `Some` exactly for a multipart body, whose media type is rendered from the boundary the
-    /// contract validated. `None` for the JSON and GET shapes, whose `content-type` — if any —
-    /// is the host's to declare through the ordinary header channel.
+    /// contract validated, and for a text body (HTTP contract version twelve), whose media type is
+    /// its closed [`south_contracts::TextMediaTypeV1`] spelling. `None` for the JSON and GET
+    /// shapes, whose `content-type` — if any — is the host's to declare through the ordinary
+    /// header channel.
     #[must_use]
     pub fn content_type(&self) -> Option<&str> {
         self.body.and_then(RequestBodyRefV1::content_type)
@@ -859,11 +886,15 @@ where
 /// with audio answers a rejection with JSON; a host reading that error body calls
 /// [`str::from_utf8`] itself.
 ///
-/// JSON POST only, and deliberately so. Every call site this shape exists for — synthesised speech
-/// and rendered images — is a JSON POST. There is no binary GET twin because the two host paths
-/// that read binary over a GET fetch absolute, ephemeral artifact URLs, which a
-/// [`ProviderBindingV1`] cannot address, and no binary multipart twin because no multipart call
-/// site answers in bytes. Reserving either would be a shape with no consumer.
+/// JSON POST only when it shipped (0.26.0), and deliberately so: every call site it was built for
+/// — synthesised speech and rendered images — was a JSON POST. There is still no binary GET twin,
+/// because the two host paths that read binary over a GET fetch absolute, ephemeral artifact URLs,
+/// which a [`ProviderBindingV1`] cannot address. The 0.26.0 reason for having no binary multipart
+/// twin — "no multipart call site answers in bytes" — stopped being true with the media worlds:
+/// the image edit surface sends multipart and must read its answer as bytes (image record §6.3a
+/// rules 1 and 2), so HTTP contract version twelve adds [`execute_multipart_binary_call_v1`], and
+/// the SSML text shape it also adds answers in audio and has [`execute_text_binary_call_v1`] only.
+/// There is no raw twin of any binary entry point (binary-response record, D7).
 ///
 /// # Errors
 ///
@@ -893,7 +924,95 @@ where
     .await
 }
 
-/// The one buffered credential-arm flow both request shapes share.
+/// Validates, authorizes, resolves, prepares, and executes one multipart POST whose response body
+/// is buffered as opaque bytes.
+///
+/// The binary-response twin of [`execute_multipart_call_v1`] (HTTP contract version twelve), and
+/// the multipart twin of [`execute_binary_call_v1`]: the same request type as the first, the same
+/// response type and transport trait as the second, and the shared flow underneath both — the same
+/// validation order, binding check, biased cancellation race and three credential arms. The
+/// transport emits the media type the contract rendered from the body's boundary, exactly as on
+/// the UTF-8 multipart path, and bytes come back on every status, exactly as on the JSON binary
+/// path, up to [`south_contracts::MAX_BINARY_RESPONSE_BODY_BYTES`].
+///
+/// It exists because a multipart call site now answers with more than the UTF-8 path can carry:
+/// an image edit's JSON answer holds up to ten base64 images, and one between the UTF-8 limit and
+/// the binary limit would otherwise be refused **after** dispatch — an upstream that succeeded and
+/// charged, and a delivery the host cannot complete (image record §6.3a). Reading bytes moves the
+/// UTF-8 and JSON decoding to the host, outside the sandbox, where the larger cap applies. Neither
+/// a transport trait nor a contract type changes for it: [`AsyncBinaryHttpTransport`] already takes
+/// any prepared request (image record §18.1). No raw, host-signed or streaming twin.
+///
+/// # Errors
+///
+/// Returns [`ProviderCallErrorV1`] exactly as [`execute_binary_call_v1`] does. A host-signed
+/// request is `UNSUPPORTED_AUTH_SHAPE` here, as it is on every unsigned entry point.
+pub async fn execute_multipart_binary_call_v1<R, T>(
+    binding: &ProviderBindingV1,
+    request: &MultipartPostRequestV1,
+    resolver: &R,
+    transport: &T,
+    deadline: Instant,
+    cancellation: &CancellationToken,
+) -> Result<BufferedBinaryResponseV1, ProviderCallErrorV1>
+where
+    R: CredentialResolver + ?Sized,
+    T: AsyncBinaryHttpTransport + ?Sized,
+{
+    execute_buffered(
+        binding,
+        request.into(),
+        resolver,
+        BinaryDispatchV1(transport),
+        deadline,
+        cancellation,
+    )
+    .await
+}
+
+/// Validates, authorizes, resolves, prepares, and executes one text POST whose response body is
+/// buffered as opaque bytes.
+///
+/// The entry point of [`TextPostRequestV1`] (HTTP contract version twelve), and its only one. The
+/// same flow as every other buffered entry point — validation order, binding check, biased
+/// cancellation race, three credential arms — with one wire fact of its own: the transport emits
+/// the media type the contract rendered from the body's closed media type, and the request shape
+/// refuses to carry a second `content-type` in its ordinary headers.
+///
+/// Bytes only, and deliberately so. The one call site this shape exists for, speech synthesis from
+/// an SSML document (speech record D3a), answers in audio, and every media-world call reads its
+/// response as bytes (image record §6.3a rule 1). A UTF-8 twin would be a shape with no consumer,
+/// which is the reasoning 0.26.0 applied to the binary GET; a raw, host-signed or streaming twin
+/// likewise. Bytes come back on every status, so a rejection's JSON body reaches the host intact.
+///
+/// # Errors
+///
+/// Returns [`ProviderCallErrorV1`] exactly as [`execute_binary_call_v1`] does. A host-signed
+/// request is `UNSUPPORTED_AUTH_SHAPE` here, as it is on every unsigned entry point.
+pub async fn execute_text_binary_call_v1<R, T>(
+    binding: &ProviderBindingV1,
+    request: &TextPostRequestV1,
+    resolver: &R,
+    transport: &T,
+    deadline: Instant,
+    cancellation: &CancellationToken,
+) -> Result<BufferedBinaryResponseV1, ProviderCallErrorV1>
+where
+    R: CredentialResolver + ?Sized,
+    T: AsyncBinaryHttpTransport + ?Sized,
+{
+    execute_buffered(
+        binding,
+        request.into(),
+        resolver,
+        BinaryDispatchV1(transport),
+        deadline,
+        cancellation,
+    )
+    .await
+}
+
+/// The one buffered credential-arm flow every buffered request shape shares.
 async fn execute_buffered<R, D>(
     binding: &ProviderBindingV1,
     request: RequestParts<'_>,

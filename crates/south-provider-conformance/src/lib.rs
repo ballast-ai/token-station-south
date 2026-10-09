@@ -25,6 +25,7 @@ mod eventstream_framing;
 mod header_auth;
 mod provider_binary;
 mod provider_get;
+mod provider_media_binary;
 mod provider_multipart;
 mod quota;
 mod request_signing;
@@ -86,6 +87,14 @@ pub use provider_get::{
     ProviderGetAuthArmV1, ProviderGetCaseIdV1, ProviderGetExpectedEvidenceV1,
     ProviderGetExpectedOutcomeV1, ProviderGetExpectedV1, ProviderGetFixtureV1, ProviderGetInputV1,
     ProviderGetUpstreamV1, provider_get_fixtures_v1,
+};
+pub use provider_media_binary::{
+    PROVIDER_MEDIA_BINARY_CONFORMANCE_SUITE_ID, PROVIDER_MEDIA_BINARY_CONFORMANCE_SUITE_VERSION,
+    ProviderMediaBinaryAuthArmV1, ProviderMediaBinaryCaseIdV1,
+    ProviderMediaBinaryExpectedEvidenceV1, ProviderMediaBinaryExpectedOutcomeV1,
+    ProviderMediaBinaryExpectedV1, ProviderMediaBinaryFixtureV1, ProviderMediaBinaryInputV1,
+    ProviderMediaBinaryRawResponseV1, ProviderMediaBinaryRequestBodyV1,
+    ProviderMediaBinaryUpstreamV1, provider_media_binary_fixtures_v1,
 };
 pub use provider_multipart::{
     PROVIDER_MULTIPART_CONFORMANCE_SUITE_ID, PROVIDER_MULTIPART_CONFORMANCE_SUITE_VERSION,

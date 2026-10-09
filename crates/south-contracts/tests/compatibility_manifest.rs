@@ -115,6 +115,8 @@ struct Conformance {
     provider_multipart_suite: u32,
     provider_binary_suite_id: String,
     provider_binary_suite: u32,
+    provider_media_binary_suite_id: String,
+    provider_media_binary_suite: u32,
     credential_recipe_suite_id: String,
     credential_recipe_suite: u32,
     eventstream_framing_suite_id: String,
@@ -164,7 +166,7 @@ struct ProviderRuntime {
 /// status is not `verified`.
 type ExpectedCapability = (&'static str, &'static str, Option<usize>);
 
-fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 12]> {
+fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 13]> {
     BTreeMap::from([
         (
             "token-station",
@@ -212,6 +214,10 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 1
                 // 0.26.0) stays not_verified: the community host has no text-to-speech or
                 // image-generation surface, so nothing there answers in bytes.
                 ("provider_binary", "not_verified", None),
+                // provider_media_binary (a multipart or SSML text POST read as bytes, HTTP
+                // contract v12, the media minor) stays not_verified: the community host has no
+                // image-edit or speech surface.
+                ("provider_media_binary", "not_verified", None),
                 // credential_recipe (gate ③ of credential recipes, B4) stays not_verified: the
                 // community host has no recipe executor.
                 ("credential_recipe", "not_verified", None),
@@ -411,6 +417,11 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 1
                 // record is held by that host's repository; this manifest records only the
                 // resulting status.
                 ("provider_binary", "verified", Some(6)),
+                // provider_media_binary (HTTP contract v12, image record S-I-2) is new and no host
+                // has run it. The `provider_binary` result above was measured on the JSON POST
+                // pairing only and is deliberately not carried over to these rows (image record
+                // §19, S-I-2 acceptance).
+                ("provider_media_binary", "not_verified", None),
                 // token-station-server credential_recipe demoted 2026-10-05. It was verified the
                 // same day against the nine-case table (P21 S3a, C3: its generic recipe executor
                 // passed 9/9 at server `8777b84f`, host feedback SF6). The suite has since grown
@@ -604,6 +615,11 @@ fn compatibility_manifest_describes_the_library_slice() {
     assert_eq!(manifest.conformance.provider_multipart_suite, 1);
     assert_eq!(manifest.conformance.provider_binary_suite_id, "south.provider-binary.v1");
     assert_eq!(manifest.conformance.provider_binary_suite, 1);
+    assert_eq!(
+        manifest.conformance.provider_media_binary_suite_id,
+        "south.provider-media-binary.v1"
+    );
+    assert_eq!(manifest.conformance.provider_media_binary_suite, 1);
     assert_eq!(manifest.conformance.credential_recipe_suite_id, "south.credential-recipe.v1");
     assert_eq!(manifest.conformance.credential_recipe_suite, 1);
     assert_eq!(manifest.conformance.eventstream_framing_suite_id, "south.eventstream-framing.v1");
@@ -628,26 +644,26 @@ fn compatibility_manifest_describes_the_library_slice() {
         ("south-task-core", "task_workflow_orchestration_v1"),
         (
             "south-contracts",
-            "http_get_request_multipart_request_binary_response_auth_error_stream_quota_metadata_header_auth_controlled_query_user_agent_v1",
+            "http_get_request_multipart_request_text_request_binary_response_auth_error_stream_quota_metadata_header_auth_controlled_query_user_agent_v1",
         ),
         (
             "south-core",
-            "buffered_streaming_provider_call_buffered_get_call_buffered_multipart_call_buffered_binary_call_header_auth_controlled_query_user_agent_raw_prelude_signed_raw_call_get_raw_call_multipart_raw_call_v1",
+            "buffered_streaming_provider_call_buffered_get_call_buffered_multipart_call_buffered_binary_call_buffered_multipart_binary_call_buffered_text_binary_call_header_auth_controlled_query_user_agent_raw_prelude_signed_raw_call_get_raw_call_multipart_raw_call_v1",
         ),
         ("south-provider-api", "provider_adapter_v2_wit_manifest_v1"),
         ("south-component-conformance", "provider_component_gates_reference_v1"),
         (
             "south-provider-conformance",
-            "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_provider_get_provider_multipart_provider_binary_credential_recipe_eventstream_framing_request_signing_suites_v1",
+            "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_provider_get_provider_multipart_provider_binary_provider_media_binary_credential_recipe_eventstream_framing_request_signing_suites_v1",
         ),
         ("south-provider-runtime", "sandboxed_component_execution_v1"),
         (
             "south-testkit",
-            "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_provider_get_provider_multipart_provider_binary_runners_raw_builder_signed_raw_builder_get_raw_builder_multipart_raw_builder_v1",
+            "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_provider_get_provider_multipart_provider_binary_provider_media_binary_runners_raw_builder_signed_raw_builder_get_raw_builder_multipart_raw_builder_v1",
         ),
         (
             "south-transport-reqwest",
-            "buffered_streaming_json_post_buffered_get_buffered_multipart_buffered_binary_quota_metadata_header_auth_user_agent_transport_pair_v1",
+            "buffered_streaming_json_post_buffered_get_buffered_multipart_buffered_binary_buffered_text_quota_metadata_header_auth_user_agent_transport_pair_v1",
         ),
     ]);
     assert_eq!(manifest.crates.len(), expected_crates.len());

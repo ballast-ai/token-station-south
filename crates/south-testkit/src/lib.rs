@@ -51,6 +51,7 @@ mod header_auth;
 mod host_signed;
 mod provider_binary;
 mod provider_get;
+mod provider_media_binary;
 mod provider_multipart;
 mod quota;
 mod raw;
@@ -101,6 +102,15 @@ pub use provider_get::{
     ProviderGetConformanceReportV1, ProviderGetEvidenceV1, ProviderGetMismatchCategoryV1,
     ProviderGetMismatchV1, ProviderGetObservationV1, ReferenceAssembledProviderGetExecutorV1,
     parse_reference_get_input, run_provider_get_conformance_v1,
+};
+pub use provider_media_binary::{
+    AssembledProviderMediaBinaryExecutionFutureV1, AssembledProviderMediaBinaryExecutorV1,
+    MAX_PROVIDER_MEDIA_BINARY_MISMATCHES_V1, ProviderMediaBinaryConformanceFailureV1,
+    ProviderMediaBinaryConformanceReportV1, ProviderMediaBinaryEvidenceV1,
+    ProviderMediaBinaryMismatchCategoryV1, ProviderMediaBinaryMismatchV1,
+    ProviderMediaBinaryObservationV1, ProviderMediaBinaryRequestV1,
+    ReferenceAssembledProviderMediaBinaryExecutorV1, parse_reference_media_binary_input,
+    run_provider_media_binary_conformance_v1,
 };
 pub use provider_multipart::{
     AssembledProviderMultipartExecutionFutureV1, AssembledProviderMultipartExecutorV1,
@@ -752,6 +762,10 @@ const fn map_contract_error(error: ContractErrorV1) -> ProviderCallFailureCodeV1
         | ContractErrorV1::ContentTypeHeaderNotPermitted => {
             ProviderCallFailureCodeV1::InvalidRelativePath
         }
+        // The text shape's media type outside the closed set (HTTP contract version twelve) is
+        // the same preparation-time, zero-call declaration failure, and folds the same way — not
+        // into `InvalidJsonBody`, for the reason given for the multipart variants above.
+        ContractErrorV1::UnsupportedTextMediaType => ProviderCallFailureCodeV1::InvalidRelativePath,
         // B7a: a declared query parameter refused at construction is the same preparation-time,
         // zero-call declaration failure as an invalid sanctioned value, and folds the same way.
         ContractErrorV1::InvalidQueryDeclaration => ProviderCallFailureCodeV1::InvalidRelativePath,

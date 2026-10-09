@@ -23,7 +23,7 @@ fn enumeration(values: &[&str]) -> QueryValueSyntaxV1 {
 
 #[test]
 fn the_contract_versions_moved() {
-    assert_eq!(HTTP_CONTRACT_VERSION, 11);
+    assert_eq!(HTTP_CONTRACT_VERSION, 12);
     assert_eq!(PROVIDER_QUOTA_METADATA_CONTRACT_VERSION, 2);
 }
 
