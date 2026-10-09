@@ -21,7 +21,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 use south_provider_runtime::{
@@ -147,22 +147,22 @@ fn load_embeddings() -> LoadedComponentV1 {
 #[derive(Clone, Copy, Debug)]
 enum Hosting {
     /// A request task on a multi-thread tokio runtime: the gateway's shape.
-    MultiThread,
+    TokioWorker,
     /// A current-thread tokio runtime: what `#[tokio::test]` gives a host's tests.
-    CurrentThread,
+    TokioLocal,
     /// A thread with no tokio runtime at all.
-    PlainThread,
+    BareThread,
 }
 
 /// Runs `work` as the host would and fails the test, rather than the process, when it panics.
 fn hosted(hosting: Hosting, work: impl FnOnce() + Send + 'static) {
     match hosting {
-        Hosting::PlainThread => {
+        Hosting::BareThread => {
             std::thread::spawn(work).join().expect("the calling thread must not panic");
         }
-        Hosting::MultiThread | Hosting::CurrentThread => {
+        Hosting::TokioWorker | Hosting::TokioLocal => {
             let runtime = match hosting {
-                Hosting::MultiThread => {
+                Hosting::TokioWorker => {
                     tokio::runtime::Builder::new_multi_thread().worker_threads(2).build()
                 }
                 _ => tokio::runtime::Builder::new_current_thread().build(),
@@ -189,6 +189,10 @@ enum Fault {
     OutOfMemory,
     /// The guest loops forever; the epoch deadline cuts it off.
     Hang,
+    /// The guest sleeps for five seconds, which means waiting on a clock
+    /// pollable. The sandbox has no blocking waits: the call is a trap at once
+    /// instead of holding a host thread that the epoch deadline cannot reach.
+    Sleep,
 }
 
 impl Fault {
@@ -197,6 +201,7 @@ impl Fault {
             Self::Panic => json!({ "__panic": true }),
             Self::OutOfMemory => json!({ "__grow_mb": 256 }),
             Self::Hang => json!({ "__hang": true }),
+            Self::Sleep => json!({ "__sleep_ms": 5000 }),
         }
     }
 
@@ -205,7 +210,7 @@ impl Fault {
     fn assert_refused(self, result: Result<String, CallErrorV1>) {
         match (self, result) {
             (Self::Hang, Err(CallErrorV1::Deadline)) => {}
-            (Self::Panic | Self::OutOfMemory, Err(CallErrorV1::Trap(message))) => {
+            (Self::Panic | Self::OutOfMemory | Self::Sleep, Err(CallErrorV1::Trap(message))) => {
                 assert!(
                     !message.contains("poisoned") && !message.contains("cannot enter"),
                     "a fresh trap must report itself, not the wreck of an earlier one: {message}"
@@ -271,10 +276,18 @@ fn call(
 /// Trap, then call again, then trap again and call again: the component outlives its traps.
 fn trap_then_recover(carrier: Carrier, fault: Fault, component: &LoadedComponentV1) {
     call(carrier, component, &json!({})).expect("the control call succeeds before any trap");
+    let started = Instant::now();
     for _ in 0..2 {
         fault.assert_refused(call(carrier, component, &fault.magic()));
         call(carrier, component, &json!({}))
             .unwrap_or_else(|error| panic!("the call after a {fault:?} must succeed: {error:?}"));
+    }
+    if matches!(fault, Fault::Sleep) {
+        assert!(
+            started.elapsed() < Duration::from_secs(4),
+            "a sleeping guest must be refused, not waited for: {:?}",
+            started.elapsed()
+        );
     }
     // The shared instance answers too, whichever world the carrier was in.
     if matches!(carrier, Carrier::Stream) {
@@ -308,6 +321,14 @@ macro_rules! trap_matrix {
                 run($hosting, Carrier::Provider, Fault::Hang);
             }
             #[test]
+            fn provider_sleep() {
+                run($hosting, Carrier::Provider, Fault::Sleep);
+            }
+            #[test]
+            fn embeddings_sleep() {
+                run($hosting, Carrier::Embeddings, Fault::Sleep);
+            }
+            #[test]
             fn embeddings_panic() {
                 run($hosting, Carrier::Embeddings, Fault::Panic);
             }
@@ -336,7 +357,7 @@ macro_rules! trap_matrix {
 }
 
 trap_matrix! {
-    multi_thread_runtime => Hosting::MultiThread,
-    current_thread_runtime => Hosting::CurrentThread,
-    plain_thread => Hosting::PlainThread,
+    multi_thread_runtime => Hosting::TokioWorker,
+    current_thread_runtime => Hosting::TokioLocal,
+    bare_thread => Hosting::BareThread,
 }

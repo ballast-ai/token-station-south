@@ -208,6 +208,9 @@ impl LoadedComponentV1 {
     ) -> Result<Self, LoadErrorV1> {
         let mut linker: Linker<Ctx> = Linker::new(runtime.engine());
         wasmtime_wasi::p2::add_to_linker_sync(&mut linker).map_err(LoadErrorV1::NotAComponent)?;
+        // The synchronous WASI shims re-enter the ambient tokio runtime for every blocking
+        // `wasi:io` call, which panics on a runtime thread; see `nonblocking_io`.
+        crate::nonblocking_io::add_to_linker(&mut linker).map_err(LoadErrorV1::NotAComponent)?;
         // Only the provider and task-v1 worlds import `host`; task-v2 and
         // embeddings are pure exports, so the linker never offers them a
         // signing capability to find.

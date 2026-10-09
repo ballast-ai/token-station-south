@@ -54,6 +54,7 @@ mod bindings;
 mod catalog;
 mod component;
 mod loader;
+mod nonblocking_io;
 mod package_set;
 mod runtime;
 

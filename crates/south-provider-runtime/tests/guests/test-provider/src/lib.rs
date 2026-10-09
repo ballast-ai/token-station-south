@@ -58,6 +58,10 @@ fn obey_magic(value: &Value) {
     if value.get("__panic").is_some() {
         panic!("the input told me to");
     }
+    if let Some(ms) = value.get("__sleep_ms").and_then(Value::as_u64) {
+        // Waits on a clock pollable, which the host has no way to wait for.
+        std::thread::sleep(std::time::Duration::from_millis(ms));
+    }
 }
 
 impl Guest for TestProvider {
