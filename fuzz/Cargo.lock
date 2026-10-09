@@ -363,7 +363,7 @@ dependencies = [
 
 [[package]]
 name = "south-north-codec"
-version = "0.51.0"
+version = "0.51.1"
 dependencies = [
  "base64",
  "serde_json",

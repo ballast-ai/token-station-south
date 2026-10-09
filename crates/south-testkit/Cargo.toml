@@ -12,8 +12,8 @@ version.workspace = true
 bytes.workspace = true
 http.workspace = true
 south-contracts = { path = "../south-contracts", version = "0.50.0" }
-south-core = { path = "../south-core", version = "0.51.0" }
-south-provider-conformance = { path = "../south-provider-conformance", version = "0.51.0" }
+south-core = { path = "../south-core", version = "0.51.1" }
+south-provider-conformance = { path = "../south-provider-conformance", version = "0.51.1" }
 tokio = { workspace = true, features = ["macros", "sync", "time"] }
 tokio-util = { workspace = true, features = ["rt"] }
 
