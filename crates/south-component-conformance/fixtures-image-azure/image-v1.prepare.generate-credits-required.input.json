@@ -10,7 +10,7 @@
     }
   },
   "context": {
-    "upstream_model": "mai-image-2.5",
+    "upstream_model": "MAI-Image-2.5",
     "metering_required": [
       "credits"
     ]

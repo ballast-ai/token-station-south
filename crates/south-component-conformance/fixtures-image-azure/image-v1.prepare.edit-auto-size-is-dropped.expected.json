@@ -25,7 +25,7 @@
         "parts": [
           {
             "name": "model",
-            "value": "mai-image-2.5"
+            "value": "MAI-Image-2.5"
           },
           {
             "name": "prompt",

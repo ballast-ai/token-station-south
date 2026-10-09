@@ -27,7 +27,7 @@
     "body": {
       "json": {
         "template": {
-          "model": "mai-image-2.5",
+          "model": "MAI-Image-2.5",
           "prompt": "a red fox",
           "width": 1024,
           "height": 1024

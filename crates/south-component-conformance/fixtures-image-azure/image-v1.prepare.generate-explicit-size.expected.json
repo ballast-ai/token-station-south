@@ -27,7 +27,7 @@
     "body": {
       "json": {
         "template": {
-          "model": "mai-image-2.5",
+          "model": "MAI-Image-2.5",
           "prompt": "a lighthouse",
           "width": 768,
           "height": 1365

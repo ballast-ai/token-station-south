@@ -1,6 +1,6 @@
 [
   {
-    "model": "mai-image-2.5",
+    "model": "MAI-Image-2.5",
     "operations": [
       "generate",
       "edit"
@@ -35,7 +35,7 @@
     "request_elision_paths": []
   },
   {
-    "model": "mai-image-2.5-flash",
+    "model": "MAI-Image-2.5-Flash",
     "operations": [
       "generate",
       "edit"

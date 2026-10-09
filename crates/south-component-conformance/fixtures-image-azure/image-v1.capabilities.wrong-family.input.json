@@ -5,10 +5,10 @@
     "auth": "provider_api_key",
     "models": [
       {
-        "model": "mai-image-2.5"
+        "model": "MAI-Image-2.5"
       },
       {
-        "model": "mai-image-2.5-flash"
+        "model": "MAI-Image-2.5-Flash"
       }
     ]
   }
