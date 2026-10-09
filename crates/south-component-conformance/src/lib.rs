@@ -150,6 +150,7 @@ pub use embeddings_suite::{
     EMBEDDINGS_COMPONENT_SUITE_V1, EMBEDDINGS_MEDIA_ROW_V2, EMBEDDINGS_REQUIRED_ROWS_V1,
     run_embeddings_component_suite_v1,
 };
+pub mod reference_azure_image;
 pub mod reference_gemini_embeddings;
 pub mod reference_openai_compatible_embeddings;
 pub mod reference_vertex_embeddings;
