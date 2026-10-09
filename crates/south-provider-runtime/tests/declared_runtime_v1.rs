@@ -60,9 +60,11 @@ fn this_runtime_only() -> HostRangeV1 {
         BTreeSet::from([as_u32(&record["contracts"]["task"], "contracts.task")]),
     )]);
     if let Some(embeddings) = record["contracts"].get("embeddings") {
+        // The newest embeddings contract the release decodes is what `compatibility.json`
+        // records; a host decodes every contract up to it.
         contracts.insert(
             "embeddings".to_owned(),
-            BTreeSet::from([as_u32(embeddings, "contracts.embeddings")]),
+            (1..=as_u32(embeddings, "contracts.embeddings")).collect(),
         );
     }
     HostRangeV1 {

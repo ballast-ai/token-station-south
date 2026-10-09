@@ -268,7 +268,7 @@ pub const TASK_WORLD_SCHEMA_V2: WorldSchemaV1 = WorldSchemaV1 {
     auth_arms: &["bearer", "header_secret"],
 };
 
-/// The embeddings world's capability vocabulary, for contract 1.
+/// The embeddings world's capability vocabulary, for contracts 1 and 2.
 ///
 /// Each word states the most the component can do; a model that cannot serve
 /// a request is refused per request by `build-embeddings-request`.
@@ -278,11 +278,21 @@ pub const TASK_WORLD_SCHEMA_V2: WorldSchemaV1 = WorldSchemaV1 {
 /// - `batch`: it accepts more than one input in one request.
 /// - `dimensions`: it honors the requested output dimensions.
 /// - `token_ids`: it accepts inputs given as token ids.
-///
-/// `media` is deliberately absent: contract 1 carries text and token-id inputs
-/// only, so a package declaring `media` is refused like any unknown word until
-/// contract 2 adds it (2026-09-30 embeddings-contract record, §15).
-pub const EMBEDDINGS_CAPABILITIES: &[&str] = &["embed", "batch", "dimensions", "token_ids"];
+/// - `media`: it accepts media inputs, which contract 2 carries inline
+///   (2026-09-30 embeddings-contract record, §17). Contract 1 carries text
+///   and token-id inputs only (§15), so a package declaring `media` must also
+///   declare contract [`EMBEDDINGS_MEDIA_CONTRACT`]; gate ① refuses it
+///   otherwise ([`ManifestErrorV1::MediaCapabilityRequiresContract2`]).
+pub const EMBEDDINGS_CAPABILITIES: &[&str] =
+    &["embed", "batch", "dimensions", "token_ids", "media"];
+
+/// The capability word that needs a newer contract than 1.
+pub const EMBEDDINGS_MEDIA_CAPABILITY: &str = "media";
+
+/// The first embeddings contract that carries media inputs. Mirrors
+/// `south_contracts::EMBEDDINGS_CONTRACT_VERSION_V2`, repeated because this
+/// crate deliberately does not depend on `south-contracts`.
+pub const EMBEDDINGS_MEDIA_CONTRACT: u32 = 2;
 
 /// The embeddings world, as gate ① validates it.
 ///
@@ -894,6 +904,14 @@ impl ComponentManifestV1 {
             if self.providers.is_empty() {
                 return Err(ManifestErrorV1::ProviderFamilyRequired);
             }
+            // Media inputs exist from contract 2 (embeddings record §17.4); a package that says
+            // it accepts them but speaks contract 1 would be sent requests its host cannot build.
+            if self.capabilities.contains(EMBEDDINGS_MEDIA_CAPABILITY) {
+                let declared = self.compatibility.contracts.get("embeddings").copied();
+                if declared.is_none_or(|contract| contract < EMBEDDINGS_MEDIA_CONTRACT) {
+                    return Err(ManifestErrorV1::MediaCapabilityRequiresContract2 { declared });
+                }
+            }
             // The value channel (embeddings record §16): a family's non-secret keys reach the
             // component in `ProviderConfig.declared`, under the provider world's key rules. With no
             // endpoint here, only those rules apply.
@@ -1228,6 +1246,11 @@ pub enum ManifestErrorV1 {
     TaskLifecycleCapabilityRequired { missing: String },
     #[error("every embeddings component must support `embed`")]
     EmbedCapabilityRequired,
+    #[error(
+        "capability `media` needs `compatibility.contracts.embeddings` {EMBEDDINGS_MEDIA_CONTRACT} \
+         (embeddings contract 1 carries no media inputs); the manifest declares {declared:?}"
+    )]
+    MediaCapabilityRequiresContract2 { declared: Option<u32> },
     #[error(
         "usage_evidence is a provider-world declaration; other worlds meter through their own \
          contracts"

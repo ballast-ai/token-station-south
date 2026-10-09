@@ -538,7 +538,13 @@ fn compatibility_manifest_describes_the_library_slice() {
         south_contracts::MAX_RESPONSE_TRANSCRIPT_TOTAL_BYTES
     );
     assert_eq!(manifest.contracts.task, south_contracts::TASK_CONTRACT_VERSION);
-    assert_eq!(manifest.contracts.embeddings, south_contracts::EMBEDDINGS_CONTRACT_VERSION);
+    // The newest contract this release decodes, as `task` records its newest; a host's range
+    // lists every number it decodes (contract 1 packages keep working, record §17.4).
+    assert_eq!(
+        Some(&manifest.contracts.embeddings),
+        south_contracts::EMBEDDINGS_CONTRACT_VERSIONS.last()
+    );
+    assert_eq!(manifest.contracts.embeddings, south_contracts::EMBEDDINGS_CONTRACT_VERSION_V2);
     assert_eq!(manifest.contracts.task_limits.artifact_urls, south_contracts::MAX_ARTIFACT_URLS);
     assert_eq!(
         manifest.contracts.task_limits.artifact_ref_bytes,

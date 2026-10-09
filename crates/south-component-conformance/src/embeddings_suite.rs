@@ -1,5 +1,6 @@
-//! Gate ② for the embeddings world: `south.embeddings-component.v1` (record §10, under the v1
-//! scope of §15: no `request.media` row and no `ReferenceIntegrity`).
+//! Gate ② for the embeddings world: `south.embeddings-component.v1` (record §10). Contract 2
+//! (§17) adds the `request.media` row for a package declaring `media`; there is no
+//! `ReferenceIntegrity`, since media is carried inline.
 //!
 //! Request and error cases feed one component function each. A response case names the request
 //! case it answers; the suite builds that request, extracts and erases the vectors of the
@@ -32,8 +33,9 @@ use crate::{
 /// The suite identifier, equal to the manifest's `conformance.required_suite`.
 pub const EMBEDDINGS_COMPONENT_SUITE_V1: &str = south_provider_api::EMBEDDINGS_BEHAVIOR_SUITE;
 
-/// The rows every embeddings package ships by name (record §10; `request.media` waits for
-/// contract 2). A missing row is a [`CheckV1::Coverage`] failure.
+/// The rows every embeddings package ships by name (record §10). A missing row is a
+/// [`CheckV1::Coverage`] failure. A package declaring `media` also ships
+/// [`EMBEDDINGS_MEDIA_ROW_V2`].
 pub const EMBEDDINGS_REQUIRED_ROWS_V1: [&str; 10] = [
     "embeddings.request.single-text",
     "embeddings.request.batch-text",
@@ -46,6 +48,21 @@ pub const EMBEDDINGS_REQUIRED_ROWS_V1: [&str; 10] = [
     "embeddings.error.rejected-credential",
     "embeddings.error.server",
 ];
+
+/// The row a package declaring the `media` capability ships by name (record §10, §17.6).
+///
+/// A request holding a media input that the component builds, the input's `data` appearing in the
+/// body unchanged. A package that does not declare `media` is not asked for it.
+pub const EMBEDDINGS_MEDIA_ROW_V2: &str = "embeddings.request.media";
+
+/// Every row `manifest`'s package ships by name.
+fn required_rows(manifest: &ComponentManifestV1) -> Vec<&'static str> {
+    let mut rows = EMBEDDINGS_REQUIRED_ROWS_V1.to_vec();
+    if manifest.capabilities.contains(south_provider_api::EMBEDDINGS_MEDIA_CAPABILITY) {
+        rows.push(EMBEDDINGS_MEDIA_ROW_V2);
+    }
+    rows
+}
 
 /// The key injected to prove a component tolerates a newer peer's field.
 const UNKNOWN_FIELD: &str = "__conformance_unknown_field";
@@ -212,7 +229,8 @@ pub fn run_embeddings_component_suite_v1(
     manifest: &ComponentManifestV1,
 ) -> ReportV1 {
     let suite = Suite { component, pack, manifest };
-    let mut outcomes = coverage(pack);
+    let required = required_rows(manifest);
+    let mut outcomes = coverage(pack, &required);
     let mut a_credential_was_rejected_somewhere = false;
 
     for case in pack.cases() {
@@ -243,7 +261,7 @@ pub fn run_embeddings_component_suite_v1(
                 }
             }
         }
-        if EMBEDDINGS_REQUIRED_ROWS_V1.contains(&case.name.as_str()) {
+        if required.contains(&case.name.as_str()) {
             outcomes.push(named_row(&suite, case, &first));
         }
     }
@@ -262,9 +280,10 @@ pub fn run_embeddings_component_suite_v1(
     ReportV1::new(EMBEDDINGS_COMPONENT_SUITE_V1, outcomes)
 }
 
-fn coverage(pack: &EmbeddingsFixturePackV1) -> Vec<OutcomeV1> {
-    let missing: Vec<OutcomeV1> = EMBEDDINGS_REQUIRED_ROWS_V1
-        .into_iter()
+fn coverage(pack: &EmbeddingsFixturePackV1, required: &[&'static str]) -> Vec<OutcomeV1> {
+    let missing: Vec<OutcomeV1> = required
+        .iter()
+        .copied()
         .filter(|row| pack.case(row).is_none())
         .map(|row| {
             OutcomeV1::failed(
@@ -339,6 +358,9 @@ fn request_checks(suite: &Suite<'_>, case: &EmbeddingsCaseV1, first: &Invoked) -
     let Ok(input) = parse::<RequestInput>(&case.input) else {
         return outcomes;
     };
+    if input.request.carries_media() {
+        outcomes.push(media_follows_declaration(suite, case, first));
+    }
     let Ok(prepared) = suite.build(&input) else {
         return outcomes;
     };
@@ -360,6 +382,39 @@ fn request_checks(suite: &Suite<'_>, case: &EmbeddingsCaseV1, first: &Invoked) -
         },
     ]);
     outcomes
+}
+
+/// `MediaInputsFollowTheDeclaration`: judged on what the component produced for a case whose
+/// request holds a media input.
+fn media_follows_declaration(
+    suite: &Suite<'_>,
+    case: &EmbeddingsCaseV1,
+    first: &Invoked,
+) -> OutcomeV1 {
+    let check = CheckV1::MediaInputsFollowTheDeclaration;
+    let declared =
+        suite.manifest.capabilities.contains(south_provider_api::EMBEDDINGS_MEDIA_CAPABILITY);
+    let answer = match first {
+        Ok(output) => output,
+        Err(detail) => return OutcomeV1::failed(check, &case.name, detail.clone()),
+    };
+    let refusal = refusal_of(answer);
+    let capability_refusal = refusal.and_then(code_of) == Some("capability");
+    match (declared, refusal.is_some(), capability_refusal) {
+        (true, false, _) | (_, true, true) => OutcomeV1::passed(check, &case.name),
+        (true, true, false) => OutcomeV1::failed(
+            check,
+            &case.name,
+            "the package declares `media`, yet a media input was refused other than as a \
+             `capability` error (a model that takes no media is a capability error)",
+        ),
+        (false, ..) => OutcomeV1::failed(
+            check,
+            &case.name,
+            "the package does not declare `media`, so a media input must be refused with a \
+             `capability` error before admission",
+        ),
+    }
 }
 
 /// Adds a key the manifest does not declare to `ProviderConfig.declared` and requires the same
@@ -604,6 +659,7 @@ fn row_problem(suite: &Suite<'_>, case: &EmbeddingsCaseV1, output: &Value) -> Op
             Some("capability") => None,
             _ => problem("must be refused with a `capability` error before admission"),
         },
+        "request.media" => media_row(case, output, refusal.is_some()),
         "request.extra-fields" => match request() {
             Ok(request) if request.extra().is_empty() => {
                 problem("must carry unmodelled northbound fields")
@@ -650,6 +706,46 @@ fn row_problem(suite: &Suite<'_>, case: &EmbeddingsCaseV1, output: &Value) -> Op
     }
 }
 
+/// `request.media` (record §17.6): the request holds a media input, the component built it, and
+/// every media input's `data` appears in the descriptor body exactly as the client sent it, since
+/// the host never decodes it.
+fn media_row(case: &EmbeddingsCaseV1, output: &Value, was_refused: bool) -> Option<String> {
+    let request = match parse::<RequestInput>(&case.input) {
+        Ok(input) => input.request,
+        Err(detail) => return Some(detail),
+    };
+    if !request.carries_media() {
+        return Some("must carry a media input".to_owned());
+    }
+    if was_refused {
+        return Some("the manifest declares `media`, yet the media request was refused".into());
+    }
+    let body = &output["descriptor"]["body"];
+    for input in request.inputs() {
+        if let south_contracts::EmbeddingInputV1::Media { data, .. } = input
+            && !data.is_empty()
+            && !contains_string(body, data)
+        {
+            return Some(
+                "a media input's `data` does not appear in the body unchanged; the host never \
+                 decodes it, so the component must pass the client's string through"
+                    .to_owned(),
+            );
+        }
+    }
+    None
+}
+
+/// Whether `needle` is, as a whole, a string anywhere in `value`.
+fn contains_string(value: &Value, needle: &str) -> bool {
+    match value {
+        Value::String(text) => text == needle,
+        Value::Array(items) => items.iter().any(|item| contains_string(item, needle)),
+        Value::Object(map) => map.values().any(|item| contains_string(item, needle)),
+        _ => false,
+    }
+}
+
 /// `request.dimensions`: the request carries `dimensions`; a component declaring the capability
 /// builds it and places it in the body — changing the value changes the body — and one without it
 /// refuses.
@@ -673,7 +769,7 @@ fn dimensions_row(suite: &Suite<'_>, case: &EmbeddingsCaseV1, was_refused: bool)
         }
     }
     let other = if dimensions == u32::MAX { dimensions - 1 } else { dimensions + 1 };
-    let changed = EmbeddingsRequestV1::new(
+    let changed = EmbeddingsRequestV1::new_v2(
         request.model().to_owned(),
         request.inputs().to_vec(),
         request.input_shape(),

@@ -13,7 +13,7 @@ use south_component_conformance::{
 };
 use south_contracts::{
     EmbeddingsFailureOutcomeV1, EmbeddingsParsedV1, EmbeddingsRequestV1, EmbeddingsUsageFactsV1,
-    JsonPointerV1, VectorLocatorV1,
+    InputShapeV1, JsonPointerV1, VectorLocatorV1,
 };
 use south_provider_api::{ComponentManifestV1, ComponentMetadataV1};
 use token_station_protocol::{ErrorCode, ErrorEnvelope, HttpResponseParts, ProviderConfig};
@@ -220,4 +220,57 @@ fn dimensions_not_placed_fail_the_named_row() {
 fn a_component_refusing_a_newer_peer_field_fails_unknown_field_tolerance() {
     let report = run(&Broken::RefuseUnknownConfig);
     assert!(has(&report, CheckV1::UnknownFieldTolerance, "embeddings.request.single-text"));
+}
+
+// -- Embeddings contract 2: this package speaks contract 1 and refuses media (record §17.5) ----
+
+#[test]
+fn a_media_input_is_a_capability_error_whatever_else_the_request_holds() {
+    let pack = pack();
+    let case = pack.case("embeddings.request.refused-media").expect("the pack ships the refusal");
+    let config: ProviderConfig =
+        serde_json::from_value(case.input["provider_config"].clone()).unwrap();
+    for (inputs, shape) in [
+        (vec![media()], InputShapeV1::Single),
+        (vec![text("hello"), media()], InputShapeV1::Array),
+        (vec![media(), media()], InputShapeV1::Array),
+    ] {
+        let request = EmbeddingsRequestV1::new_v2(
+            "m".into(),
+            inputs,
+            shape,
+            None,
+            None,
+            None,
+            serde_json::Map::new(),
+        )
+        .unwrap();
+        let error = REFERENCE.build_embeddings_request(&config, &request).unwrap_err();
+        assert_eq!(error.code, ErrorCode::Capability);
+        assert_eq!(error.http_status, 400);
+    }
+}
+
+#[test]
+fn the_media_refusal_row_passes_and_the_package_owes_no_media_row() {
+    let manifest = manifest();
+    assert!(!manifest.capabilities.contains("media"));
+    assert_eq!(manifest.compatibility.contracts.get("embeddings"), Some(&1));
+    let report = run(&REFERENCE);
+    assert!(report.is_passing(), "{report}");
+    assert!(report.outcomes().iter().any(|outcome| {
+        outcome.check == CheckV1::MediaInputsFollowTheDeclaration
+            && outcome.case == "embeddings.request.refused-media"
+    }));
+}
+
+fn text(value: &str) -> south_contracts::EmbeddingInputV1 {
+    south_contracts::EmbeddingInputV1::Text(value.to_owned())
+}
+
+fn media() -> south_contracts::EmbeddingInputV1 {
+    south_contracts::EmbeddingInputV1::Media {
+        media_type: "image/png".to_owned(),
+        data: "iVBORw0KGgo=".to_owned(),
+    }
 }

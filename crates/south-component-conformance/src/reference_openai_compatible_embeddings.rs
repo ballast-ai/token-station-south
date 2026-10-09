@@ -38,7 +38,7 @@ use crate::{ComponentResultV1, EmbeddingsComponentV1, PreparedEmbeddingsV1};
 
 /// The package name and version this reference is published as.
 pub const NAME: &str = "embeddings-openai-compatible";
-pub const VERSION: &str = "1.0.2";
+pub const VERSION: &str = "1.0.3";
 
 /// The two families, as the provider world names them.
 const OPENAI_COMPATIBLE: &str = "openai-compatible";
@@ -60,6 +60,15 @@ fn capability(detail: impl Into<String>) -> ErrorEnvelope {
     ErrorEnvelope::new(ErrorCode::Capability, 400, detail)
 }
 
+/// The refusal of a media input by a package that does not declare `media` (record §17.3). One
+/// wording for the contract 1 references and the sandbox seam, so a fixture pins it once.
+pub(crate) fn media_not_accepted() -> ErrorEnvelope {
+    capability(
+        "this embeddings package does not accept media inputs; media needs a package declaring \
+         the `media` capability (embeddings contract 2)",
+    )
+}
+
 fn provider_protocol_error(message: &'static str) -> ErrorEnvelope {
     ErrorEnvelope::new(ErrorCode::ProviderProtocolError, 502, message)
 }
@@ -75,6 +84,9 @@ fn embeddings_url(config: &ProviderConfig) -> ComponentResultV1<String> {
 /// The northbound `input`, rebuilt from the inputs and their shape (record §3 table).
 fn input_of(request: &EmbeddingsRequestV1) -> ComponentResultV1<Value> {
     let inputs = request.inputs();
+    if request.carries_media() {
+        return Err(media_not_accepted());
+    }
     let all_text = inputs.iter().all(|input| matches!(input, EmbeddingInputV1::Text(_)));
     let all_ids = inputs.iter().all(|input| matches!(input, EmbeddingInputV1::TokenIds(_)));
     if !all_text && !all_ids {
@@ -83,13 +95,16 @@ fn input_of(request: &EmbeddingsRequestV1) -> ComponentResultV1<Value> {
         ));
     }
     let item = |input: &EmbeddingInputV1| match input {
-        EmbeddingInputV1::Text(text) => json!(text),
-        EmbeddingInputV1::TokenIds(ids) => json!(ids),
+        EmbeddingInputV1::Text(text) => Ok(json!(text)),
+        EmbeddingInputV1::TokenIds(ids) => Ok(json!(ids)),
+        EmbeddingInputV1::Media { .. } => Err(internal("a media input was checked above")),
     };
     Ok(match (request.input_shape(), inputs) {
-        (InputShapeV1::Single, [only]) => item(only),
+        (InputShapeV1::Single, [only]) => item(only)?,
         (InputShapeV1::Single, _) => return Err(internal("a single-shaped request has one input")),
-        (InputShapeV1::Array, _) => Value::Array(inputs.iter().map(item).collect()),
+        (InputShapeV1::Array, _) => {
+            Value::Array(inputs.iter().map(item).collect::<Result<_, _>>()?)
+        }
     })
 }
 

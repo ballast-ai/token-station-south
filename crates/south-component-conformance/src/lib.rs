@@ -140,7 +140,8 @@ pub use embeddings_fixture::{
 pub mod embeddings_json;
 mod embeddings_suite;
 pub use embeddings_suite::{
-    EMBEDDINGS_COMPONENT_SUITE_V1, EMBEDDINGS_REQUIRED_ROWS_V1, run_embeddings_component_suite_v1,
+    EMBEDDINGS_COMPONENT_SUITE_V1, EMBEDDINGS_MEDIA_ROW_V2, EMBEDDINGS_REQUIRED_ROWS_V1,
+    run_embeddings_component_suite_v1,
 };
 pub mod reference_gemini_embeddings;
 pub mod reference_openai_compatible_embeddings;

@@ -246,3 +246,65 @@ fn the_guest_shims_answer_bad_input_with_an_error_envelope() {
     assert_eq!(envelope(refused).code, ErrorCode::ProviderProtocolError);
     let _: HttpResponseParts = serde_json::from_str(&parts).unwrap();
 }
+
+// -- Embeddings contract 2: the Media input crosses the boundary codec (record §17.2) ----------
+
+const GEMINI_CONFIG: &str = r#"{"provider":"gemini","base_url":"https://generativelanguage.googleapis.com","auth":"provider_api_key"}"#;
+
+fn media_request(model: &str) -> String {
+    format!(
+        r#"{{"model":"{model}","inputs":[{{"text":"a"}},{{"media":{{"media_type":"audio/wav","data":"UklGRg=="}}}}],"input_shape":"array","dimensions":null,"encoding_format":null,"user":null,"extra":{{}}}}"#
+    )
+}
+
+#[test]
+fn a_media_request_round_trips_through_the_abi_shim_into_the_prepared_body() {
+    let prepared = build_embeddings_request_json(
+        &GeminiEmbeddingsReferenceV1,
+        GEMINI_CONFIG,
+        &media_request("gemini-embedding-2-preview"),
+    )
+    .expect("a multimodal model takes media");
+    let prepared = parse_prepared_embeddings_json(&prepared).expect("the frame is strict-valid");
+    assert_eq!(
+        prepared.descriptor.body.as_ref().unwrap()["requests"][1]["content"]["parts"][0],
+        json!({"inline_data": {"mime_type": "audio/wav", "data": "UklGRg=="}})
+    );
+    // 2 for the one-byte text, 512 for audio.
+    assert_eq!(prepared.estimate.fallback_input_tokens(), Some(1 + 512));
+    assert_eq!(prepared.estimate.max_input_tokens(), Some(1 + 512));
+    // The canonical encoding is stable.
+    let again =
+        parse_prepared_embeddings_json(&prepared_embeddings_json(&prepared).unwrap().to_string());
+    assert_eq!(again, Ok(prepared));
+}
+
+#[test]
+fn the_shim_refuses_a_malformed_media_input_as_an_internal_error_not_a_capability_one() {
+    for bad in [
+        r#"{"media":{"media_type":"audio","data":"AA"}}"#,
+        r#"{"media":{"media_type":"audio/wav"}}"#,
+        r#"{"media":{"media_type":"audio/wav","data":"AA","extra":1}}"#,
+        r#"{"text":"data:audio/wav;base64,AA"}"#,
+    ] {
+        let request = format!(
+            r#"{{"model":"m","inputs":[{bad}],"input_shape":"single","dimensions":null,"encoding_format":null,"user":null,"extra":{{}}}}"#
+        );
+        let error =
+            build_embeddings_request_json(&GeminiEmbeddingsReferenceV1, GEMINI_CONFIG, &request)
+                .expect_err("the frame is refused");
+        assert!(error.contains(r#""code":"internal""#), "{bad}: {error}");
+    }
+}
+
+#[test]
+fn a_contract_1_reference_answers_a_media_frame_with_a_capability_envelope() {
+    let config = r#"{"provider":"openai-compatible","base_url":"https://api.openai.com","auth":"provider_api_key"}"#;
+    let error = build_embeddings_request_json(
+        &OpenAiCompatibleEmbeddingsReferenceV1,
+        config,
+        &media_request("text-embedding-3-small"),
+    )
+    .expect_err("a contract 1 package takes no media");
+    assert!(error.contains(r#""code":"capability""#) && error.contains("400"), "{error}");
+}

@@ -1,0 +1,41 @@
+{
+  "descriptor": {
+    "method": "POST",
+    "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2-preview:embedContent",
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "model": "models/gemini-embedding-2-preview",
+      "content": {
+        "parts": [
+          {
+            "inline_data": {
+              "mime_type": "image/png",
+              "data": ""
+            }
+          }
+        ]
+      }
+    },
+    "auth": {
+      "scheme": "header",
+      "name": "x-goog-api-key",
+      "secret": "provider_api_key"
+    }
+  },
+  "estimate": {
+    "fallback_input_tokens": 258,
+    "max_input_tokens": 258
+  },
+  "vectors": {
+    "kind": "single",
+    "vector": "/embedding/values"
+  },
+  "immutable_body_paths": [
+    "content",
+    "requests",
+    "model"
+  ],
+  "parse_context": null
+}

@@ -258,3 +258,252 @@ fn measure_a_2048_by_3072_batch() {
         .expect("some batch parses");
     measure("largest float batch the guest parses whole", parses, EncodingV1::Float, &wasm);
 }
+
+// -- Embeddings contract 2: what a bounded inline media input costs (record §17.8, §17.10) -----
+
+const MIB_BYTES: usize = 1024 * 1024;
+
+mod inline_media {
+    use super::*;
+    use south_component_conformance::reference_gemini_embeddings::GeminiEmbeddingsReferenceV1;
+    use south_contracts::{EmbeddingsRequestV1, parse_embeddings_request_v2};
+    use token_station_protocol::ProviderConfig;
+
+    pub const GEMINI: &str = "embeddings-gemini";
+    const MODEL: &str = "gemini-embedding-2-preview";
+    const MARKER: &str = "data:image/png;base64,";
+    const CONFIG: &str = r#"{"provider":"gemini","base_url":"https://generativelanguage.googleapis.com","auth":"provider_api_key"}"#;
+
+    /// A base64-looking payload of `chars` characters (a multiple of four, as base64 is).
+    fn payload(chars: usize) -> String {
+        "QUJD".repeat(chars / 4)
+    }
+
+    /// The northbound body: `inputs` payloads of `chars` characters each, one string when
+    /// `single`, an array otherwise.
+    fn northbound(inputs: usize, chars: usize, single: bool) -> serde_json::Value {
+        let item = format!("{MARKER}{}", payload(chars));
+        if single {
+            serde_json::json!({ "input": item, "dimensions": 8 })
+        } else {
+            serde_json::json!({ "input": vec![item; inputs], "dimensions": 8 })
+        }
+    }
+
+    /// What one size cost: the request view, the native steps and the sandboxed call.
+    pub struct Cost {
+        pub view_bytes: usize,
+        pub frame_bytes: usize,
+        pub parse: Duration,
+        pub native_build: Duration,
+        pub sandboxed: Result<Duration, CallErrorV1>,
+    }
+
+    pub fn cost(wasm: &Path, inputs: usize, chars: usize, single: bool) -> Cost {
+        cost_in(wasm, RuntimeLimitsV1::default(), inputs, chars, single)
+    }
+
+    /// [`cost`] under other runtime limits.
+    pub fn cost_in(
+        wasm: &Path,
+        limits: RuntimeLimitsV1,
+        inputs: usize,
+        chars: usize,
+        single: bool,
+    ) -> Cost {
+        let body = northbound(inputs, chars, single);
+        let (parse, parsed) = fastest(|| parse_embeddings_request_v2(&body, MODEL));
+        let request: EmbeddingsRequestV1 = parsed.expect("the synthetic body parses");
+        let view = serde_json::to_string(&request).expect("the view serializes");
+        let config: ProviderConfig = serde_json::from_str(CONFIG).expect("the config parses");
+        let (native_build, prepared) = fastest(|| {
+            let prepared = GeminiEmbeddingsReferenceV1
+                .build_embeddings_request(&config, &request)
+                .expect("the native reference builds");
+            wire::prepared_embeddings_json(&prepared).expect("the frame encodes").to_string()
+        });
+        let component = load_in(wasm, limits);
+        let mut best = Duration::MAX;
+        let mut sandboxed = Ok(Duration::MAX);
+        for _ in 0..3 {
+            let started = Instant::now();
+            match component.call_build_embeddings_request(CONFIG, &view) {
+                Ok(frame) => {
+                    best = best.min(started.elapsed());
+                    assert_eq!(
+                        frame.len(),
+                        prepared.len(),
+                        "the guest agrees with the native build"
+                    );
+                    sandboxed = Ok(best);
+                }
+                Err(error) => {
+                    sandboxed = Err(error);
+                    break;
+                }
+            }
+        }
+        Cost { view_bytes: view.len(), frame_bytes: prepared.len(), parse, native_build, sandboxed }
+    }
+
+    /// The package loaded the way `embeddings_parity::load` does, under other runtime limits.
+    fn load_in(wasm: &Path, limits: RuntimeLimitsV1) -> south_provider_runtime::LoadedComponentV1 {
+        let runtime =
+            south_provider_runtime::ComponentRuntimeV1::new(limits).expect("engine builds");
+        south_provider_runtime::LoadedComponentV1::load_embedded(
+            &runtime,
+            &embeddings_parity::manifest_source(GEMINI),
+            &std::fs::read(wasm).expect("the component reads"),
+            &super::host_range::host_range(),
+            south_provider_runtime::NoSecretsV1,
+        )
+        .expect("the shipped package passes every load gate")
+    }
+
+    pub fn describe(cost: &Cost) -> String {
+        let outcome = match &cost.sandboxed {
+            Ok(took) => format!("ok in {}", ms(*took)),
+            Err(CallErrorV1::PayloadTooLarge { limit }) => {
+                format!("refused: payload above the {} limit", mib(*limit))
+            }
+            Err(CallErrorV1::Trap(detail)) => {
+                format!("trapped: {}", detail.lines().last().unwrap_or_default().trim())
+            }
+            Err(other) => format!("failed: {other}"),
+        };
+        format!(
+            "view {} ({} B), prepared frame {} ({} B); parse_v2 {}, native build+codec {}; sandbox {outcome}",
+            mib(cost.view_bytes),
+            cost.view_bytes,
+            mib(cost.frame_bytes),
+            cost.frame_bytes,
+            ms(cost.parse),
+            ms(cost.native_build),
+        )
+    }
+
+    /// The payload size (characters, a multiple of four) at which `inputs` media inputs make a
+    /// request view of at most `bound` bytes, as close to it as the multiple allows.
+    pub fn fit(inputs: usize, single: bool, bound: usize) -> usize {
+        let view = |chars: usize| {
+            let request = parse_embeddings_request_v2(&northbound(inputs, chars, single), MODEL)
+                .expect("the synthetic body parses");
+            serde_json::to_string(&request).expect("the view serializes").len()
+        };
+        let per_input = (bound - view(0)) / inputs / 4 * 4;
+        assert!(view(per_input) <= bound && bound - view(per_input) < 5 * inputs);
+        per_input
+    }
+
+    /// [`cost`] for a request whose view is the host's inline bound, in the runtime a host builds
+    /// for `media` packages.
+    pub fn cost_at_the_bound(wasm: &Path, inputs: usize, single: bool) -> Cost {
+        let chars = fit(inputs, single, south_contracts::MAX_EMBEDDINGS_REQUEST_VIEW_BYTES);
+        cost_in(wasm, RuntimeLimitsV1::for_embeddings_media(), inputs, chars, single)
+    }
+
+    /// The largest payload (in characters, a multiple of four) of one single media input whose
+    /// sandboxed build succeeds, by bisection between a size that works and the view limit.
+    pub fn largest_single(wasm: &Path) -> usize {
+        let works = |chars: usize| cost(wasm, 1, chars, true).sandboxed.is_ok();
+        let (mut low, mut high) = (4 * 1024, RuntimeLimitsV1::default().max_payload_bytes / 4 * 4);
+        assert!(works(low), "a 4 KiB media input must build");
+        while high - low > 4 {
+            let middle = (low + (high - low) / 2) / 4 * 4;
+            if works(middle) {
+                low = middle;
+            } else {
+                high = middle;
+            }
+        }
+        low
+    }
+}
+
+#[test]
+#[ignore = "a release-mode measurement for the release record (embeddings record §17.10), not a short test"]
+fn measure_inline_media() {
+    use inline_media::cost_at_the_bound;
+    use inline_media::{GEMINI, cost, describe, largest_single};
+    use south_contracts::{EMBEDDINGS_MEDIA_GUEST_MEMORY_BYTES, MAX_EMBEDDINGS_REQUEST_VIEW_BYTES};
+
+    let wasm = embeddings_parity::build(GEMINI, "build-embeddings-gemini-component.sh");
+    let limits = RuntimeLimitsV1::default();
+    println!(
+        "runtime limits: payload {}, memory {}, call deadline {:?}; request view limit {}",
+        mib(limits.max_payload_bytes),
+        mib(limits.memory_bytes),
+        limits.call_timeout,
+        mib(MAX_EMBEDDINGS_REQUEST_VIEW_BYTES)
+    );
+    // The host-facing constants against the runtime they are about.
+    assert_eq!(MAX_EMBEDDINGS_REQUEST_VIEW_BYTES + MIB_BYTES, limits.max_payload_bytes);
+    assert_eq!(
+        RuntimeLimitsV1::for_embeddings_media().memory_bytes,
+        EMBEDDINGS_MEDIA_GUEST_MEMORY_BYTES
+    );
+
+    // The default limits (64 MiB guest memory): one input growing to the payload limit.
+    let limit = limits.max_payload_bytes;
+    for (label, chars) in [
+        ("1 MiB", MIB_BYTES),
+        ("4 MiB", 4 * MIB_BYTES),
+        ("8 MiB", 8 * MIB_BYTES),
+        ("12 MiB", 12 * MIB_BYTES),
+        ("16 MiB view limit (payload fills the rest of the limit)", (limit - 256) / 4 * 4),
+    ] {
+        println!("== single input, payload {label}");
+        println!("  {}", describe(&cost(&wasm, 1, chars, true)));
+    }
+
+    // The same total spread over a batch.
+    println!("== 2 inputs, 7.9 MiB each");
+    println!("  {}", describe(&cost(&wasm, 2, 8 * MIB_BYTES - 128 * 1024, false)));
+    println!("== 2048 inputs, 7.9 KiB each");
+    println!("  {}", describe(&cost(&wasm, 2048, 7936, false)));
+
+    // The same near-limit request with more guest memory: what the wasm memory limit costs, apart
+    // from the payload limit. The view is sized so that the prepared frame, which is a few hundred
+    // bytes longer than the view, stays under the payload limit.
+    let near_limit = (limit - 4096) / 4 * 4;
+    for memory_mib in [64_usize, 96, 128, 192, 256] {
+        let limits = RuntimeLimitsV1 {
+            memory_bytes: memory_mib * MIB_BYTES,
+            call_timeout: Duration::from_secs(20),
+            ..RuntimeLimitsV1::default()
+        };
+        println!(
+            "== single input, payload {near_limit} characters, guest memory {memory_mib} MiB, deadline 20 s"
+        );
+        println!("  {}", describe(&inline_media::cost_in(&wasm, limits, 1, near_limit, true)));
+    }
+
+    // The host's inline bound in the runtime a host builds for media packages: the view is the
+    // bound itself, so the prepared frame shows the margin to the runtime's frame limit.
+    for (label, inputs, single) in
+        [("1 input", 1, true), ("2 inputs", 2, false), ("2048 inputs", 2048, false)]
+    {
+        let at_the_bound = cost_at_the_bound(&wasm, inputs, single);
+        println!("== at the inline bound, {label}, guest memory 192 MiB, default deadline");
+        println!("  {}", describe(&at_the_bound));
+        println!(
+            "  margin to the {} frame limit: {} bytes",
+            mib(limits.max_payload_bytes),
+            limits.max_payload_bytes - at_the_bound.frame_bytes
+        );
+        assert!(at_the_bound.sandboxed.is_ok(), "{label}: {}", describe(&at_the_bound));
+    }
+
+    let largest = largest_single(&wasm);
+    let best = cost(&wasm, 1, largest, true);
+    println!(
+        "== largest single payload the sandbox builds: {largest} characters ({})",
+        mib(largest)
+    );
+    println!("  {}", describe(&best));
+    println!(
+        "  headroom below the {} payload limit: {} bytes of view",
+        mib(limit),
+        limit - best.view_bytes
+    );
+}

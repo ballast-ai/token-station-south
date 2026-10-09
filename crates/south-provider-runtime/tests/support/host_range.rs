@@ -53,12 +53,11 @@ pub fn host_range() -> HostRangeV1 {
                 "task".to_owned(),
                 BTreeSet::from([as_u32(&record["contracts"]["task"], "contracts.task")]),
             ),
+            // `compatibility.json` records the newest embeddings contract the release decodes; a
+            // host decodes every contract up to it (contract 1 packages keep working).
             (
                 "embeddings".to_owned(),
-                BTreeSet::from([as_u32(
-                    &record["contracts"]["embeddings"],
-                    "contracts.embeddings",
-                )]),
+                (1..=as_u32(&record["contracts"]["embeddings"], "contracts.embeddings")).collect(),
             ),
         ]),
     }

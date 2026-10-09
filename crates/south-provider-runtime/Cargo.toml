@@ -11,7 +11,7 @@ version.workspace = true
 [dependencies]
 serde_json.workspace = true
 sha2.workspace = true
-south-provider-api = { path = "../south-provider-api", version = "0.49.0" }
+south-provider-api = { path = "../south-provider-api", version = "0.50.0" }
 thiserror.workspace = true
 wasmtime.workspace = true
 wasmtime-wasi.workspace = true

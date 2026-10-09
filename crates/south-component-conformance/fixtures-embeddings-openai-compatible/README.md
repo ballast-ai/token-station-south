@@ -30,3 +30,5 @@ Notes on individual cases:
   base64 vectors (1.0, 2.0 and 3.0, 4.0 as little-endian f32).
 - `response.mixed-index` carries `index` on one item only, which the host refuses.
 - `error.timeout` (408) is `unknown`; every other 4xx is `rejected`, a 5xx is `unknown`.
+
+`request.refused-media`: a media input (embeddings contract 2, record §17.5) is a capability error: this package speaks contract 1 and declares no `media`.

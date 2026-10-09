@@ -5,9 +5,10 @@ use std::collections::BTreeSet;
 use south_provider_api::{
     ADAPTER_WIT, COMPONENT_BEHAVIOR_SUITE, CompatibilityDeclarationV1, CompatibilityMismatchV1,
     ComponentManifestV1, ComponentPermissionsV1, ConformanceSpecV1, EMBEDDINGS_ADAPTER_WIT,
-    EMBEDDINGS_BEHAVIOR_SUITE, EMBEDDINGS_CAPABILITIES, EMBEDDINGS_WIT_PACKAGE, EMBEDDINGS_WORLD,
-    EMBEDDINGS_WORLD_SCHEMA, HostExpectationsV1, KNOWN_WORLDS, ManifestErrorV1, PROVIDER_AUTH_ARMS,
-    PROVIDER_WORLD, PROVIDER_WORLD_SCHEMA, TASK_ADAPTER_V2_WIT, TASK_ADAPTER_WIT, TASK_AUTH_ARMS,
+    EMBEDDINGS_BEHAVIOR_SUITE, EMBEDDINGS_CAPABILITIES, EMBEDDINGS_MEDIA_CAPABILITY,
+    EMBEDDINGS_MEDIA_CONTRACT, EMBEDDINGS_WIT_PACKAGE, EMBEDDINGS_WORLD, EMBEDDINGS_WORLD_SCHEMA,
+    HostExpectationsV1, KNOWN_WORLDS, ManifestErrorV1, PROVIDER_AUTH_ARMS, PROVIDER_WORLD,
+    PROVIDER_WORLD_SCHEMA, TASK_ADAPTER_V2_WIT, TASK_ADAPTER_WIT, TASK_AUTH_ARMS,
     TASK_BEHAVIOR_SUITE, TASK_CAPABILITIES, TASK_WIT_PACKAGE, TASK_WORLD, TASK_WORLD_SCHEMA,
     TASK_WORLD_SCHEMA_V2, TASK_WORLD_V2, UsageEvidenceV1, WIT_PACKAGE, compatibility_matches,
     known_world,
@@ -926,7 +927,7 @@ fn the_embeddings_world_is_known_and_carries_its_own_vocabulary() {
     assert_eq!(schema.wit_package, "token-station:embeddings-adapter@1.0.0");
     assert_eq!(schema.behavior_suite, "south.embeddings-component.v1");
     assert_eq!(schema.capabilities, EMBEDDINGS_CAPABILITIES);
-    assert_eq!(schema.capabilities, ["embed", "batch", "dimensions", "token_ids"]);
+    assert_eq!(schema.capabilities, ["embed", "batch", "dimensions", "token_ids", "media"]);
     assert_eq!(schema.auth_arms, ["bearer", "header_secret"]);
 }
 
@@ -983,9 +984,11 @@ fn an_embeddings_manifest_validates_and_reports_its_own_tuple() {
     assert_eq!(tuple.wit_world, EMBEDDINGS_WORLD);
     assert_eq!(tuple.conformance_suite, EMBEDDINGS_BEHAVIOR_SUITE);
 
+    // `media` is in the vocabulary, so declaring every word needs contract 2 as well.
     let mut every_word = embeddings_manifest();
     every_word.capabilities = EMBEDDINGS_CAPABILITIES.iter().map(|w| (*w).to_owned()).collect();
     every_word.auth_arms = BTreeSet::from(["header_secret".to_owned()]);
+    every_word.compatibility.contracts.insert("embeddings".to_owned(), 2);
     assert_eq!(every_word.validate(), Ok(()));
 }
 
@@ -1019,19 +1022,108 @@ fn an_embeddings_component_without_embed_is_refused() {
     assert_eq!(familyless.validate(), Err(ManifestErrorV1::ProviderFamilyRequired));
 }
 
-/// Contract 1 carries text and token ids only; `media` arrives with contract 2
-/// (record §15), so until then it is an unknown word like any other.
+/// Contract 1 carries text and token ids only, and `media` arrives with contract 2 (record
+/// §15, §17.4): a package declaring the word must declare contract 2, whatever else it declares.
 #[test]
-fn media_is_not_in_the_contract_1_embeddings_vocabulary() {
-    let mut manifest = embeddings_manifest();
-    manifest.capabilities.insert("media".to_owned());
+fn media_needs_embeddings_contract_2() {
+    let with_contract = |declared: Option<u32>| {
+        let mut manifest = embeddings_manifest();
+        manifest.capabilities.insert("media".to_owned());
+        manifest.compatibility.contracts.clear();
+        if let Some(contract) = declared {
+            manifest.compatibility.contracts.insert("embeddings".to_owned(), contract);
+        }
+        manifest
+    };
+    // Contract 1, or no embeddings contract at all, is refused with the typed error.
+    for declared in [Some(1), Some(0), None] {
+        assert_eq!(
+            with_contract(declared).validate(),
+            Err(ManifestErrorV1::MediaCapabilityRequiresContract2 { declared }),
+            "{declared:?}"
+        );
+    }
+    // Another contract's number does not stand in for the embeddings one.
+    let mut other = with_contract(None);
+    other.compatibility.contracts.insert("task".to_owned(), 7);
     assert_eq!(
-        manifest.validate(),
-        Err(ManifestErrorV1::CapabilityIsNotInTheWorldVocabulary {
-            capability: "media".to_owned(),
-            world: EMBEDDINGS_WORLD.to_owned(),
-        })
+        other.validate(),
+        Err(ManifestErrorV1::MediaCapabilityRequiresContract2 { declared: None })
     );
+    // Contract 2 admits it, and so would a later number.
+    assert_eq!(with_contract(Some(EMBEDDINGS_MEDIA_CONTRACT)).validate(), Ok(()));
+    assert_eq!(with_contract(Some(3)).validate(), Ok(()));
+    assert_eq!(EMBEDDINGS_MEDIA_CONTRACT, 2);
+    assert_eq!(EMBEDDINGS_MEDIA_CAPABILITY, "media");
+    assert!(
+        ManifestErrorV1::MediaCapabilityRequiresContract2 { declared: Some(1) }
+            .to_string()
+            .contains("`compatibility.contracts.embeddings` 2")
+    );
+}
+
+/// A contract 2 package need not accept media, and a contract 1 package without the word is
+/// unaffected: the rule binds the word to the contract, not the contract to the word.
+#[test]
+fn contract_2_without_media_and_contract_1_without_media_both_validate() {
+    for contract in [1, 2] {
+        let mut manifest = embeddings_manifest();
+        manifest.compatibility.contracts.insert("embeddings".to_owned(), contract);
+        assert_eq!(manifest.validate(), Ok(()), "contract {contract}");
+    }
+}
+
+/// The validation order is fixed: identity, then the vocabulary, then role coherence (where the
+/// media rule sits), then conformance, then the compatibility declaration. So the media rule
+/// does not mask an earlier failure, and a later failure does not mask it.
+#[test]
+fn the_media_rule_sits_between_the_vocabulary_and_the_conformance_checks() {
+    let media_on_contract_1 = || {
+        let mut manifest = embeddings_manifest();
+        manifest.capabilities.insert("media".to_owned());
+        manifest.compatibility.contracts.insert("embeddings".to_owned(), 1);
+        manifest
+    };
+    // After: a bad conformance suite and a bad WIT package come later in the order.
+    let mut later = media_on_contract_1();
+    later.conformance.required_suite = "south.other.v1".to_owned();
+    later.compatibility.wit_package = "token-station:other@1.0.0".to_owned();
+    assert_eq!(
+        later.validate(),
+        Err(ManifestErrorV1::MediaCapabilityRequiresContract2 { declared: Some(1) })
+    );
+    // Before: an unknown capability word, an unknown auth arm and a missing `embed` come first.
+    let mut unknown = media_on_contract_1();
+    unknown.capabilities.insert("telepathy".to_owned());
+    assert!(matches!(
+        unknown.validate(),
+        Err(ManifestErrorV1::CapabilityIsNotInTheWorldVocabulary { .. })
+    ));
+    let mut arm = media_on_contract_1();
+    arm.auth_arms = BTreeSet::from(["oauth".to_owned()]);
+    assert!(matches!(
+        arm.validate(),
+        Err(ManifestErrorV1::AuthArmIsNotInTheWorldVocabulary { .. })
+    ));
+    let mut no_embed = media_on_contract_1();
+    no_embed.capabilities.remove("embed");
+    assert_eq!(no_embed.validate(), Err(ManifestErrorV1::EmbedCapabilityRequired));
+}
+
+/// `media` exists only in the embeddings vocabulary: the other worlds still refuse it as unknown.
+#[test]
+fn other_worlds_do_not_gain_the_media_word() {
+    for mut manifest in [task_manifest(), reference_manifest()] {
+        manifest.capabilities.insert("media".to_owned());
+        assert!(
+            matches!(
+                manifest.validate(),
+                Err(ManifestErrorV1::CapabilityIsNotInTheWorldVocabulary { .. })
+            ),
+            "{}",
+            manifest.api_version
+        );
+    }
 }
 
 #[test]

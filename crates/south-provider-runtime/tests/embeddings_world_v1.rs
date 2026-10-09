@@ -288,11 +288,11 @@ fn embeddings_bytes_cannot_claim_another_world_or_a_different_identity() {
 fn embeddings_admission_keeps_both_handshakes() {
     let bytes = std::fs::read(embeddings_guest_wasm()).expect("guest");
 
-    // The range handshake decodes embeddings contract 1 and nothing else.
+    // The range handshake decodes embeddings contracts 1 and 2 and nothing newer.
     let mut newer = embeddings_manifest_value();
-    newer["compatibility"]["contracts"] = json!({ "embeddings": 2 });
+    newer["compatibility"]["contracts"] = json!({ "embeddings": 3 });
     let error =
-        load_embedded(&runtime(), &newer.to_string(), &bytes).expect_err("contract 2 is unknown");
+        load_embedded(&runtime(), &newer.to_string(), &bytes).expect_err("contract 3 is unknown");
     assert!(matches!(error, LoadErrorV1::OutsideRange(_)), "{error}");
 
     // The exact handshake, still supported for one release: a host holding the manifest's own

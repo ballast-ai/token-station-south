@@ -327,9 +327,11 @@ fn the_embeddings_world_has_independent_unverified_host_adoption_records() {
         "south.embeddings-component.v1"
     );
     assert_eq!(manifest["conformance"]["embeddings_component_v1_suite"], 1);
+    // The newest contract the release decodes; the shipped contract 1 packages declare 1 and the
+    // host range lists both (`host_range`).
     assert_eq!(
         manifest["contracts"]["embeddings"],
-        u32::from(south_contracts::EMBEDDINGS_CONTRACT_VERSION)
+        u32::from(south_contracts::EMBEDDINGS_CONTRACT_VERSION_V2)
     );
 }
 
@@ -600,8 +602,14 @@ fn every_shipped_package_declares_the_range_handshake() {
             if manifest.api_version.starts_with("task") {
                 [("task".to_owned(), u32::from(south_contracts::TASK_CONTRACT_VERSION))].into()
             } else if manifest.api_version == south_provider_api::EMBEDDINGS_WORLD {
-                [("embeddings".to_owned(), u32::from(south_contracts::EMBEDDINGS_CONTRACT_VERSION))]
-                    .into()
+                // Only a package that accepts media speaks contract 2 (embeddings record §17.4);
+                // the others stay at the contract 1 they were published with.
+                let contract = if manifest.capabilities.contains("media") {
+                    south_contracts::EMBEDDINGS_CONTRACT_VERSION_V2
+                } else {
+                    south_contracts::EMBEDDINGS_CONTRACT_VERSION
+                };
+                [("embeddings".to_owned(), u32::from(contract))].into()
             } else {
                 std::collections::BTreeMap::new()
             };
@@ -818,7 +826,6 @@ fn the_embeddings_value_channel_retires_every_published_047_package_identity() {
         ("task-wan-image-v2", "0.35.6", "0.46.0"),
         ("task-gmi-image-v2", "0.35.6", "0.46.0"),
         ("embeddings-openai-compatible", "1.0.0", "0.47.0"),
-        ("embeddings-gemini", "1.0.0", "0.47.0"),
     ] {
         let manifest: ComponentManifestV1 = serde_json::from_str(
             &std::fs::read_to_string(
@@ -859,7 +866,6 @@ fn host_feedback_sf27_retires_every_published_048_package_identity() {
         ("task-wan-image-v2", "0.35.7", "0.46.0"),
         ("task-gmi-image-v2", "0.35.7", "0.46.0"),
         ("embeddings-openai-compatible", "1.0.1", "0.47.0"),
-        ("embeddings-gemini", "1.0.1", "0.47.0"),
         ("embeddings-vertex", "1.0.0", "0.48.0"),
     ] {
         let manifest: ComponentManifestV1 = serde_json::from_str(
@@ -877,14 +883,34 @@ fn host_feedback_sf27_retires_every_published_048_package_identity() {
     }
 }
 
-/// The embeddings world is first known to the 0.47.0 runtime, so that is the oldest runtime that
-/// admits either embeddings package, and both declare it: a host that claims 0.46.0 refuses them
-/// through the declared runtime alone, even with embeddings contract 1 in its range.
+/// Embeddings contract 2 changed `south-contracts`, `south-provider-api` and
+/// `south-component-conformance`, which every guest links; under the Q47 rule (boundary record
+/// §13.12) each of the three took a new version and every `component.wasm` changed, so every
+/// identity published with 0.50.0 retires, or the release's digest-stability check would refuse
+/// it. The sixteen other packages keep their `south_runtime`: under the declared-runtime
+/// discipline it names the oldest runtime a package needs, and none of them needs anything newer
+/// than it did. `embeddings-gemini` moved to 1.1.0 and is judged by
+/// `embeddings_gemini_retires_its_published_identities_with_contract_2`.
 #[test]
-fn the_embeddings_packages_declare_the_first_runtime_with_the_world() {
-    let mut on_046 = host_range::host_range();
-    "0.46.0".clone_into(&mut on_046.south_runtime);
-    for name in ["embeddings-openai-compatible", "embeddings-gemini"] {
+fn embeddings_contract_2_retires_every_published_050_package_identity() {
+    for (name, published, runtime) in [
+        ("provider-openai-compatible", "2.4.3", "0.46.0"),
+        ("provider-anthropic", "1.0.15", "0.46.0"),
+        ("provider-gemini", "1.1.11", "0.46.0"),
+        ("provider-bedrock-converse", "1.0.12", "0.46.0"),
+        ("provider-bedrock-converse-bearer", "1.0.4", "0.46.0"),
+        ("task-kling", "1.0.11", "0.46.0"),
+        ("task-kling-v2", "0.32.9", "0.46.0"),
+        ("task-minimax-v2", "0.31.8", "0.46.0"),
+        ("task-bailian-v2", "0.31.8", "0.46.0"),
+        ("task-byteplus-v2", "0.36.8", "0.46.0"),
+        ("task-xai-v2", "0.35.8", "0.46.0"),
+        ("task-veo-v2", "0.35.8", "0.46.0"),
+        ("task-wan-image-v2", "0.35.8", "0.46.0"),
+        ("task-gmi-image-v2", "0.35.8", "0.46.0"),
+        ("embeddings-openai-compatible", "1.0.2", "0.47.0"),
+        ("embeddings-vertex", "1.0.1", "0.48.0"),
+    ] {
         let manifest: ComponentManifestV1 = serde_json::from_str(
             &std::fs::read_to_string(
                 repo_root().join("components").join(name).join("manifest.json"),
@@ -892,15 +918,71 @@ fn the_embeddings_packages_declare_the_first_runtime_with_the_world() {
             .unwrap(),
         )
         .unwrap();
-        assert_eq!(manifest.compatibility.south_runtime, "0.47.0", "{name}");
-        assert!(
-            matches!(
-                compatibility_admits(&manifest, &on_046),
-                Err(CompatibilityMismatchV2::SouthRuntimeAboveHost { .. })
-            ),
-            "{name}"
+        assert_ne!(manifest.version, published, "{name} reused its published identity");
+        assert_eq!(
+            manifest.compatibility.south_runtime, runtime,
+            "{name}: needs nothing newer than {runtime}, so it declares {runtime}"
         );
     }
+    // The Gemini package's published identity (1.0.2) is retired by its minor.
+    let gemini: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(repo_root().join("components/embeddings-gemini/manifest.json"))
+            .unwrap(),
+    )
+    .unwrap();
+    assert_ne!(gemini.version, "1.0.2");
+}
+
+/// The embeddings world is first known to the 0.47.0 runtime, so that is the oldest runtime that
+/// admits the contract 1 text package, and it declares it: a host that claims 0.46.0 refuses it
+/// through the declared runtime alone, even with embeddings contract 1 in its range. (The Gemini
+/// package declares a later runtime, the one whose gate 1 admits `media`.)
+#[test]
+fn the_embeddings_packages_declare_the_first_runtime_with_the_world() {
+    let mut on_046 = host_range::host_range();
+    "0.46.0".clone_into(&mut on_046.south_runtime);
+    // `embeddings-gemini` moved on with contract 2 and declares a later runtime.
+    let name = "embeddings-openai-compatible";
+    let manifest: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(repo_root().join("components").join(name).join("manifest.json"))
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(manifest.compatibility.south_runtime, "0.47.0", "{name}");
+    assert!(
+        matches!(
+            compatibility_admits(&manifest, &on_046),
+            Err(CompatibilityMismatchV2::SouthRuntimeAboveHost { .. })
+        ),
+        "{name}"
+    );
+}
+
+/// `embeddings-gemini` declares the `media` capability and embeddings contract 2, which gate ① first
+/// admits in the 0.51.0 runtime (embeddings record §17.4), so that is the oldest runtime that admits
+/// it and the package declares it: a host that claims 0.50.0 refuses it through the declared runtime
+/// alone, even with contract 2 in its range. Contract 1 hosts refuse it through the contract number.
+#[test]
+fn the_gemini_package_declares_the_first_runtime_with_media_and_contract_2() {
+    let manifest: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(repo_root().join("components/embeddings-gemini/manifest.json"))
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(manifest.compatibility.south_runtime, "0.51.0");
+    assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
+    let mut on_050 = host_range::host_range();
+    "0.50.0".clone_into(&mut on_050.south_runtime);
+    assert!(matches!(
+        compatibility_admits(&manifest, &on_050),
+        Err(CompatibilityMismatchV2::SouthRuntimeAboveHost { .. })
+    ));
+    let mut contract_1_only = host_range::host_range();
+    contract_1_only.contracts.insert("embeddings".to_owned(), BTreeSet::from([1]));
+    assert!(matches!(
+        compatibility_admits(&manifest, &contract_1_only),
+        Err(CompatibilityMismatchV2::Contract { declared: 2, .. })
+    ));
 }
 
 /// `embeddings-vertex` declares a family's `config_schema` and an exported credential attribute,
@@ -1004,4 +1086,22 @@ fn the_gemini_family_moves_the_unreleased_openai_compatible_identity() {
     .unwrap();
     assert_ne!(manifest.version, "2.3.0");
     assert!(manifest.providers.iter().any(|family| family == "gemini-openai-compatible"));
+}
+
+/// `embeddings-gemini` left the `south_runtime` those two retirement tests pin for it: it declares
+/// `media`, which only a runtime whose gate 1 knows the word admits (embeddings record §17.4), and
+/// every identity it published before (1.0.0 with 0.47.0, 1.0.1 with 0.48.0, 1.0.2 with 0.49.0)
+/// stays retired.
+#[test]
+fn embeddings_gemini_retires_its_published_identities_with_contract_2() {
+    let manifest: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(repo_root().join("components/embeddings-gemini/manifest.json"))
+            .unwrap(),
+    )
+    .unwrap();
+    for published in ["1.0.0", "1.0.1", "1.0.2"] {
+        assert_ne!(manifest.version, published, "embeddings-gemini reused a published identity");
+    }
+    assert!(manifest.capabilities.contains("media"));
+    assert_eq!(manifest.compatibility.contracts.get("embeddings"), Some(&2));
 }

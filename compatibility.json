@@ -1,7 +1,7 @@
 {
   "schema_version": 6,
   "release": {
-    "version": "0.50.0",
+    "version": "0.51.0",
     "stability": "library_slice"
   },
   "runtime_abi": 1,
@@ -49,7 +49,7 @@
       "artifact_urls": 16,
       "artifact_ref_bytes": 8192
     },
-    "embeddings": 1
+    "embeddings": 2
   },
   "conformance": {
     "suite_id": "south.provider-call.v1",

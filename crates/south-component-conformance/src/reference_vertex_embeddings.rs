@@ -52,7 +52,7 @@ use crate::{ComponentResultV1, EmbeddingsComponentV1, PreparedEmbeddingsV1};
 
 /// The package name and version this reference is published as.
 pub const NAME: &str = "embeddings-vertex";
-pub const VERSION: &str = "1.0.1";
+pub const VERSION: &str = "1.0.2";
 
 /// The family, as the host's task bindings name it.
 const VERTEX_AI: &str = "vertex-ai";
@@ -94,8 +94,14 @@ fn pointer(text: &str) -> ComponentResultV1<JsonPointerV1> {
 
 /// The one text input `:predict` takes (the native arm's `vertex_embeddings_request`).
 fn single_text(request: &EmbeddingsRequestV1) -> ComponentResultV1<&str> {
+    if request.carries_media() {
+        return Err(crate::reference_openai_compatible_embeddings::media_not_accepted());
+    }
     let text = match request.inputs() {
         [EmbeddingInputV1::Text(text)] => text,
+        [EmbeddingInputV1::Media { .. }] => {
+            return Err(internal("a media input was checked above"));
+        }
         [EmbeddingInputV1::TokenIds(_)] => {
             return Err(capability(
                 "Vertex embeddings take text input; token-id arrays are not supported",

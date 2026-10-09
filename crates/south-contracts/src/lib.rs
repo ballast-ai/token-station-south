@@ -17,15 +17,17 @@ pub use declared::{
     QueryValueSyntaxV1, UserAgentV1,
 };
 
-// Embeddings contract 1 (docs/design/2026-09-30-embeddings-contract.md, v1 scope §15).
+// Embeddings contracts 1 and 2 (docs/design/2026-09-30-embeddings-contract.md, §15 and §17).
 pub use embeddings::{
-    EMBEDDINGS_CONTRACT_VERSION, EmbeddingInputV1, EmbeddingVectorV1, EmbeddingsContractErrorV1,
-    EmbeddingsEstimateV1, EmbeddingsFailureOutcomeV1, EmbeddingsParsedV1, EmbeddingsRequestErrorV1,
-    EmbeddingsRequestV1, EmbeddingsUsageFactsV1, EncodingV1, ExtractedVectorsV1, InputShapeV1,
-    JsonPointerV1, MAX_EMBEDDING_INPUTS, MAX_EMBEDDINGS_EXTRA_BYTES, MAX_EMBEDDINGS_EXTRA_FIELDS,
-    MAX_EMBEDDINGS_PARSE_CONTEXT_BYTES, MAX_VECTOR_POINTER_BYTES, UsageSourceV1, VectorLocatorV1,
+    EMBEDDINGS_CONTRACT_VERSION, EMBEDDINGS_CONTRACT_VERSION_V2, EMBEDDINGS_CONTRACT_VERSIONS,
+    EMBEDDINGS_MEDIA_GUEST_MEMORY_BYTES, EmbeddingInputV1, EmbeddingVectorV1,
+    EmbeddingsContractErrorV1, EmbeddingsEstimateV1, EmbeddingsFailureOutcomeV1,
+    EmbeddingsParsedV1, EmbeddingsRequestErrorV1, EmbeddingsRequestV1, EmbeddingsUsageFactsV1,
+    EncodingV1, ExtractedVectorsV1, InputShapeV1, JsonPointerV1, MAX_EMBEDDING_INPUTS,
+    MAX_EMBEDDINGS_EXTRA_BYTES, MAX_EMBEDDINGS_EXTRA_FIELDS, MAX_EMBEDDINGS_PARSE_CONTEXT_BYTES,
+    MAX_EMBEDDINGS_REQUEST_VIEW_BYTES, MAX_VECTOR_POINTER_BYTES, UsageSourceV1, VectorLocatorV1,
     check_embeddings_response_v1, extract_vectors_v1, media_type_of, parse_embeddings_request_v1,
-    render_vectors_v1,
+    parse_embeddings_request_v2, render_vectors_v1,
 };
 
 pub use eventstream::{
