@@ -78,6 +78,8 @@
     "eventstream_framing_suite": 1,
     "request_signing_suite_id": "south.request-signing.v1",
     "request_signing_suite": 1,
+    "safe_fetch_suite_id": "south.safe-fetch.v1",
+    "safe_fetch_suite": 1,
     "provider_component_suite_id": "south.provider-component.v1",
     "provider_component_suite": 1,
     "task_component_v1_suite_id": "south.task-component.v1",
@@ -99,9 +101,9 @@
     "south-contracts": "http_get_request_multipart_request_text_request_binary_response_auth_error_stream_quota_metadata_header_auth_controlled_query_user_agent_v1",
     "south-core": "buffered_streaming_provider_call_buffered_get_call_buffered_multipart_call_buffered_binary_call_buffered_multipart_binary_call_buffered_text_binary_call_header_auth_controlled_query_user_agent_raw_prelude_signed_raw_call_get_raw_call_multipart_raw_call_v1",
     "south-provider-api": "provider_adapter_v2_wit_manifest_v1",
-    "south-provider-conformance": "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_provider_get_provider_multipart_provider_binary_provider_media_binary_credential_recipe_eventstream_framing_request_signing_suites_v1",
+    "south-provider-conformance": "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_provider_get_provider_multipart_provider_binary_provider_media_binary_credential_recipe_eventstream_framing_request_signing_safe_fetch_suites_v1",
     "south-provider-runtime": "sandboxed_component_execution_v1",
-    "south-testkit": "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_provider_get_provider_multipart_provider_binary_provider_media_binary_runners_raw_builder_signed_raw_builder_get_raw_builder_multipart_raw_builder_v1",
+    "south-testkit": "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_provider_get_provider_multipart_provider_binary_provider_media_binary_safe_fetch_runners_raw_builder_signed_raw_builder_get_raw_builder_multipart_raw_builder_v1",
     "south-transport-reqwest": "buffered_streaming_json_post_buffered_get_buffered_multipart_buffered_binary_buffered_text_quota_metadata_header_auth_user_agent_transport_pair_v1",
     "south-component-conformance": "provider_component_gates_reference_v1"
   },
@@ -150,6 +152,9 @@
         "status": "not_verified"
       },
       "request_signing": {
+        "status": "not_verified"
+      },
+      "safe_fetch": {
         "status": "not_verified"
       }
     },
@@ -204,6 +209,9 @@
       "request_signing": {
         "status": "verified",
         "cases": 7
+      },
+      "safe_fetch": {
+        "status": "not_verified"
       }
     }
   },

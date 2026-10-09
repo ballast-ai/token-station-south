@@ -55,6 +55,7 @@ mod provider_media_binary;
 mod provider_multipart;
 mod quota;
 mod raw;
+mod safe_fetch;
 mod stream;
 
 pub use host_signed::{
@@ -129,6 +130,13 @@ pub use quota::{
     run_provider_quota_metadata_conformance_v1,
 };
 
+pub use safe_fetch::{
+    MAX_SAFE_FETCH_MISMATCHES_V1, ReferenceSafeFetchExecutorV1, SAFE_FETCH_RUNNER_GRACE_V1,
+    SafeFetchArtifactV1, SafeFetchConformanceFailureV1, SafeFetchConformanceReportV1,
+    SafeFetchExecutorV1, SafeFetchFutureV1, SafeFetchMismatchCategoryV1, SafeFetchMismatchV1,
+    SafeFetchPortsV1, SafeFetchResolveErrorV1, SafeFetchTransportErrorV1, SafeFetchWireBodyV1,
+    SafeFetchWireRequestV1, SafeFetchWireResponseV1, run_safe_fetch_conformance_v1,
+};
 pub use stream::{
     AssembledProviderStreamExecutorV1, AssembledStreamExecutionFutureV1,
     MAX_PROVIDER_STREAM_MISMATCHES_V1, ProviderStreamConformanceFailureV1,

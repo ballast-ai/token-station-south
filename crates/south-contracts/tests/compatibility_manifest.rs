@@ -123,6 +123,8 @@ struct Conformance {
     eventstream_framing_suite: u32,
     request_signing_suite_id: String,
     request_signing_suite: u32,
+    safe_fetch_suite_id: String,
+    safe_fetch_suite: u32,
     provider_component_suite_id: String,
     provider_component_suite: u32,
     task_component_v1_suite_id: String,
@@ -166,7 +168,7 @@ struct ProviderRuntime {
 /// status is not `verified`.
 type ExpectedCapability = (&'static str, &'static str, Option<usize>);
 
-fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 13]> {
+fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 14]> {
     BTreeMap::from([
         (
             "token-station",
@@ -225,6 +227,10 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 1
                 // B2) stay not_verified: the community host has no eventstream or signed provider.
                 ("eventstream_framing", "not_verified", None),
                 ("request_signing", "not_verified", None),
+                // safe_fetch (gate ③ of the media worlds' second hop, image record §11 D8b) stays
+                // not_verified: the community host has no image or speech surface, so it fetches
+                // no artifact URL.
+                ("safe_fetch", "not_verified", None),
             ],
         ),
         // token-station-server provider_stream verified 2026-08-17: the durable
@@ -466,6 +472,11 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 1
                 // repository.
                 ("eventstream_framing", "verified", Some(9)),
                 ("request_signing", "verified", Some(7)),
+                // safe_fetch (image record S-I-5) is new and no host has run it. The server's
+                // `guarded_asset_client` rechecks v4-mapped addresses only (image record §11), so
+                // the v4-compatible, NAT64, 6to4 and `fec0::/10` rows are host work before it can
+                // pass.
+                ("safe_fetch", "not_verified", None),
             ],
         ),
     ])
@@ -626,6 +637,8 @@ fn compatibility_manifest_describes_the_library_slice() {
     assert_eq!(manifest.conformance.eventstream_framing_suite, 1);
     assert_eq!(manifest.conformance.request_signing_suite_id, "south.request-signing.v1");
     assert_eq!(manifest.conformance.request_signing_suite, 1);
+    assert_eq!(manifest.conformance.safe_fetch_suite_id, "south.safe-fetch.v1");
+    assert_eq!(manifest.conformance.safe_fetch_suite, 1);
     assert_eq!(manifest.conformance.provider_component_suite_id, "south.provider-component.v1");
     assert_eq!(manifest.conformance.provider_component_suite, 1);
     assert_eq!(manifest.conformance.task_component_v1_suite_id, "south.task-component.v1");
@@ -654,12 +667,12 @@ fn compatibility_manifest_describes_the_library_slice() {
         ("south-component-conformance", "provider_component_gates_reference_v1"),
         (
             "south-provider-conformance",
-            "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_provider_get_provider_multipart_provider_binary_provider_media_binary_credential_recipe_eventstream_framing_request_signing_suites_v1",
+            "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_provider_get_provider_multipart_provider_binary_provider_media_binary_credential_recipe_eventstream_framing_request_signing_safe_fetch_suites_v1",
         ),
         ("south-provider-runtime", "sandboxed_component_execution_v1"),
         (
             "south-testkit",
-            "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_provider_get_provider_multipart_provider_binary_provider_media_binary_runners_raw_builder_signed_raw_builder_get_raw_builder_multipart_raw_builder_v1",
+            "provider_call_stream_quota_metadata_header_auth_controlled_query_user_agent_provider_get_provider_multipart_provider_binary_provider_media_binary_safe_fetch_runners_raw_builder_signed_raw_builder_get_raw_builder_multipart_raw_builder_v1",
         ),
         (
             "south-transport-reqwest",
