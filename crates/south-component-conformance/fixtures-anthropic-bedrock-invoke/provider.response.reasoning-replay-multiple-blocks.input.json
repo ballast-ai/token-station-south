@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"id\":\"msg_bdrk_01\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude-haiku-4-5-20251001\",\"content\":[{\"type\":\"thinking\",\"thinking\":\"first\",\"signature\":\"SIG-1\"},{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"SIG-EMPTY\"},{\"type\":\"redacted_thinking\",\"data\":\"OPAQUE\"},{\"type\":\"text\",\"text\":\"answer\"}],\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"usage\":{\"input_tokens\":1,\"output_tokens\":2}}"
+}

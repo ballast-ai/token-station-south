@@ -1,0 +1,5 @@
+{
+  "status": 400,
+  "headers": {},
+  "body": "{\"__type\": \"ValidationException\", \"message\": \"stream: Extra inputs are not permitted\"}"
+}

@@ -1,0 +1,8 @@
+{
+  "status": 429,
+  "headers": {
+    "x-amzn-errortype": "ThrottlingException:http://internal.amazon.com/coral/com.amazon.bedrock/",
+    "retry-after": "7"
+  },
+  "body": "{\"message\": \"Too many requests, please wait before trying again.\"}"
+}

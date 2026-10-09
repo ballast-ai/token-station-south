@@ -15,11 +15,12 @@ mod host_range;
 
 /// The official components this repository ships. Named, so that an empty or
 /// mistyped scan below cannot pass over nothing.
-const OFFICIAL_COMPONENTS: [&str; 17] = [
+const OFFICIAL_COMPONENTS: [&str; 18] = [
     "embeddings-gemini",
     "embeddings-openai-compatible",
     "embeddings-vertex",
     "provider-anthropic",
+    "provider-anthropic-bedrock-invoke",
     "provider-bedrock-converse",
     "provider-bedrock-converse-bearer",
     "provider-gemini",
@@ -891,6 +892,12 @@ fn host_feedback_sf27_retires_every_published_048_package_identity() {
 /// discipline it names the oldest runtime a package needs, and none of them needs anything newer
 /// than it did. `embeddings-gemini` moved to 1.1.0 and is judged by
 /// `embeddings_gemini_retires_its_published_identities_with_contract_2`.
+///
+/// B6-2 (`docs/design/2026-10-08-bedrock-invoke-anthropic-component.md` §15) changed
+/// `south-component-conformance` again before any release, so it rides the same single bump over
+/// v0.50.0 rather than a second one: `provider-anthropic` 1.0.16 also carries B6-2's behavior
+/// changes (I-Q7, I-Q12), and the other packages' bytes change again under unchanged identities,
+/// which no published release has seen.
 #[test]
 fn embeddings_contract_2_retires_every_published_050_package_identity() {
     for (name, published, runtime) in [
@@ -931,6 +938,26 @@ fn embeddings_contract_2_retires_every_published_050_package_identity() {
     )
     .unwrap();
     assert_ne!(gemini.version, "1.0.2");
+}
+
+/// `provider-anthropic-bedrock-invoke` uses only declarations `provider-bedrock-converse` uses under
+/// runtime 0.46.0 (design record §12), so 0.46.0 is the oldest runtime that admits it and the
+/// package declares it; `scripts/check-declared-runtime.sh` loads it under that runtime's tag.
+#[test]
+fn the_invoke_package_declares_the_runtime_converse_declares() {
+    let read = |name: &str| -> ComponentManifestV1 {
+        serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap()
+    };
+    let invoke = read("provider-anthropic-bedrock-invoke");
+    assert_eq!(invoke.version, "1.0.0");
+    assert_eq!(invoke.compatibility.south_runtime, "0.46.0");
+    assert_eq!(invoke.compatibility, read("provider-bedrock-converse").compatibility);
 }
 
 /// The embeddings world is first known to the 0.47.0 runtime, so that is the oldest runtime that

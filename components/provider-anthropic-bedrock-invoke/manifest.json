@@ -1,0 +1,99 @@
+{
+  "name": "provider-anthropic-bedrock-invoke",
+  "version": "1.0.0",
+  "api_version": "provider-adapter-v2",
+  "providers": [
+    "anthropic-bedrock-invoke"
+  ],
+  "capabilities": [
+    "chat",
+    "stream",
+    "tool_call"
+  ],
+  "auth_arms": [
+    "host_signed"
+  ],
+  "endpoint": {
+    "anthropic-bedrock-invoke": "https://bedrock-runtime.{region}.amazonaws.com"
+  },
+  "config_schema": {
+    "anthropic-bedrock-invoke": {
+      "region": {
+        "syntax": "aws_region",
+        "required": true,
+        "description": "The AWS region the Bedrock runtime is called in."
+      }
+    }
+  },
+  "credentials": {
+    "schema": "south.credential-recipe.v1",
+    "fields": {
+      "access_key_id": {
+        "secret": true,
+        "required": true,
+        "description": "The AWS access key ID of the IAM principal the requests are signed as."
+      },
+      "secret_access_key": {
+        "secret": true,
+        "required": true,
+        "description": "The AWS secret access key paired with the access key ID."
+      },
+      "session_token": {
+        "secret": true,
+        "description": "The AWS session token, only for temporary credentials from AWS STS."
+      }
+    }
+  },
+  "permissions": {
+    "network": false,
+    "filesystem": false,
+    "secrets": []
+  },
+  "conformance": {
+    "required_suite": "south.provider-component.v1",
+    "fixtures": "fixtures-anthropic-bedrock-invoke/"
+  },
+  "compatibility": {
+    "ir_schema_id": "token-station-protocol@0.5.0/v0.4.0",
+    "kernel_version": "0.4.0",
+    "kernel_revision": "8e34f5a089d0b9c7273b49ddb6952dd87e960019",
+    "wit_package": "token-station:adapter@2.0.0",
+    "south_runtime": "0.46.0",
+    "runtime_abi": 1,
+    "kernel_contracts": {
+      "canonical_ir": 3,
+      "error_catalog": 1,
+      "stream": 2
+    }
+  },
+  "emits": [
+    "authorization",
+    "x-amz-date",
+    "x-amz-content-sha256",
+    "x-amz-security-token"
+  ],
+  "stream_framing": "aws-eventstream",
+  "signing": {
+    "scheme": "aws-sigv4",
+    "service": "bedrock",
+    "region": {
+      "template_param": "region"
+    },
+    "credentials": {
+      "access_key_id": "access_key_id",
+      "secret_access_key": "secret_access_key",
+      "session_token": "session_token"
+    }
+  },
+  "request_facts": {
+    "anthropic-bedrock-invoke": {
+      "output_cap": [
+        "/max_tokens"
+      ],
+      "model": {
+        "url": "/model/{model}/invoke"
+      },
+      "stream": "url"
+    }
+  }
+}

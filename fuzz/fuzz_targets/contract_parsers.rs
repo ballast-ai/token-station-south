@@ -5,6 +5,8 @@ use south_component_conformance::embeddings_json::{
     embeddings_parsed_json, parse_embeddings_parsed_json, parse_prepared_embeddings_json,
     parse_provider_error_json, prepared_embeddings_json, provider_error_json,
 };
+use south_component_conformance::reference_anthropic_bedrock_invoke::AnthropicBedrockInvokeReferenceV1;
+use south_component_conformance::ProviderComponentV1;
 use south_component_conformance::task_v2_json::{
     locator_json, observation_json, parse_locator_json, parse_observation_json,
     parse_prepared_task_json, parse_render_context_json, parse_submit_outcome_json,
@@ -131,6 +133,53 @@ fn fuzz_eventstream(data: &[u8]) {
 }
 
 /// B7a: the declared-instance parsers consume untrusted manifest text (§10, §16 Q15).
+/// Standard base64 with padding, written out so the target does not share the decoder it fuzzes.
+fn base64_standard(bytes: &[u8]) -> String {
+    const SYMBOLS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut encoded = String::new();
+    for group in bytes.chunks(3) {
+        let value = group
+            .iter()
+            .enumerate()
+            .fold(0usize, |value, (at, byte)| value | (usize::from(*byte) << (16 - 8 * at)));
+        for at in 0..4 {
+            encoded.push(if at <= group.len() {
+                char::from(SYMBOLS[(value >> (18 - 6 * at)) & 0x3f])
+            } else {
+                '='
+            });
+        }
+    }
+    encoded
+}
+
+/// The Bedrock `InvokeModel` Anthropic stream parser (B6-2): the `chunk` envelope's strict base64
+/// decoding and the shared Messages state machine under it, fed upstream bytes. Fed raw, the input
+/// exercises the frame splitter and the envelope; wrapped as one `chunk`'s payload, it reaches the
+/// decoded-event path. Chunking never changes the events or the first error.
+fn fuzz_invoke_stream(data: &[u8]) {
+    let run = |body: &[u8], stride: usize| {
+        let mut parser = AnthropicBedrockInvokeReferenceV1.stream_parser();
+        let mut events = Vec::new();
+        for piece in body.chunks(stride) {
+            match parser.parse_chunk(piece) {
+                Ok(more) => events.extend(more),
+                Err(error) => return format!("{events:?} {error:?}"),
+            }
+        }
+        match parser.finish() {
+            Ok(more) => events.extend(more),
+            Err(error) => return format!("{events:?} {error:?}"),
+        }
+        format!("{events:?}")
+    };
+    let wrapped = format!("event: chunk\ndata: {{\"bytes\":\"{}\"}}\n\n", base64_standard(data));
+    let stride = usize::from(data.first().copied().unwrap_or(0) % 17) + 1;
+    for body in [data, wrapped.as_bytes()] {
+        assert_eq!(run(body, stride), run(body, body.len().max(1)));
+    }
+}
+
 fn fuzz_declared_instances(input: &str) {
     // A declared user-agent: an accepted value has the controlled grammar and round-trips.
     if let Ok(agent) = DeclaredUserAgentV1::from_manifest_value(input) {
@@ -277,6 +326,7 @@ fn fuzz_embeddings(input: &str) {
 
 fuzz_target!(|data: &[u8]| {
     fuzz_eventstream(data);
+    fuzz_invoke_stream(data);
 
     let Ok(input) = std::str::from_utf8(data) else {
         return;

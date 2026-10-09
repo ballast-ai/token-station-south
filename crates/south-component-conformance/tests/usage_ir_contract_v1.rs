@@ -43,6 +43,7 @@ use south_component_conformance::{
     ProviderComponentV1,
     reference::OpenAiCompatibleReferenceV1,
     reference_anthropic::AnthropicReferenceV1,
+    reference_anthropic_bedrock_invoke::AnthropicBedrockInvokeReferenceV1,
     reference_bedrock_converse::{BedrockConverseBearerReferenceV1, BedrockConverseReferenceV1},
     reference_gemini::GeminiReferenceV1,
 };
@@ -163,6 +164,154 @@ fn anthropic_stream_reports_the_whole_prompt_however_the_frames_split_it() {
     assert_partitioned(usage, 1000, 300, 200, "anthropic stream, delta repeats input only");
 }
 
+// Anthropic streaming documentation: the counts in `message_delta.usage` are cumulative for the
+// whole message. A later report may repeat a count or raise it, never lower it; a count that
+// shrinks is contradictory evidence and refused, as the host refuses it (its 03 #86 rule; I-Q7 of
+// docs/design/2026-10-08-bedrock-invoke-anthropic-component.md).
+#[test]
+fn anthropic_stream_refuses_a_cumulative_count_that_shrinks() {
+    let start = "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":1000,\"output_tokens\":1}}}\n\n";
+    for (what, delta) in [
+        ("input", "{\"input_tokens\":900,\"output_tokens\":20}"),
+        ("output", "{\"output_tokens\":0}"),
+    ] {
+        let mut parser = AnthropicReferenceV1.stream_parser();
+        parser.parse_chunk(start.as_bytes()).unwrap();
+        let frame = format!(
+            "event: message_delta\ndata: {{\"type\":\"message_delta\",\"delta\":{{\"stop_reason\":\"end_turn\"}},\"usage\":{delta}}}\n\n"
+        );
+        let outcome = parser.parse_chunk(frame.as_bytes());
+        if what == "input" {
+            assert_eq!(
+                outcome.unwrap_err().code.as_str(),
+                "provider_protocol_error",
+                "a terminal input count below the start's must be refused"
+            );
+        } else {
+            // Zero is "not filled in", never a shrink: the start's output stands.
+            let events = outcome.unwrap();
+            let usage = events.iter().find_map(|event| match event {
+                StreamEvent::Usage { usage } => Some(*usage),
+                _ => None,
+            });
+            assert_eq!(usage.map(|usage| usage.output_tokens), Some(1), "{events:?}");
+        }
+    }
+}
+
+// The cache-write total and its 5-minute / 1-hour split describe one bucket, so a later report
+// replaces them together or not at all (the host's 03 #86 rule): a larger later total takes the
+// later split, and an equal total takes it only when it brings a split the earlier report lacked.
+// Folded field by field, a 300 / 0 start and a 0 / 500 terminal would bill 300 + 500 against a
+// total of 500. Judged on the terminal report itself: each report carries the whole-so-far usage,
+// and a consumer folding reports with the kernel's last-nonzero `Usage::absorb` cannot take a tier
+// back to zero (design record §15.2).
+#[test]
+fn anthropic_stream_folds_the_cache_write_tiers_as_one_group() {
+    let fold = |start: &Value, delta: &Value| -> Usage {
+        let start = format!(
+            "event: message_start\ndata: {}\n\n",
+            json!({"type": "message_start", "message": {"usage": start}})
+        );
+        let delta = format!(
+            "event: message_delta\ndata: {}\n\n",
+            json!({"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": delta})
+        );
+        let mut parser = AnthropicReferenceV1.stream_parser();
+        let mut events = parser.parse_chunk(start.as_bytes()).expect("the start parses");
+        events.extend(parser.parse_chunk(delta.as_bytes()).expect("the delta parses"));
+        events
+            .iter()
+            .rev()
+            .find_map(|event| match event {
+                StreamEvent::Usage { usage } => Some(*usage),
+                _ => None,
+            })
+            .expect("the terminal delta reports usage")
+    };
+    let tiers = |five: u64, hour: u64| json!({"ephemeral_5m_input_tokens": five, "ephemeral_1h_input_tokens": hour});
+    let grown = fold(
+        &json!({"input_tokens": 10, "output_tokens": 1, "cache_creation_input_tokens": 300,
+                "cache_creation": tiers(300, 0)}),
+        &json!({"output_tokens": 5, "cache_creation_input_tokens": 500,
+                "cache_creation": tiers(0, 500)}),
+    );
+    assert_eq!(
+        (grown.cache_write_tokens, grown.cache_write_5m_tokens, grown.cache_write_1h_tokens),
+        (500, 0, 500)
+    );
+    let split_later = fold(
+        &json!({"input_tokens": 10, "output_tokens": 1, "cache_creation_input_tokens": 300}),
+        &json!({"output_tokens": 5, "cache_creation_input_tokens": 300,
+                "cache_creation": tiers(100, 200)}),
+    );
+    assert_eq!((split_later.cache_write_5m_tokens, split_later.cache_write_1h_tokens), (100, 200));
+    let kept = fold(
+        &json!({"input_tokens": 10, "output_tokens": 1, "cache_creation_input_tokens": 300,
+                "cache_creation": tiers(300, 0)}),
+        &json!({"output_tokens": 5, "cache_creation_input_tokens": 300,
+                "cache_creation": tiers(100, 200)}),
+    );
+    assert_eq!((kept.cache_write_5m_tokens, kept.cache_write_1h_tokens), (300, 0));
+}
+
+// ── Bedrock InvokeModel, Anthropic ───────────────────────────────────────────
+// AWS (Anthropic Claude Messages API on Bedrock): the InvokeModel request and response bodies are
+// the Messages API's, so the usage object and its formula are Anthropic's: total input =
+// input_tokens + cache_read_input_tokens + cache_creation_input_tokens. A stream's `chunk` events
+// carry each Anthropic stream event base64-encoded in `bytes` (`PayloadPart`).
+
+fn invoke_chunk(event: &Value) -> String {
+    use base64::Engine as _;
+    let encoded = base64::engine::general_purpose::STANDARD.encode(event.to_string());
+    format!("event: chunk\ndata: {}\n\n", json!({"bytes": encoded}))
+}
+
+#[test]
+fn invoke_reads_the_messages_usage_and_its_whole_prompt() {
+    let body = anthropic_body(&json!({"input_tokens": 500, "output_tokens": 20,
+                                      "cache_read_input_tokens": 300,
+                                      "cache_creation_input_tokens": 200}));
+    let usage = AnthropicBedrockInvokeReferenceV1.parse_response(&response(&body)).unwrap().usage;
+    assert_partitioned(usage, 1000, 300, 200, "invoke non-stream");
+
+    let start = json!({"type": "message_start", "message": {"usage": {
+        "input_tokens": 500, "output_tokens": 1, "cache_read_input_tokens": 300,
+        "cache_creation_input_tokens": 200,
+        "cache_creation": {"ephemeral_5m_input_tokens": 50, "ephemeral_1h_input_tokens": 150}}}});
+    let block = [
+        json!({"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}),
+        json!({"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "hi"}}),
+        json!({"type": "content_block_stop", "index": 0}),
+    ];
+    let delta = json!({"type": "message_delta", "delta": {"stop_reason": "end_turn"},
+                       "usage": {"output_tokens": 20}});
+    let chunks: Vec<String> =
+        std::iter::once(&start).chain(&block).chain([&delta]).map(invoke_chunk).collect();
+    let chunks: Vec<&str> = chunks.iter().map(String::as_str).collect();
+    let usage = folded(&AnthropicBedrockInvokeReferenceV1, &chunks);
+    assert_partitioned(usage, 1000, 300, 200, "invoke stream");
+    assert_eq!(
+        (usage.output_tokens, usage.cache_write_5m_tokens, usage.cache_write_1h_tokens),
+        (20, 50, 150)
+    );
+
+    // The host's 03 #86 shape: input 0 at the start, the real input on the terminal delta.
+    let start = json!({"type": "message_start", "message": {"usage": {"input_tokens": 0, "output_tokens": 0}}});
+    let delta = json!({"type": "message_delta", "delta": {"stop_reason": "end_turn"},
+                       "usage": {"input_tokens": 700, "output_tokens": 20,
+                                 "cache_read_input_tokens": 300}});
+    let chunks: Vec<String> =
+        std::iter::once(&start).chain(&block).chain([&delta]).map(invoke_chunk).collect();
+    let chunks: Vec<&str> = chunks.iter().map(String::as_str).collect();
+    let usage = folded(&AnthropicBedrockInvokeReferenceV1, &chunks);
+    assert_partitioned(usage, 1000, 300, 0, "invoke stream, input on the terminal delta");
+
+    let invoke = AnthropicBedrockInvokeReferenceV1;
+    refused(&invoke, &anthropic_body(&Value::Null), "invoke, no usage object");
+    refused(&invoke, &anthropic_body(&json!({"input_tokens": 10})), "invoke, no output_tokens");
+}
+
 // ── Gemini ───────────────────────────────────────────────────────────────────
 // Gemini: `promptTokenCount` is the whole prompt; `cachedContentTokenCount` is
 // the cached part of it (a subset).
@@ -252,7 +401,7 @@ struct Dialect {
     cache: &'static [&'static str],
 }
 
-const DIALECTS: [Dialect; 5] = [
+const DIALECTS: [Dialect; 6] = [
     // `prompt_tokens` already contains `prompt_tokens_details.cached_tokens`.
     Dialect {
         dir: "fixtures",
@@ -289,11 +438,20 @@ const DIALECTS: [Dialect; 5] = [
         prompt: &["inputTokens", "cacheReadInputTokens", "cacheWriteInputTokens"],
         cache: &["cacheReadInputTokens", "cacheWriteInputTokens"],
     },
+    // InvokeModel carries the Messages usage; stream events arrive base64-wrapped in `bytes`.
+    Dialect {
+        dir: "fixtures-anthropic-bedrock-invoke",
+        usage_key: "usage",
+        prompt: &["input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"],
+        cache: &["cache_read_input_tokens", "cache_creation_input_tokens"],
+    },
 ];
 
 /// The JSON payloads a fixture input puts on the wire: a response body, or
-/// every `data:` line of every stream chunk.
+/// every `data:` line of every stream chunk, with an `InvokeModel` `{"bytes": <base64>}` envelope
+/// opened (by the `base64` crate, not by the reference's decoder).
 fn wire_payloads(input: &Value) -> Vec<Value> {
+    use base64::Engine as _;
     if let Some(body) = input["body"].as_str() {
         return serde_json::from_str(body).into_iter().collect();
     }
@@ -303,7 +461,16 @@ fn wire_payloads(input: &Value) -> Vec<Value> {
         .filter_map(Value::as_str)
         .flat_map(str::lines)
         .filter_map(|line| line.strip_prefix("data:"))
-        .filter_map(|data| serde_json::from_str(data.trim()).ok())
+        .filter_map(|data| serde_json::from_str::<Value>(data.trim()).ok())
+        .filter_map(|payload| {
+            let Some(encoded) = payload["bytes"].as_str() else {
+                return Some(payload);
+            };
+            base64::engine::general_purpose::STANDARD
+                .decode(encoded)
+                .ok()
+                .and_then(|decoded| serde_json::from_slice(&decoded).ok())
+        })
         .collect()
 }
 

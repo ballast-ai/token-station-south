@@ -183,6 +183,7 @@ directory shape the runtime loads — `manifest.json` beside `component.wasm`.
 | `embeddings-openai-compatible` | `openai-compatible`, `azure-openai-v1` | `bash scripts/build-embeddings-openai-compatible-component.sh` | embeddings contract 1, from 0.47.0 |
 | `embeddings-gemini` | `gemini` | `bash scripts/build-embeddings-gemini-component.sh` | embeddings contract 2 (inline media inputs), from 0.51.0; contract 1 text before |
 | `embeddings-vertex` | `vertex-ai` | `bash scripts/build-embeddings-vertex-component.sh` | embeddings contract 1, from 0.48.0 |
+| `provider-anthropic-bedrock-invoke` | `anthropic-bedrock-invoke` | `bash scripts/build-anthropic-bedrock-invoke-component.sh` | Bedrock InvokeModel (Anthropic), `host_signed` with `aws-sigv4`; unreleased (B6-2) |
 
 Each pack's `README.md` records how its expectations were derived and how the
 component differs from the host's native arm — read that before changing a

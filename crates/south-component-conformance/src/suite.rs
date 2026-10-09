@@ -80,10 +80,13 @@ const USAGE_ROWS: [&str; 5] = [
     "provider.stream.no-usage",
 ];
 
-/// The error a response case expects, when its expected file is
-/// `{"error": <envelope>}` rather than a chat response.
+/// The error a response or stream case expects, when its expected file is
+/// `{"error": <envelope>}` rather than a chat response or an event array.
+///
+/// A stream case that expects an error expects the parser to refuse the stream — on whichever
+/// chunk carries the refused frame, however the body is split — with exactly that envelope.
 fn expected_error(case: &CaseV1) -> Option<&Value> {
-    if case.family != ProviderFamilyV1::Response {
+    if !matches!(case.family, ProviderFamilyV1::Response | ProviderFamilyV1::Stream) {
         return None;
     }
     let map = case.expected.as_object()?;
@@ -628,9 +631,26 @@ fn stream_incrementality(component: &dyn ProviderComponentV1, case: &CaseV1) -> 
         Err(failure) => return OutcomeV1::failed(check, &case.name, failure.detail()),
     };
     let body = input.body();
+    let refusal = expected_error(case);
 
     for split in 0..=body.len() {
-        let events = match feed(component.stream_parser().as_mut(), &body, &[split]) {
+        let fed = feed(component.stream_parser().as_mut(), &body, &[split]);
+        if let Some(expected) = refusal {
+            match fed {
+                Err(Failure::Component { envelope, .. }) if envelope == *expected => continue,
+                _ => {
+                    return OutcomeV1::failed(
+                        check,
+                        &case.name,
+                        format!(
+                            "split at byte {split} did not refuse the stream as expected; a \
+                             chunk off a socket is not a whole frame"
+                        ),
+                    );
+                }
+            }
+        }
+        let events = match fed {
             Ok(events) => events,
             Err(failure) => {
                 return OutcomeV1::failed(

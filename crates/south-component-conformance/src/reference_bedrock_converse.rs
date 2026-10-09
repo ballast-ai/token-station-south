@@ -953,18 +953,7 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
 
     fn map_provider_error(&self, parts: &HttpResponseParts) -> ComponentResultV1<ErrorEnvelope> {
         let raw: Value = serde_json::from_str(&parts.body).unwrap_or(Value::Null);
-        // Bedrock names the exception in a header on some paths and in the
-        // body's `__type` on others; both are checked before falling back to
-        // the status.
-        let exception = parts
-            .headers
-            .get("x-amzn-errortype")
-            .map(String::as_str)
-            .or_else(|| raw["__type"].as_str())
-            .unwrap_or_default();
-        let exception = exception.rsplit('#').next().unwrap_or(exception);
-        let exception = exception.split(':').next().unwrap_or(exception);
-        let code = exception_code(exception).unwrap_or(match parts.status {
+        let code = exception_code(exception_name(parts, &raw)).unwrap_or(match parts.status {
             400 | 404 | 422 => ErrorCode::InvalidRequest,
             401 | 403 => ErrorCode::Auth,
             402 => ErrorCode::PaymentRequired,
@@ -1091,10 +1080,24 @@ fn build_converse_request(
     Ok(descriptor)
 }
 
+/// The Bedrock exception a non-2xx answer names, normalized: Bedrock names it in a header on some
+/// paths and in the body's `__type` on others, possibly qualified (`…#ThrottlingException`) or
+/// suffixed (`ThrottlingException:http://…`). Empty when neither names one.
+pub(crate) fn exception_name<'a>(parts: &'a HttpResponseParts, body: &'a Value) -> &'a str {
+    let exception = parts
+        .headers
+        .get("x-amzn-errortype")
+        .map(String::as_str)
+        .or_else(|| body["__type"].as_str())
+        .unwrap_or_default();
+    let exception = exception.rsplit('#').next().unwrap_or(exception);
+    exception.split(':').next().unwrap_or(exception)
+}
+
 /// A Bedrock exception name, as a response header, a body `__type` or an eventstream
 /// `:exception-type` names it. Streams spell it in lower camel case (`throttlingException`),
 /// responses in upper camel case, so the first letter is compared without case.
-fn exception_code(exception: &str) -> Option<ErrorCode> {
+pub(crate) fn exception_code(exception: &str) -> Option<ErrorCode> {
     let mut chars = exception.chars();
     let first = chars.next()?.to_ascii_uppercase();
     let name = format!("{first}{}", chars.as_str());

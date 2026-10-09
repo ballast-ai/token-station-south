@@ -147,5 +147,5 @@ jobs:
       - name: Fuzz untrusted contract parsers
         run: |
           mkdir -p fuzz/corpus/contract_parsers
-          cp fuzz/seeds/contract_parsers/*.json fuzz/corpus/contract_parsers/
+          cp fuzz/seeds/contract_parsers/* fuzz/corpus/contract_parsers/
           rustup run nightly-2026-08-15 cargo fuzz run contract_parsers -- -max_total_time=600

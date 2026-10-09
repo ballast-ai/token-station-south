@@ -1,0 +1,60 @@
+{
+  "method": "POST",
+  "url": "https://bedrock-runtime.us-east-1.amazonaws.com/model/anthropic.claude-sonnet-4-v1:0/invoke",
+  "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "x-amzn-bedrock-accept": "application/json"
+  },
+  "body": {
+    "anthropic_version": "bedrock-2023-05-31",
+    "messages": [
+      {
+        "role": "user",
+        "content": "weather in both?"
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_use",
+            "id": "tu_1",
+            "input": {
+              "city": "Beijing"
+            },
+            "name": "get_weather"
+          },
+          {
+            "type": "tool_use",
+            "id": "tu_2",
+            "input": {
+              "city": "Tokyo"
+            },
+            "name": "get_weather"
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "content": "12C",
+            "tool_use_id": "tu_1"
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "content": "18C",
+            "tool_use_id": "tu_2"
+          }
+        ]
+      }
+    ],
+    "max_tokens": 4096
+  }
+}

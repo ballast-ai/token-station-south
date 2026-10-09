@@ -984,39 +984,18 @@ fn form(params: &serde_json::Map<String, Value>) -> String {
 
 const HEX: &[u8; 16] = b"0123456789ABCDEF";
 
-const BASE64URL: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-
 /// Base64url without padding (RFC 7515 §2).
 fn base64url_encode(bytes: &[u8]) -> String {
-    let mut encoded = String::with_capacity(bytes.len().div_ceil(3) * 4);
-    for chunk in bytes.chunks(3) {
-        let group = chunk
-            .iter()
-            .enumerate()
-            .fold(0usize, |group, (index, byte)| group | (usize::from(*byte) << (16 - 8 * index)));
-        for index in 0..=chunk.len() {
-            encoded.push(char::from(BASE64URL[(group >> (18 - 6 * index)) & 0x3f]));
-        }
-    }
-    encoded
+    crate::base64::encode(bytes, crate::base64::Alphabet::UrlSafe, false)
 }
 
-/// Base64url, padded or not; `None` on any other byte.
+/// Base64url, padded or not (RFC 7515 readers meet both); `None` on any other spelling.
 fn base64url_decode(text: &str) -> Option<Vec<u8>> {
-    let text = text.trim_end_matches('=');
-    let mut decoded = Vec::with_capacity(text.len() * 3 / 4);
-    let mut group = 0u32;
-    let mut bits = 0u32;
-    for byte in text.bytes() {
-        let sextet = BASE64URL.iter().position(|candidate| *candidate == byte)?;
-        group = (group << 6) | u32::try_from(sextet).ok()?;
-        bits += 6;
-        if bits >= 8 {
-            bits -= 8;
-            decoded.push(u8::try_from((group >> bits) & 0xff).ok()?);
-        }
-    }
-    Some(decoded)
+    crate::base64::decode(
+        text,
+        crate::base64::Alphabet::UrlSafe,
+        crate::base64::Padding::Indifferent,
+    )
 }
 
 /// A JWT's payload, decoded without verifying anything.

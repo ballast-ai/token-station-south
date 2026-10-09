@@ -65,7 +65,7 @@ fn model_allows_reasoning_replay(request: &ChatRequest, config: &ProviderConfig)
     })
 }
 
-fn provider_protocol_error(message: &'static str) -> ErrorEnvelope {
+pub(crate) fn provider_protocol_error(message: &'static str) -> ErrorEnvelope {
     ErrorEnvelope::new(ErrorCode::ProviderProtocolError, 502, message)
 }
 
@@ -303,6 +303,24 @@ fn tools_of(request: &ChatRequest) -> (Option<Value>, Option<Value>) {
     (declarations, choice)
 }
 
+/// The Messages body for `request`, after the checks every Messages wire runs before building
+/// one: reasoning replay needs the model's capability, and the Claude dialect words decide what
+/// the body may carry. Shared with the Bedrock `InvokeModel` reference, which sends the same body
+/// with three edits (`docs/design/2026-10-08-bedrock-invoke-anthropic-component.md` §4.2).
+pub(crate) fn checked_body_of(
+    request: &ChatRequest,
+    config: &ProviderConfig,
+) -> ComponentResultV1<Value> {
+    if requests_reasoning_replay(request) && !model_allows_reasoning_replay(request, config) {
+        return Err(capability(
+            "reasoning replay requires the target model capability reasoning_replay.claude.v1",
+        ));
+    }
+    let dialect = Dialect::of(request, config)?;
+    dialect.refuse_forced_tool(request)?;
+    body_of(request, dialect)
+}
+
 fn body_of(request: &ChatRequest, dialect: Dialect) -> ComponentResultV1<Value> {
     let (system, messages) = conversation_of(request)?;
     let max_tokens = request.sampling.max_output_tokens.map_or(DEFAULT_MAX_TOKENS, u64::from);
@@ -452,23 +470,56 @@ impl WireUsage {
         Ok(usage)
     }
 
-    /// Fold a later report in, last-nonzero-wins per wire field.
+    /// Fold a later report in, the way the host folds a Messages stream (its 03 #86 rule;
+    /// `docs/design/2026-10-08-bedrock-invoke-anthropic-component.md` §6, I-Q7).
     ///
-    /// The fold happens on the wire buckets, not on the IR sum: a
-    /// `message_delta` that repeats `input_tokens` without the cache fields
-    /// would otherwise shrink the prompt total it reports.
-    const fn absorb(&mut self, later: Self) {
-        const fn keep(slot: &mut u64, later: u64) {
-            if later != 0 {
-                *slot = later;
+    /// Every count on this wire is cumulative for the whole message, so per bucket:
+    ///
+    /// - a later report that leaves the bucket out or reports zero keeps the earlier value — zero
+    ///   cannot tell "exactly none" from "not filled in", and compatible upstreams send the real
+    ///   input only on the terminal `message_delta`;
+    /// - a later non-zero value at least the earlier one wins;
+    /// - a later non-zero value below an earlier non-zero one is refused: a cumulative count does
+    ///   not shrink, so the evidence contradicts itself.
+    ///
+    /// The cache-write bucket travels with its 5-minute / 1-hour split as one group: a larger
+    /// later total takes the later group, and an equal one takes it only when it brings a split
+    /// the earlier report lacked (otherwise the 1-hour part would bill at the 5-minute price).
+    /// Folding the tiers field by field could pair one report's 5-minute count with another's
+    /// 1-hour count and break the sum.
+    ///
+    /// The fold happens on the wire buckets, not on the IR sum: a `message_delta` that repeats
+    /// `input_tokens` without the cache fields would otherwise shrink the prompt total it reports.
+    fn absorb(&mut self, later: Self) -> ComponentResultV1<()> {
+        fn cumulative(earlier: u64, later: u64) -> ComponentResultV1<u64> {
+            if later == 0 {
+                return Ok(earlier);
             }
+            if later < earlier {
+                return Err(provider_protocol_error(
+                    "the upstream stream usage shrank a cumulative token count",
+                ));
+            }
+            Ok(later)
         }
-        keep(&mut self.uncached_input, later.uncached_input);
-        keep(&mut self.output, later.output);
-        keep(&mut self.cache_read, later.cache_read);
-        keep(&mut self.cache_write, later.cache_write);
-        keep(&mut self.cache_write_5m, later.cache_write_5m);
-        keep(&mut self.cache_write_1h, later.cache_write_1h);
+        const fn has_split(usage: &WireUsage) -> bool {
+            usage.cache_write_5m > 0 || usage.cache_write_1h > 0
+        }
+        let uncached_input = cumulative(self.uncached_input, later.uncached_input)?;
+        let output = cumulative(self.output, later.output)?;
+        let cache_read = cumulative(self.cache_read, later.cache_read)?;
+        cumulative(self.cache_write, later.cache_write)?;
+        if later.cache_write > self.cache_write
+            || (later.cache_write == self.cache_write && has_split(&later) && !has_split(self))
+        {
+            self.cache_write = later.cache_write;
+            self.cache_write_5m = later.cache_write_5m;
+            self.cache_write_1h = later.cache_write_1h;
+        }
+        self.uncached_input = uncached_input;
+        self.output = output;
+        self.cache_read = cache_read;
+        Ok(())
     }
 
     fn to_ir(self) -> Usage {
@@ -499,8 +550,10 @@ fn usage_of(raw: &Value) -> ComponentResultV1<Usage> {
 /// records the stop reason, and the terminal triple leaves on the frame that
 /// carries usage, or at EOF (design record D3).
 #[derive(Debug, Default)]
-struct AnthropicSseParser {
+pub(crate) struct AnthropicSseParser {
     tail: Vec<u8>,
+    /// Whether the upstream reported a failure in-band: nothing follows it.
+    closed: bool,
     saw_finish: bool,
     pending_finish_reason: Option<FinishReason>,
     pending_stop_sequence: Option<String>,
@@ -513,7 +566,7 @@ struct AnthropicSseParser {
 
 /// The end of the first complete SSE frame in `buffer`, as
 /// `(payload_end, frame_end)`.
-fn sse_frame_boundary(buffer: &[u8]) -> Option<(usize, usize)> {
+pub(crate) fn sse_frame_boundary(buffer: &[u8]) -> Option<(usize, usize)> {
     let newline = buffer.windows(2).position(|pair| pair == b"\n\n").map(|at| (at, at + 2));
     let crlf = buffer.windows(4).position(|quad| quad == b"\r\n\r\n").map(|at| (at, at + 4));
     // Whichever separator closes the earlier frame wins; either alone is the
@@ -525,7 +578,7 @@ fn sse_frame_boundary(buffer: &[u8]) -> Option<(usize, usize)> {
 }
 
 /// The `event:` and `data:` values of one frame.
-fn frame_fields(frame: &str) -> (Option<&str>, Option<&str>) {
+pub(crate) fn frame_fields(frame: &str) -> (Option<&str>, Option<&str>) {
     let mut event = None;
     let mut data = None;
     for line in frame.lines() {
@@ -596,11 +649,71 @@ impl AnthropicSseParser {
     /// carries the whole-so-far usage, which a last-nonzero-wins consumer
     /// absorbs to the same result.
     fn report_usage(&mut self, raw: &Value, report: UsageReport) -> ComponentResultV1<StreamEvent> {
-        self.usage.absorb(WireUsage::of(raw, report)?);
+        self.usage.absorb(WireUsage::of(raw, report)?)?;
         Ok(StreamEvent::Usage { usage: self.usage.to_ir() })
     }
 
-    fn events_of(&mut self, event: &str, data: &Value) -> ComponentResultV1<Vec<StreamEvent>> {
+    /// The events one `content_block_delta` carries.
+    fn block_delta_events(&self, data: &Value) -> ComponentResultV1<Vec<StreamEvent>> {
+        let index = block_index(data)?;
+        self.require_open_block(index)?;
+        let delta = &data["delta"];
+        Ok(match delta["type"].as_str() {
+            Some("text_delta") => text_event(delta["text"].as_str(), |text| StreamEvent::Delta {
+                index: 0,
+                content: text,
+            }),
+            Some("thinking_delta") => text_event(delta["thinking"].as_str(), |text| {
+                StreamEvent::ThinkingDelta { index: 0, block_index: index, thinking_delta: text }
+            }),
+            // D1: the signature arrives exactly once, in the stream.
+            Some("signature_delta") => text_event(delta["signature"].as_str(), |signature| {
+                StreamEvent::ThinkingSignatureDelta {
+                    index: 0,
+                    block_index: index,
+                    signature_delta: signature,
+                }
+            }),
+            Some("input_json_delta") => vec![StreamEvent::ToolCallDelta {
+                index,
+                id: None,
+                name: None,
+                arguments_delta: delta["partial_json"].as_str().unwrap_or_default().to_owned(),
+            }],
+            _ => Vec::new(),
+        })
+    }
+
+    /// Whether an in-band or framing-level failure already ended the stream.
+    pub(crate) const fn is_closed(&self) -> bool {
+        self.closed
+    }
+
+    /// Ends the stream with a failure the upstream reported mid-stream. The kernel's
+    /// `StreamEvent::Error` contract forbids events after it, so the parser closes: later frames
+    /// and the EOF yield nothing, not even a pending `Finish` / `Done`.
+    pub(crate) fn fail(
+        &mut self,
+        code: ErrorCode,
+        provider_message: Option<&str>,
+    ) -> Vec<StreamEvent> {
+        self.closed = true;
+        let mut error = ErrorEnvelope::new(code, 502, message_of(code));
+        error.provider_message =
+            provider_message.filter(|message| message.chars().count() <= 256).map(str::to_owned);
+        vec![StreamEvent::Error { error }]
+    }
+
+    /// One Messages stream event, already split from its framing: the SSE `event:` name (or, on
+    /// Bedrock `InvokeModel`, the decoded payload's `type`) and its parsed `data`.
+    pub(crate) fn events_of(
+        &mut self,
+        event: &str,
+        data: &Value,
+    ) -> ComponentResultV1<Vec<StreamEvent>> {
+        if self.closed {
+            return Ok(Vec::new());
+        }
         match event {
             "message_start" => {
                 let usage = &data["message"]["usage"];
@@ -640,43 +753,7 @@ impl AnthropicSseParser {
                     arguments_delta: String::new(),
                 }])
             }
-            "content_block_delta" => {
-                let index = block_index(data)?;
-                self.require_open_block(index)?;
-                let delta = &data["delta"];
-                Ok(match delta["type"].as_str() {
-                    Some("text_delta") => text_event(delta["text"].as_str(), |text| {
-                        StreamEvent::Delta { index: 0, content: text }
-                    }),
-                    Some("thinking_delta") => {
-                        text_event(delta["thinking"].as_str(), |text| StreamEvent::ThinkingDelta {
-                            index: 0,
-                            block_index: index,
-                            thinking_delta: text,
-                        })
-                    }
-                    // D1: the signature arrives exactly once, in the stream.
-                    Some("signature_delta") => {
-                        text_event(delta["signature"].as_str(), |signature| {
-                            StreamEvent::ThinkingSignatureDelta {
-                                index: 0,
-                                block_index: index,
-                                signature_delta: signature,
-                            }
-                        })
-                    }
-                    Some("input_json_delta") => vec![StreamEvent::ToolCallDelta {
-                        index,
-                        id: None,
-                        name: None,
-                        arguments_delta: delta["partial_json"]
-                            .as_str()
-                            .unwrap_or_default()
-                            .to_owned(),
-                    }],
-                    _ => Vec::new(),
-                })
-            }
+            "content_block_delta" => self.block_delta_events(data),
             "content_block_stop" => {
                 self.close_block(block_index(data)?)?;
                 Ok(Vec::new())
@@ -700,8 +777,36 @@ impl AnthropicSseParser {
                 self.done_emitted = true;
                 Ok(events)
             }
+            // An in-band failure (Anthropic streaming docs, "Error events"), e.g.
+            // `overloaded_error` mid-stream. The stream ends with the upstream's error rather than
+            // looking truncated (I-Q12). After the terminal `Done` it changes nothing.
+            "error" if !self.done_emitted => {
+                let error = &data["error"];
+                let code = error["type"]
+                    .as_str()
+                    .and_then(error_type_code)
+                    .unwrap_or(ErrorCode::UpstreamUnavailable);
+                Ok(self.fail(code, error["message"].as_str()))
+            }
+            // `ping`, `message_stop`, and any event the dialect gains later.
             _ => Ok(Vec::new()),
         }
+    }
+
+    /// The clean transport EOF, which the runtime spells as an empty fragment (design record D3).
+    pub(crate) fn end_of_stream(&mut self) -> Vec<StreamEvent> {
+        if self.closed {
+            return Vec::new();
+        }
+        if self.done_emitted {
+            self.done_emitted = false;
+            return Vec::new();
+        }
+        let Some(finish) = self.take_pending_finish() else {
+            return Vec::new();
+        };
+        self.done_emitted = true;
+        vec![finish, StreamEvent::Done { finish_reason: None, stop_sequence: None }]
     }
 }
 
@@ -723,18 +828,7 @@ impl StreamParserV1 for AnthropicSseParser {
         // The runtime spells a clean transport EOF as an empty fragment, which
         // a successful socket read can never produce (design record D3).
         if chunk.is_empty() {
-            if self.done_emitted {
-                self.done_emitted = false;
-                return Ok(Vec::new());
-            }
-            let Some(finish) = self.take_pending_finish() else {
-                return Ok(Vec::new());
-            };
-            self.done_emitted = true;
-            return Ok(vec![
-                finish,
-                StreamEvent::Done { finish_reason: None, stop_sequence: None },
-            ]);
+            return Ok(self.end_of_stream());
         }
 
         self.tail.extend_from_slice(chunk);
@@ -754,6 +848,50 @@ impl StreamParserV1 for AnthropicSseParser {
             events.extend(self.events_of(event, &parsed)?);
         }
         Ok(events)
+    }
+}
+
+/// An Anthropic error `type` (Messages API errors), when it names one this dialect maps.
+pub(crate) fn error_type_code(error_type: &str) -> Option<ErrorCode> {
+    Some(match error_type {
+        "overloaded_error" => ErrorCode::Capacity,
+        "rate_limit_error" => ErrorCode::RateLimit,
+        "authentication_error" | "permission_error" => ErrorCode::Auth,
+        "invalid_request_error" | "not_found_error" => ErrorCode::InvalidRequest,
+        _ => return None,
+    })
+}
+
+/// The code an HTTP status means when the body names no error this dialect maps.
+pub(crate) const fn status_code(status: u16) -> ErrorCode {
+    match status {
+        400 | 404 | 422 => ErrorCode::InvalidRequest,
+        401 | 403 => ErrorCode::Auth,
+        402 => ErrorCode::PaymentRequired,
+        408 => ErrorCode::Timeout,
+        429 => ErrorCode::RateLimit,
+        529 => ErrorCode::Capacity,
+        500 | 502 | 503 | 504 => ErrorCode::UpstreamUnavailable,
+        _ => ErrorCode::Internal,
+    }
+}
+
+/// The fixed, credential-free message for each code.
+pub(crate) const fn message_of(code: ErrorCode) -> &'static str {
+    match code {
+        ErrorCode::InvalidRequest => "the upstream refused the request as malformed",
+        ErrorCode::Auth => "the upstream rejected the credential",
+        ErrorCode::PaymentRequired => {
+            "the upstream requires payment or the account is out of funds"
+        }
+        ErrorCode::RateLimit => "the upstream rate limited this request",
+        ErrorCode::ContentPolicy => "the upstream refused on content-policy grounds",
+        ErrorCode::ContextLength => "the request exceeds the model's context window",
+        ErrorCode::Timeout => "the upstream did not answer in time",
+        ErrorCode::UpstreamUnavailable => "the upstream is unavailable",
+        ErrorCode::TransportTruncated => "the upstream connection dropped mid-response",
+        ErrorCode::ProviderProtocolError => "the upstream answered with an invalid body",
+        ErrorCode::Capacity | ErrorCode::Capability | ErrorCode::Internal => "the upstream failed",
     }
 }
 
@@ -787,13 +925,7 @@ impl ProviderComponentV1 for AnthropicReferenceV1 {
         if config.provider != "anthropic" {
             return Err(capability(format!("unsupported provider dialect `{}`", config.provider)));
         }
-        if requests_reasoning_replay(request) && !model_allows_reasoning_replay(request, config) {
-            return Err(capability(
-                "reasoning replay requires the target model capability reasoning_replay.claude.v1",
-            ));
-        }
-        let dialect = Dialect::of(request, config)?;
-        dialect.refuse_forced_tool(request)?;
+        let body = checked_body_of(request, config)?;
         let mut descriptor = HttpRequestDescriptor::new(
             HttpMethod::Post,
             config.base_url.resolve(ProviderApi::Messages),
@@ -804,7 +936,7 @@ impl ProviderComponentV1 for AnthropicReferenceV1 {
             ("anthropic-version", ANTHROPIC_VERSION),
         ])
         .map_err(internal)?;
-        descriptor.body = Some(body_of(request, dialect)?);
+        descriptor.body = Some(body);
         // The host holds the value; this names the slot and the presentation
         // the dialect fixes.
         descriptor.auth = match config.auth.clone() {
@@ -919,40 +1051,11 @@ impl ProviderComponentV1 for AnthropicReferenceV1 {
 
     fn map_provider_error(&self, parts: &HttpResponseParts) -> ComponentResultV1<ErrorEnvelope> {
         let raw: Value = serde_json::from_str(&parts.body).unwrap_or(Value::Null);
-        let provider_type = raw["error"]["type"].as_str().unwrap_or_default();
-        let code = match provider_type {
-            "overloaded_error" => ErrorCode::Capacity,
-            "rate_limit_error" => ErrorCode::RateLimit,
-            "authentication_error" | "permission_error" => ErrorCode::Auth,
-            "invalid_request_error" | "not_found_error" => ErrorCode::InvalidRequest,
-            _ => match parts.status {
-                400 | 404 | 422 => ErrorCode::InvalidRequest,
-                401 | 403 => ErrorCode::Auth,
-                402 => ErrorCode::PaymentRequired,
-                408 => ErrorCode::Timeout,
-                429 => ErrorCode::RateLimit,
-                529 => ErrorCode::Capacity,
-                500 | 502 | 503 | 504 => ErrorCode::UpstreamUnavailable,
-                _ => ErrorCode::Internal,
-            },
-        };
-        let message = match code {
-            ErrorCode::InvalidRequest => "the upstream refused the request as malformed",
-            ErrorCode::Auth => "the upstream rejected the credential",
-            ErrorCode::PaymentRequired => {
-                "the upstream requires payment or the account is out of funds"
-            }
-            ErrorCode::RateLimit => "the upstream rate limited this request",
-            ErrorCode::ContentPolicy => "the upstream refused on content-policy grounds",
-            ErrorCode::ContextLength => "the request exceeds the model's context window",
-            ErrorCode::Timeout => "the upstream did not answer in time",
-            ErrorCode::UpstreamUnavailable => "the upstream is unavailable",
-            ErrorCode::TransportTruncated => "the upstream connection dropped mid-response",
-            ErrorCode::ProviderProtocolError => "the upstream answered with an invalid body",
-            ErrorCode::Capacity | ErrorCode::Capability | ErrorCode::Internal => {
-                "the upstream failed"
-            }
-        };
+        let code = raw["error"]["type"]
+            .as_str()
+            .and_then(error_type_code)
+            .unwrap_or_else(|| status_code(parts.status));
+        let message = message_of(code);
         let mut envelope = ErrorEnvelope::new(code, parts.status, message);
         envelope.provider_message = raw["error"]["message"]
             .as_str()

@@ -1,0 +1,38 @@
+[
+  {
+    "type": "usage",
+    "usage": {
+      "input_tokens": 400,
+      "output_tokens": 1,
+      "cache_read_tokens": 90,
+      "cache_write_tokens": 300,
+      "cache_write_5m_tokens": 100,
+      "cache_write_1h_tokens": 200,
+      "reasoning_tokens": 0
+    }
+  },
+  {
+    "type": "delta",
+    "content": "18C and sunny.",
+    "index": 0
+  },
+  {
+    "type": "finish",
+    "finish_reason": "stop"
+  },
+  {
+    "type": "usage",
+    "usage": {
+      "input_tokens": 400,
+      "output_tokens": 9,
+      "cache_read_tokens": 90,
+      "cache_write_tokens": 300,
+      "cache_write_5m_tokens": 100,
+      "cache_write_1h_tokens": 200,
+      "reasoning_tokens": 0
+    }
+  },
+  {
+    "type": "done"
+  }
+]

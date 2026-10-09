@@ -203,6 +203,19 @@ misread as a boundary violation.
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
 This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.51.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.50.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**Unreleased (B6-2)**: the Bedrock InvokeModel Anthropic component (design record
+`docs/design/2026-10-08-bedrock-invoke-anthropic-component.md`, accepted 2026-10-09). The new package
+`provider-anthropic-bedrock-invoke` 1.0.0 (family `anthropic-bedrock-invoke`, `host_signed` with `aws-sigv4` as Converse
+declares it, `stream_framing: aws-eventstream`, `south_runtime` 0.46.0) sends `provider-anthropic`'s Messages body
+without `model` and `stream` and with `anthropic_version: "bedrock-2023-05-31"`, unwraps each stream `chunk`'s base64
+`bytes` itself, and maps Bedrock exception names, then Anthropic error types, then the status. The shared Messages stream
+state machine changed for `provider-anthropic` too: a cumulative usage count that shrinks is refused and the
+cache-write tiers fold as one group (the host's 03 #86 rule, I-Q7), and an in-band `error` event ends the stream with
+`StreamEvent::Error` (I-Q12). Gate ② stream cases may now expect a refusal (`{"error": <envelope>}`). A crate-private
+strict base64 codec replaces the credential recipe interpreter's. No release has been cut since v0.50.0, so B6-2 takes
+no version of its own beyond the new package: `south-component-conformance` stays at the 0.50.0 #167 gave it, and every
+existing package keeps the single bump over v0.50.0 that #167 gave it (`provider-anthropic` 1.0.16 now also carries the
+two behavior changes above).
 **v0.51.0**: embeddings contract 2, inline media inputs (release record `docs/design/2026-10-09-release-0.51.0.md`,
 embeddings record §17). `EmbeddingInputV1::Media` and `parse_embeddings_request_v2` carry a `data:<media type>;base64,`
 input undecoded; the `media` capability word needs `contracts: {"embeddings": 2}`; `embeddings-gemini` 1.1.0
