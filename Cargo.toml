@@ -56,11 +56,75 @@ missing_panics_doc = "allow"
 module_name_repetitions = "allow"
 
 # The tests JIT-compile real wasm components through wasmtime and Cranelift. At the default dev
-# opt-level 0 that compile alone took about 3.6 s per test process (0.5 s with optimized
-# dependencies, measured on one test), and 10-17 s on a 4-vCPU CI runner where several run at
-# once. Only third-party dependencies are optimized; the workspace crates keep the plain dev
-# profile, and the CI cache pays the one-time build cost.
-[profile.dev.package."*"]
+# opt-level 0 that compile alone took about 3.6 s per test process, against about 0.6 s with the
+# packages below optimized, and 10-17 s on a 4-vCPU CI runner where several run at once.
+#
+# Only the packages that run during that compile are listed, not all dependencies: a blanket
+# `[profile.dev.package."*"]` also optimizes about 300 packages, most of them proc-macros and
+# build-time tools, and made the cold CI compile several minutes slower. Measured on one machine,
+# a cold build of the parity test binary took 134 CPU-seconds unoptimized, 664 with every
+# dependency optimized and 324 with this list. The `*-meta`, `*-macro` and `wit-*` packages are
+# build-time only and stay unoptimized. A name that no longer matches a package after a wasmtime
+# upgrade only draws a cargo warning and loses the speed-up, so check this list when wasmtime is
+# bumped.
+[profile.dev.package.cranelift-assembler-x64]
+opt-level = 2
+
+[profile.dev.package.cranelift-bforest]
+opt-level = 2
+
+[profile.dev.package.cranelift-bitset]
+opt-level = 2
+
+[profile.dev.package.cranelift-codegen]
+opt-level = 2
+
+[profile.dev.package.cranelift-codegen-shared]
+opt-level = 2
+
+[profile.dev.package.cranelift-control]
+opt-level = 2
+
+[profile.dev.package.cranelift-entity]
+opt-level = 2
+
+[profile.dev.package.cranelift-frontend]
+opt-level = 2
+
+[profile.dev.package.cranelift-native]
+opt-level = 2
+
+[profile.dev.package.gimli]
+opt-level = 2
+
+[profile.dev.package.object]
+opt-level = 2
+
+[profile.dev.package.regalloc2]
+opt-level = 2
+
+[profile.dev.package.wasmparser]
+opt-level = 2
+
+[profile.dev.package.wasmtime]
+opt-level = 2
+
+[profile.dev.package.wasmtime-environ]
+opt-level = 2
+
+[profile.dev.package.wasmtime-internal-cache]
+opt-level = 2
+
+[profile.dev.package.wasmtime-internal-core]
+opt-level = 2
+
+[profile.dev.package.wasmtime-internal-cranelift]
+opt-level = 2
+
+[profile.dev.package.wasmtime-internal-fiber]
+opt-level = 2
+
+[profile.dev.package.wasmtime-internal-unwinder]
 opt-level = 2
 
 [profile.release]
