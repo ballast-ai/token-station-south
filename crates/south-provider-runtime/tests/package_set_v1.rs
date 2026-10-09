@@ -22,6 +22,10 @@ fn guest_wasm(release: bool) -> PathBuf {
     static BUILT: OnceLock<()> = OnceLock::new();
     let guest_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/guests/test-provider");
     BUILT.get_or_init(|| {
+        // `scripts/prebuild-components.sh` (the nextest setup script) has already built both.
+        if std::env::var_os("SOUTH_COMPONENTS_PREBUILT").is_some() {
+            return;
+        }
         for profile in [
             &["build", "--target", "wasm32-wasip2"][..],
             &["build", "--release", "--target", "wasm32-wasip2"][..],

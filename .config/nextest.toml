@@ -1,12 +1,12 @@
 # Setup scripts are an experimental nextest feature; the repository config opts in explicitly.
 experimental = ["setup-scripts"]
 
-# The sandbox parity tests and the task-world tests load real wasm32-wasip2 components. Build every
-# component once before they run, instead of once per test process (which took 60-80 s per test
-# and made the tests of one binary wait on each other's build lock).
+# The sandbox parity, task-world and runtime guest tests load real wasm32-wasip2 components.
+# Build every component and guest once before they run, instead of once per test process (which
+# took 60-80 s per test and made the tests of one binary wait on each other's build lock).
 [scripts.setup.prebuild-components]
 command = 'bash scripts/prebuild-components.sh'
 
 [[profile.default.scripts]]
-filter = 'binary(~sandbox_parity) | binary(embeddings_payload_measurement) | binary(~task_world_v)'
+filter = 'binary(~sandbox_parity) | binary(embeddings_payload_measurement) | binary(~task_world_v) | binary(package_set_v1) | binary(embeddings_world_v1) | binary(t21_unseen_eventstream_v1) | binary(wasm_component_v1)'
 setup = 'prebuild-components'

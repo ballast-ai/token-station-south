@@ -21,15 +21,18 @@ mod host_range;
 /// Builds a guest under `tests/guests` once per call site and returns the component's path.
 fn build_guest(directory: &str, artifact: &str) -> PathBuf {
     let guest_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/guests").join(directory);
-    let status = Command::new("cargo")
-        .args(["build", "--target", "wasm32-wasip2"])
-        .current_dir(&guest_dir)
-        .status()
-        .expect("cargo is on PATH");
-    assert!(
-        status.success(),
-        "the guest must build; run `rustup target add wasm32-wasip2` if the target is missing"
-    );
+    // `scripts/prebuild-components.sh` (the nextest setup script) has already built the guest.
+    if std::env::var_os("SOUTH_COMPONENTS_PREBUILT").is_none() {
+        let status = Command::new("cargo")
+            .args(["build", "--target", "wasm32-wasip2"])
+            .current_dir(&guest_dir)
+            .status()
+            .expect("cargo is on PATH");
+        assert!(
+            status.success(),
+            "the guest must build; run `rustup target add wasm32-wasip2` if the target is missing"
+        );
+    }
     guest_dir.join("target/wasm32-wasip2/debug").join(artifact)
 }
 

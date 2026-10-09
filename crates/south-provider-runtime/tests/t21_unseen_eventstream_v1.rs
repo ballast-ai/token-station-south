@@ -34,12 +34,15 @@ fn guest_wasm() -> &'static Path {
     WASM.get_or_init(|| {
         let guest_dir =
             Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/guests/t21-unseen-eventstream");
-        let status = Command::new("cargo")
-            .args(["build", "--target", "wasm32-wasip2"])
-            .current_dir(&guest_dir)
-            .status()
-            .expect("cargo is on PATH");
-        assert!(status.success(), "the guest must build; `rustup target add wasm32-wasip2`");
+        // `scripts/prebuild-components.sh` (the nextest setup script) has already built the guest.
+        if std::env::var_os("SOUTH_COMPONENTS_PREBUILT").is_none() {
+            let status = Command::new("cargo")
+                .args(["build", "--target", "wasm32-wasip2"])
+                .current_dir(&guest_dir)
+                .status()
+                .expect("cargo is on PATH");
+            assert!(status.success(), "the guest must build; `rustup target add wasm32-wasip2`");
+        }
         guest_dir.join("target/wasm32-wasip2/debug/t21_unseen_eventstream.wasm")
     })
 }
