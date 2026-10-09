@@ -834,6 +834,40 @@ pub fn parse_prepared_image_call_v1(
     })
 }
 
+impl PreparedImageCallV1 {
+    /// Serializes the call compactly; [`parse_prepared_image_call_v1`] of the result gives back an
+    /// equal call. The descriptor and the state are written as their source text.
+    #[must_use]
+    pub fn to_json(&self) -> String {
+        let mut out = String::from("{\"facts\":");
+        out.push_str(&serde_json::to_string(&self.facts).unwrap_or_default());
+        out.push_str(",\"descriptor\":");
+        out.push_str(&self.descriptor.to_json());
+        out.push_str(",\"repeat\":");
+        out.push_str(&self.repeat.to_string());
+        out.push_str(",\"response_body_form\":");
+        out.push_str(&serde_json::to_string(&self.response_body_form).unwrap_or_default());
+        out.push_str(",\"response_elision_paths\":");
+        out.push_str(&serde_json::to_string(&self.response_elision_paths).unwrap_or_default());
+        out.push_str(",\"immutable_body_paths\":");
+        out.push_str(&serde_json::to_string(&self.immutable_body_paths).unwrap_or_default());
+        out.push_str(",\"state\":");
+        out.push_str(&self.state);
+        out.push('}');
+        out
+    }
+}
+
+/// The compact source text of one top-level member of a JSON object.
+///
+/// Members keep source order and numbers are written as they were; `None` when `document` is not
+/// an object with that key. Hosts and codecs use it to keep a component's JSON (a template, a
+/// state) byte for byte.
+#[must_use]
+pub fn member_source_text(document: &str, key: &str) -> Option<String> {
+    member_text(&json::parse(document.as_bytes()).ok()?, key)
+}
+
 fn member_text(node: &Node, key: &str) -> Option<String> {
     let Node::Object(members) = node else { return None };
     let member = members.iter().find(|member| member.key.decoded == key)?;

@@ -318,6 +318,71 @@ impl MediaRequestDescriptorV1 {
         &self.body
     }
 
+    /// Serializes the descriptor compactly in its wire shape: `method`, `path`, `query` (canonical
+    /// order) and `headers` (lower-case names, sorted) when present, `auth` when present, and the
+    /// body — a JSON template is copied as its source text. [`Self::parse`] of the result gives
+    /// back an equal descriptor.
+    #[must_use]
+    pub fn to_json(&self) -> String {
+        let mut out = String::from("{\"method\":\"POST\",\"path\":");
+        json::write_string(self.path.as_str(), &mut out);
+        if let Some(query) = &self.query {
+            out.push_str(",\"query\":[");
+            for (index, pair) in query.as_str().split('&').enumerate() {
+                let (name, value) = pair.split_once('=').unwrap_or((pair, ""));
+                if index > 0 {
+                    out.push(',');
+                }
+                out.push_str("{\"name\":");
+                json::write_string(name, &mut out);
+                out.push_str(",\"value\":");
+                json::write_string(value, &mut out);
+                out.push('}');
+            }
+            out.push(']');
+        }
+        if !self.headers.is_empty() {
+            out.push_str(",\"headers\":[");
+            for (index, (name, value)) in self.headers.iter().enumerate() {
+                if index > 0 {
+                    out.push(',');
+                }
+                out.push_str("{\"name\":");
+                json::write_string(name, &mut out);
+                out.push_str(",\"value\":");
+                json::write_string(value, &mut out);
+                out.push('}');
+            }
+            out.push(']');
+        }
+        if let Some(auth) = &self.auth {
+            out.push_str(",\"auth\":");
+            // A two-field enum of strings always serializes.
+            out.push_str(&serde_json::to_string(auth).unwrap_or_default());
+        }
+        out.push_str(",\"body\":");
+        match &self.body {
+            MediaBodyV1::Json(template) => {
+                out.push_str("{\"json\":{\"template\":");
+                out.push_str(template);
+                out.push_str("}}");
+            }
+            MediaBodyV1::Multipart(parts) => {
+                out.push_str("{\"multipart\":{\"parts\":");
+                out.push_str(&serde_json::to_string(parts).unwrap_or_default());
+                out.push_str("}}");
+            }
+            MediaBodyV1::Text(text) => {
+                out.push_str("{\"text\":");
+                out.push_str(&serde_json::to_string(text).unwrap_or_default());
+                out.push('}');
+            }
+            MediaBodyV1::Empty => out.push_str("\"empty\""),
+        }
+        out.push('}');
+        out
+    }
+
     /// Every blob the descriptor references, in order of appearance.
     #[must_use]
     pub fn referenced_blobs(&self) -> Vec<BlobIdV1> {
@@ -590,5 +655,19 @@ mod tests {
             Err(MediaDescriptorErrorV1::Malformed(_))
         ));
         assert!(parse(r#"{"method":"POST","path":"v1/x","body":{"text":{"media_type":"application/ssml+xml","text":"<speak/>"}}}"#).is_ok());
+    }
+
+    #[test]
+    fn descriptors_serialize_back_to_what_they_parse_from() {
+        for text in [
+            r#"{"method":"POST","path":"openai/deployments/d/images/generations","query":[{"name":"api-version","value":"2025-04-01-preview"}],"headers":[{"name":"x-trace","value":"1"}],"auth":{"arm":"header_secret","header":"api-key","slot":"default"},"body":{"json":{"template":{"prompt":"x","n":1.0,"image":{"$south.ref":{"blob":"b0","transform":"as_is"}}}}}}"#,
+            r#"{"method":"POST","path":"v1/images/edits","auth":{"arm":"bearer","slot":"default"},"body":{"multipart":{"parts":[{"name":"prompt","value":"x"},{"name":"image","blob":"b0","transform":"as_is","filename":"a.png"}]}}}"#,
+            r#"{"method":"POST","path":"v1/x","body":{"text":{"media_type":"application/ssml+xml","text":"<speak/>"}}}"#,
+            r#"{"method":"POST","path":"v1/x","body":"empty"}"#,
+        ] {
+            let descriptor = parse(text).expect("valid");
+            assert_eq!(descriptor.to_json(), text);
+            assert_eq!(parse(&descriptor.to_json()).expect("re-parses"), descriptor);
+        }
     }
 }
