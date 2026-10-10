@@ -7,11 +7,12 @@ use south_contracts::{
     TextBodyV1, TextMediaTypeV1, TextPostRequestV1,
 };
 use south_provider_conformance::{
-    PROVIDER_MEDIA_BINARY_CONFORMANCE_SUITE_ID, PROVIDER_MEDIA_BINARY_CONFORMANCE_SUITE_VERSION,
-    ProviderCallCountV1, ProviderCallFailureCodeV1, ProviderMediaBinaryAuthArmV1,
-    ProviderMediaBinaryCaseIdV1, ProviderMediaBinaryExpectedOutcomeV1,
-    ProviderMediaBinaryFixtureV1, ProviderMediaBinaryRequestBodyV1, ProviderMediaBinaryUpstreamV1,
-    provider_binary_fixtures_v1, provider_media_binary_fixtures_v1, provider_multipart_fixtures_v1,
+    FAKE_BEARER_SECRET_V1, FAKE_HEADER_SECRET_V1, PROVIDER_MEDIA_BINARY_CONFORMANCE_SUITE_ID,
+    PROVIDER_MEDIA_BINARY_CONFORMANCE_SUITE_VERSION, ProviderCallCountV1,
+    ProviderCallFailureCodeV1, ProviderMediaBinaryAuthArmV1, ProviderMediaBinaryCaseIdV1,
+    ProviderMediaBinaryExpectedOutcomeV1, ProviderMediaBinaryFixtureV1,
+    ProviderMediaBinaryRequestBodyV1, ProviderMediaBinaryUpstreamV1, provider_binary_fixtures_v1,
+    provider_media_binary_fixtures_v1, provider_multipart_fixtures_v1,
 };
 use static_assertions::assert_not_impl_any;
 
@@ -173,7 +174,42 @@ fn canonical_table_freezes_the_expected_wire_shape_evidence() {
         assert_eq!(evidence.wire_content_type_exact(), reached, "{case:?}");
         assert_eq!(evidence.wire_request_body_exact(), reached, "{case:?}");
         assert_eq!(evidence.wire_binary_response_observed(), reached, "{case:?}");
+        assert_eq!(evidence.wire_auth_exact(), reached, "{case:?}");
     }
+}
+
+/// The expected auth header is built from the declared arm alone: Bearer binds `authorization`
+/// with the `Bearer ` prefix, a header secret binds its sanctioned lowercase name with the secret
+/// verbatim and never `authorization`. The two header-secret rows therefore expect a different
+/// wire from the Bearer rows even though the request is otherwise identical.
+#[test]
+fn expected_wire_auth_header_follows_the_declared_arm_only() {
+    let bearer = ProviderMediaBinaryAuthArmV1::Bearer.expected_wire_auth_header();
+    assert_eq!(bearer.0, "authorization");
+    assert_eq!(bearer.1, [b"Bearer ".as_slice(), FAKE_BEARER_SECRET_V1.as_bytes()].concat());
+    for header in SecretHeaderV1::ALL {
+        let (name, value) =
+            ProviderMediaBinaryAuthArmV1::HeaderSecret(header).expected_wire_auth_header();
+        assert_eq!(name, header.header_name());
+        assert_eq!(name, name.to_ascii_lowercase());
+        assert_ne!(name, "authorization");
+        assert_eq!(value, FAKE_HEADER_SECRET_V1.as_bytes());
+    }
+    let header_secret_rows: Vec<_> = provider_media_binary_fixtures_v1()
+        .iter()
+        .filter(|fixture| {
+            matches!(fixture.auth_arm(), ProviderMediaBinaryAuthArmV1::HeaderSecret(_))
+                && matches!(fixture.upstream(), ProviderMediaBinaryUpstreamV1::Response(_))
+        })
+        .map(ProviderMediaBinaryFixtureV1::case_id)
+        .collect();
+    assert_eq!(
+        header_secret_rows,
+        [
+            ProviderMediaBinaryCaseIdV1::MultipartBinaryRejectionCarriesBody,
+            ProviderMediaBinaryCaseIdV1::TextBinaryHeaderSecretSuccess,
+        ]
+    );
 }
 
 #[test]

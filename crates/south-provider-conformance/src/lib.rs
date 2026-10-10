@@ -148,6 +148,18 @@ pub const PROVIDER_CALL_CONFORMANCE_DEADLINE_OFFSET_V1: Duration = Duration::fro
 /// Synthetic test-only Bearer material used by the reference executor.
 pub const FAKE_BEARER_SECRET_V1: &str = "south-test-only-fake-bearer-v1";
 
+/// The one auth header a correct implementation binds for a Bearer (`None`) or header-secret
+/// (`Some`) arm, built from the arm and the fake secrets alone: the single source the
+/// media-binary, multipart and buffered-GET suites' `expected_wire_auth_header` methods share.
+fn expected_wire_auth_header_v1(
+    header_secret: Option<south_contracts::SecretHeaderV1>,
+) -> (&'static str, Vec<u8>) {
+    header_secret.map_or_else(
+        || ("authorization", [b"Bearer ".as_slice(), FAKE_BEARER_SECRET_V1.as_bytes()].concat()),
+        |header| (header.header_name(), FAKE_HEADER_SECRET_V1.as_bytes().to_vec()),
+    )
+}
+
 /// The closed set of canonical provider-call cases.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ProviderCallCaseIdV1 {

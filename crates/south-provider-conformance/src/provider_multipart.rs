@@ -8,12 +8,17 @@
 //! declared boundary exactly, and the two ways a host can hand over an inconsistent request —
 //! a body that is not delimited by the boundary it declared, and a `content-type` smuggled
 //! through the ordinary header channel — are both refused before any boundary is touched.
+//! Every row that reaches the transport also measures the auth headers against the arm the row
+//! declares, so the header-secret row fails an adapter that sends its secret as Bearer.
 
 use std::fmt;
 
 use south_contracts::SecretHeaderV1;
 
-use crate::{ProviderCallCountV1, ProviderCallFailureCodeV1, ProviderCallRawResponseV1};
+use crate::{
+    ProviderCallCountV1, ProviderCallFailureCodeV1, ProviderCallRawResponseV1,
+    expected_wire_auth_header_v1,
+};
 
 /// The multipart conformance suite version.
 pub const PROVIDER_MULTIPART_CONFORMANCE_SUITE_VERSION: u32 = 1;
@@ -67,6 +72,24 @@ pub enum ProviderMultipartAuthArmV1 {
     Bearer,
     /// The secret verbatim in one sanctioned header, no `authorization`.
     HeaderSecret(SecretHeaderV1),
+}
+
+impl ProviderMultipartAuthArmV1 {
+    /// Returns the one auth header a correct implementation binds for this arm: its lowercase
+    /// name and complete value bytes.
+    ///
+    /// Built from the declared arm and the fake secret the reference resolver returns for it —
+    /// `authorization: Bearer <FAKE_BEARER_SECRET_V1>` for Bearer, the sanctioned name and
+    /// `FAKE_HEADER_SECRET_V1` verbatim for a header secret — and never from the adapter's own
+    /// mapping, so an adapter comparing its prepared request's `auth_headers()` against exactly
+    /// this one pair measures agreement with the fixture rather than with itself.
+    #[must_use]
+    pub fn expected_wire_auth_header(self) -> (&'static str, Vec<u8>) {
+        expected_wire_auth_header_v1(match self {
+            Self::Bearer => None,
+            Self::HeaderSecret(header) => Some(header),
+        })
+    }
 }
 
 impl fmt::Debug for ProviderMultipartAuthArmV1 {
@@ -225,17 +248,24 @@ impl fmt::Debug for ProviderMultipartExpectedOutcomeV1 {
 
 /// Expected resolver, transport, and wire-shape boundary evidence.
 ///
-/// Both wire-shape booleans are **presence claims**: `false` until a transport call observed the
-/// fact, so the three rows that never reach the transport expect `false` for both, and an
-/// adapter whose probe answers without reading the prepared request fails those rows. There is
-/// deliberately no absence claim in this table — everything worth asserting about a multipart
-/// request is something that must be *seen* on the wire.
+/// All three wire-shape booleans are **presence claims**: `false` until a transport call
+/// observed the fact, so the three rows that never reach the transport expect `false` for all
+/// three, and an adapter whose probe answers without reading the prepared request fails those
+/// rows. There is deliberately no absence claim in this table — everything worth asserting about
+/// a multipart request is something that must be *seen* on the wire.
+///
+/// `wire_auth_exact` (added after 0.53.0) is the claim that the complete list of auth headers the
+/// transport sends is exactly the one pair [`ProviderMultipartAuthArmV1::expected_wire_auth_header`]
+/// builds from the row's declared arm. An adapter that maps `HeaderSecret` to `Bearer` sends the
+/// same secret under `authorization`, matches every other claim, and fails here on the
+/// header-secret row.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct ProviderMultipartExpectedEvidenceV1 {
     resolver_calls: ProviderCallCountV1,
     transport_calls: ProviderCallCountV1,
     wire_content_type_exact: bool,
     wire_body_bytes_exact: bool,
+    wire_auth_exact: bool,
 }
 
 impl ProviderMultipartExpectedEvidenceV1 {
@@ -262,6 +292,13 @@ impl ProviderMultipartExpectedEvidenceV1 {
     pub const fn wire_body_bytes_exact(&self) -> bool {
         self.wire_body_bytes_exact
     }
+
+    /// Returns whether the auth headers must have reached the transport as exactly the declared
+    /// arm's one pair.
+    #[must_use]
+    pub const fn wire_auth_exact(&self) -> bool {
+        self.wire_auth_exact
+    }
 }
 
 impl fmt::Debug for ProviderMultipartExpectedEvidenceV1 {
@@ -272,6 +309,7 @@ impl fmt::Debug for ProviderMultipartExpectedEvidenceV1 {
             .field("transport_calls", &self.transport_calls)
             .field("wire_content_type_exact", &self.wire_content_type_exact)
             .field("wire_body_bytes_exact", &self.wire_body_bytes_exact)
+            .field("wire_auth_exact", &self.wire_auth_exact)
             .finish()
     }
 }
@@ -423,15 +461,17 @@ const REACHED: ProviderMultipartExpectedEvidenceV1 = ProviderMultipartExpectedEv
     transport_calls: ProviderCallCountV1::One,
     wire_content_type_exact: true,
     wire_body_bytes_exact: true,
+    wire_auth_exact: true,
 };
 
-/// Evidence for a case refused before any boundary: nothing was observed, so both presence
-/// claims are `false`.
+/// Evidence for a case refused before any boundary: nothing was observed, so every presence
+/// claim is `false`.
 const NOT_REACHED: ProviderMultipartExpectedEvidenceV1 = ProviderMultipartExpectedEvidenceV1 {
     resolver_calls: ProviderCallCountV1::Zero,
     transport_calls: ProviderCallCountV1::Zero,
     wire_content_type_exact: false,
     wire_body_bytes_exact: false,
+    wire_auth_exact: false,
 };
 
 const fn success_response(retry_after: Option<&'static str>) -> ProviderMultipartUpstreamV1 {

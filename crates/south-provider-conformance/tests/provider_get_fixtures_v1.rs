@@ -6,9 +6,10 @@ use south_contracts::{
     RelativePathV1, SafeHeaders, SecretHeaderV1,
 };
 use south_provider_conformance::{
-    PROVIDER_GET_CONFORMANCE_SUITE_ID, PROVIDER_GET_CONFORMANCE_SUITE_VERSION,
-    ProviderCallCaseIdV1, ProviderCallCountV1, ProviderCallFailureCodeV1, ProviderGetAuthArmV1,
-    ProviderGetCaseIdV1, ProviderGetExpectedOutcomeV1, ProviderGetFixtureV1, ProviderGetUpstreamV1,
+    FAKE_BEARER_SECRET_V1, FAKE_HEADER_SECRET_V1, PROVIDER_GET_CONFORMANCE_SUITE_ID,
+    PROVIDER_GET_CONFORMANCE_SUITE_VERSION, ProviderCallCaseIdV1, ProviderCallCountV1,
+    ProviderCallFailureCodeV1, ProviderGetAuthArmV1, ProviderGetCaseIdV1,
+    ProviderGetExpectedOutcomeV1, ProviderGetFixtureV1, ProviderGetUpstreamV1,
     provider_get_fixtures_v1,
 };
 use static_assertions::assert_not_impl_any;
@@ -136,6 +137,43 @@ fn canonical_table_freezes_the_expected_wire_shape_evidence() {
             fixture.case_id()
         );
     }
+    // The auth claim is a presence claim: `true` exactly where the transport is reached.
+    for fixture in fixtures {
+        let reached = matches!(fixture.upstream(), ProviderGetUpstreamV1::Response(_));
+        assert_eq!(
+            fixture.expected().evidence().wire_auth_exact(),
+            reached,
+            "{:?}",
+            fixture.case_id()
+        );
+    }
+}
+
+/// The expected auth header is built from the declared arm alone: Bearer binds `authorization`
+/// with the `Bearer ` prefix, a header secret binds its sanctioned lowercase name with the secret
+/// verbatim and never `authorization`. The header-secret row therefore expects a different wire
+/// from the Bearer rows even though the request is otherwise identical.
+#[test]
+fn expected_wire_auth_header_follows_the_declared_arm_only() {
+    let bearer = ProviderGetAuthArmV1::Bearer.expected_wire_auth_header();
+    assert_eq!(bearer.0, "authorization");
+    assert_eq!(bearer.1, [b"Bearer ".as_slice(), FAKE_BEARER_SECRET_V1.as_bytes()].concat());
+    for header in SecretHeaderV1::ALL {
+        let (name, value) = ProviderGetAuthArmV1::HeaderSecret(header).expected_wire_auth_header();
+        assert_eq!(name, header.header_name());
+        assert_eq!(name, name.to_ascii_lowercase());
+        assert_ne!(name, "authorization");
+        assert_eq!(value, FAKE_HEADER_SECRET_V1.as_bytes());
+    }
+    let header_secret_rows: Vec<_> = provider_get_fixtures_v1()
+        .iter()
+        .filter(|fixture| {
+            matches!(fixture.auth_arm(), ProviderGetAuthArmV1::HeaderSecret(_))
+                && matches!(fixture.upstream(), ProviderGetUpstreamV1::Response(_))
+        })
+        .map(ProviderGetFixtureV1::case_id)
+        .collect();
+    assert_eq!(header_secret_rows, [ProviderGetCaseIdV1::BufferedGetHeaderSecretSuccess,]);
 }
 
 #[test]

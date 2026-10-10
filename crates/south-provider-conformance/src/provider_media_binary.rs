@@ -14,6 +14,8 @@
 //! the wire unmodified under `application/ssml+xml` and nothing else, under each credential arm
 //! the speech surface uses, the binding check still runs before any boundary, and a `content-type`
 //! smuggled through the ordinary header channel is refused while the request is still a value.
+//! Every row that reaches the transport also measures the auth headers against the arm the row
+//! declares, so the two header-secret rows fail an adapter that sends their secret as Bearer.
 //!
 //! Which entry point a row drives is fixed by its body: a multipart body goes through
 //! `execute_multipart_binary_call_v1`, a text body through `execute_text_binary_call_v1`. Neither
@@ -26,6 +28,7 @@ use south_contracts::SecretHeaderV1;
 
 use crate::{
     BOUND_SLOT, DIFFERENT_SLOT, ENDPOINT, HEADERS, ProviderCallCountV1, ProviderCallFailureCodeV1,
+    expected_wire_auth_header_v1,
 };
 
 /// The media-binary conformance suite version.
@@ -92,6 +95,26 @@ pub enum ProviderMediaBinaryAuthArmV1 {
     Bearer,
     /// The secret verbatim in one sanctioned header, no `authorization`.
     HeaderSecret(SecretHeaderV1),
+}
+
+impl ProviderMediaBinaryAuthArmV1 {
+    /// Returns the one auth header a correct implementation binds for this arm: its lowercase
+    /// name and complete value bytes.
+    ///
+    /// Built here from the declared arm and the fake secret the reference resolver returns for
+    /// it — `authorization: Bearer <FAKE_BEARER_SECRET_V1>` for Bearer, the sanctioned name and
+    /// `FAKE_HEADER_SECRET_V1` verbatim for a header secret — and never from the adapter's own
+    /// mapping, so an adapter comparing its prepared request's `auth_headers()` against exactly
+    /// this one pair is measuring agreement with the fixture rather than with itself. An adapter
+    /// that maps a header-secret arm to Bearer binds `authorization` and no sanctioned header,
+    /// and fails the comparison.
+    #[must_use]
+    pub fn expected_wire_auth_header(self) -> (&'static str, Vec<u8>) {
+        expected_wire_auth_header_v1(match self {
+            Self::Bearer => None,
+            Self::HeaderSecret(header) => Some(header),
+        })
+    }
 }
 
 impl fmt::Debug for ProviderMediaBinaryAuthArmV1 {
@@ -345,8 +368,8 @@ impl fmt::Debug for ProviderMediaBinaryExpectedOutcomeV1 {
 
 /// Expected resolver, transport, and wire-shape boundary evidence.
 ///
-/// All three wire booleans are **presence claims**: `false` until a transport call observed the
-/// fact, so the two rows that never reach the transport expect `false` for all three, and an
+/// All four wire booleans are **presence claims**: `false` until a transport call observed the
+/// fact, so the two rows that never reach the transport expect `false` for all four, and an
 /// adapter whose probe answers without reading the prepared request fails those rows.
 ///
 /// - `wire_content_type_exact` — the media type the transport emits is exactly the one rebuilt
@@ -356,13 +379,23 @@ impl fmt::Debug for ProviderMediaBinaryExpectedOutcomeV1 {
 ///   This is the claim that separates the new entry points from the UTF-8 multipart one: an
 ///   adapter that routed the multipart rows through `execute_multipart_call_v1` and re-encoded the
 ///   answer would match every outcome and fail here.
+/// - `wire_auth_exact` — the complete list of auth headers the transport sends is exactly the one
+///   pair [`ProviderMediaBinaryAuthArmV1::expected_wire_auth_header`] builds from the fixture's
+///   declared arm. This is the claim that makes the header-secret rows a controlled experiment on
+///   the credential arm: an adapter that maps `HeaderSecret` to `Bearer` sends the same secret
+///   under `authorization`, matches every other claim, and fails here on exactly those rows.
 #[derive(Clone, Copy, PartialEq, Eq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "Each wire claim is an independent presence fact compared case by case; the suite's evidence shape is one bool per claim."
+)]
 pub struct ProviderMediaBinaryExpectedEvidenceV1 {
     resolver_calls: ProviderCallCountV1,
     transport_calls: ProviderCallCountV1,
     wire_content_type_exact: bool,
     wire_request_body_exact: bool,
     wire_binary_response_observed: bool,
+    wire_auth_exact: bool,
 }
 
 impl ProviderMediaBinaryExpectedEvidenceV1 {
@@ -395,6 +428,13 @@ impl ProviderMediaBinaryExpectedEvidenceV1 {
     pub const fn wire_binary_response_observed(&self) -> bool {
         self.wire_binary_response_observed
     }
+
+    /// Returns whether the auth headers must have reached the transport as exactly the declared
+    /// arm's one pair.
+    #[must_use]
+    pub const fn wire_auth_exact(&self) -> bool {
+        self.wire_auth_exact
+    }
 }
 
 impl fmt::Debug for ProviderMediaBinaryExpectedEvidenceV1 {
@@ -406,6 +446,7 @@ impl fmt::Debug for ProviderMediaBinaryExpectedEvidenceV1 {
             .field("wire_content_type_exact", &self.wire_content_type_exact)
             .field("wire_request_body_exact", &self.wire_request_body_exact)
             .field("wire_binary_response_observed", &self.wire_binary_response_observed)
+            .field("wire_auth_exact", &self.wire_auth_exact)
             .finish()
     }
 }
@@ -567,6 +608,7 @@ const RETURNED: ProviderMediaBinaryExpectedEvidenceV1 = ProviderMediaBinaryExpec
     wire_content_type_exact: true,
     wire_request_body_exact: true,
     wire_binary_response_observed: true,
+    wire_auth_exact: true,
 };
 
 /// Evidence for a case refused before any boundary: nothing was observed, so every presence claim
@@ -577,6 +619,7 @@ const NOT_REACHED: ProviderMediaBinaryExpectedEvidenceV1 = ProviderMediaBinaryEx
     wire_content_type_exact: false,
     wire_request_body_exact: false,
     wire_binary_response_observed: false,
+    wire_auth_exact: false,
 };
 
 const fn audio_response() -> ProviderMediaBinaryRawResponseV1 {

@@ -5,7 +5,8 @@
 //! The four cases prove what the task-polling consumer relies on: the request reaches the
 //! transport as a `GET` with no body slot, under each credential arm the submit leg already
 //! uses, the binding check runs before any boundary, and a `task_id` declaration lands on the
-//! wire exactly.
+//! wire exactly. Every row that reaches the transport also measures the auth headers against the
+//! arm the row declares, so the header-secret row fails an adapter that sends its secret as Bearer.
 
 use std::fmt;
 
@@ -13,7 +14,7 @@ use south_contracts::{QueryParameterV1, SecretHeaderV1};
 
 use crate::{
     BOUND_SLOT, DIFFERENT_SLOT, ENDPOINT, HEADERS, ProviderCallCountV1, ProviderCallFailureCodeV1,
-    ProviderCallRawResponseV1,
+    ProviderCallRawResponseV1, expected_wire_auth_header_v1,
 };
 
 /// The buffered-GET conformance suite version.
@@ -55,6 +56,24 @@ pub enum ProviderGetAuthArmV1 {
     Bearer,
     /// The secret verbatim in one sanctioned header, no `authorization`.
     HeaderSecret(SecretHeaderV1),
+}
+
+impl ProviderGetAuthArmV1 {
+    /// Returns the one auth header a correct implementation binds for this arm: its lowercase
+    /// name and complete value bytes.
+    ///
+    /// Built from the declared arm and the fake secret the reference resolver returns for it —
+    /// `authorization: Bearer <FAKE_BEARER_SECRET_V1>` for Bearer, the sanctioned name and
+    /// `FAKE_HEADER_SECRET_V1` verbatim for a header secret — and never from the adapter's own
+    /// mapping, so an adapter comparing its prepared request's `auth_headers()` against exactly
+    /// this one pair measures agreement with the fixture rather than with itself.
+    #[must_use]
+    pub fn expected_wire_auth_header(self) -> (&'static str, Vec<u8>) {
+        expected_wire_auth_header_v1(match self {
+            Self::Bearer => None,
+            Self::HeaderSecret(header) => Some(header),
+        })
+    }
 }
 
 impl fmt::Debug for ProviderGetAuthArmV1 {
@@ -198,13 +217,23 @@ impl fmt::Debug for ProviderGetExpectedOutcomeV1 {
 ///   only when the request declared a query *and* the wire carried it byte for byte. Two rows of
 ///   this table reach the transport and still expect `false`, which is what catches a probe that
 ///   hardcodes `true` without reading the prepared URL.
+/// - `wire_auth_exact` (added after 0.53.0) is a presence claim — `true` only when a transport
+///   call saw the complete list of auth headers equal exactly the one pair
+///   [`ProviderGetAuthArmV1::expected_wire_auth_header`] builds from the row's declared arm;
+///   `false` when the transport is never reached. An adapter that maps `HeaderSecret` to `Bearer`
+///   sends the same secret under `authorization` and fails here on the header-secret row.
 #[derive(Clone, Copy, PartialEq, Eq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "Each wire claim is an independent fact with its own polarity, compared case by case."
+)]
 pub struct ProviderGetExpectedEvidenceV1 {
     resolver_calls: ProviderCallCountV1,
     transport_calls: ProviderCallCountV1,
     wire_method_get: bool,
     wire_body_absent: bool,
     wire_query_exact: bool,
+    wire_auth_exact: bool,
 }
 
 impl ProviderGetExpectedEvidenceV1 {
@@ -240,6 +269,13 @@ impl ProviderGetExpectedEvidenceV1 {
     pub const fn wire_query_exact(&self) -> bool {
         self.wire_query_exact
     }
+
+    /// Returns whether the auth headers must have reached the transport as exactly the declared
+    /// arm's one pair. `false` when the transport must never be reached.
+    #[must_use]
+    pub const fn wire_auth_exact(&self) -> bool {
+        self.wire_auth_exact
+    }
 }
 
 impl fmt::Debug for ProviderGetExpectedEvidenceV1 {
@@ -251,6 +287,7 @@ impl fmt::Debug for ProviderGetExpectedEvidenceV1 {
             .field("wire_method_get", &self.wire_method_get)
             .field("wire_body_absent", &self.wire_body_absent)
             .field("wire_query_exact", &self.wire_query_exact)
+            .field("wire_auth_exact", &self.wire_auth_exact)
             .finish()
     }
 }
@@ -383,6 +420,7 @@ const fn reached(wire_query_exact: bool) -> ProviderGetExpectedEvidenceV1 {
         wire_method_get: true,
         wire_body_absent: true,
         wire_query_exact,
+        wire_auth_exact: true,
     }
 }
 
@@ -394,6 +432,7 @@ const NOT_REACHED: ProviderGetExpectedEvidenceV1 = ProviderGetExpectedEvidenceV1
     wire_method_get: false,
     wire_body_absent: true,
     wire_query_exact: false,
+    wire_auth_exact: false,
 };
 
 const PROVIDER_GET_FIXTURES: &[ProviderGetFixtureV1] = &[

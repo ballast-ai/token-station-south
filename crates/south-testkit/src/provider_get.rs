@@ -32,8 +32,8 @@ use crate::{
     map_canonical_fixture_header_invariant_failure, map_contract_error, map_provider_call_error,
 };
 
-/// Four cases multiplied by the eleven closed buffered-GET mismatch categories.
-pub const MAX_PROVIDER_GET_MISMATCHES_V1: usize = 44;
+/// Four cases multiplied by the twelve closed buffered-GET mismatch categories.
+pub const MAX_PROVIDER_GET_MISMATCHES_V1: usize = 48;
 
 /// A boxed, cancellation-safe assembled buffered-GET executor future.
 pub type AssembledProviderGetExecutionFutureV1<'a> =
@@ -50,30 +50,45 @@ pub trait AssembledProviderGetExecutorV1: Send + Sync {
 
 /// Adapter-reported resolver, transport, and wire-shape boundary evidence.
 ///
-/// The three wire-shape booleans are measured at the adapter's real transport boundary with the
-/// polarities the fixture table defines: `wire_method_get` and `wire_query_exact` are presence
-/// claims (`false` until a transport call observes them), `wire_body_absent` is an absence claim
-/// (`true` until a transport call observes a body). Like every adapter-reported value, a passing
-/// report alone is insufficient for host verification; the adoption review must confirm the
-/// wiring.
+/// The four wire-shape booleans are measured at the adapter's real transport boundary with the
+/// polarities the fixture table defines: `wire_method_get`, `wire_query_exact` and
+/// `wire_auth_exact` are presence claims (`false` until a transport call observes them),
+/// `wire_body_absent` is an absence claim (`true` until a transport call observes a body).
+/// `wire_auth_exact` is `true` only when the prepared request's complete `auth_headers()` list was
+/// exactly the one pair [`ProviderGetAuthArmV1::expected_wire_auth_header`] builds from the
+/// fixture's declared arm. Like every adapter-reported value, a passing report alone is
+/// insufficient for host verification; the adoption review must confirm the wiring.
 #[derive(Clone, Copy, PartialEq, Eq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "Each wire claim is an independent fact with its own polarity, compared case by case."
+)]
 pub struct ProviderGetEvidenceV1 {
     resolver_calls: ProviderCallCountV1,
     transport_calls: ProviderCallCountV1,
     wire_method_get: bool,
     wire_body_absent: bool,
     wire_query_exact: bool,
+    wire_auth_exact: bool,
 }
 
 impl ProviderGetEvidenceV1 {
     /// Constructs evidence and saturates both raw call counts.
+    ///
+    /// `wire_auth_exact` was added after 0.53.0: it is `true` only when a transport call saw the
+    /// prepared request's auth headers equal exactly the fixture arm's one expected pair.
     #[must_use]
+    #[expect(
+        clippy::fn_params_excessive_bools,
+        reason = "One positional bool per independent wire claim, as in every other suite's evidence constructor."
+    )]
     pub const fn new(
         resolver_calls: usize,
         transport_calls: usize,
         wire_method_get: bool,
         wire_body_absent: bool,
         wire_query_exact: bool,
+        wire_auth_exact: bool,
     ) -> Self {
         Self {
             resolver_calls: ProviderCallCountV1::from_usize(resolver_calls),
@@ -81,6 +96,7 @@ impl ProviderGetEvidenceV1 {
             wire_method_get,
             wire_body_absent,
             wire_query_exact,
+            wire_auth_exact,
         }
     }
 
@@ -113,6 +129,12 @@ impl ProviderGetEvidenceV1 {
     pub const fn wire_query_exact(&self) -> bool {
         self.wire_query_exact
     }
+
+    /// Returns whether the auth headers reached the transport as exactly the declared arm's pair.
+    #[must_use]
+    pub const fn wire_auth_exact(&self) -> bool {
+        self.wire_auth_exact
+    }
 }
 
 impl fmt::Debug for ProviderGetEvidenceV1 {
@@ -124,6 +146,7 @@ impl fmt::Debug for ProviderGetEvidenceV1 {
             .field("wire_method_get", &self.wire_method_get)
             .field("wire_body_absent", &self.wire_body_absent)
             .field("wire_query_exact", &self.wire_query_exact)
+            .field("wire_auth_exact", &self.wire_auth_exact)
             .finish()
     }
 }
@@ -224,6 +247,9 @@ pub enum ProviderGetMismatchCategoryV1 {
     WireBody,
     /// Wire-query evidence differed.
     WireQuery,
+    /// Auth-header wire evidence differed: the credential arm the transport carried was not the
+    /// one the fixture declares.
+    WireAuth,
 }
 
 fixed_debug!(ProviderGetMismatchCategoryV1 {
@@ -238,6 +264,7 @@ fixed_debug!(ProviderGetMismatchCategoryV1 {
     WireMethod => "WireMethod",
     WireBody => "WireBody",
     WireQuery => "WireQuery",
+    WireAuth => "WireAuth",
 });
 
 /// One case/category mismatch without expected or observed payload values.
@@ -467,6 +494,12 @@ fn compare_provider_get_evidence(
         ProviderGetMismatchCategoryV1::WireQuery,
         mismatches,
     );
+    record_if(
+        expected.wire_auth_exact() != observed.wire_auth_exact(),
+        fixture,
+        ProviderGetMismatchCategoryV1::WireAuth,
+        mismatches,
+    );
 }
 
 fn record_if(
@@ -493,7 +526,8 @@ fn record(
 ///
 /// Every case runs through `execute_get_call_v1`. The wire-shape booleans are measured on the
 /// prepared request at the fake transport boundary, mirroring what a real adapter must measure
-/// on its wire: the method, the presence of a body slot, and the URL's query.
+/// on its wire: the method, the presence of a body slot, the URL's query, and the auth headers
+/// against the fixture's declared arm.
 pub struct ReferenceAssembledProviderGetExecutorV1;
 
 impl ReferenceAssembledProviderGetExecutorV1 {
@@ -571,7 +605,7 @@ async fn execute_reference_provider_get_case(
         Err(code) => {
             return ProviderGetObservationV1::failure(
                 code,
-                ProviderGetEvidenceV1::new(0, 0, false, true, false),
+                ProviderGetEvidenceV1::new(0, 0, false, true, false, false),
             );
         }
     };
@@ -580,7 +614,7 @@ async fn execute_reference_provider_get_case(
         Err(code) => {
             return ProviderGetObservationV1::failure(
                 code,
-                ProviderGetEvidenceV1::new(0, 0, false, true, false),
+                ProviderGetEvidenceV1::new(0, 0, false, true, false, false),
             );
         }
     };
@@ -595,6 +629,7 @@ async fn execute_reference_provider_get_case(
         calls: Arc::clone(&transport_calls),
         upstream: fixture.upstream(),
         declared_query,
+        expected_auth_header: fixture.auth_arm().expected_wire_auth_header(),
         wire_shape: Arc::clone(&wire_shape),
     };
     let cancellation = CancellationToken::new();
@@ -608,6 +643,7 @@ async fn execute_reference_provider_get_case(
         wire_shape.method_get.load(Ordering::SeqCst),
         wire_shape.body_absent.load(Ordering::SeqCst),
         wire_shape.query_exact.load(Ordering::SeqCst),
+        wire_shape.auth_exact.load(Ordering::SeqCst),
     );
     match result {
         Ok(response) => ProviderGetObservationV1::response(response, evidence),
@@ -615,12 +651,13 @@ async fn execute_reference_provider_get_case(
     }
 }
 
-/// Observed wire shape at the fake transport boundary, with the table's polarities: the two
+/// Observed wire shape at the fake transport boundary, with the table's polarities: the three
 /// presence claims start `false`, the absence claim starts `true`.
 struct WireShapeProbe {
     method_get: AtomicBool,
     body_absent: AtomicBool,
     query_exact: AtomicBool,
+    auth_exact: AtomicBool,
 }
 
 impl Default for WireShapeProbe {
@@ -629,6 +666,7 @@ impl Default for WireShapeProbe {
             method_get: AtomicBool::new(false),
             body_absent: AtomicBool::new(true),
             query_exact: AtomicBool::new(false),
+            auth_exact: AtomicBool::new(false),
         }
     }
 }
@@ -655,6 +693,7 @@ struct WireRecordingTransport<'fixture> {
     calls: Arc<AtomicUsize>,
     upstream: &'fixture ProviderGetUpstreamV1,
     declared_query: Option<QueryStringV1>,
+    expected_auth_header: (&'static str, Vec<u8>),
     wire_shape: Arc<WireShapeProbe>,
 }
 
@@ -668,6 +707,19 @@ impl WireRecordingTransport<'_> {
         let wire = request.url().query();
         let declared = self.declared_query.as_ref().map(QueryStringV1::as_str);
         self.wire_shape.query_exact.store(declared.is_some() && wire == declared, Ordering::SeqCst);
+        // The complete auth header list, compared against the one pair built from the fixture's
+        // declared arm — not from the request's own `ProviderAuthV1` — so an adapter that maps
+        // the header-secret arm to Bearer (same secret, under `authorization`) is measured as a
+        // different wire. Whole-list equality also rules out an extra header beside the right
+        // one; the ordinary channel is checked for `authorization` for the same reason.
+        let (expected_name, expected_value) = &self.expected_auth_header;
+        let mut bound = request.auth_headers();
+        let auth_exact = bound.len() == 1
+            && bound.next().is_some_and(|(name, value)| {
+                name.eq_ignore_ascii_case(expected_name) && value == expected_value.as_slice()
+            })
+            && request.headers().get("authorization").is_none();
+        self.wire_shape.auth_exact.store(auth_exact, Ordering::SeqCst);
     }
 }
 

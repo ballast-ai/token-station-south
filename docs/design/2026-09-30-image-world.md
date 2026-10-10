@@ -1517,3 +1517,24 @@ rest of S-I-5 because it depends only on S-I-1a's pure halves. Fixtures are in
 - 2026-10-10, lv ruling: `decode_sse_v1` lives in the host-only crate `south-host-grammars` and ships in 0.53.0, early
   and alone (Q-B6-6), not in `south-contracts` with this world's minor. §6.5, §6.7, §15, the §19 S-I-1 row, the
   consistency-pass entry and the S-I-1a note gain notes (boundary record §13.13).
+- 2026-10-10, approved by lv, unreleased (ships in the next release): `south.provider-media-binary.v1` (§18.1, S-I-2)
+  did not check the credential arm. A host adapter that mapped the fixture's `HeaderSecret(header)` arm to
+  `ProviderAuthV1::Bearer` sent `authorization: Bearer <FAKE_HEADER_SECRET_V1>` and no sanctioned header, and all six
+  rows still passed. The suite gains a fourth presence claim, `wire_auth_exact`, measured at the transport boundary
+  from `PreparedHttpRequestV1::auth_headers()`: the complete list, names lowercased, must equal exactly the one pair
+  `ProviderMediaBinaryAuthArmV1::expected_wire_auth_header` builds from the declared arm (`authorization` with
+  `Bearer ` and `FAKE_BEARER_SECRET_V1`, or the sanctioned name with `FAKE_HEADER_SECRET_V1` and no `authorization`).
+  It is expected `true` on the four rows that reach the transport and `false` on the two refused rows, the polarity
+  of the other wire claims. A difference is the new mismatch category `WireAuth`
+  (`MAX_PROVIDER_MEDIA_BINARY_MISMATCHES_V1` 66 → 72). Suite id, version and case count are unchanged: no host has
+  verified this suite. **Host-visible:** `ProviderMediaBinaryEvidenceV1::new` takes a sixth argument,
+  `wire_auth_exact`, and `ProviderMediaBinaryMismatchCategoryV1` has a new variant. Only `south-provider-conformance`
+  and `south-testkit` change; no guest-linked crate, package or `component.wasm` does (Q47 does not apply).
+  `south.provider-multipart.v1` and `south.provider-get.v1` each carry one header-secret row and did not measure the
+  arm either. lv ruled the same day to close them in the same change, with the same claim: `wire_auth_exact` on
+  `ProviderMultipartExpectedEvidenceV1` / `ProviderMultipartEvidenceV1` and `ProviderGetExpectedEvidenceV1` /
+  `ProviderGetEvidenceV1` (`true` on reached rows, `false` on refused ones), `WireAuth` in each mismatch enum,
+  `MAX_PROVIDER_MULTIPART_MISMATCHES_V1` 50 → 55 and `MAX_PROVIDER_GET_MISMATCHES_V1` 44 → 48, and
+  `expected_wire_auth_header` on `ProviderMultipartAuthArmV1` and `ProviderGetAuthArmV1`. The host's `verified` status
+  for those two suites in `compatibility.json` is left as it is; the host re-verifies all three suites at the re-pin
+  that adds the claim to its adapters.
