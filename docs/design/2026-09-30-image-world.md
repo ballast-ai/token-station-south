@@ -327,9 +327,10 @@ In `prepare` the component declares this response's body form, `response_body_fo
 with the provider world's `stream_framing` (boundary record §5.2: `bytes | aws-eventstream`). It follows the rule of
 P21 S4 — the component names a form from a closed set and the host implements each form once. That record declines
 `sse` because provider-world components receive raw chunks and split SSE themselves; in this world the body stays out
-of the sandbox, so the host builds the view and therefore does the splitting, with south's `decode_sse_v1`, which
-lives in `south-contracts` as the SSE sibling of the eventstream deframer (boundary record §5.2) and is released with
-this world's minor.
+of the sandbox, so the host builds the view and therefore does the splitting, with south's `decode_sse_v1`, the SSE sibling
+of the eventstream deframer (boundary record §5.2). *(Amended 2026-10-10: it lives in the host-only crate
+`south-host-grammars`, not in `south-contracts`, and ships in 0.53.0, not in this world's minor; boundary record
+§13.13.)*
 
 From the declaration the host provides `{status, headers, body}`, where `body` is `{"json": <elided view>}`,
 `{"text": "…"}` (≤ the fallback threshold), or `{"opaque": {"blob", "bytes", "media_type"}}` (binary, or over the
@@ -369,8 +370,9 @@ lists** (§14).
   sandbox, so large bytes still never enter wasm; both hosts share one implementation, and golden vectors let the
   suite assert byte for byte on every result. Cost: it overturns the half-sentence "South gains no … encoder" of
   0.25.0 §2 and adds a multipart parser, which needs a ruling from the south maintainers (§17 Q1). The SSE
-  decoder `decode_sse_v1` that the speech world needs follows the same reasoning and also lives in `south-contracts`
-  (boundary record §5.2).
+  decoder `decode_sse_v1` that the speech world needs follows the same reasoning, one implementation both hosts call
+  (boundary record §5.2), but lives in the host-only crate `south-host-grammars`, because no component runs it
+  (amended 2026-10-10, boundary record §13.13).
 
 ## 7. D4 — Function set
 
@@ -961,8 +963,9 @@ A South **minor**. Released worlds and contracts are unchanged; one transport sh
 - `south-contracts`: new modules `media` (request view, descriptor and `MediaAuthV1`, transforms, response view,
   `response_body_form`, `parse_multipart_parts_v1`, `elide_v1`, `encode_multipart_v1`, the safe fetch pure
   functions, and their golden vectors) and `image` (facts, outcomes, artifacts). The SSE decoder `decode_sse_v1`
-  that the speech world needs also lives in `south-contracts`, as the SSE sibling of the eventstream deframer
-  (boundary record §5.2), and is released with this minor. JSON codecs and
+  that the speech world needs is the SSE sibling of the eventstream deframer (boundary record §5.2); it lives in the
+  host-only crate `south-host-grammars` and ships in 0.53.0, not with this minor (amended 2026-10-10, boundary record
+  §13.13). JSON codecs and
   types containing `ErrorEnvelope` go into conformance, following the task v2 precedent (`component_v2.rs:13-37`), as
   does `admit_media_descriptor_auth`.
 - `south-core`: `execute_multipart_binary_call_v1` and its raw twin (§6.3a). `HTTP_CONTRACT_VERSION` 9 → 10
@@ -1294,7 +1297,7 @@ south acceptance) waits for; the south acceptance of every step is on south alon
 
 | Step | Work | Files and crates | Acceptance |
 |---|---|---|---|
-| **S-I-1** Contract types and pure functions | New module `south-contracts::media`: request view and part list types, `MediaRequestDescriptorV1` with `MediaAuthV1`, the closed transforms of §6.4 (all of them, including `from_hex`, `concat`, `wav_pcm_s16le`), the response view and `response_body_form`, `MediaLimitsV1`, `parse_multipart_parts_v1`, `elide_v1`, `encode_multipart_v1`, `ArtifactUrlV1::parse`, `is_forbidden_egress_address`, but **not** `decode_sse_v1`: lv ruled the host's B6 plan Q-B6-6 on 2026-10-09 (release it separately and earlier, as a small minor, so the Responses record R1 does not wait for this world), so it leaves this step; the `sse` response body form stays in the `contracts.media` v1 vocabulary and its view is built by that decoder. New module `south-contracts::image`: facts, `ImageMeteringV1`, `ImageOutcomeV1`, artifact forms, tier words. Revise the 0.25.0 record's "no encoder" half-sentence (Q1). R-1 (A) and R-2 (exact, widened grammar) ruled 2026-10-09; `ImageModelCapabilitiesV1` carries only the dialect-bound fields listed in §7 | `crates/south-contracts/src/` (`lib.rs` re-exports, new `media.rs`, `image.rs`; the SSE decoder beside `eventstream.rs`), golden vectors under `crates/south-contracts/tests/`, fuzz targets in `fuzz/fuzz_targets/` (`contract_parsers.rs` pattern), `docs/design/2026-09-09-multipart-request-body.md` | Golden vectors for each function; fuzz targets build (`cargo check --manifest-path fuzz/Cargo.toml --all-targets --locked`); `scripts/check-boundaries.sh`; timing of `elide_v1` and the multipart splitter on a 32 MiB base64 body recorded in the release record (the E-Q1 pattern); `south-contracts` version bump (Q47) |
+| **S-I-1** Contract types and pure functions | New module `south-contracts::media`: request view and part list types, `MediaRequestDescriptorV1` with `MediaAuthV1`, the closed transforms of §6.4 (all of them, including `from_hex`, `concat`, `wav_pcm_s16le`), the response view and `response_body_form`, `MediaLimitsV1`, `parse_multipart_parts_v1`, `elide_v1`, `encode_multipart_v1`, `ArtifactUrlV1::parse`, `is_forbidden_egress_address`, but **not** `decode_sse_v1`: lv ruled the host's B6 plan Q-B6-6 on 2026-10-09 (release it separately and earlier, as a small minor, so the Responses record R1 does not wait for this world), so it leaves this step; the `sse` response body form stays in the `contracts.media` v1 vocabulary and its view is built by that decoder. New module `south-contracts::image`: facts, `ImageMeteringV1`, `ImageOutcomeV1`, artifact forms, tier words. Revise the 0.25.0 record's "no encoder" half-sentence (Q1). R-1 (A) and R-2 (exact, widened grammar) ruled 2026-10-09; `ImageModelCapabilitiesV1` carries only the dialect-bound fields listed in §7 | `crates/south-contracts/src/` (`lib.rs` re-exports, new `media.rs`, `image.rs`; the SSE decoder beside `eventstream.rs` — superseded 2026-10-10: it is in `crates/south-host-grammars/`, boundary record §13.13), golden vectors under `crates/south-contracts/tests/`, fuzz targets in `fuzz/fuzz_targets/` (`contract_parsers.rs` pattern), `docs/design/2026-09-09-multipart-request-body.md` | Golden vectors for each function; fuzz targets build (`cargo check --manifest-path fuzz/Cargo.toml --all-targets --locked`); `scripts/check-boundaries.sh`; timing of `elide_v1` and the multipart splitter on a 32 MiB base64 body recorded in the release record (the E-Q1 pattern); `south-contracts` version bump (Q47) |
 | **S-I-2** HTTP contract 12 | `HTTP_CONTRACT_VERSION` 11 → 12 with its doc entry; `execute_multipart_binary_call_v1` beside `execute_multipart_call_v1`; `TextPostRequestV1` with a binary execution entry point (carried for the speech record, Q1 there); the raw-twin question of §18.1; testkit runners; provider-suite rows (own suite or an existing one, for the maintainers) | `crates/south-contracts/src/lib.rs`, `crates/south-core/src/lib.rs` (and `raw.rs` if a raw form is wanted), `crates/south-transport-reqwest/src/lib.rs` (text body rendering only), `crates/south-testkit/src/provider_binary.rs`, `crates/south-provider-conformance`, `compatibility.json`, the two pinned tests `http_contract_v1.rs:54` and `declared_instances_v1.rs:26` | New suite rows pass in the testkit; contract 11 requests are exactly contract 12 requests that do not use the new shapes; `compatibility.json` `contracts.http` 12 and the crate capability strings updated; the host's `provider_binary` gate ③ result is not claimed for the new rows |
 | **S-I-3** WIT, manifest, gate ① | `wit/image-adapter.wit` (§7); `IMAGE_WIT_PACKAGE`, `IMAGE_WORLD`, `IMAGE_BEHAVIOR_SUITE`, `IMAGE_CAPABILITIES`, `IMAGE_WORLD_SCHEMA`, a `KNOWN_WORLDS` row, a `validate_role` branch; admit `config_schema` and credential attributes in this world (§18.3); turn the enumerated world exclusions of §18.6 into world properties; new `ManifestErrorV1` variant for "operation word required" (breaking for hosts matching it exhaustively, as 0.47.0's was) | `crates/south-provider-api/` (`wit/`, `src/manifest.rs`, `src/values.rs`, `src/lib.rs`, tests `provider_api_v2.rs`) | A manifest declaring neither `generate` nor `edit`, an unknown word, `host_values`, an `endpoint`, an instance declaration or the `oauth` arm is refused; a manifest with a family's `config_schema` and exported attributes is admitted; the existing four worlds' tests pass unchanged; `south-provider-api` version bump |
 | **S-I-4** Runtime world | `bindgen!` module, `InstanceKind::Image`, `call_model_capabilities`, `call_prepare`, `call_parse_response`, `call_render`; the host import is not linked and the import scan refuses `token-station:*` and any `host` interface for this world; limits unchanged | `crates/south-provider-runtime/src/` (`bindings.rs`, `component.rs`, `loader.rs`), a test guest `tests/guests/test-image`, test `image_world_v1.rs` | The `embeddings_world_v1.rs` cases ported: a guest importing `host` is refused, a guest with the wrong world is refused, payload above 16 MiB is refused, determinism; `declared_runtime_v1` still passes |
@@ -1363,6 +1366,8 @@ executor in the host), I3-6 (the Reve bridge, with P18's Reve edit).
   (Ideogram) is the same outcome.
 - Consistency pass, `decode_sse_v1` (§6.5, §6.7, §15): it lives in `south-contracts` as the SSE sibling of the
   eventstream deframer (boundary record §5.2), released with this minor; it is no longer listed as part of `media`.
+  *(Superseded: it left this world's first batch on 2026-10-09 (Q-B6-6, §19), and on 2026-10-10 lv placed it in the
+  host-only crate `south-host-grammars`, shipping in 0.53.0; boundary record §13.13.)*
 - Consistency pass, HTTP contract 10 (§6.3a, §15, Q14): one bump, in this world's minor, carrying both
   `execute_multipart_binary_call_v1` and speech's `TextPostRequestV1`; ASR uses the multipart binary twin.
 - Consistency pass, §15: the embeddings declaration is quoted correctly as `{"media": 1, "embeddings": 1}`.
@@ -1372,7 +1377,11 @@ executor in the host), I3-6 (the Reve bridge, with P18's Reve edit).
 What the record left to the implementation, as built on branch `feature/image-world`, for review:
 
 - **`decode_sse_v1` is out of S-I-1** (Q-B6-6, ruled 2026-10-09; see §19). `ResponseBodyFormV1::Sse` exists, and
-  `build_media_response_view_v1` refuses it (`SseUnavailable`) until that decoder ships.
+  `build_media_response_view_v1` refuses it (`SseUnavailable`) until that decoder ships. *(Note 2026-10-10: the
+  decoder lives in `south-host-grammars`, which `south-contracts` may not depend on (boundary record §13.13), so the
+  `sse` form cannot be built by calling the decoder from `build_media_response_view_v1`. When the speech world wires
+  it, the host decodes with `decode_sse_v1` and hands the events to a `south-contracts` function that takes
+  already-split events; that change belongs to the speech world's minor.)*
 - **Limits added to `media_limits`**: at most 64 parts in a multipart request view or descriptor, at most 8 KiB of
   header block per part, `state` at most 8 KiB, JSON nesting at most 128 levels (`MAX_MEDIA_JSON_DEPTH`).
 - **The JSON tree.** `elide_v1` and the template expander share one strict RFC 8259 parser that keeps source order,
@@ -1505,3 +1514,6 @@ rest of S-I-5 because it depends only on S-I-1a's pure halves. Fixtures are in
 - 2026-10-09 (embeddings contract 2): the §18.2 row on the embeddings world's dependency on `contracts.media` and the
   S-I-9 step are marked superseded for embeddings by the embeddings record §17, which carries media inline and
   independently of this world.
+- 2026-10-10, lv ruling: `decode_sse_v1` lives in the host-only crate `south-host-grammars` and ships in 0.53.0, early
+  and alone (Q-B6-6), not in `south-contracts` with this world's minor. §6.5, §6.7, §15, the §19 S-I-1 row, the
+  consistency-pass entry and the S-I-1a note gain notes (boundary record §13.13).

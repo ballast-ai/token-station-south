@@ -1,0 +1,8 @@
+event: response.created
+data: {"type":"response.created"}
+
+event: response.completed
+data: {"type":"response.completed",
+data: "usage":{"input_tokens":3}}
+
+: keep-aliveid: 7retry: 10data﻿data: tail

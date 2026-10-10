@@ -15,6 +15,13 @@ readonly KERNEL_IR_CONSUMERS='["south-component-conformance", "south-north-codec
 # Depending on the codec is how a crate would acquire the IR without naming it,
 # so the allowlist above governs that edge too.
 readonly CODEC_PACKAGE='south-north-codec'
+# The host-only grammar crate (boundary record §13.13). It has no normal or build dependency, so a
+# host taking it takes nothing else; and no component-linked crate may depend on it, because every
+# component would then link it and a workspace-versioned crate would re-identify every package at
+# every release (the component lockfile test, shipped_packages_v1, checks the components
+# themselves). Dev-dependencies are not linked into anything and stay free.
+readonly HOST_GRAMMARS_PACKAGE='south-host-grammars'
+readonly GUEST_LINKED_PACKAGES='["south-contracts", "south-provider-api", "south-component-conformance"]'
 # The scheduled fuzz binary is a test-only consumer, not an additional production
 # IR edge. Identity includes its exact manifest, private publication, and bin targets.
 readonly FUZZ_MANIFEST_PATH="$(pwd -P)/fuzz/Cargo.toml"
@@ -54,6 +61,8 @@ check_metadata() {
       --arg kernel_ir_package "$KERNEL_IR_PACKAGE" \
       --argjson kernel_ir_consumers "$KERNEL_IR_CONSUMERS" \
       --arg codec_package "$CODEC_PACKAGE" \
+      --arg host_grammars_package "$HOST_GRAMMARS_PACKAGE" \
+      --argjson guest_linked_packages "$GUEST_LINKED_PACKAGES" \
       --arg fuzz_manifest "$allowed_fuzz_manifest" \
       --arg expected_req "$expected_req" \
       --arg expected_version "$expected_version" \
@@ -131,6 +140,25 @@ check_metadata() {
               or ((.rename // "") | gsub("_"; "-")) == $codec_package
             )
           | "codec-dependency: \($package.name) -> \($codec_package) (the typed IR would leak transitively)"
+        ),
+        (
+          .packages[]
+          | select(.name == $host_grammars_package)
+          | . as $package
+          | .dependencies[]
+          | select(.kind != "dev")
+          | "host-grammars-dependency: \($package.name) -> \(.name) (the host-only grammar crate takes no dependencies)"
+        ),
+        (
+          .packages[]
+          | select(.name as $name | $guest_linked_packages | index($name) != null)
+          | . as $package
+          | .dependencies[]
+          | select(.kind != "dev")
+          # Cargo metadata names the package itself in `name` (an alias goes in `rename`), so a
+          # renamed dependency is caught here too (fixture forbidden-host-grammars-guest-linked-rename).
+          | select((.name | gsub("_"; "-")) == $host_grammars_package)
+          | "guest-linked-host-grammars: \($package.name) -> \($host_grammars_package) (every component would link a host-only crate)"
         ),
         (
           (.workspace_members // []) as $workspace_members

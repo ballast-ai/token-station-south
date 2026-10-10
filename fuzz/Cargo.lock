@@ -358,8 +358,13 @@ dependencies = [
  "serde_json",
  "south-component-conformance",
  "south-contracts",
+ "south-host-grammars",
  "south-north-codec",
 ]
+
+[[package]]
+name = "south-host-grammars"
+version = "0.52.0"
 
 [[package]]
 name = "south-north-codec"

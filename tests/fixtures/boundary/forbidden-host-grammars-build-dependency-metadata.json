@@ -1,0 +1,21 @@
+{
+  "packages": [
+    {
+      "id": "path+file:///south-host-grammars#0.0.1",
+      "name": "south-host-grammars",
+      "version": "0.0.1",
+      "dependencies": [
+        {
+          "name": "cc",
+          "rename": null,
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "path": null,
+          "kind": "build"
+        }
+      ]
+    }
+  ],
+  "workspace_members": [
+    "path+file:///south-host-grammars#0.0.1"
+  ]
+}

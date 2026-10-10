@@ -613,11 +613,15 @@ the same time, and the host's roughly 235 lines of deframing code (P21 §2.5) re
 `bytes` and split eventstream itself — the WIT allows it and DP4 does not forbid it; what is forbidden is the host
 choosing a decoder by provider identity. Kiro is also eventstream (P21 §2.5) and is covered by the same declaration.
 
-**Its SSE sibling, `decode_sse_v1`**, also lives in `south-contracts`, with golden vectors and a fuzz target, and is
-released with the image world's minor. It has two uses outside the provider-world rule above: the media worlds,
-whose `response_body_form` declares an SSE body and where the host builds the component's view (speech record), and
-`north_passthrough`, where the host splits the northbound frames only to find the terminal frame (Responses
-record). Both hosts call the same function, so the split is identical.
+**Its SSE sibling, `decode_sse_v1`**, lives in `south-host-grammars`, the crate of grammars only hosts call, with
+golden vectors and a fuzz target, and ships in 0.53.0, early and alone (Q-B6-6). It has two uses outside the
+provider-world rule above: the media worlds, whose `response_body_form` declares an SSE body and where the host
+builds the component's view (speech record), and `north_passthrough`, where the host splits the northbound frames
+only to find the terminal frame (Responses record). Both hosts call the same function, so the split is identical.
+*(Amended 2026-10-10, §13.13: this paragraph first placed the decoder in `south-contracts` and released it with the
+image world's minor. Neither use runs inside a component, and a function added to `south-contracts` re-identifies
+every package, so lv placed it in a new host-only crate; the deframer, which components may also link, stays in
+`south-contracts`.)*
 
 ### 5.3 Proposal: `signing` for `host_signed`
 
@@ -1290,7 +1294,7 @@ the link layer.
 | B4 | Credential recipe v1: manifest section, trust rules, reference interpreter, gate ② fixtures, gate ③ host suite; the `Auth::OAuth` admission rule | P21 S3; P22 Vertex, P23 Vertex TTS | J2b① (minting part, first-party packages) | minor |
 | B7a | §10 instance declarations on the south side: declared secret headers, query parameters, quota headers, `DeclaredUserAgentV1`; the contract changes of §10 | P21 S7 | New instances no longer touch the south link layer | minor |
 | B5 | T21 guests, gaining modes phase by phase alongside B1–B4 and B7a | J2 standing pilot | All of J2b | Not published |
-| B6 | Responses upstream, Kiro, InvokeModel-Anthropic, catalog data, catalog world. Catalog data (B6-1) implemented, not released (§13.11). | P21 S6, S7 | J1 keeps falling | minor each |
+| B6 | Responses upstream, Kiro, InvokeModel-Anthropic, catalog data, catalog world. Catalog data (B6-1) implemented, not released (§13.11). `decode_sse_v1`, a prerequisite of the Responses upstream (B6-4), implemented in `south-host-grammars`, to ship in 0.53.0 (§13.13). | P21 S6, S7 | J1 keeps falling | minor each |
 | B7b | Kernel chain: `Auth` combined arm, credential header catalog (§10), cache buckets. **Landed 2026-10-08 (§13.7).** | P21 S7 | New secret header names no longer touch the kernel | minor + kernel |
 
 B1, B2 and B3 are independent of one another and can proceed in parallel; B4 depends on B2's descriptor auth
@@ -1346,7 +1350,8 @@ chose as follows.
   another bump when B2 ships.
 - **Not in B2:**
   - host adoption (P21 S1, S4);
-  - `decode_sse_v1`, which ships with the image world's minor;
+  - `decode_sse_v1`, which ships in 0.53.0 from `south-host-grammars` (§13.13; first planned for the image world's
+    minor);
   - the component's channel for config keys (Q14);
   - the combined auth arm (Q4, B7b).
 - **Found while fuzzing.** The fuzz work turned up an existing defect, unrelated to B2:
@@ -2693,6 +2698,93 @@ directory throughout; local digests are compared only with local digests, since 
   check from `release_index.py` fails `test_report_naming_another_release_is_refused`.
 - The repository's full check set passes (the pull request lists each command and its exit code).
 
+### 13.13 `decode_sse_v1` in a host-only crate, `south-host-grammars` (2026-10-10)
+
+**Ruled.** lv ruled on 2026-10-10 that `decode_sse_v1` lives in a new crate, `south-host-grammars`, and not in
+`south-contracts` as §5.2 first said. With Q-B6-6 (lv, 2026-10-09: release it separately and early, as a minor of its
+own, so the Responses upstream record's R1 does not wait for the image world), it ships in 0.53.0 and nothing else
+does.
+
+**Why not `south-contracts`.** Q47 (§13.12) makes a change to `south-contracts` bump that crate's version, and §13.12
+rule 2 says such a bump changes every `component.wasm`. The cost for a function no component calls was measured
+before choosing (macOS, one checkout path and target directory, each component built with its own
+`scripts/build-*-component.sh`; local digests compared only with local digests):
+
+| Build | `component.wasm` changed (of 19) |
+|---|---|
+| `origin/main` (`8be549e`, 0.52.0) built twice | 0 (the build is deterministic) |
+| An unused `pub fn` added to `south-contracts`, no version bump | 3 (`image-azure`, `provider-bedrock-converse`, `provider-bedrock-converse-bearer`) |
+| Only the Q47 bump of `south-contracts` (0.51.0 → 0.51.1, the requirements and the 19 lockfiles) | 19 |
+| Both | 19 |
+
+So the early release would have re-identified every package, and the server's cutover preflight identity table,
+release index pins and digest pins would have moved for code that no package runs. Even without the bump, the added
+code shifts code generation in three packages that already use the crate's eventstream module.
+
+**The crate.** Pure, bounded grammars that only hosts call: no I/O, clock or environment; explicit limits with typed
+errors; never panics; golden vectors, property tests and the scheduled `contract_parsers` fuzz target, the same
+obligation as `south-contracts` (CONTRIBUTING: untrusted parsers). It carries the workspace version, like the other
+host-side crates, so a release that does not change it still moves its version, which no package sees. Two rules keep
+it host-only, both mechanical:
+
+- **No component links it.** `shipped_packages_v1::no_component_links_a_host_only_crate` fails when a component
+  lockfile names it by any source, and `components_link_only_independently_versioned_workspace_crates` already fails
+  on a path dependency. `scripts/check-boundaries.sh` fails when `south-contracts`, `south-provider-api` or
+  `south-component-conformance` takes it as a normal or build dependency (rule `guest-linked-host-grammars`), since
+  every component would then link it.
+- **It has no dependencies.** `scripts/check-boundaries.sh` refuses any normal or build dependency (rule
+  `host-grammars-dependency`), so a host that takes it takes nothing else. Dev-dependencies are free.
+
+`compatibility.json` lists the crate under `crates` as `sse_decoder_v1`.
+
+`south-core`'s statement that its prelude introduces no grammar (raw.rs:11-12) is unchanged. The deframer stays in
+`south-contracts`: components may declare `bytes` and split eventstream themselves (§5.2).
+
+**The decoder.** `decode_sse_v1(&[u8]) -> Result<Vec<SseEventV1>, SseErrorV1>` for a buffered body (the media
+worlds), and `SseDecoderV1` (`push`, `next_event`, `position`, `buffered_len`, `finish`) for a stream, in the shape of
+`AwsEventStreamDeframerV1`. The rules are the WHATWG event-stream interpretation as the speech record §6 states them
+(LF, CR and CRLF; one leading BOM dropped; comments dropped; `data` lines joined with LF; an empty event type is
+`message`; `id`, `retry` and unknown fields ignored; an empty data buffer dispatches nothing), with three
+departures: the end of input dispatches the pending event and reads an unterminated last line (speech record §6),
+invalid UTF-8 is `SseErrorV1::NotUtf8` rather than a replacement character, and memory is bounded
+(`MAX_SSE_LINE_BYTES` and `MAX_SSE_EVENT_BYTES`, 16 MiB each; `MAX_SSE_EVENTS`, 262,144, for the whole-body function
+only). Chunking never changes the events, their positions or the first error.
+
+`north_passthrough` needs more than events: the Responses record §8.2 has the host forward the upstream's own bytes
+and hand the component one whole frame per call. `SseDecoderV1::position` gives the frame boundary: right after an
+event, it is the stream offset just past the blank line that dispatched it, and each slice cut there decodes alone to
+exactly that event (a property test and the fuzz target check it). Because a CR may be the first half of a CRLF, a
+line ended by a CR is read only once the next byte arrives, or at `finish`.
+
+**What a component does instead.** No component can link this crate, so the Responses component (B6-4) splits its
+stream with its own code, as the three SSE references do, and the Responses record §6 no longer says both sides run
+the same function. Under `north_passthrough` the host hands the component one whole frame per call, cut by this
+decoder, so the component's splitter only has to recognize a frame that ends the call's bytes; the component's tests
+can run this crate's golden vectors as a dev-dependency (dev-dependencies of a crate do not enter a component's
+lockfile). The Responses package (R1) therefore no longer waits for the decoder; the host's pass-through does.
+
+**The media worlds' `sse` view.** `south_contracts::media::build_media_response_view_v1` refuses the `sse` form
+(`SseUnavailable`) until the decoder ships, and it cannot call the decoder now, since `south-contracts` may not depend
+on this crate. The speech world, which first declares that form, adds a `south-contracts` entry point that takes the
+events the host decoded with `decode_sse_v1`; that change belongs to the speech minor, which changes `south-contracts`
+anyway.
+
+**Evidence (2026-10-10).**
+
+- All 19 components rebuilt on this change: every `component.wasm` is byte-identical to `origin/main`, and no
+  component lockfile, no file of the three guest-linked crates outside `tests/`, and no package version changed.
+  `scripts/check_crate_versions.py --unreleased` passes with the three crates unbumped.
+- Golden vectors: 45 cases, each checked whole, byte by byte and split at every point. Property tests: arbitrary
+  chunkings equal the whole body, positions cut self-contained frames at any chunking, well-formed events round-trip
+  under each line terminator, arbitrary bytes never panic.
+- Mutations, each restored from a copy: dropping the BOM rule, counting a CRLF as a CR, not waiting after a final CR,
+  not dispatching at end of input in either entry point, stripping every leading space, not resetting the event type,
+  removing the unterminated-line bound, an off-by-one line limit, not stripping a final CR at `finish`, lossy UTF-8,
+  leaving the event type out of the event limit, removing the event count limit, a position that leaves out the
+  terminator, and the whole-body function splitting a CRLF in two each fail at least one test. Deleting the comment
+  branch is an equivalent mutation (an empty field name is ignored anyway). The two boundary rules each fail the
+  self-test when disabled, and a component lockfile naming the crate fails `no_component_links_a_host_only_crate`.
+
 ## 14. Existing text to revise in step
 
 - ARCHITECTURE.md:117-126: change the concluding sentence to "execution, material, reachable destinations and the
@@ -2734,6 +2826,12 @@ directory throughout; local digests are compared only with local digests, since 
   (§5.2).
 - **Putting the deframer in `south-core`** (this record's first draft): parsing grammars live in `south-contracts`
   with their fuzz obligation; `south-core`'s prelude introduces none (raw.rs:11-12).
+- **Putting `decode_sse_v1` in `south-contracts`** (§5.2 before 2026-10-10): every component links that crate, and a
+  measurement showed that an unused public function changes 3 of the 19 `component.wasm` and the version bump Q47
+  then requires changes all 19, so a grammar no component runs would re-identify every package (§13.13).
+- **Putting `decode_sse_v1` in `south-core` or `south-north-codec`** (§13.13): neither is linked by components, but
+  `south-core`'s prelude introduces no grammar (raw.rs:11-12) and that rule stays; the north codec maps client wire
+  formats onto the IR and depends on the kernel, while the media worlds decode an upstream body.
 - **Per-family `stream_framing` / `usage_evidence`**: the response-side functions cannot tell families apart (R6).
 - **An IR compatibility range on the protocol crate version**: the kernel promises nothing within a minor line, and
   additions would be dropped silently by older components (§8.3).
@@ -3167,3 +3265,6 @@ into the body. Where each landed:
   Q48's provenance-file sub-question is ruled: no separate file; pull requests and release notes carry the sources and
   dates. Q47, Q48 and §13.11's maintenance paragraph gain notes. Also ruled on review of the check: a change only
   under a crate's `tests/` is exempt; fixtures and other directories stay strict.
+- 2026-10-10, lv ruling: `decode_sse_v1` lives in a new host-only crate, `south-host-grammars`, and ships in 0.53.0,
+  early and alone (Q-B6-6). New §13.13 with the measurement (an unused function changed 3 of 19 `component.wasm`, the
+  Q47 bump all 19); §5.2, §13 (B2's "Not in B2" list and the B6 row) and §15 gain notes.

@@ -1,0 +1,28 @@
+{
+  "packages": [
+    {
+      "id": "path+file:///south-host-grammars#0.0.1",
+      "name": "south-host-grammars",
+      "version": "0.0.1",
+      "dependencies": []
+    },
+    {
+      "id": "path+file:///south-component-conformance#0.0.1",
+      "name": "south-component-conformance",
+      "version": "0.0.1",
+      "dependencies": [
+        {
+          "name": "south-host-grammars",
+          "rename": "grammars",
+          "source": null,
+          "path": "/south-host-grammars",
+          "kind": null
+        }
+      ]
+    }
+  ],
+  "workspace_members": [
+    "path+file:///south-host-grammars#0.0.1",
+    "path+file:///south-component-conformance#0.0.1"
+  ]
+}

@@ -676,6 +676,7 @@ fn compatibility_manifest_describes_the_library_slice() {
             "south-core",
             "buffered_streaming_provider_call_buffered_get_call_buffered_multipart_call_buffered_binary_call_buffered_multipart_binary_call_buffered_text_binary_call_header_auth_controlled_query_user_agent_raw_prelude_signed_raw_call_get_raw_call_multipart_raw_call_v1",
         ),
+        ("south-host-grammars", "sse_decoder_v1"),
         ("south-provider-api", "provider_adapter_v2_wit_manifest_v1"),
         ("south-component-conformance", "provider_component_gates_reference_v1"),
         (

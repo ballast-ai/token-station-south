@@ -29,6 +29,7 @@ use south_contracts::{
     extract_vectors_v1, parse_embeddings_request_v1, parse_embeddings_request_v2,
     reencode_eventstream_v1, render_vectors_v1,
 };
+use south_host_grammars::{SseDecoderV1, decode_sse_v1};
 
 const QUOTA_FIELDS: [ProviderQuotaMetadataFieldV1; 9] = [
     ProviderQuotaMetadataFieldV1::XRateLimitLimitTokens,
@@ -129,6 +130,57 @@ fn fuzz_eventstream(data: &[u8]) {
         assert_eq!(frame.matches('\n').count(), 3);
         assert!(!frame.contains('\r'));
         assert_eq!(frame.lines().nth(1).map(|line| line.starts_with("data: ")), Some(true));
+    }
+}
+
+/// The SSE decoder hosts use for media views and `north_passthrough` (boundary record §5.2,
+/// §13.13): chunking never changes the events or the first error, and the input never panics.
+fn fuzz_sse(data: &[u8]) {
+    let whole = decode_sse_v1(data);
+    let stride = usize::from(data.last().copied().unwrap_or(0) % 13) + 1;
+    let mut decoder = SseDecoderV1::new();
+    // Each event with the end of its frame (`position` right after the event).
+    let mut events = Vec::new();
+    let mut outcome = Ok(());
+    'chunks: for chunk in data.chunks(stride) {
+        decoder.push(chunk);
+        loop {
+            match decoder.next_event() {
+                Ok(Some(event)) => {
+                    let end = usize::try_from(decoder.position()).expect("fuzz inputs are small");
+                    events.push((event, end));
+                }
+                Ok(None) => break,
+                Err(error) => {
+                    outcome = Err(error);
+                    break 'chunks;
+                }
+            }
+        }
+    }
+    if outcome.is_ok() {
+        let end = usize::try_from(decoder.position()).expect("fuzz inputs are small")
+            + decoder.buffered_len();
+        assert_eq!(end, data.len());
+        match decoder.finish() {
+            Ok(last) => events.extend(last.map(|event| (event, end))),
+            Err(error) => outcome = Err(error),
+        }
+    }
+    match whole {
+        Ok(expected) => {
+            assert_eq!(outcome, Ok(()));
+            assert_eq!(events.iter().map(|(event, _)| event).collect::<Vec<_>>(), expected.iter().collect::<Vec<_>>());
+            // The positions cut the stream into frames that each decode alone to their event.
+            let mut start = 0;
+            for (event, end) in events {
+                assert!(!event.event().is_empty());
+                assert!(!event.event().contains(['\r', '\n']));
+                assert_eq!(decode_sse_v1(&data[start..end]), Ok(vec![event]));
+                start = end;
+            }
+        }
+        Err(error) => assert_eq!(outcome, Err(error)),
     }
 }
 
@@ -327,6 +379,7 @@ fn fuzz_embeddings(input: &str) {
 fuzz_target!(|data: &[u8]| {
     fuzz_eventstream(data);
     fuzz_invoke_stream(data);
+    fuzz_sse(data);
 
     let Ok(input) = std::str::from_utf8(data) else {
         return;

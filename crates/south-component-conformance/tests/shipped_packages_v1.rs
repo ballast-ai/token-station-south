@@ -151,6 +151,13 @@ fn every_shipped_package_agrees_with_its_crate_and_names_no_future_release() {
 const GUEST_LINKED_CRATES: [&str; 3] =
     ["south-component-conformance", "south-contracts", "south-provider-api"];
 
+/// Workspace crates that exist for hosts only: no component may link them, by any source.
+///
+/// `south-host-grammars` holds grammars only hosts call (`decode_sse_v1`). Putting such a grammar
+/// in a component-linked crate would re-identify every package for code no package runs (boundary
+/// record §13.13: an unused function changed 3 of 19 `component.wasm`, the Q47 bump all 19).
+const HOST_ONLY_CRATES: [&str; 1] = ["south-host-grammars"];
+
 /// The `[[package]]` entries of a lockfile that come from a path (no `source`), as
 /// `(name, version)`.
 fn locked_path_packages(lockfile: &str) -> Vec<(String, String)> {
@@ -212,6 +219,40 @@ fn components_link_only_independently_versioned_workspace_crates() {
                 version,
                 package_version(&declared),
                 "{}: the lockfile records {name} {version}, the crate declares another version",
+                package.display()
+            );
+        }
+    }
+}
+
+/// No component lockfile names a host-only crate, whatever its source (path, registry or git), and
+/// each host-only crate keeps the workspace version, so it is never mistaken for a guest-linked one.
+///
+/// The test above already refuses a path dependency on any crate outside
+/// [`GUEST_LINKED_CRATES`]; this one also covers a component that took the crate by git tag, and
+/// says why the crate must stay out.
+#[test]
+fn no_component_links_a_host_only_crate() {
+    let crates = repo_root().join("crates");
+    for name in HOST_ONLY_CRATES {
+        let cargo_toml = std::fs::read_to_string(crates.join(name).join("Cargo.toml"))
+            .expect("the host-only crate manifest reads");
+        assert!(
+            cargo_toml.lines().any(|line| line.trim() == "version.workspace = true"),
+            "{name}: a host-only crate carries the workspace version"
+        );
+        assert!(!GUEST_LINKED_CRATES.contains(&name), "{name} is listed as both");
+    }
+
+    let shipped = shipped_packages();
+    assert!(!shipped.is_empty(), "no component packages found");
+    for package in shipped {
+        let lockfile = std::fs::read_to_string(package.join("Cargo.lock"))
+            .expect("every component commits its lockfile");
+        for name in HOST_ONLY_CRATES {
+            assert!(
+                !lockfile.lines().any(|line| line.trim() == format!("name = \"{name}\"")),
+                "{}: links the host-only crate {name}; only hosts may take it",
                 package.display()
             );
         }
