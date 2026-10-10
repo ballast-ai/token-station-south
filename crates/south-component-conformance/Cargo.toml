@@ -37,8 +37,10 @@ sha2.workspace = true
 # The north codec is the other half of the Responses round-trip judge and the source of the
 # request rows (OpenAI Responses upstream record §9, R-Q13); the host-only SSE decoder's golden
 # vectors are run against the component's own splitter (record §6, as amended 2026-10-10).
-south-host-grammars = { path = "../south-host-grammars" }
-south-north-codec = { path = "../south-north-codec" }
+# Lower bounds for the same reason as the runtime above: both crates keep the workspace version,
+# and an exact requirement would edit this manifest at every release (§16 Q47).
+south-host-grammars = { path = "../south-host-grammars", version = ">=0.53.0" }
+south-north-codec = { path = "../south-north-codec", version = ">=0.53.0" }
 
 [[test]]
 name = "sandbox_parity_v1"
