@@ -27,7 +27,7 @@ community policy      enterprise policy
 | `south-task-core` | 候选：独立 Rust 版本 0.1.0，无生产依赖；共享提交/观察/CAS 赢家回读/等待/取消顺序，宿主保留政策与复合原子效果 |
 | `south-task-conformance` | 候选：独立 Rust 版本 0.1.0，无生产依赖；公共原子效果故障套件，宿主适配真实 SQLite / PG 事务，无资金宿主明确不适用 |
 | `south-contracts` | Implemented bounded HTTP (JSON POST, body-less GET, multipart POST, and SSML text POST request shapes, and a buffered binary response beside the UTF-8 one), Bearer, sanctioned header-secret, combined Bearer-plus-header-secret, and package-declared header-secret auth, stable error, byte-streaming, and closed quota metadata contracts, plus the sanctioned controlled query and controlled user-agent declarations |
-| `south-host-grammars` | Implemented, unreleased (ships in 0.53.0): pure, bounded wire grammars that only hosts call, today the SSE decoder `decode_sse_v1` / `SseDecoderV1` (frame positions for `north_passthrough`, golden vectors, fuzz target). No dependencies; no component may link it (`shipped_packages_v1`, `scripts/check-boundaries.sh`), so it carries the workspace version and a change to it re-identifies no package (boundary record §13.13). A grammar a component may link stays in `south-contracts` |
+| `south-host-grammars` | Implemented, released in 0.53.0: pure, bounded wire grammars that only hosts call, today the SSE decoder `decode_sse_v1` / `SseDecoderV1` (frame positions for `north_passthrough`, golden vectors, fuzz target). No dependencies; no component may link it (`shipped_packages_v1`, `scripts/check-boundaries.sh`), so it carries the workspace version and a change to it re-identifies no package (boundary record §13.13). A grammar a component may link stays in `south-contracts` |
 | `south-core` | Implemented host-neutral buffered and streaming provider-call orchestration and its buffered body-less GET, multipart and binary-response twins, the multipart-binary and text-binary entry points of HTTP contract 12, plus the shared host prelude (`raw` module: raw-call type, its host-signed, GET and multipart twins, contract-parse orchestration, one-shot wrappers for all four, resolver adapters) |
 | `south-transport-reqwest` | Implemented hardened buffered and byte-streaming JSON POST transport, the same buffered transport for body-less GET, multipart POST and SSML text POST requests (rendering the latter two's media types and sharing their allocations) and for a JSON POST whose response is buffered as opaque bytes under its own larger cap, bounded quota metadata capture, sanctioned user-agent application, and one-config transport-pair construction |
 | `south-provider-conformance` | Implemented immutable provider-call, provider-stream, provider-quota-metadata, header-auth, controlled-query, controlled-user-agent, provider-get, provider-multipart, provider-binary, and provider-media-binary v1 fixtures, the safe-fetch v1 fake-network fixtures, and the host-implemented credential-recipe v1 suite (harness, fake token endpoint, runner) |
@@ -206,7 +206,7 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.52.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.51.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.53.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.51.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
 **Unreleased (B6-2)**: the Bedrock InvokeModel Anthropic component (design record
 `docs/design/2026-10-08-bedrock-invoke-anthropic-component.md`, accepted 2026-10-09). The new package
 `provider-anthropic-bedrock-invoke` 1.0.0 (family `anthropic-bedrock-invoke`, `host_signed` with `aws-sigv4` as Converse
@@ -220,6 +220,11 @@ strict base64 codec replaces the credential recipe interpreter's. No release has
 no version of its own beyond the new package: `south-component-conformance` stays at the 0.50.0 #167 gave it, and every
 existing package keeps the single bump over v0.50.0 that #167 gave it (`provider-anthropic` 1.0.16 now also carries the
 two behavior changes above).
+**v0.53.0**: `decode_sse_v1`, early and alone (release record `docs/design/2026-10-10-release-0.53.0.md`, boundary
+record §13.13, Q-B6-6). The new host-only crate `south-host-grammars` carries the SSE decoder `decode_sse_v1` and its
+incremental form `SseDecoderV1`, whose `position` cuts a stream into whole frames for `north_passthrough`. No component
+links the crate, so no guest-linked crate, package, `component.wasm`, contract number or `south_runtime` changes (Q47
+does not apply); all nineteen packages keep their version and bytes.
 **v0.52.0**: the image world, first batch (release record `docs/design/2026-10-10-release-0.52.0.md`, image world record
 §19). `contracts.media` v1 and `contracts.image` v1 (`south_contracts::media`, `south_contracts::image`), HTTP contract 12,
 the `image-adapter-v1` world (no host import; world exclusions are now `WorldSchemaV1` properties), gate ②
