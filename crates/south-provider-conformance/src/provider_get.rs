@@ -217,7 +217,7 @@ impl fmt::Debug for ProviderGetExpectedOutcomeV1 {
 ///   only when the request declared a query *and* the wire carried it byte for byte. Two rows of
 ///   this table reach the transport and still expect `false`, which is what catches a probe that
 ///   hardcodes `true` without reading the prepared URL.
-/// - `wire_auth_exact` (added after 0.53.0) is a presence claim — `true` only when a transport
+/// - `wire_auth_exact` (added in 0.54.0) is a presence claim — `true` only when a transport
 ///   call saw the complete list of auth headers equal exactly the one pair
 ///   [`ProviderGetAuthArmV1::expected_wire_auth_header`] builds from the row's declared arm;
 ///   `false` when the transport is never reached. An adapter that maps `HeaderSecret` to `Bearer`

@@ -1517,7 +1517,7 @@ rest of S-I-5 because it depends only on S-I-1a's pure halves. Fixtures are in
 - 2026-10-10, lv ruling: `decode_sse_v1` lives in the host-only crate `south-host-grammars` and ships in 0.53.0, early
   and alone (Q-B6-6), not in `south-contracts` with this world's minor. §6.5, §6.7, §15, the §19 S-I-1 row, the
   consistency-pass entry and the S-I-1a note gain notes (boundary record §13.13).
-- 2026-10-10, approved by lv, unreleased (ships in the next release): `south.provider-media-binary.v1` (§18.1, S-I-2)
+- 2026-10-10, approved by lv, released in 0.54.0: `south.provider-media-binary.v1` (§18.1, S-I-2)
   did not check the credential arm. A host adapter that mapped the fixture's `HeaderSecret(header)` arm to
   `ProviderAuthV1::Bearer` sent `authorization: Bearer <FAKE_HEADER_SECRET_V1>` and no sanctioned header, and all six
   rows still passed. The suite gains a fourth presence claim, `wire_auth_exact`, measured at the transport boundary

@@ -165,7 +165,7 @@ header channel, likewise refused. Evidence: resolver and transport call counts, 
 `wire_body_bytes_exact` (the transport was handed the declared bytes unmodified — the presence
 polarity, so a probe that never reads the prepared body answers `false`).
 
-**Amended 2026-10-10 (lv ruling; unreleased).** The suite did not measure the credential arm: an
+**Amended 2026-10-10 (lv ruling; released in 0.54.0).** The suite did not measure the credential arm: an
 adapter that mapped the `HeaderSecret` row to `ProviderAuthV1::Bearer` sent the same secret under
 `authorization` and passed all five rows. The evidence gains a third presence claim,
 `wire_auth_exact` — the prepared request's complete `auth_headers()` list equals exactly the one
