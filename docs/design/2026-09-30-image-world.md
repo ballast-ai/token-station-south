@@ -1530,5 +1530,11 @@ rest of S-I-5 because it depends only on S-I-1a's pure halves. Fixtures are in
   verified this suite. **Host-visible:** `ProviderMediaBinaryEvidenceV1::new` takes a sixth argument,
   `wire_auth_exact`, and `ProviderMediaBinaryMismatchCategoryV1` has a new variant. Only `south-provider-conformance`
   and `south-testkit` change; no guest-linked crate, package or `component.wasm` does (Q47 does not apply).
-  `south.provider-multipart.v1` and `south.provider-get.v1` each carry one header-secret row and do not measure the
-  arm either; both are `verified` by a host, so they are left for a separate decision.
+  `south.provider-multipart.v1` and `south.provider-get.v1` each carry one header-secret row and did not measure the
+  arm either. lv ruled the same day to close them in the same change, with the same claim: `wire_auth_exact` on
+  `ProviderMultipartExpectedEvidenceV1` / `ProviderMultipartEvidenceV1` and `ProviderGetExpectedEvidenceV1` /
+  `ProviderGetEvidenceV1` (`true` on reached rows, `false` on refused ones), `WireAuth` in each mismatch enum,
+  `MAX_PROVIDER_MULTIPART_MISMATCHES_V1` 50 → 55 and `MAX_PROVIDER_GET_MISMATCHES_V1` 44 → 48, and
+  `expected_wire_auth_header` on `ProviderMultipartAuthArmV1` and `ProviderGetAuthArmV1`. The host's `verified` status
+  for those two suites in `compatibility.json` is left as it is; the host re-verifies all three suites at the re-pin
+  that adds the claim to its adapters.

@@ -7,10 +7,10 @@ use south_contracts::{
     SecretHeaderV1,
 };
 use south_provider_conformance::{
-    PROVIDER_MULTIPART_CONFORMANCE_SUITE_ID, PROVIDER_MULTIPART_CONFORMANCE_SUITE_VERSION,
-    ProviderCallCountV1, ProviderCallFailureCodeV1, ProviderMultipartAuthArmV1,
-    ProviderMultipartCaseIdV1, ProviderMultipartExpectedOutcomeV1, ProviderMultipartFixtureV1,
-    ProviderMultipartUpstreamV1, provider_multipart_fixtures_v1,
+    FAKE_BEARER_SECRET_V1, FAKE_HEADER_SECRET_V1, PROVIDER_MULTIPART_CONFORMANCE_SUITE_ID,
+    PROVIDER_MULTIPART_CONFORMANCE_SUITE_VERSION, ProviderCallCountV1, ProviderCallFailureCodeV1,
+    ProviderMultipartAuthArmV1, ProviderMultipartCaseIdV1, ProviderMultipartExpectedOutcomeV1,
+    ProviderMultipartFixtureV1, ProviderMultipartUpstreamV1, provider_multipart_fixtures_v1,
     provider_multipart_mismatched_boundary_v1,
 };
 use static_assertions::assert_not_impl_any;
@@ -119,9 +119,9 @@ fn canonical_table_freezes_arms_upstreams_and_outcomes() {
     }
 }
 
-/// Both wire booleans are presence claims, so the three rows that never reach the transport
-/// expect `false` for both. An adapter whose probe answers without reading the prepared request
-/// fails those three.
+/// All three wire booleans are presence claims, so the three rows that never reach the transport
+/// expect `false` for all three. An adapter whose probe answers without reading the prepared
+/// request fails those three.
 #[test]
 fn canonical_table_freezes_the_expected_wire_shape_evidence() {
     let fixtures = provider_multipart_fixtures_v1();
@@ -147,7 +147,39 @@ fn canonical_table_freezes_the_expected_wire_shape_evidence() {
         let reached = matches!(fixture.upstream(), ProviderMultipartUpstreamV1::Response(_));
         assert_eq!(fixture.expected().evidence().wire_content_type_exact(), reached);
         assert_eq!(fixture.expected().evidence().wire_body_bytes_exact(), reached);
+        assert_eq!(fixture.expected().evidence().wire_auth_exact(), reached);
     }
+}
+
+/// The expected auth header is built from the declared arm alone: Bearer binds `authorization`
+/// with the `Bearer ` prefix, a header secret binds its sanctioned lowercase name with the secret
+/// verbatim and never `authorization`. The header-secret row therefore expects a different wire
+/// from the Bearer rows even though the request is otherwise identical.
+#[test]
+fn expected_wire_auth_header_follows_the_declared_arm_only() {
+    let bearer = ProviderMultipartAuthArmV1::Bearer.expected_wire_auth_header();
+    assert_eq!(bearer.0, "authorization");
+    assert_eq!(bearer.1, [b"Bearer ".as_slice(), FAKE_BEARER_SECRET_V1.as_bytes()].concat());
+    for header in SecretHeaderV1::ALL {
+        let (name, value) =
+            ProviderMultipartAuthArmV1::HeaderSecret(header).expected_wire_auth_header();
+        assert_eq!(name, header.header_name());
+        assert_eq!(name, name.to_ascii_lowercase());
+        assert_ne!(name, "authorization");
+        assert_eq!(value, FAKE_HEADER_SECRET_V1.as_bytes());
+    }
+    let header_secret_rows: Vec<_> = provider_multipart_fixtures_v1()
+        .iter()
+        .filter(|fixture| {
+            matches!(fixture.auth_arm(), ProviderMultipartAuthArmV1::HeaderSecret(_))
+                && matches!(fixture.upstream(), ProviderMultipartUpstreamV1::Response(_))
+        })
+        .map(ProviderMultipartFixtureV1::case_id)
+        .collect();
+    assert_eq!(
+        header_secret_rows,
+        [ProviderMultipartCaseIdV1::BufferedMultipartHeaderSecretSuccess,]
+    );
 }
 
 #[test]

@@ -96,12 +96,16 @@ the [task adapter vocabulary](docs/design/2026-08-27-task-adapter-vocabulary.md)
   `south.controlled-query.v1`, `south.controlled-user-agent.v1`, `south.provider-get.v1`,
   `south.provider-multipart.v1`, `south.provider-binary.v1`, and `south.provider-media-binary.v1`
   fixtures, while `south-testkit`
-  runs them against assembled host executors. Unreleased: `south.provider-media-binary.v1` gains a
-  fourth wire claim, `wire_auth_exact` (mismatch category `WireAuth`): the transport's complete
-  `auth_headers()` list must be exactly the one pair `ProviderMediaBinaryAuthArmV1::expected_wire_auth_header`
-  builds from the row's declared arm, so an adapter that sends a header secret as Bearer fails the two
-  header-secret rows. The case count stays six; `ProviderMediaBinaryEvidenceV1::new` takes a sixth
-  argument, which a host adapter supplies on re-pin. It also carries the host-implemented
+  runs them against assembled host executors. Unreleased: `south.provider-media-binary.v1`,
+  `south.provider-multipart.v1` and `south.provider-get.v1` each gain a wire claim,
+  `wire_auth_exact` (mismatch category `WireAuth`): the transport's complete `auth_headers()` list
+  must be exactly the one pair the suite's `…AuthArmV1::expected_wire_auth_header` builds from the
+  row's declared arm, so an adapter that sends a header secret as Bearer fails the header-secret
+  rows (two, one and one). Case counts and suite versions are unchanged; each suite's evidence
+  constructor (`ProviderMediaBinaryEvidenceV1::new`, `ProviderMultipartEvidenceV1::new`,
+  `ProviderGetEvidenceV1::new`) takes one more argument, last. **A host must re-verify all three
+  suites after its adapter measures the new claim**: the `verified` status `compatibility.json`
+  records for `provider_multipart` and `provider_get` was earned without it. It also carries the host-implemented
   `south.credential-recipe.v1` suite (gate ③ of credential recipes): a harness the host wraps around
   its own recipe executor and credential store, an in-process fake token endpoint, and the runner.
   Two more gate ③ suites are host-implemented the same way: `south.eventstream-framing.v1` (the host's

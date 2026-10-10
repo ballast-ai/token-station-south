@@ -98,10 +98,13 @@ async fn each_single_difference_reports_exactly_its_one_case_and_category() {
         (Case::BufferedMultipartHeaderSecretSuccess, Cat::TransportCallCount),
         (Case::BufferedMultipartBearerSuccess, Cat::WireContentType),
         (Case::BufferedMultipartBearerSuccess, Cat::WireBodyBytes),
-        // The refusal rows expect `false` for both wire claims, so a probe that hardcodes `true`
+        (Case::BufferedMultipartHeaderSecretSuccess, Cat::WireAuth),
+        (Case::BufferedMultipartBearerSuccess, Cat::WireAuth),
+        // The refusal rows expect `false` for every wire claim, so a probe that hardcodes `true`
         // is caught there and not only on the success rows.
         (Case::MultipartBodyBoundaryMismatch, Cat::WireContentType),
         (Case::MultipartContentTypeSmuggled, Cat::WireBodyBytes),
+        (Case::MultipartSlotMismatch, Cat::WireAuth),
     ];
 
     for (case_id, category) in isolated_mismatches {
@@ -131,7 +134,7 @@ async fn a_fully_wrong_executor_reports_every_case_without_failing_fast() {
         ) -> AssembledProviderMultipartExecutionFutureV1<'a> {
             Box::pin(async move {
                 // Every claim inverted, counts saturated.
-                let evidence = ProviderMultipartEvidenceV1::new(257, 256, false, false);
+                let evidence = ProviderMultipartEvidenceV1::new(257, 256, false, false, false);
                 match fixture.case_id() {
                     ProviderMultipartCaseIdV1::MultipartSlotMismatch => {
                         ProviderMultipartObservationV1::response(
@@ -163,6 +166,7 @@ async fn a_fully_wrong_executor_reports_every_case_without_failing_fast() {
     assert!(categories.contains(&ProviderMultipartMismatchCategoryV1::TransportCallCount));
     assert!(categories.contains(&ProviderMultipartMismatchCategoryV1::WireContentType));
     assert!(categories.contains(&ProviderMultipartMismatchCategoryV1::WireBodyBytes));
+    assert!(categories.contains(&ProviderMultipartMismatchCategoryV1::WireAuth));
     for fixture in provider_multipart_fixtures_v1() {
         assert!(failure.mismatches().iter().any(|m| m.case_id() == fixture.case_id()));
     }
@@ -170,12 +174,14 @@ async fn a_fully_wrong_executor_reports_every_case_without_failing_fast() {
 
 #[test]
 fn evidence_construction_saturates_large_boundary_counts() {
-    let evidence = ProviderMultipartEvidenceV1::new(256, 257, true, false);
+    let evidence = ProviderMultipartEvidenceV1::new(256, 257, true, false, false);
 
     assert_eq!(evidence.resolver_calls(), ProviderCallCountV1::MoreThanOne);
     assert_eq!(evidence.transport_calls(), ProviderCallCountV1::MoreThanOne);
     assert!(evidence.wire_content_type_exact());
     assert!(!evidence.wire_body_bytes_exact());
+    assert!(!evidence.wire_auth_exact());
+    assert!(ProviderMultipartEvidenceV1::new(1, 1, false, false, true).wire_auth_exact());
 }
 
 #[test]
@@ -191,7 +197,7 @@ fn debug_output_contains_only_safe_structural_evidence() {
             Some(METADATA_SENTINEL.to_owned()),
         )
         .expect("fixture response should be valid"),
-        ProviderMultipartEvidenceV1::new(1, 1, true, true),
+        ProviderMultipartEvidenceV1::new(1, 1, true, true, true),
     );
 
     let debug = format!("{observation:?}");
@@ -243,6 +249,7 @@ const fn matching_evidence(fixture: &ProviderMultipartFixtureV1) -> ProviderMult
         count_value(evidence.transport_calls()),
         evidence.wire_content_type_exact(),
         evidence.wire_body_bytes_exact(),
+        evidence.wire_auth_exact(),
     )
 }
 
@@ -288,6 +295,7 @@ fn observation_with_single_mismatch(
     let mut transport_calls = count_value(expected_evidence.transport_calls());
     let mut content_type_exact = expected_evidence.wire_content_type_exact();
     let mut body_bytes_exact = expected_evidence.wire_body_bytes_exact();
+    let mut auth_exact = expected_evidence.wire_auth_exact();
     match category {
         ProviderMultipartMismatchCategoryV1::ResolverCallCount => {
             resolver_calls = different_count(resolver_calls);
@@ -301,6 +309,9 @@ fn observation_with_single_mismatch(
         ProviderMultipartMismatchCategoryV1::WireBodyBytes => {
             body_bytes_exact = !body_bytes_exact;
         }
+        ProviderMultipartMismatchCategoryV1::WireAuth => {
+            auth_exact = !auth_exact;
+        }
         _ => {}
     }
     let evidence = ProviderMultipartEvidenceV1::new(
@@ -308,6 +319,7 @@ fn observation_with_single_mismatch(
         transport_calls,
         content_type_exact,
         body_bytes_exact,
+        auth_exact,
     );
 
     match fixture.expected().outcome() {

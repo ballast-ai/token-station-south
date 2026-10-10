@@ -115,6 +115,13 @@ async fn each_single_difference_reports_exactly_its_one_case_and_category() {
         (ProviderGetCaseIdV1::BufferedGetBearerSuccess, ProviderGetMismatchCategoryV1::WireQuery),
         // The refused row must catch a probe that hardcodes the method claim.
         (ProviderGetCaseIdV1::GetSlotMismatch, ProviderGetMismatchCategoryV1::WireMethod),
+        (
+            ProviderGetCaseIdV1::BufferedGetHeaderSecretSuccess,
+            ProviderGetMismatchCategoryV1::WireAuth,
+        ),
+        (ProviderGetCaseIdV1::BufferedGetBearerSuccess, ProviderGetMismatchCategoryV1::WireAuth),
+        // The refused row must catch a probe that hardcodes the auth claim.
+        (ProviderGetCaseIdV1::GetSlotMismatch, ProviderGetMismatchCategoryV1::WireAuth),
     ];
 
     for (case_id, category) in isolated_mismatches {
@@ -144,7 +151,7 @@ async fn a_fully_wrong_executor_reports_every_case_without_failing_fast() {
         ) -> AssembledProviderGetExecutionFutureV1<'a> {
             Box::pin(async move {
                 // A POST-shaped executor: every claim inverted, counts saturated.
-                let evidence = ProviderGetEvidenceV1::new(257, 256, false, false, true);
+                let evidence = ProviderGetEvidenceV1::new(257, 256, false, false, true, false);
                 match fixture.case_id() {
                     ProviderGetCaseIdV1::GetSlotMismatch => ProviderGetObservationV1::response(
                         response(200, "{}", None, None),
@@ -172,6 +179,7 @@ async fn a_fully_wrong_executor_reports_every_case_without_failing_fast() {
     assert!(categories.contains(&ProviderGetMismatchCategoryV1::WireMethod));
     assert!(categories.contains(&ProviderGetMismatchCategoryV1::WireBody));
     assert!(categories.contains(&ProviderGetMismatchCategoryV1::WireQuery));
+    assert!(categories.contains(&ProviderGetMismatchCategoryV1::WireAuth));
     for fixture in provider_get_fixtures_v1() {
         assert!(failure.mismatches().iter().any(|m| m.case_id() == fixture.case_id()));
     }
@@ -179,13 +187,15 @@ async fn a_fully_wrong_executor_reports_every_case_without_failing_fast() {
 
 #[test]
 fn evidence_construction_saturates_large_boundary_counts() {
-    let evidence = ProviderGetEvidenceV1::new(256, 257, true, false, true);
+    let evidence = ProviderGetEvidenceV1::new(256, 257, true, false, true, false);
 
     assert_eq!(evidence.resolver_calls(), ProviderCallCountV1::MoreThanOne);
     assert_eq!(evidence.transport_calls(), ProviderCallCountV1::MoreThanOne);
     assert!(evidence.wire_method_get());
     assert!(!evidence.wire_body_absent());
     assert!(evidence.wire_query_exact());
+    assert!(!evidence.wire_auth_exact());
+    assert!(ProviderGetEvidenceV1::new(1, 1, false, false, false, true).wire_auth_exact());
 }
 
 #[test]
@@ -193,7 +203,7 @@ fn debug_output_contains_only_safe_structural_evidence() {
     const BODY_SENTINEL: &str = "provider-get-runner-body-debug-sentinel";
     const METADATA_SENTINEL: &str = "provider-get-runner-metadata-debug-sentinel";
 
-    let evidence = ProviderGetEvidenceV1::new(1, 1, true, true, false);
+    let evidence = ProviderGetEvidenceV1::new(1, 1, true, true, false, true);
     let observation = ProviderGetObservationV1::response(
         BufferedHttpResponseV1::try_from_parts(
             StatusCode::OK,
@@ -255,6 +265,7 @@ const fn matching_evidence(fixture: &ProviderGetFixtureV1) -> ProviderGetEvidenc
         evidence.wire_method_get(),
         evidence.wire_body_absent(),
         evidence.wire_query_exact(),
+        evidence.wire_auth_exact(),
     )
 }
 
@@ -298,6 +309,7 @@ fn observation_with_single_mismatch(
     let mut method_get = expected_evidence.wire_method_get();
     let mut body_absent = expected_evidence.wire_body_absent();
     let mut query_exact = expected_evidence.wire_query_exact();
+    let mut auth_exact = expected_evidence.wire_auth_exact();
     match category {
         ProviderGetMismatchCategoryV1::ResolverCallCount => {
             resolver_calls = different_count(resolver_calls);
@@ -308,6 +320,7 @@ fn observation_with_single_mismatch(
         ProviderGetMismatchCategoryV1::WireMethod => method_get = !method_get,
         ProviderGetMismatchCategoryV1::WireBody => body_absent = !body_absent,
         ProviderGetMismatchCategoryV1::WireQuery => query_exact = !query_exact,
+        ProviderGetMismatchCategoryV1::WireAuth => auth_exact = !auth_exact,
         _ => {}
     }
     let evidence = ProviderGetEvidenceV1::new(
@@ -316,6 +329,7 @@ fn observation_with_single_mismatch(
         method_get,
         body_absent,
         query_exact,
+        auth_exact,
     );
 
     match fixture.expected().outcome() {

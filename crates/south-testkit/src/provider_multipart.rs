@@ -34,8 +34,8 @@ use crate::{
     map_canonical_fixture_header_invariant_failure, map_contract_error, map_provider_call_error,
 };
 
-/// Five cases multiplied by the ten closed multipart mismatch categories.
-pub const MAX_PROVIDER_MULTIPART_MISMATCHES_V1: usize = 50;
+/// Five cases multiplied by the eleven closed multipart mismatch categories.
+pub const MAX_PROVIDER_MULTIPART_MISMATCHES_V1: usize = 55;
 
 /// A boxed, cancellation-safe assembled multipart executor future.
 pub type AssembledProviderMultipartExecutionFutureV1<'a> =
@@ -52,9 +52,11 @@ pub trait AssembledProviderMultipartExecutorV1: Send + Sync {
 
 /// Adapter-reported resolver, transport, and wire-shape boundary evidence.
 ///
-/// Both wire-shape booleans are presence claims measured at the adapter's real transport
-/// boundary: whether the rendered media type reached it byte for byte, and whether the declared
-/// body bytes reached it unmodified. Like every adapter-reported value, a passing report alone is
+/// All three wire-shape booleans are presence claims measured at the adapter's real transport
+/// boundary: whether the rendered media type reached it byte for byte, whether the declared body
+/// bytes reached it unmodified, and whether the prepared request's complete `auth_headers()` list
+/// was exactly the one pair [`ProviderMultipartAuthArmV1::expected_wire_auth_header`] builds from
+/// the fixture's declared arm. Like every adapter-reported value, a passing report alone is
 /// insufficient for host verification; the adoption review must confirm the wiring.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct ProviderMultipartEvidenceV1 {
@@ -62,22 +64,28 @@ pub struct ProviderMultipartEvidenceV1 {
     transport_calls: ProviderCallCountV1,
     wire_content_type_exact: bool,
     wire_body_bytes_exact: bool,
+    wire_auth_exact: bool,
 }
 
 impl ProviderMultipartEvidenceV1 {
     /// Constructs evidence and saturates both raw call counts.
+    ///
+    /// `wire_auth_exact` was added after 0.53.0: it is `true` only when a transport call saw the
+    /// prepared request's auth headers equal exactly the fixture arm's one expected pair.
     #[must_use]
     pub const fn new(
         resolver_calls: usize,
         transport_calls: usize,
         wire_content_type_exact: bool,
         wire_body_bytes_exact: bool,
+        wire_auth_exact: bool,
     ) -> Self {
         Self {
             resolver_calls: ProviderCallCountV1::from_usize(resolver_calls),
             transport_calls: ProviderCallCountV1::from_usize(transport_calls),
             wire_content_type_exact,
             wire_body_bytes_exact,
+            wire_auth_exact,
         }
     }
 
@@ -104,6 +112,12 @@ impl ProviderMultipartEvidenceV1 {
     pub const fn wire_body_bytes_exact(&self) -> bool {
         self.wire_body_bytes_exact
     }
+
+    /// Returns whether the auth headers reached the transport as exactly the declared arm's pair.
+    #[must_use]
+    pub const fn wire_auth_exact(&self) -> bool {
+        self.wire_auth_exact
+    }
 }
 
 impl fmt::Debug for ProviderMultipartEvidenceV1 {
@@ -114,6 +128,7 @@ impl fmt::Debug for ProviderMultipartEvidenceV1 {
             .field("transport_calls", &self.transport_calls)
             .field("wire_content_type_exact", &self.wire_content_type_exact)
             .field("wire_body_bytes_exact", &self.wire_body_bytes_exact)
+            .field("wire_auth_exact", &self.wire_auth_exact)
             .finish()
     }
 }
@@ -215,6 +230,9 @@ pub enum ProviderMultipartMismatchCategoryV1 {
     WireContentType,
     /// Body-bytes wire evidence differed.
     WireBodyBytes,
+    /// Auth-header wire evidence differed: the credential arm the transport carried was not the
+    /// one the fixture declares.
+    WireAuth,
 }
 
 fixed_debug!(ProviderMultipartMismatchCategoryV1 {
@@ -228,6 +246,7 @@ fixed_debug!(ProviderMultipartMismatchCategoryV1 {
     TransportCallCount => "TransportCallCount",
     WireContentType => "WireContentType",
     WireBodyBytes => "WireBodyBytes",
+    WireAuth => "WireAuth",
 });
 
 /// One case/category mismatch without expected or observed payload values.
@@ -459,6 +478,12 @@ fn compare_multipart_evidence(
         ProviderMultipartMismatchCategoryV1::WireBodyBytes,
         mismatches,
     );
+    record_if(
+        expected.wire_auth_exact() != observed.wire_auth_exact(),
+        fixture,
+        ProviderMultipartMismatchCategoryV1::WireAuth,
+        mismatches,
+    );
 }
 
 fn record_if(
@@ -522,9 +547,10 @@ pub fn parse_reference_multipart_input(
 /// A deterministic assembled multipart executor built from real `south-core` orchestration and
 /// fake ports.
 ///
-/// Every case runs through `execute_multipart_call_v1`. Both wire-shape booleans are measured on
-/// the prepared request at the fake transport boundary, mirroring what a real adapter must
-/// measure on its wire: the rendered media type and the body bytes.
+/// Every case runs through `execute_multipart_call_v1`. All three wire-shape booleans are
+/// measured on the prepared request at the fake transport boundary, mirroring what a real adapter
+/// must measure on its wire: the rendered media type, the body bytes, and the auth headers against
+/// the fixture's declared arm.
 pub struct ReferenceAssembledProviderMultipartExecutorV1;
 
 impl ReferenceAssembledProviderMultipartExecutorV1 {
@@ -563,7 +589,7 @@ async fn execute_reference_multipart_case(
             Err(code) => {
                 return ProviderMultipartObservationV1::failure(
                     code,
-                    ProviderMultipartEvidenceV1::new(0, 0, false, false),
+                    ProviderMultipartEvidenceV1::new(0, 0, false, false, false),
                 );
             }
         };
@@ -575,6 +601,7 @@ async fn execute_reference_multipart_case(
         upstream: fixture.upstream(),
         expected_content_type: fixture.input().expected_content_type(),
         expected_body: fixture.input().body(),
+        expected_auth_header: fixture.auth_arm().expected_wire_auth_header(),
         probe: Arc::clone(&probe),
     };
     let cancellation = CancellationToken::new();
@@ -593,6 +620,7 @@ async fn execute_reference_multipart_case(
         transport_calls.load(Ordering::SeqCst),
         probe.content_type_exact.load(Ordering::SeqCst),
         probe.body_bytes_exact.load(Ordering::SeqCst),
+        probe.auth_matched.load(Ordering::SeqCst),
     );
     match result {
         Ok(response) => ProviderMultipartObservationV1::response(response, evidence),
@@ -602,12 +630,13 @@ async fn execute_reference_multipart_case(
     }
 }
 
-/// Observed wire shape at the fake transport boundary. Both are presence claims, so both start
-/// `false` and only a transport call can raise them.
+/// Observed wire shape at the fake transport boundary. All three are presence claims, so all
+/// start `false` and only a transport call can raise them.
 #[derive(Default)]
 struct WireShapeProbe {
     content_type_exact: AtomicBool,
     body_bytes_exact: AtomicBool,
+    auth_matched: AtomicBool,
 }
 
 struct ArmSecretResolver {
@@ -631,6 +660,7 @@ struct WireRecordingTransport<'fixture> {
     upstream: &'fixture ProviderMultipartUpstreamV1,
     expected_content_type: String,
     expected_body: &'static [u8],
+    expected_auth_header: (&'static str, Vec<u8>),
     probe: Arc<WireShapeProbe>,
 }
 
@@ -650,6 +680,19 @@ impl WireRecordingTransport<'_> {
             request.body().map(south_core::RequestBodyRefV1::as_bytes) == Some(self.expected_body),
             Ordering::SeqCst,
         );
+        // The complete auth header list, compared against the one pair built from the fixture's
+        // declared arm — not from the request's own `ProviderAuthV1` — so an adapter that maps
+        // the header-secret arm to Bearer (same secret, under `authorization`) is measured as a
+        // different wire. Whole-list equality also rules out an extra header beside the right
+        // one; the ordinary channel is checked for `authorization` for the same reason.
+        let (expected_name, expected_value) = &self.expected_auth_header;
+        let mut bound = request.auth_headers();
+        let auth_exact = bound.len() == 1
+            && bound.next().is_some_and(|(name, value)| {
+                name.eq_ignore_ascii_case(expected_name) && value == expected_value.as_slice()
+            })
+            && request.headers().get("authorization").is_none();
+        self.probe.auth_matched.store(auth_exact, Ordering::SeqCst);
     }
 }
 

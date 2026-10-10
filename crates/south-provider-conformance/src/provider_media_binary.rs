@@ -27,8 +27,8 @@ use std::fmt;
 use south_contracts::SecretHeaderV1;
 
 use crate::{
-    BOUND_SLOT, DIFFERENT_SLOT, ENDPOINT, FAKE_BEARER_SECRET_V1, FAKE_HEADER_SECRET_V1, HEADERS,
-    ProviderCallCountV1, ProviderCallFailureCodeV1,
+    BOUND_SLOT, DIFFERENT_SLOT, ENDPOINT, HEADERS, ProviderCallCountV1, ProviderCallFailureCodeV1,
+    expected_wire_auth_header_v1,
 };
 
 /// The media-binary conformance suite version.
@@ -110,15 +110,10 @@ impl ProviderMediaBinaryAuthArmV1 {
     /// and fails the comparison.
     #[must_use]
     pub fn expected_wire_auth_header(self) -> (&'static str, Vec<u8>) {
-        match self {
-            Self::Bearer => (
-                "authorization",
-                [b"Bearer ".as_slice(), FAKE_BEARER_SECRET_V1.as_bytes()].concat(),
-            ),
-            Self::HeaderSecret(header) => {
-                (header.header_name(), FAKE_HEADER_SECRET_V1.as_bytes().to_vec())
-            }
-        }
+        expected_wire_auth_header_v1(match self {
+            Self::Bearer => None,
+            Self::HeaderSecret(header) => Some(header),
+        })
     }
 }
 
