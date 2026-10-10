@@ -204,6 +204,7 @@ directory shape the runtime loads — `manifest.json` beside `component.wasm`.
 | `embeddings-vertex` | `vertex-ai` | `bash scripts/build-embeddings-vertex-component.sh` | embeddings contract 1, from 0.48.0 |
 | `image-azure` | `azure-mai` | `bash scripts/build-image-azure-component.sh` | media contract 1 and image contract 1, from 0.52.0 |
 | `provider-anthropic-bedrock-invoke` | `anthropic-bedrock-invoke` | `bash scripts/build-anthropic-bedrock-invoke-component.sh` | Bedrock InvokeModel (Anthropic), `host_signed` with `aws-sigv4`; unreleased (B6-2) |
+| `provider-openai-responses` | `openai-responses` | `bash scripts/build-openai-responses-component.sh` | OpenAI Responses API, `bearer`; OpenAI's own wire only until another upstream ships a captured-traffic pack (R-Q16); unreleased (Responses R1) |
 
 Each pack's `README.md` records how its expectations were derived and how the
 component differs from the host's native arm — read that before changing a
