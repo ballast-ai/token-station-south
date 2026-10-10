@@ -1,6 +1,7 @@
 # The OpenAI Responses upstream dialect component (`provider-openai-responses`)
 
-Status: proposed — drafted for review by the host team (token-station-server P21), not accepted
+Status: accepted (lv, 2026-10-10: the remaining S-tagged questions ruled, §16) — drafted by the host team
+(token-station-server P21)
 
 Date: 2026-09-30
 
@@ -1182,6 +1183,8 @@ failure frames) and R-Q2 (`content_filter`).
   **Ruled (lv, 2026-10-01): a relayed upstream failure frame is replaced by the host's fixed-message failure
   event**, extending the N-Q3 ruling to relayed failures. Pass-through is enabled by declaration as ruled above, with
   this replacement as one of its conditions (§8.2).
+  **Ruled for the south side (lv, 2026-10-10): accepted as ruled for the host** — `north_passthrough` by
+  declaration, with the conditions of §8.2, including the replacement of relayed failure frames.
 - **R-Q2 (L)** Does a generation truncated at the cap (`response.incomplete` with usage) settle as a success with
   finish reason `length` (recommended: yes, as on every other wire), or stay in `delivery_unknown` as the native leg
   does today?
@@ -1208,32 +1211,48 @@ failure frames) and R-Q2 (`content_filter`).
   the host does not cut, because cutting would discard the upstream's usage report; a settlement above the
   reservation goes to manual review, which is the existing generic path.
   The same rule as the Kiro record's K-Q1. Non-streaming Codex callers are refused at build time.
+  **Ruled for the south side (lv, 2026-10-10): accepted as ruled for the host.** South provides
+  `request_facts.output_cap: []` (the umbrella's form) if the measurement shows Codex refuses the field. The
+  measurement gates R3 only; R1 (`openai-responses`) does not wait for it.
 - **R-Q6 (S)** A package-declared `user-agent` value (§10.4): this record needs none today and carries no proposal of
   its own. If one is needed, it uses the umbrella's single proposal (its §10: a new owned type validated by gate ①
   against the existing value grammar, which reopens the 2026-08-20 controlled-user-agent ruling); the questions are
   asked there as umbrella Q15 and Q16.
+  **No ruling needed (2026-10-10):** v1 sends no `user-agent`; the umbrella's Q15 and Q16 carry the question.
 - **R-Q7 (S)** Recipe details (§10.2): every form this recipe uses is in the umbrella §3.3 vocabulary, and the clock
   is decided (a fixed 3000-second window, for the reason given in §10.2). What remains is one behaviour: a seeded
   access token that is not a decodable JWT is refreshed on first use (`default_seconds: 0`, raised to the host's
   60-second minimum, which lies inside the refresh margin; recommended) rather than trusted until the upstream rejects
   it, as the host does today.
+  **Ruled (lv, 2026-10-10): refresh on first use** (`default_seconds: 0`, raised to the host's 60-second minimum).
+  Affects R3 only.
 - **R-Q8 (S, K)** OpenAI opaque reasoning through the IR: a family-tagged opaque reasoning event in the stream
   contract (kernel chain), the `reasoning_replay.openai.v1` word, and north codec follow-ups NC-1 and NC-2 — or rely
   on pass-through delivery for the response half (effective only once NC-1 lets the component send `include`, §8.3)
   and do only NC-1.
+  **Ruled (lv, 2026-10-10): v1 does NC-1 only and relies on pass-through delivery for the response half.** No
+  kernel change for v1; a family-tagged opaque reasoning event stays a later option. Codex rows are not cut over
+  before NC-1 (R-Q14).
 - **R-Q9 (S)** Unknown `response.*` event types: error (this record, matching the host) or ignore (what the Converse
   reference does with unknown events, reference_bedrock_converse.rs:736-739, and what the sibling Kiro record chose
   for its wire). Strict means a new inert upstream event stops streams until a package release; lenient means content
   or cost could pass unseen and, under pass-through, reach the client unparsed. Recommended: strict here, because
   this wire has a published event list; the difference from Kiro is argued in §6.2.
+  **Ruled (lv, 2026-10-10): strict.** An unknown `response.*` event type is an error, as recommended.
 - **R-Q10 (S)** Refusal text: ordinary text (this record), an error, or a finish reason.
+  **Ruled (lv, 2026-10-10): ordinary text**, as this record maps it (§5, §6.1). Pass-through keeps the `refusal`
+  part type; a re-rendered answer carries it as `output_text`.
 - **R-Q11 (S, K)** `block_index` for a wire with two-level indices: first-seen counter (this record) or another rule.
+  **Ruled (lv, 2026-10-10): first-seen counter**, as this record does.
 - **R-Q12 (L)** How a "Responses only" model on a mixed provider is declared in the host: a second provider row (no
   new mechanism) or a generic model-row family override (recommended if such providers are common; host work only).
   **Ruled (lv, 2026-09-30): a second provider row.** It is operator data and needs no new host mechanism; a generic
   model-row family override is reconsidered only if such providers turn out to be common.
 - **R-Q13 (S)** Where shared Responses vocabulary constants live (§9), given that guests depend on the conformance
   crate and the north codec may depend only on the kernel IR (ARCHITECTURE.md:70-80).
+  **Ruled (lv, 2026-10-10):** the constants live in one module of the conformance crate, which guests already
+  depend on. The north codec keeps its literals (it may depend only on the kernel IR), and an in-repo test that
+  depends on both crates asserts the two spellings agree.
 - **R-Q14 (L)** Cutover order: may the Responses surface be cut over before NC-1, losing encrypted reasoning replay
   for clients that use it (recommended: no for Codex rows; yes for rows with no such clients), and which upstreams of
   §3.3 (Azure, Bedrock with SigV4) are in production use and must be covered before R4.
@@ -1244,9 +1263,15 @@ failure frames) and R-Q2 (`content_filter`).
   promotion path, done once for both packages), or record them as an explicit, argued exception to D5. v1 follows
   the existing precedent, adds no key and does not act on `responses_reasoning_summary`. Umbrella Q14 covers the
   general question and names this one.
+  **Ruled (lv, 2026-10-10): v1 follows the existing precedent** — the same three keys the compatible reference
+  reads, no new key, no behaviour on `responses_reasoning_summary`. Promotion to typed IR fields goes through the
+  kernel chain as a separate change, done once for both packages.
 - **R-Q16 (S)** Third-party Responses upstreams (§3.3): admit each to `openai-responses` by a captured-traffic
   fixture pack in this package (recommended while their wire and usage match OpenAI's), or give every non-OpenAI
   upstream its own family from the start. Either way no upstream is routed without its own evidence.
+  **Ruled (lv, 2026-10-10): admitted to `openai-responses`, each with its own captured-traffic fixture pack**, while
+  its wire and usage match OpenAI's; an upstream that departs from them gets its own family. No upstream is routed
+  without its own evidence.
 
 ## Revision note (2026-10-01)
 
@@ -1308,3 +1333,8 @@ failure frames) and R-Q2 (`content_filter`).
 - 2026-10-10, lv ruling (umbrella §13.13): `decode_sse_v1` lives in the host-only crate `south-host-grammars` and ships
   in 0.53.0. §6, §8.2, §13.1 R1 and §14 gain notes: the component splits its own stream, the host cuts whole frames
   for pass-through with `SseDecoderV1::position`, and R1 no longer waits for the decoder.
+- 2026-10-10, lv rulings on the remaining questions: R-Q1 and R-Q5 accepted for the south side as ruled for the
+  host (R-Q5's measurement gates R3 only); R-Q7 refresh on first use; R-Q8 NC-1 only, relying on pass-through; R-Q9
+  strict; R-Q10 ordinary text; R-Q11 first-seen counter; R-Q13 constants in the conformance crate, north codec
+  literals checked by a cross-crate test; R-Q15 existing precedent for v1, typed fields later through the kernel
+  chain; R-Q16 one fixture pack per third-party upstream. R-Q6 needs no ruling. The record is accepted.
