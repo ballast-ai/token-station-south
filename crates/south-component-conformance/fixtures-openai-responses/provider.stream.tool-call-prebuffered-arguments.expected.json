@@ -1,0 +1,43 @@
+[
+  {
+    "arguments_delta": "{\"city\":\"Paris\"}",
+    "id": "call_wx1",
+    "index": 0,
+    "name": "get_weather",
+    "type": "tool_call_delta"
+  },
+  {
+    "arguments_delta": "",
+    "id": "call_tm2",
+    "index": 1,
+    "name": "get_time",
+    "type": "tool_call_delta"
+  },
+  {
+    "arguments_delta": "{\"city\":",
+    "index": 1,
+    "type": "tool_call_delta"
+  },
+  {
+    "arguments_delta": "\"Paris\"}",
+    "index": 1,
+    "type": "tool_call_delta"
+  },
+  {
+    "finish_reason": "tool_calls",
+    "type": "finish"
+  },
+  {
+    "type": "usage",
+    "usage": {
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "input_tokens": 96,
+      "output_tokens": 37,
+      "reasoning_tokens": 0
+    }
+  },
+  {
+    "type": "done"
+  }
+]

@@ -141,7 +141,7 @@ impl TaskComponentV2 for WanImageTaskComponentV2 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "task-wan-image-v2".into(),
-            version: "0.35.10".into(),
+            version: "0.35.11".into(),
             api_version: "task-adapter-v2".into(),
         }
     }

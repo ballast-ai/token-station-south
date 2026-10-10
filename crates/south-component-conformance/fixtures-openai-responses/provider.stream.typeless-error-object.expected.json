@@ -1,0 +1,11 @@
+[
+  {
+    "error": {
+      "code": "payment_required",
+      "http_status": 502,
+      "message": "the upstream requires payment or the account is out of funds",
+      "provider_message": "You exceeded your current quota, please check your plan and billing details."
+    },
+    "type": "error"
+  }
+]

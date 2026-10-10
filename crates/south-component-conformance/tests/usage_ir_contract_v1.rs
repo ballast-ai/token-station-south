@@ -6,7 +6,7 @@
 //! Gate ② proves "wasm ≡ native reference", and the two are one source. A
 //! reference that maps a provider's usage wrongly therefore passes gate ② with
 //! its wrong answer written into its own fixtures — which is how two of the
-//! three non-OpenAI references came to report the *uncached* prompt as the IR's
+//! three non-`OpenAI` references came to report the *uncached* prompt as the IR's
 //! `input_tokens`, and how the Converse reference came to refuse every real
 //! cached response (its fixture's `totalTokens` was written to match the
 //! reference, not AWS).
@@ -46,8 +46,9 @@ use south_component_conformance::{
     reference_anthropic_bedrock_invoke::AnthropicBedrockInvokeReferenceV1,
     reference_bedrock_converse::{BedrockConverseBearerReferenceV1, BedrockConverseReferenceV1},
     reference_gemini::GeminiReferenceV1,
+    reference_openai_responses::{OpenAiResponsesReferenceV1, failure_code},
 };
-use token_station_protocol::{HttpResponseParts, StreamEvent, Usage};
+use token_station_protocol::{ErrorCode, HttpResponseParts, StreamEvent, Usage};
 
 fn response(body: &Value) -> HttpResponseParts {
     serde_json::from_value(json!({"status":200,"headers":{},"body":body.to_string()})).unwrap()
@@ -401,7 +402,7 @@ struct Dialect {
     cache: &'static [&'static str],
 }
 
-const DIALECTS: [Dialect; 6] = [
+const DIALECTS: [Dialect; 7] = [
     // `prompt_tokens` already contains `prompt_tokens_details.cached_tokens`.
     Dialect {
         dir: "fixtures",
@@ -444,6 +445,14 @@ const DIALECTS: [Dialect; 6] = [
         usage_key: "usage",
         prompt: &["input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"],
         cache: &["cache_read_input_tokens", "cache_creation_input_tokens"],
+    },
+    // OpenAI Responses: `input_tokens` already contains `input_tokens_details.cached_tokens`
+    // (and the host-read `cache_write_tokens`, see `responses_usage_partitions_the_prompt`).
+    Dialect {
+        dir: "fixtures-openai-responses",
+        usage_key: "usage",
+        prompt: &["input_tokens"],
+        cache: &["cached_tokens", "cache_write_tokens"],
     },
 ];
 
@@ -827,4 +836,189 @@ fn every_shipped_provider_fixture_keeps_reasoning_inside_output() {
         }
     }
     assert!(with_reasoning > 0, "no shipped fixture carried reasoning tokens");
+}
+
+// ── OpenAI Responses ─────────────────────────────────────────────────────────
+// OpenAI's Responses API reference, the `usage` object of a response: `input_tokens` is the whole
+// prompt and `input_tokens_details.cached_tokens` the part served from cache; `output_tokens`
+// includes `output_tokens_details.reasoning_tokens`; `total_tokens = input_tokens +
+// output_tokens`. The same numbers on the non-streaming body and on the `response.completed`
+// event's `response` (the record §7.1). `input_tokens_details.cache_write_tokens` is not in that
+// reference: the component reads it because the host's native parser does, as a subset of the
+// prompt, and this judge can say only that it is read the host's way (record §7.1, open for lv).
+
+fn responses_body(usage: &Value) -> Value {
+    json!({
+        "id": "resp_1", "object": "response", "status": "completed", "model": "gpt-5.5",
+        "output": [{"id": "msg_1", "type": "message", "role": "assistant", "status": "completed",
+                    "content": [{"type": "output_text", "text": "hi", "annotations": []}]}],
+        "usage": usage,
+    })
+}
+
+fn responses_stream(usage: &Value) -> Vec<String> {
+    let frame =
+        |data: Value| format!("event: {}\ndata: {data}\n\n", data["type"].as_str().unwrap());
+    let mut terminal = responses_body(usage);
+    terminal["status"] = json!("completed");
+    vec![
+        frame(json!({"type": "response.created", "sequence_number": 0,
+                     "response": {"id": "resp_1", "object": "response", "status": "in_progress",
+                                  "output": [], "usage": null}})),
+        frame(
+            json!({"type": "response.output_text.delta", "sequence_number": 1, "item_id": "msg_1",
+                     "output_index": 0, "content_index": 0, "delta": "hi"}),
+        ),
+        frame(json!({"type": "response.completed", "sequence_number": 2, "response": terminal})),
+    ]
+}
+
+#[test]
+fn responses_prompt_tokens_already_contain_the_cached_part_and_output_the_reasoning() {
+    // A wrong field cannot land on these: every count differs from every other.
+    let usage = json!({"input_tokens": 1000, "input_tokens_details": {"cached_tokens": 300},
+                       "output_tokens": 250, "output_tokens_details": {"reasoning_tokens": 200},
+                       "total_tokens": 1250});
+    let parsed = OpenAiResponsesReferenceV1
+        .parse_response(&response(&responses_body(&usage)))
+        .unwrap()
+        .usage;
+    assert_partitioned(parsed, 1000, 300, 0, "responses non-stream");
+    assert_eq!((parsed.output_tokens, parsed.reasoning_tokens), (250, 200));
+
+    let chunks = responses_stream(&usage);
+    let chunks: Vec<&str> = chunks.iter().map(String::as_str).collect();
+    let streamed = folded(&OpenAiResponsesReferenceV1, &chunks);
+    assert_partitioned(streamed, 1000, 300, 0, "responses stream");
+    assert_eq!((streamed.output_tokens, streamed.reasoning_tokens), (250, 200));
+}
+
+#[test]
+fn responses_usage_partitions_the_prompt() {
+    // The host-read cache-write bucket is a subset of the prompt too, never added to it.
+    let usage = json!({"input_tokens": 1000,
+                       "input_tokens_details": {"cached_tokens": 300, "cache_write_tokens": 500},
+                       "output_tokens": 7, "total_tokens": 1007});
+    let parsed = OpenAiResponsesReferenceV1
+        .parse_response(&response(&responses_body(&usage)))
+        .unwrap()
+        .usage;
+    assert_partitioned(parsed, 1000, 300, 500, "responses cache write");
+}
+
+#[test]
+fn responses_usage_is_strict() {
+    let ai = OpenAiResponsesReferenceV1;
+    refused(&ai, &responses_body(&Value::Null), "responses, no usage object");
+    for missing in ["input_tokens", "output_tokens", "total_tokens"] {
+        let mut usage = json!({"input_tokens": 12, "output_tokens": 5, "total_tokens": 17});
+        usage.as_object_mut().unwrap().remove(missing);
+        refused(&ai, &responses_body(&usage), &format!("responses, no {missing}"));
+    }
+    for (usage, what) in [
+        (
+            json!({"input_tokens": 12, "output_tokens": 5, "total_tokens": 16}),
+            "total does not add up",
+        ),
+        (json!({"input_tokens": -1, "output_tokens": 5, "total_tokens": 4}), "negative count"),
+        (
+            json!({"input_tokens": 12.5, "output_tokens": 5, "total_tokens": 17.5}),
+            "fractional count",
+        ),
+        (json!({"input_tokens": "12", "output_tokens": 5, "total_tokens": 17}), "count as text"),
+        (
+            json!({"input_tokens": 12, "output_tokens": 5, "total_tokens": 17,
+                "output_tokens_details": {"reasoning_tokens": 6}}),
+            "reasoning larger than output",
+        ),
+        (
+            json!({"input_tokens": 12, "output_tokens": 5, "total_tokens": 17,
+                "input_tokens_details": {"cached_tokens": 13}}),
+            "cached larger than prompt",
+        ),
+        (
+            json!({"input_tokens": 12, "output_tokens": 5, "total_tokens": 17,
+                "input_tokens_details": {"cached_tokens": 8, "cache_write_tokens": 5}}),
+            "cached plus cache write larger than prompt",
+        ),
+        (
+            json!({"input_tokens": 12, "output_tokens": 5, "total_tokens": 17,
+                "input_tokens_details": 3}),
+            "details not an object",
+        ),
+    ] {
+        refused(&ai, &responses_body(&usage), &format!("responses, {what}"));
+    }
+    // Null details are not reported, not an error.
+    let usage = json!({"input_tokens": 12, "input_tokens_details": null, "output_tokens": 5,
+                       "output_tokens_details": null, "total_tokens": 17});
+    assert!(ai.parse_response(&response(&responses_body(&usage))).is_ok());
+}
+
+/// R-Q3: a non-zero hosted-tool counter is refused, `image_gen` included; zero telemetry passes.
+#[test]
+fn responses_refuse_hosted_tool_usage() {
+    let usage = json!({"input_tokens": 12, "output_tokens": 5, "total_tokens": 17});
+    let with = |tool_usage: Value| {
+        let mut body = responses_body(&usage);
+        body["tool_usage"] = tool_usage;
+        body
+    };
+    for (tool_usage, what) in [
+        (
+            json!({"image_gen": {"input_tokens": 50, "output_tokens": 4160, "total_tokens": 4210}}),
+            "image_gen",
+        ),
+        (json!({"web_search": {"num_requests": 1}}), "web_search"),
+        (json!({"image_gen": {"input_tokens_details": {"image_tokens": 1}}}), "nested"),
+        (json!({"image_gen": [0, 1]}), "array"),
+        (json!({"image_gen": {"total_tokens": -1}}), "negative"),
+        (json!({"image_gen": {"total_tokens": "0"}}), "text"),
+        (json!(7), "not an object"),
+    ] {
+        refused(&OpenAiResponsesReferenceV1, &with(tool_usage), &format!("tool_usage {what}"));
+    }
+    for tool_usage in [
+        Value::Null,
+        json!({}),
+        json!({"image_gen": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
+               "web_search": {"num_requests": 0}, "file_search": null}),
+    ] {
+        assert!(OpenAiResponsesReferenceV1.parse_response(&response(&with(tool_usage))).is_ok());
+    }
+}
+
+/// The record §6.4's code table, from `OpenAI`'s published list of a response's `error.code`
+/// (Responses API reference, the response object's `error`), plus the codes the record names: the
+/// two `map-provider-error` checks and `insufficient_quota`. Anything else is `internal`, never an
+/// invented code.
+#[test]
+fn responses_failure_codes_follow_the_published_list() {
+    for (code, expected) in [
+        ("server_error", ErrorCode::UpstreamUnavailable),
+        ("rate_limit_exceeded", ErrorCode::RateLimit),
+        ("invalid_prompt", ErrorCode::ContentPolicy),
+        ("vector_store_timeout", ErrorCode::Timeout),
+        ("invalid_image", ErrorCode::InvalidRequest),
+        ("invalid_image_format", ErrorCode::InvalidRequest),
+        ("invalid_base64_image", ErrorCode::InvalidRequest),
+        ("invalid_image_url", ErrorCode::InvalidRequest),
+        ("image_too_large", ErrorCode::InvalidRequest),
+        ("image_too_small", ErrorCode::InvalidRequest),
+        ("image_parse_error", ErrorCode::InvalidRequest),
+        ("image_content_policy_violation", ErrorCode::ContentPolicy),
+        ("invalid_image_mode", ErrorCode::InvalidRequest),
+        ("image_file_too_large", ErrorCode::InvalidRequest),
+        ("unsupported_image_media_type", ErrorCode::InvalidRequest),
+        ("empty_image_file", ErrorCode::InvalidRequest),
+        ("failed_to_download_image", ErrorCode::InvalidRequest),
+        ("image_file_not_found", ErrorCode::InvalidRequest),
+        ("content_policy_violation", ErrorCode::ContentPolicy),
+        ("context_length_exceeded", ErrorCode::ContextLength),
+        ("insufficient_quota", ErrorCode::PaymentRequired),
+        ("usage_limit_reached", ErrorCode::Internal),
+        ("", ErrorCode::Internal),
+    ] {
+        assert_eq!(failure_code(code), expected, "`{code}`");
+    }
 }

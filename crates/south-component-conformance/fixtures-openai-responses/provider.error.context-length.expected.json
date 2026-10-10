@@ -1,0 +1,6 @@
+{
+  "code": "context_length",
+  "http_status": 400,
+  "message": "the request exceeds the model's context window",
+  "provider_message": "Your input exceeds the context window of this model. Please adjust your input and try again."
+}

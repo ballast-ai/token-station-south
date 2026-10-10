@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "provider_protocol_error",
+    "http_status": 502,
+    "message": "the upstream response is incomplete for a reason that does not settle"
+  }
+}

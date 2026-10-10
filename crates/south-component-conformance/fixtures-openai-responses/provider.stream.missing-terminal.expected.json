@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "transport_truncated",
+    "http_status": 502,
+    "message": "the upstream connection dropped mid-response"
+  }
+}

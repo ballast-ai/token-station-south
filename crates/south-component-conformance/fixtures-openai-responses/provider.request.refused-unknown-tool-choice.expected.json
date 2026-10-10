@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "capability",
+    "http_status": 400,
+    "message": "this tool_choice has no OpenAI Responses rendering; the wire names a function, or takes auto, none or required"
+  }
+}

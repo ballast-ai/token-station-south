@@ -49,6 +49,7 @@ jobs:
             components/provider-bedrock-converse-bearer
             components/provider-gemini
             components/provider-openai-compatible
+            components/provider-openai-responses
             components/task-bailian-v2
             components/task-byteplus-v2
             components/task-gmi-image-v2

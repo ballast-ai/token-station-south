@@ -1,0 +1,7 @@
+{
+  "chunks": [
+    "event: response.created\ndata: {\"type\":\"response.created\",\"sequence_number\":0,\"response\":{\"id\":\"resp_68af0a1c7f8c8190b7d5c3b9a0e1f2d3\",\"object\":\"response\",\"created_at\":1756367388,\"status\":\"in_progress\",\"error\":null,\"incomplete_details\":null,\"model\":\"gpt-5.5-2026-08-07\",\"output\":[],\"usage\":null}}\n\n",
+    "event: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"sequence_number\":1,\"response\":{\"id\":\"resp_68af0a1c7f8c8190b7d5c3b9a0e1f2d3\",\"object\":\"response\",\"created_at\":1756367388,\"status\":\"in_progress\",\"error\":null,\"incomplete_details\":null,\"model\":\"gpt-5.5-2026-08-07\",\"output\":[],\"usage\":null}}\n\n",
+    "event: error\ndata: {\"type\":\"error\",\"sequence_number\":2,\"code\":\"invalid_prompt\",\"message\":\"Invalid prompt: your prompt was flagged as potentially violating our usage policy.\",\"param\":null}\n\n"
+  ]
+}

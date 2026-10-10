@@ -1,0 +1,5 @@
+{
+  "chunks": [
+    "event: error\ndata: {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"code\":\"context_length_exceeded\",\"message\":\"Your input exceeds the context window of this model.\",\"param\":\"input\"}}\n\n"
+  ]
+}

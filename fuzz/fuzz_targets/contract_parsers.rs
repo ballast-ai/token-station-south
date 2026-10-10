@@ -6,6 +6,8 @@ use south_component_conformance::embeddings_json::{
     parse_provider_error_json, prepared_embeddings_json, provider_error_json,
 };
 use south_component_conformance::reference_anthropic_bedrock_invoke::AnthropicBedrockInvokeReferenceV1;
+use south_component_conformance::reference_openai_responses::OpenAiResponsesReferenceV1;
+use south_component_conformance::sse_split::{SseSplitErrorV1, SseSplitterV1};
 use south_component_conformance::ProviderComponentV1;
 use south_component_conformance::task_v2_json::{
     locator_json, observation_json, parse_locator_json, parse_observation_json,
@@ -135,6 +137,53 @@ fn fuzz_eventstream(data: &[u8]) {
 
 /// The SSE decoder hosts use for media views and `north_passthrough` (boundary record §5.2,
 /// §13.13): chunking never changes the events or the first error, and the input never panics.
+/// The `OpenAI` Responses stream parser (Responses record R1) over untrusted upstream bytes: its
+/// own SSE splitter agrees with the host's `decode_sse_v1` on every input, and chunking never
+/// changes the parser's events or its first error. The same bytes as a 2xx body never panic.
+fn fuzz_responses_stream(data: &[u8]) {
+    let mut splitter = SseSplitterV1::new();
+    let split = splitter.push(data).and_then(|mut frames| {
+        frames.extend(splitter.finish()?);
+        Ok(frames)
+    });
+    match (decode_sse_v1(data), split) {
+        (Ok(expected), Ok(frames)) => {
+            assert_eq!(expected.len(), frames.len());
+            for (event, frame) in expected.iter().zip(&frames) {
+                assert_eq!((event.event(), event.data()), (frame.event.as_str(), frame.data.as_str()));
+            }
+        }
+        (Err(_), Err(SseSplitErrorV1::NotUtf8)) => {}
+        (expected, split) => panic!("decoder {expected:?} and splitter {split:?} disagree"),
+    }
+
+    let run = |stride: usize| {
+        let mut parser = OpenAiResponsesReferenceV1.stream_parser();
+        let mut events = Vec::new();
+        for piece in data.chunks(stride) {
+            match parser.parse_chunk(piece) {
+                Ok(more) => events.extend(more),
+                // An error discards the events of its own call, so only the error is compared.
+                Err(error) => return format!("{error:?}"),
+            }
+        }
+        match parser.finish() {
+            Ok(more) => events.extend(more),
+            Err(error) => return format!("{error:?}"),
+        }
+        format!("{events:?}")
+    };
+    let stride = usize::from(data.first().copied().unwrap_or(0) % 19) + 1;
+    assert_eq!(run(stride), run(data.len().max(1)));
+
+    if let Ok(body) = std::str::from_utf8(data) {
+        let parts = serde_json::json!({"status": 200, "headers": {}, "body": body});
+        if let Ok(parts) = serde_json::from_value(parts) {
+            let _ = OpenAiResponsesReferenceV1.parse_response(&parts);
+        }
+    }
+}
+
 fn fuzz_sse(data: &[u8]) {
     let whole = decode_sse_v1(data);
     let stride = usize::from(data.last().copied().unwrap_or(0) % 13) + 1;
@@ -379,6 +428,7 @@ fn fuzz_embeddings(input: &str) {
 fuzz_target!(|data: &[u8]| {
     fuzz_eventstream(data);
     fuzz_invoke_stream(data);
+    fuzz_responses_stream(data);
     fuzz_sse(data);
 
     let Ok(input) = std::str::from_utf8(data) else {

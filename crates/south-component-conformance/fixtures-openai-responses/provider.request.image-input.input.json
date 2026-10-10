@@ -1,0 +1,55 @@
+{
+  "provider_config": {
+    "provider": "openai-responses",
+    "base_url": "https://api.openai.com/v1",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "gpt-5.5",
+        "tool": true,
+        "vision": true,
+        "json_schema": true,
+        "context_window": 400000,
+        "supported_parameters": [
+          "reasoning_effort",
+          "temperature",
+          "top_p"
+        ]
+      }
+    ]
+  },
+  "chat_request": {
+    "model": "gpt-5.5",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "What is in these images, and what does the clip say?"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "https://upload.example.org/boardwalk.jpg",
+              "detail": "high"
+            }
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "data:image/png;base64,iVBORw0KGgo="
+            }
+          },
+          {
+            "type": "input_audio",
+            "input_audio": {
+              "data": "UklGRg==",
+              "format": "wav"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

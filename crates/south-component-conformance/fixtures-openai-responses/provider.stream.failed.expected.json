@@ -1,0 +1,11 @@
+[
+  {
+    "error": {
+      "code": "upstream_unavailable",
+      "http_status": 502,
+      "message": "the upstream is unavailable",
+      "provider_message": "The server had an error while processing your request. Sorry about that!"
+    },
+    "type": "error"
+  }
+]

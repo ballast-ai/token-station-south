@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "capability",
+    "http_status": 400,
+    "message": "an `input_file` part names a document the upstream fetches or stores, whose size the request does not show; this dialect refuses it"
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "chat_request": {
+    "messages": [
+      {
+        "content": "Weather and time in Paris?",
+        "role": "user"
+      }
+    ],
+    "model": "gpt-5.5",
+    "parallel_tool_calls": false,
+    "responses_tool_strict": {
+      "get_time": false,
+      "get_weather": true
+    },
+    "sampling": {},
+    "stream": false,
+    "tool_choice": {
+      "function": {
+        "name": "get_weather"
+      },
+      "type": "function"
+    },
+    "tools": [
+      {
+        "description": "Current weather for a city.",
+        "name": "get_weather",
+        "parameters": {
+          "properties": {
+            "city": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "city"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "get_time",
+        "parameters": {
+          "properties": {
+            "city": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      }
+    ]
+  },
+  "provider_config": {
+    "auth": "provider_api_key",
+    "base_url": "https://api.openai.com/v1",
+    "models": [
+      {
+        "context_window": 400000,
+        "json_schema": true,
+        "model": "gpt-5.5",
+        "supported_parameters": [
+          "reasoning_effort",
+          "temperature",
+          "top_p"
+        ],
+        "tool": true,
+        "vision": true
+      }
+    ],
+    "provider": "openai-responses"
+  }
+}

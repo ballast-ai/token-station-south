@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "capability",
+    "http_status": 400,
+    "message": "a `file_id` names a file stored in the upstream account, whose size the request does not show; this dialect refuses it"
+  }
+}

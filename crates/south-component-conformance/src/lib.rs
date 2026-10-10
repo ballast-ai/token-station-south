@@ -72,9 +72,12 @@ pub mod reference_anthropic_bedrock_invoke;
 pub mod reference_bedrock_converse;
 pub mod reference_gemini;
 pub mod reference_kling_task;
+pub mod reference_openai_responses;
 mod report;
+pub mod responses_vocabulary;
 #[cfg(feature = "sandbox")]
 pub mod sandbox;
+pub mod sse_split;
 mod suite;
 mod task_fixture;
 pub mod task_json;

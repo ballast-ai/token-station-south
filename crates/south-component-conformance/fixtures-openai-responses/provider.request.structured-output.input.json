@@ -1,0 +1,56 @@
+{
+  "chat_request": {
+    "messages": [
+      {
+        "content": "Alice and Bob meet on Friday for lunch.",
+        "role": "user"
+      }
+    ],
+    "model": "gpt-5.5",
+    "response_format": {
+      "json_schema": {
+        "description": "One calendar entry.",
+        "name": "calendar_event",
+        "schema": {
+          "additionalProperties": false,
+          "properties": {
+            "date": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "date"
+          ],
+          "type": "object"
+        },
+        "strict": true
+      },
+      "type": "json_schema"
+    },
+    "sampling": {},
+    "stream": false
+  },
+  "provider_config": {
+    "auth": "provider_api_key",
+    "base_url": "https://api.openai.com/v1",
+    "models": [
+      {
+        "context_window": 400000,
+        "json_schema": true,
+        "model": "gpt-5.5",
+        "supported_parameters": [
+          "reasoning_effort",
+          "temperature",
+          "top_p"
+        ],
+        "tool": true,
+        "vision": true
+      }
+    ],
+    "provider": "openai-responses"
+  }
+}

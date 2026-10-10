@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "capability",
+    "http_status": 400,
+    "message": "the OpenAI Responses dialect cannot consume Claude reasoning replay"
+  }
+}

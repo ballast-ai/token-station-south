@@ -1,0 +1,26 @@
+[
+  {
+    "content": "Partial answer",
+    "index": 0,
+    "type": "delta"
+  },
+  {
+    "type": "usage",
+    "usage": {
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "input_tokens": 220,
+      "output_tokens": 31,
+      "reasoning_tokens": 0
+    }
+  },
+  {
+    "error": {
+      "code": "upstream_unavailable",
+      "http_status": 502,
+      "message": "the upstream is unavailable",
+      "provider_message": "The model produced invalid content."
+    },
+    "type": "error"
+  }
+]

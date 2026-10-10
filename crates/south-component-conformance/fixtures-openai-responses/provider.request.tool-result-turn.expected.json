@@ -1,0 +1,56 @@
+{
+  "auth": {
+    "scheme": "bearer",
+    "secret": "provider_api_key"
+  },
+  "body": {
+    "input": [
+      {
+        "content": [
+          {
+            "text": "What is the weather in Beijing?",
+            "type": "input_text"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "arguments": "{\"city\":\"Beijing\"}",
+        "call_id": "call_wx1",
+        "name": "get_weather",
+        "type": "function_call"
+      },
+      {
+        "call_id": "call_wx1",
+        "output": "Sunny, 25 C",
+        "type": "function_call_output"
+      }
+    ],
+    "model": "gpt-5.5",
+    "store": false,
+    "tool_choice": "auto",
+    "tools": [
+      {
+        "description": "Current weather for a city.",
+        "name": "get_weather",
+        "parameters": {
+          "properties": {
+            "city": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "city"
+          ],
+          "type": "object"
+        },
+        "type": "function"
+      }
+    ]
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "method": "POST",
+  "url": "https://api.openai.com/v1/responses"
+}

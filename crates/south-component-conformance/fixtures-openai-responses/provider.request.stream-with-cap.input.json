@@ -1,0 +1,34 @@
+{
+  "chat_request": {
+    "messages": [
+      {
+        "content": "Tell me a joke.",
+        "role": "user"
+      }
+    ],
+    "model": "gpt-5.5",
+    "sampling": {
+      "max_output_tokens": 128
+    },
+    "stream": true
+  },
+  "provider_config": {
+    "auth": "provider_api_key",
+    "base_url": "https://api.openai.com/v1",
+    "models": [
+      {
+        "context_window": 400000,
+        "json_schema": true,
+        "model": "gpt-5.5",
+        "supported_parameters": [
+          "reasoning_effort",
+          "temperature",
+          "top_p"
+        ],
+        "tool": true,
+        "vision": true
+      }
+    ],
+    "provider": "openai-responses"
+  }
+}
