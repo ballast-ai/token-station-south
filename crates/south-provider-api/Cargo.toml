@@ -9,7 +9,7 @@ rust-version.workspace = true
 # Its own version, not the workspace's: every component links this crate, and its version
 # enters the component's bytes. It moves only when this crate changes, so a South release
 # that leaves it alone re-identifies no package (host-zero-vendor-boundary §16 Q47).
-version = "0.51.0"
+version = "0.52.0"
 
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
