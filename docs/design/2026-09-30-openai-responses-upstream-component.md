@@ -1370,15 +1370,17 @@ package cannot.
     and usage, without the request echo), to keep gate ②'s every-byte split fast; the non-streaming rows carry the full
     object.
 
-### 17.4 Open for lv
+### 17.4 Rulings on the implementation (lv, 2026-10-10)
 
-- **`input_tokens_details.cache_write_tokens`.** The component reads it as the host does (§7.1), but OpenAI's published
-  usage object does not document it, so the documentation-derived judge can pin only host parity, not OpenAI's
-  semantics. Keep reading it (today's choice, so the two paths produce the same `TokenUsage`), or refuse a body that
-  carries it until a capture shows it?
-- **The additive gate ② request-refusal form** (§17.1) and the definition of `ImmutablePathsHonoured` (§17.3 item 1).
-- **`UsageNeverDefaulted` on stream fixtures** (§12.2) is not built: R1's family has response fixtures with a usage
-  pointer, and the record motivates the stream form by Codex, whose only path is the stream. Proposed for R3.
+- **`input_tokens_details.cache_write_tokens`: keep reading it**, as the host does (§7.1), so the two paths produce the
+  same `TokenUsage` in the dual run. OpenAI's published usage object does not document the field, so the
+  documentation-derived judge pins host parity only; revisit when a capture shows it.
+- **Ratified:** the additive gate ② request-refusal form (§17.1) and the definition of `ImmutablePathsHonoured`
+  (§17.3 item 1).
+- **`UsageNeverDefaulted` on stream fixtures** (§12.2) moves to R3, where Codex motivates it.
+- **The package's `south_runtime`** holds the runtime under construction (0.53.0, as `embeddings-gemini` did in #167)
+  and is set to the release's version by the release commit, since no published runtime admits the two new manifest
+  fields.
 
 ## Revision note (2026-10-01)
 
