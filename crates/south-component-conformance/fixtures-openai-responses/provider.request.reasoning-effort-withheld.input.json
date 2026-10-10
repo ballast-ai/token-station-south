@@ -1,0 +1,30 @@
+{
+  "provider_config": {
+    "provider": "openai-responses",
+    "base_url": "https://api.openai.com/v1",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "gpt-4.1",
+        "tool": true,
+        "vision": true,
+        "json_schema": true,
+        "context_window": 1047576,
+        "supported_parameters": [
+          "temperature",
+          "top_p"
+        ]
+      }
+    ]
+  },
+  "chat_request": {
+    "model": "gpt-4.1",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Plan a three-day trip to Kyoto."
+      }
+    ],
+    "reasoning_effort": "high"
+  }
+}

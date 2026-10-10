@@ -173,6 +173,14 @@ pub enum CheckV1 {
     /// The bytes stay out of the sandbox only if nothing the component returns can carry them, or
     /// point the host at bytes the upstream did not send.
     ReferenceIntegrity,
+    /// Every request fixture of a family that declares `immutable_body_paths` leaves each declared
+    /// path in one state, present in every request the component built or absent from every one
+    /// (the `OpenAI` Responses upstream record §12.2).
+    ///
+    /// The host refuses an operator extra that touches a declared path, which protects what the
+    /// family fixes only if the family really fixes it: a path the component writes for some
+    /// requests and not for others is not a fixed field.
+    ImmutablePathsHonoured,
 }
 
 impl CheckV1 {
@@ -203,6 +211,7 @@ impl CheckV1 {
             Self::EvidenceAbsentIsNull => "evidence_absent_is_null",
             Self::PreDispatchRefusal => "pre_dispatch_refusal",
             Self::ReferenceIntegrity => "reference_integrity",
+            Self::ImmutablePathsHonoured => "immutable_paths_honoured",
         }
     }
 }

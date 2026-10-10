@@ -1,0 +1,44 @@
+{
+  "auth": {
+    "scheme": "bearer",
+    "secret": "provider_api_key"
+  },
+  "body": {
+    "input": [
+      {
+        "content": [
+          {
+            "text": "Is 91 prime?",
+            "type": "input_text"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "text": "No: 91 = 7 x 13.",
+            "type": "output_text"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "text": "And 97?",
+            "type": "input_text"
+          }
+        ],
+        "role": "user"
+      }
+    ],
+    "model": "gpt-5.5",
+    "store": false
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "method": "POST",
+  "url": "https://api.openai.com/v1/responses"
+}

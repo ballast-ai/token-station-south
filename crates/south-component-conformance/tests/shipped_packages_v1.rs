@@ -15,7 +15,7 @@ mod host_range;
 
 /// The official components this repository ships. Named, so that an empty or
 /// mistyped scan below cannot pass over nothing.
-const OFFICIAL_COMPONENTS: [&str; 19] = [
+const OFFICIAL_COMPONENTS: [&str; 20] = [
     "embeddings-gemini",
     "embeddings-openai-compatible",
     "embeddings-vertex",
@@ -26,6 +26,7 @@ const OFFICIAL_COMPONENTS: [&str; 19] = [
     "provider-bedrock-converse-bearer",
     "provider-gemini",
     "provider-openai-compatible",
+    "provider-openai-responses",
     "task-kling",
     "task-kling-v2",
     "task-minimax-v2",
@@ -1005,7 +1006,7 @@ fn the_invoke_package_declares_the_runtime_converse_declares() {
         .unwrap()
     };
     let invoke = read("provider-anthropic-bedrock-invoke");
-    assert_eq!(invoke.version, "1.0.1");
+    assert_eq!(invoke.version, "1.0.2");
     assert_eq!(invoke.compatibility.south_runtime, "0.46.0");
     assert_eq!(invoke.compatibility, read("provider-bedrock-converse").compatibility);
 }
@@ -1236,4 +1237,75 @@ fn embeddings_gemini_retires_its_published_identities_with_contract_2() {
     }
     assert!(manifest.capabilities.contains("media"));
     assert_eq!(manifest.compatibility.contracts.get("embeddings"), Some(&2));
+}
+
+/// The `OpenAI` Responses package (record step R1) changed `south-provider-api` (the manifest gains
+/// `immutable_body_paths` and `north_passthrough`) and `south-component-conformance` (the
+/// reference, the shared vocabulary and the SSE splitter), which every guest links, so both took a
+/// new version (0.51.0 → 0.52.0, Q47) and every `component.wasm` changes: each identity published
+/// with 0.53.0 retires, or the release's digest-stability check would refuse it. Each keeps its
+/// `south_runtime`: none needs anything newer than it did.
+#[test]
+fn the_responses_package_retires_every_published_053_package_identity() {
+    for (name, published, runtime) in [
+        ("provider-openai-compatible", "2.4.5", "0.46.0"),
+        ("provider-anthropic", "1.0.17", "0.46.0"),
+        ("provider-anthropic-bedrock-invoke", "1.0.1", "0.46.0"),
+        ("provider-gemini", "1.1.13", "0.46.0"),
+        ("provider-bedrock-converse", "1.0.14", "0.46.0"),
+        ("provider-bedrock-converse-bearer", "1.0.6", "0.46.0"),
+        ("task-kling", "1.0.13", "0.46.0"),
+        ("task-kling-v2", "0.32.11", "0.46.0"),
+        ("task-minimax-v2", "0.31.10", "0.46.0"),
+        ("task-bailian-v2", "0.31.10", "0.46.0"),
+        ("task-xai-v2", "0.35.10", "0.46.0"),
+        ("task-byteplus-v2", "0.36.10", "0.46.0"),
+        ("task-veo-v2", "0.35.10", "0.46.0"),
+        ("task-wan-image-v2", "0.35.10", "0.46.0"),
+        ("task-gmi-image-v2", "0.35.10", "0.46.0"),
+        ("embeddings-openai-compatible", "1.0.4", "0.47.0"),
+        ("embeddings-gemini", "1.1.1", "0.51.0"),
+        ("embeddings-vertex", "1.0.3", "0.48.0"),
+        ("image-azure", "1.0.0", "0.52.0"),
+    ] {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_ne!(manifest.version, published, "{name} reused its published identity");
+        assert_eq!(
+            manifest.compatibility.south_runtime, runtime,
+            "{name}: needs nothing newer than {runtime}, so it declares {runtime}"
+        );
+    }
+}
+
+/// `provider-openai-responses` declares `immutable_body_paths` and `north_passthrough`, which no
+/// released runtime's gate ① admits (the manifest refuses unknown fields), so the oldest runtime
+/// that admits it is the release that ships this change. Until that release commit it declares the
+/// version being built, as `embeddings-gemini` did before 0.51.0 (#167); the release commit raises
+/// it to the new release, and `scripts/check-declared-runtime.sh --build` loads it under this tree
+/// meanwhile.
+#[test]
+fn the_responses_package_declares_the_runtime_that_first_admits_its_declarations() {
+    let manifest: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(
+            repo_root().join("components/provider-openai-responses/manifest.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let cargo = std::fs::read_to_string(repo_root().join("Cargo.toml")).unwrap();
+    let workspace = cargo
+        .split("[workspace.package]")
+        .nth(1)
+        .and_then(|table| table.lines().find_map(|line| line.strip_prefix("version = \"")))
+        .and_then(|rest| rest.strip_suffix('"'))
+        .unwrap();
+    assert_eq!(manifest.version, "1.0.0");
+    assert_eq!(manifest.compatibility.south_runtime, workspace);
+    assert!(!manifest.immutable_body_paths.is_empty() && !manifest.north_passthrough.is_empty());
 }

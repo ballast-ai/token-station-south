@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "provider_protocol_error",
+    "http_status": 502,
+    "message": "the upstream reported hosted-tool usage, which this dialect has no meter for"
+  }
+}

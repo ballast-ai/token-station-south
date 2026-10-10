@@ -1,0 +1,11 @@
+[
+  {
+    "error": {
+      "code": "content_policy",
+      "http_status": 502,
+      "message": "the upstream refused on content-policy grounds",
+      "provider_message": "Invalid prompt: your prompt was flagged as potentially violating our usage policy."
+    },
+    "type": "error"
+  }
+]

@@ -135,8 +135,9 @@ pub struct WorldSchemaV1 {
     pub value_channel: bool,
     /// Whether the world admits the declarations that shape a chat request:
     /// `endpoint`, `host_values`, `signing`, `stream_framing`,
-    /// `usage_evidence` and `request_facts`. Without it gate ① refuses each
-    /// as a provider-world declaration.
+    /// `usage_evidence`, `request_facts`, `immutable_body_paths` and
+    /// `north_passthrough`. Without it gate ① refuses each as a provider-world
+    /// declaration.
     pub request_declarations: bool,
     /// Whether the world admits the B7a instance declarations
     /// (`query_parameters`, `quota_headers`, `user_agent`; §10). Without it
@@ -597,6 +598,22 @@ pub struct ComponentManifestV1 {
     /// Absent means none. Provider world only.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub host_values: Vec<String>,
+    /// Each family's body paths that operator request extras may neither set, remove nor rewrite,
+    /// with their ancestors and descendants (the `OpenAI` Responses upstream record §3.4, D11). Dotted
+    /// object paths under the task world's grammar (`[A-Za-z0-9_-]+` segments, no array indices,
+    /// at most [`MAX_IMMUTABLE_BODY_PATHS`] of at most [`MAX_IMMUTABLE_BODY_PATH_BYTES`] bytes).
+    /// A path may name a field the component leaves out: immutable then means "stays absent".
+    /// Absent means no declared paths, which is what every earlier package gets. Provider world
+    /// only.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub immutable_body_paths: BTreeMap<String, Vec<String>>,
+    /// Each family whose upstream already answers in a northbound protocol, and which one
+    /// (the `OpenAI` Responses upstream record §3.4, §8.2; ruled R-Q1). A host **may** then deliver the
+    /// upstream's own bytes to a client of that protocol under the record's §8.2 conditions; a
+    /// host that does not always renders through the north codec. Absent means always render.
+    /// Provider world only.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub north_passthrough: BTreeMap<String, NorthProtocolV1>,
     pub permissions: ComponentPermissionsV1,
     pub conformance: ConformanceSpecV1,
     pub compatibility: CompatibilityDeclarationV1,
@@ -721,6 +738,50 @@ pub struct RequestFactsV1 {
 
 /// The most output-cap locations one family may declare.
 pub const MAX_OUTPUT_CAP_LOCATIONS: usize = 4;
+
+/// The most immutable body paths one family may declare.
+///
+/// Mirrors `south_contracts::MAX_IMMUTABLE_BODY_PATHS`, repeated because this crate depends on no
+/// other south crate; a conformance-crate test pins the two grammars together.
+pub const MAX_IMMUTABLE_BODY_PATHS: usize = 64;
+
+/// The most bytes one immutable body path may have. Mirrors
+/// `south_contracts::MAX_IMMUTABLE_BODY_PATH_BYTES`.
+pub const MAX_IMMUTABLE_BODY_PATH_BYTES: usize = 256;
+
+/// A northbound protocol a family's upstream may already answer in (`north_passthrough`).
+///
+/// A closed set owned by south, spelled apart from every family name on purpose: it names the
+/// client's surface, never a provider.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NorthProtocolV1 {
+    /// `OpenAI` Chat Completions.
+    ChatCompletions,
+    /// `OpenAI` Responses.
+    Responses,
+    /// Anthropic Messages.
+    Messages,
+}
+
+/// Whether `paths` are valid immutable body paths.
+///
+/// Dotted object paths whose every segment is `[A-Za-z0-9_-]+`, no repeats, within the two
+/// bounds: the task world's rule for the same purpose (task contract 6), so one grammar covers
+/// both worlds.
+#[must_use]
+pub fn are_immutable_body_paths(paths: &[String]) -> bool {
+    let segment_ok = |segment: &str| {
+        !segment.is_empty()
+            && segment.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+    };
+    paths.len() <= MAX_IMMUTABLE_BODY_PATHS
+        && paths.iter().enumerate().all(|(index, path)| {
+            path.len() <= MAX_IMMUTABLE_BODY_PATH_BYTES
+                && path.split('.').all(segment_ok)
+                && !paths[..index].contains(path)
+        })
+}
 
 /// Where a request names its model.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -988,6 +1049,9 @@ impl ComponentManifestV1 {
             self.validate_request_facts()?;
             self.validate_endpoints()?;
             self.validate_signing_declaration()?;
+            self.validate_delivery_declarations()?;
+        } else if !self.immutable_body_paths.is_empty() || !self.north_passthrough.is_empty() {
+            return Err(ManifestErrorV1::DeliveryIsAProviderWorldDeclaration);
         } else if self.signing.is_some() {
             return Err(ManifestErrorV1::InvalidSigning(
                 "signing is a provider-world declaration".to_owned(),
@@ -1053,6 +1117,37 @@ impl ComponentManifestV1 {
         for provider in &self.providers {
             validate_component_name(provider)
                 .map_err(|_| ManifestErrorV1::InvalidProviderFamily(provider.clone()))?;
+        }
+        Ok(())
+    }
+
+    /// `immutable_body_paths` and `north_passthrough` (the `OpenAI` Responses upstream record §3.4):
+    /// each names a family the manifest declares, and each path list follows the immutable-path
+    /// grammar. A family may declare an empty list, which says nothing; the protocol is a closed
+    /// enum, so serde already refused any other word.
+    fn validate_delivery_declarations(&self) -> Result<(), ManifestErrorV1> {
+        for (family, paths) in &self.immutable_body_paths {
+            let invalid = |detail: &str| ManifestErrorV1::InvalidImmutableBodyPaths {
+                family: family.clone(),
+                detail: detail.to_owned(),
+            };
+            if !self.providers.contains(family) {
+                return Err(invalid("names a family the manifest does not declare"));
+            }
+            if !are_immutable_body_paths(paths) {
+                return Err(invalid(
+                    "each path must be distinct dotted [A-Za-z0-9_-] segments, at most 64 paths of \
+                     at most 256 bytes",
+                ));
+            }
+        }
+        if let Some(family) =
+            self.north_passthrough.keys().find(|family| !self.providers.contains(*family))
+        {
+            return Err(ManifestErrorV1::InvalidNorthPassthrough {
+                family: family.clone(),
+                detail: "names a family the manifest does not declare".to_owned(),
+            });
         }
         Ok(())
     }
@@ -1398,6 +1493,13 @@ pub enum ManifestErrorV1 {
     RequestFactsIsAProviderWorldDeclaration,
     #[error("request_facts for family `{family}`: {detail}")]
     InvalidRequestFacts { family: String, detail: String },
+    /// `immutable_body_paths` or `north_passthrough` in a world without request declarations.
+    #[error("immutable_body_paths and north_passthrough are provider-world declarations")]
+    DeliveryIsAProviderWorldDeclaration,
+    #[error("immutable_body_paths for family `{family}`: {detail}")]
+    InvalidImmutableBodyPaths { family: String, detail: String },
+    #[error("north_passthrough for family `{family}`: {detail}")]
+    InvalidNorthPassthrough { family: String, detail: String },
     #[error("credentials: {0}")]
     InvalidCredentials(String),
     #[error("signing: {0}")]

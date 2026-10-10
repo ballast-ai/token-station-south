@@ -1,0 +1,28 @@
+{
+  "auth": {
+    "scheme": "bearer",
+    "secret": "provider_api_key"
+  },
+  "body": {
+    "input": [
+      {
+        "content": [
+          {
+            "text": "Tell me a joke.",
+            "type": "input_text"
+          }
+        ],
+        "role": "user"
+      }
+    ],
+    "max_output_tokens": 128,
+    "model": "gpt-5.5",
+    "store": false,
+    "stream": true
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "method": "POST",
+  "url": "https://api.openai.com/v1/responses"
+}

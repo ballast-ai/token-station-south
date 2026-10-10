@@ -1,0 +1,53 @@
+{
+  "chat_request": {
+    "messages": [
+      {
+        "content": "You are terse.",
+        "responses_transient_instructions": true,
+        "role": "system"
+      },
+      {
+        "content": "Answer in English.",
+        "role": "system"
+      },
+      {
+        "content": "Hi",
+        "role": "user"
+      },
+      {
+        "content": "Hello! How can I help?",
+        "role": "assistant"
+      },
+      {
+        "content": "Keep it under fifty words.",
+        "role": "system"
+      },
+      {
+        "content": "Summarize our chat.",
+        "role": "user"
+      }
+    ],
+    "model": "gpt-5.5",
+    "sampling": {},
+    "stream": false
+  },
+  "provider_config": {
+    "auth": "provider_api_key",
+    "base_url": "https://api.openai.com/v1",
+    "models": [
+      {
+        "context_window": 400000,
+        "json_schema": true,
+        "model": "gpt-5.5",
+        "supported_parameters": [
+          "reasoning_effort",
+          "temperature",
+          "top_p"
+        ],
+        "tool": true,
+        "vision": true
+      }
+    ],
+    "provider": "openai-responses"
+  }
+}

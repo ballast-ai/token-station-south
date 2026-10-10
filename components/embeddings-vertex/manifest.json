@@ -1,6 +1,6 @@
 {
   "name": "embeddings-vertex",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "api_version": "embeddings-adapter-v1",
   "providers": [
     "vertex-ai"

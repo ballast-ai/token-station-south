@@ -206,7 +206,22 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.53.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.51.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.53.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.51.0, 0.52.0 and 0.52.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**Unreleased (Responses R1)**: the OpenAI Responses upstream component, step R1 (design record
+`docs/design/2026-09-30-openai-responses-upstream-component.md`, accepted 2026-10-10). The new package
+`provider-openai-responses` 1.0.0 (family `openai-responses` only; `openai-codex` is step R3) maps the IR onto a stateless
+Responses body (`store: false` always, leading system messages as `instructions`, `input_file` and `file_id` refused),
+reads the response and the `response.*` stream strictly (a closed event list, `sequence_number`, one `response.id`, item
+and part identity, one terminal, truncation without a terminal), settles `incomplete` only for `max_output_tokens` and
+`content_filter`, recognises the three failure-frame shapes first, and refuses any non-zero `tool_usage`. It splits SSE
+with the conformance crate's own `sse_split` (it links no host-only crate); the decoder's golden vectors run against that
+splitter as a dev-dependency. Its manifest declares the record's two new provider-world fields, `immutable_body_paths`
+and `north_passthrough` (gate ① admits them for declared families only), so it declares `south_runtime` equal to the
+version being built until the release commit raises it. Gate ② gains the request-refusal form (`{"error": <envelope>}`
+on a request case) and `ImmutablePathsHonoured`. The Responses wire vocabulary lives in `responses_vocabulary`; a test
+depending on the conformance crate and the north codec asserts their spellings agree. `south-provider-api` and
+`south-component-conformance` move to 0.52.0, so every other package takes a patch bump with unchanged behavior and keeps
+its `south_runtime`.
 **Unreleased (B6-2)**: the Bedrock InvokeModel Anthropic component (design record
 `docs/design/2026-10-08-bedrock-invoke-anthropic-component.md`, accepted 2026-10-09). The new package
 `provider-anthropic-bedrock-invoke` 1.0.0 (family `anthropic-bedrock-invoke`, `host_signed` with `aws-sigv4` as Converse

@@ -1,0 +1,63 @@
+{
+  "provider_config": {
+    "provider": "openai-responses",
+    "base_url": "https://api.openai.com/v1",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "gpt-5.5",
+        "tool": true,
+        "vision": true,
+        "json_schema": true,
+        "context_window": 400000,
+        "supported_parameters": [
+          "reasoning_effort",
+          "temperature",
+          "top_p"
+        ]
+      }
+    ]
+  },
+  "chat_request": {
+    "model": "gpt-5.5",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What is the weather in Beijing?"
+      },
+      {
+        "role": "assistant",
+        "tool_calls": [
+          {
+            "id": "call_wx1",
+            "name": "get_weather",
+            "arguments": "{\"city\":\"Beijing\"}"
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_wx1",
+        "content": "Sunny, 25 C"
+      }
+    ],
+    "tools": [
+      {
+        "name": "get_weather",
+        "description": "Current weather for a city.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "city": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "city"
+          ]
+        }
+      }
+    ],
+    "tool_choice": "auto"
+  }
+}

@@ -1294,7 +1294,7 @@ the link layer.
 | B4 | Credential recipe v1: manifest section, trust rules, reference interpreter, gate ② fixtures, gate ③ host suite; the `Auth::OAuth` admission rule | P21 S3; P22 Vertex, P23 Vertex TTS | J2b① (minting part, first-party packages) | minor |
 | B7a | §10 instance declarations on the south side: declared secret headers, query parameters, quota headers, `DeclaredUserAgentV1`; the contract changes of §10 | P21 S7 | New instances no longer touch the south link layer | minor |
 | B5 | T21 guests, gaining modes phase by phase alongside B1–B4 and B7a | J2 standing pilot | All of J2b | Not published |
-| B6 | Responses upstream, Kiro, InvokeModel-Anthropic, catalog data, catalog world. Catalog data (B6-1) implemented, not released (§13.11). `decode_sse_v1`, a prerequisite of the Responses upstream (B6-4), implemented in `south-host-grammars`, to ship in 0.53.0 (§13.13). | P21 S6, S7 | J1 keeps falling | minor each |
+| B6 | Responses upstream, Kiro, InvokeModel-Anthropic, catalog data, catalog world. Catalog data (B6-1) implemented, not released (§13.11). `decode_sse_v1`, a prerequisite of the Responses upstream's host pass-through (B6-4), shipped in 0.53.0 in `south-host-grammars` (§13.13). Responses upstream step R1 (B6-4, family `openai-responses`, `provider-openai-responses` 1.0.0) implemented 2026-10-10, not released (Responses record §17); its Codex family is step R3. | P21 S6, S7 | J1 keeps falling | minor each |
 | B7b | Kernel chain: `Auth` combined arm, credential header catalog (§10), cache buckets. **Landed 2026-10-08 (§13.7).** | P21 S7 | New secret header names no longer touch the kernel | minor + kernel |
 
 B1, B2 and B3 are independent of one another and can proceed in parallel; B4 depends on B2's descriptor auth
@@ -3268,3 +3268,5 @@ into the body. Where each landed:
 - 2026-10-10, lv ruling: `decode_sse_v1` lives in a new host-only crate, `south-host-grammars`, and ships in 0.53.0,
   early and alone (Q-B6-6). New §13.13 with the measurement (an unused function changed 3 of 19 `component.wasm`, the
   Q47 bump all 19); §5.2, §13 (B2's "Not in B2" list and the B6 row) and §15 gain notes.
+- 2026-10-10, Responses R1: the B6 row of §13 records step R1 of the Responses upstream record as implemented and
+  not released (that record's §17).

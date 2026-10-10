@@ -1,7 +1,7 @@
 # The OpenAI Responses upstream dialect component (`provider-openai-responses`)
 
 Status: accepted (lv, 2026-10-10: the remaining S-tagged questions ruled, §16) — drafted by the host team
-(token-station-server P21)
+(token-station-server P21). Step R1 implemented 2026-10-10, not released (§17).
 
 Date: 2026-09-30
 
@@ -1001,7 +1001,7 @@ Per boundary R4, each is marked `verified` under `host_capabilities` only once b
 | Step | Side | Content | Acceptance |
 |---|---|---|---|
 | R0 | Host | Owner rulings R-Q1 to R-Q5 are recorded (§16), including the 2026-10-01 extensions under R-Q1 (relayed failure frames) and R-Q2 (`content_filter`); the south halves of R-Q1 and R-Q5 remain. Fix or accept the suspected defects of §13.5 in the native leg first (P21 §9 practice) | — |
-| R1 | South | Package with `openai-responses`: reference implementation, fixtures, judges, wasm build. Needs umbrella B1 (usage strictness), B2 (`request_facts`, descriptor auth admission) and B3 (the package declares `runtime_abi` and must be listed in the release index), and `decode_sse_v1` from the image world's minor (amended 2026-10-10: R1 does not need it, since the component splits its own stream; the host's pass-through needs it, from 0.53.0, umbrella §13.13) | Suite green; listed in the release index with the upstreams that have a fixture pack (§3.3) |
+| R1 | South | Package with `openai-responses`: reference implementation, fixtures, judges, wasm build. Needs umbrella B1 (usage strictness), B2 (`request_facts`, descriptor auth admission) and B3 (the package declares `runtime_abi` and must be listed in the release index), and `decode_sse_v1` from the image world's minor (amended 2026-10-10: R1 does not need it, since the component splits its own stream; the host's pass-through needs it, from 0.53.0, umbrella §13.13) | Suite green; listed in the release index with the upstreams that have a fixture pack (§3.3). **Implemented 2026-10-10, not released (§17)**: suite green; OpenAI's pack only (R-Q16); the release index entry comes with the release |
 | R2 | Host | Route provider rows to the family, one upstream at a time and only upstreams with a fixture pack; refuse `previous_response_id` on the northbound side; dual run; remove `supports_responses` / `upstream_requires_responses` branching for covered rows | §13.2 |
 | R3 | South + host | `openai-codex`: needs boundary B4 (recipes) and the host's recipe executor | Credential fixtures and gate ③ suite green; §13.2 on Codex rows |
 | R4 | Host | Retire the code of §13.4 | J1 count falls; removing the package leaves the host compiling, testing and starting (J3) |
@@ -1273,6 +1273,115 @@ failure frames) and R-Q2 (`content_filter`).
   its wire and usage match OpenAI's; an upstream that departs from them gets its own family. No upstream is routed
   without its own evidence.
 
+## 17. Implementation of R1 (2026-10-10)
+
+Step R1 is implemented on branch `responses-r1`, stacked on the rulings of 2026-10-10 (#176); nothing is released.
+Only the `openai-responses` family is built. The `openai-codex` family, its credential recipe and the §12.3 credential
+fixtures are step R3, and the host's pass-through (§8.2) and the gate ③ suites of §12.4 are host work.
+
+### 17.1 What landed
+
+- **The package.** `components/provider-openai-responses` 1.0.0: a wit-bindgen shell around
+  `south_component_conformance::reference_openai_responses`, family `openai-responses`, the `bearer` arm on the static
+  slot `provider_api_key`, `usage_evidence: reported`, `stream_framing` absent (`bytes`), `request_facts` as §3.4
+  (`output_cap: ["/max_output_tokens"]`, model `/model`, stream `/stream`), `immutable_body_paths: {"openai-responses":
+  ["store"]}` and `north_passthrough: {"openai-responses": "responses"}` (R-Q1). Build script
+  `scripts/build-openai-responses-component.sh`; release workflow, sandbox parity and CI cache entries.
+- **The reference** implements §4–§7 as written for the family: a stateless body (`store: false` always, never
+  `previous_response_id`, D4 / R-Q4), leading system messages as `instructions`, the §4.2 items, `input_file` and any
+  `file_id` refused (D10), exactly the three precedent `extensions` keys (R-Q15); the response and stream mappings with
+  `incomplete` settling only for `max_output_tokens` (`length`) and `content_filter` (`content_filter`) (R-Q2), refusal
+  parts as text (R-Q10), a first-seen `block_index` (R-Q11), strict unknown events (R-Q9), the three failure-frame
+  shapes recognised before the evidence rules with `Usage` before `Error`, strict usage, and any non-zero `tool_usage`
+  refused (R-Q3). `map-provider-error` is the OpenAI-compatible reference's, unchanged.
+- **SSE.** The component splits its stream with `south_component_conformance::sse_split`, the WHATWG rules the host's
+  `decode_sse_v1` implements (LF, CR and CRLF; one BOM; comments; joined `data`; end of input dispatches). It links no
+  host-only crate. Its tests take `south-host-grammars` as a dev-dependency only: the decoder's 45 golden vectors give the
+  splitter the same events whole, byte by byte and at every split; a property test holds the two equal on arbitrary
+  input; and frames cut at `SseDecoderV1::position` over every stream row each give the splitter exactly one event and
+  leave it idle — the "no partial frame after a call" assertion of §8.2, on the component side.
+- **Vocabulary (R-Q13).** `south_component_conformance::responses_vocabulary` holds the event, item, part, incomplete-reason
+  and `extensions`-key spellings; the OpenAI-compatible reference reads its three keys from it. The north codec keeps its
+  literals; `openai_responses_vocabulary_v1`, which depends on both crates, asserts the codec writes the same keys and
+  renders only events, items, parts and reasons the module names.
+- **Judges.** The round-trip judge of §9 (north parse then south build gives the codec-derived request rows; south parse,
+  north render, south parse keeps text, tool calls, finish reason and every usage bucket, for responses and for
+  streams, the latter through the component's strict stream rules). The documentation-derived usage judge of §12.3
+  (`usage_ir_contract_v1`: the cached part inside `input_tokens`, reasoning inside `output_tokens`, the total, every
+  strictness case, `tool_usage`) and the §6.4 code table. The fixture-wide prompt sweep covers the new pack.
+- **Fixtures.** `fixtures-openai-responses/`, 69 cases with their sources in the pack's README: 21 request rows (7 of
+  them north codec outputs), 18 response, 26 stream, 3 error, 1 capabilities.
+- **Fuzz.** `contract_parsers` gains the Responses stream parser (chunking never changes its events or first error; the
+  splitter agrees with `decode_sse_v1` on every input; the same bytes as a 2xx body never panic) and a seed.
+- **Gate ①** (south-provider-api): the two proposed manifest fields of §3.4. `immutable_body_paths` per family, under the
+  task world's immutable-path grammar (`are_immutable_body_paths`, bounds mirrored from `south-contracts`);
+  `north_passthrough` per family, a closed `NorthProtocolV1` (`chat_completions`, `responses`, `messages`). Both name
+  only declared families and are provider-world declarations (`ManifestErrorV1::DeliveryIsAProviderWorldDeclaration`,
+  `InvalidImmutableBodyPaths`, `InvalidNorthPassthrough`).
+- **Gate ②** (additive; every existing pack passes unchanged): a request case may expect a refusal
+  (`{"error": <envelope>}`), as B1 gave response cases and B6-2 stream cases, so §12.1's `request.refused-*` rows are
+  fixture rows; such a case skips the checks that judge a descriptor. New check `ImmutablePathsHonoured` (§12.2).
+
+### 17.2 Versions (Q47)
+
+`south-provider-api` and `south-component-conformance` changed, so both move 0.51.0 → 0.52.0 (minor: a public field on
+`ComponentManifestV1`, new `ManifestErrorV1` and `CheckV1` variants), with the requirements on them (runtime, provider
+conformance, fuzz) and every component lockfile. `south-contracts` is unchanged. Every existing package takes a patch
+bump with unchanged behavior and keeps its `south_runtime` (`shipped_packages_v1::the_responses_package_retires_every_
+published_053_package_identity`). The workspace version and `compatibility.json` are not touched; this is not a release.
+
+`provider-openai-responses` declares `south_runtime` 0.53.0, the version being built. The oldest runtime that admits it
+is the release that ships this change, because no released gate ① admits `immutable_body_paths` or `north_passthrough`
+(unknown manifest fields are refused); following `embeddings-gemini` before 0.51.0 (#167), the package declares the
+version being built until the release commit raises it, and `scripts/check-declared-runtime.sh --build` loads it under
+this tree meanwhile. B6-2 declared an older runtime because it used only declarations Converse already used; this
+package cannot.
+
+### 17.3 Decisions this implementation took where the record is silent
+
+1. **`ImmutablePathsHonoured`** is defined as: every request a family's fixtures build holds each declared path in one
+   state, present in all or absent from all (for `openai-responses`, `store` present; the package test also pins it to
+   `false` under adversarial `extensions`). A family with paths and no built request fails the check.
+2. **The `error` event's error object.** OpenAI's reference puts `code` and `message` at the top level of the `error`
+   event; the host (§6.4 table) reads a top-level `error` object. The component reads the `error` object when present,
+   else the frame itself.
+3. **Failure envelopes** carry HTTP status 502, as the Anthropic reference's in-band failures do.
+4. **After a failure frame** any further frame is a protocol error (§6.2: rules 1 and 4 still apply to what follows);
+   the end of stream after it is clean.
+5. **An empty chunk before any byte** is tolerated (gate ② feeds one at split 0); a clean end of stream after the
+   stream began and before a terminal is `transport_truncated` (§6.2 rule 8).
+6. **Stricter than the host in five places**, each a protocol error: an SSE `event:` name that disagrees with the
+   payload's `type`; arguments for a call never opened or already finished; a call whose `call_id` or `name` changes
+   between `added` and `done`; a `response.completed` / `response.incomplete` whose `response.status` says otherwise; a
+   `function_call` item without `call_id` or `name`.
+7. **The §6.4 table** maps OpenAI's published response error codes beyond the four the record names:
+   `vector_store_timeout` → `timeout`, `image_content_policy_violation` → `content_policy`, and the image input codes
+   (`invalid_image`, `invalid_image_format`, `invalid_base64_image`, `invalid_image_url`, `image_too_large`,
+   `image_too_small`, `image_parse_error`, `invalid_image_mode`, `image_file_too_large`,
+   `unsupported_image_media_type`, `empty_image_file`, `failed_to_download_image`, `image_file_not_found`) →
+   `invalid_request`. Anything else stays `internal`.
+8. **Parts the tables do not list** are capability errors: thinking parts in a user message, any non-text part in a
+   system or tool message, and an image in an assistant message. A system message's text parts are concatenated without
+   a separator; the leading messages are joined with `\n` (§4.1). An assistant turn's text parts are concatenated into
+   one `output_text`.
+9. **Non-streaming reasoning** gives one `Thinking` part per summary part, then per content part, item by item, before
+   the text; `ToolCalls` wins as the finish reason whenever a `function_call` item is present, `incomplete` included.
+10. **Stream fixtures** carry a compact `response` object inside lifecycle and terminal events (identity, state, output
+    and usage, without the request echo), to keep gate ②'s every-byte split fast; the non-streaming rows carry the full
+    object.
+
+### 17.4 Rulings on the implementation (lv, 2026-10-10)
+
+- **`input_tokens_details.cache_write_tokens`: keep reading it**, as the host does (§7.1), so the two paths produce the
+  same `TokenUsage` in the dual run. OpenAI's published usage object does not document the field, so the
+  documentation-derived judge pins host parity only; revisit when a capture shows it.
+- **Ratified:** the additive gate ② request-refusal form (§17.1) and the definition of `ImmutablePathsHonoured`
+  (§17.3 item 1).
+- **`UsageNeverDefaulted` on stream fixtures** (§12.2) moves to R3, where Codex motivates it.
+- **The package's `south_runtime`** holds the runtime under construction (0.53.0, as `embeddings-gemini` did in #167)
+  and is set to the release's version by the release commit, since no published runtime admits the two new manifest
+  fields.
+
 ## Revision note (2026-10-01)
 
 - Header: host baseline moved to `a82c852b`; host line numbers in `translate_responses.rs` updated for the #61 fix.
@@ -1338,3 +1447,4 @@ failure frames) and R-Q2 (`content_filter`).
   strict; R-Q10 ordinary text; R-Q11 first-seen counter; R-Q13 constants in the conformance crate, north codec
   literals checked by a cross-crate test; R-Q15 existing precedent for v1, typed fields later through the kernel
   chain; R-Q16 one fixture pack per third-party upstream. R-Q6 needs no ruling. The record is accepted.
+- 2026-10-10, step R1 implemented (§17, new): the header and §13.1 note it; nothing else in the record changes.

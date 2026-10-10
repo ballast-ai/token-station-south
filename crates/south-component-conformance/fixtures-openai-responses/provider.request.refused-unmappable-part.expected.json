@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "capability",
+    "http_status": 400,
+    "message": "content block `document` has no OpenAI Responses rendering; route the request to a provider that speaks its wire"
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "auth": {
+    "scheme": "bearer",
+    "secret": "provider_api_key"
+  },
+  "body": {
+    "input": [
+      {
+        "content": [
+          {
+            "text": "What is in these images, and what does the clip say?",
+            "type": "input_text"
+          },
+          {
+            "detail": "high",
+            "image_url": "https://upload.example.org/boardwalk.jpg",
+            "type": "input_image"
+          },
+          {
+            "image_url": "data:image/png;base64,iVBORw0KGgo=",
+            "type": "input_image"
+          },
+          {
+            "input_audio": {
+              "data": "UklGRg==",
+              "format": "wav"
+            },
+            "type": "input_audio"
+          }
+        ],
+        "role": "user"
+      }
+    ],
+    "model": "gpt-5.5",
+    "store": false
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "method": "POST",
+  "url": "https://api.openai.com/v1/responses"
+}

@@ -1,0 +1,32 @@
+{
+  "choices": [
+    {
+      "finish_reason": "tool_calls",
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "tool_calls": [
+          {
+            "arguments": "{\"city\":\"Beijing\"}",
+            "id": "call_wx1",
+            "name": "get_weather"
+          },
+          {
+            "arguments": "{\"city\":\"Beijing\"}",
+            "id": "call_tm2",
+            "name": "get_time"
+          }
+        ]
+      }
+    }
+  ],
+  "id": "resp_68af0a1c7f8c8190b7d5c3b9a0e1f2d3",
+  "model": "gpt-5.5-2026-08-07",
+  "usage": {
+    "cache_read_tokens": 0,
+    "cache_write_tokens": 0,
+    "input_tokens": 82,
+    "output_tokens": 41,
+    "reasoning_tokens": 0
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "status": 429,
+  "headers": {
+    "content-type": "application/json",
+    "retry-after": "20"
+  },
+  "body": "{\"error\":{\"message\":\"Rate limit reached for gpt-5.5 on requests per min (RPM): Limit 500, Used 500, Requested 1.\",\"type\":\"requests\",\"param\":null,\"code\":\"rate_limit_exceeded\"}}"
+}

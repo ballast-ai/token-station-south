@@ -1,0 +1,62 @@
+{
+  "name": "provider-openai-responses",
+  "version": "1.0.0",
+  "api_version": "provider-adapter-v2",
+  "providers": [
+    "openai-responses"
+  ],
+  "capabilities": [
+    "chat",
+    "json_schema",
+    "stream",
+    "tool_call"
+  ],
+  "auth_arms": [
+    "bearer"
+  ],
+  "request_facts": {
+    "openai-responses": {
+      "output_cap": [
+        "/max_output_tokens"
+      ],
+      "model": {
+        "body": "/model"
+      },
+      "stream": {
+        "body": "/stream"
+      }
+    }
+  },
+  "immutable_body_paths": {
+    "openai-responses": [
+      "store"
+    ]
+  },
+  "north_passthrough": {
+    "openai-responses": "responses"
+  },
+  "permissions": {
+    "network": false,
+    "filesystem": false,
+    "secrets": [
+      "provider_api_key"
+    ]
+  },
+  "conformance": {
+    "required_suite": "south.provider-component.v1",
+    "fixtures": "fixtures-openai-responses/"
+  },
+  "compatibility": {
+    "ir_schema_id": "token-station-protocol@0.5.0/v0.4.0",
+    "kernel_version": "0.4.0",
+    "kernel_revision": "8e34f5a089d0b9c7273b49ddb6952dd87e960019",
+    "wit_package": "token-station:adapter@2.0.0",
+    "south_runtime": "0.53.0",
+    "runtime_abi": 1,
+    "kernel_contracts": {
+      "canonical_ir": 3,
+      "error_catalog": 1,
+      "stream": 2
+    }
+  }
+}

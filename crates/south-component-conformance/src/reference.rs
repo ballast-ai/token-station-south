@@ -21,6 +21,7 @@ use token_station_protocol::{
 };
 
 use crate::component::{ComponentResultV1, ProviderComponentV1, StreamParserV1};
+use crate::responses_vocabulary::extension;
 
 /// The reference component. Stateless; each stream gets its own parser.
 #[derive(Debug, Default, Clone, Copy)]
@@ -309,7 +310,7 @@ fn body_of(request: &ChatRequest, config: &ProviderConfig) -> ComponentResultV1<
                 function.insert("parameters".to_owned(), tool.parameters.clone());
                 if let Some(strict) = request
                     .extensions
-                    .get("responses_tool_strict")
+                    .get(extension::TOOL_STRICT)
                     .and_then(|strict| strict.get(&tool.name))
                     .and_then(Value::as_bool)
                 {
@@ -323,7 +324,7 @@ fn body_of(request: &ChatRequest, config: &ProviderConfig) -> ComponentResultV1<
         // the extensions passthrough and the wire only accepts it alongside
         // `tools`.
         if let Some(parallel) =
-            request.extensions.get("parallel_tool_calls").and_then(Value::as_bool)
+            request.extensions.get(extension::PARALLEL_TOOL_CALLS).and_then(Value::as_bool)
         {
             body.insert("parallel_tool_calls".to_owned(), json!(parallel));
         }
@@ -356,7 +357,7 @@ fn reasoning_effort_allowed(request: &ChatRequest, config: &ProviderConfig) -> b
     config.models.iter().find(|capability| capability.model == request.model).map_or(
         !requires_explicit_capability,
         |capability| {
-            capability.supported_parameters.contains("reasoning_effort")
+            capability.supported_parameters.contains(extension::REASONING_EFFORT)
                 || (!requires_explicit_capability && capability.supported_parameters.is_empty())
         },
     )
@@ -724,7 +725,7 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-openai-compatible".to_owned(),
-            version: "2.4.5".to_owned(),
+            version: "2.4.6".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
@@ -769,7 +770,8 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
         let mut body = body_of(request, config)?;
         // `reasoning_effort` arrives through the extensions passthrough;
         // render it when the chosen model allows it.
-        if let Some(effort) = request.extensions.get("reasoning_effort").and_then(Value::as_str)
+        if let Some(effort) =
+            request.extensions.get(extension::REASONING_EFFORT).and_then(Value::as_str)
             && reasoning_effort_allowed(request, config)
             && let Value::Object(map) = &mut body
         {

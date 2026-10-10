@@ -1,6 +1,6 @@
 {
   "name": "provider-anthropic-bedrock-invoke",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "api_version": "provider-adapter-v2",
   "providers": [
     "anthropic-bedrock-invoke"

@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "capability",
+    "http_status": 400,
+    "message": "a tool result without a tool_call_id cannot be matched to its call on the OpenAI Responses wire"
+  }
+}

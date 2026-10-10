@@ -81,6 +81,7 @@ jobs:
           scripts/build-reference-component.sh
           scripts/build-anthropic-component.sh
           scripts/build-anthropic-bedrock-invoke-component.sh
+          scripts/build-openai-responses-component.sh
           scripts/build-bedrock-converse-component.sh
           scripts/build-bedrock-converse-bearer-component.sh
           scripts/build-gemini-component.sh
@@ -113,6 +114,7 @@ jobs:
             --test sandbox_parity_v1 \
             --test anthropic_sandbox_parity_v1 \
             --test anthropic_bedrock_invoke_sandbox_parity_v1 \
+            --test openai_responses_sandbox_parity_v1 \
             --test bedrock_converse_sandbox_parity_v1 \
             --test bedrock_converse_bearer_sandbox_parity_v1 \
             --test gemini_sandbox_parity_v1 \
@@ -154,6 +156,7 @@ jobs:
           package provider-openai-compatible provider_openai_compatible.wasm
           package provider-anthropic provider_anthropic.wasm
           package provider-anthropic-bedrock-invoke provider_anthropic_bedrock_invoke.wasm
+          package provider-openai-responses provider_openai_responses.wasm
           package provider-bedrock-converse provider_bedrock_converse.wasm
           package provider-bedrock-converse-bearer provider_bedrock_converse_bearer.wasm
           package provider-gemini provider_gemini.wasm

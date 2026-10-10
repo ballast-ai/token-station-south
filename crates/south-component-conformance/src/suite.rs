@@ -80,13 +80,18 @@ const USAGE_ROWS: [&str; 5] = [
     "provider.stream.no-usage",
 ];
 
-/// The error a response or stream case expects, when its expected file is
-/// `{"error": <envelope>}` rather than a chat response or an event array.
+/// The error a request, response or stream case expects, when its expected file is
+/// `{"error": <envelope>}` rather than a descriptor, a chat response or an event array.
 ///
 /// A stream case that expects an error expects the parser to refuse the stream — on whichever
-/// chunk carries the refused frame, however the body is split — with exactly that envelope.
+/// chunk carries the refused frame, however the body is split — with exactly that envelope. A
+/// request case that expects an error expects `build-http-request` to refuse the request, so no
+/// descriptor exists for the checks that judge one (the `OpenAI` Responses upstream record §12.1).
 fn expected_error(case: &CaseV1) -> Option<&Value> {
-    if !matches!(case.family, ProviderFamilyV1::Response | ProviderFamilyV1::Stream) {
+    if !matches!(
+        case.family,
+        ProviderFamilyV1::Request | ProviderFamilyV1::Response | ProviderFamilyV1::Stream
+    ) {
         return None;
     }
     let map = case.expected.as_object()?;
@@ -178,10 +183,17 @@ fn run_suite(
         match case.family {
             ProviderFamilyV1::Request => {
                 let built = invoke(&case.input);
-                outcomes.push(endpoint_confinement(case, &built));
+                // A refused request built no descriptor: `FixtureMatch` pins the refusal, and
+                // `UndeclaredValuesIgnored` requires the same refusal with the extra keys.
+                let refused = expected_error(case).is_some();
+                if !refused {
+                    outcomes.push(endpoint_confinement(case, &built));
+                }
                 if let Some(manifest) = manifest {
-                    outcomes.push(descriptor_auth_within_manifest(case, &built, manifest));
-                    outcomes.push(request_facts_honoured(case, &built, manifest, &invoke));
+                    if !refused {
+                        outcomes.push(descriptor_auth_within_manifest(case, &built, manifest));
+                        outcomes.push(request_facts_honoured(case, &built, manifest, &invoke));
+                    }
                     outcomes.push(undeclared_values_ignored(case, &built, manifest, &invoke));
                 }
             }
@@ -215,8 +227,75 @@ fn run_suite(
     if let Some(credentials) = manifest.and_then(|manifest| manifest.credentials.as_ref()) {
         outcomes.extend(credential_recipe_checks_v1(credentials, pack.credentials()));
     }
+    if let Some(manifest) = manifest {
+        outcomes.extend(immutable_paths_honoured(component, pack, manifest));
+    }
 
     ReportV1::new(PROVIDER_COMPONENT_SUITE_V1, outcomes)
+}
+
+/// Whether the dotted `path` names a member of `body`.
+fn holds_path(body: &Value, path: &str) -> bool {
+    path.split('.')
+        .try_fold(body, |value, segment| value.as_object().and_then(|map| map.get(segment)))
+        .is_some()
+}
+
+/// `ImmutablePathsHonoured` (the `OpenAI` Responses upstream record §12.2): for each family with
+/// declared paths, every request it built holds each path in the same state, present or absent.
+/// A family with paths but no built request fails, since the check then never ran.
+fn immutable_paths_honoured(
+    component: &dyn ProviderComponentV1,
+    pack: &FixturePackV1,
+    manifest: &ComponentManifestV1,
+) -> Vec<OutcomeV1> {
+    let check = CheckV1::ImmutablePathsHonoured;
+    let mut outcomes = Vec::new();
+    for (family, paths) in &manifest.immutable_body_paths {
+        if paths.is_empty() {
+            continue;
+        }
+        let mut first: Option<(String, Vec<bool>)> = None;
+        for case in pack.cases() {
+            if case.family != ProviderFamilyV1::Request
+                || case.input.pointer("/provider_config/provider").and_then(Value::as_str)
+                    != Some(family.as_str())
+            {
+                continue;
+            }
+            let Ok(built) = invoke_component(component, case.family, &case.input) else {
+                continue;
+            };
+            let body = built.get("body").cloned().unwrap_or(Value::Null);
+            let state: Vec<bool> = paths.iter().map(|path| holds_path(&body, path)).collect();
+            let Some((reference, expected)) = &first else {
+                outcomes.push(OutcomeV1::passed(check, &case.name));
+                first = Some((case.name.clone(), state));
+                continue;
+            };
+            match paths.iter().zip(state.iter().zip(expected)).find(|(_, (now, then))| now != then)
+            {
+                None => outcomes.push(OutcomeV1::passed(check, &case.name)),
+                Some((path, _)) => outcomes.push(OutcomeV1::failed(
+                    check,
+                    &case.name,
+                    format!(
+                        "family `{family}` declares `{path}` immutable, yet it is present in one \
+                         of this request and `{reference}` and absent from the other"
+                    ),
+                )),
+            }
+        }
+        if first.is_none() {
+            outcomes.push(OutcomeV1::failed(
+                check,
+                format!("provider.request ({family})"),
+                "the family declares immutable body paths, but no request fixture of it built a \
+                 request, so the check never ran",
+            ));
+        }
+    }
+    outcomes
 }
 
 fn invoke_component(
