@@ -1,0 +1,443 @@
+{
+  "grammar": "decode_sse_v1",
+  "note": "Golden vectors for south_host_grammars::decode_sse_v1. `input` is UTF-8 text, `input_hex` raw bytes. A case has `events` (each with `event` and `data`) or `error` (the SseErrorV1 variant in snake_case). Every case must give the same result fed whole, byte by byte, and split at any single point.",
+  "cases": [
+    {
+      "name": "empty_body",
+      "input": "",
+      "events": []
+    },
+    {
+      "name": "one_event_lf",
+      "input": "data: hello\n\n",
+      "events": [
+        {
+          "event": "message",
+          "data": "hello"
+        }
+      ]
+    },
+    {
+      "name": "one_event_crlf",
+      "input": "data: hello\r\n\r\n",
+      "events": [
+        {
+          "event": "message",
+          "data": "hello"
+        }
+      ]
+    },
+    {
+      "name": "one_event_cr",
+      "input": "data: hello\r\r",
+      "events": [
+        {
+          "event": "message",
+          "data": "hello"
+        }
+      ]
+    },
+    {
+      "name": "mixed_line_endings",
+      "note": "LF, CR and CRLF end a line, mixed in one stream",
+      "input": "data: a\r\ndata: b\rdata: c\n\r\n",
+      "events": [
+        {
+          "event": "message",
+          "data": "a\nb\nc"
+        }
+      ]
+    },
+    {
+      "name": "cr_cr_is_two_lines",
+      "note": "CR CR is two line ends, so the second CR is a blank line",
+      "input": "data: a\r\rdata: b\n\n",
+      "events": [
+        {
+          "event": "message",
+          "data": "a"
+        },
+        {
+          "event": "message",
+          "data": "b"
+        }
+      ]
+    },
+    {
+      "name": "lf_cr_is_two_lines",
+      "note": "LF then CR is two line ends, not one CRLF",
+      "input": "data: a\n\rdata: b\n\n",
+      "events": [
+        {
+          "event": "message",
+          "data": "a"
+        },
+        {
+          "event": "message",
+          "data": "b"
+        }
+      ]
+    },
+    {
+      "name": "multi_line_data",
+      "input": "data: first\ndata: second\ndata: third\n\n",
+      "events": [
+        {
+          "event": "message",
+          "data": "first\nsecond\nthird"
+        }
+      ]
+    },
+    {
+      "name": "named_event",
+      "input": "event: response.completed\ndata: {\"type\":\"response.completed\"}\n\n",
+      "events": [
+        {
+          "event": "response.completed",
+          "data": "{\"type\":\"response.completed\"}"
+        }
+      ]
+    },
+    {
+      "name": "event_type_resets_after_dispatch",
+      "input": "event: a\ndata: 1\n\ndata: 2\n\n",
+      "events": [
+        {
+          "event": "a",
+          "data": "1"
+        },
+        {
+          "event": "message",
+          "data": "2"
+        }
+      ]
+    },
+    {
+      "name": "last_event_line_wins",
+      "input": "event: a\nevent: b\ndata: x\n\n",
+      "events": [
+        {
+          "event": "b",
+          "data": "x"
+        }
+      ]
+    },
+    {
+      "name": "empty_event_name_is_message",
+      "input": "event:\ndata: x\n\n",
+      "events": [
+        {
+          "event": "message",
+          "data": "x"
+        }
+      ]
+    },
+    {
+      "name": "event_without_data_is_not_dispatched",
+      "note": "an empty data buffer dispatches nothing and resets the event type",
+      "input": "event: ping\n\ndata: x\n\n",
+      "events": [
+        {
+          "event": "message",
+          "data": "x"
+        }
+      ]
+    },
+    {
+      "name": "comment_only",
+      "input": ": keep-alive\n\n: another\n\n",
+      "events": []
+    },
+    {
+      "name": "comment_between_data_lines",
+      "input": "data: a\n: note\ndata: b\n\n",
+      "events": [
+        {
+          "event": "message",
+          "data": "a\nb"
+        }
+      ]
+    },
+    {
+      "name": "bom_dropped",
+      "input": "\ufeffdata: x\n\n",
+      "events": [
+        {
+          "event": "message",
+          "data": "x"
+        }
+      ]
+    },
+    {
+      "name": "bom_only_at_stream_start",
+      "note": "a later U+FEFF is content: the field name becomes U+FEFF+\"data\", which is ignored",
+      "input": "data: a\n\n\ufeffdata: b\n\n",
+      "events": [
+        {
+          "event": "message",
+          "data": "a"
+        }
+      ]
+    },
+    {
+      "name": "second_bom_kept",
+      "note": "only one BOM is dropped",
+      "input": "\ufeff\ufeffdata: x\n\n",
+      "events": []
+    },
+    {
+      "name": "no_space_after_colon",
+      "input": "data:x\n\n",
+      "events": [
+        {
+          "event": "message",
+          "data": "x"
+        }
+      ]
+    },
+    {
+      "name": "only_one_space_dropped",
+      "input": "data:  x \n\n",
+      "events": [
+        {
+          "event": "message",
+          "data": " x "
+        }
+      ]
+    },
+    {
+      "name": "tab_is_not_dropped",
+      "input": "data:\tx\n\n",
+      "events": [
+        {
+          "event": "message",
+          "data": "\tx"
+        }
+      ]
+    },
+    {
+      "name": "value_keeps_later_colons",
+      "input": "data: {\"a\":\"b:c\"}\n\n",
+      "events": [
+        {
+          "event": "message",
+          "data": "{\"a\":\"b:c\"}"
+        }
+      ]
+    },
+    {
+      "name": "field_without_colon",
+      "note": "a line with no colon is a field name with an empty value",
+      "input": "data\n\n",
+      "events": [
+        {
+          "event": "message",
+          "data": ""
+        }
+      ]
+    },
+    {
+      "name": "empty_data_line",
+      "input": "data:\n\n",
+      "events": [
+        {
+          "event": "message",
+          "data": ""
+        }
+      ]
+    },
+    {
+      "name": "two_empty_data_lines",
+      "input": "data\ndata\n\n",
+      "events": [
+        {
+          "event": "message",
+          "data": "\n"
+        }
+      ]
+    },
+    {
+      "name": "id_and_retry_ignored",
+      "input": "id: 7\nretry: 1000\ndata: x\n\n",
+      "events": [
+        {
+          "event": "message",
+          "data": "x"
+        }
+      ]
+    },
+    {
+      "name": "id_alone_dispatches_nothing",
+      "input": "id: 7\n\n",
+      "events": []
+    },
+    {
+      "name": "unknown_field_ignored",
+      "input": "foo: bar\ndata: x\n\n",
+      "events": [
+        {
+          "event": "message",
+          "data": "x"
+        }
+      ]
+    },
+    {
+      "name": "field_names_case_sensitive",
+      "input": "Data: x\nEVENT: y\n\n",
+      "events": []
+    },
+    {
+      "name": "leading_space_is_part_of_field_name",
+      "input": " data: x\n\n",
+      "events": []
+    },
+    {
+      "name": "extra_blank_lines",
+      "input": "\n\ndata: x\n\n\n\n",
+      "events": [
+        {
+          "event": "message",
+          "data": "x"
+        }
+      ]
+    },
+    {
+      "name": "final_event_without_blank_line",
+      "note": "departure: the end of input dispatches",
+      "input": "data: x\n",
+      "events": [
+        {
+          "event": "message",
+          "data": "x"
+        }
+      ]
+    },
+    {
+      "name": "final_line_without_terminator",
+      "note": "departure: an unterminated last line is read, then dispatched",
+      "input": "event: done\ndata: {\"usage\":1}",
+      "events": [
+        {
+          "event": "done",
+          "data": "{\"usage\":1}"
+        }
+      ]
+    },
+    {
+      "name": "final_cr",
+      "input": "data: x\r",
+      "events": [
+        {
+          "event": "message",
+          "data": "x"
+        }
+      ]
+    },
+    {
+      "name": "final_comment_without_terminator",
+      "input": "data: x\n\n: tail",
+      "events": [
+        {
+          "event": "message",
+          "data": "x"
+        }
+      ]
+    },
+    {
+      "name": "nul_in_data",
+      "input": "data: a\u0000b\n\n",
+      "events": [
+        {
+          "event": "message",
+          "data": "a\u0000b"
+        }
+      ]
+    },
+    {
+      "name": "non_ascii_utf8",
+      "input": "event: \u00e9v\ndata: \u4e2d\u6587 \ud83d\ude00\n\n",
+      "events": [
+        {
+          "event": "\u00e9v",
+          "data": "\u4e2d\u6587 \ud83d\ude00"
+        }
+      ]
+    },
+    {
+      "name": "openai_done_sentinel",
+      "input": "data: {\"choices\":[]}\n\ndata: [DONE]\n\n",
+      "events": [
+        {
+          "event": "message",
+          "data": "{\"choices\":[]}"
+        },
+        {
+          "event": "message",
+          "data": "[DONE]"
+        }
+      ]
+    },
+    {
+      "name": "responses_stream",
+      "note": "the OpenAI Responses stream shape (north_passthrough looks for the terminal frame)",
+      "input": "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1\"}}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"Hi\"}\n\nevent: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"usage\":{\"input_tokens\":3,\"output_tokens\":1}}}\n\n",
+      "events": [
+        {
+          "event": "response.created",
+          "data": "{\"type\":\"response.created\",\"response\":{\"id\":\"resp_1\"}}"
+        },
+        {
+          "event": "response.output_text.delta",
+          "data": "{\"type\":\"response.output_text.delta\",\"delta\":\"Hi\"}"
+        },
+        {
+          "event": "response.completed",
+          "data": "{\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"usage\":{\"input_tokens\":3,\"output_tokens\":1}}}"
+        }
+      ]
+    },
+    {
+      "name": "speech_sse",
+      "note": "the OpenAI token-priced speech SSE shape (a media world's sse response body form)",
+      "input": "data: {\"type\":\"speech.audio.delta\",\"audio\":\"AAA=\"}\r\n\r\ndata: {\"type\":\"speech.audio.done\",\"usage\":{\"input_tokens\":5,\"output_tokens\":9}}\r\n\r\n",
+      "events": [
+        {
+          "event": "message",
+          "data": "{\"type\":\"speech.audio.delta\",\"audio\":\"AAA=\"}"
+        },
+        {
+          "event": "message",
+          "data": "{\"type\":\"speech.audio.done\",\"usage\":{\"input_tokens\":5,\"output_tokens\":9}}"
+        }
+      ]
+    },
+    {
+      "name": "invalid_utf8_in_data",
+      "input_hex": "646174613a20ff0a0a",
+      "error": "not_utf8"
+    },
+    {
+      "name": "invalid_utf8_after_events",
+      "note": "the events before the bad line are not returned by the whole-body function",
+      "input_hex": "646174613a206f6b0a0a646174613a20c30a0a",
+      "error": "not_utf8"
+    },
+    {
+      "name": "invalid_utf8_in_comment",
+      "note": "comments are lines too",
+      "input_hex": "3a20fe0a",
+      "error": "not_utf8"
+    },
+    {
+      "name": "truncated_multibyte_at_end",
+      "input_hex": "646174613a20e4b8",
+      "error": "not_utf8"
+    },
+    {
+      "name": "lone_bom_prefix_bytes",
+      "note": "an incomplete BOM is not a BOM",
+      "input_hex": "efbb646174613a20780a0a",
+      "error": "not_utf8"
+    }
+  ]
+}

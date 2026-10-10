@@ -1,0 +1,19 @@
+[package]
+description = "Pure, bounded wire grammars that only hosts call; no component links this crate."
+edition.workspace = true
+license.workspace = true
+name = "south-host-grammars"
+publish = false
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+# No [dependencies], on purpose: scripts/check-boundaries.sh refuses any. Both hosts take this crate
+# for one decoder, and a dependency here would become a dependency of both.
+
+[dev-dependencies]
+proptest.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

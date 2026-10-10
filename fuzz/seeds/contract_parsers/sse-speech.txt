@@ -1,0 +1,3 @@
+﻿data: {"type":"speech.audio.delta","audio":"AAA="}
+
+data: {"type":"speech.audio.done","usage":{"input_tokens":5}}

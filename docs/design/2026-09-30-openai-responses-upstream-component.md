@@ -426,6 +426,15 @@ bytes` the component still receives the upstream bytes unchanged. The host uses 
 `north_passthrough` it splits the northbound frames to find the terminal frame (§8.2). Both sides therefore agree on
 every frame boundary by construction rather than by two implementations happening to match.
 
+*(Amended 2026-10-10, umbrella §13.13: lv placed `decode_sse_v1` in the host-only crate `south-host-grammars`, which no
+component may link, and it ships in 0.53.0. The component therefore splits its stream with its own code, as the three
+SSE references do, and the two sides no longer share one function. What keeps them aligned under `north_passthrough`
+is §8.2's delivery: the host cuts the upstream bytes into whole frames with `SseDecoderV1::position` and hands the
+component one frame per call, and the gate ③ assertion that the component holds no partial frame after a call fails
+closed (the host forwards nothing more and parks) if the component's splitter does not recognize a frame the decoder
+cut, for instance one ended by bare CRs. The component's tests can run the decoder's golden vectors as a
+dev-dependency. R1 itself no longer needs the decoder; the host's pass-through does.)*
+
 ### 6.1 Events
 
 | Upstream event | IR events |
@@ -641,7 +650,8 @@ When pass-through applies:
 
 - The request is still built by the component from IR.
 - **The host splits northbound frames only to find the terminal frame** (umbrella §5.2). It runs `decode_sse_v1`
-  (§6), the same south-supplied function the component uses, over the upstream bytes; it does not parse the frames
+  (§6; amended 2026-10-10: the incremental `SseDecoderV1` of `south-host-grammars`, whose `position` marks each frame's
+  end, and no longer a function the component also uses), over the upstream bytes; it does not parse the frames
   for the component, which still receives the bytes unchanged (`stream_framing: bytes`). The host hands the component
   the bytes chunked at those frame boundaries, one whole frame per `parse-stream-chunk` call — any chunking is
   admissible under `bytes` — so that each call's events belong to one frame. After each call the component holds no
@@ -990,7 +1000,7 @@ Per boundary R4, each is marked `verified` under `host_capabilities` only once b
 | Step | Side | Content | Acceptance |
 |---|---|---|---|
 | R0 | Host | Owner rulings R-Q1 to R-Q5 are recorded (§16), including the 2026-10-01 extensions under R-Q1 (relayed failure frames) and R-Q2 (`content_filter`); the south halves of R-Q1 and R-Q5 remain. Fix or accept the suspected defects of §13.5 in the native leg first (P21 §9 practice) | — |
-| R1 | South | Package with `openai-responses`: reference implementation, fixtures, judges, wasm build. Needs umbrella B1 (usage strictness), B2 (`request_facts`, descriptor auth admission) and B3 (the package declares `runtime_abi` and must be listed in the release index), and `decode_sse_v1` from the image world's minor | Suite green; listed in the release index with the upstreams that have a fixture pack (§3.3) |
+| R1 | South | Package with `openai-responses`: reference implementation, fixtures, judges, wasm build. Needs umbrella B1 (usage strictness), B2 (`request_facts`, descriptor auth admission) and B3 (the package declares `runtime_abi` and must be listed in the release index), and `decode_sse_v1` from the image world's minor (amended 2026-10-10: R1 does not need it, since the component splits its own stream; the host's pass-through needs it, from 0.53.0, umbrella §13.13) | Suite green; listed in the release index with the upstreams that have a fixture pack (§3.3) |
 | R2 | Host | Route provider rows to the family, one upstream at a time and only upstreams with a fixture pack; refuse `previous_response_id` on the northbound side; dual run; remove `supports_responses` / `upstream_requires_responses` branching for covered rows | §13.2 |
 | R3 | South + host | `openai-codex`: needs boundary B4 (recipes) and the host's recipe executor | Credential fixtures and gate ③ suite green; §13.2 on Codex rows |
 | R4 | Host | Retire the code of §13.4 | J1 count falls; removing the package leaves the host compiling, testing and starting (J3) |
@@ -1103,6 +1113,8 @@ Evidence is the cited code only; no impact is claimed.
   every existing package gets today.
 - `decode_sse_v1` is a new pure function in `south-contracts` with golden vectors and a fuzz target, stated in
   umbrella §5.2 as the SSE sibling of the eventstream deframer and released with the image world's minor, before R1.
+  *(Amended 2026-10-10: it is in the host-only crate `south-host-grammars` and ships in 0.53.0, early and alone
+  (Q-B6-6); it is a host dependency of pass-through, not of the package. Umbrella §13.13.)*
 - Phasing: R1 after umbrella B1, B2 and B3; R3 after B4. Both are inside the umbrella's B6, which this package
   enters without needing B7a (it declares no new instance, §10.4).
 - Host link layer: the recipe executor and pass-through delivery are one-time generic mechanisms (P21 §1.4). After
@@ -1293,3 +1305,6 @@ failure frames) and R-Q2 (`content_filter`).
     fixed-message failure event. The condition that no host enables pass-through until this is ruled is dropped;
     pass-through is enabled by declaration as ruled under R-Q1, with the replacement as one of its conditions. D7,
     §8.2, §12.4, §13.1 and the R-Q1 note state it.
+- 2026-10-10, lv ruling (umbrella §13.13): `decode_sse_v1` lives in the host-only crate `south-host-grammars` and ships
+  in 0.53.0. §6, §8.2, §13.1 R1 and §14 gain notes: the component splits its own stream, the host cuts whole frames
+  for pass-through with `SseDecoderV1::position`, and R1 no longer waits for the decoder.

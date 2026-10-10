@@ -1,0 +1,58 @@
+{
+  "packages": [
+    {
+      "id": "path+file:///south-host-grammars#0.0.1",
+      "name": "south-host-grammars",
+      "version": "0.0.1",
+      "dependencies": [
+        {
+          "name": "proptest",
+          "rename": null,
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "path": null,
+          "kind": "dev"
+        },
+        {
+          "name": "serde_json",
+          "rename": null,
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "path": null,
+          "kind": "dev"
+        }
+      ]
+    },
+    {
+      "id": "path+file:///south-core#0.0.1",
+      "name": "south-core",
+      "version": "0.0.1",
+      "dependencies": [
+        {
+          "name": "south-host-grammars",
+          "rename": null,
+          "source": null,
+          "path": "/south-host-grammars",
+          "kind": null
+        }
+      ]
+    },
+    {
+      "id": "path+file:///south-contracts#0.0.1",
+      "name": "south-contracts",
+      "version": "0.0.1",
+      "dependencies": [
+        {
+          "name": "south-host-grammars",
+          "rename": null,
+          "source": null,
+          "path": "/south-host-grammars",
+          "kind": "dev"
+        }
+      ]
+    }
+  ],
+  "workspace_members": [
+    "path+file:///south-host-grammars#0.0.1",
+    "path+file:///south-core#0.0.1",
+    "path+file:///south-contracts#0.0.1"
+  ]
+}

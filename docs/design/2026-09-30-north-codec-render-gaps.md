@@ -298,7 +298,8 @@ pub fn responses_error_event(error: &ErrorEnvelope, relayed: &RelayedResponseIde
 - The host reads `response.id`, `response.model`, `response.created_at` and each event's `sequence_number` from the
   frames it relays. That is reading the northbound protocol the host serves, not provider knowledge; the frames are
   split by `decode_sse_v1`, the pure SSE decoder south places in `south-contracts` beside the eventstream deframer
-  (boundary record §5.2). The host splits northbound frames only to find the terminal frame and, here, to read this
+  (boundary record §5.2). *(Amended 2026-10-10: it lives in the host-only crate `south-host-grammars` and ships in
+  0.53.0; boundary record §13.13.)* The host splits northbound frames only to find the terminal frame and, here, to read this
   identity; it never picks a decoder to parse a provider's stream for the component (boundary record §15).
 - If the failure comes **before** any upstream frame was relayed, there is no relayed identity: the host builds a
   `ResponsesSseState` from its own context (minted id, routed model, its clock) and feeds `StreamEvent::Error`; the
@@ -650,3 +651,5 @@ halves tagged S or C remain open.
     meter for `usage_evidence: absent` families; it stays checkpoint and manual-review evidence only, and G5 stays in
     the host (N-Q9). §2 D6, §7 (billing paragraph, the fixture-review sentence, scheduling), the §9 G5 row, §10's
     release grouping, the N-Q9 note and N-Q10 state it; "not yet ruled" is dropped.
+- 2026-10-10: §5.3's `decode_sse_v1` home amended to the host-only crate `south-host-grammars` (boundary record
+  §13.13).

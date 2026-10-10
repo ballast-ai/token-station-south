@@ -236,7 +236,9 @@ the same list, or one of them sees the usage event and the other does not. So:
 - South supplies the decoder as a pure function, `decode_sse_v1(bytes) -> Result<Vec<SseEventV1>, SseErrorV1>`, in
   `south-contracts` (the SSE sibling of the eventstream deframer, boundary record §5.2; new grammars live there under a
   fuzz obligation, `south-core/src/raw.rs:11-12`), with golden
-  vectors. The rules follow the WHATWG event-stream format: LF, CR and CRLF all end a line; a leading BOM is dropped;
+  vectors. *(Amended 2026-10-10: it lives in the host-only crate `south-host-grammars`, under the same fuzz
+  obligation, and ships in 0.53.0 (Q-B6-6); no component runs it, and adding it to `south-contracts` would have
+  re-identified every package. Boundary record §13.13.)* The rules follow the WHATWG event-stream format: LF, CR and CRLF all end a line; a leading BOM is dropped;
   comment lines are dropped; several `data:` lines join with LF; an event without `event:` is named `message`;
   `id:` and `retry:` are ignored. One deliberate departure: a final event not followed by a blank line is **still
   dispatched** — the standard drops it because a live stream might continue, but a buffered body has a definite end,
@@ -566,7 +568,10 @@ A South **minor**, sharing `contracts.media` with the image world:
 - `south-contracts`: a `speech` module (facts, outcomes, artifacts, `immutable_form_fields`, the speech dialect words
   of §4). **`contracts.media` v1 is released once, complete**: besides the image words it already carries `from_hex`,
   `concat`, `wav_pcm_s16le{sample_rate, channels}`, the `sse` response body form, the `text` request body kind and
-  `decode_sse_v1` with its golden vectors. The speech minor therefore adds nothing to `contracts.media`, and speech
+  `decode_sse_v1` with its golden vectors. *(Amended 2026-10-10: `decode_sse_v1` is not part of `contracts.media`; it
+  ships in 0.53.0 from `south-host-grammars` (boundary record §13.13). Building the `sse` form's view still needs a
+  `south-contracts` entry point that takes the events the host decoded, because `south-contracts` may not depend on
+  that crate; the speech minor adds it.)* The speech minor therefore adds nothing to `contracts.media`, and speech
   packages declare `media: 1` whether they ship in the image minor or after it.
 - **HTTP contract 10 is one bump, released in the image world's minor**, carrying both
   `execute_multipart_binary_call_v1` (image record §6.3a, Q14 there; the ASR arms need it, §5) and this record's D3a
@@ -647,6 +652,11 @@ and are unchanged.
   `compatibility.json` until that host lands it.
 - **Q13** — Ruled (lv for the south maintainers, 2026-10-08): as recommended. South supplies `decode_sse_v1` with golden
   vectors in `south-contracts`, under the fuzz obligation; both hosts call it. It ships with the image minor (S-I-1).
+  - Note (2026-10-10): lv ruled Q-B6-6 on 2026-10-09 (release it separately and early, so it left S-I-1) and on
+    2026-10-10 placed it in the new host-only crate `south-host-grammars` rather than `south-contracts`: an unused
+    function added to `south-contracts` changed 3 of 19 `component.wasm`, and the Q47 bump it requires changed all 19.
+    Both hosts still call the same function, under the same fuzz obligation; it ships in 0.53.0. Boundary record
+    §13.13.
 - **Q14** — Ruled (lv for the south maintainers, 2026-10-08): as recommended. The speech dialect words `speech.translate`
   and `speech.verbose_json` are defined by the contract, closed to those two, so catalog data can set them without
   knowing a component. See §17.5 on where such data can come from today.
@@ -688,7 +698,8 @@ the code yet (no `TextPostRequestV1`, `decode_sse_v1`, `from_hex`, `concat`, `wa
 `compatibility.json` has no `media` or `speech` key yet (image record §18.2 lists the keys). Speech needs from the image
 world's work, and cannot ship before them: S-I-1 (the `media` module with the complete transform table including
 `from_hex`, `concat` and `wav_pcm_s16le`, the `text` body and `sse` form, the elider, parser and encoder,
-`decode_sse_v1`, the safe fetch pure functions), S-I-2 (HTTP contract 12) and the host suite `south.safe-fetch.v1` of
+`decode_sse_v1` (amended 2026-10-10: released separately in 0.53.0 from `south-host-grammars`, boundary record
+§13.13), the safe fetch pure functions), S-I-2 (HTTP contract 12) and the host suite `south.safe-fetch.v1` of
 S-I-5. The image minor releases `contracts.media` v1 complete, so speech adds nothing to it (§14); speech packages declare
 `{"media": 1, "speech": 1}`. The record allows the speech world to ship in the image minor or after it; the steps of §18
 are written to let either happen.
@@ -743,7 +754,7 @@ packages. Steps are in dependency order; "host prerequisite" is work outside sou
 
 | Step | Work | Depends on | Acceptance |
 |---|---|---|---|
-| **S-S-0** Shared with the image world | S-I-1 (`media` module including the speech words, `decode_sse_v1`, safe fetch functions), S-I-2 (HTTP contract 12 with `TextPostRequestV1`), the `south.safe-fetch.v1` host suite of S-I-5. Nothing in speech is built twice | image record §19 | Those steps' own acceptance; the WAV container encoder and the hex and concat transforms have golden vectors even though no image component uses them |
+| **S-S-0** Shared with the image world | S-I-1 (`media` module including the speech words, `decode_sse_v1` — since 2026-10-10 released on its own in 0.53.0 from `south-host-grammars`, boundary record §13.13 —, safe fetch functions), S-I-2 (HTTP contract 12 with `TextPostRequestV1`), the `south.safe-fetch.v1` host suite of S-I-5. Nothing in speech is built twice | image record §19 | Those steps' own acceptance; the WAV container encoder and the hex and concat transforms have golden vectors even though no image component uses them |
 | **S-S-1** `speech` contract module | Facts (`characters {count, upper?}`, `metering_forms`, `reservation`, `output_media_type`), `SpeechMeteringV1` (characters with `source`, seconds with `basis`, tokens), outcomes, `SpeechArtifactV1` (`body`, `inline`, `segments`, `url`, `container`), the ASR delivery forms, the two dialect words, `immutable_form_fields`, `PreparedSpeechCallV1` | S-S-0 | Types and codecs with tests in `crates/south-contracts`; `south-contracts` version bump (Q47) |
 | **S-S-2** WIT, manifest, gate ①, runtime | `wit/speech-adapter.wit` (§7), `SPEECH_*` constants and schema row, `validate_role` branch; gate ① admits `config_schema`, credential attributes and `query_parameters` in this world (§17.3); runtime `bindgen!` module and instance kind; `UndeclaredValuesIgnored` row | S-S-1, image S-I-3 and S-I-4 | Refusal tests for unknown words, `host_values`, `endpoint`, `quota_headers`, `user_agent`; the embeddings-style runtime tests |
 | **S-S-3** Suite `south.speech-component.v1` and references | Codecs, trait, ABI and sandbox adapters, the required rows of §11 (`ssml_escaping`, `client_format_rendering`, `absent_duration_is_null_or_unknown`, `undeclared_operation_refused`, `second_hop_artifact`, `empty_audio_is_unknown`, the metering rows) as additive `CheckV1` variants; the host-obligation vectors for the WAV container and `decode_sse_v1` | S-S-2, image S-I-5 | A native reference passes every row and each row has a failing mutation; `south-component-conformance` version bump |
@@ -806,3 +817,6 @@ stays a host test (§4).
   stands); gate ① must admit `config_schema`, credential attributes and `query_parameters` in this world; Vertex TTS
   reuses the `embeddings-vertex` recipe; the 0.50.0 catalog carries no speech data; a table of drifted citations.
 - §18 (new): outline of the implementation steps S-S-0 to S-S-5 and the prerequisites outside south.
+- 2026-10-10, lv ruling (boundary record §13.13): `decode_sse_v1` lives in the host-only crate `south-host-grammars` and
+  ships in 0.53.0, early and alone (Q-B6-6). §6, §14, §17, §18 S-S-0 and the Q13 ruling gain notes; the `sse` view
+  needs a `south-contracts` entry point taking already-decoded events, added with the speech minor.
