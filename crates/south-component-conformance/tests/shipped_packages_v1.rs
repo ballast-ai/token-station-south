@@ -1284,11 +1284,10 @@ fn the_responses_package_retires_every_published_053_package_identity() {
 }
 
 /// `provider-openai-responses` declares `immutable_body_paths` and `north_passthrough`, which no
-/// released runtime's gate ① admits (the manifest refuses unknown fields), so the oldest runtime
-/// that admits it is the release that ships this change. Until that release commit it declares the
-/// version being built, as `embeddings-gemini` did before 0.51.0 (#167); the release commit raises
-/// it to the new release, and `scripts/check-declared-runtime.sh --build` loads it under this tree
-/// meanwhile.
+/// runtime before 0.54.0 admits (the manifest refuses unknown fields), so 0.54.0, the release that
+/// ships this change, is the oldest runtime that admits it and the package declares it, as
+/// `embeddings-gemini` declared 0.51.0 (#167): a host that claims 0.53.0 refuses it through the
+/// declared runtime alone.
 #[test]
 fn the_responses_package_declares_the_runtime_that_first_admits_its_declarations() {
     let manifest: ComponentManifestV1 = serde_json::from_str(
@@ -1298,14 +1297,14 @@ fn the_responses_package_declares_the_runtime_that_first_admits_its_declarations
         .unwrap(),
     )
     .unwrap();
-    let cargo = std::fs::read_to_string(repo_root().join("Cargo.toml")).unwrap();
-    let workspace = cargo
-        .split("[workspace.package]")
-        .nth(1)
-        .and_then(|table| table.lines().find_map(|line| line.strip_prefix("version = \"")))
-        .and_then(|rest| rest.strip_suffix('"'))
-        .unwrap();
     assert_eq!(manifest.version, "1.0.0");
-    assert_eq!(manifest.compatibility.south_runtime, workspace);
+    assert_eq!(manifest.compatibility.south_runtime, "0.54.0");
     assert!(!manifest.immutable_body_paths.is_empty() && !manifest.north_passthrough.is_empty());
+    assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
+    let mut on_053 = host_range::host_range();
+    "0.53.0".clone_into(&mut on_053.south_runtime);
+    assert!(matches!(
+        compatibility_admits(&manifest, &on_053),
+        Err(CompatibilityMismatchV2::SouthRuntimeAboveHost { .. })
+    ));
 }

@@ -70,7 +70,7 @@ pub struct ProviderMultipartEvidenceV1 {
 impl ProviderMultipartEvidenceV1 {
     /// Constructs evidence and saturates both raw call counts.
     ///
-    /// `wire_auth_exact` was added after 0.53.0: it is `true` only when a transport call saw the
+    /// `wire_auth_exact` was added in 0.54.0: it is `true` only when a transport call saw the
     /// prepared request's auth headers equal exactly the fixture arm's one expected pair.
     #[must_use]
     pub const fn new(

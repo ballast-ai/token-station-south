@@ -254,7 +254,7 @@ impl fmt::Debug for ProviderMultipartExpectedOutcomeV1 {
 /// rows. There is deliberately no absence claim in this table — everything worth asserting about
 /// a multipart request is something that must be *seen* on the wire.
 ///
-/// `wire_auth_exact` (added after 0.53.0) is the claim that the complete list of auth headers the
+/// `wire_auth_exact` (added in 0.54.0) is the claim that the complete list of auth headers the
 /// transport sends is exactly the one pair [`ProviderMultipartAuthArmV1::expected_wire_auth_header`]
 /// builds from the row's declared arm. An adapter that maps `HeaderSecret` to `Bearer` sends the
 /// same secret under `authorization`, matches every other claim, and fails here on the

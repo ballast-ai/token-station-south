@@ -206,35 +206,27 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.53.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.51.0, 0.52.0 and 0.52.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
-**Unreleased (Responses R1)**: the OpenAI Responses upstream component, step R1 (design record
-`docs/design/2026-09-30-openai-responses-upstream-component.md`, accepted 2026-10-10). The new package
-`provider-openai-responses` 1.0.0 (family `openai-responses` only; `openai-codex` is step R3) maps the IR onto a stateless
-Responses body (`store: false` always, leading system messages as `instructions`, `input_file` and `file_id` refused),
-reads the response and the `response.*` stream strictly (a closed event list, `sequence_number`, one `response.id`, item
-and part identity, one terminal, truncation without a terminal), settles `incomplete` only for `max_output_tokens` and
-`content_filter`, recognises the three failure-frame shapes first, and refuses any non-zero `tool_usage`. It splits SSE
-with the conformance crate's own `sse_split` (it links no host-only crate); the decoder's golden vectors run against that
-splitter as a dev-dependency. Its manifest declares the record's two new provider-world fields, `immutable_body_paths`
-and `north_passthrough` (gate ① admits them for declared families only), so it declares `south_runtime` equal to the
-version being built until the release commit raises it. Gate ② gains the request-refusal form (`{"error": <envelope>}`
-on a request case) and `ImmutablePathsHonoured`. The Responses wire vocabulary lives in `responses_vocabulary`; a test
-depending on the conformance crate and the north codec asserts their spellings agree. `south-provider-api` and
-`south-component-conformance` move to 0.52.0, so every other package takes a patch bump with unchanged behavior and keeps
-its `south_runtime`.
-**Unreleased (B6-2)**: the Bedrock InvokeModel Anthropic component (design record
-`docs/design/2026-10-08-bedrock-invoke-anthropic-component.md`, accepted 2026-10-09). The new package
-`provider-anthropic-bedrock-invoke` 1.0.0 (family `anthropic-bedrock-invoke`, `host_signed` with `aws-sigv4` as Converse
-declares it, `stream_framing: aws-eventstream`, `south_runtime` 0.46.0) sends `provider-anthropic`'s Messages body
-without `model` and `stream` and with `anthropic_version: "bedrock-2023-05-31"`, unwraps each stream `chunk`'s base64
-`bytes` itself, and maps Bedrock exception names, then Anthropic error types, then the status. The shared Messages stream
-state machine changed for `provider-anthropic` too: a cumulative usage count that shrinks is refused and the
-cache-write tiers fold as one group (the host's 03 #86 rule, I-Q7), and an in-band `error` event ends the stream with
-`StreamEvent::Error` (I-Q12). Gate ② stream cases may now expect a refusal (`{"error": <envelope>}`). A crate-private
-strict base64 codec replaces the credential recipe interpreter's. No release has been cut since v0.50.0, so B6-2 takes
-no version of its own beyond the new package: `south-component-conformance` stays at the 0.50.0 #167 gave it, and every
-existing package keeps the single bump over v0.50.0 that #167 gave it (`provider-anthropic` 1.0.16 now also carries the
-two behavior changes above).
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.54.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.51.0, 0.52.0 and 0.52.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**v0.54.0**: the OpenAI Responses upstream component, step R1, and the gate ③ credential-arm bit (release record
+`docs/design/2026-10-10-release-0.54.0.md`; Responses design record
+`docs/design/2026-09-30-openai-responses-upstream-component.md` §17). The new package `provider-openai-responses` 1.0.0
+(family `openai-responses` only; `openai-codex` is step R3) maps the IR onto a stateless Responses body (`store: false`
+always, leading system messages as `instructions`, `input_file` and `file_id` refused), reads the response and the
+`response.*` stream strictly (a closed event list, `sequence_number`, one `response.id`, item and part identity, one
+terminal, truncation without a terminal), settles `incomplete` only for `max_output_tokens` and `content_filter`,
+recognises the three failure-frame shapes first, and refuses any non-zero `tool_usage`. It splits SSE with the
+conformance crate's own `sse_split` (it links no host-only crate); the decoder's golden vectors run against that splitter
+as a dev-dependency. Its manifest declares the record's two new provider-world fields, `immutable_body_paths` and
+`north_passthrough` (gate ① admits them for declared families only; `NorthProtocolV1`, `are_immutable_body_paths`, three
+`ManifestErrorV1` variants), so it declares `south_runtime` 0.54.0, the first runtime that admits them. Gate ② gains the
+request-refusal form (`{"error": <envelope>}` on a request case) and `CheckV1::ImmutablePathsHonoured`. The Responses
+wire vocabulary lives in `responses_vocabulary`; a test depending on the conformance crate and the north codec asserts
+their spellings agree. `south-provider-api` and `south-component-conformance` move to 0.52.0 (`south-contracts` stays
+0.51.0), so every other package takes a patch bump with unchanged behavior and keeps its `south_runtime`. Gate ③
+`south.provider-media-binary.v1`, `south.provider-multipart.v1` and `south.provider-get.v1` each gain the wire claim
+`wire_auth_exact` (mismatch category `WireAuth`): the transport's complete auth header list must be exactly the pair the
+row's declared arm builds. Each suite's evidence constructor takes it as a final argument; case counts and suite
+versions are unchanged, and a host re-verifies all three suites after measuring it.
 **v0.53.0**: `decode_sse_v1`, early and alone (release record `docs/design/2026-10-10-release-0.53.0.md`, boundary
 record §13.13, Q-B6-6). The new host-only crate `south-host-grammars` carries the SSE decoder `decode_sse_v1` and its
 incremental form `SseDecoderV1`, whose `position` cuts a stream into whole frames for `north_passthrough`. No component
@@ -261,6 +253,19 @@ runtime with at least 192 MiB of guest memory (`RuntimeLimitsV1::for_embeddings_
 unchanged) and answers 413 above a 15 MiB request view (E-O2). The three crates every component links took 0.50.0
 under Q47, so the other sixteen packages take a patch bump with unchanged behavior and `south_runtime`. The
 `gemini-embedding-001` text-only refusal is a hard-code carried over from the native arm (open item E-O1).
+**v0.51.0 (B6-2)**: the Bedrock InvokeModel Anthropic component (design record
+`docs/design/2026-10-08-bedrock-invoke-anthropic-component.md`, accepted 2026-10-09), merged as #168 after #167 and
+shipped in the `v0.51.0` tag with it. The package `provider-anthropic-bedrock-invoke` 1.0.0 (family
+`anthropic-bedrock-invoke`, `host_signed` with `aws-sigv4` as Converse declares it, `stream_framing: aws-eventstream`,
+`south_runtime` 0.46.0) sends `provider-anthropic`'s Messages body without `model` and `stream` and with
+`anthropic_version: "bedrock-2023-05-31"`, unwraps each stream `chunk`'s base64 `bytes` itself, and maps Bedrock
+exception names, then Anthropic error types, then the status. The shared Messages stream state machine changed for
+`provider-anthropic` too: a cumulative usage count that shrinks is refused and the cache-write tiers fold as one group
+(the host's 03 #86 rule, I-Q7), and an in-band `error` event ends the stream with `StreamEvent::Error` (I-Q12). Gate ②
+stream cases may expect a refusal (`{"error": <envelope>}`). A crate-private strict base64 codec replaces the credential
+recipe interpreter's. B6-2 took no version of its own beyond the new package: `south-component-conformance` kept the
+0.50.0 #167 gave it, and every existing package kept the single bump over v0.50.0 that #167 gave it
+(`provider-anthropic` 1.0.16 also carries the two behavior changes above).
 **v0.50.0**: the model catalog (release record `docs/design/2026-10-08-release-0.50.0.md`, boundary record §13.11,
 §13.12). `catalogs/model-catalog.json` is published as `model-catalog-v0.50.0.json` and listed in the release index
 under `catalogs` (`south.model-catalog.v1`, read by `south_provider_runtime::ModelCatalogV1`). It is the first release

@@ -111,7 +111,7 @@ rows reach the transport and still expect `wire_query_exact == false`, so a prob
 `true` fails a row. The fixture input is the provider-call input minus its body: a GET fixture
 cannot carry one.
 
-**Amended 2026-10-10 (lv ruling; unreleased).** The suite did not measure the credential arm: an
+**Amended 2026-10-10 (lv ruling; released in 0.54.0).** The suite did not measure the credential arm: an
 adapter that mapped the `HeaderSecret` row to `ProviderAuthV1::Bearer` sent the same secret under
 `authorization` and passed all four rows. The evidence gains a fourth boolean, `wire_auth_exact`
 (presence polarity: the prepared request's complete `auth_headers()` list equals exactly the one

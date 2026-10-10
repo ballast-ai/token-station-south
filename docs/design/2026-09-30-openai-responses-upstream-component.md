@@ -1,7 +1,7 @@
 # The OpenAI Responses upstream dialect component (`provider-openai-responses`)
 
 Status: accepted (lv, 2026-10-10: the remaining S-tagged questions ruled, §16) — drafted by the host team
-(token-station-server P21). Step R1 implemented 2026-10-10, not released (§17).
+(token-station-server P21). Step R1 implemented 2026-10-10, released in 0.54.0 (§17, §17.5).
 
 Date: 2026-09-30
 
@@ -1001,7 +1001,7 @@ Per boundary R4, each is marked `verified` under `host_capabilities` only once b
 | Step | Side | Content | Acceptance |
 |---|---|---|---|
 | R0 | Host | Owner rulings R-Q1 to R-Q5 are recorded (§16), including the 2026-10-01 extensions under R-Q1 (relayed failure frames) and R-Q2 (`content_filter`); the south halves of R-Q1 and R-Q5 remain. Fix or accept the suspected defects of §13.5 in the native leg first (P21 §9 practice) | — |
-| R1 | South | Package with `openai-responses`: reference implementation, fixtures, judges, wasm build. Needs umbrella B1 (usage strictness), B2 (`request_facts`, descriptor auth admission) and B3 (the package declares `runtime_abi` and must be listed in the release index), and `decode_sse_v1` from the image world's minor (amended 2026-10-10: R1 does not need it, since the component splits its own stream; the host's pass-through needs it, from 0.53.0, umbrella §13.13) | Suite green; listed in the release index with the upstreams that have a fixture pack (§3.3). **Implemented 2026-10-10, not released (§17)**: suite green; OpenAI's pack only (R-Q16); the release index entry comes with the release |
+| R1 | South | Package with `openai-responses`: reference implementation, fixtures, judges, wasm build. Needs umbrella B1 (usage strictness), B2 (`request_facts`, descriptor auth admission) and B3 (the package declares `runtime_abi` and must be listed in the release index), and `decode_sse_v1` from the image world's minor (amended 2026-10-10: R1 does not need it, since the component splits its own stream; the host's pass-through needs it, from 0.53.0, umbrella §13.13) | Suite green; listed in the release index with the upstreams that have a fixture pack (§3.3). **Implemented 2026-10-10, released in 0.54.0 (§17, §17.5)**: suite green; OpenAI's pack only (R-Q16); listed in the 0.54.0 release index |
 | R2 | Host | Route provider rows to the family, one upstream at a time and only upstreams with a fixture pack; refuse `previous_response_id` on the northbound side; dual run; remove `supports_responses` / `upstream_requires_responses` branching for covered rows | §13.2 |
 | R3 | South + host | `openai-codex`: needs boundary B4 (recipes) and the host's recipe executor | Credential fixtures and gate ③ suite green; §13.2 on Codex rows |
 | R4 | Host | Retire the code of §13.4 | J1 count falls; removing the package leaves the host compiling, testing and starting (J3) |
@@ -1275,7 +1275,8 @@ failure frames) and R-Q2 (`content_filter`).
 
 ## 17. Implementation of R1 (2026-10-10)
 
-Step R1 is implemented on branch `responses-r1`, stacked on the rulings of 2026-10-10 (#176); nothing is released.
+Step R1 is implemented on branch `responses-r1`, stacked on the rulings of 2026-10-10 (#176), and merged as #177; it
+ships in 0.54.0 (§17.5).
 Only the `openai-responses` family is built. The `openai-codex` family, its credential recipe and the §12.3 credential
 fixtures are step R3, and the host's pass-through (§8.2) and the gate ③ suites of §12.4 are host work.
 
@@ -1382,6 +1383,18 @@ package cannot.
   and is set to the release's version by the release commit, since no published runtime admits the two new manifest
   fields.
 
+### 17.5 Release (0.54.0)
+
+R1 ships in 0.54.0 (release record `2026-10-10-release-0.54.0.md`), with #178 (gate ③ `wire_auth_exact`). The release
+commit raises the package's `south_runtime` from the placeholder 0.53.0 to **0.54.0**, as §17.4 rules: 0.54.0 is the
+first runtime whose gate ① admits `immutable_body_paths` and `north_passthrough`, so a host claiming 0.53.0 refuses the
+package through the declared runtime alone (`shipped_packages_v1::the_responses_package_declares_the_runtime_that_first_
+admits_its_declarations`, which now pins the literal instead of the workspace version). The package stays 1.0.0: no
+identity was published before, so changing its `manifest.json` (and so its `manifest_sha256`) retires nothing.
+`component.wasm` does not embed the manifest, so the release commit leaves its bytes unchanged; the three guest-linked
+crates keep the versions #177 gave them, and no component lockfile changes. `scripts/check-declared-runtime.sh` loads
+the package under the 0.54.0 runtime of the release tree.
+
 ## Revision note (2026-10-01)
 
 - Header: host baseline moved to `a82c852b`; host line numbers in `translate_responses.rs` updated for the #61 fix.
@@ -1448,3 +1461,5 @@ package cannot.
   literals checked by a cross-crate test; R-Q15 existing precedent for v1, typed fields later through the kernel
   chain; R-Q16 one fixture pack per third-party upstream. R-Q6 needs no ruling. The record is accepted.
 - 2026-10-10, step R1 implemented (§17, new): the header and §13.1 note it; nothing else in the record changes.
+- 2026-10-10, release 0.54.0 (§17.5, new): the package declares `south_runtime` 0.54.0; the header, §13.1 and §17's
+  opening note the release.

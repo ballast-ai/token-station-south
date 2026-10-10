@@ -45,6 +45,7 @@ jobs:
             components/embeddings-vertex
             components/image-azure
             components/provider-anthropic
+            components/provider-anthropic-bedrock-invoke
             components/provider-bedrock-converse
             components/provider-bedrock-converse-bearer
             components/provider-gemini
