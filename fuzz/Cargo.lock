@@ -364,11 +364,11 @@ dependencies = [
 
 [[package]]
 name = "south-host-grammars"
-version = "0.52.0"
+version = "0.53.0"
 
 [[package]]
 name = "south-north-codec"
-version = "0.52.0"
+version = "0.53.0"
 dependencies = [
  "base64",
  "serde_json",
