@@ -36,8 +36,8 @@ use crate::{
     map_canonical_fixture_header_invariant_failure, map_contract_error, map_provider_call_error,
 };
 
-/// Six cases multiplied by the eleven closed media-binary mismatch categories.
-pub const MAX_PROVIDER_MEDIA_BINARY_MISMATCHES_V1: usize = 66;
+/// Six cases multiplied by the twelve closed media-binary mismatch categories.
+pub const MAX_PROVIDER_MEDIA_BINARY_MISMATCHES_V1: usize = 72;
 
 /// A boxed, cancellation-safe assembled media-binary executor future.
 pub type AssembledProviderMediaBinaryExecutionFutureV1<'a> =
@@ -59,29 +59,44 @@ pub trait AssembledProviderMediaBinaryExecutorV1: Send + Sync {
 
 /// Adapter-reported resolver, transport, and wire-shape boundary evidence.
 ///
-/// The three wire-shape booleans are presence claims measured at the adapter's real boundary:
+/// The four wire-shape booleans are presence claims measured at the adapter's real boundary:
 /// whether the rendered media type reached it byte for byte, whether the declared body bytes
-/// reached it unmodified, and whether a bytes-reading transport seam carried the exchange. Like
-/// every adapter-reported value, a passing report alone is insufficient for host verification;
-/// the adoption review must confirm the wiring.
+/// reached it unmodified, whether a bytes-reading transport seam carried the exchange, and whether
+/// the prepared request's complete `auth_headers()` list was exactly the one pair
+/// [`ProviderMediaBinaryAuthArmV1::expected_wire_auth_header`] builds from the fixture's declared
+/// arm. Like every adapter-reported value, a passing report alone is insufficient for host
+/// verification; the adoption review must confirm the wiring.
 #[derive(Clone, Copy, PartialEq, Eq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "Each wire claim is an independent presence fact compared case by case; the suite's evidence shape is one bool per claim."
+)]
 pub struct ProviderMediaBinaryEvidenceV1 {
     resolver_calls: ProviderCallCountV1,
     transport_calls: ProviderCallCountV1,
     wire_content_type_exact: bool,
     wire_request_body_exact: bool,
     wire_binary_response_observed: bool,
+    wire_auth_exact: bool,
 }
 
 impl ProviderMediaBinaryEvidenceV1 {
     /// Constructs evidence and saturates both raw call counts.
+    ///
+    /// `wire_auth_exact` was added after 0.53.0: it is `true` only when a transport call saw the
+    /// prepared request's auth headers equal exactly the fixture arm's one expected pair.
     #[must_use]
+    #[expect(
+        clippy::fn_params_excessive_bools,
+        reason = "One positional bool per independent wire claim, as in every other suite's evidence constructor."
+    )]
     pub const fn new(
         resolver_calls: usize,
         transport_calls: usize,
         wire_content_type_exact: bool,
         wire_request_body_exact: bool,
         wire_binary_response_observed: bool,
+        wire_auth_exact: bool,
     ) -> Self {
         Self {
             resolver_calls: ProviderCallCountV1::from_usize(resolver_calls),
@@ -89,6 +104,7 @@ impl ProviderMediaBinaryEvidenceV1 {
             wire_content_type_exact,
             wire_request_body_exact,
             wire_binary_response_observed,
+            wire_auth_exact,
         }
     }
 
@@ -121,6 +137,12 @@ impl ProviderMediaBinaryEvidenceV1 {
     pub const fn wire_binary_response_observed(&self) -> bool {
         self.wire_binary_response_observed
     }
+
+    /// Returns whether the auth headers reached the transport as exactly the declared arm's pair.
+    #[must_use]
+    pub const fn wire_auth_exact(&self) -> bool {
+        self.wire_auth_exact
+    }
 }
 
 impl fmt::Debug for ProviderMediaBinaryEvidenceV1 {
@@ -132,6 +154,7 @@ impl fmt::Debug for ProviderMediaBinaryEvidenceV1 {
             .field("wire_content_type_exact", &self.wire_content_type_exact)
             .field("wire_request_body_exact", &self.wire_request_body_exact)
             .field("wire_binary_response_observed", &self.wire_binary_response_observed)
+            .field("wire_auth_exact", &self.wire_auth_exact)
             .finish()
     }
 }
@@ -235,6 +258,9 @@ pub enum ProviderMediaBinaryMismatchCategoryV1 {
     WireRequestBody,
     /// Bytes-reading-seam wire evidence differed.
     WireBinaryResponse,
+    /// Auth-header wire evidence differed: the credential arm the transport carried was not the
+    /// one the fixture declares.
+    WireAuth,
 }
 
 fixed_debug!(ProviderMediaBinaryMismatchCategoryV1 {
@@ -249,6 +275,7 @@ fixed_debug!(ProviderMediaBinaryMismatchCategoryV1 {
     WireContentType => "WireContentType",
     WireRequestBody => "WireRequestBody",
     WireBinaryResponse => "WireBinaryResponse",
+    WireAuth => "WireAuth",
 });
 
 /// One case/category mismatch without expected or observed payload values.
@@ -486,6 +513,12 @@ fn compare_media_binary_evidence(
         ProviderMediaBinaryMismatchCategoryV1::WireBinaryResponse,
         mismatches,
     );
+    record_if(
+        expected.wire_auth_exact() != observed.wire_auth_exact(),
+        fixture,
+        ProviderMediaBinaryMismatchCategoryV1::WireAuth,
+        mismatches,
+    );
 }
 
 fn record_if(
@@ -582,7 +615,8 @@ pub fn parse_reference_media_binary_input(
 /// Multipart rows run through `execute_multipart_binary_call_v1` and text rows through
 /// `execute_text_binary_call_v1`. The wire-shape booleans are measured on the prepared request at
 /// a fake bytes-reading transport boundary, mirroring what a real adapter must measure on its
-/// wire: the rendered media type, the body bytes, and which transport seam carried the exchange.
+/// wire: the rendered media type, the body bytes, which transport seam carried the exchange, and
+/// the auth headers against the fixture's declared arm.
 pub struct ReferenceAssembledProviderMediaBinaryExecutorV1;
 
 impl ReferenceAssembledProviderMediaBinaryExecutorV1 {
@@ -621,7 +655,7 @@ async fn execute_reference_media_binary_case(
             Err(code) => {
                 return ProviderMediaBinaryObservationV1::failure(
                     code,
-                    ProviderMediaBinaryEvidenceV1::new(0, 0, false, false, false),
+                    ProviderMediaBinaryEvidenceV1::new(0, 0, false, false, false, false),
                 );
             }
         };
@@ -633,6 +667,7 @@ async fn execute_reference_media_binary_case(
         upstream: fixture.upstream(),
         expected_content_type: fixture.input().expected_content_type(),
         expected_body: fixture.input().body().bytes(),
+        expected_auth_header: fixture.auth_arm().expected_wire_auth_header(),
         probe: Arc::clone(&probe),
     };
     let cancellation = CancellationToken::new();
@@ -667,6 +702,7 @@ async fn execute_reference_media_binary_case(
         probe.content_type_exact.load(Ordering::SeqCst),
         probe.request_body_exact.load(Ordering::SeqCst),
         probe.binary_response_observed.load(Ordering::SeqCst),
+        probe.auth_exact.load(Ordering::SeqCst),
     );
     match result {
         Ok(response) => ProviderMediaBinaryObservationV1::response(response, evidence),
@@ -676,13 +712,14 @@ async fn execute_reference_media_binary_case(
     }
 }
 
-/// Observed wire shape at the fake transport boundary. All three are presence claims, so all
+/// Observed wire shape at the fake transport boundary. All four are presence claims, so all
 /// start `false` and only a transport call can raise them.
 #[derive(Default)]
 struct WireShapeProbe {
     content_type_exact: AtomicBool,
     request_body_exact: AtomicBool,
     binary_response_observed: AtomicBool,
+    auth_exact: AtomicBool,
 }
 
 struct ArmSecretResolver {
@@ -706,6 +743,7 @@ struct WireRecordingBinaryTransport<'fixture> {
     upstream: &'fixture ProviderMediaBinaryUpstreamV1,
     expected_content_type: String,
     expected_body: &'static [u8],
+    expected_auth_header: (&'static str, Vec<u8>),
     probe: Arc<WireShapeProbe>,
 }
 
@@ -724,6 +762,19 @@ impl WireRecordingBinaryTransport<'_> {
             request.body().map(RequestBodyRefV1::as_bytes) == Some(self.expected_body),
             Ordering::SeqCst,
         );
+        // The complete auth header list, compared against the one pair built from the fixture's
+        // declared arm — not from the request's own `ProviderAuthV1` — so an adapter that maps
+        // the header-secret arm to Bearer (same secret, under `authorization`) is measured as a
+        // different wire. Whole-list equality also rules out an extra header beside the right
+        // one; the ordinary channel is checked for `authorization` for the same reason.
+        let (expected_name, expected_value) = &self.expected_auth_header;
+        let mut bound = request.auth_headers();
+        let auth_exact = bound.len() == 1
+            && bound.next().is_some_and(|(name, value)| {
+                name.eq_ignore_ascii_case(expected_name) && value == expected_value.as_slice()
+            })
+            && request.headers().get("authorization").is_none();
+        self.probe.auth_exact.store(auth_exact, Ordering::SeqCst);
     }
 }
 

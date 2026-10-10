@@ -105,10 +105,13 @@ async fn each_single_difference_reports_exactly_its_one_case_and_category() {
         (Case::TextBinaryBearerSuccess, Cat::WireContentType),
         (Case::MultipartBinarySuccess, Cat::WireRequestBody),
         (Case::MultipartBinarySuccess, Cat::WireBinaryResponse),
+        (Case::MultipartBinaryRejectionCarriesBody, Cat::WireAuth),
+        (Case::TextBinaryBearerSuccess, Cat::WireAuth),
         // The refused rows expect `false` for every wire claim, so a probe that hardcodes `true`
         // is caught there and not only on the reached rows.
         (Case::TextContentTypeSmuggled, Cat::WireContentType),
         (Case::TextBinarySlotMismatch, Cat::WireBinaryResponse),
+        (Case::TextContentTypeSmuggled, Cat::WireAuth),
     ];
 
     for (case_id, category) in isolated_mismatches {
@@ -185,7 +188,8 @@ async fn a_fully_wrong_executor_reports_every_case_without_failing_fast() {
             fixture: &'a ProviderMediaBinaryFixtureV1,
         ) -> AssembledProviderMediaBinaryExecutionFutureV1<'a> {
             Box::pin(async move {
-                let evidence = ProviderMediaBinaryEvidenceV1::new(257, 256, false, false, false);
+                let evidence =
+                    ProviderMediaBinaryEvidenceV1::new(257, 256, false, false, false, false);
                 match fixture.upstream() {
                     ProviderMediaBinaryUpstreamV1::NotReached => {
                         ProviderMediaBinaryObservationV1::response(
@@ -217,6 +221,7 @@ async fn a_fully_wrong_executor_reports_every_case_without_failing_fast() {
         ProviderMediaBinaryMismatchCategoryV1::WireContentType,
         ProviderMediaBinaryMismatchCategoryV1::WireRequestBody,
         ProviderMediaBinaryMismatchCategoryV1::WireBinaryResponse,
+        ProviderMediaBinaryMismatchCategoryV1::WireAuth,
     ] {
         assert!(categories.contains(&category), "{category:?}");
     }
@@ -227,13 +232,15 @@ async fn a_fully_wrong_executor_reports_every_case_without_failing_fast() {
 
 #[test]
 fn evidence_construction_saturates_large_boundary_counts() {
-    let evidence = ProviderMediaBinaryEvidenceV1::new(256, 257, true, false, true);
+    let evidence = ProviderMediaBinaryEvidenceV1::new(256, 257, true, false, true, false);
 
     assert_eq!(evidence.resolver_calls(), ProviderCallCountV1::MoreThanOne);
     assert_eq!(evidence.transport_calls(), ProviderCallCountV1::MoreThanOne);
     assert!(evidence.wire_content_type_exact());
     assert!(!evidence.wire_request_body_exact());
     assert!(evidence.wire_binary_response_observed());
+    assert!(!evidence.wire_auth_exact());
+    assert!(ProviderMediaBinaryEvidenceV1::new(1, 1, false, false, false, true).wire_auth_exact());
 }
 
 #[test]
@@ -243,7 +250,7 @@ fn debug_output_contains_only_safe_structural_evidence() {
 
     let observation = ProviderMediaBinaryObservationV1::response(
         response(200, BODY_SENTINEL, Some(METADATA_SENTINEL), Some(METADATA_SENTINEL)),
-        ProviderMediaBinaryEvidenceV1::new(1, 1, true, true, true),
+        ProviderMediaBinaryEvidenceV1::new(1, 1, true, true, true, true),
     );
 
     let debug = format!("{observation:?}");
@@ -322,6 +329,7 @@ fn observation_with_single_mismatch_inner(
         expected.wire_content_type_exact() ^ is(Cat::WireContentType),
         expected.wire_request_body_exact() ^ is(Cat::WireRequestBody),
         expected.wire_binary_response_observed() ^ is(Cat::WireBinaryResponse),
+        expected.wire_auth_exact() ^ is(Cat::WireAuth),
     );
 
     match fixture.expected().outcome() {
