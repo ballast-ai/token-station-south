@@ -45,7 +45,7 @@
   "response_elision_paths": [
     "/data/*/b64_json"
   ],
-  "immutable_body_paths": [],
+  "immutable_body_paths": ["model", "n", "size", "width", "height", "response_format", "image", "mask"],
   "state": {
     "metering_required": [
       "images"

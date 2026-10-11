@@ -430,8 +430,14 @@ world image-adapter-v1 {
   (boundary record §13.11: "no declaration", not "no capability"), and the host applies no catalog limit or default to it.
 - **`prepare`**: a pure function the host calls **before admission and reservation**; it returns the pre-dispatch
   facts (§8), the request descriptor (§6.3), `repeat`, the `response_body_form` and response elision paths,
-  `immutable_body_paths` (same semantics as task contract 6 §4), and a bounded `state` (≤ 8 KiB, no secrets, for use
-  by the two later functions).
+  `immutable_body_paths` (same semantics as task contract 6 §4 on a JSON descriptor; on a multipart descriptor see
+  below), and a bounded `state` (≤ 8 KiB, no secrets, for use by the two later functions).
+  **On a multipart descriptor** (added with `image-azure` 1.0.2, P22 Q3; no type and no contract number change) each
+  path is a single segment under the same grammar and names a **part**: operator request extras may neither add a part
+  of that name, remove one, nor rewrite its value, and a name also covers its array form (`image` covers `image[]`,
+  since `[]` is outside the path grammar). A multi-segment path has no meaning on a multipart descriptor and a host
+  treats it as naming nothing it may touch: it injects no extra part whose name starts with that path's first segment.
+  As on JSON, a name may be one the component leaves out, and immutable then means "stays absent".
 - **`parse-response`**: called once per upstream round; returns one of the four outcomes of §9.2. Error mapping is
   merged in here, with no separate `map-provider-error`: on the synchronous image surface only the component can tell
   "failed but charged" from "failed and not charged" (MiniMax's errors arrive as HTTP 200 + `base_resp`,
@@ -869,7 +875,7 @@ output.
 3. Every §11 safe fetch vector is refused.
 4. §10.2's verify-then-settle ordering: no `finalize` when a fetch fails or `render` fails after upstream success.
 5. No extra configuration is injected into `immutable_body_paths`, their ancestors or their descendants (same rule as
-   task contract 6 §4).
+   task contract 6 §4); on a multipart descriptor, into no part a path names nor its array form (§7 `prepare`).
 6. Undeclared operations and undeclared metering forms are refused before admission.
 7. The precedence between image component routes and task component routes is pinned by a test; a model never hits
    both.

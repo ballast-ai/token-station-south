@@ -67,6 +67,14 @@ const GENERATIONS_PATH: &str = "mai/v1/images/generations";
 const EDITS_PATH: &str = "mai/v1/images/edits";
 /// The native arm's `AZURE_IMAGE_OWNED`: request extras may not set these.
 const IMMUTABLE_BODY_PATHS: [&str; 5] = ["model", "width", "height", "n", "response_format"];
+/// The parts of the multipart edit request that operator request extras may neither add, remove nor
+/// rewrite (contracts.image `PreparedImageCallV1::immutable_body_paths` on a multipart descriptor: a
+/// single segment names a part, and `image` also covers its array form `image[]`). They are the parts
+/// this component reads, rewrites or translates: the count and format caps, the size and the
+/// `width` / `height` pair it becomes, the upstream model, and the input image and mask. `size` is
+/// named although the component drops it: immutable then means "stays absent".
+const EDIT_IMMUTABLE_PART_NAMES: [&str; 8] =
+    ["model", "n", "size", "width", "height", "response_format", "image", "mask"];
 const MIN_EDGE: u32 = 768;
 const MAX_PIXELS: u64 = 1_048_576;
 const DEFAULT_EDGE: u32 = 1024;
@@ -333,7 +341,7 @@ impl AzureImageReferenceV1 {
         prepared(
             facts(ImageOperationV1::Edit, inputs, translated, forms.to_vec()),
             &descriptor,
-            &[],
+            &EDIT_IMMUTABLE_PART_NAMES,
             forms,
         )
     }

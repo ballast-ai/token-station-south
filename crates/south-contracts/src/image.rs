@@ -772,7 +772,10 @@ pub struct PreparedImageCallV1 {
     pub response_body_form: ResponseBodyFormV1,
     /// Response-side elision paths.
     pub response_elision_paths: Vec<PathPatternV1>,
-    /// Request-body paths the host must not rewrite (task contract 6 §4).
+    /// Request-body paths the host must not rewrite (task contract 6 §4). On a multipart descriptor
+    /// each path is a single segment that names a part, and also covers that part's array form
+    /// (`image` covers `image[]`): operator request extras may neither add, remove nor rewrite such
+    /// a part (image world record §7, `prepare`).
     pub immutable_body_paths: Vec<String>,
     /// The bounded, secret-free state `parse-response` and `render` receive, as compact JSON.
     pub state: String,

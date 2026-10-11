@@ -157,3 +157,35 @@ mod mutations {
         }
     }
 }
+
+/// P22 Q3 (`image-azure` 1.0.2): the multipart edit names the parts operator extras may not touch.
+/// On a multipart descriptor every immutable path is a single segment under contract 6's grammar
+/// (contracts.image `PreparedImageCallV1::immutable_body_paths`), and the edit names at least the
+/// count, the size pair and the input image and mask.
+#[test]
+fn the_edit_names_its_immutable_parts_as_single_segments() {
+    for case in
+        ["edit-auto-size-is-dropped", "edit-translates-size", "edit-without-size-keeps-the-parts"]
+    {
+        let expected: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(
+                root().join(format!("fixtures-image-azure/image-v1.prepare.{case}.expected.json")),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let paths: Vec<String> = serde_json::from_value(
+            expected
+                .pointer("/ok/immutable_body_paths")
+                .or_else(|| expected.pointer("/immutable_body_paths"))
+                .unwrap_or_else(|| panic!("{case}: no immutable_body_paths in {expected}"))
+                .clone(),
+        )
+        .unwrap();
+        assert_eq!(south_contracts::validate_immutable_body_paths(&paths), Ok(()), "{case}");
+        assert!(paths.iter().all(|path| !path.contains('.')), "{case}: single segments {paths:?}");
+        for part in ["model", "n", "size", "width", "height", "image", "mask"] {
+            assert!(paths.iter().any(|path| path == part), "{case}: names `{part}` {paths:?}");
+        }
+    }
+}
