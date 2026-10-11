@@ -33,7 +33,7 @@ jobs:
           # The guest-linked crate version check compares this tree with the
           # previous release tag, so it needs the tags and their history.
           fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master
         with:
           toolchain: 1.96.0
           # The components are wasm32-wasip2 guests built as child cargo
