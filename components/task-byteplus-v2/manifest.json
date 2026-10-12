@@ -1,6 +1,6 @@
 {
   "name": "task-byteplus-v2",
-  "version": "0.36.14",
+  "version": "0.36.15",
   "api_version": "task-adapter-v2",
   "providers": [
     "byteplus-video"
