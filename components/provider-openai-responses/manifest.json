@@ -1,9 +1,10 @@
 {
   "name": "provider-openai-responses",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "api_version": "provider-adapter-v2",
   "providers": [
-    "openai-responses"
+    "openai-responses",
+    "openai-codex"
   ],
   "capabilities": [
     "chat",
@@ -25,15 +26,149 @@
       "stream": {
         "body": "/stream"
       }
+    },
+    "openai-codex": {
+      "output_cap": [],
+      "model": {
+        "body": "/model"
+      },
+      "stream": {
+        "body": "/stream"
+      }
     }
   },
   "immutable_body_paths": {
     "openai-responses": [
       "store"
+    ],
+    "openai-codex": [
+      "store",
+      "stream",
+      "instructions",
+      "temperature",
+      "max_output_tokens"
     ]
   },
   "north_passthrough": {
-    "openai-responses": "responses"
+    "openai-responses": "responses",
+    "openai-codex": "responses"
+  },
+  "credentials": {
+    "schema": "south.credential-recipe.v1",
+    "families": [
+      "openai-codex"
+    ],
+    "fields": {
+      "access_token": {
+        "secret": true,
+        "description": "A Codex access token, such as tokens.access_token in the Codex CLI's auth.json. Used as is when no refresh token is stored."
+      },
+      "refresh_token": {
+        "secret": true,
+        "description": "The Codex refresh token, such as tokens.refresh_token in the Codex CLI's auth.json. Rotated on every refresh and written back."
+      },
+      "account_id": {
+        "secret": false,
+        "syntax": "token",
+        "description": "The ChatGPT account id, such as tokens.account_id in the Codex CLI's auth.json. Sent as chatgpt-account-id; a refresh naming another account is refused."
+      }
+    },
+    "require_one_of": [
+      [
+        "access_token",
+        "refresh_token"
+      ]
+    ],
+    "import": {
+      "access_token": {
+        "file": "codex-auth-json",
+        "pointers": [
+          "/tokens/access_token"
+        ]
+      },
+      "account_id": {
+        "file": "codex-auth-json",
+        "pointers": [
+          "/tokens/account_id"
+        ]
+      },
+      "refresh_token": {
+        "file": "codex-auth-json",
+        "pointers": [
+          "/tokens/refresh_token"
+        ]
+      }
+    },
+    "slots": {
+      "provider_api_key": {
+        "minted": "codex"
+      }
+    },
+    "recipes": {
+      "codex": {
+        "steps": [
+          {
+            "id": "refresh",
+            "kind": "oauth2_token",
+            "encoding": "json",
+            "endpoint": "https://auth.openai.com/oauth/token",
+            "requires": [
+              "refresh_token"
+            ],
+            "params": {
+              "client_id": {
+                "const": "app_EMoamEEZ73f0CkXaXp7hrann"
+              },
+              "grant_type": {
+                "const": "refresh_token"
+              },
+              "refresh_token": {
+                "field": "refresh_token"
+              },
+              "scope": {
+                "const": "openid profile email offline_access"
+              }
+            },
+            "extract": {
+              "access_token": {
+                "pointer": "/access_token",
+                "secret": true
+              },
+              "account": {
+                "jwt_claim": {
+                  "token": "/id_token",
+                  "pointer": "/https:~1~1api.openai.com~1auth/chatgpt_account_id"
+                },
+                "optional": true,
+                "must_equal_field": "account_id"
+              },
+              "expires_at": {
+                "fixed_window": true
+              },
+              "refresh_token": {
+                "pointer": "/refresh_token",
+                "secret": true,
+                "optional": true
+              }
+            }
+          }
+        ],
+        "present": "refresh.access_token",
+        "rotates_refresh_material": true,
+        "write_back": {
+          "refresh_token": "refresh.refresh_token"
+        },
+        "without_refresh_material": "use_stored",
+        "fixed_validity_seconds": 3000,
+        "attributes": {
+          "account_id": {
+            "field": "account_id",
+            "export": true,
+            "persist": true
+          }
+        }
+      }
+    }
   },
   "permissions": {
     "network": false,

@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "capability",
+    "http_status": 400,
+    "message": "the Codex backend serves only streaming requests; send the request with stream: true"
+  }
+}

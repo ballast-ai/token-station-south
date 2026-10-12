@@ -4,7 +4,8 @@ Gate ② samples for `provider-openai-responses` (family `openai-responses`), ju
 (`docs/design/2026-09-30-openai-responses-upstream-component.md` §12.1, step R1). This is **OpenAI's own pack** (R-Q16):
 no row is a capture of real traffic, and no row stands for another upstream. A third-party Responses upstream (Groq,
 xAI, Bailian, Azure, Bedrock's OpenAI-shaped endpoint) is admitted only by a pack of its own captured traffic, added in a
-later release (record §3.3). The Codex rows and the `credential.*` rows of §12.1 belong to step R3.
+later release (record §3.3). The Codex rows and the `credential.*` rows of §12.1 are step R3's, in
+`fixtures-openai-codex/`.
 
 Each row's source:
 
@@ -68,3 +69,17 @@ Added with `docs/design/2026-10-11-responses-reasoning-replay-and-passthrough-su
   stream: on `response.output_item.done` and in the terminal `response`). Their expected IR is `reasoning-summary`'s:
   the value never enters the IR (record §5, §6.1); under pass-through the client receives the upstream's bytes.
 
+
+## R3 rows (1.2.0)
+
+Added with `docs/design/2026-10-12-responses-r3-codex-and-request-fields.md` §4. The Codex family's rows are in
+`fixtures-openai-codex/`, which gate ② judges together with this directory (see that pack's README).
+
+- **`request-fields`** (codec-derived; the client body is in `client_bodies()`): `user`, `metadata`,
+  `prompt_cache_key` and `truncation` reach the body under their own names, unchanged.
+- **`refused-request-field-out-of-bounds`** (17 `metadata` entries) and **`refused-unknown-truncation`**
+  (`truncation: "middle"`): hand-written IR as the Chat codec produces it, which copies the three Chat names verbatim
+  and validates nothing; the component holds every value to the north codec's bounds and refuses with
+  `invalid_request` (400).
+
+Every other row is unchanged: a request without the four fields builds the same body as before.

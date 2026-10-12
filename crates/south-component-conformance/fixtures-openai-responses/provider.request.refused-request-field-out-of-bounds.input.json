@@ -1,0 +1,49 @@
+{
+  "provider_config": {
+    "provider": "openai-responses",
+    "base_url": "https://api.openai.com/v1",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "gpt-5.5",
+        "tool": true,
+        "vision": true,
+        "json_schema": true,
+        "context_window": 400000,
+        "supported_parameters": [
+          "reasoning_effort",
+          "temperature",
+          "top_p"
+        ]
+      }
+    ]
+  },
+  "chat_request": {
+    "model": "gpt-5.5",
+    "messages": [
+      {
+        "role": "user",
+        "content": "hi"
+      }
+    ],
+    "metadata": {
+      "k00": "v",
+      "k01": "v",
+      "k02": "v",
+      "k03": "v",
+      "k04": "v",
+      "k05": "v",
+      "k06": "v",
+      "k07": "v",
+      "k08": "v",
+      "k09": "v",
+      "k10": "v",
+      "k11": "v",
+      "k12": "v",
+      "k13": "v",
+      "k14": "v",
+      "k15": "v",
+      "k16": "v"
+    }
+  }
+}

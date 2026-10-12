@@ -18,7 +18,10 @@
 //! `{"usage_pointer": "/usage"}` — where the usage object sits in the upstream
 //! body — which `UsageNeverDefaulted` deletes to prove the component refuses
 //! rather than reports zeros (B1, `docs/design/2026-09-30-host-zero-vendor-boundary.md`
-//! §6.2).
+//! §6.2). A stream case may carry the same sidecar with one more key,
+//! `{"usage_chunk": 3, "usage_pointer": "/response/usage"}`: the string chunk
+//! holding the terminal frame, and the pointer into that frame's `data:` JSON
+//! (`OpenAI` Responses upstream record §12.2, built in step R3).
 //!
 //! The same directory may hold `credential.<family>.<case>` pairs: gate ②'s credential-recipe
 //! samples (B4, host-zero-vendor-boundary §3.7). They feed no component function — south's
@@ -112,7 +115,14 @@ pub struct CaseV1 {
     /// `UsageNeverDefaulted` deletes what it points at and requires an error.
     /// Written by the fixture author, so it proves only what the author
     /// pointed at.
+    ///
+    /// On a stream case it points into the `data:` JSON of the chunk
+    /// [`CaseV1::usage_chunk`] names.
     pub usage_pointer: Option<String>,
+    /// The index in `chunks` of the stream chunk holding the usage
+    /// [`CaseV1::usage_pointer`] points into: present exactly on a stream case
+    /// that carries the sidecar.
+    pub usage_chunk: Option<usize>,
 }
 
 /// Every case a component package ships, in a stable order.
@@ -164,10 +174,12 @@ impl FixturePackV1 {
             };
             let expected_path = directory.join(format!("{stem}.expected.json"));
             let meta_path = directory.join(format!("{stem}.meta.json"));
-            let usage_pointer = if meta_path.exists() {
-                Some(usage_pointer_of(&read_json(&meta_path, &stem)?, &stem, family)?)
+            let (usage_pointer, usage_chunk) = if meta_path.exists() {
+                let (pointer, chunk) =
+                    usage_meta_of(&read_json(&meta_path, &stem)?, &stem, family)?;
+                (Some(pointer), chunk)
             } else {
-                None
+                (None, None)
             };
             cases.push(CaseV1 {
                 input: read_json(&input_path, &stem)?,
@@ -175,6 +187,7 @@ impl FixturePackV1 {
                 family,
                 name: stem,
                 usage_pointer,
+                usage_chunk,
             });
         }
 
@@ -214,28 +227,44 @@ impl FixturePackV1 {
     }
 }
 
-/// A case's sidecar metadata: exactly `{"usage_pointer": "/…"}`, on a response
-/// case. Anything else is refused, so a misspelt key cannot silently disable
-/// the check it was meant to enable.
-fn usage_pointer_of(
+/// A case's sidecar metadata: exactly `{"usage_pointer": "/…"}` on a response
+/// case, and exactly `{"usage_chunk": <index>, "usage_pointer": "/…"}` on a
+/// stream case. Anything else is refused, so a misspelt key cannot silently
+/// disable the check it was meant to enable.
+fn usage_meta_of(
     meta: &Value,
     case: &str,
     family: ProviderFamilyV1,
-) -> Result<String, FixtureErrorV1> {
+) -> Result<(String, Option<usize>), FixtureErrorV1> {
     let invalid = |detail: &str| FixtureErrorV1::InvalidMeta {
         case: case.to_owned(),
         detail: detail.to_owned(),
     };
-    if family != ProviderFamilyV1::Response {
-        return Err(invalid("only response cases carry metadata"));
-    }
-    let Some(map) = meta.as_object().filter(|map| map.len() == 1) else {
-        return Err(invalid("metadata must be an object with the single key `usage_pointer`"));
+    let keys = match family {
+        ProviderFamilyV1::Response => 1,
+        ProviderFamilyV1::Stream => 2,
+        _ => return Err(invalid("only response and stream cases carry metadata")),
     };
-    match map.get("usage_pointer").and_then(Value::as_str) {
-        Some(pointer) if pointer.starts_with('/') => Ok(pointer.to_owned()),
-        _ => Err(invalid("`usage_pointer` must be a non-root JSON Pointer string")),
+    let Some(map) = meta.as_object().filter(|map| map.len() == keys) else {
+        return Err(invalid(if keys == 1 {
+            "metadata must be an object with the single key `usage_pointer`"
+        } else {
+            "stream metadata must be an object with exactly `usage_chunk` and `usage_pointer`"
+        }));
+    };
+    let pointer = match map.get("usage_pointer").and_then(Value::as_str) {
+        Some(pointer) if pointer.starts_with('/') => pointer.to_owned(),
+        _ => return Err(invalid("`usage_pointer` must be a non-root JSON Pointer string")),
+    };
+    if family == ProviderFamilyV1::Response {
+        return Ok((pointer, None));
     }
+    let chunk = map
+        .get("usage_chunk")
+        .and_then(Value::as_u64)
+        .and_then(|chunk| usize::try_from(chunk).ok())
+        .ok_or_else(|| invalid("`usage_chunk` must be a chunk index"))?;
+    Ok((pointer, Some(chunk)))
 }
 
 /// `provider.<family>.<case>` -> the family, or `None` when the file belongs
@@ -322,7 +351,8 @@ pub enum FixtureErrorV1 {
         detail: String,
     },
     /// A `.meta.json` sidecar that is not `{"usage_pointer": "/…"}` on a
-    /// response case.
+    /// response case or `{"usage_chunk": n, "usage_pointer": "/…"}` on a
+    /// stream case.
     InvalidMeta {
         case: String,
         detail: String,

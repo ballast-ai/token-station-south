@@ -402,7 +402,7 @@ struct Dialect {
     cache: &'static [&'static str],
 }
 
-const DIALECTS: [Dialect; 7] = [
+const DIALECTS: [Dialect; 8] = [
     // `prompt_tokens` already contains `prompt_tokens_details.cached_tokens`.
     Dialect {
         dir: "fixtures",
@@ -450,6 +450,13 @@ const DIALECTS: [Dialect; 7] = [
     // (and the host-read `cache_write_tokens`, see `responses_usage_partitions_the_prompt`).
     Dialect {
         dir: "fixtures-openai-responses",
+        usage_key: "usage",
+        prompt: &["input_tokens"],
+        cache: &["cached_tokens", "cache_write_tokens"],
+    },
+    // The Codex family speaks the same wire and the same usage convention (R3 record §3.1).
+    Dialect {
+        dir: "fixtures-openai-codex",
         usage_key: "usage",
         prompt: &["input_tokens"],
         cache: &["cached_tokens", "cache_write_tokens"],

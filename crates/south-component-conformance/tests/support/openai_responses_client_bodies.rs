@@ -66,6 +66,13 @@ fn client_bodies() -> Vec<(&'static str, serde_json::Value)> {
             json!({"model": "gpt-5.5", "input": "Prove that there are infinitely many primes.",
                    "reasoning": {"effort": "high", "summary": "auto"}, "top_p": 0.9}),
         ),
+        // R3 record §4.3: the four client fields the IR has no typed slot for.
+        (
+            "request-fields",
+            json!({"model": "gpt-5.5", "input": "Summarize our last meeting.", "user": "user-42",
+                   "metadata": {"tenant": "acme", "trace": "t-1"},
+                   "prompt_cache_key": "meetings-acme", "truncation": "auto"}),
+        ),
     ]
 }
 

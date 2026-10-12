@@ -1,5 +1,6 @@
 //! The `OpenAI` Responses component's sandbox acceptance test over its frozen
-//! fixture pack.
+//! fixture pack: both directories, so both families (`openai-responses` and, since R3,
+//! `openai-codex`) and the Codex recipe's credential rows are judged against the wasm build.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -18,6 +19,8 @@ use south_provider_runtime::{ComponentRuntimeV1, NoSecretsV1, RuntimeLimitsV1};
 mod gate2_report;
 #[path = "support/host_range.rs"]
 mod host_range;
+#[path = "support/openai_responses_packs.rs"]
+mod packs;
 
 fn repo_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().and_then(Path::parent).expect("repo root")
@@ -62,8 +65,7 @@ fn sandboxed() -> SandboxedComponentV1 {
 }
 
 fn shipped_pack() -> FixturePackV1 {
-    FixturePackV1::load(&Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures-openai-responses"))
-        .expect("the shipped fixture pack loads")
+    packs::package_pack()
 }
 
 #[test]
@@ -80,6 +82,17 @@ fn the_sandboxed_component_passes_gate_two_byte_for_byte() {
         eprintln!("{failure}");
     }
     assert!(report.is_passing(), "{report}");
+    // Both families' request rows ran in the sandbox.
+    for family in ["openai-responses", "openai-codex"] {
+        assert!(
+            shipped_pack().cases().iter().any(|case| {
+                case.input.pointer("/provider_config/provider").and_then(|p| p.as_str())
+                    == Some(family)
+                    && report.outcomes().iter().any(|outcome| outcome.case == case.name)
+            }),
+            "no {family} row ran"
+        );
+    }
 }
 
 #[test]

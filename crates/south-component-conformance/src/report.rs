@@ -72,6 +72,10 @@ pub enum CheckV1 {
     UsageRows,
     /// Deleting the usage object a response fixture points at makes the
     /// component refuse the response rather than report zeros (§6.2 item 3).
+    /// A stream fixture may point too, into the `data:` JSON of the chunk
+    /// holding its terminal frame: the stream must then end in a provider
+    /// protocol error with no usage event (`OpenAI` Responses upstream record
+    /// §12.2, for a family that only streams).
     ///
     /// Usage is funds evidence: a zero the upstream never said would settle a
     /// call as free. The pointer is the fixture author's, so for a third-party

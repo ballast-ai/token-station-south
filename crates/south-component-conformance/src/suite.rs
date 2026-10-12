@@ -889,8 +889,14 @@ fn usage_checks(
             if USAGE_ROWS.contains(&case.name.as_str()) {
                 outcomes.push(usage_row(case));
             }
-            if let Some(pointer) = &case.usage_pointer {
-                outcomes.push(usage_never_defaulted(case, pointer, invoke));
+            match (&case.usage_pointer, case.usage_chunk) {
+                (Some(pointer), Some(chunk)) => {
+                    outcomes.push(stream_usage_never_defaulted(case, pointer, chunk, invoke));
+                }
+                (Some(pointer), None) => {
+                    outcomes.push(usage_never_defaulted(case, pointer, invoke));
+                }
+                (None, _) => {}
             }
         }
     }
@@ -984,6 +990,74 @@ fn usage_never_defaulted(
             "with `{pointer}` deleted the component still produced a response; usage is funds \
              evidence and a missing report must be an error, never a zero"
         )),
+    }
+}
+
+/// The stream form of [`usage_never_defaulted`] (`OpenAI` Responses upstream record §12.2): deletes
+/// what `pointer` names in the `data:` JSON of string chunk `chunk` and requires an error and no
+/// usage — a family that only streams has no response fixture for the check to run on.
+fn stream_usage_never_defaulted(
+    case: &CaseV1,
+    pointer: &str,
+    chunk: usize,
+    invoke: &dyn Fn(&Value) -> Invoked,
+) -> OutcomeV1 {
+    let check = CheckV1::UsageNeverDefaulted;
+    let failed = |detail: String| OutcomeV1::failed(check, &case.name, detail);
+
+    let Some(text) = case.input.pointer(&format!("/chunks/{chunk}")).and_then(Value::as_str) else {
+        return failed(format!("usage_chunk {chunk} names no string chunk of the stream"));
+    };
+    let lines: Vec<&str> = text.split_inclusive('\n').collect();
+    let data: Vec<usize> = (0..lines.len()).filter(|&i| lines[i].starts_with("data:")).collect();
+    let [line] = data[..] else {
+        return failed(format!("usage_chunk {chunk} must hold exactly one `data:` line"));
+    };
+    let payload = lines[line].trim_start_matches("data:").trim();
+    let Ok(mut frame) = serde_json::from_str::<Value>(payload) else {
+        return failed(format!("the `data:` line of usage_chunk {chunk} is not a JSON document"));
+    };
+    let (parent, key) = pointer.rsplit_once('/').unwrap_or(("", pointer));
+    let key = key.replace("~1", "/").replace("~0", "~");
+    let removed = match frame.pointer_mut(parent) {
+        Some(Value::Object(map)) => map.remove(&key).is_some(),
+        _ => false,
+    };
+    if !removed {
+        return failed(format!("usage_pointer `{pointer}` names nothing in usage_chunk {chunk}"));
+    }
+    let ending = &lines[line][lines[line].trim_end_matches(['\r', '\n']).len()..];
+    let mut rebuilt: Vec<String> = lines.iter().map(|line| (*line).to_owned()).collect();
+    rebuilt[line] = format!("data: {frame}{ending}");
+    let mut mutated = case.input.clone();
+    mutated["chunks"][chunk] = Value::String(rebuilt.concat());
+
+    match invoke(&mutated) {
+        Err(Failure::Component { envelope, .. })
+            if envelope["code"] == "provider_protocol_error" =>
+        {
+            OutcomeV1::passed(check, &case.name)
+        }
+        Err(failure) => failed(format!(
+            "without its usage the stream was refused, but not as a provider protocol error: {}",
+            failure.detail()
+        )),
+        Ok(events) => {
+            let events = events.as_array().map(Vec::as_slice).unwrap_or_default();
+            let usage = events.iter().any(|event| event["type"] == "usage");
+            let error = events.iter().any(|event| {
+                event["type"] == "error" && event["error"]["code"] == "provider_protocol_error"
+            });
+            if error && !usage {
+                OutcomeV1::passed(check, &case.name)
+            } else {
+                failed(format!(
+                    "with `{pointer}` deleted from chunk {chunk} the stream still ended without a \
+                     provider protocol error, or reported usage; usage is funds evidence and a \
+                     missing report must be an error, never a zero"
+                ))
+            }
+        }
     }
 }
 

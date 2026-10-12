@@ -6,8 +6,11 @@
 //! literals; the test `openai_responses_vocabulary_v1` depends on both crates and asserts that the
 //! two spellings agree.
 
-/// The `extensions` keys an `OpenAI` component acts on. Exactly the three the `OpenAI`-compatible
-/// reference already reads (record §4.1, R-Q15): this module names them, it adds no use.
+/// The `extensions` keys an `OpenAI` component acts on.
+///
+/// The three the `OpenAI`-compatible reference already reads (record §4.1, R-Q15), and since R3
+/// the four client fields the IR has no typed slot for (R3 record
+/// `2026-10-12-responses-r3-codex-and-request-fields.md` §4.3, RQ3-Q3).
 pub mod extension {
     /// Per tool name, the `strict` flag of a function tool.
     pub const TOOL_STRICT: &str = "responses_tool_strict";
@@ -21,6 +24,41 @@ pub mod extension {
     /// Marks the system message the north codec built from `instructions`. Named for the agreement
     /// test only; no component acts on it.
     pub const TRANSIENT_INSTRUCTIONS: &str = "responses_transient_instructions";
+    /// The client's end-user identifier. The raw Chat name, which the Chat codec copies verbatim
+    /// and the Responses codec writes after validating it (RQ3-Q4).
+    pub const USER: &str = "user";
+    /// The client's string-valued metadata object (RQ3-Q4).
+    pub const METADATA: &str = "metadata";
+    /// The client's prompt-cache routing key (RQ3-Q4).
+    pub const PROMPT_CACHE_KEY: &str = "prompt_cache_key";
+    /// The Responses truncation strategy, `auto` or `disabled`. Responses only (R3 §4.3).
+    pub const TRUNCATION: &str = "truncation";
+    /// The four client fields, in the order a component writes them.
+    pub const CLIENT_FIELDS: [&str; 4] = [USER, METADATA, PROMPT_CACHE_KEY, TRUNCATION];
+    /// The most bytes [`USER`] and [`PROMPT_CACHE_KEY`] may hold (R3 §4.3).
+    pub const MAX_FIELD_BYTES: usize = 512;
+    /// The most entries [`METADATA`] may hold.
+    pub const MAX_METADATA_ENTRIES: usize = 16;
+    /// The most characters a [`METADATA`] key may hold.
+    pub const MAX_METADATA_KEY_CHARS: usize = 64;
+    /// The most characters a [`METADATA`] value may hold.
+    pub const MAX_METADATA_VALUE_CHARS: usize = 512;
+    /// The [`TRUNCATION`] values.
+    pub const TRUNCATION_VALUES: [&str; 2] = ["auto", "disabled"];
+}
+
+/// The `openai-codex` family's spellings (record §3.3, §4.3, §10.3; R3 record §2).
+pub mod codex {
+    /// The family name.
+    pub const FAMILY: &str = "openai-codex";
+    /// The path below the configured base URL (record §3.3: `{base_url}/codex/responses`).
+    pub const PATH: &str = "codex/responses";
+    /// The `instructions` sent when the request has none (record §4.3).
+    pub const DEFAULT_INSTRUCTIONS: &str = "You are a helpful assistant.";
+    /// The credential attribute the recipe exports, read from `ProviderConfig.declared`.
+    pub const ACCOUNT_ATTRIBUTE: &str = "account_id";
+    /// The request header that carries it (record §10.3).
+    pub const ACCOUNT_HEADER: &str = "chatgpt-account-id";
 }
 
 /// The `response.*` stream event types (record §6.1). The closed list a component accepts is

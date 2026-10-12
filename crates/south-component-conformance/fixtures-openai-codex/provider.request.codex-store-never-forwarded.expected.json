@@ -1,0 +1,30 @@
+{
+  "auth": {
+    "scheme": "bearer",
+    "secret": "provider_api_key"
+  },
+  "body": {
+    "input": [
+      {
+        "content": [
+          {
+            "text": "hi",
+            "type": "input_text"
+          }
+        ],
+        "role": "user"
+      }
+    ],
+    "instructions": "You are a helpful assistant.",
+    "model": "gpt-5-codex",
+    "store": false,
+    "stream": true
+  },
+  "headers": {
+    "accept": "text/event-stream",
+    "chatgpt-account-id": "acct-1",
+    "content-type": "application/json"
+  },
+  "method": "POST",
+  "url": "https://chatgpt.com/backend-api/codex/responses"
+}

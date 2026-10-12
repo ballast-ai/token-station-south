@@ -1,0 +1,6 @@
+{
+  "chunks": [
+    "data: {\"type\":\"response.created\",\"sequence_number\":0,\"response\":{\"id\":\"resp-south-stream\"}}\n\n",
+    "data: {\"type\":\"response.completed\",\"sequence_number\":1,\"response\":{\"id\":\"resp-south-stream\",\"object\":\"response\",\"status\":\"completed\",\"model\":\"test-model\",\"output\":[],\"usage\":{\"input_tokens\":1000,\"output_tokens\":500,\"total_tokens\":1500}}}\n\n"
+  ]
+}
