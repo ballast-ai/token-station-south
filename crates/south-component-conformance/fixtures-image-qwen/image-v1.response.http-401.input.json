@@ -1,0 +1,11 @@
+{
+  "prepare_case": "image-v1.prepare.text-defaults",
+  "response": {
+    "status": 401,
+    "body": {
+      "code": "InvalidApiKey",
+      "message": "Invalid API-key provided.",
+      "request_id": "r-7"
+    }
+  }
+}

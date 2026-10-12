@@ -161,6 +161,10 @@ pub use embeddings_suite::{
 };
 pub use image_suite::{IMAGE_COMPONENT_SUITE_V1, run_image_component_suite_v1};
 pub mod reference_azure_image;
+pub mod reference_minimax_image;
+pub mod reference_qwen_image;
+// The request and response pieces the two I3-1 image references share.
+mod image_shared;
 pub mod reference_gemini_embeddings;
 pub mod reference_openai_compatible_embeddings;
 pub mod reference_vertex_embeddings;

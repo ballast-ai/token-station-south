@@ -1,0 +1,11 @@
+{
+  "prepare_case": "image-v1.prepare.text-defaults",
+  "response": {
+    "status": 400,
+    "body": {
+      "code": "InvalidParameter",
+      "message": "The size is not match the allowed size",
+      "request_id": "r-5"
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "provider_config": {
+    "provider": "minimax-image",
+    "base_url": "https://dashscope.aliyuncs.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "qwen-image-plus"
+      }
+    ]
+  }
+}

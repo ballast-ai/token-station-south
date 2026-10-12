@@ -1,0 +1,12 @@
+{
+  "provider_config": {
+    "provider": "azure-mai",
+    "base_url": "https://api.minimax.io",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "image-01"
+      }
+    ]
+  }
+}

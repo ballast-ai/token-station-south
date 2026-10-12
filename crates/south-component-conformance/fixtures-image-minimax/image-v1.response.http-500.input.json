@@ -1,0 +1,9 @@
+{
+  "prepare_case": "image-v1.prepare.group-id-sent",
+  "response": {
+    "status": 500,
+    "body": {
+      "error": "internal"
+    }
+  }
+}

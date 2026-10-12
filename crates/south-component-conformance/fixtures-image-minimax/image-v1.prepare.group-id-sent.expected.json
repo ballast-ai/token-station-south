@@ -1,0 +1,51 @@
+{
+  "facts": {
+    "operation": "generate",
+    "inputs": {
+      "input_image": 0,
+      "reference_image": 0,
+      "mask": 0
+    },
+    "requested_outputs": 1,
+    "tier": {},
+    "metering_forms": [
+      "images"
+    ]
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "v1/image_generation",
+    "query": [
+      {
+        "name": "GroupId",
+        "value": "1782000000000000000"
+      }
+    ],
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "model": "image-01",
+          "prompt": "a lighthouse at dusk"
+        }
+      }
+    }
+  },
+  "repeat": 1,
+  "response_body_form": "json",
+  "response_elision_paths": [
+    "/data/image_base64/*"
+  ],
+  "immutable_body_paths": [
+    "model",
+    "n",
+    "width",
+    "height",
+    "aspect_ratio",
+    "response_format"
+  ],
+  "state": {}
+}

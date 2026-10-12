@@ -1,0 +1,20 @@
+{
+  "artifacts": [
+    {
+      "form": "url",
+      "pointer": "/output/choices/0/message/content/0/image"
+    },
+    {
+      "form": "url",
+      "pointer": "/output/choices/1/message/content/0/image"
+    }
+  ],
+  "extras": null,
+  "metering": {
+    "credits": null,
+    "images_reported": 2,
+    "tokens": null,
+    "upstream_cost": null
+  },
+  "outcome": "succeeded"
+}

@@ -1,0 +1,12 @@
+{
+  "prepare_case": "image-v1.prepare.group-id-sent",
+  "response": {
+    "status": 401,
+    "body": {
+      "base_resp": {
+        "status_code": 1004,
+        "status_msg": "login fail"
+      }
+    }
+  }
+}

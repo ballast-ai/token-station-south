@@ -1,0 +1,35 @@
+{
+  "provider_config": {
+    "provider": "bailian-qwen-image",
+    "base_url": "https://dashscope.aliyuncs.com",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "json": {
+      "prompt": "a red panda",
+      "n": 2,
+      "size": "1328x1328",
+      "watermark": false,
+      "bbox_list": [
+        [
+          0,
+          0,
+          10,
+          10
+        ]
+      ],
+      "seed": 7,
+      "prompt_extend": true,
+      "negative_prompt": "blurry",
+      "quality": "hd",
+      "response_format": "url",
+      "style": "vivid"
+    }
+  },
+  "context": {
+    "upstream_model": "qwen-image-plus",
+    "metering_required": [
+      "images"
+    ]
+  }
+}

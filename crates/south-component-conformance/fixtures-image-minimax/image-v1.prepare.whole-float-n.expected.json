@@ -1,0 +1,52 @@
+{
+  "descriptor": {
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "model": "image-01",
+          "n": 2,
+          "prompt": "a lighthouse"
+        }
+      }
+    },
+    "method": "POST",
+    "path": "v1/image_generation",
+    "query": [
+      {
+        "name": "GroupId",
+        "value": "1782000000000000000"
+      }
+    ]
+  },
+  "facts": {
+    "inputs": {
+      "input_image": 0,
+      "mask": 0,
+      "reference_image": 0
+    },
+    "metering_forms": [
+      "images"
+    ],
+    "operation": "generate",
+    "requested_outputs": 2,
+    "tier": {}
+  },
+  "immutable_body_paths": [
+    "model",
+    "n",
+    "width",
+    "height",
+    "aspect_ratio",
+    "response_format"
+  ],
+  "repeat": 1,
+  "response_body_form": "json",
+  "response_elision_paths": [
+    "/data/image_base64/*"
+  ],
+  "state": {}
+}

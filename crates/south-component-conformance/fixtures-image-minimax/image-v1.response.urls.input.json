@@ -1,0 +1,23 @@
+{
+  "prepare_case": "image-v1.prepare.group-id-sent",
+  "response": {
+    "status": 200,
+    "body": {
+      "id": "03ff3cd0",
+      "data": {
+        "image_urls": [
+          "https://hailuo-image.example-cdn.com/out/1.jpeg",
+          "https://hailuo-image.example-cdn.com/out/2.jpeg"
+        ]
+      },
+      "metadata": {
+        "failed_count": "0",
+        "success_count": "2"
+      },
+      "base_resp": {
+        "status_code": 0,
+        "status_msg": "success"
+      }
+    }
+  }
+}

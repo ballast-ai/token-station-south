@@ -1,0 +1,25 @@
+{
+  "template": {
+    "created": 1700000001,
+    "data": [
+      {
+        "revised_prompt": null,
+        "url": {
+          "$south.artifact": {
+            "as": "url",
+            "index": 0
+          }
+        }
+      },
+      {
+        "b64_json": {
+          "$south.artifact": {
+            "as": "b64_json",
+            "index": 1
+          }
+        },
+        "revised_prompt": null
+      }
+    ]
+  }
+}

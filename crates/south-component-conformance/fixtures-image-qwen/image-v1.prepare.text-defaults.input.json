@@ -1,0 +1,18 @@
+{
+  "provider_config": {
+    "provider": "bailian-qwen-image",
+    "base_url": "https://dashscope.aliyuncs.com",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "json": {
+      "prompt": "a red panda reading a newspaper"
+    }
+  },
+  "context": {
+    "upstream_model": "qwen-image-plus",
+    "metering_required": [
+      "images"
+    ]
+  }
+}

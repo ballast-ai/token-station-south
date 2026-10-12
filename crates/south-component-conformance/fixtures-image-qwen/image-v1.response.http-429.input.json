@@ -1,0 +1,11 @@
+{
+  "prepare_case": "image-v1.prepare.text-defaults",
+  "response": {
+    "status": 429,
+    "body": {
+      "code": "Throttling.RateQuota",
+      "message": "Requests rate limit exceeded",
+      "request_id": "r-8"
+    }
+  }
+}

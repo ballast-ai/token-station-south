@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "rate_limit",
+    "http_status": 429,
+    "message": "the upstream rate limited this request"
+  },
+  "outcome": "rejected"
+}

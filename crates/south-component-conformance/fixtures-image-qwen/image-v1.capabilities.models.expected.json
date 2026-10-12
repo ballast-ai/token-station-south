@@ -1,0 +1,52 @@
+[
+  {
+    "input_roles": [
+      {
+        "key": "image_url",
+        "role": "input_image"
+      }
+    ],
+    "metering_forms": [
+      "images"
+    ],
+    "model": "qwen-image-plus",
+    "operations": [
+      "generate"
+    ],
+    "repeat": false,
+    "request_elision_paths": [
+      "/image_url",
+      "/image_url/*"
+    ],
+    "response_formats": [
+      "url"
+    ],
+    "tier_dimensions": [],
+    "token_buckets": []
+  },
+  {
+    "input_roles": [
+      {
+        "key": "image_url",
+        "role": "input_image"
+      }
+    ],
+    "metering_forms": [
+      "images"
+    ],
+    "model": "qwen-image-edit-plus",
+    "operations": [
+      "generate"
+    ],
+    "repeat": false,
+    "request_elision_paths": [
+      "/image_url",
+      "/image_url/*"
+    ],
+    "response_formats": [
+      "url"
+    ],
+    "tier_dimensions": [],
+    "token_buckets": []
+  }
+]

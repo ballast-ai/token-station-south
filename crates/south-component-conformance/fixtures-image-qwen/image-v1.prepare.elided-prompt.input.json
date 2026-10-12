@@ -1,0 +1,24 @@
+{
+  "provider_config": {
+    "provider": "bailian-qwen-image",
+    "base_url": "https://dashscope.aliyuncs.com",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "json": {
+      "prompt": {
+        "$south.blob": {
+          "id": "b0",
+          "bytes": 1048577,
+          "head": "aaaa"
+        }
+      }
+    }
+  },
+  "context": {
+    "upstream_model": "qwen-image-plus",
+    "metering_required": [
+      "images"
+    ]
+  }
+}

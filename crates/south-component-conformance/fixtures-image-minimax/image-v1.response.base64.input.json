@@ -1,0 +1,23 @@
+{
+  "prepare_case": "image-v1.prepare.every-forwarded-field",
+  "response": {
+    "status": 200,
+    "body": {
+      "id": "03ff3cd1",
+      "data": {
+        "image_base64": [
+          "iVBORw0KGgoAAAANSUhEUg==",
+          ""
+        ]
+      },
+      "metadata": {
+        "failed_count": "1",
+        "success_count": "1"
+      },
+      "base_resp": {
+        "status_code": 0,
+        "status_msg": "success"
+      }
+    }
+  }
+}

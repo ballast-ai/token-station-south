@@ -1,0 +1,31 @@
+{
+  "prepare_case": "image-v1.prepare.text-defaults",
+  "response": {
+    "status": 200,
+    "body": {
+      "output": {
+        "choices": [
+          {
+            "message": {
+              "content": [
+                {
+                  "image": ""
+                },
+                {
+                  "text": "done"
+                },
+                {
+                  "image": "https://dashscope-result.example-oss.com/1/a.png?Expires=1"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "usage": {
+        "image_count": 1
+      },
+      "request_id": "r-2"
+    }
+  }
+}

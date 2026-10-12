@@ -1,0 +1,9 @@
+{
+  "error": {
+    "code": "content_policy",
+    "http_status": 400,
+    "message": "the upstream refused on content-policy grounds",
+    "provider_message": "DataInspectionFailed: Input data may contain inappropriate content."
+  },
+  "outcome": "rejected"
+}

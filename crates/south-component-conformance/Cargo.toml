@@ -123,6 +123,14 @@ name = "azure_image_sandbox_parity"
 required-features = ["sandbox"]
 
 [[test]]
+name = "minimax_image_sandbox_parity"
+required-features = ["sandbox"]
+
+[[test]]
+name = "qwen_image_sandbox_parity"
+required-features = ["sandbox"]
+
+[[test]]
 name = "embeddings_payload_measurement"
 required-features = ["sandbox"]
 

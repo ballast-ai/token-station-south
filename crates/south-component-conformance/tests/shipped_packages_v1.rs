@@ -15,11 +15,13 @@ mod host_range;
 
 /// The official components this repository ships. Named, so that an empty or
 /// mistyped scan below cannot pass over nothing.
-const OFFICIAL_COMPONENTS: [&str; 20] = [
+const OFFICIAL_COMPONENTS: [&str; 22] = [
     "embeddings-gemini",
     "embeddings-openai-compatible",
     "embeddings-vertex",
     "image-azure",
+    "image-minimax",
+    "image-qwen",
     "provider-anthropic",
     "provider-anthropic-bedrock-invoke",
     "provider-bedrock-converse",
@@ -1498,6 +1500,34 @@ fn i3_1_retires_every_published_057_package_identity() {
             manifest.compatibility.ir_schema_id, "token-station-protocol@0.6.0/v0.5.0",
             "{name}"
         );
+    }
+}
+
+/// The two packages of I3-1 start at 1.0.0 in the image world and declare the oldest runtime that
+/// admits their declarations, 0.57.0 (the first to record `canonical_ir` 4, which every package of
+/// this tuple needs). `image-minimax` declares one non-secret config key, `group_id` (IM-Q3);
+/// `image-qwen` declares none.
+#[test]
+fn the_i3_1_image_packages_declare_the_runtime_and_values_of_the_record() {
+    for (name, family, keys) in [
+        ("image-minimax", "minimax-image", vec!["group_id"]),
+        ("image-qwen", "bailian-qwen-image", vec![]),
+    ] {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(manifest.version, "1.0.0", "{name}");
+        assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD, "{name}");
+        assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), [family], "{name}");
+        assert_eq!(manifest.compatibility.south_runtime, "0.57.0", "{name}");
+        assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()), "{name}");
+        let declared: Vec<String> =
+            manifest.declared_keys(family).into_iter().map(str::to_owned).collect();
+        assert_eq!(declared, keys, "{name}");
     }
 }
 
