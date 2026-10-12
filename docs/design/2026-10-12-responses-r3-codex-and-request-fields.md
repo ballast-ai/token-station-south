@@ -1,6 +1,7 @@
 # Responses step R3: the `openai-codex` family, the four dropped request fields, and the tool-usage bucket
 
-Status: accepted (lv, 2026-10-12: RQ3-Q1 to RQ3-Q8 ruled as recommended, §8). Not implemented. lv approved in
+Status: accepted (lv, 2026-10-12: RQ3-Q1 to RQ3-Q8 ruled as recommended, §8). Implemented 2026-10-12 on branch
+`responses-r3-codex`, not released; the §3.2 measurement is pending (§9). lv approved in
 principle on 2026-10-12 that R3 starts now and that the four request fields of record §4.6 be carried; the same day lv
 had scheduled the IR tool-usage bucket (host SF23) with R3, and on the evidence of §5 re-ruled it out of R3 (RQ3-Q6).
 
@@ -264,8 +265,142 @@ the measurement and could ship earlier on their own if lv prefers (**RQ3-Q7**); 
 - **RQ3-Q8** Keep `scope` in the recipe (§2.2 item 1). **Recommended: yes**, until §3.2 (d) shows it is not needed.
   **Ruled (lv, 2026-10-12): as recommended.**
 
+## 9. Implementation (2026-10-12)
+
+Implemented on branch `responses-r3-codex` after the rulings of §8; not released. The §3.2 measurement is
+**pending** (an operator action on a real Codex account): until (a) and (b) are recorded here the release waits
+(§6), and (c) and (d) are recorded when measured. Commits, in order: the north codec (§4); the conformance crate,
+the package and the Q47 bumps; these notes.
+
+### 9.1 What landed
+
+- **North codec (§4.3).** `chat_request_from_responses` validates `user`, `metadata`, `prompt_cache_key` and
+  `truncation` and writes them into `ChatRequest.extensions` under those names, the three Chat names the Chat codec
+  already copies (RQ3-Q4). Bounds, fail closed with `invalid_request`: `user` and `prompt_cache_key` strings of at
+  most 512 bytes; `metadata` an object of at most 16 string-valued entries, keys at most 64 and values at most 512
+  characters; `truncation` `auto` or `disabled`. `null` is absent. New public constants
+  `RESPONSES_REQUEST_FIELD_MAX_BYTES`, `RESPONSES_METADATA_MAX_ENTRIES`, `RESPONSES_METADATA_KEY_MAX_CHARS`,
+  `RESPONSES_METADATA_VALUE_MAX_CHARS`. A golden test pins the IR of a request without the four fields to the bytes
+  the codec produced at `7ef9995`.
+- **Package `provider-openai-responses` 1.2.0 (§2).** Providers `openai-responses` and `openai-codex`;
+  `request_facts.openai-codex` with `output_cap: []`, model `/model`, stream `/stream`; `immutable_body_paths`
+  `store`, `stream`, `instructions`, `temperature`, `max_output_tokens`; `north_passthrough: responses`; a
+  `credentials` section with `families: ["openai-codex"]`, the three fields, `require_one_of`, `import` from
+  `codex-auth-json` (`/tokens/access_token`, `/tokens/refresh_token`, `/tokens/account_id`), and slot
+  `provider_api_key` minted by recipe `codex`. The recipe is the test recipe `codex()` with exactly the three §2.2
+  changes (`openai_codex_conformance_v1::the_recipe_is_the_test_recipe_with_the_three_r3_changes` pins the
+  difference). `south_runtime` stays 0.54.0: gate ① at `v0.54.0` admits every form used.
+- **Reference (§3.1).** For `openai-codex`: `{base_url}/codex/responses`, `accept: text/event-stream`,
+  `chatgpt-account-id` from `ProviderConfig.declared["account_id"]` only, `stream: true`, a non-streaming request a
+  400 capability error at build time, `instructions` defaulted, no `temperature`, no `max_output_tokens`, none of the
+  four client fields (RQ3-Q5), `store: false`, `input` always an item list, NC-1 unchanged (a declaring model gets
+  `include`). The response, stream, failure-frame and usage rules are the family-neutral ones (the response-side
+  functions take no configuration). For `openai-responses`: the four fields from their extension keys, held to the
+  codec's bounds (§9.2 item 5).
+- **Gate ② (record §12.2, moved here by record §17.4).** A stream case may carry
+  `provider.stream.<case>.meta.json` = `{"usage_chunk": <index>, "usage_pointer": "/…"}`; `UsageNeverDefaulted`
+  deletes the pointer from that chunk's `data:` JSON and requires a provider protocol error with no usage event.
+  `CaseV1` gains `usage_chunk`. Existing packs are unchanged.
+- **Fixtures (§3.3).** `fixtures-openai-codex/`: 6 request rows, 9 stream rows (5 with the usage sidecar), 10
+  credential rows for the production recipe; sources in its README. `fixtures-openai-responses/` gains
+  `request.request-fields` (codec-derived), `request.refused-request-field-out-of-bounds` and
+  `request.refused-unknown-truncation`; every other row is unchanged. The documentation-derived usage judge covers
+  the new pack.
+- **Tests.** `openai_codex_conformance_v1` (14 tests), new tests in `openai_responses_conformance_v1` and
+  `openai_responses_vocabulary_v1`, `south-north-codec`'s `responses_request_fields` (6 tests), and
+  `shipped_packages_v1::r3_retires_every_published_055_package_identity`.
+
+### 9.2 Decisions taken where the record is silent
+
+1. **Two directories, one gate ② pack.** The manifest's `conformance.fixtures` still names
+   `fixtures-openai-responses/`. The response-side functions take no configuration, so the Codex directory carries no
+   response, error or capabilities rows, and the manifest's recipe owes credential rows that only the Codex directory
+   carries: neither passes alone (`the_responses_directory_alone_does_not_pass_gate_two`). Every gate ② run of the
+   package — native, sandbox parity, and so the release's one gate ② report per package — loads both
+   (`tests/support/openai_responses_packs.rs`). Every Codex row is named `codex-*`, so no name repeats.
+2. **Where the recipe's fixtures run.** §3.3 and §7 place them in "the gate ③ suite `south.credential-recipe.v1`".
+   They run in gate ②'s `CredentialRecipeMatch` (south's reference interpreter, the south half of that schema), as
+   `github-copilot`'s and Kling's do, and cover every §7 item: refresh with `scope`, rotation and write-back, the
+   fixed window, the `must_equal_field` conflict, missing refresh material (`use_stored`, and neither token), 4xx
+   `reauth_required`, 5xx transient. The host-implemented gate ③ suite is unchanged: its recipes reach only the
+   `.invalid` fake endpoint (its constant's contract), its cases are numbered host evidence in `compatibility.json`
+   (one host records `credential_recipe` verified with 12 cases), and its `Rotating` kind already exercises the host
+   invariants this recipe relies on. Adding the production recipe there would change that evidence, which §6 does not
+   list. **For lv to confirm.**
+3. **`response.nonzero-tool-usage` (§3.3)** is the stream row `stream.codex-nonzero-tool-usage`: Codex only
+   streams, and the name would repeat the Responses pack's response row.
+4. **The stream sidecar** is opt-in per row; it is not made mandatory for the `stream.usage-terminal` row of every
+   reported package, which would change every pack. The chunk must hold exactly one `data:` line; the check passes on a
+   provider protocol error returned by the parser or emitted as an `error` event with no `usage` event.
+5. **The component re-checks the four fields.** The Chat codec copies `user`, `metadata` and `prompt_cache_key`
+   verbatim, so a Chat request routed to an `openai-responses` row now sends them when they are in bounds and is
+   refused (400 `invalid_request`) when they are not; before 1.2.0 they were dropped silently. A value the Responses
+   codec admits always passes. `null` is absent here too.
+6. **No refresh margin is declared**, as in the test recipe: the host's default (30 s) applies. The native arm's 300 s
+   (record §10.2) would need `min_ttl_seconds` above it under gate ① (boundary record §13.3).
+7. **No import `seed`** (record §10.2's sketch had one; §2.2 does not): an imported access token is used as stored
+   only without a refresh token (`use_stored`); with one, the first request refreshes.
+8. **429 from the token endpoint is `reauth_required`**, the vocabulary default the record keeps (record §10.2, §7
+   here). `github-copilot` declares 429 `transient` so a rate limit does not latch a working credential; whether Codex
+   should do the same is **for lv** (a one-line `on_status` addition, a package change).
+9. **Import file kind** `codex-auth-json`; the three fields carry operator-form descriptions.
+10. **A failure frame whose `response` object has no `id`** (the shape of the host's unit test
+    `codex_response_failed_keeps_the_upstream_error_message`) is a provider protocol error, not the mapped failure:
+    the parser binds a present `response` object's id (record §6.4, rules 1 and 4 still apply). The Codex row carries
+    an id. A host dual run may see the difference on such a frame.
+11. **Fixture values**: model `gpt-5-codex`, base URL `https://chatgpt.com/backend-api`, account `acct-1`; all
+    illustrative, none captured.
+
+### 9.3 Failing-first evidence
+
+- With only the four bound constants added, 4 of the 6 new codec tests failed (the fields were dropped and no bound
+  was enforced); the golden test passed before and after.
+- Against the 1.1.0 reference (plus a `CODEX_FAMILY` placeholder so the tests compile), 8 of the 41 tests in the
+  Codex, Responses-conformance and vocabulary binaries failed, among them `gate_two_passes_over_the_shipped_pack`,
+  `codex_requests_never_carry_what_the_family_removes`, `the_account_header_comes_from_the_declared_attribute_only`
+  and `only_the_named_extension_keys_change_the_body`.
+- Mutations (§7), each applied alone and then restored:
+
+  | Mutation | Red tests (besides `gate_two_passes_over_the_shipped_pack`, red in every row but the last) |
+  |---|---|
+  | Drop the account header | `the_account_header_comes_from_the_declared_attribute_only` |
+  | Drop `store` | `codex_requests_never_carry_what_the_family_removes`, `every_request_is_stateless_whatever_the_ir_carries` |
+  | Let `stream=false` through | `a_non_streaming_codex_request_is_refused_at_build_time` |
+  | Map 5xx to `reauth_required` (`on_status`) | `the_credential_rows_show_the_r3_test_plan`, `the_recipe_is_the_test_recipe_with_the_three_r3_changes` |
+  | Drop `prompt_cache_key` from the body | `only_the_named_extension_keys_change_the_body`, `the_client_fields_are_held_to_the_codec_bounds` |
+  | Skip the stream form of `UsageNeverDefaulted` | `every_codex_stream_row_that_reports_usage_runs_usage_never_defaulted`, `the_stream_usage_check_bites_on_a_component_that_defaults_missing_usage`, `a_stream_sidecar_that_names_nothing_fails_the_check` |
+
+### 9.4 Versions (Q47)
+
+| Item | Before | After |
+|---|---|---|
+| `south-component-conformance` | 0.53.0 | 0.54.0 |
+| `south-contracts`, `south-provider-api` | 0.52.0, 0.52.0 | unchanged |
+| `south-north-codec` | workspace (0.55.0) | workspace, unchanged until the release |
+| `provider-openai-responses` | 1.1.0 | 1.2.0 |
+| `provider-openai-compatible` | 2.5.0 | 2.5.1 |
+| `provider-gemini` | 1.2.0 | 1.2.1 |
+| `provider-anthropic` | 1.0.19 | 1.0.20 |
+| `provider-anthropic-bedrock-invoke` | 1.0.3 | 1.0.4 |
+| `provider-bedrock-converse` | 1.0.16 | 1.0.17 |
+| `provider-bedrock-converse-bearer` | 1.0.8 | 1.0.9 |
+| `task-kling` | 1.0.15 | 1.0.16 |
+| `task-kling-v2` | 0.32.13 | 0.32.14 |
+| `task-minimax-v2`, `task-bailian-v2` | 0.31.12 | 0.31.13 |
+| `task-xai-v2`, `task-veo-v2`, `task-wan-image-v2`, `task-gmi-image-v2` | 0.35.12 | 0.35.13 |
+| `task-byteplus-v2` | 0.36.12 | 0.36.13 |
+| `embeddings-openai-compatible` | 1.0.6 | 1.0.7 |
+| `embeddings-gemini` | 1.1.3 | 1.1.4 |
+| `embeddings-vertex` | 1.0.5 | 1.0.6 |
+| `image-azure` | 1.0.2 | 1.0.3 |
+
+No package's `south_runtime` moves (`shipped_packages_v1::r3_retires_every_published_055_package_identity`;
+`provider-openai-responses` keeps 0.54.0, and `scripts/check-declared-runtime.sh --build` loads it under that tag).
+The workspace version and `compatibility.json` are not touched; this is not a release.
+
 ## Revision note
 
 - 2026-10-12: first draft (proposed).
 - 2026-10-12: lv ruled RQ3-Q1 to RQ3-Q8 as recommended (RQ3-Q6 re-rules the same day's scheduling of the tool-usage
   bucket with R3); the status is accepted.
+- 2026-10-12: implemented (§9, new); the status line notes it. The §3.2 measurement is still pending.
