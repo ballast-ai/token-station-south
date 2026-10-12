@@ -1,0 +1,123 @@
+{
+  "chat_request": {
+    "messages": [
+      {
+        "content": "Pick a prime.",
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "thinking": "Any prime works.",
+            "type": "thinking"
+          },
+          {
+            "text": "13.",
+            "type": "text"
+          }
+        ],
+        "reasoning_replay_block_layout": [
+          {
+            "index": 0,
+            "kind": "reasoning_item"
+          },
+          {
+            "kind": "content",
+            "ordinal": 1
+          }
+        ],
+        "reasoning_replay_protocol_family": "openai-encrypted-reasoning",
+        "responses_opaque_reasoning_items": [
+          {
+            "encrypted_content": "gAAAAABo-turn-one",
+            "id": "rs_a",
+            "summary": [
+              {
+                "text": "Any prime works.",
+                "type": "summary_text"
+              }
+            ],
+            "type": "reasoning"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": "Another one, larger.",
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "text": "Let me think.",
+            "type": "text"
+          },
+          {
+            "thinking": "Larger than 13.",
+            "type": "thinking"
+          },
+          {
+            "text": "17.",
+            "type": "text"
+          }
+        ],
+        "reasoning_replay_block_layout": [
+          {
+            "kind": "content",
+            "ordinal": 0
+          },
+          {
+            "index": 0,
+            "kind": "reasoning_item"
+          },
+          {
+            "kind": "content",
+            "ordinal": 2
+          }
+        ],
+        "reasoning_replay_protocol_family": "openai-encrypted-reasoning",
+        "responses_opaque_reasoning_items": [
+          {
+            "encrypted_content": "gAAAAABo-turn-two",
+            "id": "rs_b",
+            "summary": [
+              {
+                "text": "Larger than 13.",
+                "type": "summary_text"
+              }
+            ],
+            "type": "reasoning"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": "Their product?",
+        "role": "user"
+      }
+    ],
+    "model": "gpt-5.5",
+    "sampling": {},
+    "stream": false
+  },
+  "provider_config": {
+    "auth": "provider_api_key",
+    "base_url": "https://api.openai.com/v1",
+    "models": [
+      {
+        "context_window": 400000,
+        "json_schema": true,
+        "model": "gpt-5.5",
+        "supported_parameters": [
+          "reasoning_effort",
+          "temperature",
+          "top_p",
+          "reasoning_replay.openai.v1"
+        ],
+        "tool": true,
+        "vision": true
+      }
+    ],
+    "provider": "openai-responses"
+  }
+}

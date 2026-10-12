@@ -725,7 +725,7 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-openai-compatible".to_owned(),
-            version: "2.4.6".to_owned(),
+            version: "2.5.0".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
@@ -750,6 +750,13 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
         }) {
             return Err(capability(
                 "the OpenAI-compatible dialect cannot consume Claude reasoning replay",
+            ));
+        }
+        // NP-Q4: `OpenAI`'s encrypted reasoning items mean nothing to this wire; refused rather than
+        // dropped, as the Claude carrier is (design record 2026-10-11 §2.6).
+        if request.messages.iter().any(crate::reasoning_replay::is_openai_family) {
+            return Err(capability(
+                "the OpenAI-compatible dialect cannot consume OpenAI reasoning replay",
             ));
         }
         let copilot = config.provider == GITHUB_COPILOT;

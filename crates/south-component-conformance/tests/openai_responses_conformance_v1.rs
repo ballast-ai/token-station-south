@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 use south_component_conformance::reference_openai_responses::{
     FAMILY, NAME, OpenAiResponsesReferenceV1, VERSION,
 };
-use south_component_conformance::responses_vocabulary::extension;
+use south_component_conformance::responses_vocabulary::{extension, replay};
 use south_component_conformance::{
     CheckV1, FixturePackV1, ProviderComponentV1, accepts_manifest, reported_identity_matches,
     run_provider_component_suite_v1_for_manifest,
@@ -201,10 +201,13 @@ fn the_shipped_pack_carries_every_decided_row() {
 
 /// D4 / R-Q4: every request is stateless. Whatever the IR carries — here every stateful field a
 /// client could have smuggled into `extensions` — the body says `store: false`, never names a
-/// previous response, and holds no field outside the record's §4.1 mapping.
+/// previous response, and holds no field outside the record's §4.1 mapping. A smuggled `include`
+/// never reaches the wire: `include` is sent only for a model declaring `reasoning_replay.openai.v1`
+/// (NC-1, NP-Q3), and then with exactly that one value.
 #[test]
 fn every_request_is_stateless_whatever_the_ir_carries() {
-    const MAPPED: [&str; 13] = [
+    const MAPPED: [&str; 14] = [
+        "include",
         "model",
         "instructions",
         "input",
@@ -234,8 +237,20 @@ fn every_request_is_stateless_whatever_the_ir_carries() {
         ] {
             request[key] = value;
         }
-        let body = build(&request).unwrap_or_else(|error| panic!("{}: {error:?}", case.name));
+        let config: ProviderConfig =
+            serde_json::from_value(case.input["provider_config"].clone()).unwrap();
+        let declares = config
+            .models
+            .iter()
+            .any(|model| model.supported_parameters.contains("reasoning_replay.openai.v1"));
+        let request: ChatRequest = serde_json::from_value(request).unwrap();
+        let descriptor = OpenAiResponsesReferenceV1
+            .build_http_request(&request, &config)
+            .unwrap_or_else(|error| panic!("{}: {error:?}", case.name));
+        let body = serde_json::to_value(descriptor).unwrap()["body"].clone();
         assert_eq!(body["store"], json!(false), "{}", case.name);
+        let include = if declares { json!(["reasoning.encrypted_content"]) } else { Value::Null };
+        assert_eq!(body["include"], include, "{}", case.name);
         for key in body.as_object().unwrap().keys() {
             assert!(MAPPED.contains(&key.as_str()), "{}: `{key}` is not a mapped field", case.name);
         }
@@ -336,4 +351,40 @@ fn the_component_does_not_link_the_host_only_sse_decoder() {
             .unwrap();
     assert!(!lockfile.contains("south-host-grammars"));
     assert!(lockfile.contains("name = \"south-component-conformance\""));
+}
+
+/// NC-1 (design record 2026-10-11 §2.4, §7 item 12): the replay markers change the body only for a
+/// model declaring `reasoning_replay.openai.v1`; for any other model they are refused, never
+/// silently dropped. The two retired single-valued keys still change nothing (the R-Q15 test
+/// above).
+#[test]
+fn the_replay_keys_change_the_body_only_for_a_declaring_model() {
+    let input = read_json("provider.request.reasoning-replay.input.json");
+    let declaring: ProviderConfig =
+        serde_json::from_value(input["provider_config"].clone()).unwrap();
+    let request: ChatRequest = serde_json::from_value(input["chat_request"].clone()).unwrap();
+    let mut stripped = request.clone();
+    for message in &mut stripped.messages {
+        for key in [replay::FAMILY_KEY, replay::LAYOUT_KEY, replay::ITEMS_KEY] {
+            message.extensions.remove(key);
+        }
+    }
+    let body = |request: &ChatRequest, config: &ProviderConfig| {
+        OpenAiResponsesReferenceV1
+            .build_http_request(request, config)
+            .map(|descriptor| serde_json::to_value(descriptor).unwrap()["body"].clone())
+    };
+    let with = body(&request, &declaring).unwrap();
+    let without = body(&stripped, &declaring).unwrap();
+    assert_ne!(with["input"], without["input"]);
+    assert!(with["input"].as_array().unwrap().iter().any(|item| item["type"] == "reasoning"));
+    assert!(!without["input"].as_array().unwrap().iter().any(|item| item["type"] == "reasoning"));
+    // `include` follows the declaration, not the markers (NP-Q3).
+    assert_eq!(with["include"], without["include"]);
+
+    let undeclared = config();
+    let error = body(&request, &undeclared).unwrap_err();
+    assert_eq!(error.code, ErrorCode::Capability);
+    let plain = body(&stripped, &undeclared).unwrap();
+    assert!(plain.get("include").is_none());
 }

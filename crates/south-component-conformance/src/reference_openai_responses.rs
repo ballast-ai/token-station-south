@@ -10,6 +10,11 @@
 //!   (D4, R-Q4); `previous_response_id` is never sent. Inputs whose token count the request does
 //!   not show (`input_file`, any `file_id`) are refused (D10). The component acts on exactly the
 //!   three `extensions` keys the `OpenAI`-compatible reference reads (R-Q15).
+//! - **Reasoning replay (NC-1, 1.1.0).** For a model declaring `reasoning_replay.openai.v1`, an
+//!   assistant turn the north codec marked `openai-encrypted-reasoning` is replayed in its layout
+//!   order (reasoning items verbatim, texts, calls), and every request asks for
+//!   `include: ["reasoning.encrypted_content"]`. Without the declaration such a turn is refused.
+//!   Design record `docs/design/2026-10-11-responses-reasoning-replay-and-passthrough-suite.md`.
 //! - **Response (§5).** `completed`, or `incomplete` for `max_output_tokens` (finish reason
 //!   `length`, R-Q2) and `content_filter` (finish reason `content_filter`); every other status or
 //!   reason, and every output item this dialect cannot represent, is a protocol error. Refusal
@@ -37,9 +42,10 @@ use token_station_protocol::{
 };
 
 use crate::component::{ComponentResultV1, ProviderComponentV1, StreamParserV1};
+use crate::reasoning_replay::{OpenAiReplayRef, is_openai_family, openai_layout};
 use crate::reference::OpenAiCompatibleReferenceV1;
 use crate::reference_anthropic::{message_of, provider_protocol_error};
-use crate::responses_vocabulary::{event, extension, incomplete_reason, item, part};
+use crate::responses_vocabulary::{event, extension, incomplete_reason, item, part, replay};
 use crate::sse_split::{SseFrameV1, SseSplitErrorV1, SseSplitterV1};
 
 /// The family this package serves in v1.
@@ -49,7 +55,7 @@ pub const FAMILY: &str = "openai-responses";
 pub const NAME: &str = "provider-openai-responses";
 
 /// The package's version.
-pub const VERSION: &str = "1.0.0";
+pub const VERSION: &str = "1.1.0";
 
 /// The reference component. Stateless; each stream gets its own parser.
 #[derive(Debug, Default, Clone, Copy)]
@@ -205,6 +211,27 @@ fn input_items(messages: &[Message]) -> ComponentResultV1<Vec<Value>> {
                 );
             }
             Role::Assistant => {
+                // NC-1: a turn carrying OpenAI encrypted reasoning is replayed in layout order.
+                let layout = openai_layout(message)
+                    .map_err(|()| capability("invalid reasoning replay markers or layout"))?;
+                if let Some(layout) = layout {
+                    for entry in layout {
+                        items.push(match entry {
+                            OpenAiReplayRef::Item(item) => item.clone(),
+                            OpenAiReplayRef::Text(text) => json!({
+                                "role": "assistant",
+                                "content": [{"type": part::OUTPUT_TEXT, "text": text}],
+                            }),
+                            OpenAiReplayRef::Tool(call) => json!({
+                                "type": item::FUNCTION_CALL,
+                                "call_id": call.id,
+                                "name": call.name,
+                                "arguments": call.arguments,
+                            }),
+                        });
+                    }
+                    continue;
+                }
                 let text = assistant_text(message.content.as_ref())?;
                 if !text.is_empty() {
                     items.push(json!({
@@ -302,6 +329,13 @@ fn reasoning_effort_allowed(request: &ChatRequest, config: &ProviderConfig) -> b
     )
 }
 
+/// Whether the target model declares `reasoning_replay.openai.v1` (NC-1 §2.3).
+fn declares_openai_replay(request: &ChatRequest, config: &ProviderConfig) -> bool {
+    config.models.iter().any(|model| {
+        model.model == request.model && model.supported_parameters.contains(replay::CAPABILITY)
+    })
+}
+
 fn body_of(request: &ChatRequest, config: &ProviderConfig) -> ComponentResultV1<Value> {
     let mut body = Map::new();
     body.insert("model".to_owned(), json!(request.model));
@@ -365,6 +399,11 @@ fn body_of(request: &ChatRequest, config: &ProviderConfig) -> ComponentResultV1<
     }
     if let Some(cap) = request.sampling.max_output_tokens {
         body.insert("max_output_tokens".to_owned(), json!(cap));
+    }
+    // NC-1 / NP-Q3: a model that declares OpenAI reasoning replay always asks for the encrypted
+    // reasoning, so the answer to the first turn already carries what the next turn replays.
+    if declares_openai_replay(request, config) {
+        body.insert("include".to_owned(), json!([replay::INCLUDE_ENCRYPTED_CONTENT]));
     }
     // `sampling.stop` is dropped: the wire has no stop field (record §4.1).
     if request.stream {
@@ -1211,6 +1250,14 @@ impl ProviderComponentV1 for OpenAiResponsesReferenceV1 {
         }) {
             return Err(capability(
                 "the OpenAI Responses dialect cannot consume Claude reasoning replay",
+            ));
+        }
+        // NC-1: OpenAI's own encrypted reasoning goes only to a model that declares it can take it
+        // back, as the Claude carrier goes only to a model declaring `reasoning_replay.claude.v1`.
+        if request.messages.iter().any(is_openai_family) && !declares_openai_replay(request, config)
+        {
+            return Err(capability(
+                "reasoning replay requires the target model capability reasoning_replay.openai.v1",
             ));
         }
         let body = body_of(request, config)?;

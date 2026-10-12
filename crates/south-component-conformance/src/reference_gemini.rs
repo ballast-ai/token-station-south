@@ -567,7 +567,7 @@ impl ProviderComponentV1 for GeminiReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-gemini".to_owned(),
-            version: "1.1.14".to_owned(),
+            version: "1.2.0".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
@@ -589,6 +589,11 @@ impl ProviderComponentV1 for GeminiReferenceV1 {
                 == Some("claude-signed-thinking")
         }) {
             return Err(capability("the Gemini dialect cannot consume Claude reasoning replay"));
+        }
+        // NP-Q4: `OpenAI`'s encrypted reasoning items mean nothing to this wire; refused rather than
+        // dropped, as the Claude carrier is (design record 2026-10-11 §2.6).
+        if request.messages.iter().any(crate::reasoning_replay::is_openai_family) {
+            return Err(capability("the Gemini dialect cannot consume OpenAI reasoning replay"));
         }
         if config.provider != "gemini" {
             return Err(capability(format!("unsupported provider dialect `{}`", config.provider)));

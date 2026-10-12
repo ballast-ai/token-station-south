@@ -107,3 +107,26 @@ pub mod incomplete_reason {
     pub const MAX_OUTPUT_TOKENS: &str = "max_output_tokens";
     pub const CONTENT_FILTER: &str = "content_filter";
 }
+
+/// `OpenAI` encrypted reasoning replay through the IR.
+///
+/// NC-1, design record `2026-10-11-responses-reasoning-replay-and-passthrough-suite.md` §2.1–§2.4.
+/// The north codec keeps its own literals; `openai_responses_vocabulary_v1` asserts they agree.
+pub mod replay {
+    /// The model capability a target declares in `supported_parameters` to accept the items.
+    pub const CAPABILITY: &str = "reasoning_replay.openai.v1";
+    /// The message extension naming a turn's replay family (shared with the Claude carrier).
+    pub const FAMILY_KEY: &str = "reasoning_replay_protocol_family";
+    /// The message extension holding a turn's layout (shared with the Claude carrier).
+    pub const LAYOUT_KEY: &str = "reasoning_replay_block_layout";
+    /// The family value of an `OpenAI` encrypted reasoning turn.
+    pub const OPENAI_FAMILY: &str = "openai-encrypted-reasoning";
+    /// The family value of a Claude carrier turn.
+    pub const CLAUDE_FAMILY: &str = "claude-signed-thinking";
+    /// The message extension holding the turn's replayable reasoning items, in input order.
+    pub const ITEMS_KEY: &str = "responses_opaque_reasoning_items";
+    /// The layout entry kind naming an item, by its index in the items list.
+    pub const ITEM_KIND: &str = "reasoning_item";
+    /// The `include` value that asks the upstream to return encrypted reasoning.
+    pub const INCLUDE_ENCRYPTED_CONTENT: &str = "reasoning.encrypted_content";
+}

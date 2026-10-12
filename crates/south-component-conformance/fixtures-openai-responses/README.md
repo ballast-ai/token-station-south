@@ -47,3 +47,24 @@ Expectations were produced by the reference, then each was read against the reco
 (`tests/usage_ir_contract_v1.rs`) recomputes every row's prompt total from the wire by OpenAI's documented convention
 (the cached part inside `input_tokens`, reasoning inside `output_tokens`, `total_tokens = input_tokens + output_tokens`),
 not from the reference, and pins the §6.4 error-code table.
+
+## NC-1 rows (1.1.0)
+
+Added with `docs/design/2026-10-11-responses-reasoning-replay-and-passthrough-suite.md` (§7 items 6–10):
+
+- **Codec-derived replay rows** (`reasoning-replay`, `reasoning-replay-interleaved`, `reasoning-replay-multi-turn`,
+  `reasoning-replay-include-only`): the client bodies are `replay_client_bodies()` in
+  `tests/support/openai_responses_client_bodies.rs`, and
+  `openai_responses_vocabulary_v1::the_codec_derived_replay_rows_are_north_codec_outputs` re-derives them. Their model
+  declares `reasoning_replay.openai.v1`, so `provider_config` is the declared one plus that word. Expected bodies: every
+  reasoning item verbatim (the codec's closed projection) in its input place between the same texts and calls, and
+  `include: ["reasoning.encrypted_content"]`, which the declaring model always gets (NP-Q3). The `encrypted_content`
+  values are placeholders, not captured ciphertext: no row of this pack is captured traffic (§7 item 15 is open).
+- **Refusals**: `refused-reasoning-replay-undeclared` (the `reasoning-replay` IR against the declared model, which lacks
+  the word) and `refused-reasoning-replay-invalid-layout` (the interleaved IR with one tool call missing from the
+  layout).
+- **Encrypted reasoning on the response side**: `response.reasoning-encrypted-content` and
+  `stream.reasoning-encrypted-content` are `reasoning-summary` with `encrypted_content` on the reasoning item (in the
+  stream: on `response.output_item.done` and in the terminal `response`). Their expected IR is `reasoning-summary`'s:
+  the value never enters the IR (record §5, §6.1); under pass-through the client receives the upstream's bytes.
+

@@ -68,3 +68,67 @@ fn client_bodies() -> Vec<(&'static str, serde_json::Value)> {
         ),
     ]
 }
+
+/// The `OpenAI` Responses client bodies the codec-derived NC-1 replay rows come from (design
+/// record `2026-10-11-responses-reasoning-replay-and-passthrough-suite.md` §7 items 6 and 7). The
+/// rows' model declares `reasoning_replay.openai.v1`, so their `provider_config` is the declared
+/// one plus that word; `openai_responses_vocabulary_v1` re-derives the rows.
+fn replay_client_bodies() -> Vec<(&'static str, serde_json::Value)> {
+    use serde_json::json;
+    let reasoning = |id: &str, summary: &str, encrypted: &str| {
+        json!({"type": "reasoning", "id": id,
+               "summary": [{"type": "summary_text", "text": summary}],
+               "encrypted_content": encrypted})
+    };
+    vec![
+        (
+            "reasoning-replay",
+            json!({"model": "gpt-5.5", "input": [
+                {"role": "user", "content": "Is 91 prime?"},
+                reasoning("rs_68af0a1d1a2b8190b3c4d5e6f7a8b9c0", "7 x 13 = 91.",
+                          "gAAAAABo-replay-one"),
+                {"type": "message", "role": "assistant",
+                 "content": [{"type": "output_text", "text": "No, 91 = 7 x 13."}]},
+                {"role": "user", "content": "And 97?"}
+            ]}),
+        ),
+        (
+            "reasoning-replay-interleaved",
+            json!({"model": "gpt-5.5", "input": [
+                {"role": "user", "content": "Weather in Paris, then summarize."},
+                reasoning("rs_1", "Need the weather first.", "gAAAAABo-interleaved-one"),
+                {"type": "function_call", "call_id": "call_1", "name": "get_weather",
+                 "arguments": "{\"city\":\"Paris\"}"},
+                reasoning("rs_2", "Also the time.", "gAAAAABo-interleaved-two"),
+                {"type": "function_call", "call_id": "call_2", "name": "get_time",
+                 "arguments": "{\"city\":\"Paris\"}"},
+                {"type": "function_call_output", "call_id": "call_1", "output": "18C, clear"},
+                {"type": "function_call_output", "call_id": "call_2", "output": "14:05"},
+                reasoning("rs_3", "Both answers are in.", "gAAAAABo-interleaved-three"),
+                {"type": "message", "role": "assistant",
+                 "content": [{"type": "output_text", "text": "Paris: 18C and clear at 14:05."}]},
+                {"role": "user", "content": "Thanks."}
+            ]}),
+        ),
+        (
+            "reasoning-replay-multi-turn",
+            json!({"model": "gpt-5.5", "input": [
+                {"role": "user", "content": "Pick a prime."},
+                reasoning("rs_a", "Any prime works.", "gAAAAABo-turn-one"),
+                {"type": "message", "role": "assistant",
+                 "content": [{"type": "output_text", "text": "13."}]},
+                {"role": "user", "content": "Another one, larger."},
+                {"type": "message", "role": "assistant",
+                 "content": [{"type": "output_text", "text": "Let me think."}]},
+                reasoning("rs_b", "Larger than 13.", "gAAAAABo-turn-two"),
+                {"type": "message", "role": "assistant",
+                 "content": [{"type": "output_text", "text": "17."}]},
+                {"role": "user", "content": "Their product?"}
+            ]}),
+        ),
+        (
+            "reasoning-replay-include-only",
+            json!({"model": "gpt-5.5", "input": "Is 97 prime?"}),
+        ),
+    ]
+}

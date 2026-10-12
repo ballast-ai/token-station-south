@@ -1,0 +1,33 @@
+{
+  "chat_request": {
+    "messages": [
+      {
+        "content": "Is 97 prime?",
+        "role": "user"
+      }
+    ],
+    "model": "gpt-5.5",
+    "sampling": {},
+    "stream": false
+  },
+  "provider_config": {
+    "auth": "provider_api_key",
+    "base_url": "https://api.openai.com/v1",
+    "models": [
+      {
+        "context_window": 400000,
+        "json_schema": true,
+        "model": "gpt-5.5",
+        "supported_parameters": [
+          "reasoning_effort",
+          "temperature",
+          "top_p",
+          "reasoning_replay.openai.v1"
+        ],
+        "tool": true,
+        "vision": true
+      }
+    ],
+    "provider": "openai-responses"
+  }
+}
