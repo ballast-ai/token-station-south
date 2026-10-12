@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "the request's `truncation` must be auto or disabled"
+  }
+}

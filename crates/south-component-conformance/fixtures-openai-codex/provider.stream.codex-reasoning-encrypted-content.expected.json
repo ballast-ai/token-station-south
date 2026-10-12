@@ -1,0 +1,30 @@
+[
+  {
+    "block_index": 0,
+    "index": 0,
+    "thinking_delta": "Checking the tide tables.",
+    "type": "thinking_delta"
+  },
+  {
+    "content": "High tide is at noon.",
+    "index": 0,
+    "type": "delta"
+  },
+  {
+    "finish_reason": "stop",
+    "type": "finish"
+  },
+  {
+    "type": "usage",
+    "usage": {
+      "cache_read_tokens": 512,
+      "cache_write_tokens": 0,
+      "input_tokens": 900,
+      "output_tokens": 210,
+      "reasoning_tokens": 180
+    }
+  },
+  {
+    "type": "done"
+  }
+]

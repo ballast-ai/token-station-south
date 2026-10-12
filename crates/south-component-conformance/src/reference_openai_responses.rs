@@ -1,15 +1,25 @@
 //! The native reference implementation of the `OpenAI` Responses upstream component
-//! (`provider-openai-responses`, family `openai-responses`).
+//! (`provider-openai-responses`, families `openai-responses` and `openai-codex`).
 //!
 //! Design record: `docs/design/2026-09-30-openai-responses-upstream-component.md` (accepted
-//! 2026-10-10). This is its step R1: the `openai-responses` family only. The `openai-codex`
-//! family, its credential recipe and its request rules are step R3.
+//! 2026-10-10). Step R1 built the `openai-responses` family; step R3
+//! (`docs/design/2026-10-12-responses-r3-codex-and-request-fields.md`, 1.2.0) adds the
+//! `openai-codex` family and the four client request fields.
 //!
 //! - **Request (§4).** The IR maps onto a stateless Responses body: the leading system messages
 //!   become `instructions`, every other message an `input` item, and `store` is always `false`
 //!   (D4, R-Q4); `previous_response_id` is never sent. Inputs whose token count the request does
-//!   not show (`input_file`, any `file_id`) are refused (D10). The component acts on exactly the
-//!   three `extensions` keys the `OpenAI`-compatible reference reads (R-Q15).
+//!   not show (`input_file`, any `file_id`) are refused (D10). The component acts on the three
+//!   `extensions` keys the `OpenAI`-compatible reference reads (R-Q15) and, for `openai-responses`
+//!   only, on the four client fields `user`, `metadata`, `prompt_cache_key` and `truncation`,
+//!   which it checks against the north codec's bounds (R3 §4.3, RQ3-Q5).
+//! - **Family `openai-codex` (R3, record §4.3).** `{base_url}/codex/responses`; `stream: true`
+//!   always, and a non-streaming request is refused at build time (R-Q5); `instructions` defaults
+//!   to `You are a helpful assistant.`; no `max_output_tokens`, no `temperature`; none of the four
+//!   client fields (RQ3-Q5); `accept: text/event-stream`, and `chatgpt-account-id` from the
+//!   credential's exported `account_id` attribute only when the host passes one (§10.3). The
+//!   response, stream and usage rules are the family-neutral ones below: the response-side
+//!   functions receive no configuration.
 //! - **Reasoning replay (NC-1, 1.1.0).** For a model declaring `reasoning_replay.openai.v1`, an
 //!   assistant turn the north codec marked `openai-encrypted-reasoning` is replayed in its layout
 //!   order (reasoning items verbatim, texts, calls), and every request asks for
@@ -45,17 +55,20 @@ use crate::component::{ComponentResultV1, ProviderComponentV1, StreamParserV1};
 use crate::reasoning_replay::{OpenAiReplayRef, is_openai_family, openai_layout};
 use crate::reference::OpenAiCompatibleReferenceV1;
 use crate::reference_anthropic::{message_of, provider_protocol_error};
-use crate::responses_vocabulary::{event, extension, incomplete_reason, item, part, replay};
+use crate::responses_vocabulary::{codex, event, extension, incomplete_reason, item, part, replay};
 use crate::sse_split::{SseFrameV1, SseSplitErrorV1, SseSplitterV1};
 
-/// The family this package serves in v1.
+/// The family this package was first built for (step R1).
 pub const FAMILY: &str = "openai-responses";
+
+/// The Codex subscription family (step R3).
+pub const CODEX_FAMILY: &str = codex::FAMILY;
 
 /// The package's name.
 pub const NAME: &str = "provider-openai-responses";
 
 /// The package's version.
-pub const VERSION: &str = "1.1.0";
+pub const VERSION: &str = "1.2.0";
 
 /// The reference component. Stateless; each stream gets its own parser.
 #[derive(Debug, Default, Clone, Copy)]
@@ -336,7 +349,65 @@ fn declares_openai_replay(request: &ChatRequest, config: &ProviderConfig) -> boo
     })
 }
 
-fn body_of(request: &ChatRequest, config: &ProviderConfig) -> ComponentResultV1<Value> {
+fn invalid_field(field: &str, detail: &str) -> ErrorEnvelope {
+    ErrorEnvelope::new(ErrorCode::InvalidRequest, 400, format!("the request's `{field}` {detail}"))
+}
+
+/// The four client fields (R3 §4.3), checked against the north codec's bounds before they reach
+/// the body. The Responses codec already refuses a value outside them; the Chat codec copies the
+/// three Chat names verbatim, so a Chat request routed here is held to the same bounds rather than
+/// widening the upstream body. `null` is the same as absent.
+fn client_fields(request: &ChatRequest, body: &mut Map<String, Value>) -> ComponentResultV1<()> {
+    for field in extension::CLIENT_FIELDS {
+        let Some(value) = request.extensions.get(field).filter(|value| !value.is_null()) else {
+            continue;
+        };
+        match field {
+            extension::USER | extension::PROMPT_CACHE_KEY => {
+                let Some(text) = value.as_str() else {
+                    return Err(invalid_field(field, "must be a string"));
+                };
+                if text.len() > extension::MAX_FIELD_BYTES {
+                    return Err(invalid_field(field, "must contain at most 512 bytes"));
+                }
+            }
+            extension::METADATA => {
+                let Some(entries) = value.as_object() else {
+                    return Err(invalid_field(field, "must be an object"));
+                };
+                if entries.len() > extension::MAX_METADATA_ENTRIES {
+                    return Err(invalid_field(field, "must hold at most 16 entries"));
+                }
+                for (key, entry) in entries {
+                    let in_bounds = key.chars().count() <= extension::MAX_METADATA_KEY_CHARS
+                        && entry.as_str().is_some_and(|text| {
+                            text.chars().count() <= extension::MAX_METADATA_VALUE_CHARS
+                        });
+                    if !in_bounds {
+                        return Err(invalid_field(
+                            field,
+                            "must map keys of at most 64 characters to strings of at most 512",
+                        ));
+                    }
+                }
+            }
+            _ => {
+                if !value.as_str().is_some_and(|text| extension::TRUNCATION_VALUES.contains(&text))
+                {
+                    return Err(invalid_field(field, "must be auto or disabled"));
+                }
+            }
+        }
+        body.insert(field.to_owned(), value.clone());
+    }
+    Ok(())
+}
+
+fn body_of(
+    request: &ChatRequest,
+    config: &ProviderConfig,
+    codex: bool,
+) -> ComponentResultV1<Value> {
     let mut body = Map::new();
     body.insert("model".to_owned(), json!(request.model));
 
@@ -348,6 +419,9 @@ fn body_of(request: &ChatRequest, config: &ProviderConfig) -> ComponentResultV1<
     let rest = &request.messages[instructions.len()..];
     if !instructions.is_empty() {
         body.insert("instructions".to_owned(), json!(instructions.join("\n")));
+    } else if codex {
+        // Record §4.3: the Codex backend requires instructions.
+        body.insert("instructions".to_owned(), json!(codex::DEFAULT_INSTRUCTIONS));
     }
     body.insert("input".to_owned(), Value::Array(input_items(rest)?));
 
@@ -391,14 +465,20 @@ fn body_of(request: &ChatRequest, config: &ProviderConfig) -> ComponentResultV1<
     {
         body.insert("reasoning".to_owned(), json!({"effort": effort}));
     }
-    if let Some(temperature) = request.sampling.temperature {
+    // Record §4.3: Codex takes neither `temperature` nor a cap (`output_cap: []`, R-Q5); the
+    // authorized cap stays in the IR for the host.
+    if let Some(temperature) = request.sampling.temperature.filter(|_| !codex) {
         body.insert("temperature".to_owned(), json!(temperature));
     }
     if let Some(top_p) = request.sampling.top_p {
         body.insert("top_p".to_owned(), json!(top_p));
     }
-    if let Some(cap) = request.sampling.max_output_tokens {
+    if let Some(cap) = request.sampling.max_output_tokens.filter(|_| !codex) {
         body.insert("max_output_tokens".to_owned(), json!(cap));
+    }
+    // RQ3-Q5: Codex gets none of the four client fields until the backend is measured (§3.2).
+    if !codex {
+        client_fields(request, &mut body)?;
     }
     // NC-1 / NP-Q3: a model that declares OpenAI reasoning replay always asks for the encrypted
     // reasoning, so the answer to the first turn already carries what the next turn replays.
@@ -1240,8 +1320,18 @@ impl ProviderComponentV1 for OpenAiResponsesReferenceV1 {
         request: &ChatRequest,
         config: &ProviderConfig,
     ) -> ComponentResultV1<HttpRequestDescriptor> {
-        if config.provider != FAMILY {
-            return Err(capability(format!("unsupported provider dialect `{}`", config.provider)));
+        let codex = match config.provider.as_str() {
+            FAMILY => false,
+            CODEX_FAMILY => true,
+            other => return Err(capability(format!("unsupported provider dialect `{other}`"))),
+        };
+        // R-Q5: the Codex backend only streams, and a non-streaming caller is refused here,
+        // before any upstream call, rather than buffered (record §4.3).
+        if codex && !request.stream {
+            return Err(capability(
+                "the Codex backend serves only streaming requests; send the request with stream: \
+                 true",
+            ));
         }
         // §4.5: the Claude family's replay carrier means nothing to this upstream.
         if request.messages.iter().any(|message| {
@@ -1260,13 +1350,22 @@ impl ProviderComponentV1 for OpenAiResponsesReferenceV1 {
                 "reasoning replay requires the target model capability reasoning_replay.openai.v1",
             ));
         }
-        let body = body_of(request, config)?;
-        let mut descriptor = HttpRequestDescriptor::new(
-            HttpMethod::Post,
-            config.base_url.resolve(ProviderApi::Responses),
-        );
-        descriptor.headers =
-            SafeHeaders::try_new([("content-type", "application/json")]).map_err(internal)?;
+        let body = body_of(request, config, codex)?;
+        let url = if codex {
+            format!("{}/{}", config.base_url.as_str(), codex::PATH)
+        } else {
+            config.base_url.resolve(ProviderApi::Responses)
+        };
+        let mut descriptor = HttpRequestDescriptor::new(HttpMethod::Post, url);
+        let mut headers = vec![("content-type", "application/json")];
+        if codex {
+            headers.push(("accept", "text/event-stream"));
+            // Record §10.3: the exported attribute only, never a claim; no header without one.
+            if let Some(account) = config.declared.get(codex::ACCOUNT_ATTRIBUTE) {
+                headers.push((codex::ACCOUNT_HEADER, account));
+            }
+        }
+        descriptor.headers = SafeHeaders::try_new(headers).map_err(internal)?;
         descriptor.body = Some(body);
         descriptor.auth = config.auth.clone().map(Auth::bearer);
         Ok(descriptor)

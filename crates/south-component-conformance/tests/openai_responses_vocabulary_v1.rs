@@ -23,7 +23,9 @@ use south_component_conformance::sse_split::{SseFrameV1, SseSplitErrorV1, SseSpl
 use south_host_grammars::SseDecoderV1;
 use south_north_codec::responses::{
     OPENAI_REASONING_ITEMS_EXTENSION, OPENAI_REASONING_REPLAY_CAPABILITY,
-    OPENAI_REASONING_REPLAY_FAMILY, ResponsesContext, ResponsesReasoningMode,
+    OPENAI_REASONING_REPLAY_FAMILY, RESPONSES_METADATA_KEY_MAX_CHARS,
+    RESPONSES_METADATA_MAX_ENTRIES, RESPONSES_METADATA_VALUE_MAX_CHARS,
+    RESPONSES_REQUEST_FIELD_MAX_BYTES, ResponsesContext, ResponsesReasoningMode,
     ResponsesRequestOptions, ResponsesSseState, chat_request_from_responses, responses_frames,
     responses_response,
 };
@@ -95,6 +97,40 @@ fn the_codec_writes_the_extension_keys_the_component_names() {
         assert!(request.extensions.contains_key(key), "the codec does not write `{key}`");
     }
     assert_eq!(request.messages[0].extensions[extension::TRANSIENT_INSTRUCTIONS], json!(true));
+}
+
+/// R3 record §4.3 (RQ3-Q4): the four client fields travel under the names the component reads,
+/// which for the three Chat fields are the names the Chat codec copies; the bounds the component
+/// re-checks are the codec's.
+#[test]
+fn the_codecs_write_the_client_field_keys_the_component_names() {
+    let fields = json!({"user": "u", "metadata": {"a": "b"}, "prompt_cache_key": "k",
+                        "truncation": "auto"});
+    let mut body = json!({"model": "gpt-5.5", "input": "Hi"});
+    body.as_object_mut().unwrap().extend(fields.as_object().unwrap().clone());
+    let request = chat_request_from_responses(&body, &ResponsesRequestOptions::default()).unwrap();
+    let mut chat = json!({"model": "gpt-5.5", "messages": [{"role": "user", "content": "Hi"}]});
+    chat.as_object_mut().unwrap().extend(fields.as_object().unwrap().clone());
+    let from_chat = south_north_codec::chat_request_from_openai_chat(&chat).unwrap();
+    for key in extension::CLIENT_FIELDS {
+        assert_eq!(
+            request.extensions.get(key),
+            fields.get(key),
+            "the codec does not write `{key}`"
+        );
+        if key != extension::TRUNCATION {
+            assert_eq!(from_chat.extensions.get(key), fields.get(key), "Chat: `{key}`");
+        }
+    }
+    assert_eq!(extension::MAX_FIELD_BYTES, RESPONSES_REQUEST_FIELD_MAX_BYTES);
+    assert_eq!(extension::MAX_METADATA_ENTRIES, RESPONSES_METADATA_MAX_ENTRIES);
+    assert_eq!(extension::MAX_METADATA_KEY_CHARS, RESPONSES_METADATA_KEY_MAX_CHARS);
+    assert_eq!(extension::MAX_METADATA_VALUE_CHARS, RESPONSES_METADATA_VALUE_MAX_CHARS);
+    for value in extension::TRUNCATION_VALUES {
+        let mut body = body.clone();
+        body["truncation"] = json!(value);
+        assert!(chat_request_from_responses(&body, &ResponsesRequestOptions::default()).is_ok());
+    }
 }
 
 /// Renders IR stream events with the north codec, as SSE text.
@@ -262,6 +298,10 @@ fn the_codec_derived_request_rows_are_north_codec_outputs() {
             "parallel_tool_calls",
             "tool_choice",
             "text",
+            "user",
+            "metadata",
+            "prompt_cache_key",
+            "truncation",
         ] {
             if let Some(value) = body.get(key) {
                 assert_eq!(&built[key], value, "{name}: `{key}`");

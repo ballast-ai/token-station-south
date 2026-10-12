@@ -1,0 +1,11 @@
+[
+  {
+    "error": {
+      "code": "rate_limit",
+      "http_status": 502,
+      "message": "the upstream rate limited this request",
+      "provider_message": "The usage limit has been reached"
+    },
+    "type": "error"
+  }
+]

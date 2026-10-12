@@ -1006,7 +1006,7 @@ fn the_invoke_package_declares_the_runtime_converse_declares() {
         .unwrap()
     };
     let invoke = read("provider-anthropic-bedrock-invoke");
-    assert_eq!(invoke.version, "1.0.3");
+    assert_eq!(invoke.version, "1.0.4");
     assert_eq!(invoke.compatibility.south_runtime, "0.46.0");
     assert_eq!(invoke.compatibility, read("provider-bedrock-converse").compatibility);
 }
@@ -1297,8 +1297,9 @@ fn the_responses_package_declares_the_runtime_that_first_admits_its_declarations
         .unwrap(),
     )
     .unwrap();
-    // 1.0.0 shipped in 0.54.0; NC-1 made 1.1.0 (below), with the same runtime.
-    assert_eq!(manifest.version, "1.1.0");
+    // 1.0.0 shipped in 0.54.0; NC-1 made 1.1.0 and R3 1.2.0 (below), with the same runtime: the
+    // Codex `credentials` section uses only forms the 0.54.0 gate ① admits.
+    assert_eq!(manifest.version, "1.2.0");
     assert_eq!(manifest.compatibility.south_runtime, "0.54.0");
     assert!(!manifest.immutable_body_paths.is_empty() && !manifest.north_passthrough.is_empty());
     assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
@@ -1319,27 +1320,72 @@ fn the_responses_package_declares_the_runtime_that_first_admits_its_declarations
 /// the replay word is data in `supported_parameters`, not a manifest field.
 #[test]
 fn nc1_retires_every_published_054_package_identity() {
+    for (name, published, runtime) in [
+        ("provider-openai-compatible", "2.4.6", "0.46.0"),
+        ("provider-anthropic", "1.0.18", "0.46.0"),
+        ("provider-anthropic-bedrock-invoke", "1.0.2", "0.46.0"),
+        ("provider-gemini", "1.1.14", "0.46.0"),
+        ("provider-bedrock-converse", "1.0.15", "0.46.0"),
+        ("provider-bedrock-converse-bearer", "1.0.7", "0.46.0"),
+        ("provider-openai-responses", "1.0.0", "0.54.0"),
+        ("task-kling", "1.0.14", "0.46.0"),
+        ("task-kling-v2", "0.32.12", "0.46.0"),
+        ("task-minimax-v2", "0.31.11", "0.46.0"),
+        ("task-bailian-v2", "0.31.11", "0.46.0"),
+        ("task-xai-v2", "0.35.11", "0.46.0"),
+        ("task-byteplus-v2", "0.36.11", "0.46.0"),
+        ("task-veo-v2", "0.35.11", "0.46.0"),
+        ("task-wan-image-v2", "0.35.11", "0.46.0"),
+        ("task-gmi-image-v2", "0.35.11", "0.46.0"),
+        ("embeddings-openai-compatible", "1.0.5", "0.47.0"),
+        ("embeddings-gemini", "1.1.2", "0.51.0"),
+        ("embeddings-vertex", "1.0.4", "0.48.0"),
+        ("image-azure", "1.0.1", "0.52.0"),
+    ] {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_ne!(manifest.version, published, "{name} reused its published identity");
+        assert_eq!(
+            manifest.compatibility.south_runtime, runtime,
+            "{name}: needs nothing newer than {runtime}, so it declares {runtime}"
+        );
+    }
+}
+
+/// Step R3 (design record `2026-10-12-responses-r3-codex-and-request-fields.md` §6) changed
+/// `south-component-conformance` (the Codex family, the four client fields, the stream form of
+/// `UsageNeverDefaulted`), which every guest links, so the crate took a new version (0.53.0 →
+/// 0.54.0, Q47) and every `component.wasm` changes: each identity published with 0.55.0 retires.
+/// The Responses package's new family and body fields take a minor version; every other package a
+/// patch. None needs a newer runtime: the Codex section uses only manifest forms 0.54.0 admits.
+#[test]
+fn r3_retires_every_published_055_package_identity() {
     for (name, published, now, runtime) in [
-        ("provider-openai-compatible", "2.4.6", "2.5.0", "0.46.0"),
-        ("provider-anthropic", "1.0.18", "1.0.19", "0.46.0"),
-        ("provider-anthropic-bedrock-invoke", "1.0.2", "1.0.3", "0.46.0"),
-        ("provider-gemini", "1.1.14", "1.2.0", "0.46.0"),
-        ("provider-bedrock-converse", "1.0.15", "1.0.16", "0.46.0"),
-        ("provider-bedrock-converse-bearer", "1.0.7", "1.0.8", "0.46.0"),
-        ("provider-openai-responses", "1.0.0", "1.1.0", "0.54.0"),
-        ("task-kling", "1.0.14", "1.0.15", "0.46.0"),
-        ("task-kling-v2", "0.32.12", "0.32.13", "0.46.0"),
-        ("task-minimax-v2", "0.31.11", "0.31.12", "0.46.0"),
-        ("task-bailian-v2", "0.31.11", "0.31.12", "0.46.0"),
-        ("task-xai-v2", "0.35.11", "0.35.12", "0.46.0"),
-        ("task-byteplus-v2", "0.36.11", "0.36.12", "0.46.0"),
-        ("task-veo-v2", "0.35.11", "0.35.12", "0.46.0"),
-        ("task-wan-image-v2", "0.35.11", "0.35.12", "0.46.0"),
-        ("task-gmi-image-v2", "0.35.11", "0.35.12", "0.46.0"),
-        ("embeddings-openai-compatible", "1.0.5", "1.0.6", "0.47.0"),
-        ("embeddings-gemini", "1.1.2", "1.1.3", "0.51.0"),
-        ("embeddings-vertex", "1.0.4", "1.0.5", "0.48.0"),
-        ("image-azure", "1.0.1", "1.0.2", "0.52.0"),
+        ("provider-openai-compatible", "2.5.0", "2.5.1", "0.46.0"),
+        ("provider-anthropic", "1.0.19", "1.0.20", "0.46.0"),
+        ("provider-anthropic-bedrock-invoke", "1.0.3", "1.0.4", "0.46.0"),
+        ("provider-gemini", "1.2.0", "1.2.1", "0.46.0"),
+        ("provider-bedrock-converse", "1.0.16", "1.0.17", "0.46.0"),
+        ("provider-bedrock-converse-bearer", "1.0.8", "1.0.9", "0.46.0"),
+        ("provider-openai-responses", "1.1.0", "1.2.0", "0.54.0"),
+        ("task-kling", "1.0.15", "1.0.16", "0.46.0"),
+        ("task-kling-v2", "0.32.13", "0.32.14", "0.46.0"),
+        ("task-minimax-v2", "0.31.12", "0.31.13", "0.46.0"),
+        ("task-bailian-v2", "0.31.12", "0.31.13", "0.46.0"),
+        ("task-xai-v2", "0.35.12", "0.35.13", "0.46.0"),
+        ("task-byteplus-v2", "0.36.12", "0.36.13", "0.46.0"),
+        ("task-veo-v2", "0.35.12", "0.35.13", "0.46.0"),
+        ("task-wan-image-v2", "0.35.12", "0.35.13", "0.46.0"),
+        ("task-gmi-image-v2", "0.35.12", "0.35.13", "0.46.0"),
+        ("embeddings-openai-compatible", "1.0.6", "1.0.7", "0.47.0"),
+        ("embeddings-gemini", "1.1.3", "1.1.4", "0.51.0"),
+        ("embeddings-vertex", "1.0.5", "1.0.6", "0.48.0"),
+        ("image-azure", "1.0.2", "1.0.3", "0.52.0"),
     ] {
         let manifest: ComponentManifestV1 = serde_json::from_str(
             &std::fs::read_to_string(

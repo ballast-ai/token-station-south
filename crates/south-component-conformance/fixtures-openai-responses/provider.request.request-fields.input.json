@@ -1,0 +1,39 @@
+{
+  "chat_request": {
+    "messages": [
+      {
+        "content": "Summarize our last meeting.",
+        "role": "user"
+      }
+    ],
+    "metadata": {
+      "tenant": "acme",
+      "trace": "t-1"
+    },
+    "model": "gpt-5.5",
+    "prompt_cache_key": "meetings-acme",
+    "sampling": {},
+    "stream": false,
+    "truncation": "auto",
+    "user": "user-42"
+  },
+  "provider_config": {
+    "provider": "openai-responses",
+    "base_url": "https://api.openai.com/v1",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "gpt-5.5",
+        "tool": true,
+        "vision": true,
+        "json_schema": true,
+        "context_window": 400000,
+        "supported_parameters": [
+          "reasoning_effort",
+          "temperature",
+          "top_p"
+        ]
+      }
+    ]
+  }
+}

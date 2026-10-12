@@ -1,0 +1,37 @@
+{
+  "provider_config": {
+    "provider": "openai-codex",
+    "base_url": "https://chatgpt.com/backend-api",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "gpt-5-codex",
+        "tool": true,
+        "vision": true,
+        "json_schema": true,
+        "context_window": 400000,
+        "supported_parameters": [
+          "reasoning_effort",
+          "top_p"
+        ]
+      }
+    ]
+  },
+  "chat_request": {
+    "model": "gpt-5-codex",
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are terse."
+      },
+      {
+        "role": "user",
+        "content": "hi"
+      }
+    ],
+    "sampling": {
+      "max_output_tokens": 64
+    },
+    "stream": true
+  }
+}

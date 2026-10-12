@@ -2,13 +2,16 @@
 //! against its native reference implementation over its own frozen fixture pack, and the facts
 //! the design record decided that a passing pack alone would not show.
 //!
-//! Design record: `docs/design/2026-09-30-openai-responses-upstream-component.md` (step R1).
+//! Design record: `docs/design/2026-09-30-openai-responses-upstream-component.md` (step R1); the
+//! `openai-codex` family and the four client fields are step R3
+//! (`docs/design/2026-10-12-responses-r3-codex-and-request-fields.md`), whose own facts are in
+//! `openai_codex_conformance_v1`.
 
 use std::path::Path;
 
 use serde_json::{Value, json};
 use south_component_conformance::reference_openai_responses::{
-    FAMILY, NAME, OpenAiResponsesReferenceV1, VERSION,
+    CODEX_FAMILY, FAMILY, NAME, OpenAiResponsesReferenceV1, VERSION,
 };
 use south_component_conformance::responses_vocabulary::{extension, replay};
 use south_component_conformance::{
@@ -22,8 +25,10 @@ use token_station_protocol::{ChatRequest, ErrorCode, HttpResponseParts, Provider
 
 #[path = "support/host_range.rs"]
 mod host_range;
+#[path = "support/openai_responses_packs.rs"]
+mod packs;
 
-const PACK: &str = "fixtures-openai-responses";
+const PACK: &str = packs::RESPONSES_PACK;
 
 fn repo_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().and_then(Path::parent).expect("repo root")
@@ -37,8 +42,7 @@ fn shipped_manifest() -> ComponentManifestV1 {
 }
 
 fn shipped_pack() -> FixturePackV1 {
-    FixturePackV1::load(&Path::new(env!("CARGO_MANIFEST_DIR")).join(PACK))
-        .expect("the shipped fixture pack loads")
+    packs::load(PACK)
 }
 
 fn read_json(name: &str) -> Value {
@@ -68,15 +72,15 @@ fn gate_one_admits_the_shipped_package_and_its_reported_identity() {
     assert!(reported_identity_matches(&OpenAiResponsesReferenceV1.metadata(), &manifest));
     assert_eq!(manifest.api_version, PROVIDER_WORLD);
     assert_eq!(manifest.version, VERSION);
-    assert_eq!(manifest.providers, [FAMILY]);
+    assert_eq!(manifest.providers, [FAMILY, CODEX_FAMILY]);
 }
 
-/// Gate ②: the reference implementation answers its own frozen pack exactly.
+/// Gate ②: the reference implementation answers its own frozen pack — both directories — exactly.
 #[test]
 fn gate_two_passes_over_the_shipped_pack() {
     let report = run_provider_component_suite_v1_for_manifest(
         &OpenAiResponsesReferenceV1,
-        &shipped_pack(),
+        &packs::package_pack(),
         &shipped_manifest(),
     );
     let failures: Vec<String> = report.failures().map(|outcome| format!("{outcome:?}")).collect();
@@ -85,12 +89,14 @@ fn gate_two_passes_over_the_shipped_pack() {
     let ran = |check: CheckV1| report.outcomes().iter().any(|outcome| outcome.check == check);
     assert!(ran(CheckV1::ImmutablePathsHonoured));
     assert!(ran(CheckV1::UsageNeverDefaulted));
+    assert!(ran(CheckV1::CredentialRecipeMatch));
 }
 
-/// Record §3.4, step R1: the `openai-responses` family only, with exactly the declarations the
-/// manifest sketch gives it.
+/// Record §3.4, as reconciled for step R3 (R3 record §2.1): two families, with exactly the
+/// declarations the sketch gives each; the credential section is judged in
+/// `openai_codex_conformance_v1`.
 #[test]
-fn the_manifest_declares_what_the_record_gives_the_family() {
+fn the_manifest_declares_what_the_record_gives_the_families() {
     let manifest = shipped_manifest();
     assert_eq!(
         manifest.capabilities.iter().map(String::as_str).collect::<Vec<_>>(),
@@ -101,25 +107,32 @@ fn the_manifest_declares_what_the_record_gives_the_family() {
     assert!(!manifest.permissions.network && !manifest.permissions.filesystem);
     assert!(manifest.usage_evidence.is_reported());
     assert_eq!(manifest.stream_framing, StreamFramingV1::Bytes);
-    assert!(manifest.credentials.is_none(), "the minted Codex slot is step R3");
+    let credentials = manifest.credentials.as_ref().expect("the minted Codex slot (R3)");
+    assert_eq!(credentials.families.as_deref(), Some(&[CODEX_FAMILY.to_owned()][..]));
     assert!(manifest.signing.is_none() && manifest.emits.is_empty());
     assert!(manifest.endpoint.is_empty() && manifest.config_schema.is_empty());
     assert!(manifest.user_agent.is_empty() && manifest.host_values.is_empty());
     assert_eq!(
         serde_json::to_value(&manifest.request_facts).unwrap(),
         json!({FAMILY: {"output_cap": ["/max_output_tokens"], "model": {"body": "/model"},
-                        "stream": {"body": "/stream"}}})
+                        "stream": {"body": "/stream"}},
+               CODEX_FAMILY: {"output_cap": [], "model": {"body": "/model"},
+                              "stream": {"body": "/stream"}}})
     );
     assert_eq!(
         serde_json::to_value(&manifest.immutable_body_paths).unwrap(),
-        json!({FAMILY: ["store"]})
+        json!({FAMILY: ["store"],
+               CODEX_FAMILY: ["store", "stream", "instructions", "temperature", "max_output_tokens"]})
     );
     assert_eq!(manifest.north_passthrough.get(FAMILY), Some(&NorthProtocolV1::Responses));
+    assert_eq!(manifest.north_passthrough.get(CODEX_FAMILY), Some(&NorthProtocolV1::Responses));
+    assert_eq!(manifest.north_passthrough.len(), 2);
     assert_eq!(manifest.conformance.fixtures, format!("{PACK}/"));
 }
 
-/// The rows the record lists (§12.1, without the Codex and credential rows of step R3), plus this
-/// implementation's own. A pack can pass while having quietly lost a case.
+/// The rows the record lists (§12.1; the Codex and credential rows of step R3 are pinned in
+/// `openai_codex_conformance_v1`), plus this implementation's own and the R3 §4 rows. A pack can
+/// pass while having quietly lost a case.
 #[test]
 fn the_shipped_pack_carries_every_decided_row() {
     let names: Vec<String> = shipped_pack().cases().iter().map(|case| case.name.clone()).collect();
@@ -145,6 +158,9 @@ fn the_shipped_pack_carries_every_decided_row() {
         "request.refused-input-file",
         "request.refused-file-id",
         "request.refused-tool-result-without-call-id",
+        "request.request-fields",
+        "request.refused-request-field-out-of-bounds",
+        "request.refused-unknown-truncation",
         "response.usage",
         "response.cached-usage",
         "response.cache-write-tokens-are-a-subset",
@@ -206,7 +222,7 @@ fn the_shipped_pack_carries_every_decided_row() {
 /// (NC-1, NP-Q3), and then with exactly that one value.
 #[test]
 fn every_request_is_stateless_whatever_the_ir_carries() {
-    const MAPPED: [&str; 14] = [
+    const MAPPED: [&str; 18] = [
         "include",
         "model",
         "instructions",
@@ -221,6 +237,11 @@ fn every_request_is_stateless_whatever_the_ir_carries() {
         "max_output_tokens",
         "stream",
         "store",
+        // R3 §4.3: the four client fields, from their own extension keys only.
+        "user",
+        "metadata",
+        "prompt_cache_key",
+        "truncation",
     ];
     let mut built = 0;
     for case in shipped_pack().cases() {
@@ -259,11 +280,11 @@ fn every_request_is_stateless_whatever_the_ir_carries() {
     assert!(built >= 10, "too few request rows to judge");
 }
 
-/// R-Q15: the component acts on exactly the three `extensions` keys the OpenAI-compatible
-/// reference reads. `responses_reasoning_summary`, the north codec's transient-instructions
-/// marker and any other key change nothing.
+/// R-Q15: the component acts on the three `extensions` keys the OpenAI-compatible reference reads
+/// and, since R3, on the four client fields (R3 §4.3). `responses_reasoning_summary`, the north
+/// codec's transient-instructions marker and any other key change nothing.
 #[test]
-fn only_the_three_precedent_extension_keys_change_the_body() {
+fn only_the_named_extension_keys_change_the_body() {
     let input = read_json("provider.request.reasoning-effort.input.json");
     let request = input["chat_request"].clone();
     assert_eq!(request[extension::REASONING_SUMMARY], json!("auto"), "the row carries the key");
@@ -290,17 +311,91 @@ fn only_the_three_precedent_extension_keys_change_the_body() {
         changed.as_object_mut().unwrap().remove(key);
         assert_ne!(build(&changed).unwrap(), tool_baseline, "{key}");
     }
+
+    // R3 §4.3: each of the four client fields reaches the body under its own name, unchanged,
+    // and removing it removes exactly that member.
+    let fields = read_json("provider.request.request-fields.input.json")["chat_request"].clone();
+    let fields_body = build(&fields).unwrap();
+    for key in extension::CLIENT_FIELDS {
+        assert_eq!(fields_body[key], fields[key], "{key}");
+        let mut changed = fields.clone();
+        changed.as_object_mut().unwrap().remove(key);
+        let mut expected = fields_body.clone();
+        expected.as_object_mut().unwrap().remove(key);
+        assert_eq!(build(&changed).unwrap(), expected, "{key}");
+        // `null` is the same as absent.
+        changed[key] = Value::Null;
+        assert_eq!(build(&changed).unwrap(), expected, "{key}");
+    }
 }
 
-/// Step R1 serves `openai-responses` only: a request for any other family, Codex included, is a
-/// capability error with no request built.
+/// R3 §4.3: the component holds the four fields to the north codec's bounds, so a Chat request —
+/// whose codec copies `user`, `metadata` and `prompt_cache_key` verbatim — cannot widen the body
+/// either. The bounds are inclusive.
 #[test]
-fn only_the_openai_responses_family_is_served() {
-    let request: ChatRequest = serde_json::from_value(
+fn the_client_fields_are_held_to_the_codec_bounds() {
+    let fields = read_json("provider.request.request-fields.input.json")["chat_request"].clone();
+    let longest = "u".repeat(extension::MAX_FIELD_BYTES);
+    let full: serde_json::Map<String, Value> = (0..extension::MAX_METADATA_ENTRIES)
+        .map(|index| {
+            (
+                format!("{index:0>width$}", width = extension::MAX_METADATA_KEY_CHARS),
+                json!("\u{4e00}".repeat(extension::MAX_METADATA_VALUE_CHARS)),
+            )
+        })
+        .collect();
+    for (key, value) in [
+        (extension::USER, json!(longest)),
+        (extension::PROMPT_CACHE_KEY, json!(longest)),
+        (extension::METADATA, Value::Object(full)),
+        (extension::METADATA, json!({})),
+        (extension::TRUNCATION, json!("disabled")),
+    ] {
+        let mut request = fields.clone();
+        request[key] = value.clone();
+        assert_eq!(build(&request).unwrap()[key], value, "{key}");
+    }
+    let too_long = "s".repeat(extension::MAX_FIELD_BYTES + 1);
+    let many: serde_json::Map<String, Value> = (0..=extension::MAX_METADATA_ENTRIES)
+        .map(|index| (format!("k{index}"), json!("v")))
+        .collect();
+    for (key, value) in [
+        (extension::USER, json!(too_long)),
+        (extension::USER, json!("\u{4e00}".repeat(171))),
+        (extension::USER, json!(42)),
+        (extension::PROMPT_CACHE_KEY, json!(too_long)),
+        (extension::PROMPT_CACHE_KEY, json!({"k": "v"})),
+        (extension::METADATA, json!("tenant")),
+        (extension::METADATA, Value::Object(many)),
+        (extension::METADATA, json!({"k".repeat(extension::MAX_METADATA_KEY_CHARS + 1): "v"})),
+        (extension::METADATA, json!({"k": "v".repeat(extension::MAX_METADATA_VALUE_CHARS + 1)})),
+        (extension::METADATA, json!({"k": 7})),
+        (extension::TRUNCATION, json!("middle")),
+        (extension::TRUNCATION, json!(true)),
+    ] {
+        let mut request = fields.clone();
+        request[key] = value.clone();
+        let refused = build(&request).unwrap_err();
+        assert_eq!(refused.code, ErrorCode::InvalidRequest, "{key}: {value}");
+        assert_eq!(refused.http_status, 400, "{key}");
+    }
+}
+
+/// The package serves its two families: a request for any other is a capability error with no
+/// request built.
+#[test]
+fn only_the_two_families_are_served() {
+    let mut request: ChatRequest = serde_json::from_value(
         read_json("provider.request.text.input.json")["chat_request"].clone(),
     )
     .unwrap();
-    for family in ["openai-codex", "openai-compatible", "azure-openai-v1"] {
+    request.stream = true;
+    for family in [FAMILY, CODEX_FAMILY] {
+        let mut config = config();
+        family.clone_into(&mut config.provider);
+        assert!(OpenAiResponsesReferenceV1.build_http_request(&request, &config).is_ok());
+    }
+    for family in ["openai-compatible", "azure-openai-v1", "codex", ""] {
         let mut config = config();
         family.clone_into(&mut config.provider);
         let refused = OpenAiResponsesReferenceV1.build_http_request(&request, &config).unwrap_err();

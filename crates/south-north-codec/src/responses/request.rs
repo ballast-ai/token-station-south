@@ -3,8 +3,10 @@ use super::replay::{
     OPENAI_REASONING_ITEMS_EXTENSION, OPENAI_REASONING_REPLAY_FAMILY,
 };
 use super::{
-    LOCAL_SHELL, ReasoningReplayBlock, ResponsesRequestOptions, decode_reasoning_replay_carrier,
-    invalid, namespace_name, required_str, tool_definitions,
+    LOCAL_SHELL, RESPONSES_METADATA_KEY_MAX_CHARS, RESPONSES_METADATA_MAX_ENTRIES,
+    RESPONSES_METADATA_VALUE_MAX_CHARS, RESPONSES_REQUEST_FIELD_MAX_BYTES, ReasoningReplayBlock,
+    ResponsesRequestOptions, decode_reasoning_replay_carrier, invalid, namespace_name,
+    required_str, tool_definitions,
 };
 use crate::CodecError;
 use serde_json::{Value, json};
@@ -113,7 +115,50 @@ pub fn chat_request_from_responses(
         None | Some(Value::Null) => false,
         Some(v) => v.as_bool().ok_or_else(|| invalid("stream", "must be a boolean"))?,
     };
+    client_fields(body, &mut request)?;
     Ok(request)
+}
+/// The four client fields the IR has no typed slot for, as request extensions under the names the
+/// Chat codec copies them under (R3 record §4.3, RQ3-Q3, RQ3-Q4). Validated here, fail closed: the
+/// bounds keep a client from widening the upstream body beyond what `OpenAI` accepts. `null` is
+/// the same as absent.
+fn client_fields(body: &Value, request: &mut ChatRequest) -> Result<(), CodecError> {
+    for field in ["user", "prompt_cache_key"] {
+        let Some(value) = body.get(field).filter(|v| !v.is_null()) else { continue };
+        let text = required_str(value, field)?;
+        if text.len() > RESPONSES_REQUEST_FIELD_MAX_BYTES {
+            return Err(invalid(field, "must contain at most 512 bytes"));
+        }
+        request.extensions.insert(field.into(), json!(text));
+    }
+    if let Some(metadata) = body.get("metadata").filter(|v| !v.is_null()) {
+        let entries =
+            metadata.as_object().ok_or_else(|| invalid("metadata", "must be an object"))?;
+        if entries.len() > RESPONSES_METADATA_MAX_ENTRIES {
+            return Err(invalid("metadata", "must hold at most 16 entries"));
+        }
+        for (key, value) in entries {
+            if key.chars().count() > RESPONSES_METADATA_KEY_MAX_CHARS {
+                return Err(invalid("metadata", "keys must contain at most 64 characters"));
+            }
+            let Some(value) = value.as_str() else {
+                return Err(invalid("metadata", "values must be strings"));
+            };
+            if value.chars().count() > RESPONSES_METADATA_VALUE_MAX_CHARS {
+                return Err(invalid("metadata", "values must contain at most 512 characters"));
+            }
+        }
+        request.extensions.insert("metadata".into(), metadata.clone());
+    }
+    if let Some(truncation) = body.get("truncation").filter(|v| !v.is_null()) {
+        match truncation.as_str() {
+            Some("auto" | "disabled") => {
+                request.extensions.insert("truncation".into(), truncation.clone());
+            }
+            _ => return Err(super::unsupported("truncation", "auto, disabled")),
+        }
+    }
+    Ok(())
 }
 fn validate_previous_response_id(body: &Value) -> Result<(), CodecError> {
     let Some(previous) = body.get("previous_response_id").filter(|value| !value.is_null()) else {

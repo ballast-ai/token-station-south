@@ -1,0 +1,11 @@
+[
+  {
+    "error": {
+      "code": "internal",
+      "http_status": 502,
+      "message": "the upstream failed",
+      "provider_message": "model is not available for this account"
+    },
+    "type": "error"
+  }
+]

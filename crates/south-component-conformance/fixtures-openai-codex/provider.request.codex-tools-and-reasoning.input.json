@@ -1,0 +1,57 @@
+{
+  "provider_config": {
+    "provider": "openai-codex",
+    "base_url": "https://chatgpt.com/backend-api",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "gpt-5-codex",
+        "tool": true,
+        "vision": true,
+        "json_schema": true,
+        "context_window": 400000,
+        "supported_parameters": [
+          "reasoning_effort",
+          "top_p",
+          "reasoning_replay.openai.v1"
+        ]
+      }
+    ],
+    "declared": {
+      "account_id": "acct-1"
+    }
+  },
+  "chat_request": {
+    "model": "gpt-5-codex",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Weather in Paris?"
+      }
+    ],
+    "tools": [
+      {
+        "name": "get_weather",
+        "description": "Current weather for a city.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "city": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "city"
+          ]
+        }
+      }
+    ],
+    "tool_choice": "auto",
+    "stream": true,
+    "parallel_tool_calls": false,
+    "reasoning_effort": "high",
+    "responses_tool_strict": {
+      "get_weather": true
+    }
+  }
+}

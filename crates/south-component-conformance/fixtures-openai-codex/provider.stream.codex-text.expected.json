@@ -1,0 +1,29 @@
+[
+  {
+    "content": "Waves fold",
+    "index": 0,
+    "type": "delta"
+  },
+  {
+    "content": " into foam.",
+    "index": 0,
+    "type": "delta"
+  },
+  {
+    "finish_reason": "stop",
+    "type": "finish"
+  },
+  {
+    "type": "usage",
+    "usage": {
+      "cache_read_tokens": 2048,
+      "cache_write_tokens": 0,
+      "input_tokens": 2400,
+      "output_tokens": 120,
+      "reasoning_tokens": 96
+    }
+  },
+  {
+    "type": "done"
+  }
+]
