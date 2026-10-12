@@ -78,7 +78,10 @@ pub use manifest::{
 };
 
 // The component value channel (Q14, host-zero-vendor-boundary §13.8).
-pub use values::{DeclaredValuesErrorV1, HOST_VALUE_ATTEMPT_ID, HOST_VALUES};
+pub use values::{
+    DeclaredValuesErrorV1, END_USER_HASH_MAX_BYTES, HOST_VALUE_ATTEMPT_ID,
+    HOST_VALUE_END_USER_HASH, HOST_VALUES, is_end_user_hash,
+};
 
 // Declared secret headers (B7a, host-zero-vendor-boundary §10).
 pub use manifest::{
