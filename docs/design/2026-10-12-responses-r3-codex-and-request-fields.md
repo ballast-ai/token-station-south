@@ -1,7 +1,8 @@
 # Responses step R3: the `openai-codex` family, the four dropped request fields, and the tool-usage bucket
 
 Status: accepted (lv, 2026-10-12: RQ3-Q1 to RQ3-Q8 ruled as recommended, §8). Implemented 2026-10-12 on branch
-`responses-r3-codex`, not released; the §3.2 measurement is pending (§9). lv approved in
+`responses-r3-codex`, merged as #186 and released in 0.56.0 (`2026-10-12-release-0.56.0.md`) before the §3.2 measurement, by lv's
+ruling of 2026-10-12: no host row may be cut over to `openai-codex` until §3.2 is recorded (§9). lv approved in
 principle on 2026-10-12 that R3 starts now and that the four request fields of record §4.6 be carried; the same day lv
 had scheduled the IR tool-usage bucket (host SF23) with R3, and on the evidence of §5 re-ruled it out of R3 (RQ3-Q6).
 
@@ -273,7 +274,7 @@ the measurement and could ship earlier on their own if lv prefers (**RQ3-Q7**); 
 
 ## 9. Implementation (2026-10-12)
 
-Implemented on branch `responses-r3-codex` after the rulings of §8; not released. The §3.2 measurement is
+Implemented on branch `responses-r3-codex` after the rulings of §8; merged as #186; released in 0.56.0. The §3.2 measurement is
 **pending** (an operator action on a real Codex account): until (a) and (b) are recorded here the release waits
 (§6), and (c) and (d) are recorded when measured. Commits, in order: the north codec (§4); the conformance crate,
 the package and the Q47 bumps; these notes.
@@ -412,6 +413,8 @@ The workspace version and `compatibility.json` are not touched; this is not a re
 - 2026-10-12: lv ruled RQ3-Q1 to RQ3-Q8 as recommended (RQ3-Q6 re-rules the same day's scheduling of the tool-usage
   bucket with R3); the status is accepted.
 - 2026-10-12: implemented (§9, new); the status line notes it. The §3.2 measurement is still pending.
+- 2026-10-12: released in 0.56.0 before the §3.2 measurement (lv): rows are not cut over to `openai-codex` until it is
+  recorded; a package change it requires ships as a patch release.
 - 2026-10-12: lv ruled the two implementation questions of §9: RQ3-Q9, a 429 from the token endpoint is `transient` for
   Codex (item 8; package changed); RQ3-Q10, the recipe's fixtures run in gate ② (item 2). Release order (lv,
   2026-10-12): this step ships first as 0.56.0; KC1 (canonical IR 4) follows as 0.57.0, rebased onto it.

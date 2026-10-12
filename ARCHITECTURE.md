@@ -33,7 +33,7 @@ community policy      enterprise policy
 | `south-provider-conformance` | Implemented immutable provider-call, provider-stream, provider-quota-metadata, header-auth, controlled-query, controlled-user-agent, provider-get, provider-multipart, provider-binary, and provider-media-binary v1 fixtures, the safe-fetch v1 fake-network fixtures, the host-implemented credential-recipe v1 suite (harness, fake token endpoint, runner), and the host-implemented north-passthrough-delivery v1 suite (harness over the host's pass-through executor, per-call verdict scripts, timeline runner; from 0.55.0) |
 | `south-testkit` | Implemented assembled-executor conformance runners and reference executors for all ten suites, the reference pass-through delivery executor with its deliberate mistakes (from 0.55.0), the safe-fetch v1 runner with its fake resolver, connector and proxy environment and a reference executor, plus the owned raw-call, host-signed raw-call, raw-GET and raw-multipart builders for host tests |
 | `south-provider-api` | Implemented v2 provider component ABI: WIT package `token-station:adapter@2.0.0` (world `provider-adapter-v2`) plus the gate-① manifest schema with the seven-field compatibility tuple; depends on no other south crate by design |
-| `south-component-conformance` | Implemented gates ① and ② (package admission + `south.provider-component.v1` behavior suite) with the native `provider-openai-compatible`, `provider-anthropic` and `provider-gemini` references and a frozen fixture pack each (the Responses package's two, `fixtures-openai-responses` and the unreleased `fixtures-openai-codex`, judged as one); a sanctioned typed consumer of the Canonical IR, pinned to a kernel distribution tag |
+| `south-component-conformance` | Implemented gates ① and ② (package admission + `south.provider-component.v1` behavior suite) with the native `provider-openai-compatible`, `provider-anthropic` and `provider-gemini` references and a frozen fixture pack each (the Responses package's two, `fixtures-openai-responses` and `fixtures-openai-codex` (from 0.56.0), judged as one); a sanctioned typed consumer of the Canonical IR, pinned to a kernel distribution tag |
 | `south-provider-runtime` | Implemented sandboxed component execution: gated loading, locked-down WASI, memory/deadline/payload/stream bounds, `host.sign` behind the manifest's secret allowlist — JSON-face only, never an IR consumer; the typed seam over it is the conformance crate's `sandbox` feature. Also reads the release's model catalog (`ModelCatalogV1`, `south.model-catalog.v1`), here because no guest links this crate |
 
 ## Removed ownership markers
@@ -211,10 +211,11 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.55.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.52.0, 0.52.0 and 0.54.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
-**Unreleased (R3: the Codex family and the four request fields)**: step R3 of the OpenAI Responses upstream (design
-record `docs/design/2026-10-12-responses-r3-codex-and-request-fields.md`, accepted 2026-10-12; proposed to ship in
-0.56.0 once its §3.2 measurement is recorded). `provider-openai-responses` 1.2.0 serves a second family, `openai-codex`:
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.56.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.52.0, 0.52.0 and 0.54.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**v0.56.0 (R3: the Codex family and the four request fields)**: step R3 of the OpenAI Responses upstream (release
+record `docs/design/2026-10-12-release-0.56.0.md`; design record `docs/design/2026-10-12-responses-r3-codex-and-request-fields.md`,
+accepted 2026-10-12). Released before its §3.2 staging measurement by lv's ruling of 2026-10-12: no host row may be cut
+over to `openai-codex` until the measurement is recorded, and a package change it requires ships as a patch release. `provider-openai-responses` 1.2.0 serves a second family, `openai-codex`:
 `{base_url}/codex/responses`, `stream: true` forced and a non-streaming request refused at build time, default
 `instructions`, no `temperature` or `max_output_tokens` (`output_cap: []`), `chatgpt-account-id` from the credential's
 exported `account_id` attribute only, and a `credentials` section scoped to the family whose recipe `codex` refreshes
@@ -225,6 +226,7 @@ bounds `RESPONSES_REQUEST_FIELD_MAX_BYTES` and `RESPONSES_METADATA_*`); the `ope
 Codex family does not. Gate ② runs `UsageNeverDefaulted` on a stream fixture that names its usage chunk (`CaseV1` gains
 `usage_chunk`). Under Q47 `south-component-conformance` moves to 0.54.0, so every package takes one new version and
 keeps its `south_runtime`.
+
 **v0.55.0**: OpenAI reasoning replay through the IR (NC-1) and the gate ③ suite
 `south.north-passthrough-delivery.v1` (release record `docs/design/2026-10-12-release-0.55.0.md`; design record
 `docs/design/2026-10-11-responses-reasoning-replay-and-passthrough-suite.md`, accepted 2026-10-12), with `image-azure` 1.0.2. The north codec keeps every OpenAI reasoning item that carries
