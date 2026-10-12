@@ -187,10 +187,17 @@ jobs:
       - uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad # v2
         with:
           tool: cargo-fuzz
+      # The cargo-fuzz binary that install-action fetches is built for musl, and cargo-fuzz
+      # defaults `--target` to its own build target. The address sanitizer cannot link against
+      # a statically linked libc, so every scheduled run since that binary changed failed before
+      # fuzzing. Name the runner's own target explicitly.
       - name: Fuzz untrusted headers
-        run: rustup run nightly-2026-08-15 cargo fuzz run safe_headers -- -max_total_time=600
+        run: >-
+          rustup run nightly-2026-08-15 cargo fuzz run --target x86_64-unknown-linux-gnu
+          safe_headers -- -max_total_time=600
       - name: Fuzz untrusted contract parsers
         run: |
           mkdir -p fuzz/corpus/contract_parsers
           cp fuzz/seeds/contract_parsers/* fuzz/corpus/contract_parsers/
-          rustup run nightly-2026-08-15 cargo fuzz run contract_parsers -- -max_total_time=600
+          rustup run nightly-2026-08-15 cargo fuzz run --target x86_64-unknown-linux-gnu \
+            contract_parsers -- -max_total_time=600
