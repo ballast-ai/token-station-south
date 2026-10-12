@@ -23,6 +23,7 @@ mod controlled_user_agent;
 mod credential_recipe;
 mod eventstream_framing;
 mod header_auth;
+mod north_passthrough;
 mod provider_binary;
 mod provider_get;
 mod provider_media_binary;
@@ -75,6 +76,20 @@ pub use header_auth::{
     HeaderAuthCaseIdV1, HeaderAuthExpectedEvidenceV1, HeaderAuthExpectedOutcomeV1,
     HeaderAuthExpectedTranscriptV1, HeaderAuthExpectedV1, HeaderAuthFixtureV1, HeaderAuthHeaderV1,
     HeaderAuthUpstreamV1, header_auth_fixtures_v1,
+};
+pub use north_passthrough::{
+    NORTH_PASSTHROUGH_DELIVERY_SUITE_ID, NORTH_PASSTHROUGH_DELIVERY_SUITE_VERSION,
+    NORTH_PASSTHROUGH_TERMINAL_TYPES_V1, NorthPassthroughBodyV1, NorthPassthroughBufferedVerdictV1,
+    NorthPassthroughCaseIdV1, NorthPassthroughConformanceFailureV1,
+    NorthPassthroughConformanceReportV1, NorthPassthroughDeliveryV1,
+    NorthPassthroughFinishVerdictV1, NorthPassthroughFixtureV1, NorthPassthroughFrameV1,
+    NorthPassthroughFrameVerdictV1, NorthPassthroughHarnessV1, NorthPassthroughMismatchCategoryV1,
+    NorthPassthroughMismatchV1, NorthPassthroughPathV1, NorthPassthroughScriptV1,
+    NorthPassthroughSettlementV1, NorthPassthroughSetupV1, NorthPassthroughSplitV1,
+    NorthPassthroughStepV1, NorthPassthroughStreamOutcomeV1, NorthPassthroughTimelineV1,
+    north_passthrough_buffered_upstream_text_v1, north_passthrough_fixtures_v1,
+    north_passthrough_frames_v1, north_passthrough_terminator_v1,
+    run_north_passthrough_conformance_v1,
 };
 pub use provider_binary::{
     PROVIDER_BINARY_CONFORMANCE_SUITE_ID, PROVIDER_BINARY_CONFORMANCE_SUITE_VERSION,
