@@ -12,7 +12,7 @@ version.workspace = true
 bytes.workspace = true
 http.workspace = true
 serde_json.workspace = true
-south-contracts = { path = "../south-contracts", version = "0.51.0" }
+south-contracts = { path = "../south-contracts", version = "0.52.0" }
 south-core = { path = "../south-core", version = "0.54.0" }
 south-host-grammars = { path = "../south-host-grammars", version = "0.54.0" }
 south-provider-api = { path = "../south-provider-api", version = "0.52.0" }
