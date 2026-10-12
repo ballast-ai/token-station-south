@@ -1,6 +1,7 @@
 # Image world step I3-2: `image-gemini` (Gemini API, token pricing first)
 
-Status: proposed (awaiting lv's review). Design only; nothing is implemented, built or run.
+Status: accepted (lv, 2026-10-13: GI-Q1 to GI-Q7 ruled as recommended, §11). Design only; nothing is implemented,
+built or run yet.
 
 Date: 2026-10-13
 
@@ -259,7 +260,13 @@ of the release that ships the word; `compatibility.json` `contracts.media` 2. Ex
 implementation (I3-1's §7 numbers moved once already). Without GI-Q1: no `south-contracts` change and
 `image-gemini` declares `media: 1`.
 
-## 11. Open questions for lv
+## 11. Open questions for lv (ruled 2026-10-13)
+
+lv ruled all seven as recommended: GI-Q1 adds the transform word `data_url_payload` (`contracts.media` 1 to 2,
+`south-contracts` 0.52.0 to 0.53.0); GI-Q2 the package emits `repeat = n` and the host's multi-round dispatch is a
+precondition of cutover, so no Gemini row is cut over before it lands; GI-Q3 to GI-Q7 as recommended. lv also ruled
+that the native-arm defects this record found (read, not run) are not fixed in the native arm: they are registered
+here and leave with the arm after cutover.
 
 - **GI-Q1 Reference images on generation need a transform the contract lacks.** A JSON request's blob is the client's
   string, so for `image_url` it is the whole data URL text (`elide.rs:318-329`). Gemini wants only the base64 payload.
@@ -306,3 +313,5 @@ implementation (I3-1's §7 numbers moved once already). Without GI-Q1: no `south
 ## Revision note
 
 - 2026-10-13: first draft (proposed).
+- 2026-10-13: lv ruled GI-Q1 to GI-Q7 as recommended and chose not to fix the native-arm defects in the native arm;
+  the status is accepted.
