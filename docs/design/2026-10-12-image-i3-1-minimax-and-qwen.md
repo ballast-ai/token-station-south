@@ -111,9 +111,9 @@ script, the `ci.yml` / `release.yml` enumerations, `shipped_packages_v1` (offici
    (host defect, §6 item 2); the component path does not.
 4. **Config values on an image route**: `group_id` reaches the component as a declared config value from the row's
    `config_values` (server:`…/component/mod.rs:1192-1212`). Cutover writes `config_values.group_id` on the MiniMax row.
-5. **Client status of a body-detected failure**: the executor answers 502 for any `rejected` / `unknown` 2xx outcome;
-   the native MiniMax arm answers the mapped status (401 / 400 / 429 / 503). Either the host carries the component's
-   `http_status` through, or the difference is registered (**IM-Q6**).
+5. **Client status of a body-detected failure**: the executor answers 502 for any `rejected` / `unknown` 2xx outcome
+   while the funds are parked; the native MiniMax arm answers the mapped status (401 / 400 / 429 / 503). Registered as a
+   difference (**IM-Q6**, re-ruled 2026-10-13: keep 502).
 6. **Prefer**: native Qwen ignores `Prefer: respond-async` (no held arm); a routed Qwen model gets the generic held arm
    (202). A deliberate improvement, registered.
 
@@ -153,8 +153,11 @@ patch; `image-minimax` and `image-qwen` start at 1.0.0. Proposed to ship in the 
   default output format; the host's held path sniffs today). Alternative: `image/jpeg`; a capture settles it.
   **Ruled (lv, 2026-10-12): as recommended.**
 - **IM-Q6** A body-detected failure's client status: the host carries the component's `http_status` (a small host
-  change) rather than answering 502. **Recommended: carry it** — clients see the same status as today.
-  **Ruled (lv, 2026-10-12): as recommended.**
+  change) rather than answering 502. ~~Recommended: carry it~~ **Re-ruled (lv, 2026-10-13): keep 502, registered as a
+  difference.** The host's executor answers 502 on purpose while the funds sit in review
+  (server:`…/handler/images/component/mod.rs:965-972`): a 4xx would tell the client "refused, not charged" and invite a
+  retry while the money may still be charged. The native MiniMax arm returns the mapped 401 / 400 / 429 / 503 while it
+  too parks the funds; the component path does not reproduce that.
 - **IM-Q7** Two packages, not one "bailian + minimax" package. **Recommended: two** — different families, auth hosts
   and error vocabularies; one package per family matches `image-azure`.
   **Ruled (lv, 2026-10-12): as recommended.**
@@ -240,7 +243,8 @@ Decisions where the record is silent:
 
 - 2026-10-12: first draft (proposed).
 - 2026-10-12: lv ruled IM-Q1 to IM-Q7 as recommended; the status is accepted. The host takes IM-Q1 (settle
-  `images_reported` when 0 < reported ≤ delivered + 1, capped at the reservation) and IM-Q6 (carry the component's
-  `http_status`) as host changes.
+  `images_reported` when 0 < reported ≤ delivered + 1, capped at the reservation) as a host change.
+- 2026-10-13: lv re-ruled IM-Q6 on the host executor's documented reason: keep 502 while funds are parked, registered as
+  a difference.
 - 2026-10-12: implemented on branch `image-i3-1` ("Implementation"); §7's conformance version corrected to
   0.55.0 → 0.56.0.
