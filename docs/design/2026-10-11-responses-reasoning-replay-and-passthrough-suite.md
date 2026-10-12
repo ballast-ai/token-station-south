@@ -1,7 +1,8 @@
 # OpenAI reasoning replay through the IR (NC-1) and the pass-through delivery suite
 
 Status: accepted (lv, 2026-10-12: NP-Q1 to NP-Q13 ruled as recommended, §8). The two changes it designs were approved
-in principle by lv on 2026-10-11. Implementation follows on branch `responses-nc1-passthrough`; not released.
+in principle by lv on 2026-10-11. Implemented on branch `responses-nc1-passthrough` (§9); not released (proposed for
+0.55.0).
 
 Date: 2026-10-11
 
@@ -518,7 +519,97 @@ streams small enough for that.
   moves no package and could ship earlier, but neither removes a client-visible loss without the other (§1.3, §2.5).
   **Ruled (lv, 2026-10-12): as recommended.**
 
+## 9. Implementation (2026-10-12)
+
+Implemented on branch `responses-nc1-passthrough` after the rulings of §8; not released. Commits, in order: the
+rulings; the north codec (NC-1 and the G3 half); the conformance crate (the 1.1.0 reference, the NP-Q4 refusals,
+fixtures, Q47 bumps); the gate ③ suite with its `south-testkit` reference executor and `compatibility.json`; these
+notes and the README / ARCHITECTURE paragraphs.
+
+### 9.1 What landed
+
+- **North codec.** `chat_request_from_responses` merges an assistant run only once the run is complete
+  (`flush_assistant_run`): a run holding a replayable item becomes one message with the three NC-1 keys of §2.1; any
+  other run merges exactly as before. `reasoning_input` keeps an unmarked, non-empty `encrypted_content` as the closed
+  projection (`type`, `id`, `summary` — `[]` when absent — `encrypted_content`, and `content` when it is an array),
+  refuses an unknown `tsr.` version and an opaque item without a non-empty `id`, and no longer writes the two
+  single-valued keys (NP-Q5). A request carrying both families, and the NP-Q11 bounds, are `reasoning_replay_invalid`.
+  New public items: `OPENAI_REASONING_REPLAY_CAPABILITY`, `OPENAI_REASONING_REPLAY_FAMILY`,
+  `OPENAI_REASONING_ITEMS_EXTENSION`, and (NP-Q8) `RelayedResponseIdentity` and `responses_error_event`, built by the
+  same function as the render state's failure frame.
+- **Conformance crate (0.53.0).** `reasoning_replay::openai_layout` validates an OpenAI-family turn; the Responses
+  reference (1.1.0) replays it for a declaring model, refuses it otherwise, and sends `include` to every declaring model;
+  the OpenAI-compatible and Gemini references refuse the family (NP-Q4); `responses_vocabulary::replay` names every
+  spelling. Fixtures: `request.reasoning-replay`, `-interleaved`, `-multi-turn`, `-include-only` (codec-derived, from
+  `replay_client_bodies()`), `request.refused-reasoning-replay-undeclared`, `-invalid-layout`,
+  `response.reasoning-encrypted-content`, `stream.reasoning-encrypted-content`, and
+  `request.refused-openai-reasoning-replay` in the OpenAI-compatible, Gemini, Anthropic and Converse packs.
+- **Suite.** `south.north-passthrough-delivery.v1`, 22 cases (§3.4's 21 plus
+  `DeliveryPassesThroughWhenEveryConditionHolds`, the positive delivery case the mutants need), in
+  `south-provider-conformance`; the reference executor and `NorthPassthroughFaultV1` (eighteen mistakes) in
+  `south-testkit`. `compatibility.json` gains `north_passthrough_delivery_suite(_id)` and
+  `host_capabilities.*.north_passthrough_delivery: not_verified`.
+
+### 9.2 Decisions taken where the record is silent
+
+1. **The lagging component** (§3.4 `stream.lagging-component`) is scripted as every frame answering `Events` and
+   `finish` answering `Done`: a component that held the terminal frame back emits its `Done` only at end of input, with
+   no frame of its own. The suite therefore needs no `Lag` verdict; the four frame verdicts are `Events`, `Done`,
+   `Error`, `Trap`, and `finish` answers `Clean`, `Done` or `Truncated`.
+2. **The NP-Q10 terminator** keeps the frame's own line ending: nothing when the frame already ends with a blank line,
+   `\n` after an LF- or CRLF-terminated last line, `\r` after a CR-terminated one (appending `\n` there would turn the
+   CR into a CRLF and still leave no blank line), and `\n\n` when the last line has no ending
+   (`north_passthrough_terminator_v1`).
+3. **Comment lines a host adds** (NP-Q9) are tolerated only at frame boundaries: before each expected frame the suite
+   skips `:` lines (each optionally followed by one blank line) the host wrote, and nothing else.
+4. **Funds on a failure.** The suite accepts either `MarkedDeliveryUnknown` or `SettledAsFailure` as the funds
+   transition, once, before the failure event; it requires no `SettlementPersisted` on a failure.
+5. **A failure before any relayed frame** must show the host's own `response.created` and `response.failed`, with the
+   same id and consecutive sequence numbers, the latter carrying the fixed message (render-gaps record §5.3).
+6. **Non-streaming refusals** must forward something (the host's own error) and never the upstream body or its text.
+7. **Bounds** count `encrypted_content` bytes only, as the Claude carrier counts its opaque fields.
+8. **Two other references stay as they were**: Anthropic, Invoke and Converse already refuse the family through
+   `validated_layout`; a fixture row in the Anthropic and Converse packs pins it.
+
+### 9.3 Failing-first evidence
+
+- `nc1_keeps_every_opaque_reasoning_item_of_a_run_in_order` failed before the codec change; the run kept only
+  `{"responses_reasoning_encrypted_content":"opaque-two","responses_reasoning_id":"rs_2"}`.
+- With the 1.1.0 replay and `include` disabled, `gate_two_passes_over_the_shipped_pack`,
+  `every_request_is_stateless_whatever_the_ir_carries` and `the_replay_keys_change_the_body_only_for_a_declaring_model`
+  fail; without the NP-Q4 checks, the `refused-openai-reasoning-replay` rows of the OpenAI-compatible and Gemini packs
+  fail (the items were silently dropped).
+- `responses_error_event` did not exist before its test (a compile failure).
+- The suite's self-test: each of the eighteen mistakes fails exactly the cases pinned for it.
+
+### 9.4 Versions (Q47)
+
+| Item | Before | After |
+|---|---|---|
+| `south-component-conformance` | 0.52.0 | 0.53.0 |
+| `south-contracts`, `south-provider-api` | 0.51.0, 0.52.0 | unchanged |
+| `provider-openai-responses` | 1.0.0 | 1.1.0 |
+| `provider-openai-compatible` | 2.4.6 | 2.5.0 |
+| `provider-gemini` | 1.1.14 | 1.2.0 |
+| `provider-anthropic` | 1.0.18 | 1.0.19 |
+| `provider-anthropic-bedrock-invoke` | 1.0.2 | 1.0.3 |
+| `provider-bedrock-converse` | 1.0.15 | 1.0.16 |
+| `provider-bedrock-converse-bearer` | 1.0.7 | 1.0.8 |
+| `task-kling` | 1.0.14 | 1.0.15 |
+| `task-kling-v2` | 0.32.12 | 0.32.13 |
+| `task-minimax-v2`, `task-bailian-v2` | 0.31.11 | 0.31.12 |
+| `task-xai-v2`, `task-veo-v2`, `task-wan-image-v2`, `task-gmi-image-v2` | 0.35.11 | 0.35.12 |
+| `task-byteplus-v2` | 0.36.11 | 0.36.12 |
+| `embeddings-openai-compatible` | 1.0.5 | 1.0.6 |
+| `embeddings-gemini` | 1.1.2 | 1.1.3 |
+| `embeddings-vertex` | 1.0.4 | 1.0.5 |
+| `image-azure` | 1.0.1 | 1.0.2 (the co-traveller `image-azure-edit-immutable` reuses this version) |
+
+No package's `south_runtime` moves (`shipped_packages_v1::nc1_retires_every_published_054_package_identity`). The
+workspace version is not touched; this is not a release.
+
 ## Revision note
 
 - 2026-10-11: first draft (proposed).
 - 2026-10-12: lv ruled NP-Q1 to NP-Q13 as recommended; the status is accepted and each question records the ruling.
+- 2026-10-12: implemented (§9, new); the status line notes it.
