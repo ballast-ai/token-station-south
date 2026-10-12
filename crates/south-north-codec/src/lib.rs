@@ -42,6 +42,7 @@ use token_station_protocol::ReasoningEffort;
 
 pub mod anthropic;
 pub mod anthropic_sse;
+mod fidelity;
 pub mod request;
 pub mod response;
 pub mod sse;
