@@ -1,7 +1,7 @@
 # Image world step I3-1: `image-minimax` and `image-qwen`
 
-Status: accepted (lv, 2026-10-12: IM-Q1 to IM-Q7 ruled as recommended, §8). Implemented on branch `image-i3-1` (see
-"Implementation"); not released. lv chose on 2026-10-12 that the synchronous image
+Status: accepted (lv, 2026-10-12: IM-Q1 to IM-Q7 ruled as recommended, §8). Implemented in #190 (see
+"Implementation"); released in 0.58.0 ([release record](2026-10-13-release-0.58.0.md)). lv chose on 2026-10-12 that the synchronous image
 packages (the image world record's I3 batches) are the next lane, and that each batch's design is reviewed before it is
 built.
 
