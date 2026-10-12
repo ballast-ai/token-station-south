@@ -24,7 +24,7 @@ three `extensions` keys components act on, to be promoted through the kernel cha
 [`2026-10-08-bedrock-invoke-anthropic-component.md`](2026-10-08-bedrock-invoke-anthropic-component.md) (which records
 the Messages-surface losses this change removes).
 
-Owner rulings (host design `server:docs/product-review-v2/plans/2026-10-09-P21-KC1-IR承载Anthropic字段设计稿.md` §8;
+Owner rulings (host design `server:docs/product-review-v2/plans/2026-10-09-P21-KC1-*.md` (the host KC1 design draft) §8;
 kernel PR #42 "Rulings"):
 
 | # | Ruling |
