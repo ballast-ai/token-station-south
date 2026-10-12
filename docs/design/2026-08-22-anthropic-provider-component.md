@@ -101,6 +101,10 @@ is still worth sending.
 Empty text contributes nothing and is skipped, so a caller never gets a blank
 line it did not write.
 
+*(Amended 2026-10-12, KC1, record `2026-10-12-kc1-canonical-ir-4-south.md` §4.1: when a system text part carries a
+prompt-cache marker, `system` is a block array with each marker in place, because joining would move the breakpoint;
+unmarked, it is still the joined string.)*
+
 ## 4. Fixture pack
 
 The pack lives beside the existing one (`fixtures-anthropic/`) rather than

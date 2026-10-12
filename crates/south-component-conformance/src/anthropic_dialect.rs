@@ -24,11 +24,13 @@
 //! exactly as it was before these words existed.
 
 use serde_json::{Value, json};
-use token_station_protocol::{ChatRequest, ErrorCode, ErrorEnvelope, ProviderConfig, ToolChoice};
+use token_station_protocol::{
+    ChatRequest, ErrorCode, ErrorEnvelope, ProviderConfig, ReasoningMode, ToolChoice,
+};
 
 use crate::component::ComponentResultV1;
 
-/// The model rejects `temperature` and `top_p`; they are dropped, not sent.
+/// The model rejects `temperature`, `top_p` and `top_k`; they are dropped, not sent.
 pub const SAMPLING_NONE: &str = "anthropic.sampling.none";
 /// The model rejects a forced tool choice; a request that forces one is refused.
 pub const TOOL_CHOICE_AUTO_ONLY: &str = "anthropic.tool_choice.auto_only";
@@ -59,17 +61,28 @@ const BUDGET_MEDIUM: u64 = 4096;
 const BUDGET_HIGH: u64 = 16384;
 
 /// How a declared model is asked to think.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Thinking {
     /// `thinking: {type: adaptive}` with `output_config.effort`.
     Adaptive { effort: &'static str },
     /// `thinking: {type: enabled, budget_tokens}`.
     Budget { budget_tokens: u64 },
+    /// The caller's own `thinking` configuration (protocol 0.6.0 `ChatRequest.reasoning` with a
+    /// mode), written back unchanged: mode, budget and effort exactly as sent, whatever thinking
+    /// shape the model declares (KC1 record §4.1, owner ruling K5). The upstream rules on it, as
+    /// it does on the native pass-through row.
+    Verbatim { mode: ReasoningMode, budget_tokens: Option<u32>, effort: Option<String> },
 }
 
 impl Thinking {
+    /// Whether the model thinks under this form. A caller's `disabled` is a thinking form that
+    /// leaves sampling alone.
+    pub(crate) const fn is_on(&self) -> bool {
+        !matches!(self, Self::Verbatim { mode: ReasoningMode::Disabled, .. })
+    }
+
     /// The Messages-API fields this thinking mode adds to a request body.
-    pub(crate) fn fields(self) -> Vec<(&'static str, Value)> {
+    pub(crate) fn fields(&self) -> Vec<(&'static str, Value)> {
         match self {
             Self::Adaptive { effort } => vec![
                 ("thinking", json!({"type": "adaptive"})),
@@ -77,6 +90,21 @@ impl Thinking {
             ],
             Self::Budget { budget_tokens } => {
                 vec![("thinking", json!({"type": "enabled", "budget_tokens": budget_tokens}))]
+            }
+            Self::Verbatim { mode, budget_tokens, effort } => {
+                let mut thinking = json!({"type": match mode {
+                    ReasoningMode::Enabled => "enabled",
+                    ReasoningMode::Disabled => "disabled",
+                    ReasoningMode::Adaptive => "adaptive",
+                }});
+                if let Some(budget) = budget_tokens {
+                    thinking["budget_tokens"] = json!(budget);
+                }
+                let mut fields = vec![("thinking", thinking)];
+                if let Some(effort) = effort {
+                    fields.push(("output_config", json!({"effort": effort})));
+                }
+                fields
             }
         }
     }
@@ -107,6 +135,8 @@ pub(crate) struct Dialect {
     auto_only: bool,
     shape: Option<Shape>,
     xhigh: bool,
+    /// The host declared at least one word of this dialect for the model: it is a Claude model.
+    claude: bool,
 }
 
 fn capability(detail: impl Into<String>) -> ErrorEnvelope {
@@ -168,6 +198,7 @@ impl Dialect {
             auto_only: declared(TOOL_CHOICE_AUTO_ONLY),
             shape,
             xhigh: declared(EFFORT_XHIGH),
+            claude: DIALECT_PARAMETERS.iter().any(|word| declared(word)),
         })
     }
 
@@ -190,22 +221,32 @@ impl Dialect {
     /// the budget form cannot be honored: the budget must stay below
     /// `max_tokens`, and a forced tool choice excludes it — the forced choice
     /// is a guarantee the caller asked for, the effort only a preference.
+    ///
+    /// A caller that sent its own thinking mode (Messages `thinking`, protocol 0.6.0) gets it back
+    /// verbatim when `verbatim` allows it ([`Thinking::Verbatim`]); the declared shape decides only
+    /// for an effort with no mode. A budget without a mode is not a form the caller wrote and is
+    /// not invented into one.
     pub(crate) fn thinking(
         self,
         request: &ChatRequest,
         max_tokens: Option<u64>,
+        verbatim: bool,
     ) -> ComponentResultV1<Option<Thinking>> {
+        if verbatim && let Some(mode) = request.reasoning.mode {
+            return Ok(Some(Thinking::Verbatim {
+                mode,
+                budget_tokens: request.reasoning.budget_tokens,
+                effort: request.reasoning.effort.as_ref().map(|effort| effort.as_str().to_owned()),
+            }));
+        }
         let Some(shape) = self.shape else {
             return Ok(None);
         };
-        let Some(effort) = request.extensions.get("reasoning_effort").filter(|v| !v.is_null())
-        else {
+        // Typed since protocol 0.6.0 (R-Q15); before, the same wire key arrived in `extensions`.
+        let Some(effort) = request.reasoning.effort.as_ref() else {
             return Ok(None);
         };
-        let Some(effort) = effort.as_str() else {
-            return Err(capability("reasoning effort must be a string"));
-        };
-        let level = match effort {
+        let level = match effort.as_str() {
             "none" | "minimal" => Level::Floor,
             "low" => Level::Low,
             "medium" => Level::Medium,
@@ -243,11 +284,18 @@ impl Dialect {
         })
     }
 
-    /// Whether `temperature` and `top_p` may be sent. The model may reject
+    /// Whether `temperature`, `top_p` and `top_k` may be sent. The model may reject
     /// them outright, and with thinking on a non-default value is rejected
-    /// too; either way they are dropped rather than approximated.
-    pub(crate) const fn keeps_sampling(self, thinking: Option<Thinking>) -> bool {
-        !matches!(self.sampling, Sampling::None) && thinking.is_none()
+    /// too (and `top_k` at all); either way they are dropped rather than approximated.
+    pub(crate) fn keeps_sampling(self, thinking: Option<&Thinking>) -> bool {
+        !matches!(self.sampling, Sampling::None) && !thinking.is_some_and(Thinking::is_on)
+    }
+
+    /// Whether the host declared any word of this dialect for the model, which marks it as a
+    /// Claude model on a wire that also serves others (Converse): only then are Claude's own
+    /// request fields (a verbatim `thinking`, `top_k`) sent there (KC1 record §4.2, KC-Q7).
+    pub(crate) const fn is_claude(self) -> bool {
+        self.claude
     }
 
     /// Whether `top_p` may be sent next to a `temperature`. A model that takes
@@ -270,7 +318,9 @@ enum Level {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use token_station_protocol::{Message, ModelCapability, ProviderEndpoint, Role, ToolDef};
+    use token_station_protocol::{
+        Message, ModelCapability, ProviderEndpoint, Reasoning, ReasoningEffort, Role, ToolDef,
+    };
 
     fn config(words: &[&str]) -> ProviderConfig {
         let mut config = ProviderConfig::new(
@@ -288,31 +338,27 @@ mod tests {
     fn request(effort: Option<&str>) -> ChatRequest {
         let mut request = ChatRequest::new("m", vec![Message::text(Role::User, "hi")]);
         if let Some(effort) = effort {
-            request.extensions.insert("reasoning_effort".into(), json!(effort));
+            request.reasoning.effort = Some(serde_json::from_value(json!(effort)).unwrap());
         }
         request
     }
 
     fn with_tool(mut request: ChatRequest, choice: ToolChoice) -> ChatRequest {
-        request.tools.push(ToolDef {
-            name: "t".into(),
-            description: None,
-            parameters: json!({"type": "object"}),
-        });
+        request.tools.push(ToolDef::new("t", None, json!({"type": "object"})));
         request.tool_choice = Some(choice);
         request
     }
 
     fn thinking(words: &[&str], effort: Option<&str>, max: Option<u64>) -> Option<Thinking> {
         let request = request(effort);
-        Dialect::of(&request, &config(words)).unwrap().thinking(&request, max).unwrap()
+        Dialect::of(&request, &config(words)).unwrap().thinking(&request, max, true).unwrap()
     }
 
     #[test]
     fn an_undeclared_model_keeps_todays_request() {
         let request = request(Some("high"));
         let dialect = Dialect::of(&request, &config(&[])).unwrap();
-        assert_eq!(dialect.thinking(&request, Some(4096)).unwrap(), None);
+        assert_eq!(dialect.thinking(&request, Some(4096), true).unwrap(), None);
         assert!(dialect.keeps_sampling(None));
         let forced = with_tool(request, ToolChoice::Required);
         assert!(dialect.refuse_forced_tool(&forced).is_ok());
@@ -359,7 +405,7 @@ mod tests {
 
         let forced = with_tool(request(Some("low")), ToolChoice::Required);
         let dialect = Dialect::of(&forced, &config(&budget)).unwrap();
-        assert_eq!(dialect.thinking(&forced, Some(4096)).unwrap(), None);
+        assert_eq!(dialect.thinking(&forced, Some(4096), true).unwrap(), None);
     }
 
     #[test]
@@ -369,7 +415,7 @@ mod tests {
         assert!(!none.keeps_sampling(None));
         let adaptive = Dialect::of(&request, &config(&[THINKING_ADAPTIVE])).unwrap();
         assert!(adaptive.keeps_sampling(None));
-        assert!(!adaptive.keeps_sampling(Some(Thinking::Adaptive { effort: "low" })));
+        assert!(!adaptive.keeps_sampling(Some(&Thinking::Adaptive { effort: "low" })));
     }
 
     #[test]
@@ -417,7 +463,47 @@ mod tests {
         assert!(Dialect::of(&request, &config(&[THINKING_ADAPTIVE, THINKING_BUDGET])).is_err());
         let dialect = Dialect::of(&request, &config(&[THINKING_ADAPTIVE])).unwrap();
         let mut odd = request;
-        odd.extensions.insert("reasoning_effort".into(), json!("max"));
-        assert!(dialect.thinking(&odd, Some(4096)).is_err(), "max is not in the OpenAI vocabulary");
+        odd.reasoning.effort = Some(ReasoningEffort::Other("max".to_owned()));
+        assert!(
+            dialect.thinking(&odd, Some(4096), true).is_err(),
+            "max is not in the OpenAI vocabulary"
+        );
+    }
+
+    /// KC1 §4.1: a caller's own mode is sent back unchanged whatever shape the model declares,
+    /// only where the wire allows it; `disabled` leaves sampling alone.
+    #[test]
+    fn a_callers_mode_is_verbatim_and_disabled_keeps_sampling() {
+        let mut request = request(Some("max"));
+        request.reasoning.mode = Some(ReasoningMode::Adaptive);
+        let dialect = Dialect::of(&request, &config(&[THINKING_BUDGET])).unwrap();
+        let verbatim = dialect.thinking(&request, Some(4096), true).unwrap().unwrap();
+        assert_eq!(
+            verbatim,
+            Thinking::Verbatim {
+                mode: ReasoningMode::Adaptive,
+                budget_tokens: None,
+                effort: Some("max".to_owned()),
+            }
+        );
+        assert_eq!(
+            verbatim.fields(),
+            vec![
+                ("thinking", json!({"type": "adaptive"})),
+                ("output_config", json!({"effort": "max"})),
+            ]
+        );
+        assert!(!dialect.keeps_sampling(Some(&verbatim)));
+        // Not allowed here: the effort rule decides, and `max` is not in its vocabulary.
+        assert!(dialect.thinking(&request, Some(4096), false).is_err());
+
+        request.reasoning =
+            Reasoning { mode: Some(ReasoningMode::Disabled), effort: None, budget_tokens: None };
+        let off = dialect.thinking(&request, Some(4096), true).unwrap().unwrap();
+        assert!(!off.is_on());
+        assert!(dialect.keeps_sampling(Some(&off)));
+        assert_eq!(off.fields(), vec![("thinking", json!({"type": "disabled"}))]);
+        assert!(dialect.is_claude());
+        assert!(!Dialect::of(&request, &config(&[])).unwrap().is_claude());
     }
 }

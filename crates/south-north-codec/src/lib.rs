@@ -38,9 +38,11 @@
 //! path that failed; the host maps it, the codec never does.
 
 use serde_json::Value;
+use token_station_protocol::ReasoningEffort;
 
 pub mod anthropic;
 pub mod anthropic_sse;
+mod fidelity;
 pub mod request;
 pub mod response;
 pub mod sse;
@@ -127,6 +129,14 @@ impl CodecError {
             | Self::Unrenderable { field, .. } => field,
         }
     }
+}
+
+/// A reasoning level as the IR types it (protocol 0.6.0). Every string is accepted: a level the
+/// kernel does not name is kept verbatim as [`ReasoningEffort::Other`], and the provider component
+/// decides whether to send it.
+pub(crate) fn reasoning_effort(level: &str) -> ReasoningEffort {
+    serde_json::from_value(Value::String(level.to_owned()))
+        .unwrap_or_else(|_| ReasoningEffort::Other(level.to_owned()))
 }
 
 /// A JSON value rendered as a short string for an error message.

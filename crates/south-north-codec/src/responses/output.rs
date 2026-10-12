@@ -40,12 +40,12 @@ fn choice_output(
     let generated_carrier = carrier_from_message(&choice.message)?;
     let parts = match &choice.message.content {
         None => Vec::new(),
-        Some(Content::Text(text)) => vec![ContentPart::Text { text: text.clone() }],
+        Some(Content::Text(text)) => vec![ContentPart::text(text.clone())],
         Some(Content::Parts(parts)) => parts.clone(),
     };
     for part in parts {
         match part {
-            ContentPart::Text { text } => texts.push(json!({"type":"output_text","text":text})),
+            ContentPart::Text { text, .. } => texts.push(json!({"type":"output_text","text":text})),
             ContentPart::Thinking { thinking: text, signature: part_signature } => {
                 if replay_items.is_none() && generated_carrier.is_none() {
                     thinking.push_str(&text);

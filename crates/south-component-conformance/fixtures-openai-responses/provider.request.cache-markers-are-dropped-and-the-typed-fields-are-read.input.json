@@ -1,0 +1,120 @@
+{
+  "chat_request": {
+    "messages": [
+      {
+        "content": [
+          {
+            "cache_control": {
+              "type": "ephemeral"
+            },
+            "text": "Rules.",
+            "type": "text"
+          },
+          {
+            "text": "More rules.",
+            "type": "text"
+          }
+        ],
+        "role": "system"
+      },
+      {
+        "content": [
+          {
+            "cache_control": {
+              "ttl": "1h",
+              "type": "ephemeral"
+            },
+            "text": "a",
+            "type": "text"
+          },
+          {
+            "cache_control": {
+              "type": "ephemeral"
+            },
+            "image_url": {
+              "url": "https://x.test/i.png"
+            },
+            "type": "image_url"
+          },
+          {
+            "text": "b",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "role": "assistant",
+        "tool_calls": [
+          {
+            "arguments": "{\"city\":\"Beijing\"}",
+            "id": "c1",
+            "name": "get_weather"
+          }
+        ]
+      },
+      {
+        "content": [
+          {
+            "text": "18C",
+            "type": "text"
+          },
+          {
+            "cache_control": {
+              "ttl": "1h",
+              "type": "ephemeral"
+            },
+            "text": "sunny",
+            "type": "text"
+          }
+        ],
+        "role": "tool",
+        "tool_call_id": "c1"
+      }
+    ],
+    "model": "gpt-5.5",
+    "parallel_tool_calls": false,
+    "reasoning_effort": "low",
+    "sampling": {
+      "top_k": 40
+    },
+    "tools": [
+      {
+        "cache_control": {
+          "ttl": "1h",
+          "type": "ephemeral"
+        },
+        "description": "Look up weather",
+        "name": "get_weather",
+        "parameters": {
+          "properties": {
+            "city": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "strict": true
+      }
+    ]
+  },
+  "provider_config": {
+    "auth": "provider_api_key",
+    "base_url": "https://api.openai.com/v1",
+    "models": [
+      {
+        "context_window": 400000,
+        "json_schema": true,
+        "model": "gpt-5.5",
+        "supported_parameters": [
+          "reasoning_effort",
+          "temperature",
+          "top_p"
+        ],
+        "tool": true,
+        "vision": true
+      }
+    ],
+    "provider": "openai-responses"
+  }
+}

@@ -149,7 +149,7 @@ fn c1_responses_request_and_output_preserve_carrier_and_ordered_blocks() {
         &request.messages[0].content,
         Some(Content::Parts(parts))
             if matches!(&parts[0], ContentPart::Thinking { thinking, signature: Some(signature) } if thinking == "first" && signature == "sig")
-                && matches!(&parts[1], ContentPart::Text { text } if text == "answer")
+                && matches!(&parts[1], ContentPart::Text { text, .. } if text == "answer")
                 && matches!(&parts[2], ContentPart::RedactedThinking { data } if data == "redacted")
     ));
 
@@ -244,8 +244,8 @@ fn c1_output_requires_a_bijection_over_content_and_tool_references() {
                 message: token_station_protocol::Message {
                     role: token_station_protocol::Role::Assistant,
                     content: Some(Content::Parts(vec![
-                        ContentPart::Text { text: "one".into() },
-                        ContentPart::Text { text: "two".into() },
+                        ContentPart::text("one"),
+                        ContentPart::text("two"),
                     ])),
                     tool_calls: vec![token_station_protocol::ToolCall {
                         id: "call_1".into(),
@@ -329,8 +329,8 @@ fn c1_output_text_refs_name_text_position_in_content_not_layout_order() {
             message: token_station_protocol::Message {
                 role: token_station_protocol::Role::Assistant,
                 content: Some(Content::Parts(vec![
-                    ContentPart::Text { text: "zero".into() },
-                    ContentPart::Text { text: "one".into() },
+                    ContentPart::text("zero"),
+                    ContentPart::text("one"),
                 ])),
                 tool_calls: Vec::new(),
                 tool_call_id: None,
@@ -417,7 +417,7 @@ fn x5_stream_preserves_interleaved_layout_and_reuses_the_completed_carrier() {
         terminal.choices[0].message.content.as_ref(),
         Some(Content::Parts(parts))
             if matches!(&parts[0], ContentPart::Thinking { signature: Some(signature), .. } if signature == "sig")
-                && matches!(&parts[1], ContentPart::Text { text } if text == "answer")
+                && matches!(&parts[1], ContentPart::Text { text, .. } if text == "answer")
                 && matches!(&parts[2], ContentPart::RedactedThinking { data } if data == "opaque")
     ));
 }

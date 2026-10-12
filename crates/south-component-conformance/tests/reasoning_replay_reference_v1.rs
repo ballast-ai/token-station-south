@@ -288,7 +288,7 @@ fn x1_converse_response_preserves_thinking_signature_and_redacted_blocks() {
     assert!(
         matches!(&parts[0], ContentPart::Thinking { thinking, signature: Some(signature) } if thinking == "first" && signature == "sig-1")
     );
-    assert!(matches!(&parts[1], ContentPart::Text { text } if text == "answer"));
+    assert!(matches!(&parts[1], ContentPart::Text { text, .. } if text == "answer"));
     assert!(matches!(&parts[2], ContentPart::RedactedThinking { data } if data == "opaque"));
 }
 

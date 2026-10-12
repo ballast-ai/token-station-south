@@ -1,0 +1,22 @@
+{
+  "method": "POST",
+  "url": "https://bedrock-runtime.us-east-1.amazonaws.com/model/claude-x/invoke",
+  "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "x-amzn-bedrock-accept": "application/json"
+  },
+  "body": {
+    "anthropic_version": "bedrock-2023-05-31",
+    "messages": [
+      {
+        "role": "user",
+        "content": "hi"
+      }
+    ],
+    "max_tokens": 64,
+    "metadata": {
+      "user_id": "t7_9f86d081884c7d659a2feaa0c55ad015"
+    }
+  }
+}

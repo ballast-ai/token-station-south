@@ -8,7 +8,7 @@ use super::{
     ResponsesRequestOptions, decode_reasoning_replay_carrier, invalid, namespace_name,
     required_str, tool_definitions,
 };
-use crate::CodecError;
+use crate::{CodecError, reasoning_effort};
 use serde_json::{Value, json};
 use token_station_protocol::{
     ChatRequest, Content, ContentPart, ImageUrl, Message, ResponseFormat, Role, ToolCall,
@@ -65,6 +65,14 @@ pub fn chat_request_from_responses(
     refuse_mixed_replay_families(&request.messages)?;
     let (tools, extensions) = tool_definitions(body.get("tools").unwrap_or(&Value::Null))?;
     request.tools = tools;
+    // Protocol 0.6.0 (R-Q15): strictness is a per-tool field. The request-level map stays in
+    // `extensions` as data during the transition, so a consumer built before the promotion still
+    // finds it (KC1 record §3.3, KC-Q8).
+    if let Some(strict) = extensions.get("responses_tool_strict") {
+        for tool in &mut request.tools {
+            tool.strict = strict.get(&tool.name).and_then(Value::as_bool);
+        }
+    }
     request.extensions = extensions;
     request.tool_choice = tool_choice(body.get("tool_choice"), !request.tools.is_empty())?;
     if let Some(reasoning) = body.get("reasoning").filter(|v| !v.is_null()) {
@@ -72,10 +80,9 @@ pub fn chat_request_from_responses(
             return Err(invalid("reasoning", "must be an object"));
         }
         if let Some(effort) = reasoning.get("effort").filter(|v| !v.is_null()) {
-            request.extensions.insert(
-                "reasoning_effort".into(),
-                json!(required_str(effort, "reasoning.effort")?),
-            );
+            // Typed since protocol 0.6.0 (R-Q15); the wire key is unchanged.
+            request.reasoning.effort =
+                Some(reasoning_effort(required_str(effort, "reasoning.effort")?));
         }
         if let Some(summary) = reasoning.get("summary").filter(|v| !v.is_null()) {
             request.extensions.insert("responses_reasoning_summary".into(), summary.clone());
@@ -85,7 +92,7 @@ pub fn chat_request_from_responses(
         let parallel = parallel
             .as_bool()
             .ok_or_else(|| invalid("parallel_tool_calls", "must be a boolean"))?;
-        request.extensions.insert("parallel_tool_calls".into(), json!(parallel));
+        request.parallel_tool_calls = Some(parallel);
     }
     request.response_format = response_format(body)?;
     if let Some(cap) = body
@@ -381,9 +388,9 @@ fn content(
                     {
                         ContentPart::Unknown(p.clone())
                     }
-                    Some("text" | "input_text" | "output_text") => ContentPart::Text {
-                        text: required_str(&p["text"], &format!("{field}.text"))?.to_owned(),
-                    },
+                    Some("text" | "input_text" | "output_text") => ContentPart::text(
+                        required_str(&p["text"], &format!("{field}.text"))?.to_owned(),
+                    ),
                     Some("input_image" | "image_url")
                         if p["type"] == "input_image" || options.preserve_unknown_content =>
                     {
@@ -416,6 +423,7 @@ fn content(
                                         .and_then(Value::as_str)
                                         .map(str::to_owned),
                                 },
+                                cache_control: None,
                             }
                         }
                     }
@@ -435,9 +443,9 @@ fn content(
             {
                 let text = parts
                     .into_iter()
-                    .filter_map(
-                        |p| if let ContentPart::Text { text } = p { Some(text) } else { None },
-                    )
+                    .filter_map(|p| {
+                        if let ContentPart::Text { text, .. } = p { Some(text) } else { None }
+                    })
                     .collect::<String>();
                 Ok(Some(Content::Text(text)))
             } else {
@@ -463,11 +471,11 @@ fn merge_content(target: &mut Option<Content>, incoming: Option<Content>) {
         }
         (a, b) => {
             let mut parts = match a {
-                Content::Text(text) => vec![ContentPart::Text { text }],
+                Content::Text(text) => vec![ContentPart::text(text)],
                 Content::Parts(parts) => parts,
             };
             match b {
-                Content::Text(text) => parts.push(ContentPart::Text { text }),
+                Content::Text(text) => parts.push(ContentPart::text(text)),
                 Content::Parts(mut other) => parts.append(&mut other),
             }
             Content::Parts(parts)
@@ -531,13 +539,13 @@ fn openai_replay_message(pieces: Vec<Message>) -> Result<Message, CodecError> {
             Some(Content::Text(text)) => {
                 if !text.is_empty() {
                     layout.push(json!({"kind": "content", "ordinal": parts.len()}));
-                    parts.push(ContentPart::Text { text });
+                    parts.push(ContentPart::text(text));
                 }
             }
             Some(Content::Parts(added)) => {
                 for part in added {
                     match part {
-                        ContentPart::Text { ref text } if text.is_empty() => {}
+                        ContentPart::Text { ref text, .. } if text.is_empty() => {}
                         ContentPart::Thinking { signature: None, .. } => parts.push(part),
                         other => {
                             layout.push(json!({"kind": "content", "ordinal": parts.len()}));
@@ -622,7 +630,7 @@ fn materialize_replay_message(message: &mut Message) -> Result<(), CodecError> {
         Some(Content::Parts(parts)) => parts
             .into_iter()
             .filter_map(|part| match part {
-                ContentPart::Text { text } => Some(text),
+                ContentPart::Text { text, .. } => Some(text),
                 _ => None,
             })
             .collect(),
@@ -659,7 +667,7 @@ fn materialize_replay_message(message: &mut Message) -> Result<(), CodecError> {
                     };
                     text_refs[index] = text_refs[index].saturating_add(1);
                     layout.push(json!({"kind":"content","ordinal":parts.len()}));
-                    parts.push(ContentPart::Text { text: text.clone() });
+                    parts.push(ContentPart::text(text.clone()));
                 }
                 ReasoningReplayBlock::ToolCallRef { call_id } => {
                     let Some(index) =

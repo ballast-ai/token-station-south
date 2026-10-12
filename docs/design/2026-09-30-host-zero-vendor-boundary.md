@@ -2153,6 +2153,8 @@ credential, so the host builds the map after it selects the credential and never
 version 4, lowercase and hyphenated) the host mints fresh for every upstream attempt, so a failover attempt gets a new
 one (the Kiro record's P-4). Gate ① refuses an unknown word and a repeat. A host fills exactly the declared words on
 every call and passes no other; a new word is a generic host feature (P21 §1.4 exception ①), never a per-vendor value.
+*(2026-10-12, KC1: the second word is `end_user_hash`, an opaque per-tenant pseudonym of the caller's end user, 1 to
+128 bytes of `[A-Za-z0-9_-]` (`is_end_user_hash`); record `2026-10-12-kc1-canonical-ir-4-south.md` §5.)*
 
 **Provider world only (§16 Q44).** `ChatRequest` exists only in the provider world, so `host_values` is refused
 elsewhere (`InstanceIsAProviderWorldDeclaration("host_values")`). `config_schema` already was provider-only; credential

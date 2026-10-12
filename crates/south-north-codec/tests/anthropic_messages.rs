@@ -73,7 +73,7 @@ fn thinking_blocks_keep_their_signature_and_redacted_ones_survive() {
                 signature: Some("sig-1".to_owned())
             },
             ContentPart::RedactedThinking { data: "opaque".to_owned() },
-            ContentPart::Text { text: "done".to_owned() },
+            ContentPart::text("done".to_owned()),
         ])),
         "the signature is the ticket that makes a replay verifiable, and the redacted block is \
          unreadable but still has to survive the round trip"
@@ -123,7 +123,7 @@ fn an_image_source_shape_this_protocol_does_not_define_is_carried_whole() {
         panic!("expected parts: {:?}", request.messages[0].content);
     };
     assert!(
-        matches!(&parts[0], ContentPart::ImageUrl { image_url } if image_url.url == "data:image/png;base64,AAAA")
+        matches!(&parts[0], ContentPart::ImageUrl { image_url, .. } if image_url.url == "data:image/png;base64,AAAA")
     );
     assert!(
         matches!(&parts[1], ContentPart::Unknown(_)),
@@ -174,7 +174,7 @@ fn the_message_envelope_is_pinned_block_by_block() {
             vec![choice(
                 Some(Content::Parts(vec![
                     ContentPart::Thinking { thinking: "reasoning".to_owned(), signature: None },
-                    ContentPart::Text { text: "checking now".to_owned() },
+                    ContentPart::text("checking now".to_owned()),
                 ])),
                 vec![ToolCall {
                     id: "toolu_upstream".to_owned(),

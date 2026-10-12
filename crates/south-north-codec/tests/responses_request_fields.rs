@@ -125,7 +125,10 @@ fn each_bound_is_refused_with_its_field_and_no_payload() {
 }
 
 /// A request without the four fields parses to the same IR, byte for byte, as before the change.
-/// The literal was taken from the codec at `origin/main` 7ef9995, before these fields existed.
+/// The literal was taken from the codec at `origin/main` 7ef9995, before these fields existed, and
+/// changed once since: protocol 0.6.0 (KC1, R-Q15) types `reasoning_effort`,
+/// `parallel_tool_calls` and the per-tool `strict`, which moves the first two out of the sorted
+/// `extensions` tail to their struct positions and adds `strict` to the tool.
 #[test]
 fn a_request_without_them_is_unchanged_byte_for_byte() {
     let body = json!({
@@ -146,8 +149,9 @@ fn a_request_without_them_is_unchanged_byte_for_byte() {
 const GOLDEN_IR: &str = concat!(
     r#"{"model":"gpt-5.5","messages":[{"role":"system","content":"Be brief.","responses_transient"#,
     r#"_instructions":true},{"role":"user","content":"Weather in Paris?"}],"tools":[{"name":"get_"#,
-    r#"weather","parameters":{"properties":{"city":{"type":"string"}},"type":"object"}}],"respons"#,
-    r#"e_format":{"type":"json_object"},"tool_choice":"auto","sampling":{"temperature":0.5,"top_p"#,
-    r#"":0.9,"max_output_tokens":64},"stream":true,"parallel_tool_calls":false,"reasoning_effort""#,
-    r#":"low","responses_reasoning_summary":"auto","responses_tool_strict":{"get_weather":true}}"#,
+    r#"weather","parameters":{"properties":{"city":{"type":"string"}},"type":"object"},"strict":"#,
+    r#"true}],"response_format":{"type":"json_object"},"tool_choice":"auto","sampling":{"tempera"#,
+    r#"ture":0.5,"top_p":0.9,"max_output_tokens":64},"reasoning_effort":"low","parallel_tool_cal"#,
+    r#"ls":false,"stream":true,"responses_reasoning_summary":"auto","responses_tool_strict":{"get"#,
+    r#"_weather":true}}"#,
 );

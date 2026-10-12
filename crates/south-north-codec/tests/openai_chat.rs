@@ -153,7 +153,7 @@ fn client_supplied_reasoning_is_kept_and_leads_the_visible_text() {
         request.messages[0].content,
         Some(Content::Parts(vec![
             ContentPart::Thinking { thinking: "first I thought".to_owned(), signature: None },
-            ContentPart::Text { text: "the answer".to_owned() },
+            ContentPart::text("the answer".to_owned()),
         ])),
         "reasoning is produced before the answer, so it leads; whether it is replayed upstream \
          is the host's per-model call, not something normalization may pre-empt"
@@ -274,7 +274,7 @@ fn empty_text_is_null_and_usage_sub_buckets_appear_only_when_reported() {
             assistant(
                 Some(Content::Parts(vec![
                     ContentPart::Thinking { thinking: "pondering".to_owned(), signature: None },
-                    ContentPart::Text { text: String::new() },
+                    ContentPart::text(String::new()),
                 ])),
                 Vec::new(),
             ),

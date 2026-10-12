@@ -34,8 +34,30 @@ use crate::{ComponentManifestV1, ConfigErrorV1, ManifestErrorV1, WorldSchemaV1};
 /// hyphenated), fresh for every attempt, so a failover attempt gets a new one.
 pub const HOST_VALUE_ATTEMPT_ID: &str = "attempt_id";
 
+/// An opaque, per-tenant pseudonym of the caller's end user (KC1 record
+/// `docs/design/2026-10-12-kc1-canonical-ir-4-south.md` §5, owner ruling K3).
+///
+/// The host mints it: stable for one end user within one tenant, unlinkable across tenants, and
+/// never the raw id the client sent. How it is computed is the host's design. A dialect maps it to
+/// its own end-user field (Anthropic `metadata.user_id`). Absent means "send no end-user id". The
+/// value satisfies [`is_end_user_hash`]; a component refuses any other value as a host error.
+pub const HOST_VALUE_END_USER_HASH: &str = "end_user_hash";
+
+/// The most bytes an [`HOST_VALUE_END_USER_HASH`] value may hold.
+pub const END_USER_HASH_MAX_BYTES: usize = 128;
+
 /// The closed vocabulary of `ChatRequest.host_values` keys a manifest may declare (D7).
-pub const HOST_VALUES: &[&str] = &[HOST_VALUE_ATTEMPT_ID];
+pub const HOST_VALUES: &[&str] = &[HOST_VALUE_ATTEMPT_ID, HOST_VALUE_END_USER_HASH];
+
+/// Whether `value` is a well-formed [`HOST_VALUE_END_USER_HASH`].
+///
+/// That is 1 to [`END_USER_HASH_MAX_BYTES`] bytes of `[A-Za-z0-9_-]`, which lies inside the kernel
+/// `ComponentValues` grammar and inside every dialect's end-user id syntax a component maps it to.
+#[must_use]
+pub fn is_end_user_hash(value: &str) -> bool {
+    (1..=END_USER_HASH_MAX_BYTES).contains(&value.len())
+        && value.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+}
 
 /// Why [`ComponentManifestV1::declared_values`] built no map.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]

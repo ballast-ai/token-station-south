@@ -179,7 +179,7 @@ pub fn openai_layout(message: &Message) -> Result<Option<Vec<OpenAiReplayRef<'_>
                 if std::mem::replace(seen, true) {
                     return Err(());
                 }
-                let ContentPart::Text { text } = &parts[index] else { return Err(()) };
+                let ContentPart::Text { text, .. } = &parts[index] else { return Err(()) };
                 ordered.push(OpenAiReplayRef::Text(text));
             }
             Some("tool_call") => {

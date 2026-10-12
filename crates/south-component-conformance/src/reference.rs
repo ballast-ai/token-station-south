@@ -17,7 +17,8 @@ use south_provider_api::{ComponentMetadataV1, PROVIDER_WORLD};
 use token_station_protocol::{
     Auth, ChatRequest, ChatResponse, Choice, Content, ContentPart, ErrorCode, ErrorEnvelope,
     Extensions, FinishReason, HttpMethod, HttpRequestDescriptor, HttpResponseParts, Message,
-    ProviderApi, ProviderConfig, ResponseFormat, Role, SafeHeaders, StreamEvent, ToolCall, Usage,
+    ProviderApi, ProviderConfig, ReasoningEffort, ResponseFormat, Role, SafeHeaders, StreamEvent,
+    ToolCall, Usage,
 };
 
 use crate::component::{ComponentResultV1, ProviderComponentV1, StreamParserV1};
@@ -158,7 +159,14 @@ fn message_to_openai_for_model(
     if message.content.is_none() {
         out.insert("content".to_owned(), Value::Null);
     }
-    if let Some(content) = &message.content {
+    // This wire has no inline prompt-cache marker (KC1 record §4.3): a system prompt or tool
+    // result that is a part list only for its markers renders as the string it would otherwise be.
+    let content = if matches!(message.role, Role::System | Role::Tool) {
+        crate::typed_request::without_markers(message.content.as_ref())
+    } else {
+        message.content.as_ref().map(std::borrow::Cow::Borrowed)
+    };
+    if let Some(content) = content.as_deref() {
         match content {
             Content::Text(text) => {
                 out.insert("content".to_owned(), json!(text));
@@ -168,10 +176,10 @@ fn message_to_openai_for_model(
                 let mut multimodal = Vec::new();
                 for part in parts {
                     match part {
-                        ContentPart::Text { text } => {
+                        ContentPart::Text { text, .. } => {
                             multimodal.push(json!({"type": "text", "text": text}));
                         }
-                        ContentPart::ImageUrl { image_url } => {
+                        ContentPart::ImageUrl { image_url, .. } => {
                             multimodal.push(json!({
                                 "type": "image_url",
                                 "image_url": image_url
@@ -196,7 +204,13 @@ fn message_to_openai_for_model(
                             if !native {
                                 return Err(unmappable_part("OpenAI Chat Completions", value));
                             }
-                            multimodal.push(value.clone());
+                            // A native part keeps its shape; a prompt-cache marker on it is
+                            // dropped like any other on this wire (KC1 record §4.3).
+                            let mut value = value.clone();
+                            if let Some(object) = value.as_object_mut() {
+                                object.remove("cache_control");
+                            }
+                            multimodal.push(value);
                         }
                     }
                 }
@@ -308,24 +322,15 @@ fn body_of(request: &ChatRequest, config: &ProviderConfig) -> ComponentResultV1<
                 function.insert("name".to_owned(), json!(tool.name));
                 function.insert("description".to_owned(), json!(tool.description));
                 function.insert("parameters".to_owned(), tool.parameters.clone());
-                if let Some(strict) = request
-                    .extensions
-                    .get(extension::TOOL_STRICT)
-                    .and_then(|strict| strict.get(&tool.name))
-                    .and_then(Value::as_bool)
-                {
+                if let Some(strict) = crate::typed_request::tool_strict(request, tool) {
                     function.insert("strict".to_owned(), json!(strict));
                 }
                 json!({"type": "function", "function": function})
             })
             .collect();
         body.insert("tools".to_owned(), Value::Array(tools));
-        // `parallel_tool_calls` has no first-class IR field; it arrives via
-        // the extensions passthrough and the wire only accepts it alongside
-        // `tools`.
-        if let Some(parallel) =
-            request.extensions.get(extension::PARALLEL_TOOL_CALLS).and_then(Value::as_bool)
-        {
+        // Typed since protocol 0.6.0 (R-Q15); the wire only accepts it alongside `tools`.
+        if let Some(parallel) = request.parallel_tool_calls {
             body.insert("parallel_tool_calls".to_owned(), json!(parallel));
         }
     }
@@ -347,12 +352,7 @@ fn body_of(request: &ChatRequest, config: &ProviderConfig) -> ComponentResultV1<
 /// parameter set; a translated Anthropic adaptive/enabled thinking
 /// preference requires an explicit declaration before receiving the field.
 fn reasoning_effort_allowed(request: &ChatRequest, config: &ProviderConfig) -> bool {
-    let requires_explicit_capability = request
-        .extensions
-        .get("anthropic_thinking")
-        .and_then(|thinking| thinking.get("type"))
-        .and_then(Value::as_str)
-        .is_some_and(|kind| matches!(kind, "adaptive" | "enabled"));
+    let requires_explicit_capability = crate::typed_request::thinking_requested(request);
 
     config.models.iter().find(|capability| capability.model == request.model).map_or(
         !requires_explicit_capability,
@@ -725,7 +725,7 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-openai-compatible".to_owned(),
-            version: "2.5.1".to_owned(),
+            version: "2.6.0".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
@@ -775,10 +775,8 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
         )
         .map_err(internal)?;
         let mut body = body_of(request, config)?;
-        // `reasoning_effort` arrives through the extensions passthrough;
-        // render it when the chosen model allows it.
-        if let Some(effort) =
-            request.extensions.get(extension::REASONING_EFFORT).and_then(Value::as_str)
+        // Typed since protocol 0.6.0 (R-Q15); rendered when the chosen model allows it.
+        if let Some(effort) = request.reasoning.effort.as_ref().map(ReasoningEffort::as_str)
             && reasoning_effort_allowed(request, config)
             && let Value::Object(map) = &mut body
         {
@@ -863,7 +861,7 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
                                 signature: None,
                             }];
                             if let Some(text) = text.filter(|t| !t.is_empty()) {
-                                parts.push(ContentPart::Text { text: text.to_owned() });
+                                parts.push(ContentPart::text(text.to_owned()));
                             }
                             parts
                         })),

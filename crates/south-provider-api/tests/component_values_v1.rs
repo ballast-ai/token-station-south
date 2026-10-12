@@ -11,8 +11,9 @@ use std::path::Path;
 
 use serde_json::{Value, json};
 use south_provider_api::{
-    ComponentManifestV1, ConfigErrorV1, DeclaredValuesErrorV1, HOST_VALUE_ATTEMPT_ID, HOST_VALUES,
-    ManifestErrorV1,
+    ComponentManifestV1, ConfigErrorV1, DeclaredValuesErrorV1, END_USER_HASH_MAX_BYTES,
+    HOST_VALUE_ATTEMPT_ID, HOST_VALUE_END_USER_HASH, HOST_VALUES, ManifestErrorV1,
+    is_end_user_hash,
 };
 
 fn shipped(package: &str) -> Value {
@@ -75,7 +76,7 @@ fn exporting() -> Value {
 
 #[test]
 fn the_host_value_vocabulary_is_closed_and_starts_with_the_attempt_id() {
-    assert_eq!(HOST_VALUES, [HOST_VALUE_ATTEMPT_ID]);
+    assert_eq!(HOST_VALUES, [HOST_VALUE_ATTEMPT_ID, HOST_VALUE_END_USER_HASH]);
     assert_eq!(HOST_VALUE_ATTEMPT_ID, "attempt_id");
 
     let mut manifest = shipped("provider-openai-compatible");
@@ -107,7 +108,7 @@ fn the_host_value_vocabulary_is_closed_and_starts_with_the_attempt_id() {
     );
 
     // Absent means none, and it is not serialized, so every shipped manifest is unchanged.
-    let plain = parse(shipped("provider-anthropic"));
+    let plain = parse(shipped("provider-gemini"));
     assert!(plain.host_values.is_empty());
     assert!(serde_json::to_value(&plain).unwrap().get("host_values").is_none());
 }
@@ -470,4 +471,24 @@ fn the_image_world_holds_its_values_to_the_provider_rules() {
         refused(&|m| m["user_agent"] = json!({ "gemini": "acme/1.0" })),
         Err(ManifestErrorV1::InstanceIsAProviderWorldDeclaration("user_agent".to_owned()))
     );
+}
+
+/// KC1 record §5 (owner ruling K3): the host rewrites the caller's end-user id to a per-tenant
+/// pseudonym and passes it as `end_user_hash`; gate ① admits the word, and the value syntax every
+/// component checks is published here so a host can check the same before it sends.
+#[test]
+fn the_end_user_hash_is_a_declarable_word_with_a_published_syntax() {
+    assert_eq!(HOST_VALUE_END_USER_HASH, "end_user_hash");
+    let mut manifest = shipped("provider-openai-compatible");
+    manifest["host_values"] = json!(["attempt_id", "end_user_hash"]);
+    assert_eq!(parse(manifest).validate(), Ok(()));
+
+    let longest = "x".repeat(END_USER_HASH_MAX_BYTES);
+    let too_long = "x".repeat(END_USER_HASH_MAX_BYTES + 1);
+    for good in ["a", "tenant-7_9f86d081884c7d659a2feaa0c55ad015", longest.as_str()] {
+        assert!(is_end_user_hash(good), "{good}");
+    }
+    for bad in ["", "user@example.com", "a b", "a.b", "\u{e9}", too_long.as_str()] {
+        assert!(!is_end_user_hash(bad), "{bad}");
+    }
 }

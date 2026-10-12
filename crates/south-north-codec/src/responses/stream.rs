@@ -126,7 +126,7 @@ impl ResponsesSseState {
                             signature: (!slot.signature.is_empty()).then(|| slot.signature.clone()),
                         }
                     } else {
-                        ContentPart::Text { text: slot.text.clone() }
+                        ContentPart::text(slot.text.clone())
                     };
                     if let Some(Content::Parts(parts)) = &mut message.content {
                         parts.push(part);
@@ -189,7 +189,7 @@ impl ResponsesSseState {
                     {
                         let slot = self.slots.get(position)?;
                         layout.push(json!({"kind":"content","ordinal":parts.len()}));
-                        parts.push(ContentPart::Text { text: slot.text.clone() });
+                        parts.push(ContentPart::text(slot.text.clone()));
                     }
                     ReplayLayout::Tool { position }
                         if self.slots.get(position)?.source_index == choice_index =>

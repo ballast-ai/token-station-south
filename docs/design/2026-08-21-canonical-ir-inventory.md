@@ -54,11 +54,11 @@ does not cross the boundary. `Extensions` = `BTreeMap<String, serde_json::Value>
 
 | Type | Fields (all serde-default-tolerant) | Open-JSON positions |
 |---|---|---|
-| `ChatRequest` | `model: String`, `messages: Vec<Message>`, `tools: Vec<ToolDef>`, `response_format: Option<ResponseFormat>`, `tool_choice: Option<ToolChoice>`, `sampling: Sampling`, `stream: bool`, `host_values: ComponentValues` (protocol 0.5.0; §6 amendment), `extensions` | `ToolDef.parameters: Value`; `ResponseFormat::JsonSchema{json_schema: Value}`; `ToolChoice::Other(Value)`; `extensions` |
+| `ChatRequest` | `model: String`, `messages: Vec<Message>`, `tools: Vec<ToolDef>`, `response_format: Option<ResponseFormat>`, `tool_choice: Option<ToolChoice>`, `sampling: Sampling`, `stream: bool`, `host_values: ComponentValues` (protocol 0.5.0; §6 amendment), `reasoning` (flattened: `reasoning_mode?`, `reasoning_effort?`, `reasoning_budget_tokens?`) and `parallel_tool_calls?` (protocol 0.6.0, D5 amendment 2026-10-12), `extensions` | `ToolDef.parameters: Value`; `ResponseFormat::JsonSchema{json_schema: Value}`; `ToolChoice::Other(Value)`; `extensions` |
 | `Message` | `role: Role{system,user,assistant,tool}`, `content: Option<Content{Text(String) \| Parts(Vec<ContentPart>)}>`, `tool_calls: Vec<ToolCall>`, `tool_call_id: Option<String>`, `name: Option<String>`, `extensions` | `ContentPart::Unknown(Value)` (verbatim survival); `extensions` |
-| `ContentPart` | `Text{text}`, `ImageUrl{image_url:{url, detail?}}`, `Thinking{thinking, signature?}`, `RedactedThinking{data}`, `Unknown(Value)` | `Unknown` |
+| `ContentPart` | `Text{text, cache_control?}`, `ImageUrl{image_url:{url, detail?}, cache_control?}` (markers: protocol 0.6.0), `Thinking{thinking, signature?}`, `RedactedThinking{data}`, `Unknown(Value)` | `Unknown` |
 | `ToolCall` | `id`, `name`, `arguments: String` (exact model bytes; never parsed at this layer) | — |
-| `Sampling` | `temperature?`, `top_p?`, `max_output_tokens?`, `stop: Vec<String>` | — |
+| `Sampling` | `temperature?`, `top_p?`, `max_output_tokens?`, `stop: Vec<String>`, `top_k?` (protocol 0.6.0) | — |
 | `ProviderConfig` (policy-fenced subset, §6) | `provider: String`, `base_url: ProviderEndpoint`, `auth: Option<SecretRef>`, `models: Vec<ModelCapability>`, `declared: ComponentValues` (protocol 0.5.0; §6 amendment), `extensions` | `extensions` |
 | `StreamChunk` | `data` — see D2: the v1 `String` cannot carry eventstream bytes | — |
 | `HttpResponseParts` | `status: u16`, `headers: BTreeMap<String,String>`, `body: String`, `extensions` | `extensions` |
@@ -276,6 +276,14 @@ Amendment (2026-10-08, Q14): the promotion path was taken once, for
 `ProviderConfig.declared` and `ChatRequest.host_values` (§6 amendment). A
 component may behave on a key of those two typed fields when its package
 declares the key; `extensions` keys stay data.
+
+Amendment (2026-10-12, KC1 and R-Q15; record `2026-10-12-kc1-canonical-ir-4-south.md`): protocol 0.6.0
+(`canonical_ir` 4) took the promotion path a second time. The three precedent keys components acted on are typed:
+`reasoning_effort` (`ChatRequest.reasoning.effort`) and `parallel_tool_calls` keep their wire keys, so a deserialized
+request carries them in the typed fields only; `responses_tool_strict` became `ToolDef.strict` and stays in
+`extensions` as data during the transition, read only as a fallback. New typed fields carry what Anthropic Messages
+needs to cross the IR: prompt-cache markers (`ContentPart::Text` / `ImageUrl`, `ToolDef`), `Sampling.top_k`, and the
+caller's reasoning mode and budget. The NC-1 replay markers stay the one standing exception.
 
 ## 9. provider-api promotion criteria (the S1 gate)
 

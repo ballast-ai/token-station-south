@@ -1,0 +1,41 @@
+{
+  "method": "POST",
+  "url": "https://bedrock-runtime.us-east-1.amazonaws.com/model/claude-x/invoke",
+  "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "x-amzn-bedrock-accept": "application/json"
+  },
+  "body": {
+    "anthropic_version": "bedrock-2023-05-31",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Weather in Beijing?"
+      }
+    ],
+    "max_tokens": 64,
+    "tools": [
+      {
+        "name": "get_weather",
+        "description": "Look up weather",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "city": {
+              "type": "string"
+            }
+          }
+        },
+        "strict": true,
+        "cache_control": {
+          "type": "ephemeral",
+          "ttl": "1h"
+        }
+      }
+    ],
+    "tool_choice": {
+      "type": "auto"
+    }
+  }
+}

@@ -309,6 +309,13 @@ fn only_the_named_extension_keys_change_the_body() {
     for key in [extension::TOOL_STRICT, extension::PARALLEL_TOOL_CALLS] {
         let mut changed = tools.clone();
         changed.as_object_mut().unwrap().remove(key);
+        if key == extension::TOOL_STRICT {
+            // Protocol 0.6.0 (R-Q15): the per-tool field is what the codec writes and what wins;
+            // the map is the transition fallback, so both go.
+            for tool in changed["tools"].as_array_mut().unwrap() {
+                tool.as_object_mut().unwrap().remove("strict");
+            }
+        }
         assert_ne!(build(&changed).unwrap(), tool_baseline, "{key}");
     }
 

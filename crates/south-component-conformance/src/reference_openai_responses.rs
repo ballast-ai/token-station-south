@@ -47,8 +47,8 @@ use south_provider_api::{ComponentMetadataV1, PROVIDER_WORLD};
 use token_station_protocol::{
     Auth, ChatRequest, ChatResponse, Choice, Content, ContentPart, ErrorCode, ErrorEnvelope,
     Extensions, FinishReason, HttpMethod, HttpRequestDescriptor, HttpResponseParts, Message,
-    ProviderApi, ProviderConfig, ResponseFormat, Role, SafeHeaders, StreamEvent, ToolCall,
-    ToolChoice, Usage,
+    ProviderApi, ProviderConfig, ReasoningEffort, ResponseFormat, Role, SafeHeaders, StreamEvent,
+    ToolCall, ToolChoice, Usage,
 };
 
 use crate::component::{ComponentResultV1, ProviderComponentV1, StreamParserV1};
@@ -68,7 +68,7 @@ pub const CODEX_FAMILY: &str = codex::FAMILY;
 pub const NAME: &str = "provider-openai-responses";
 
 /// The package's version.
-pub const VERSION: &str = "1.2.0";
+pub const VERSION: &str = "1.3.0";
 
 /// The reference component. Stateless; each stream gets its own parser.
 #[derive(Debug, Default, Clone, Copy)]
@@ -124,6 +124,11 @@ fn refused_reference(value: &Value) -> Option<ErrorEnvelope> {
 
 /// The text of a message whose parts must all be text, concatenated.
 fn text_only(content: Option<&Content>, role: &str) -> ComponentResultV1<String> {
+    // Responses has no inline prompt-cache marker: a part list that exists only for its markers
+    // is the joined text it would otherwise be (KC1 record §4.5).
+    if let Some(text) = crate::typed_request::marker_only_text(content) {
+        return Ok(text);
+    }
     match content {
         None => Ok(String::new()),
         Some(Content::Text(text)) => Ok(text.clone()),
@@ -131,7 +136,7 @@ fn text_only(content: Option<&Content>, role: &str) -> ComponentResultV1<String>
             let mut text = String::new();
             for part in parts {
                 match part {
-                    ContentPart::Text { text: piece } => text.push_str(piece),
+                    ContentPart::Text { text: piece, .. } => text.push_str(piece),
                     ContentPart::ImageUrl { .. } => return Err(unmappable_ir("image_url", role)),
                     ContentPart::Thinking { .. } => return Err(unmappable_ir("thinking", role)),
                     ContentPart::RedactedThinking { .. } => {
@@ -158,8 +163,8 @@ fn user_content(content: Option<&Content>) -> ComponentResultV1<Vec<Value>> {
         Some(Content::Parts(parts)) => parts
             .iter()
             .map(|content_part| match content_part {
-                ContentPart::Text { text } => Ok(input_text(text)),
-                ContentPart::ImageUrl { image_url } => {
+                ContentPart::Text { text, .. } => Ok(input_text(text)),
+                ContentPart::ImageUrl { image_url, .. } => {
                     let mut image = json!({"type": part::INPUT_IMAGE, "image_url": image_url.url});
                     if let Some(detail) = &image_url.detail {
                         image["detail"] = json!(detail);
@@ -171,8 +176,13 @@ fn user_content(content: Option<&Content>) -> ComponentResultV1<Vec<Value>> {
                         return Err(refusal);
                     }
                     if value.get("type").and_then(Value::as_str) == Some(part::INPUT_AUDIO) {
-                        // Responses vocabulary the IR does not model: forwarded unchanged.
-                        return Ok(value.clone());
+                        // Responses vocabulary the IR does not model: forwarded unchanged, but
+                        // for a prompt-cache marker, which this wire has no place for (KC1 §4.5).
+                        let mut value = value.clone();
+                        if let Some(object) = value.as_object_mut() {
+                            object.remove("cache_control");
+                        }
+                        return Ok(value);
                     }
                     Err(unmappable(value))
                 }
@@ -195,7 +205,7 @@ fn assistant_text(content: Option<&Content>) -> ComponentResultV1<String> {
             let mut text = String::new();
             for content_part in parts {
                 match content_part {
-                    ContentPart::Text { text: piece } => text.push_str(piece),
+                    ContentPart::Text { text: piece, .. } => text.push_str(piece),
                     ContentPart::Thinking { .. } | ContentPart::RedactedThinking { .. } => {}
                     ContentPart::ImageUrl { .. } => {
                         return Err(unmappable_ir("image_url", "assistant"));
@@ -327,12 +337,7 @@ fn text_format(format: &ResponseFormat) -> ComponentResultV1<Value> {
 /// declares `reasoning_effort` or declares no parameter set; an effort that came from an Anthropic
 /// thinking translation needs the explicit declaration.
 fn reasoning_effort_allowed(request: &ChatRequest, config: &ProviderConfig) -> bool {
-    let requires_explicit_capability = request
-        .extensions
-        .get("anthropic_thinking")
-        .and_then(|thinking| thinking.get("type"))
-        .and_then(Value::as_str)
-        .is_some_and(|kind| matches!(kind, "adaptive" | "enabled"));
+    let requires_explicit_capability = crate::typed_request::thinking_requested(request);
     config.models.iter().find(|capability| capability.model == request.model).map_or(
         !requires_explicit_capability,
         |capability| {
@@ -426,7 +431,6 @@ fn body_of(
     body.insert("input".to_owned(), Value::Array(input_items(rest)?));
 
     if !request.tools.is_empty() {
-        let strict = request.extensions.get(extension::TOOL_STRICT);
         let tools = request
             .tools
             .iter()
@@ -438,18 +442,14 @@ fn body_of(
                     out.insert("description".to_owned(), json!(description));
                 }
                 out.insert("parameters".to_owned(), tool.parameters.clone());
-                if let Some(flag) =
-                    strict.and_then(|strict| strict.get(&tool.name)).and_then(Value::as_bool)
-                {
+                if let Some(flag) = crate::typed_request::tool_strict(request, tool) {
                     out.insert("strict".to_owned(), json!(flag));
                 }
                 Value::Object(out)
             })
             .collect();
         body.insert("tools".to_owned(), Value::Array(tools));
-        if let Some(parallel) =
-            request.extensions.get(extension::PARALLEL_TOOL_CALLS).and_then(Value::as_bool)
-        {
+        if let Some(parallel) = request.parallel_tool_calls {
             body.insert("parallel_tool_calls".to_owned(), json!(parallel));
         }
     }
@@ -459,8 +459,7 @@ fn body_of(
     if let Some(format) = &request.response_format {
         body.insert("text".to_owned(), json!({"format": text_format(format)?}));
     }
-    if let Some(effort) =
-        request.extensions.get(extension::REASONING_EFFORT).and_then(Value::as_str)
+    if let Some(effort) = request.reasoning.effort.as_ref().map(ReasoningEffort::as_str)
         && reasoning_effort_allowed(request, config)
     {
         body.insert("reasoning".to_owned(), json!({"effort": effort}));
@@ -751,7 +750,7 @@ fn response_of(raw: &Value) -> ComponentResultV1<ChatResponse> {
     } else {
         let mut parts = thinking;
         if let Some(text) = text {
-            parts.push(ContentPart::Text { text });
+            parts.push(ContentPart::text(text));
         }
         Some(Content::Parts(parts))
     };

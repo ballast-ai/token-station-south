@@ -20,6 +20,7 @@
 
 use serde_json::{Map, Value, json};
 use south_provider_api::{ComponentMetadataV1, PROVIDER_WORLD};
+use std::borrow::Cow;
 use token_station_protocol::{
     Auth, ChatRequest, ChatResponse, Choice, Content, ContentPart, ErrorCode, ErrorEnvelope,
     Extensions, FinishReason, HttpMethod, HttpRequestDescriptor, HttpResponseParts, Message,
@@ -80,8 +81,8 @@ fn unmappable_part(value: &Value) -> ErrorEnvelope {
 
 fn part_to_gemini(part: &ContentPart) -> ComponentResultV1<Value> {
     Ok(match part {
-        ContentPart::Text { text } => json!({"text": text}),
-        ContentPart::ImageUrl { image_url } => {
+        ContentPart::Text { text, .. } => json!({"text": text}),
+        ContentPart::ImageUrl { image_url, .. } => {
             if let Some(rest) = image_url.url.strip_prefix("data:")
                 && let Some((mime, data)) = rest.split_once(";base64,")
             {
@@ -113,13 +114,20 @@ fn content_to_parts(content: Option<&Content>) -> ComponentResultV1<Vec<Value>> 
     })
 }
 
-fn system_text_of(content: Option<&Content>) -> Vec<&str> {
+fn system_text_of(content: Option<&Content>) -> Vec<Cow<'_, str>> {
+    // Gemini has no inline prompt-cache marker (KC1 record §4.4): a part list that exists only
+    // for its markers is the one joined text it would otherwise be.
+    if let Some(text) = crate::typed_request::marker_only_text(content) {
+        return vec![Cow::Owned(text)];
+    }
     match content {
-        Some(Content::Text(text)) if !text.is_empty() => vec![text.as_str()],
+        Some(Content::Text(text)) if !text.is_empty() => vec![Cow::Borrowed(text.as_str())],
         Some(Content::Parts(parts)) => parts
             .iter()
             .filter_map(|part| match part {
-                ContentPart::Text { text } if !text.is_empty() => Some(text.as_str()),
+                ContentPart::Text { text, .. } if !text.is_empty() => {
+                    Some(Cow::Borrowed(text.as_str()))
+                }
                 _ => None,
             })
             .collect(),
@@ -130,10 +138,10 @@ fn system_text_of(content: Option<&Content>) -> Vec<&str> {
 /// The `systemInstruction` texts and the `contents` array. Gemini models the
 /// system prompt as a sibling of the conversation, while the IR carries system
 /// turns inside `messages`.
-fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<&str>, Vec<Value>)> {
+fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<Cow<'_, str>>, Vec<Value>)> {
     let names = tool_call_names(request);
     let mut contents: Vec<Value> = Vec::new();
-    let mut system: Vec<&str> = Vec::new();
+    let mut system: Vec<Cow<'_, str>> = Vec::new();
 
     for message in &request.messages {
         match message.role {
@@ -177,12 +185,13 @@ fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<&str>, Vec<V
                          result by the called function's name, which only that call carries",
                     ));
                 };
-                let text = match message.content.as_ref() {
+                let content = crate::typed_request::without_markers(message.content.as_ref());
+                let text = match content.as_deref() {
                     Some(Content::Text(text)) => text.clone(),
                     Some(Content::Parts(parts)) => parts
                         .iter()
                         .filter_map(|part| match part {
-                            ContentPart::Text { text } => Some(text.as_str()),
+                            ContentPart::Text { text, .. } => Some(text.as_str()),
                             _ => None,
                         })
                         .collect::<Vec<_>>()
@@ -222,6 +231,10 @@ fn body_of(request: &ChatRequest) -> ComponentResultV1<Value> {
     }
     if let Some(max) = request.sampling.max_output_tokens {
         generation.insert("maxOutputTokens".to_owned(), json!(max));
+    }
+    // Protocol 0.6.0 `Sampling.top_k` (KC1 record §4.4).
+    if let Some(top_k) = request.sampling.top_k {
+        generation.insert("topK".to_owned(), json!(top_k));
     }
     if !request.sampling.stop.is_empty() {
         generation.insert("stopSequences".to_owned(), json!(request.sampling.stop));
@@ -567,7 +580,7 @@ impl ProviderComponentV1 for GeminiReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-gemini".to_owned(),
-            version: "1.2.1".to_owned(),
+            version: "1.3.0".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
@@ -680,7 +693,7 @@ impl ProviderComponentV1 for GeminiReferenceV1 {
         } else {
             let mut parts = thinking;
             if had_text {
-                parts.push(ContentPart::Text { text: joined });
+                parts.push(ContentPart::text(joined));
             }
             Some(Content::Parts(parts))
         };

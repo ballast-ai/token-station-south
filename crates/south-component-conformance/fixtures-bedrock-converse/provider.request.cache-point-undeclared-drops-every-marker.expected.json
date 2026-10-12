@@ -1,0 +1,55 @@
+{
+  "method": "POST",
+  "url": "https://bedrock-runtime.us-east-1.amazonaws.com/model/anthropic.claude-x-v1:0/converse",
+  "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "x-amzn-bedrock-accept": "application/json"
+  },
+  "body": {
+    "system": [
+      {
+        "text": "Rules."
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "text": "Long reference text."
+          },
+          {
+            "text": "Question?"
+          }
+        ]
+      }
+    ],
+    "inferenceConfig": {
+      "maxTokens": 512
+    },
+    "toolConfig": {
+      "tools": [
+        {
+          "toolSpec": {
+            "name": "get_weather",
+            "description": "Look up weather",
+            "inputSchema": {
+              "json": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "toolChoice": {
+        "auto": {}
+      }
+    }
+  }
+}

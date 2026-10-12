@@ -133,7 +133,7 @@ fn split_thinking_and_text(content: Option<&Content>) -> (String, String) {
             for part in parts {
                 match part {
                     ContentPart::Thinking { thinking: chunk, .. } => thinking.push_str(chunk),
-                    ContentPart::Text { text: chunk } => text.push_str(chunk),
+                    ContentPart::Text { text: chunk, .. } => text.push_str(chunk),
                     _ => {}
                 }
             }

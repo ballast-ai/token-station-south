@@ -57,9 +57,9 @@ use serde_json::{Map, Value, json};
 use south_provider_api::{ComponentMetadataV1, PROVIDER_WORLD};
 use std::collections::BTreeSet;
 use token_station_protocol::{
-    Auth, ChatRequest, ChatResponse, Choice, Content, ContentPart, ErrorCode, ErrorEnvelope,
-    FinishReason, HttpMethod, HttpRequestDescriptor, HttpResponseParts, Message, ProviderConfig,
-    Role, SafeHeaders, StreamEvent, ToolCall, ToolChoice, Usage,
+    Auth, CacheControl, CacheTtl, ChatRequest, ChatResponse, Choice, Content, ContentPart,
+    ErrorCode, ErrorEnvelope, FinishReason, HttpMethod, HttpRequestDescriptor, HttpResponseParts,
+    Message, ProviderConfig, Role, SafeHeaders, StreamEvent, ToolCall, ToolChoice, Usage,
 };
 
 use crate::anthropic_dialect::{Dialect, Thinking};
@@ -118,14 +118,81 @@ fn provider_protocol_error(message: &'static str) -> ErrorEnvelope {
 ///
 /// Converse has no bare-string content: every block is typed, so a
 /// [`Content::Text`] becomes a one-element array.
-fn text_blocks(content: Option<&Content>, allow_replay: bool) -> Vec<Value> {
+fn text_blocks(content: Option<&Content>, allow_replay: bool, points: CachePoints) -> Vec<Value> {
     match content {
         Some(Content::Text(text)) => vec![json!({"text": text})],
         Some(Content::Parts(parts)) => parts
             .iter()
-            .filter_map(|part| part_to_block(part, allow_replay).ok().flatten())
+            .filter_map(|part| {
+                let block = part_to_block(part, allow_replay).ok().flatten()?;
+                Some(std::iter::once(block).chain(points.after(part)))
+            })
+            .flatten()
             .collect(),
         None => Vec::new(),
+    }
+}
+
+/// Opts a model into Converse `cachePoint` blocks.
+///
+/// An IR prompt-cache marker becomes a `cachePoint` after the block it closes, in `system` and
+/// `messages` (KC1 record §4.2, owner ruling K7). Converse also serves models without explicit
+/// caching, where a `cachePoint` is a validation error, so without this word every marker is
+/// dropped, as before.
+pub const CACHE_POINT: &str = "bedrock.converse.cache_point";
+/// The model takes `ttl: "1h"` on a `cachePoint`.
+///
+/// Without it a one-hour marker is sent as the five-minute default (K7's fallback): AWS documents
+/// a `ttl` on a five-minute-only model as a possible `ValidationException`.
+pub const CACHE_POINT_TTL_1H: &str = "bedrock.converse.cache_point.ttl_1h";
+/// The model takes a `cachePoint` in `toolConfig.tools`. Without it a tool's marker is dropped
+/// (AWS lists no tool checkpoint for Nova).
+pub const CACHE_POINT_TOOLS: &str = "bedrock.converse.cache_point.tools";
+/// Every Converse prompt-cache word, for hosts that validate the reserved namespace.
+pub const CACHE_POINT_PARAMETERS: [&str; 3] = [CACHE_POINT, CACHE_POINT_TTL_1H, CACHE_POINT_TOOLS];
+
+/// What the host declared about Converse prompt caching for the target model.
+#[derive(Debug, Clone, Copy, Default)]
+struct CachePoints {
+    enabled: bool,
+    one_hour: bool,
+    tools: bool,
+}
+
+impl CachePoints {
+    fn of(request: &ChatRequest, config: &ProviderConfig) -> Self {
+        let Some(model) = config.models.iter().find(|model| model.model == request.model) else {
+            return Self::default();
+        };
+        let declared = |word: &str| model.supported_parameters.contains(word);
+        let enabled = declared(CACHE_POINT);
+        Self {
+            enabled,
+            one_hour: enabled && declared(CACHE_POINT_TTL_1H),
+            tools: enabled && declared(CACHE_POINT_TOOLS),
+        }
+    }
+
+    /// The `cachePoint` block for a marker, if the model takes one. Five minutes, explicit or
+    /// default, is written without `ttl`: it is the AWS default, and the field is the documented
+    /// failure on five-minute-only models.
+    fn point(self, marker: Option<CacheControl>) -> Option<Value> {
+        let marker = marker.filter(|_| self.enabled)?;
+        let mut point = json!({"type": "default"});
+        if self.one_hour && marker.ttl == Some(CacheTtl::OneHour) {
+            point["ttl"] = json!("1h");
+        }
+        Some(json!({"cachePoint": point}))
+    }
+
+    /// The `cachePoint` that follows `part`'s block.
+    fn after(self, part: &ContentPart) -> Option<Value> {
+        self.point(part.cache_control())
+    }
+
+    /// The `cachePoint` that follows a tool's `toolSpec`.
+    fn after_tool(self, marker: Option<CacheControl>) -> Option<Value> {
+        if self.tools { self.point(marker) } else { None }
     }
 }
 
@@ -136,8 +203,8 @@ fn text_blocks(content: Option<&Content>, allow_replay: bool) -> Vec<Value> {
 /// reject, refused locally so the message names the part.
 fn part_to_block(part: &ContentPart, allow_replay: bool) -> ComponentResultV1<Option<Value>> {
     match part {
-        ContentPart::Text { text } => Ok(Some(json!({"text": text}))),
-        ContentPart::ImageUrl { image_url } => {
+        ContentPart::Text { text, .. } => Ok(Some(json!({"text": text}))),
+        ContentPart::ImageUrl { image_url, .. } => {
             let url = image_url.url.as_str();
             // Converse takes inline bytes only. An `http(s)` image URL has no
             // representation here at all — saying so beats sending a request
@@ -229,7 +296,10 @@ fn flush_tool_results(pending: &mut Vec<Value>, messages: &mut Vec<Value>) {
 ///   before any later user content;
 /// * parallel tool results belong to **one** user message — Converse refuses a
 ///   separate user-role message per result.
-fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<Value>, Vec<Value>)> {
+fn conversation_of(
+    request: &ChatRequest,
+    points: CachePoints,
+) -> ComponentResultV1<(Vec<Value>, Vec<Value>)> {
     let mut system: Vec<Value> = Vec::new();
     let mut messages: Vec<Value> = Vec::new();
     // Tool results seen since the last flush, all destined for one user message.
@@ -245,10 +315,24 @@ fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<Value>, Vec<
             Role::System => {
                 // Converse's system slot is text-only; a non-text part has no
                 // representation and Bedrock 400s on one.
-                for block in text_blocks(message.content.as_ref(), false) {
-                    if block.get("text").is_some() {
-                        system.push(block);
+                // Without `cachePoint` support a marker-only part list is the one block it would
+                // otherwise be (KC1 record §4.2).
+                let content = if points.enabled {
+                    message.content.as_ref().map(std::borrow::Cow::Borrowed)
+                } else {
+                    crate::typed_request::without_markers(message.content.as_ref())
+                };
+                match content.as_deref() {
+                    Some(Content::Text(text)) => system.push(json!({"text": text})),
+                    Some(Content::Parts(parts)) => {
+                        for part in parts {
+                            if let ContentPart::Text { text, .. } = part {
+                                system.push(json!({"text": text}));
+                                system.extend(points.after(part));
+                            }
+                        }
                     }
+                    None => {}
                 }
             }
             Role::Tool => {
@@ -269,7 +353,11 @@ fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<Value>, Vec<
                          same conversation; `{tool_call_id}` names none"
                     )));
                 }
-                let content = text_blocks(message.content.as_ref(), false);
+                let content = text_blocks(
+                    crate::typed_request::without_markers(message.content.as_ref()).as_deref(),
+                    false,
+                    CachePoints::default(),
+                );
                 pending_results.push(json!({
                     "toolResult": {
                         "toolUseId": tool_call_id,
@@ -279,14 +367,21 @@ fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<Value>, Vec<
                         "content": content,
                     }
                 }));
+                // A `toolResult` cannot hold a `cachePoint`; the result's marker (on its last
+                // part, KC1 record §4.2) closes the prefix right after the result in the turn.
+                if let Some(Content::Parts(parts)) = message.content.as_ref()
+                    && let Some(last) = parts.last()
+                {
+                    pending_results.extend(points.after(last));
+                }
             }
             Role::User => {
                 flush_tool_results(&mut pending_results, &mut messages);
-                messages.push(json!({"role": "user", "content": user_content(message)?}));
+                messages.push(json!({"role": "user", "content": user_content(message, points)?}));
             }
             Role::Assistant => {
                 flush_tool_results(&mut pending_results, &mut messages);
-                let content = assistant_content(message, &mut announced_calls)?;
+                let content = assistant_content(message, &mut announced_calls, points)?;
                 // Bedrock 400s on an assistant turn whose content array is
                 // empty, so an empty one is dropped rather than sent.
                 if !content.is_empty() {
@@ -303,10 +398,11 @@ fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<Value>, Vec<
 fn assistant_content<'a>(
     message: &'a Message,
     announced_calls: &mut Vec<&'a str>,
+    points: CachePoints,
 ) -> ComponentResultV1<Vec<Value>> {
     let replay_layout = validated_layout(message)
         .map_err(|()| capability("invalid reasoning replay markers or layout"))?;
-    let mut content = text_blocks(message.content.as_ref(), false);
+    let mut content = text_blocks(message.content.as_ref(), false, points);
     let Some(layout) = replay_layout else {
         for call in &message.tool_calls {
             content.push(tool_use_block(call)?);
@@ -338,7 +434,7 @@ fn assistant_content<'a>(
 /// treats it as a no-op — so this passes it through rather than deciding on
 /// the upstream's behalf. Changing this to a local refusal is a product
 /// decision, not a protocol fact.
-fn user_content(message: &Message) -> ComponentResultV1<Vec<Value>> {
+fn user_content(message: &Message, points: CachePoints) -> ComponentResultV1<Vec<Value>> {
     let mut content = Vec::new();
     match message.content.as_ref() {
         Some(Content::Text(text)) => content.push(json!({"text": text})),
@@ -346,6 +442,7 @@ fn user_content(message: &Message) -> ComponentResultV1<Vec<Value>> {
             for part in parts {
                 if let Some(block) = part_to_block(part, false)? {
                     content.push(block);
+                    content.extend(points.after(part));
                 }
             }
         }
@@ -390,14 +487,14 @@ fn inference_config(
 /// `auto`. Sending `tools` while dropping only `toolChoice` would silently
 /// upgrade "do not use tools" into "use them if you like" — so the whole
 /// object is withheld instead.
-fn tool_config(request: &ChatRequest) -> Option<Value> {
+fn tool_config(request: &ChatRequest, points: CachePoints) -> Option<Value> {
     if matches!(request.tool_choice, Some(ToolChoice::None)) || request.tools.is_empty() {
         return None;
     }
     let tools: Vec<Value> = request
         .tools
         .iter()
-        .map(|tool| {
+        .flat_map(|tool| {
             let mut spec = Map::new();
             spec.insert("name".to_owned(), json!(tool.name));
             if let Some(description) = &tool.description {
@@ -409,7 +506,8 @@ fn tool_config(request: &ChatRequest) -> Option<Value> {
                 tool.parameters.clone()
             };
             spec.insert("inputSchema".to_owned(), json!({"json": schema}));
-            json!({"toolSpec": Value::Object(spec)})
+            std::iter::once(json!({"toolSpec": Value::Object(spec)}))
+                .chain(points.after_tool(tool.cache_control))
         })
         .collect();
 
@@ -443,30 +541,46 @@ fn tool_config(request: &ChatRequest) -> Option<Value> {
     Some(Value::Object(config))
 }
 
-fn body_of(request: &ChatRequest, dialect: Dialect) -> ComponentResultV1<Value> {
-    let (system, messages) = conversation_of(request)?;
+fn body_of(
+    request: &ChatRequest,
+    dialect: Dialect,
+    points: CachePoints,
+) -> ComponentResultV1<Value> {
+    let (system, messages) = conversation_of(request, points)?;
     // Converse has no default `maxTokens` of its own to measure a budget
-    // against, so the budget form needs the caller's limit.
-    let thinking = dialect.thinking(request, request.sampling.max_output_tokens.map(u64::from))?;
+    // against, so the budget form needs the caller's limit. A caller's own
+    // thinking form is sent only to a model the host marked as Claude (KC1
+    // record §4.2): another model behind Converse would refuse it.
+    let thinking = dialect.thinking(
+        request,
+        request.sampling.max_output_tokens.map(u64::from),
+        dialect.is_claude(),
+    )?;
+    let keeps_sampling = dialect.keeps_sampling(thinking.as_ref());
     let mut body = Map::new();
     if !system.is_empty() {
         body.insert("system".to_owned(), Value::Array(system));
     }
     // Written unconditionally, even when empty: the key is required.
     body.insert("messages".to_owned(), Value::Array(messages));
-    if let Some(config) = inference_config(request, dialect, dialect.keeps_sampling(thinking)) {
+    if let Some(config) = inference_config(request, dialect, keeps_sampling) {
         body.insert("inferenceConfig".to_owned(), config);
     }
-    if let Some(config) = tool_config(request) {
+    if let Some(config) = tool_config(request, points) {
         body.insert("toolConfig".to_owned(), config);
     }
-    // Claude's own thinking fields ride in `additionalModelRequestFields`, the
-    // Converse passthrough for model-specific request fields.
-    if let Some(thinking) = thinking {
-        let fields: Map<String, Value> = Thinking::fields(thinking)
-            .into_iter()
-            .map(|(key, value)| (key.to_owned(), value))
-            .collect();
+    // Claude's own thinking fields and `top_k` ride in `additionalModelRequestFields`, the
+    // Converse passthrough for model-specific request fields; `top_k` only for a model the host
+    // marked as Claude, under the same sampling rule as `temperature` (KC1 record §4.2).
+    let mut fields: Map<String, Value> = thinking
+        .iter()
+        .flat_map(Thinking::fields)
+        .map(|(key, value)| (key.to_owned(), value))
+        .collect();
+    if let Some(top_k) = request.sampling.top_k.filter(|_| keeps_sampling && dialect.is_claude()) {
+        fields.insert("top_k".to_owned(), json!(top_k));
+    }
+    if !fields.is_empty() {
         body.insert("additionalModelRequestFields".to_owned(), Value::Object(fields));
     }
     Ok(Value::Object(body))
@@ -520,15 +634,54 @@ fn usage_of(raw: &Value) -> ComponentResultV1<Usage> {
             "a Converse usage report's totalTokens must equal inputTokens, outputTokens and both cache buckets summed",
         ));
     };
-    // Flat buckets: Converse has no TTL tier split, so the tier fields stay
-    // zero rather than repeating the total.
+    let (five_minutes, one_hour) = cache_write_tiers(raw.get("cacheDetails"), cache_write_tokens)?;
     Ok(Usage {
         input_tokens: prompt,
         output_tokens,
         cache_read_tokens,
         cache_write_tokens,
+        cache_write_5m_tokens: five_minutes,
+        cache_write_1h_tokens: one_hour,
         ..Usage::default()
     })
+}
+
+/// The five-minute and one-hour split of the cache writes, from `cacheDetails` (KC1 record §4.2).
+///
+/// Once a request may carry a one-hour `cachePoint`, a flat write billed at the five-minute price
+/// would be an under-charge, so the split is read whenever AWS reports it: one entry per TTL,
+/// `{ttl: "5m" | "1h", inputTokens}`. A repeated or unknown TTL, a count that is not a
+/// non-negative integer, or a split that does not add up to `cacheWriteInputTokens` is a protocol
+/// error, as a total that does not add up is. Absent (or `null`) leaves the write flat, as before:
+/// no tier field repeats the total.
+fn cache_write_tiers(details: Option<&Value>, total: u64) -> ComponentResultV1<(u64, u64)> {
+    let Some(details) = details.filter(|details| !details.is_null()) else {
+        return Ok((0, 0));
+    };
+    let invalid = || {
+        provider_protocol_error(
+            "a Converse cacheDetails report must list each of 5m and 1h at most once with a \
+             non-negative inputTokens, summing to cacheWriteInputTokens",
+        )
+    };
+    let entries = details.as_array().ok_or_else(invalid)?;
+    let (mut five, mut hour): (Option<u64>, Option<u64>) = (None, None);
+    for entry in entries {
+        let tokens = entry.get("inputTokens").and_then(Value::as_u64).ok_or_else(invalid)?;
+        let slot = match entry.get("ttl").and_then(Value::as_str) {
+            Some("5m") => &mut five,
+            Some("1h") => &mut hour,
+            _ => return Err(invalid()),
+        };
+        if slot.replace(tokens).is_some() {
+            return Err(invalid());
+        }
+    }
+    let (five, hour) = (five.unwrap_or(0), hour.unwrap_or(0));
+    if five.checked_add(hour) != Some(total) {
+        return Err(invalid());
+    }
+    Ok((five, hour))
 }
 
 /// Where one SSE frame's payload ends and where the frame itself ends.
@@ -824,7 +977,7 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-bedrock-converse".to_owned(),
-            version: "1.0.17".to_owned(),
+            version: "1.1.0".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
@@ -866,7 +1019,7 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
         for block in blocks {
             if let Some(chunk) = block.get("text").and_then(Value::as_str) {
                 layout.push(json!({"kind":"content","ordinal":content_parts.len()}));
-                content_parts.push(ContentPart::Text { text: chunk.to_owned() });
+                content_parts.push(ContentPart::text(chunk.to_owned()));
                 continue;
             }
             if let Some(reasoning) = block.get("reasoningContent") {
@@ -913,7 +1066,7 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
                 content_parts
                     .into_iter()
                     .filter_map(|part| match part {
-                        ContentPart::Text { text } => Some(text),
+                        ContentPart::Text { text, .. } => Some(text),
                         _ => None,
                     })
                     .collect(),
@@ -984,7 +1137,7 @@ impl ProviderComponentV1 for BedrockConverseBearerReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-bedrock-converse-bearer".to_owned(),
-            version: "1.0.9".to_owned(),
+            version: "1.1.0".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
@@ -1075,7 +1228,7 @@ fn build_converse_request(
         ("x-amzn-bedrock-accept", "application/json"),
     ])
     .map_err(internal)?;
-    descriptor.body = Some(body_of(request, dialect)?);
+    descriptor.body = Some(body_of(request, dialect, CachePoints::of(request, config))?);
     descriptor.auth = auth;
     Ok(descriptor)
 }

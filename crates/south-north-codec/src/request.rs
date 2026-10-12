@@ -13,7 +13,8 @@ use token_station_protocol::{
     ToolChoice, ToolDef,
 };
 
-use crate::{CodecError, describe};
+use crate::fidelity::{cache_control, optional_bool, refuse_reserved_keys};
+use crate::{CodecError, describe, reasoning_effort};
 
 /// Top-level `OpenAI` Chat keys that already have a typed home in the IR.
 ///
@@ -38,7 +39,15 @@ const TYPED_TOP_LEVEL_KEYS: &[&str] = &[
     "max_tokens",
     "stop",
     "stream",
+    // Typed since protocol 0.6.0 (R-Q15). In `extensions` as well they would be written twice.
+    "reasoning_effort",
+    "parallel_tool_calls",
 ];
+
+/// Canonical IR wire keys this protocol does not define (KC-Q5). `sampling` used to be copied
+/// into `extensions` and then serialized beside the typed field of the same name.
+const RESERVED_KEYS: &[&str] =
+    &["reasoning_mode", "reasoning_budget_tokens", "sampling", "host_values"];
 
 /// `OpenAI` Chat request body -> canonical [`ChatRequest`].
 ///
@@ -66,14 +75,22 @@ const TYPED_TOP_LEVEL_KEYS: &[&str] = &[
 /// acceptance is unconditional: whether that text is ever replayed upstream is
 /// the host's per-model decision, and normalization must not pre-empt it by
 /// discarding the block here.
+///
+/// # Canonical IR 4 (KC1)
+///
+/// OpenRouter-style `cache_control` on `text` and `image_url` parts reaches the IR (K4); an
+/// invalid marker on any part is refused (K6). `reasoning_effort`, `parallel_tool_calls` and the
+/// function `strict` flag are typed (R-Q15). A top-level key that is an IR key this wire does not
+/// define is refused (KC-Q5).
 pub fn chat_request_from_openai_chat(body: &Value) -> Result<ChatRequest, CodecError> {
+    refuse_reserved_keys(body, RESERVED_KEYS)?;
     let model = body.get("model").and_then(Value::as_str).unwrap_or_default().to_owned();
 
     let mut messages: Vec<Message> = Vec::new();
     if let Some(raw_messages) = body.get("messages").and_then(Value::as_array) {
         for (index, raw) in raw_messages.iter().enumerate() {
             let role = raw.get("role").and_then(Value::as_str).unwrap_or_default();
-            let content = content_from_wire(raw.get("content"));
+            let content = content_from_wire(raw.get("content"), index)?;
             match role {
                 "system" | "developer" => messages.push(message(Role::System, content, raw)),
                 "user" => messages.push(message(Role::User, content, raw)),
@@ -108,9 +125,21 @@ pub fn chat_request_from_openai_chat(body: &Value) -> Result<ChatRequest, CodecE
 
     let mut request = ChatRequest::new(model, messages);
     request.sampling = sampling_from_wire(body)?;
-    request.tools = tools_from_wire(body.get("tools"));
+    request.tools = tools_from_wire(body.get("tools"))?;
     request.stream = body.get("stream").and_then(Value::as_bool).unwrap_or(false);
     request.tool_choice = tool_choice_from_wire(body.get("tool_choice"));
+    request.parallel_tool_calls =
+        optional_bool(body.get("parallel_tool_calls"), "parallel_tool_calls")?;
+    if let Some(effort) = body.get("reasoning_effort").filter(|value| !value.is_null()) {
+        let Some(level) = effort.as_str() else {
+            return Err(CodecError::unknown_value(
+                "reasoning_effort",
+                describe(effort),
+                "a string",
+            ));
+        };
+        request.reasoning.effort = Some(reasoning_effort(level));
+    }
     request.response_format =
         body.get("response_format").and_then(|value| serde_json::from_value(value.clone()).ok());
 
@@ -157,39 +186,36 @@ fn sampling_from_wire(body: &Value) -> Result<Sampling, CodecError> {
             }
             _ => Vec::new(),
         },
+        top_k: None,
     })
 }
 
-fn tools_from_wire(tools: Option<&Value>) -> Vec<ToolDef> {
-    tools
-        .and_then(Value::as_array)
-        .map(|array| {
-            array
-                .iter()
-                .map(|tool| {
-                    // The definition normally nests under `function`; falling
-                    // back to the top level keeps a slightly-off shape from
-                    // turning the whole tool into an empty shell.
-                    let source = tool.get("function").unwrap_or(tool);
-                    ToolDef {
-                        name: source
-                            .get("name")
-                            .and_then(Value::as_str)
-                            .unwrap_or_default()
-                            .to_owned(),
-                        description: source
-                            .get("description")
-                            .and_then(Value::as_str)
-                            .map(str::to_owned),
-                        parameters: source
-                            .get("parameters")
-                            .cloned()
-                            .unwrap_or_else(|| json!({"type": "object", "properties": {}})),
-                    }
-                })
-                .collect()
+fn tools_from_wire(tools: Option<&Value>) -> Result<Vec<ToolDef>, CodecError> {
+    let Some(array) = tools.and_then(Value::as_array) else { return Ok(Vec::new()) };
+    array
+        .iter()
+        .enumerate()
+        .map(|(index, tool)| {
+            // The definition normally nests under `function`; falling
+            // back to the top level keeps a slightly-off shape from
+            // turning the whole tool into an empty shell.
+            let (source, path) = tool.get("function").map_or_else(
+                || (tool, format!("tools[{index}]")),
+                |function| (function, format!("tools[{index}].function")),
+            );
+            let mut definition = ToolDef::new(
+                source.get("name").and_then(Value::as_str).unwrap_or_default().to_owned(),
+                source.get("description").and_then(Value::as_str).map(str::to_owned),
+                source
+                    .get("parameters")
+                    .cloned()
+                    .unwrap_or_else(|| json!({"type": "object", "properties": {}})),
+            );
+            // Typed since protocol 0.6.0 (R-Q15); this decode dropped it before.
+            definition.strict = optional_bool(source.get("strict"), &format!("{path}.strict"))?;
+            Ok(definition)
         })
-        .unwrap_or_default()
+        .collect()
 }
 
 fn tool_choice_from_wire(choice: Option<&Value>) -> Option<ToolChoice> {
@@ -227,50 +253,60 @@ fn prepend_thinking(message: &mut Message, reasoning: &str) {
             message.content = Some(Content::Parts(parts));
         }
         Some(Content::Text(text)) => {
-            message.content = Some(Content::Parts(vec![thinking, ContentPart::Text { text }]));
+            message.content = Some(Content::Parts(vec![thinking, ContentPart::text(text)]));
         }
         None => message.content = Some(Content::Parts(vec![thinking])),
     }
 }
 
-fn content_from_wire(content: Option<&Value>) -> Option<Content> {
-    match content {
+fn content_from_wire(content: Option<&Value>, index: usize) -> Result<Option<Content>, CodecError> {
+    Ok(match content {
         Some(Value::String(text)) => Some(Content::Text(text.clone())),
-        Some(Value::Array(parts)) => {
-            Some(Content::Parts(parts.iter().map(part_from_wire).collect()))
-        }
+        Some(Value::Array(parts)) => Some(Content::Parts(
+            parts
+                .iter()
+                .enumerate()
+                .map(|(position, part)| {
+                    part_from_wire(part, &format!("messages[{index}].content[{position}]"))
+                })
+                .collect::<Result<_, _>>()?,
+        )),
         // Explicit null and absent are the same absence, and the render side
         // writes `null` back for it, so the round trip closes.
         Some(Value::Null) | None => None,
         // Any other scalar on a legal role is not guessed at: it is carried
         // whole so nothing is invented and nothing is lost.
         Some(other) => Some(Content::Parts(vec![ContentPart::Unknown(other.clone())])),
-    }
+    })
 }
 
-fn part_from_wire(part: &Value) -> ContentPart {
-    match part.get("type").and_then(Value::as_str) {
+fn part_from_wire(part: &Value, path: &str) -> Result<ContentPart, CodecError> {
+    // OpenRouter's convention (K4); checked on every part, the ones kept verbatim included (K6).
+    let cache_control = cache_control(part, path)?;
+    Ok(match part.get("type").and_then(Value::as_str) {
         Some("text") => ContentPart::Text {
             text: part.get("text").and_then(Value::as_str).unwrap_or_default().to_owned(),
+            cache_control,
         },
         Some("image_url") => {
             let Some(image) = part.get("image_url") else {
-                return ContentPart::Unknown(part.clone());
+                return Ok(ContentPart::Unknown(part.clone()));
             };
             // No url means no image: carrying the block whole lets the upstream
             // rule on it, rather than sending it an image with an empty source.
             let Some(url) = image.get("url").and_then(Value::as_str) else {
-                return ContentPart::Unknown(part.clone());
+                return Ok(ContentPart::Unknown(part.clone()));
             };
             ContentPart::ImageUrl {
                 image_url: ImageUrl {
                     url: url.to_owned(),
                     detail: image.get("detail").and_then(Value::as_str).map(str::to_owned),
                 },
+                cache_control,
             }
         }
         _ => ContentPart::Unknown(part.clone()),
-    }
+    })
 }
 
 fn tool_calls_from_wire(tool_calls: Option<&Value>) -> Vec<ToolCall> {
