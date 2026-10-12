@@ -94,7 +94,7 @@ impl CapabilityV1 {
             Self::NorthPassthroughDelivery => {
                 let mut ids: Vec<_> = north_passthrough_fixtures_v1()
                     .iter()
-                    .map(|fixture| fixture.case_id())
+                    .map(south_provider_conformance::NorthPassthroughFixtureV1::case_id)
                     .collect();
                 ids.dedup();
                 ids.len()
