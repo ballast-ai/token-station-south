@@ -48,6 +48,7 @@ pub use task_suite_v2::{
 };
 pub mod anthropic_dialect;
 mod base64;
+pub mod declared_parameters;
 mod descriptor_auth;
 mod url_segment;
 pub use descriptor_auth::{
