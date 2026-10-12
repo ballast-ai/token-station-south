@@ -147,6 +147,7 @@ pub(crate) fn describe(value: &Value) -> String {
 
 pub mod responses;
 pub use responses::{
-    ResponsesContext, ResponsesFrame, ResponsesReasoningMode, ResponsesRequestOptions,
-    ResponsesSseState, chat_request_from_responses, responses_frames, responses_response,
+    RelayedResponseIdentity, ResponsesContext, ResponsesFrame, ResponsesReasoningMode,
+    ResponsesRequestOptions, ResponsesSseState, chat_request_from_responses, responses_error_event,
+    responses_frames, responses_response,
 };

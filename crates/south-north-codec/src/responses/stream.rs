@@ -8,8 +8,8 @@ use crate::CodecError;
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 use token_station_protocol::{
-    ChatResponse, Choice, Content, ContentPart, ErrorCode, Extensions, FinishReason, Message, Role,
-    StreamEvent, ToolCall, Usage,
+    ChatResponse, Choice, Content, ContentPart, ErrorCode, ErrorEnvelope, Extensions, FinishReason,
+    Message, Role, StreamEvent, ToolCall, Usage,
 };
 #[derive(Debug, Clone)]
 struct Slot {
@@ -632,7 +632,12 @@ fn render(
                 state.status = StreamStatus::Completed;
             }
             StreamEvent::Error { error } => {
-                let response = json!({"id":state.context.response_id,"object":"response","created_at":state.context.created_at,"model":state.context.model,"status":"failed","output":[],"error":{"type":"server_error","code":error_code(error.code),"message":error.message}});
+                let response = failed_response(
+                    &state.context.response_id,
+                    &state.context.model,
+                    state.context.created_at,
+                    error,
+                );
                 state.emit("response.failed", json!({"response":response}), &mut out)?;
                 state.status = StreamStatus::Failed;
             }
@@ -833,6 +838,45 @@ fn render_tool(
     }
 
     Ok(())
+}
+
+/// The `response` object of a `response.failed` event. One function for the render state and for
+/// [`responses_error_event`], so a rendered and a relayed stream end a failure identically.
+fn failed_response(
+    response_id: &str,
+    model: &str,
+    created_at: i64,
+    error: &ErrorEnvelope,
+) -> Value {
+    json!({"id":response_id,"object":"response","created_at":created_at,"model":model,"status":"failed","output":[],"error":{"type":"server_error","code":error_code(error.code),"message":error.message}})
+}
+
+/// Identity of a relayed Responses stream, read by the host from the `response` object of the
+/// relayed `response.created` event (render-gaps record §5.3, G3).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RelayedResponseIdentity {
+    pub response_id: String,
+    pub model: String,
+    pub created_at: i64,
+}
+
+/// One `response.failed` event for a relayed stream, which has no render state.
+///
+/// The host's own failure event under `north_passthrough` (Responses upstream record §8.2;
+/// render-gaps record §5.3, G3). `sequence_number` is one past the last relayed event's. `error.message` should be
+/// the host's fixed public message; the codec renders whatever it is given and never reads the
+/// upstream's text.
+#[must_use]
+pub fn responses_error_event(
+    error: &ErrorEnvelope,
+    relayed: &RelayedResponseIdentity,
+    sequence_number: u64,
+) -> ResponsesFrame {
+    let response = failed_response(&relayed.response_id, &relayed.model, relayed.created_at, error);
+    ResponsesFrame {
+        event: "response.failed".into(),
+        data: json!({"response": response, "type": "response.failed", "sequence_number": sequence_number}),
+    }
 }
 
 const fn error_code(code: ErrorCode) -> &'static str {

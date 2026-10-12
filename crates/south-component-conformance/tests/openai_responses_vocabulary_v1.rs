@@ -17,13 +17,15 @@ use serde_json::{Value, json};
 use south_component_conformance::ProviderComponentV1;
 use south_component_conformance::reference_openai_responses::OpenAiResponsesReferenceV1;
 use south_component_conformance::responses_vocabulary::{
-    event, extension, incomplete_reason, item, part,
+    event, extension, incomplete_reason, item, part, replay,
 };
 use south_component_conformance::sse_split::{SseFrameV1, SseSplitErrorV1, SseSplitterV1};
 use south_host_grammars::SseDecoderV1;
 use south_north_codec::responses::{
-    ResponsesContext, ResponsesReasoningMode, ResponsesRequestOptions, ResponsesSseState,
-    chat_request_from_responses, responses_frames, responses_response,
+    OPENAI_REASONING_ITEMS_EXTENSION, OPENAI_REASONING_REPLAY_CAPABILITY,
+    OPENAI_REASONING_REPLAY_FAMILY, ResponsesContext, ResponsesReasoningMode,
+    ResponsesRequestOptions, ResponsesSseState, chat_request_from_responses, responses_frames,
+    responses_response,
 };
 use token_station_protocol::{
     ChatRequest, ChatResponse, Content, ContentPart, FinishReason, HttpResponseParts, Message,
@@ -632,5 +634,94 @@ mod properties {
             };
             prop_assert_eq!(run(stride), run(body.len().max(1)));
         }
+    }
+}
+
+// -- NC-1: OpenAI reasoning replay ----------------------------------------------------------------
+
+/// R-Q13 for NC-1: the codec's published spellings are the component's, and the codec writes
+/// exactly the keys the component reads (design record 2026-10-11 §7 item 5).
+#[test]
+fn the_codec_writes_the_replay_keys_the_component_names() {
+    assert_eq!(OPENAI_REASONING_REPLAY_CAPABILITY, replay::CAPABILITY);
+    assert_eq!(OPENAI_REASONING_REPLAY_FAMILY, replay::OPENAI_FAMILY);
+    assert_eq!(OPENAI_REASONING_ITEMS_EXTENSION, replay::ITEMS_KEY);
+    let (_, body) = &replay_client_bodies()[0];
+    let request = chat_request_from_responses(body, &ResponsesRequestOptions::default()).unwrap();
+    let turn = &request.messages[1];
+    assert_eq!(turn.extensions[replay::FAMILY_KEY], json!(replay::OPENAI_FAMILY));
+    assert!(
+        turn.extensions[replay::LAYOUT_KEY]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry["kind"] == replay::ITEM_KIND)
+    );
+    let mut keys: Vec<&str> = turn.extensions.keys().map(String::as_str).collect();
+    keys.sort_unstable();
+    assert_eq!(keys, [replay::LAYOUT_KEY, replay::FAMILY_KEY, replay::ITEMS_KEY]);
+}
+
+/// The configuration of the replay rows: the declared one plus `reasoning_replay.openai.v1`.
+fn replay_config() -> Value {
+    let mut config = read("provider.capabilities.declared.input.json");
+    config["models"][0]["supported_parameters"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!(replay::CAPABILITY));
+    config
+}
+
+/// The codec-derived NC-1 rows are what the north codec parses from their client bodies.
+#[test]
+fn the_codec_derived_replay_rows_are_north_codec_outputs() {
+    for (name, body) in replay_client_bodies() {
+        let request =
+            chat_request_from_responses(&body, &ResponsesRequestOptions::default()).unwrap();
+        let input = read(&format!("provider.request.{name}.input.json"));
+        assert_eq!(input["provider_config"], replay_config(), "{name}");
+        assert_eq!(input["chat_request"], serde_json::to_value(&request).unwrap(), "{name}");
+        let built = read(&format!("provider.request.{name}.expected.json"))["body"].clone();
+        assert_eq!(built["include"], json!([replay::INCLUDE_ENCRYPTED_CONTENT]), "{name}");
+        assert_eq!(built["store"], json!(false), "{name}");
+    }
+}
+
+/// What a Responses input item says, independent of how the two directions spell an item.
+fn signature(item: &Value) -> Value {
+    let text_of = |content: &Value| match content {
+        Value::String(text) => text.clone(),
+        Value::Array(parts) => parts.iter().filter_map(|part| part["text"].as_str()).collect(),
+        _ => String::new(),
+    };
+    match (item["type"].as_str(), item["role"].as_str()) {
+        (Some("reasoning"), _) => item.clone(),
+        (Some("function_call"), _) => {
+            json!(["call", item["call_id"], item["name"], item["arguments"]])
+        }
+        (Some("function_call_output"), _) => json!(["output", item["call_id"], item["output"]]),
+        (_, Some(role)) => json!([role, text_of(&item["content"])]),
+        _ => panic!("unexpected item {item}"),
+    }
+}
+
+/// North parse then south build replays the client's reasoning items verbatim and in their
+/// places, between the same texts and calls (design record 2026-10-11 §7 item 11).
+#[test]
+fn north_parse_then_south_build_replays_every_item_in_place() {
+    let config: token_station_protocol::ProviderConfig =
+        serde_json::from_value(replay_config()).unwrap();
+    for (name, body) in replay_client_bodies() {
+        let request =
+            chat_request_from_responses(&body, &ResponsesRequestOptions::default()).unwrap();
+        let built = OpenAiResponsesReferenceV1.build_http_request(&request, &config).unwrap();
+        let built = serde_json::to_value(built).unwrap()["body"]["input"].clone();
+        let client = match &body["input"] {
+            Value::Array(items) => items.iter().map(signature).collect::<Vec<_>>(),
+            Value::String(text) => vec![json!(["user", text])],
+            _ => unreachable!(),
+        };
+        let sent = built.as_array().unwrap().iter().map(signature).collect::<Vec<_>>();
+        assert_eq!(sent, client, "{name}");
     }
 }

@@ -111,6 +111,9 @@ the [task adapter vocabulary](docs/design/2026-08-27-task-adapter-vocabulary.md)
   Two more gate ③ suites are host-implemented the same way: `south.eventstream-framing.v1` (the host's
   framing executor: `bytes` versus `aws-eventstream`, canonical re-encoding, faults, the buffered path) and
   `south.request-signing.v1` (the declaration-selected SigV4 finalizer, verified by recomputing the signature).
+  Unreleased: `south.north-passthrough-delivery.v1` (the host's pass-through delivery under `north_passthrough`: frames cut
+  at `SseDecoderV1::position`, one per call, the terminal frame held for the settlement, the host's own failure event;
+  `south-testkit` carries its reference executor).
   The media worlds' gate ③ suite `south.safe-fetch.v1` holds the host's artifact-URL fetch executor to the image
   record's §11 rules: its fixtures here describe a whole fake network (resolver answers, servers, a system proxy),
   and the `south-testkit` runner hands those fakes to the host's executor and judges what it resolved, where it
@@ -214,7 +217,7 @@ directory shape the runtime loads — `manifest.json` beside `component.wasm`.
 | `embeddings-vertex` | `vertex-ai` | `bash scripts/build-embeddings-vertex-component.sh` | embeddings contract 1, from 0.48.0 |
 | `image-azure` | `azure-mai` | `bash scripts/build-image-azure-component.sh` | media contract 1 and image contract 1, from 0.52.0 |
 | `provider-anthropic-bedrock-invoke` | `anthropic-bedrock-invoke` | `bash scripts/build-anthropic-bedrock-invoke-component.sh` | Bedrock InvokeModel (Anthropic), `host_signed` with `aws-sigv4`, from 0.51.0 |
-| `provider-openai-responses` | `openai-responses` | `bash scripts/build-openai-responses-component.sh` | OpenAI Responses API, `bearer`; OpenAI's own wire only until another upstream ships a captured-traffic pack (R-Q16); `immutable_body_paths` and `north_passthrough`, from 0.54.0 |
+| `provider-openai-responses` | `openai-responses` | `bash scripts/build-openai-responses-component.sh` | OpenAI Responses API, `bearer`; OpenAI's own wire only until another upstream ships a captured-traffic pack (R-Q16); `immutable_body_paths` and `north_passthrough`, from 0.54.0; replays OpenAI reasoning items for a model declaring `reasoning_replay.openai.v1` (1.1.0, unreleased) |
 
 Each pack's `README.md` records how its expectations were derived and how the
 component differs from the host's native arm — read that before changing a

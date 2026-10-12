@@ -5,7 +5,7 @@
 # feature stays off).
 [package]
 name = "provider-anthropic"
-version = "1.0.18"
+version = "1.0.19"
 edition = "2021"
 publish = false
 

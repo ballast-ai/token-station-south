@@ -49,6 +49,7 @@ mod controlled_query;
 mod controlled_user_agent;
 mod header_auth;
 mod host_signed;
+mod north_passthrough;
 mod provider_binary;
 mod provider_get;
 mod provider_media_binary;
@@ -61,6 +62,10 @@ mod stream;
 pub use host_signed::{
     DeterministicRequestFinalizerV1, FAKE_SIGNING_KEY_V1, FinalizerBehaviorV1,
     HangingRequestFinalizerV1, ObservedFinalizeViewV1, expected_signature_v1,
+};
+pub use north_passthrough::{
+    NorthPassthroughFaultV1, REFERENCE_NORTH_PASSTHROUGH_FAILURE_MESSAGE_V1,
+    ReferenceNorthPassthroughExecutorV1,
 };
 pub use raw::{
     RawGetProviderCallBuilderV1, RawMultipartProviderCallBuilderV1, RawProviderCallBuilderV1,

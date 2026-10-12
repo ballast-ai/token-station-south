@@ -1,0 +1,102 @@
+{
+  "auth": {
+    "scheme": "bearer",
+    "secret": "provider_api_key"
+  },
+  "body": {
+    "include": [
+      "reasoning.encrypted_content"
+    ],
+    "input": [
+      {
+        "content": [
+          {
+            "text": "Weather in Paris, then summarize.",
+            "type": "input_text"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "encrypted_content": "gAAAAABo-interleaved-one",
+        "id": "rs_1",
+        "summary": [
+          {
+            "text": "Need the weather first.",
+            "type": "summary_text"
+          }
+        ],
+        "type": "reasoning"
+      },
+      {
+        "arguments": "{\"city\":\"Paris\"}",
+        "call_id": "call_1",
+        "name": "get_weather",
+        "type": "function_call"
+      },
+      {
+        "encrypted_content": "gAAAAABo-interleaved-two",
+        "id": "rs_2",
+        "summary": [
+          {
+            "text": "Also the time.",
+            "type": "summary_text"
+          }
+        ],
+        "type": "reasoning"
+      },
+      {
+        "arguments": "{\"city\":\"Paris\"}",
+        "call_id": "call_2",
+        "name": "get_time",
+        "type": "function_call"
+      },
+      {
+        "call_id": "call_1",
+        "output": "18C, clear",
+        "type": "function_call_output"
+      },
+      {
+        "call_id": "call_2",
+        "output": "14:05",
+        "type": "function_call_output"
+      },
+      {
+        "encrypted_content": "gAAAAABo-interleaved-three",
+        "id": "rs_3",
+        "summary": [
+          {
+            "text": "Both answers are in.",
+            "type": "summary_text"
+          }
+        ],
+        "type": "reasoning"
+      },
+      {
+        "content": [
+          {
+            "text": "Paris: 18C and clear at 14:05.",
+            "type": "output_text"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "text": "Thanks.",
+            "type": "input_text"
+          }
+        ],
+        "role": "user"
+      }
+    ],
+    "model": "gpt-5.5",
+    "store": false
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "method": "POST",
+  "url": "https://api.openai.com/v1/responses"
+}

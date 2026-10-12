@@ -1,3 +1,7 @@
+use super::replay::{
+    MAX_OPENAI_ITEM_BYTES, MAX_OPENAI_LAYOUT_ENTRIES, MAX_OPENAI_MESSAGE_BYTES,
+    OPENAI_REASONING_ITEMS_EXTENSION, OPENAI_REASONING_REPLAY_FAMILY,
+};
 use super::{
     LOCAL_SHELL, ReasoningReplayBlock, ResponsesRequestOptions, decode_reasoning_replay_carrier,
     invalid, namespace_name, required_str, tool_definitions,
@@ -41,22 +45,22 @@ pub fn chat_request_from_responses(
     if messages.is_empty() && !options.allow_empty_input {
         return Err(invalid(field, "must contain conversation history"));
     }
-    for mut message in messages {
-        if message.role == Role::Assistant
-            && request.messages.last().is_some_and(|m| m.role == Role::Assistant)
-        {
-            if let Some(previous) = request.messages.last_mut() {
-                merge_content(&mut previous.content, message.content.take());
-                previous.tool_calls.append(&mut message.tool_calls);
-                merge_extensions(&mut previous.extensions, message.extensions);
-            }
+    // Adjacent assistant items form one assistant turn. A run is merged only once it is complete,
+    // because whether it carries OpenAI reasoning replay (NC-1) decides how it is merged.
+    let mut run = Vec::new();
+    for message in messages {
+        if message.role == Role::Assistant {
+            run.push(message);
         } else {
+            flush_assistant_run(&mut request.messages, &mut run)?;
             request.messages.push(message);
         }
     }
+    flush_assistant_run(&mut request.messages, &mut run)?;
     for message in &mut request.messages {
         materialize_replay_message(message)?;
     }
+    refuse_mixed_replay_families(&request.messages)?;
     let (tools, extensions) = tool_definitions(body.get("tools").unwrap_or(&Value::Null))?;
     request.tools = tools;
     request.extensions = extensions;
@@ -426,6 +430,123 @@ fn merge_content(target: &mut Option<Content>, incoming: Option<Content>) {
     });
 }
 
+fn replay_invalid(field: impl Into<String>) -> CodecError {
+    CodecError::ReasoningReplayInvalid { field: field.into() }
+}
+
+/// Merge one assistant run into a single assistant message.
+///
+/// A run without a replayable `OpenAI` reasoning item merges exactly as it always has; a run with
+/// one keeps every item, text and tool call in input order (NC-1, design record
+/// `2026-10-11-responses-reasoning-replay-and-passthrough-suite.md` §2.2).
+fn flush_assistant_run(
+    target: &mut Vec<Message>,
+    run: &mut Vec<Message>,
+) -> Result<(), CodecError> {
+    let pieces = std::mem::take(run);
+    if pieces.iter().any(|piece| piece.extensions.contains_key(OPENAI_REASONING_ITEMS_EXTENSION)) {
+        target.push(openai_replay_message(pieces)?);
+        return Ok(());
+    }
+    let mut pieces = pieces.into_iter();
+    let Some(mut merged) = pieces.next() else { return Ok(()) };
+    for mut message in pieces {
+        merge_content(&mut merged.content, message.content.take());
+        merged.tool_calls.append(&mut message.tool_calls);
+        merge_extensions(&mut merged.extensions, message.extensions);
+    }
+    target.push(merged);
+    Ok(())
+}
+
+/// One assistant message for a run carrying `OpenAI` encrypted reasoning: every replayable item in
+/// `responses_opaque_reasoning_items`, each assistant text as its own part, and a layout naming
+/// items, texts and tool calls in input order. Summary text stays as unreferenced thinking parts.
+fn openai_replay_message(pieces: Vec<Message>) -> Result<Message, CodecError> {
+    let mut parts = Vec::new();
+    let mut items = Vec::new();
+    let mut layout = Vec::new();
+    let mut tool_calls = Vec::new();
+    let mut extensions = token_station_protocol::Extensions::new();
+    for mut piece in pieces {
+        if piece.extensions.contains_key("responses_reasoning_replay_items") {
+            // A Claude carrier and an OpenAI opaque value in one turn: neither family may be read as
+            // the other (A2 §4).
+            return Err(replay_invalid("encrypted_content"));
+        }
+        if let Some(Value::Array(added)) = piece.extensions.remove(OPENAI_REASONING_ITEMS_EXTENSION)
+        {
+            for item in added {
+                layout.push(json!({"kind": "reasoning_item", "index": items.len()}));
+                items.push(item);
+            }
+        }
+        match piece.content.take() {
+            None => {}
+            Some(Content::Text(text)) => {
+                if !text.is_empty() {
+                    layout.push(json!({"kind": "content", "ordinal": parts.len()}));
+                    parts.push(ContentPart::Text { text });
+                }
+            }
+            Some(Content::Parts(added)) => {
+                for part in added {
+                    match part {
+                        ContentPart::Text { ref text } if text.is_empty() => {}
+                        ContentPart::Thinking { signature: None, .. } => parts.push(part),
+                        other => {
+                            layout.push(json!({"kind": "content", "ordinal": parts.len()}));
+                            parts.push(other);
+                        }
+                    }
+                }
+            }
+        }
+        for call in piece.tool_calls {
+            layout.push(json!({"kind": "tool_call", "call_id": call.id}));
+            tool_calls.push(call);
+        }
+        merge_extensions(&mut extensions, piece.extensions);
+    }
+    if layout.len() > MAX_OPENAI_LAYOUT_ENTRIES {
+        return Err(replay_invalid("encrypted_content"));
+    }
+    let mut total = 0usize;
+    for item in &items {
+        let bytes = item["encrypted_content"].as_str().map_or(0, str::len);
+        if bytes > MAX_OPENAI_ITEM_BYTES {
+            return Err(replay_invalid("encrypted_content"));
+        }
+        total = total.saturating_add(bytes);
+    }
+    if total > MAX_OPENAI_MESSAGE_BYTES {
+        return Err(replay_invalid("encrypted_content"));
+    }
+    extensions
+        .insert("reasoning_replay_protocol_family".into(), json!(OPENAI_REASONING_REPLAY_FAMILY));
+    extensions.insert("reasoning_replay_block_layout".into(), Value::Array(layout));
+    extensions.insert(OPENAI_REASONING_ITEMS_EXTENSION.into(), Value::Array(items));
+    let mut message = Message::text(Role::Assistant, "");
+    message.content = (!parts.is_empty()).then_some(Content::Parts(parts));
+    message.tool_calls = tool_calls;
+    message.extensions = extensions;
+    Ok(message)
+}
+
+/// A request carrying both replay families is refused, as the host refuses it (`MixedCarriers`).
+fn refuse_mixed_replay_families(messages: &[Message]) -> Result<(), CodecError> {
+    let family = |name: &str| {
+        messages.iter().any(|message| {
+            message.extensions.get("reasoning_replay_protocol_family").and_then(Value::as_str)
+                == Some(name)
+        })
+    };
+    if family(OPENAI_REASONING_REPLAY_FAMILY) && family("claude-signed-thinking") {
+        return Err(replay_invalid("encrypted_content"));
+    }
+    Ok(())
+}
+
 fn merge_extensions(
     target: &mut token_station_protocol::Extensions,
     incoming: token_station_protocol::Extensions,
@@ -609,27 +730,42 @@ fn reasoning_input(item: &Value, path: &str, message: &mut Message) -> Result<()
             message.content = Some(Content::Parts(thinking));
         }
     }
-    for (key, extension) in [
-        ("id", "responses_reasoning_id"),
-        ("encrypted_content", "responses_reasoning_encrypted_content"),
-    ] {
-        if let Some(v) = item.get(key).filter(|v| !v.is_null()) {
-            message
-                .extensions
-                .insert(extension.into(), json!(required_str(v, &format!("{path}.{key}"))?));
-        }
+    if let Some(id) = item.get("id").filter(|v| !v.is_null()) {
+        required_str(id, &format!("{path}.id"))?;
     }
-    if let Some(encoded) = item.get("encrypted_content").and_then(Value::as_str)
-        && encoded.starts_with("tsr.c1.")
-    {
+    let encoded = match item.get("encrypted_content") {
+        None | Some(Value::Null) => return Ok(()),
+        Some(value) => required_str(value, &format!("{path}.encrypted_content"))?,
+    };
+    if encoded.starts_with("tsr.") {
+        // Token Station's own carrier; only version 1 exists, and an unknown version is never
+        // read as an OpenAI opaque value (A2 §4).
+        if !encoded.starts_with("tsr.c1.") {
+            return Err(replay_invalid(format!("{path}.encrypted_content")));
+        }
         decode_reasoning_replay_carrier(encoded)?;
         required_str(&item["id"], &format!("{path}.id"))?;
-        message.extensions.remove("responses_reasoning_encrypted_content");
         message.extensions.insert("responses_reasoning_replay_items".into(), json!([item]));
         message
             .extensions
             .insert("reasoning_replay_protocol_family".into(), json!("claude-signed-thinking"));
+    } else if !encoded.is_empty() {
+        // NC-1: an OpenAI encrypted reasoning item is kept whole, as the closed projection the
+        // upstream accepts back on a stateless request (§2.1); the merge records its position.
+        let id = item.get("id").and_then(Value::as_str).filter(|id| !id.is_empty());
+        let Some(id) = id else {
+            return Err(replay_invalid(format!("{path}.id")));
+        };
+        let mut projection = json!({
+            "type": "reasoning",
+            "id": id,
+            "summary": item.get("summary").filter(|v| !v.is_null()).cloned().unwrap_or_else(|| json!([])),
+            "encrypted_content": encoded,
+        });
+        if let Some(content) = item.get("content").filter(|v| v.is_array()) {
+            projection["content"] = content.clone();
+        }
+        message.extensions.insert(OPENAI_REASONING_ITEMS_EXTENSION.into(), json!([projection]));
     }
-
     Ok(())
 }

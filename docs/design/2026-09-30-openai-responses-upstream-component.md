@@ -734,7 +734,8 @@ stream state and the Claude carrier (crates/south-north-codec/src/responses.rs:2
 North codec follow-ups this record depends on (same repository, separate changes):
 
 - **NC-1** Keep every OpenAI reasoning input item in order with its position, instead of two single-valued extensions
-  (§4.5).
+  (§4.5). *(2026-10-11: designed, with the gate ③ suite of §12.4, in
+  `2026-10-11-responses-reasoning-replay-and-passthrough-suite.md`, accepted and implemented 2026-10-12, unreleased.)*
 - **NC-2** Render reasoning items a component placed in `Message.extensions` back onto the Responses wire
   (non-streaming). This is itself a behaviour on an `extensions` key, so it waits for the same D5 answer as R-Q15.
 
@@ -1463,3 +1464,7 @@ the package under the 0.54.0 runtime of the release tree.
 - 2026-10-10, step R1 implemented (§17, new): the header and §13.1 note it; nothing else in the record changes.
 - 2026-10-10, release 0.54.0 (§17.5, new): the package declares `south_runtime` 0.54.0; the header, §13.1 and §17's
   opening note the release.
+- 2026-10-11: NC-1 (§4.5, §9) and the gate ③ suite `south.north-passthrough-delivery.v1` (§8.2, §12.4) are designed in
+  `2026-10-11-responses-reasoning-replay-and-passthrough-suite.md` (proposed); §9 gains a pointer. Nothing else in this
+  record changes.
+- 2026-10-12: that record is accepted and implemented (unreleased); the §9 pointer says so.

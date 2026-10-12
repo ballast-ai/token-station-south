@@ -7,12 +7,15 @@ mod tools;
 use crate::CodecError;
 pub use output::responses_response;
 pub use replay::{
-    CLAUDE_REASONING_REPLAY_CAPABILITY, ReasoningReplayBlock, ReasoningReplayCarrier,
-    decode_reasoning_replay_carrier, encode_reasoning_replay_carrier,
+    CLAUDE_REASONING_REPLAY_CAPABILITY, OPENAI_REASONING_ITEMS_EXTENSION,
+    OPENAI_REASONING_REPLAY_CAPABILITY, OPENAI_REASONING_REPLAY_FAMILY, ReasoningReplayBlock,
+    ReasoningReplayCarrier, decode_reasoning_replay_carrier, encode_reasoning_replay_carrier,
 };
 pub use request::chat_request_from_responses;
 use serde_json::Value;
-pub use stream::{ResponsesSseState, responses_frames};
+pub use stream::{
+    RelayedResponseIdentity, ResponsesSseState, responses_error_event, responses_frames,
+};
 use token_station_protocol::{ChatResponse, StreamEvent};
 use tools::{LOCAL_SHELL, namespace_name, tool_definitions};
 /// Independent compatibility allowances for already-supported client shapes.

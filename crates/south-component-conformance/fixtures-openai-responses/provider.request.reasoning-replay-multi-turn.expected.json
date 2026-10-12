@@ -1,0 +1,96 @@
+{
+  "auth": {
+    "scheme": "bearer",
+    "secret": "provider_api_key"
+  },
+  "body": {
+    "include": [
+      "reasoning.encrypted_content"
+    ],
+    "input": [
+      {
+        "content": [
+          {
+            "text": "Pick a prime.",
+            "type": "input_text"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "encrypted_content": "gAAAAABo-turn-one",
+        "id": "rs_a",
+        "summary": [
+          {
+            "text": "Any prime works.",
+            "type": "summary_text"
+          }
+        ],
+        "type": "reasoning"
+      },
+      {
+        "content": [
+          {
+            "text": "13.",
+            "type": "output_text"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "text": "Another one, larger.",
+            "type": "input_text"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "text": "Let me think.",
+            "type": "output_text"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "encrypted_content": "gAAAAABo-turn-two",
+        "id": "rs_b",
+        "summary": [
+          {
+            "text": "Larger than 13.",
+            "type": "summary_text"
+          }
+        ],
+        "type": "reasoning"
+      },
+      {
+        "content": [
+          {
+            "text": "17.",
+            "type": "output_text"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "text": "Their product?",
+            "type": "input_text"
+          }
+        ],
+        "role": "user"
+      }
+    ],
+    "model": "gpt-5.5",
+    "store": false
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "method": "POST",
+  "url": "https://api.openai.com/v1/responses"
+}

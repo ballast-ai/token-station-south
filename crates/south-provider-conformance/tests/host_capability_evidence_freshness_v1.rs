@@ -20,10 +20,11 @@ use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use south_provider_conformance::{
     controlled_query_fixtures_v1, controlled_user_agent_fixtures_v1, credential_recipe_fixtures_v1,
-    eventstream_framing_fixtures_v1, header_auth_fixtures_v1, provider_binary_fixtures_v1,
-    provider_call_fixtures_v1, provider_get_fixtures_v1, provider_media_binary_fixtures_v1,
-    provider_multipart_fixtures_v1, provider_quota_metadata_fixtures_v1,
-    provider_stream_fixtures_v1, request_signing_fixtures_v1, safe_fetch_fixtures_v1,
+    eventstream_framing_fixtures_v1, header_auth_fixtures_v1, north_passthrough_fixtures_v1,
+    provider_binary_fixtures_v1, provider_call_fixtures_v1, provider_get_fixtures_v1,
+    provider_media_binary_fixtures_v1, provider_multipart_fixtures_v1,
+    provider_quota_metadata_fixtures_v1, provider_stream_fixtures_v1, request_signing_fixtures_v1,
+    safe_fetch_fixtures_v1,
 };
 
 /// Every capability the manifest may annotate.
@@ -47,6 +48,7 @@ enum CapabilityV1 {
     EventStreamFraming,
     RequestSigning,
     SafeFetch,
+    NorthPassthroughDelivery,
 }
 
 impl CapabilityV1 {
@@ -67,11 +69,12 @@ impl CapabilityV1 {
             Self::EventStreamFraming => "eventstream_framing",
             Self::RequestSigning => "request_signing",
             Self::SafeFetch => "safe_fetch",
+            Self::NorthPassthroughDelivery => "north_passthrough_delivery",
         }
     }
 
     /// The number of cases in this capability's live conformance table.
-    const fn case_count(self) -> usize {
+    fn case_count(self) -> usize {
         match self {
             Self::ProviderCall => provider_call_fixtures_v1().len(),
             Self::ProviderStream => provider_stream_fixtures_v1().len(),
@@ -87,11 +90,20 @@ impl CapabilityV1 {
             Self::EventStreamFraming => eventstream_framing_fixtures_v1().len(),
             Self::RequestSigning => request_signing_fixtures_v1().len(),
             Self::SafeFetch => safe_fetch_fixtures_v1().len(),
+            // Distinct cases: one case may run several table entries (one per body).
+            Self::NorthPassthroughDelivery => {
+                let mut ids: Vec<_> = north_passthrough_fixtures_v1()
+                    .iter()
+                    .map(south_provider_conformance::NorthPassthroughFixtureV1::case_id)
+                    .collect();
+                ids.dedup();
+                ids.len()
+            }
         }
     }
 
     /// Every capability, so the test can prove the manifest annotates exactly this set.
-    const fn all() -> [Self; 14] {
+    const fn all() -> [Self; 15] {
         [
             Self::ProviderCall,
             Self::ProviderStream,
@@ -107,6 +119,7 @@ impl CapabilityV1 {
             Self::EventStreamFraming,
             Self::RequestSigning,
             Self::SafeFetch,
+            Self::NorthPassthroughDelivery,
         ]
     }
 }

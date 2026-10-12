@@ -30,8 +30,8 @@ community policy      enterprise policy
 | `south-host-grammars` | Implemented, released in 0.53.0: pure, bounded wire grammars that only hosts call, today the SSE decoder `decode_sse_v1` / `SseDecoderV1` (frame positions for `north_passthrough`, golden vectors, fuzz target). No dependencies; no component may link it (`shipped_packages_v1`, `scripts/check-boundaries.sh`), so it carries the workspace version and a change to it re-identifies no package (boundary record §13.13). A grammar a component may link stays in `south-contracts` |
 | `south-core` | Implemented host-neutral buffered and streaming provider-call orchestration and its buffered body-less GET, multipart and binary-response twins, the multipart-binary and text-binary entry points of HTTP contract 12, plus the shared host prelude (`raw` module: raw-call type, its host-signed, GET and multipart twins, contract-parse orchestration, one-shot wrappers for all four, resolver adapters) |
 | `south-transport-reqwest` | Implemented hardened buffered and byte-streaming JSON POST transport, the same buffered transport for body-less GET, multipart POST and SSML text POST requests (rendering the latter two's media types and sharing their allocations) and for a JSON POST whose response is buffered as opaque bytes under its own larger cap, bounded quota metadata capture, sanctioned user-agent application, and one-config transport-pair construction |
-| `south-provider-conformance` | Implemented immutable provider-call, provider-stream, provider-quota-metadata, header-auth, controlled-query, controlled-user-agent, provider-get, provider-multipart, provider-binary, and provider-media-binary v1 fixtures, the safe-fetch v1 fake-network fixtures, and the host-implemented credential-recipe v1 suite (harness, fake token endpoint, runner) |
-| `south-testkit` | Implemented assembled-executor conformance runners and reference executors for all ten suites, the safe-fetch v1 runner with its fake resolver, connector and proxy environment and a reference executor, plus the owned raw-call, host-signed raw-call, raw-GET and raw-multipart builders for host tests |
+| `south-provider-conformance` | Implemented immutable provider-call, provider-stream, provider-quota-metadata, header-auth, controlled-query, controlled-user-agent, provider-get, provider-multipart, provider-binary, and provider-media-binary v1 fixtures, the safe-fetch v1 fake-network fixtures, the host-implemented credential-recipe v1 suite (harness, fake token endpoint, runner), and the host-implemented north-passthrough-delivery v1 suite (harness over the host's pass-through executor, per-call verdict scripts, timeline runner; unreleased) |
+| `south-testkit` | Implemented assembled-executor conformance runners and reference executors for all ten suites, the reference pass-through delivery executor with its deliberate mistakes (unreleased), the safe-fetch v1 runner with its fake resolver, connector and proxy environment and a reference executor, plus the owned raw-call, host-signed raw-call, raw-GET and raw-multipart builders for host tests |
 | `south-provider-api` | Implemented v2 provider component ABI: WIT package `token-station:adapter@2.0.0` (world `provider-adapter-v2`) plus the gate-① manifest schema with the seven-field compatibility tuple; depends on no other south crate by design |
 | `south-component-conformance` | Implemented gates ① and ② (package admission + `south.provider-component.v1` behavior suite) with the native `provider-openai-compatible`, `provider-anthropic` and `provider-gemini` references and a frozen fixture pack each; a sanctioned typed consumer of the Canonical IR, pinned to a kernel distribution tag |
 | `south-provider-runtime` | Implemented sandboxed component execution: gated loading, locked-down WASI, memory/deadline/payload/stream bounds, `host.sign` behind the manifest's secret allowlist — JSON-face only, never an IR consumer; the typed seam over it is the conformance crate's `sandbox` feature. Also reads the release's model catalog (`ModelCatalogV1`, `south.model-catalog.v1`), here because no guest links this crate |
@@ -61,8 +61,11 @@ south-transport-reqwest ------------------> south-core
 south-transport-reqwest ------------------> south-contracts
 south-provider-conformance ---------------> south-contracts
 south-provider-conformance ---------------> south-provider-api
+south-provider-conformance ---------------> south-host-grammars
 south-testkit ----------------------------> south-contracts
 south-testkit ----------------------------> south-core
+south-testkit ----------------------------> south-host-grammars
+south-testkit ----------------------------> south-provider-api
 south-testkit ----------------------------> south-provider-conformance
 south-component-conformance --------------> south-contracts
 south-component-conformance --------------> south-provider-api
@@ -72,8 +75,10 @@ south-provider-runtime -------------------> south-provider-api
 south-north-codec ------------------------> token-station-protocol (kernel tag)
 ```
 
-`south-host-grammars` has no edge in either direction: it depends on nothing, and no crate in this workspace
-depends on it except the fuzz binary, which is a test-only consumer.
+`south-host-grammars` depends on nothing. Besides the fuzz binary (a test-only consumer), the two host-side
+conformance crates depend on it, because the pass-through delivery suite cuts frames exactly where a host must
+(`south-provider-conformance`, and the reference executor in `south-testkit`; NC-1 record §3.2). No component-linked
+crate may depend on it.
 
 These edges are direct Cargo dependencies. They are one-way and acyclic. Only the reqwest transport
 crate owns a network-client dependency, and only the runtime crate owns the wasmtime engine (its
@@ -206,7 +211,19 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.54.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.51.0, 0.52.0 and 0.52.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.54.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.51.0, 0.52.0 and 0.53.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**Unreleased (NC-1 and pass-through delivery)**: OpenAI reasoning replay through the IR and the gate ③ suite
+`south.north-passthrough-delivery.v1` (design record `docs/design/2026-10-11-responses-reasoning-replay-and-passthrough-suite.md`,
+accepted 2026-10-12; proposed to ship in 0.55.0). The north codec keeps every OpenAI reasoning item that carries
+`encrypted_content`, in order and with its position, under the replay markers the Claude carrier uses (family
+`openai-encrypted-reasoning`, a `reasoning_item` layout entry, `responses_opaque_reasoning_items`), and no longer writes
+the two single-valued keys; it exports `OPENAI_REASONING_REPLAY_CAPABILITY` (`reasoning_replay.openai.v1`) and the G3
+`responses_error_event`. `provider-openai-responses` 1.1.0 replays such a turn for a model declaring the word and asks
+for `include: ["reasoning.encrypted_content"]` on every request to it; the OpenAI-compatible (2.5.0) and Gemini (1.2.0)
+references refuse the family. `south-component-conformance` moves to 0.53.0 under Q47, so every package takes a new
+version (`south-contracts` and `south-provider-api` are unchanged) and keeps its `south_runtime`. The suite lives in
+`south-provider-conformance` (abstract per-call verdicts, no IR, a normal dependency on `south-host-grammars`), with the
+reference executor and eighteen deliberate mistakes in `south-testkit`; it is `not_verified` for both hosts.
 **v0.54.0**: the OpenAI Responses upstream component, step R1, and the gate ③ credential-arm bit (release record
 `docs/design/2026-10-10-release-0.54.0.md`; Responses design record
 `docs/design/2026-09-30-openai-responses-upstream-component.md` §17). The new package `provider-openai-responses` 1.0.0
