@@ -12,6 +12,14 @@ pub use replay::{
     ReasoningReplayCarrier, decode_reasoning_replay_carrier, encode_reasoning_replay_carrier,
 };
 pub use request::chat_request_from_responses;
+/// The most bytes `user` and `prompt_cache_key` may hold (R3 record §4.3).
+pub const RESPONSES_REQUEST_FIELD_MAX_BYTES: usize = 512;
+/// The most entries `metadata` may hold (R3 record §4.3).
+pub const RESPONSES_METADATA_MAX_ENTRIES: usize = 16;
+/// The most characters a `metadata` key may hold (R3 record §4.3).
+pub const RESPONSES_METADATA_KEY_MAX_CHARS: usize = 64;
+/// The most characters a `metadata` value may hold (R3 record §4.3).
+pub const RESPONSES_METADATA_VALUE_MAX_CHARS: usize = 512;
 use serde_json::Value;
 pub use stream::{
     RelayedResponseIdentity, ResponsesSseState, responses_error_event, responses_frames,
