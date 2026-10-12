@@ -135,6 +135,8 @@ pub mod reference_byteplus_task_v2;
 pub mod reference_gmi_image_task_v2;
 pub mod reference_veo_task_v2;
 pub mod reference_wan_image_task_v2;
+// The DashScope pieces the Wan task package and the Qwen-Image package share (image record I3-1 §3).
+mod bailian_image;
 pub mod reference_xai_task_v2;
 
 // Embeddings contract 1 (docs/design/2026-09-30-embeddings-contract.md, v1 scope §15).
