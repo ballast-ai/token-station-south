@@ -1,0 +1,66 @@
+{
+  "auth": {
+    "scheme": "bearer",
+    "secret": "provider_api_key"
+  },
+  "body": {
+    "input": [
+      {
+        "content": [
+          {
+            "text": "a",
+            "type": "input_text"
+          },
+          {
+            "image_url": "https://x.test/i.png",
+            "type": "input_image"
+          },
+          {
+            "text": "b",
+            "type": "input_text"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "arguments": "{\"city\":\"Beijing\"}",
+        "call_id": "c1",
+        "name": "get_weather",
+        "type": "function_call"
+      },
+      {
+        "call_id": "c1",
+        "output": "18C\nsunny",
+        "type": "function_call_output"
+      }
+    ],
+    "instructions": "Rules.\nMore rules.",
+    "model": "gpt-5.5",
+    "parallel_tool_calls": false,
+    "reasoning": {
+      "effort": "low"
+    },
+    "store": false,
+    "tools": [
+      {
+        "description": "Look up weather",
+        "name": "get_weather",
+        "parameters": {
+          "properties": {
+            "city": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "strict": true,
+        "type": "function"
+      }
+    ]
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "method": "POST",
+  "url": "https://api.openai.com/v1/responses"
+}

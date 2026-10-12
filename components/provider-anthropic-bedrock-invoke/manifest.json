@@ -49,6 +49,9 @@
     "filesystem": false,
     "secrets": []
   },
+  "host_values": [
+    "end_user_hash"
+  ],
   "conformance": {
     "required_suite": "south.provider-component.v1",
     "fixtures": "fixtures-anthropic-bedrock-invoke/"

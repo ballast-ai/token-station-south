@@ -1,0 +1,75 @@
+{
+  "provider_config": {
+    "provider": "bedrock",
+    "base_url": "https://bedrock-runtime.us-east-1.amazonaws.com",
+    "models": [
+      {
+        "model": "anthropic.claude-x-v1:0",
+        "tool": true,
+        "vision": true,
+        "json_schema": false,
+        "context_window": 200000,
+        "supported_parameters": [
+          "bedrock.converse.cache_point",
+          "bedrock.converse.cache_point.tools",
+          "bedrock.converse.cache_point.ttl_1h"
+        ]
+      }
+    ]
+  },
+  "chat_request": {
+    "model": "anthropic.claude-x-v1:0",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Weather in Beijing?"
+      },
+      {
+        "role": "assistant",
+        "tool_calls": [
+          {
+            "id": "tu_1",
+            "name": "get_weather",
+            "arguments": "{\"city\":\"Beijing\"}"
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "tu_1",
+        "content": [
+          {
+            "type": "text",
+            "text": "18C"
+          },
+          {
+            "type": "text",
+            "text": "sunny",
+            "cache_control": {
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          }
+        ]
+      }
+    ],
+    "tools": [
+      {
+        "name": "get_weather",
+        "description": "Look up weather",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "city": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    ],
+    "tool_choice": "auto",
+    "sampling": {
+      "max_output_tokens": 512
+    }
+  }
+}

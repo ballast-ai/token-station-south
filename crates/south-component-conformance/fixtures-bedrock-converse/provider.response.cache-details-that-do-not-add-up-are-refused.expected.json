@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "provider_protocol_error",
+    "http_status": 502,
+    "message": "a Converse cacheDetails report must list each of 5m and 1h at most once with a non-negative inputTokens, summing to cacheWriteInputTokens"
+  }
+}

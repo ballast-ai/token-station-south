@@ -1451,3 +1451,19 @@ fn kc1_retires_every_r3_package_identity() {
         );
     }
 }
+
+/// KC1 record §5: the two Anthropic-family packages read the host's per-tenant end-user hash
+/// (`end_user_hash`, mapped to `metadata.user_id`); no other package declares a host value.
+#[test]
+fn only_the_anthropic_family_declares_the_end_user_hash() {
+    for package in shipped_packages() {
+        let manifest: ComponentManifestV1 =
+            serde_json::from_str(&std::fs::read_to_string(package.join("manifest.json")).unwrap())
+                .unwrap();
+        let expected: &[&str] = match manifest.name.as_str() {
+            "provider-anthropic" | "provider-anthropic-bedrock-invoke" => &["end_user_hash"],
+            _ => &[],
+        };
+        assert_eq!(manifest.host_values, expected, "{}", manifest.name);
+    }
+}

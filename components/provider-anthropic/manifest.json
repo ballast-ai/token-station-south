@@ -23,6 +23,9 @@
       "provider_api_key"
     ]
   },
+  "host_values": [
+    "end_user_hash"
+  ],
   "conformance": {
     "required_suite": "south.provider-component.v1",
     "fixtures": "fixtures-anthropic/"
