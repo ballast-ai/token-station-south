@@ -2,7 +2,7 @@
 
 Status: accepted (lv, 2026-10-10: the remaining S-tagged questions ruled, §16) — drafted by the host team
 (token-station-server P21). Step R1 implemented 2026-10-10, released in 0.54.0 (§17, §17.5). Step R3's south half
-(the `openai-codex` family) implemented 2026-10-12, unreleased: `2026-10-12-responses-r3-codex-and-request-fields.md` §9.
+(the `openai-codex` family) implemented 2026-10-12, released in 0.56.0 (measurement pending): `2026-10-12-responses-r3-codex-and-request-fields.md` §9.
 
 Date: 2026-09-30
 
@@ -1005,7 +1005,7 @@ Per boundary R4, each is marked `verified` under `host_capabilities` only once b
 | R0 | Host | Owner rulings R-Q1 to R-Q5 are recorded (§16), including the 2026-10-01 extensions under R-Q1 (relayed failure frames) and R-Q2 (`content_filter`); the south halves of R-Q1 and R-Q5 remain. Fix or accept the suspected defects of §13.5 in the native leg first (P21 §9 practice) | — |
 | R1 | South | Package with `openai-responses`: reference implementation, fixtures, judges, wasm build. Needs umbrella B1 (usage strictness), B2 (`request_facts`, descriptor auth admission) and B3 (the package declares `runtime_abi` and must be listed in the release index), and `decode_sse_v1` from the image world's minor (amended 2026-10-10: R1 does not need it, since the component splits its own stream; the host's pass-through needs it, from 0.53.0, umbrella §13.13) | Suite green; listed in the release index with the upstreams that have a fixture pack (§3.3). **Implemented 2026-10-10, released in 0.54.0 (§17, §17.5)**: suite green; OpenAI's pack only (R-Q16); listed in the 0.54.0 release index |
 | R2 | Host | Route provider rows to the family, one upstream at a time and only upstreams with a fixture pack; refuse `previous_response_id` on the northbound side; dual run; remove `supports_responses` / `upstream_requires_responses` branching for covered rows | §13.2 |
-| R3 | South + host | `openai-codex`: needs boundary B4 (recipes) and the host's recipe executor | Credential fixtures and gate ③ suite green; §13.2 on Codex rows. **South half implemented 2026-10-12, unreleased** (`2026-10-12-responses-r3-codex-and-request-fields.md` §9; the §3.2 measurement there is pending) |
+| R3 | South + host | `openai-codex`: needs boundary B4 (recipes) and the host's recipe executor | Credential fixtures and gate ③ suite green; §13.2 on Codex rows. **South half implemented 2026-10-12, released in 0.56.0** (`2026-10-12-responses-r3-codex-and-request-fields.md` §9; the §3.2 measurement there is pending) |
 | R4 | Host | Retire the code of §13.4 | J1 count falls; removing the package leaves the host compiling, testing and starting (J3) |
 
 ### 13.2 Dual-run reconciliation
@@ -1472,3 +1472,5 @@ the package under the 0.54.0 runtime of the release tree.
 - 2026-10-12: that record shipped in 0.55.0; the NC-1 pointer says so.
 - 2026-10-12: step R3 is designed in `2026-10-12-responses-r3-codex-and-request-fields.md` (accepted) and its south half
   implemented there (§9, unreleased); the header and §13.1 R3 row point to it.
+- 2026-10-12: R3 shipped in 0.56.0 before its §3.2 staging measurement (lv); rows are not cut over to `openai-codex` until it
+  is recorded.
