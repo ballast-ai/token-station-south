@@ -772,6 +772,8 @@ fn host_feedback_sf12_to_sf17_retires_every_published_044_package_identity() {
 /// already moved to the unreleased 2.3.0 (#150), which this change does not retire again. Every
 /// package now needs `canonical_ir` 3, which no runtime before 0.46.0 records, so under the
 /// declared-runtime discipline each declares `south_runtime` 0.46.0.
+/// The `south_runtime` each package declared when this test was written is no longer pinned: KC1
+/// raised every package to 0.57.0 (`kc1_retires_every_r3_package_identity`).
 #[test]
 fn the_kernel_repin_retires_every_published_045_package_identity() {
     for (name, published) in [
@@ -800,10 +802,6 @@ fn the_kernel_repin_retires_every_published_045_package_identity() {
         assert_ne!(manifest.version, published, "{name} reused its published identity");
         // The kernel tuple itself moved on with the KC1 re-pin (protocol 0.6.0, `canonical_ir` 4);
         // `kc1_retires_every_r3_package_identity` pins the current one.
-        assert_eq!(
-            manifest.compatibility.south_runtime, "0.46.0",
-            "{name}: needs canonical_ir 3, which 0.46.0 is the first runtime to record"
-        );
     }
 }
 
@@ -813,6 +811,8 @@ fn the_kernel_repin_retires_every_published_045_package_identity() {
 /// published with 0.46.0 retires, or the release's digest-stability check would refuse it. Their
 /// `south_runtime` stays 0.46.0: under the declared-runtime discipline it names the oldest runtime
 /// a package needs, and none of them needs anything newer.
+/// The `south_runtime` each package declared when this test was written is no longer pinned: KC1
+/// raised every package to 0.57.0 (`kc1_retires_every_r3_package_identity`).
 #[test]
 fn the_embeddings_world_retires_every_published_046_package_identity() {
     for (name, published) in [
@@ -839,10 +839,6 @@ fn the_embeddings_world_retires_every_published_046_package_identity() {
         )
         .unwrap();
         assert_ne!(manifest.version, published, "{name} reused its published identity");
-        assert_eq!(
-            manifest.compatibility.south_runtime, "0.46.0",
-            "{name}: needs nothing newer than 0.46.0, so it declares 0.46.0"
-        );
     }
 }
 
@@ -853,24 +849,26 @@ fn the_embeddings_world_retires_every_published_046_package_identity() {
 /// digest-stability check would refuse it. Each keeps its `south_runtime`: under the
 /// declared-runtime discipline it names the oldest runtime a package needs, and none of them needs
 /// anything newer than it did.
+/// The `south_runtime` each package declared when this test was written is no longer pinned: KC1
+/// raised every package to 0.57.0 (`kc1_retires_every_r3_package_identity`).
 #[test]
 fn the_embeddings_value_channel_retires_every_published_047_package_identity() {
-    for (name, published, runtime) in [
-        ("provider-openai-compatible", "2.4.1", "0.46.0"),
-        ("provider-anthropic", "1.0.13", "0.46.0"),
-        ("provider-gemini", "1.1.9", "0.46.0"),
-        ("provider-bedrock-converse", "1.0.10", "0.46.0"),
-        ("provider-bedrock-converse-bearer", "1.0.2", "0.46.0"),
-        ("task-kling", "1.0.9", "0.46.0"),
-        ("task-kling-v2", "0.32.7", "0.46.0"),
-        ("task-minimax-v2", "0.31.6", "0.46.0"),
-        ("task-bailian-v2", "0.31.6", "0.46.0"),
-        ("task-xai-v2", "0.35.6", "0.46.0"),
-        ("task-byteplus-v2", "0.36.6", "0.46.0"),
-        ("task-veo-v2", "0.35.6", "0.46.0"),
-        ("task-wan-image-v2", "0.35.6", "0.46.0"),
-        ("task-gmi-image-v2", "0.35.6", "0.46.0"),
-        ("embeddings-openai-compatible", "1.0.0", "0.47.0"),
+    for (name, published) in [
+        ("provider-openai-compatible", "2.4.1"),
+        ("provider-anthropic", "1.0.13"),
+        ("provider-gemini", "1.1.9"),
+        ("provider-bedrock-converse", "1.0.10"),
+        ("provider-bedrock-converse-bearer", "1.0.2"),
+        ("task-kling", "1.0.9"),
+        ("task-kling-v2", "0.32.7"),
+        ("task-minimax-v2", "0.31.6"),
+        ("task-bailian-v2", "0.31.6"),
+        ("task-xai-v2", "0.35.6"),
+        ("task-byteplus-v2", "0.36.6"),
+        ("task-veo-v2", "0.35.6"),
+        ("task-wan-image-v2", "0.35.6"),
+        ("task-gmi-image-v2", "0.35.6"),
+        ("embeddings-openai-compatible", "1.0.0"),
     ] {
         let manifest: ComponentManifestV1 = serde_json::from_str(
             &std::fs::read_to_string(
@@ -880,10 +878,6 @@ fn the_embeddings_value_channel_retires_every_published_047_package_identity() {
         )
         .unwrap();
         assert_ne!(manifest.version, published, "{name} reused its published identity");
-        assert_eq!(
-            manifest.compatibility.south_runtime, runtime,
-            "{name}: needs nothing newer than {runtime}, so it declares {runtime}"
-        );
     }
 }
 
@@ -893,25 +887,27 @@ fn the_embeddings_value_channel_retires_every_published_047_package_identity() {
 /// packages published with 0.48.0, so each identity retires, or the release's digest-stability
 /// check would refuse it. Each keeps its `south_runtime`: under the declared-runtime discipline it
 /// names the oldest runtime a package needs, and none of them needs anything newer than it did.
+/// The `south_runtime` each package declared when this test was written is no longer pinned: KC1
+/// raised every package to 0.57.0 (`kc1_retires_every_r3_package_identity`).
 #[test]
 fn host_feedback_sf27_retires_every_published_048_package_identity() {
-    for (name, published, runtime) in [
-        ("provider-openai-compatible", "2.4.2", "0.46.0"),
-        ("provider-anthropic", "1.0.14", "0.46.0"),
-        ("provider-gemini", "1.1.10", "0.46.0"),
-        ("provider-bedrock-converse", "1.0.11", "0.46.0"),
-        ("provider-bedrock-converse-bearer", "1.0.3", "0.46.0"),
-        ("task-kling", "1.0.10", "0.46.0"),
-        ("task-kling-v2", "0.32.8", "0.46.0"),
-        ("task-minimax-v2", "0.31.7", "0.46.0"),
-        ("task-bailian-v2", "0.31.7", "0.46.0"),
-        ("task-xai-v2", "0.35.7", "0.46.0"),
-        ("task-byteplus-v2", "0.36.7", "0.46.0"),
-        ("task-veo-v2", "0.35.7", "0.46.0"),
-        ("task-wan-image-v2", "0.35.7", "0.46.0"),
-        ("task-gmi-image-v2", "0.35.7", "0.46.0"),
-        ("embeddings-openai-compatible", "1.0.1", "0.47.0"),
-        ("embeddings-vertex", "1.0.0", "0.48.0"),
+    for (name, published) in [
+        ("provider-openai-compatible", "2.4.2"),
+        ("provider-anthropic", "1.0.14"),
+        ("provider-gemini", "1.1.10"),
+        ("provider-bedrock-converse", "1.0.11"),
+        ("provider-bedrock-converse-bearer", "1.0.3"),
+        ("task-kling", "1.0.10"),
+        ("task-kling-v2", "0.32.8"),
+        ("task-minimax-v2", "0.31.7"),
+        ("task-bailian-v2", "0.31.7"),
+        ("task-xai-v2", "0.35.7"),
+        ("task-byteplus-v2", "0.36.7"),
+        ("task-veo-v2", "0.35.7"),
+        ("task-wan-image-v2", "0.35.7"),
+        ("task-gmi-image-v2", "0.35.7"),
+        ("embeddings-openai-compatible", "1.0.1"),
+        ("embeddings-vertex", "1.0.0"),
     ] {
         let manifest: ComponentManifestV1 = serde_json::from_str(
             &std::fs::read_to_string(
@@ -921,10 +917,6 @@ fn host_feedback_sf27_retires_every_published_048_package_identity() {
         )
         .unwrap();
         assert_ne!(manifest.version, published, "{name} reused its published identity");
-        assert_eq!(
-            manifest.compatibility.south_runtime, runtime,
-            "{name}: needs nothing newer than {runtime}, so it declares {runtime}"
-        );
     }
 }
 
@@ -942,25 +934,27 @@ fn host_feedback_sf27_retires_every_published_048_package_identity() {
 /// v0.50.0 rather than a second one: `provider-anthropic` 1.0.16 also carries B6-2's behavior
 /// changes (I-Q7, I-Q12), and the other packages' bytes change again under unchanged identities,
 /// which no published release has seen.
+/// The `south_runtime` each package declared when this test was written is no longer pinned: KC1
+/// raised every package to 0.57.0 (`kc1_retires_every_r3_package_identity`).
 #[test]
 fn embeddings_contract_2_retires_every_published_050_package_identity() {
-    for (name, published, runtime) in [
-        ("provider-openai-compatible", "2.4.3", "0.46.0"),
-        ("provider-anthropic", "1.0.15", "0.46.0"),
-        ("provider-gemini", "1.1.11", "0.46.0"),
-        ("provider-bedrock-converse", "1.0.12", "0.46.0"),
-        ("provider-bedrock-converse-bearer", "1.0.4", "0.46.0"),
-        ("task-kling", "1.0.11", "0.46.0"),
-        ("task-kling-v2", "0.32.9", "0.46.0"),
-        ("task-minimax-v2", "0.31.8", "0.46.0"),
-        ("task-bailian-v2", "0.31.8", "0.46.0"),
-        ("task-byteplus-v2", "0.36.8", "0.46.0"),
-        ("task-xai-v2", "0.35.8", "0.46.0"),
-        ("task-veo-v2", "0.35.8", "0.46.0"),
-        ("task-wan-image-v2", "0.35.8", "0.46.0"),
-        ("task-gmi-image-v2", "0.35.8", "0.46.0"),
-        ("embeddings-openai-compatible", "1.0.2", "0.47.0"),
-        ("embeddings-vertex", "1.0.1", "0.48.0"),
+    for (name, published) in [
+        ("provider-openai-compatible", "2.4.3"),
+        ("provider-anthropic", "1.0.15"),
+        ("provider-gemini", "1.1.11"),
+        ("provider-bedrock-converse", "1.0.12"),
+        ("provider-bedrock-converse-bearer", "1.0.4"),
+        ("task-kling", "1.0.11"),
+        ("task-kling-v2", "0.32.9"),
+        ("task-minimax-v2", "0.31.8"),
+        ("task-bailian-v2", "0.31.8"),
+        ("task-byteplus-v2", "0.36.8"),
+        ("task-xai-v2", "0.35.8"),
+        ("task-veo-v2", "0.35.8"),
+        ("task-wan-image-v2", "0.35.8"),
+        ("task-gmi-image-v2", "0.35.8"),
+        ("embeddings-openai-compatible", "1.0.2"),
+        ("embeddings-vertex", "1.0.1"),
     ] {
         let manifest: ComponentManifestV1 = serde_json::from_str(
             &std::fs::read_to_string(
@@ -970,10 +964,6 @@ fn embeddings_contract_2_retires_every_published_050_package_identity() {
         )
         .unwrap();
         assert_ne!(manifest.version, published, "{name} reused its published identity");
-        assert_eq!(
-            manifest.compatibility.south_runtime, runtime,
-            "{name}: needs nothing newer than {runtime}, so it declares {runtime}"
-        );
     }
     // The Gemini package's published identity (1.0.2) is retired by its minor.
     let gemini: ComponentManifestV1 = serde_json::from_str(
@@ -987,6 +977,8 @@ fn embeddings_contract_2_retires_every_published_050_package_identity() {
 /// `provider-anthropic-bedrock-invoke` uses only declarations `provider-bedrock-converse` uses under
 /// runtime 0.46.0 (design record §12), so 0.46.0 is the oldest runtime that admits it and the
 /// package declares it; `scripts/check-declared-runtime.sh` loads it under that runtime's tag.
+/// Since 0.57.0 every package declares 0.57.0, the first runtime that records `canonical_ir` 4
+/// (KC1), which still refuses the older runtime below.
 #[test]
 fn the_invoke_package_declares_the_runtime_converse_declares() {
     let read = |name: &str| -> ComponentManifestV1 {
@@ -1000,7 +992,7 @@ fn the_invoke_package_declares_the_runtime_converse_declares() {
     };
     let invoke = read("provider-anthropic-bedrock-invoke");
     assert_eq!(invoke.version, "1.1.0");
-    assert_eq!(invoke.compatibility.south_runtime, "0.46.0");
+    assert_eq!(invoke.compatibility.south_runtime, "0.57.0");
     assert_eq!(invoke.compatibility, read("provider-bedrock-converse").compatibility);
 }
 
@@ -1010,27 +1002,29 @@ fn the_invoke_package_declares_the_runtime_converse_declares() {
 /// (workspace still 0.51.1) gave a different `component.wasm` for all eighteen packages published
 /// with 0.51.1, so each identity retires, or the release's digest-stability check would refuse it.
 /// Each keeps its `south_runtime`: none needs anything newer than it did.
+/// The `south_runtime` each package declared when this test was written is no longer pinned: KC1
+/// raised every package to 0.57.0 (`kc1_retires_every_r3_package_identity`).
 #[test]
 fn the_image_world_retires_every_published_0511_package_identity() {
-    for (name, published, runtime) in [
-        ("provider-openai-compatible", "2.4.4", "0.46.0"),
-        ("provider-anthropic", "1.0.16", "0.46.0"),
-        ("provider-anthropic-bedrock-invoke", "1.0.0", "0.46.0"),
-        ("provider-gemini", "1.1.12", "0.46.0"),
-        ("provider-bedrock-converse", "1.0.13", "0.46.0"),
-        ("provider-bedrock-converse-bearer", "1.0.5", "0.46.0"),
-        ("task-kling", "1.0.12", "0.46.0"),
-        ("task-kling-v2", "0.32.10", "0.46.0"),
-        ("task-minimax-v2", "0.31.9", "0.46.0"),
-        ("task-bailian-v2", "0.31.9", "0.46.0"),
-        ("task-xai-v2", "0.35.9", "0.46.0"),
-        ("task-byteplus-v2", "0.36.9", "0.46.0"),
-        ("task-veo-v2", "0.35.9", "0.46.0"),
-        ("task-wan-image-v2", "0.35.9", "0.46.0"),
-        ("task-gmi-image-v2", "0.35.9", "0.46.0"),
-        ("embeddings-openai-compatible", "1.0.3", "0.47.0"),
-        ("embeddings-gemini", "1.1.0", "0.51.0"),
-        ("embeddings-vertex", "1.0.2", "0.48.0"),
+    for (name, published) in [
+        ("provider-openai-compatible", "2.4.4"),
+        ("provider-anthropic", "1.0.16"),
+        ("provider-anthropic-bedrock-invoke", "1.0.0"),
+        ("provider-gemini", "1.1.12"),
+        ("provider-bedrock-converse", "1.0.13"),
+        ("provider-bedrock-converse-bearer", "1.0.5"),
+        ("task-kling", "1.0.12"),
+        ("task-kling-v2", "0.32.10"),
+        ("task-minimax-v2", "0.31.9"),
+        ("task-bailian-v2", "0.31.9"),
+        ("task-xai-v2", "0.35.9"),
+        ("task-byteplus-v2", "0.36.9"),
+        ("task-veo-v2", "0.35.9"),
+        ("task-wan-image-v2", "0.35.9"),
+        ("task-gmi-image-v2", "0.35.9"),
+        ("embeddings-openai-compatible", "1.0.3"),
+        ("embeddings-gemini", "1.1.0"),
+        ("embeddings-vertex", "1.0.2"),
     ] {
         let manifest: ComponentManifestV1 = serde_json::from_str(
             &std::fs::read_to_string(
@@ -1040,22 +1034,20 @@ fn the_image_world_retires_every_published_0511_package_identity() {
         )
         .unwrap();
         assert_ne!(manifest.version, published, "{name} reused its published identity");
-        assert_eq!(
-            manifest.compatibility.south_runtime, runtime,
-            "{name}: needs nothing newer than {runtime}, so it declares {runtime}"
-        );
     }
 }
 
 /// `image-azure` is the first package of the image world, which the 0.52.0 runtime is the first
 /// to know, so that is the runtime it declares (boundary record §13.6).
+/// Since 0.57.0 every package declares 0.57.0, the first runtime that records `canonical_ir` 4
+/// (KC1), which still refuses the older runtime below.
 #[test]
 fn the_image_azure_package_declares_the_first_runtime_with_the_world() {
     let manifest: ComponentManifestV1 = serde_json::from_str(
         &std::fs::read_to_string(repo_root().join("components/image-azure/manifest.json")).unwrap(),
     )
     .unwrap();
-    assert_eq!(manifest.compatibility.south_runtime, "0.52.0");
+    assert_eq!(manifest.compatibility.south_runtime, "0.57.0");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
 }
 
@@ -1063,6 +1055,8 @@ fn the_image_azure_package_declares_the_first_runtime_with_the_world() {
 /// admits the contract 1 text package, and it declares it: a host that claims 0.46.0 refuses it
 /// through the declared runtime alone, even with embeddings contract 1 in its range. (The Gemini
 /// package declares a later runtime, the one whose gate 1 admits `media`.)
+/// Since 0.57.0 every package declares 0.57.0, the first runtime that records `canonical_ir` 4
+/// (KC1), which still refuses the older runtime below.
 #[test]
 fn the_embeddings_packages_declare_the_first_runtime_with_the_world() {
     let mut on_046 = host_range::host_range();
@@ -1074,7 +1068,7 @@ fn the_embeddings_packages_declare_the_first_runtime_with_the_world() {
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(manifest.compatibility.south_runtime, "0.47.0", "{name}");
+    assert_eq!(manifest.compatibility.south_runtime, "0.57.0", "{name}");
     assert!(
         matches!(
             compatibility_admits(&manifest, &on_046),
@@ -1088,6 +1082,8 @@ fn the_embeddings_packages_declare_the_first_runtime_with_the_world() {
 /// admits in the 0.51.0 runtime (embeddings record §17.4), so that is the oldest runtime that admits
 /// it and the package declares it: a host that claims 0.50.0 refuses it through the declared runtime
 /// alone, even with contract 2 in its range. Contract 1 hosts refuse it through the contract number.
+/// Since 0.57.0 every package declares 0.57.0, the first runtime that records `canonical_ir` 4
+/// (KC1), which still refuses the older runtime below.
 #[test]
 fn the_gemini_package_declares_the_first_runtime_with_media_and_contract_2() {
     let manifest: ComponentManifestV1 = serde_json::from_str(
@@ -1095,7 +1091,7 @@ fn the_gemini_package_declares_the_first_runtime_with_media_and_contract_2() {
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(manifest.compatibility.south_runtime, "0.51.0");
+    assert_eq!(manifest.compatibility.south_runtime, "0.57.0");
     assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
     let mut on_050 = host_range::host_range();
     "0.50.0".clone_into(&mut on_050.south_runtime);
@@ -1116,6 +1112,8 @@ fn the_gemini_package_declares_the_first_runtime_with_media_and_contract_2() {
 /// so that is the oldest runtime that admits it and the package declares it: a host that claims
 /// 0.47.0 refuses it through the declared runtime alone, even with embeddings contract 1 in its
 /// range.
+/// Since 0.57.0 every package declares 0.57.0, the first runtime that records `canonical_ir` 4
+/// (KC1), which still refuses the older runtime below.
 #[test]
 fn the_vertex_package_declares_the_first_runtime_with_the_embeddings_value_channel() {
     let manifest: ComponentManifestV1 = serde_json::from_str(
@@ -1125,7 +1123,7 @@ fn the_vertex_package_declares_the_first_runtime_with_the_embeddings_value_chann
         .unwrap(),
     )
     .unwrap();
-    assert_eq!(manifest.compatibility.south_runtime, "0.48.0");
+    assert_eq!(manifest.compatibility.south_runtime, "0.57.0");
     let mut on_047 = host_range::host_range();
     "0.47.0".clone_into(&mut on_047.south_runtime);
     assert!(matches!(
@@ -1238,28 +1236,30 @@ fn embeddings_gemini_retires_its_published_identities_with_contract_2() {
 /// new version (0.51.0 → 0.52.0, Q47) and every `component.wasm` changes: each identity published
 /// with 0.53.0 retires, or the release's digest-stability check would refuse it. Each keeps its
 /// `south_runtime`: none needs anything newer than it did.
+/// The `south_runtime` each package declared when this test was written is no longer pinned: KC1
+/// raised every package to 0.57.0 (`kc1_retires_every_r3_package_identity`).
 #[test]
 fn the_responses_package_retires_every_published_053_package_identity() {
-    for (name, published, runtime) in [
-        ("provider-openai-compatible", "2.4.5", "0.46.0"),
-        ("provider-anthropic", "1.0.17", "0.46.0"),
-        ("provider-anthropic-bedrock-invoke", "1.0.1", "0.46.0"),
-        ("provider-gemini", "1.1.13", "0.46.0"),
-        ("provider-bedrock-converse", "1.0.14", "0.46.0"),
-        ("provider-bedrock-converse-bearer", "1.0.6", "0.46.0"),
-        ("task-kling", "1.0.13", "0.46.0"),
-        ("task-kling-v2", "0.32.11", "0.46.0"),
-        ("task-minimax-v2", "0.31.10", "0.46.0"),
-        ("task-bailian-v2", "0.31.10", "0.46.0"),
-        ("task-xai-v2", "0.35.10", "0.46.0"),
-        ("task-byteplus-v2", "0.36.10", "0.46.0"),
-        ("task-veo-v2", "0.35.10", "0.46.0"),
-        ("task-wan-image-v2", "0.35.10", "0.46.0"),
-        ("task-gmi-image-v2", "0.35.10", "0.46.0"),
-        ("embeddings-openai-compatible", "1.0.4", "0.47.0"),
-        ("embeddings-gemini", "1.1.1", "0.51.0"),
-        ("embeddings-vertex", "1.0.3", "0.48.0"),
-        ("image-azure", "1.0.0", "0.52.0"),
+    for (name, published) in [
+        ("provider-openai-compatible", "2.4.5"),
+        ("provider-anthropic", "1.0.17"),
+        ("provider-anthropic-bedrock-invoke", "1.0.1"),
+        ("provider-gemini", "1.1.13"),
+        ("provider-bedrock-converse", "1.0.14"),
+        ("provider-bedrock-converse-bearer", "1.0.6"),
+        ("task-kling", "1.0.13"),
+        ("task-kling-v2", "0.32.11"),
+        ("task-minimax-v2", "0.31.10"),
+        ("task-bailian-v2", "0.31.10"),
+        ("task-xai-v2", "0.35.10"),
+        ("task-byteplus-v2", "0.36.10"),
+        ("task-veo-v2", "0.35.10"),
+        ("task-wan-image-v2", "0.35.10"),
+        ("task-gmi-image-v2", "0.35.10"),
+        ("embeddings-openai-compatible", "1.0.4"),
+        ("embeddings-gemini", "1.1.1"),
+        ("embeddings-vertex", "1.0.3"),
+        ("image-azure", "1.0.0"),
     ] {
         let manifest: ComponentManifestV1 = serde_json::from_str(
             &std::fs::read_to_string(
@@ -1269,10 +1269,6 @@ fn the_responses_package_retires_every_published_053_package_identity() {
         )
         .unwrap();
         assert_ne!(manifest.version, published, "{name} reused its published identity");
-        assert_eq!(
-            manifest.compatibility.south_runtime, runtime,
-            "{name}: needs nothing newer than {runtime}, so it declares {runtime}"
-        );
     }
 }
 
@@ -1281,6 +1277,8 @@ fn the_responses_package_retires_every_published_053_package_identity() {
 /// ships this change, is the oldest runtime that admits it and the package declares it, as
 /// `embeddings-gemini` declared 0.51.0 (#167): a host that claims 0.53.0 refuses it through the
 /// declared runtime alone.
+/// Since 0.57.0 every package declares 0.57.0, the first runtime that records `canonical_ir` 4
+/// (KC1), which still refuses the older runtime below.
 #[test]
 fn the_responses_package_declares_the_runtime_that_first_admits_its_declarations() {
     let manifest: ComponentManifestV1 = serde_json::from_str(
@@ -1293,7 +1291,7 @@ fn the_responses_package_declares_the_runtime_that_first_admits_its_declarations
     // 1.0.0 shipped in 0.54.0; NC-1 made 1.1.0, R3 1.2.0 and KC1 1.3.0 (below), with the same runtime: the
     // Codex `credentials` section uses only forms the 0.54.0 gate ① admits.
     assert_eq!(manifest.version, "1.3.0");
-    assert_eq!(manifest.compatibility.south_runtime, "0.54.0");
+    assert_eq!(manifest.compatibility.south_runtime, "0.57.0");
     assert!(!manifest.immutable_body_paths.is_empty() && !manifest.north_passthrough.is_empty());
     assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
     let mut on_053 = host_range::host_range();
@@ -1311,29 +1309,31 @@ fn the_responses_package_declares_the_runtime_that_first_admits_its_declarations
 /// published with 0.54.0 retires. Behaviour changes take a minor version (the Responses package's
 /// replay, the two NP-Q4 refusals); every other package takes a patch. None needs a newer runtime:
 /// the replay word is data in `supported_parameters`, not a manifest field.
+/// The `south_runtime` each package declared when this test was written is no longer pinned: KC1
+/// raised every package to 0.57.0 (`kc1_retires_every_r3_package_identity`).
 #[test]
 fn nc1_retires_every_published_054_package_identity() {
-    for (name, published, runtime) in [
-        ("provider-openai-compatible", "2.4.6", "0.46.0"),
-        ("provider-anthropic", "1.0.18", "0.46.0"),
-        ("provider-anthropic-bedrock-invoke", "1.0.2", "0.46.0"),
-        ("provider-gemini", "1.1.14", "0.46.0"),
-        ("provider-bedrock-converse", "1.0.15", "0.46.0"),
-        ("provider-bedrock-converse-bearer", "1.0.7", "0.46.0"),
-        ("provider-openai-responses", "1.0.0", "0.54.0"),
-        ("task-kling", "1.0.14", "0.46.0"),
-        ("task-kling-v2", "0.32.12", "0.46.0"),
-        ("task-minimax-v2", "0.31.11", "0.46.0"),
-        ("task-bailian-v2", "0.31.11", "0.46.0"),
-        ("task-xai-v2", "0.35.11", "0.46.0"),
-        ("task-byteplus-v2", "0.36.11", "0.46.0"),
-        ("task-veo-v2", "0.35.11", "0.46.0"),
-        ("task-wan-image-v2", "0.35.11", "0.46.0"),
-        ("task-gmi-image-v2", "0.35.11", "0.46.0"),
-        ("embeddings-openai-compatible", "1.0.5", "0.47.0"),
-        ("embeddings-gemini", "1.1.2", "0.51.0"),
-        ("embeddings-vertex", "1.0.4", "0.48.0"),
-        ("image-azure", "1.0.1", "0.52.0"),
+    for (name, published) in [
+        ("provider-openai-compatible", "2.4.6"),
+        ("provider-anthropic", "1.0.18"),
+        ("provider-anthropic-bedrock-invoke", "1.0.2"),
+        ("provider-gemini", "1.1.14"),
+        ("provider-bedrock-converse", "1.0.15"),
+        ("provider-bedrock-converse-bearer", "1.0.7"),
+        ("provider-openai-responses", "1.0.0"),
+        ("task-kling", "1.0.14"),
+        ("task-kling-v2", "0.32.12"),
+        ("task-minimax-v2", "0.31.11"),
+        ("task-bailian-v2", "0.31.11"),
+        ("task-xai-v2", "0.35.11"),
+        ("task-byteplus-v2", "0.36.11"),
+        ("task-veo-v2", "0.35.11"),
+        ("task-wan-image-v2", "0.35.11"),
+        ("task-gmi-image-v2", "0.35.11"),
+        ("embeddings-openai-compatible", "1.0.5"),
+        ("embeddings-gemini", "1.1.2"),
+        ("embeddings-vertex", "1.0.4"),
+        ("image-azure", "1.0.1"),
     ] {
         let manifest: ComponentManifestV1 = serde_json::from_str(
             &std::fs::read_to_string(
@@ -1343,10 +1343,6 @@ fn nc1_retires_every_published_054_package_identity() {
         )
         .unwrap();
         assert_ne!(manifest.version, published, "{name} reused its published identity");
-        assert_eq!(
-            manifest.compatibility.south_runtime, runtime,
-            "{name}: needs nothing newer than {runtime}, so it declares {runtime}"
-        );
     }
 }
 
@@ -1356,29 +1352,31 @@ fn nc1_retires_every_published_054_package_identity() {
 /// 0.54.0, Q47) and every `component.wasm` changes: each identity published with 0.55.0 retires.
 /// The Responses package's new family and body fields take a minor version; every other package a
 /// patch. None needs a newer runtime: the Codex section uses only manifest forms 0.54.0 admits.
+/// The `south_runtime` each package declared when this test was written is no longer pinned: KC1
+/// raised every package to 0.57.0 (`kc1_retires_every_r3_package_identity`).
 #[test]
 fn r3_retires_every_published_055_package_identity() {
-    for (name, published, runtime) in [
-        ("provider-openai-compatible", "2.5.0", "0.46.0"),
-        ("provider-anthropic", "1.0.19", "0.46.0"),
-        ("provider-anthropic-bedrock-invoke", "1.0.3", "0.46.0"),
-        ("provider-gemini", "1.2.0", "0.46.0"),
-        ("provider-bedrock-converse", "1.0.16", "0.46.0"),
-        ("provider-bedrock-converse-bearer", "1.0.8", "0.46.0"),
-        ("provider-openai-responses", "1.1.0", "0.54.0"),
-        ("task-kling", "1.0.15", "0.46.0"),
-        ("task-kling-v2", "0.32.13", "0.46.0"),
-        ("task-minimax-v2", "0.31.12", "0.46.0"),
-        ("task-bailian-v2", "0.31.12", "0.46.0"),
-        ("task-xai-v2", "0.35.12", "0.46.0"),
-        ("task-byteplus-v2", "0.36.12", "0.46.0"),
-        ("task-veo-v2", "0.35.12", "0.46.0"),
-        ("task-wan-image-v2", "0.35.12", "0.46.0"),
-        ("task-gmi-image-v2", "0.35.12", "0.46.0"),
-        ("embeddings-openai-compatible", "1.0.6", "0.47.0"),
-        ("embeddings-gemini", "1.1.3", "0.51.0"),
-        ("embeddings-vertex", "1.0.5", "0.48.0"),
-        ("image-azure", "1.0.2", "0.52.0"),
+    for (name, published) in [
+        ("provider-openai-compatible", "2.5.0"),
+        ("provider-anthropic", "1.0.19"),
+        ("provider-anthropic-bedrock-invoke", "1.0.3"),
+        ("provider-gemini", "1.2.0"),
+        ("provider-bedrock-converse", "1.0.16"),
+        ("provider-bedrock-converse-bearer", "1.0.8"),
+        ("provider-openai-responses", "1.1.0"),
+        ("task-kling", "1.0.15"),
+        ("task-kling-v2", "0.32.13"),
+        ("task-minimax-v2", "0.31.12"),
+        ("task-bailian-v2", "0.31.12"),
+        ("task-xai-v2", "0.35.12"),
+        ("task-byteplus-v2", "0.36.12"),
+        ("task-veo-v2", "0.35.12"),
+        ("task-wan-image-v2", "0.35.12"),
+        ("task-gmi-image-v2", "0.35.12"),
+        ("embeddings-openai-compatible", "1.0.6"),
+        ("embeddings-gemini", "1.1.3"),
+        ("embeddings-vertex", "1.0.5"),
+        ("image-azure", "1.0.2"),
     ] {
         let manifest: ComponentManifestV1 = serde_json::from_str(
             &std::fs::read_to_string(
@@ -1388,10 +1386,6 @@ fn r3_retires_every_published_055_package_identity() {
         )
         .unwrap();
         assert_ne!(manifest.version, published, "{name} reused its published identity");
-        assert_eq!(
-            manifest.compatibility.south_runtime, runtime,
-            "{name}: needs nothing newer than {runtime}, so it declares {runtime}"
-        );
     }
 }
 
@@ -1400,8 +1394,9 @@ fn r3_retires_every_published_055_package_identity() {
 /// `end_user_hash` host value, 0.52.0 → 0.53.0) and `south-component-conformance` (0.54.0 →
 /// 0.55.0, Q47). The tuple is package content and every `component.wasm` changes, so each identity
 /// R3 left for 0.56.0 retires. The seven provider packages change behaviour (markers, `top_k`,
-/// typed reasoning) and take a minor version; the others a patch. `south_runtime` moves to the
-/// release that carries the re-pin at the release step (record §2.4), as the 0.46.0 re-pin did.
+/// typed reasoning) and take a minor version; the others a patch. Every package needs
+/// `canonical_ir` 4, which no runtime before 0.57.0 records, so under the declared-runtime
+/// discipline each declares `south_runtime` 0.57.0 (record §2.4), as the 0.46.0 re-pin did.
 #[test]
 fn kc1_retires_every_r3_package_identity() {
     for (name, r3, now) in [
@@ -1445,6 +1440,10 @@ fn kc1_retires_every_r3_package_identity() {
             "{name}"
         );
         assert_eq!(manifest.compatibility.kernel_version, "0.5.0", "{name}");
+        assert_eq!(
+            manifest.compatibility.south_runtime, "0.57.0",
+            "{name}: needs canonical_ir 4, which 0.57.0 is the first runtime to record"
+        );
         assert_eq!(
             manifest.compatibility.kernel_revision, "c0bca10c2d9f9a439680865feb65c9edf598fc65",
             "{name}: the upstream kernel-v0.6.0 commit the mirror records"

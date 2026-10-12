@@ -211,7 +211,15 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.56.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.52.0, 0.52.0 and 0.54.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.57.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.52.0, 0.53.0 and 0.55.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**v0.57.0 (KC1: canonical IR 4)**: the kernel re-pin to protocol 0.6.0 (mirror `v0.5.0` = `356445c1`, upstream
+`kernel-v0.6.0` = `c0bca10c`, `canonical_ir` 4; release record `docs/design/2026-10-12-release-0.57.0.md`, design record
+`docs/design/2026-10-12-kc1-canonical-ir-4-south.md`). Prompt-cache markers, `top_k`, the caller's reasoning
+configuration and the R-Q15 promotions cross the IR; the Anthropic Messages and Bedrock Invoke builders emit them, the
+Converse packages map markers to `cachePoint` for models declaring `bedrock.converse.cache_point` (`.ttl_1h`, `.tools`),
+and the other dialects drop markers without refusing. New host value `end_user_hash` (`metadata.user_id`). Every package
+declares `south_runtime` 0.57.0, the first runtime that records `canonical_ir` 4.
+
 **v0.56.0 (R3: the Codex family and the four request fields)**: step R3 of the OpenAI Responses upstream (release
 record `docs/design/2026-10-12-release-0.56.0.md`; design record `docs/design/2026-10-12-responses-r3-codex-and-request-fields.md`,
 accepted 2026-10-12). Released before its §3.2 staging measurement by lv's ruling of 2026-10-12: no host row may be cut
