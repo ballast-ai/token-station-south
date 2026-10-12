@@ -124,6 +124,11 @@ fn refused_reference(value: &Value) -> Option<ErrorEnvelope> {
 
 /// The text of a message whose parts must all be text, concatenated.
 fn text_only(content: Option<&Content>, role: &str) -> ComponentResultV1<String> {
+    // Responses has no inline prompt-cache marker: a part list that exists only for its markers
+    // is the joined text it would otherwise be (KC1 record §4.5).
+    if let Some(text) = crate::typed_request::marker_only_text(content) {
+        return Ok(text);
+    }
     match content {
         None => Ok(String::new()),
         Some(Content::Text(text)) => Ok(text.clone()),
@@ -171,8 +176,13 @@ fn user_content(content: Option<&Content>) -> ComponentResultV1<Vec<Value>> {
                         return Err(refusal);
                     }
                     if value.get("type").and_then(Value::as_str) == Some(part::INPUT_AUDIO) {
-                        // Responses vocabulary the IR does not model: forwarded unchanged.
-                        return Ok(value.clone());
+                        // Responses vocabulary the IR does not model: forwarded unchanged, but
+                        // for a prompt-cache marker, which this wire has no place for (KC1 §4.5).
+                        let mut value = value.clone();
+                        if let Some(object) = value.as_object_mut() {
+                            object.remove("cache_control");
+                        }
+                        return Ok(value);
                     }
                     Err(unmappable(value))
                 }

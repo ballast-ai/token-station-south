@@ -159,7 +159,14 @@ fn message_to_openai_for_model(
     if message.content.is_none() {
         out.insert("content".to_owned(), Value::Null);
     }
-    if let Some(content) = &message.content {
+    // This wire has no inline prompt-cache marker (KC1 record §4.3): a system prompt or tool
+    // result that is a part list only for its markers renders as the string it would otherwise be.
+    let content = if matches!(message.role, Role::System | Role::Tool) {
+        crate::typed_request::without_markers(message.content.as_ref())
+    } else {
+        message.content.as_ref().map(std::borrow::Cow::Borrowed)
+    };
+    if let Some(content) = content.as_deref() {
         match content {
             Content::Text(text) => {
                 out.insert("content".to_owned(), json!(text));
@@ -197,7 +204,13 @@ fn message_to_openai_for_model(
                             if !native {
                                 return Err(unmappable_part("OpenAI Chat Completions", value));
                             }
-                            multimodal.push(value.clone());
+                            // A native part keeps its shape; a prompt-cache marker on it is
+                            // dropped like any other on this wire (KC1 record §4.3).
+                            let mut value = value.clone();
+                            if let Some(object) = value.as_object_mut() {
+                                object.remove("cache_control");
+                            }
+                            multimodal.push(value);
                         }
                     }
                 }

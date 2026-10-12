@@ -16,12 +16,15 @@
 //! carrying a replay `signature` that a later turn must return untouched.
 
 use serde_json::{Map, Value, json};
-use south_provider_api::{ComponentMetadataV1, PROVIDER_WORLD};
+use south_provider_api::{
+    ComponentMetadataV1, HOST_VALUE_END_USER_HASH, PROVIDER_WORLD, is_end_user_hash,
+};
 use std::collections::BTreeSet;
 use token_station_protocol::{
-    Auth, ChatRequest, ChatResponse, Choice, Content, ContentPart, ErrorCode, ErrorEnvelope,
-    Extensions, FinishReason, HttpMethod, HttpRequestDescriptor, HttpResponseParts, Message,
-    ProviderApi, ProviderConfig, Role, SafeHeaders, StreamEvent, ToolCall, ToolChoice, Usage,
+    Auth, CacheControl, ChatRequest, ChatResponse, Choice, Content, ContentPart, ErrorCode,
+    ErrorEnvelope, Extensions, FinishReason, HttpMethod, HttpRequestDescriptor, HttpResponseParts,
+    Message, ProviderApi, ProviderConfig, Role, SafeHeaders, StreamEvent, ToolCall, ToolChoice,
+    Usage,
 };
 
 use crate::anthropic_dialect::Dialect;
@@ -71,16 +74,22 @@ pub(crate) fn provider_protocol_error(message: &'static str) -> ErrorEnvelope {
 
 // -- request -----------------------------------------------------------------
 
+/// One text block a `system` message contributes, with its prompt-cache marker.
+type SystemText<'a> = (&'a str, Option<CacheControl>);
+
 /// Text a `system` message contributes. Messages models `system` as a string,
 /// so only text survives (design record D6); empty text contributes nothing
-/// and is skipped so the caller never gets a blank line it did not write.
-fn system_text_of(content: Option<&Content>) -> Vec<&str> {
+/// and is skipped so the caller never gets a blank line it did not write (a
+/// marker on an empty part goes with it: Messages refuses a marker on empty text).
+fn system_text_of(content: Option<&Content>) -> Vec<SystemText<'_>> {
     match content {
-        Some(Content::Text(text)) if !text.is_empty() => vec![text.as_str()],
+        Some(Content::Text(text)) if !text.is_empty() => vec![(text.as_str(), None)],
         Some(Content::Parts(parts)) => parts
             .iter()
             .filter_map(|part| match part {
-                ContentPart::Text { text, .. } if !text.is_empty() => Some(text.as_str()),
+                ContentPart::Text { text, cache_control } if !text.is_empty() => {
+                    Some((text.as_str(), *cache_control))
+                }
                 _ => None,
             })
             .collect(),
@@ -88,19 +97,50 @@ fn system_text_of(content: Option<&Content>) -> Vec<&str> {
     }
 }
 
+/// `system` as Messages takes it: the joined string D6 always sent, unless a block carries a
+/// prompt-cache marker. Joining would move the breakpoint to the end of the prompt, so a marked
+/// system prompt is a block array with each marker in place (KC1 record §4.1, K2).
+fn system_of(system: &[SystemText<'_>]) -> Value {
+    if system.iter().all(|(_, marker)| marker.is_none()) {
+        return json!(system.iter().map(|(text, _)| *text).collect::<Vec<_>>().join("\n"));
+    }
+    Value::Array(
+        system
+            .iter()
+            .map(|(text, marker)| marked(json!({"type": "text", "text": text}), *marker))
+            .collect(),
+    )
+}
+
+/// `block` with the prompt-cache marker, if any, in the kernel's (= Messages') wire form.
+fn marked(mut block: Value, marker: Option<CacheControl>) -> Value {
+    if let Some(marker) = marker {
+        block["cache_control"] = json!(marker);
+    }
+    block
+}
+
 fn part_to_block(part: &ContentPart) -> Value {
     match part {
-        ContentPart::Text { text, .. } => json!({"type": "text", "text": text}),
-        ContentPart::ImageUrl { image_url, .. } => {
+        ContentPart::Text { text, cache_control } => {
+            marked(json!({"type": "text", "text": text}), *cache_control)
+        }
+        ContentPart::ImageUrl { image_url, cache_control } => {
             if let Some(rest) = image_url.url.strip_prefix("data:")
                 && let Some((media_type, data)) = rest.split_once(";base64,")
             {
-                return json!({
-                    "type": "image",
-                    "source": {"type": "base64", "media_type": media_type, "data": data}
-                });
+                return marked(
+                    json!({
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": media_type, "data": data}
+                    }),
+                    *cache_control,
+                );
             }
-            json!({"type": "image", "source": {"type": "url", "url": image_url.url}})
+            marked(
+                json!({"type": "image", "source": {"type": "url", "url": image_url.url}}),
+                *cache_control,
+            )
         }
         // D1: the signature is the upstream's replay ticket and travels
         // untouched. A block whose signature the caller never received simply
@@ -157,6 +197,37 @@ fn content_to_blocks(content: Option<&Content>) -> Option<Value> {
     }
 }
 
+/// The `tool_result` block for a `tool` message.
+///
+/// Unmarked, its content is the text the message carries, as before. When any part carries a
+/// prompt-cache marker (KC1 record §4.1, K2), the content is a text-block array: the last part's
+/// marker becomes the block's own `cache_control`, an earlier part's stays on its text block.
+fn tool_result_block(id: &str, content: Option<&Content>) -> Value {
+    let mut block = json!({"type": "tool_result", "tool_use_id": id});
+    match content {
+        Some(Content::Parts(parts)) if parts.iter().any(|part| part.cache_control().is_some()) => {
+            let last = parts.len() - 1;
+            let inner: Vec<Value> = parts
+                .iter()
+                .enumerate()
+                .filter_map(|(index, part)| match part {
+                    ContentPart::Text { text, cache_control } if !text.is_empty() => Some(marked(
+                        json!({"type": "text", "text": text}),
+                        cache_control.filter(|_| index != last),
+                    )),
+                    _ => None,
+                })
+                .collect();
+            block["content"] = Value::Array(inner);
+            if let Some(marker) = parts[last].cache_control() {
+                block["cache_control"] = json!(marker);
+            }
+        }
+        _ => block["content"] = json!(tool_result_text(content)),
+    }
+    block
+}
+
 /// Text a `tool` message contributes to `tool_result.content`.
 fn tool_result_text(content: Option<&Content>) -> String {
     match content {
@@ -195,8 +266,8 @@ fn tool_use_block(call: &ToolCall) -> ComponentResultV1<Value> {
 
 /// The `system` string and the `messages` array, which Messages models as
 /// siblings even though the IR carries system turns inside `messages`.
-fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<&str>, Vec<Value>)> {
-    let mut system: Vec<&str> = Vec::new();
+fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<SystemText<'_>>, Vec<Value>)> {
+    let mut system: Vec<SystemText<'_>> = Vec::new();
     let mut messages: Vec<Value> = Vec::new();
 
     for message in &request.messages {
@@ -254,11 +325,7 @@ fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<&str>, Vec<V
                 };
                 messages.push(json!({
                     "role": "user",
-                    "content": [{
-                        "type": "tool_result",
-                        "tool_use_id": id,
-                        "content": tool_result_text(message.content.as_ref()),
-                    }],
+                    "content": [tool_result_block(id, message.content.as_ref())],
                 }));
             }
         }
@@ -286,12 +353,20 @@ fn tools_of(request: &ChatRequest) -> (Option<Value>, Option<Value>) {
                         declaration.insert("description".to_owned(), json!(description));
                     }
                     declaration.insert("input_schema".to_owned(), tool.parameters.clone());
+                    // Protocol 0.6.0: Anthropic strict tool use, and the tool's prompt-cache
+                    // marker (KC1 record §4.1).
+                    if let Some(strict) = crate::typed_request::tool_strict(request, tool) {
+                        declaration.insert("strict".to_owned(), json!(strict));
+                    }
+                    if let Some(marker) = tool.cache_control {
+                        declaration.insert("cache_control".to_owned(), json!(marker));
+                    }
                     Value::Object(declaration)
                 })
                 .collect(),
         )
     });
-    let choice = match request.tool_choice.as_ref() {
+    let mut choice = match request.tool_choice.as_ref() {
         Some(ToolChoice::Auto) => Some(json!({"type": "auto"})),
         Some(ToolChoice::Required) => Some(json!({"type": "any"})),
         Some(ToolChoice::Other(value)) => value
@@ -300,6 +375,12 @@ fn tools_of(request: &ChatRequest) -> (Option<Value>, Option<Value>) {
             .map(|name| json!({"type": "tool", "name": name})),
         Some(ToolChoice::None) | None => None,
     };
+    // `parallel_tool_calls: false` is Messages' `disable_parallel_tool_use`, which lives on the
+    // choice; `auto` is what an absent choice means (KC1 record §4.1, KC-Q6).
+    if declarations.is_some() && request.parallel_tool_calls == Some(false) {
+        let choice = choice.get_or_insert_with(|| json!({"type": "auto"}));
+        choice["disable_parallel_tool_use"] = json!(true);
+    }
     (declarations, choice)
 }
 
@@ -324,19 +405,20 @@ pub(crate) fn checked_body_of(
 fn body_of(request: &ChatRequest, dialect: Dialect) -> ComponentResultV1<Value> {
     let (system, messages) = conversation_of(request)?;
     let max_tokens = request.sampling.max_output_tokens.map_or(DEFAULT_MAX_TOKENS, u64::from);
-    let thinking = dialect.thinking(request, Some(max_tokens))?;
+    let thinking = dialect.thinking(request, Some(max_tokens), true)?;
+    let end_user = end_user_hash(request)?;
     let mut body = Map::new();
     if !request.model.is_empty() {
         body.insert("model".to_owned(), json!(request.model));
     }
     if !system.is_empty() {
-        body.insert("system".to_owned(), json!(system.join("\n")));
+        body.insert("system".to_owned(), system_of(&system));
     }
     body.insert("messages".to_owned(), Value::Array(messages));
     body.insert("max_tokens".to_owned(), json!(max_tokens));
     // Dropped rather than approximated when the model or its thinking mode
     // rejects them (see `anthropic_dialect`).
-    if dialect.keeps_sampling(thinking) {
+    if dialect.keeps_sampling(thinking.as_ref()) {
         if let Some(temperature) = request.sampling.temperature {
             body.insert("temperature".to_owned(), json!(temperature));
         }
@@ -344,6 +426,9 @@ fn body_of(request: &ChatRequest, dialect: Dialect) -> ComponentResultV1<Value> 
             && (request.sampling.temperature.is_none() || dialect.keeps_top_p_with_temperature())
         {
             body.insert("top_p".to_owned(), json!(top_p));
+        }
+        if let Some(top_k) = request.sampling.top_k {
+            body.insert("top_k".to_owned(), json!(top_k));
         }
     }
     if !request.sampling.stop.is_empty() {
@@ -360,11 +445,30 @@ fn body_of(request: &ChatRequest, dialect: Dialect) -> ComponentResultV1<Value> 
     if let Some(choice) = choice {
         body.insert("tool_choice".to_owned(), choice);
     }
-    for (key, value) in thinking.into_iter().flat_map(crate::anthropic_dialect::Thinking::fields) {
+    for (key, value) in thinking.iter().flat_map(crate::anthropic_dialect::Thinking::fields) {
         body.insert(key.to_owned(), value);
+    }
+    if let Some(user_id) = end_user {
+        body.insert("metadata".to_owned(), json!({"user_id": user_id}));
     }
 
     Ok(Value::Object(body))
+}
+
+/// The host's per-tenant end-user pseudonym (`host_values.end_user_hash`, KC1 record §5), which
+/// Messages carries as `metadata.user_id`. The host sends it only to a package that declares it;
+/// a value outside the published syntax is a host error, refused before anything is built.
+fn end_user_hash(request: &ChatRequest) -> ComponentResultV1<Option<&str>> {
+    let Some(value) = request.host_values.get(HOST_VALUE_END_USER_HASH) else {
+        return Ok(None);
+    };
+    if !is_end_user_hash(value) {
+        return Err(internal(
+            "host value end_user_hash is not 1 to 128 bytes of [A-Za-z0-9_-]; the host must send \
+             a well-formed per-tenant hash or none",
+        ));
+    }
+    Ok(Some(value))
 }
 
 // -- response ----------------------------------------------------------------

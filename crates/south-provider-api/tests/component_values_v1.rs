@@ -108,7 +108,7 @@ fn the_host_value_vocabulary_is_closed_and_starts_with_the_attempt_id() {
     );
 
     // Absent means none, and it is not serialized, so every shipped manifest is unchanged.
-    let plain = parse(shipped("provider-anthropic"));
+    let plain = parse(shipped("provider-gemini"));
     assert!(plain.host_values.is_empty());
     assert!(serde_json::to_value(&plain).unwrap().get("host_values").is_none());
 }
