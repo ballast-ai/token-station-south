@@ -1544,3 +1544,7 @@ rest of S-I-5 because it depends only on S-I-1a's pure halves. Fixtures are in
   `expected_wire_auth_header` on `ProviderMultipartAuthArmV1` and `ProviderGetAuthArmV1`. The host's `verified` status
   for those two suites in `compatibility.json` is left as it is; the host re-verifies all three suites at the re-pin
   that adds the claim to its adapters.
+- 2026-10-12, approved by lv, released in 0.55.0 (#184): the multipart edit of `image-azure` names its immutable parts
+  (`model`, `n`, `size`, `width`, `height`, `response_format`, `image`, `mask`) in its prepared call, and §7 `prepare`
+  defines `immutable_body_paths` on a multipart descriptor. The doc change in `south-contracts` moves it to 0.52.0
+  (Q47); `image-azure` takes 1.0.2, the one new version NC-1 (#183) gave it in the same release.

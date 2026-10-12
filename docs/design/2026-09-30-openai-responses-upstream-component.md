@@ -735,7 +735,7 @@ North codec follow-ups this record depends on (same repository, separate changes
 
 - **NC-1** Keep every OpenAI reasoning input item in order with its position, instead of two single-valued extensions
   (§4.5). *(2026-10-11: designed, with the gate ③ suite of §12.4, in
-  `2026-10-11-responses-reasoning-replay-and-passthrough-suite.md`, accepted and implemented 2026-10-12, unreleased.)*
+  `2026-10-11-responses-reasoning-replay-and-passthrough-suite.md`, accepted and implemented 2026-10-12, released in 0.55.0.)*
 - **NC-2** Render reasoning items a component placed in `Message.extensions` back onto the Responses wire
   (non-streaming). This is itself a behaviour on an `extensions` key, so it waits for the same D5 answer as R-Q15.
 
@@ -1468,3 +1468,4 @@ the package under the 0.54.0 runtime of the release tree.
   `2026-10-11-responses-reasoning-replay-and-passthrough-suite.md` (proposed); §9 gains a pointer. Nothing else in this
   record changes.
 - 2026-10-12: that record is accepted and implemented (unreleased); the §9 pointer says so.
+- 2026-10-12: that record shipped in 0.55.0; the NC-1 pointer says so.

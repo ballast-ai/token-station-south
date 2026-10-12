@@ -1,8 +1,8 @@
 # OpenAI reasoning replay through the IR (NC-1) and the pass-through delivery suite
 
 Status: accepted (lv, 2026-10-12: NP-Q1 to NP-Q13 ruled as recommended, §8). The two changes it designs were approved
-in principle by lv on 2026-10-11. Implemented on branch `responses-nc1-passthrough` (§9); not released (proposed for
-0.55.0).
+in principle by lv on 2026-10-11. Implemented on branch `responses-nc1-passthrough` (§9), merged as #183; released in 0.55.0
+(`docs/design/2026-10-12-release-0.55.0.md`).
 
 Date: 2026-10-11
 
@@ -616,3 +616,5 @@ workspace version is not touched; this is not a release.
 - 2026-10-11: first draft (proposed).
 - 2026-10-12: lv ruled NP-Q1 to NP-Q13 as recommended; the status is accepted and each question records the ruling.
 - 2026-10-12: implemented (§9, new); the status line notes it.
+- 2026-10-12: released in 0.55.0 with `image-azure` 1.0.2 (#184), which also moved `south-contracts` to 0.52.0; the
+  status line says so.
