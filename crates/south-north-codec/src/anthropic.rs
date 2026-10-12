@@ -45,11 +45,16 @@ use crate::{CodecError, ResponseContext, describe, reasoning_effort, response::p
 /// caller's `thinking` and `output_config.effort` (unconverted), tool `strict` and
 /// `disable_parallel_tool_use` reach their typed IR fields. A marked system prompt keeps one part
 /// per block; an unmarked one stays the joined string it always was. Every other top-level key
-/// travels in `extensions` as data, except `metadata`: the caller's end-user id stays with the
-/// host, which derives the value a component may send (KC-Q4). A top-level key that is an IR key
+/// travels in `extensions` as data (the top-level automatic-caching marker included, KC-Q1),
+/// except `metadata`: the caller's end-user id stays with the host, which derives the value a
+/// component may send (KC-Q4). A top-level key that is an IR key
 /// this wire does not define is refused (KC-Q5), as is an invalid marker anywhere (K6).
 pub fn chat_request_from_anthropic_messages(body: &Value) -> Result<ChatRequest, CodecError> {
     refuse_reserved_keys(body, RESERVED_KEYS)?;
+    // Automatic caching (a top-level marker) has no IR field and travels in `extensions` as data,
+    // so it is still lost on a component row (KC-Q1); it is checked like any marker, so an invalid
+    // one is still a 400 rather than silently accepted.
+    cache_control(body, "")?;
     let model = body.get("model").and_then(Value::as_str).unwrap_or_default().to_owned();
     let mut messages: Vec<Message> = Vec::new();
 

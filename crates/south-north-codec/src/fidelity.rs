@@ -7,7 +7,8 @@ use token_station_protocol::{CacheControl, CacheTtl};
 
 use crate::{CodecError, describe};
 
-/// The block's prompt-cache marker, if it carries one, checked against the closed kernel form.
+/// The block's prompt-cache marker, if it carries one, checked against the closed kernel form. An
+/// empty `path` names the request's own top-level marker.
 ///
 /// The kernel refuses an invalid marker only when IR JSON is deserialized, and this codec builds
 /// parts directly, so it applies the same rule here: `type` absent or `"ephemeral"`, `ttl` absent,
@@ -17,7 +18,8 @@ pub fn cache_control(block: &Value, path: &str) -> Result<Option<CacheControl>, 
     let Some(marker) = block.get("cache_control").filter(|marker| !marker.is_null()) else {
         return Ok(None);
     };
-    let field = format!("{path}.cache_control");
+    let field =
+        if path.is_empty() { "cache_control".to_owned() } else { format!("{path}.cache_control") };
     let Some(object) = marker.as_object() else {
         return Err(CodecError::unknown_value(
             field,

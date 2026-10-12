@@ -298,6 +298,17 @@ fn an_invalid_marker_is_refused_with_its_path() {
     }
 }
 
+/// KC-Q1: the top-level automatic-caching marker has no IR field; it travels as data, and an
+/// invalid one is refused like any other marker.
+#[test]
+fn the_top_level_marker_is_checked_and_kept_as_data() {
+    let request = messages(&json!({"cache_control": {"type": "ephemeral", "ttl": "1h"}})).unwrap();
+    assert_eq!(request.extensions["cache_control"], json!({"type": "ephemeral", "ttl": "1h"}));
+    let error =
+        messages(&json!({"cache_control": {"type": "ephemeral", "ttl": "1d"}})).unwrap_err();
+    assert_eq!(error.field(), "cache_control.ttl");
+}
+
 /// §7.1: the IR the codec writes for the new inputs, as JSON, and its exact round trip.
 #[test]
 fn the_ir_wire_form_of_the_new_fields_is_pinned_and_round_trips() {
