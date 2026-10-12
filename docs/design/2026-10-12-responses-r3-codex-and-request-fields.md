@@ -264,6 +264,12 @@ the measurement and could ship earlier on their own if lv prefers (**RQ3-Q7**); 
   **Ruled (lv, 2026-10-12): as recommended.**
 - **RQ3-Q8** Keep `scope` in the recipe (§2.2 item 1). **Recommended: yes**, until §3.2 (d) shows it is not needed.
   **Ruled (lv, 2026-10-12): as recommended.**
+- **RQ3-Q9** (raised by the implementation, §9 item 8) A 429 from the token endpoint is `transient`, as for
+  `github-copilot`, instead of the vocabulary default `reauth_required`. **Recommended: yes.**
+  **Ruled (lv, 2026-10-12): as recommended.**
+- **RQ3-Q10** (§9 item 2) The recipe's fixtures run in gate ②'s `CredentialRecipeMatch`, not in the host-implemented
+  gate ③ suite. **Recommended: yes.**
+  **Ruled (lv, 2026-10-12): as recommended.**
 
 ## 9. Implementation (2026-10-12)
 
@@ -288,8 +294,8 @@ the package and the Q47 bumps; these notes.
   `credentials` section with `families: ["openai-codex"]`, the three fields, `require_one_of`, `import` from
   `codex-auth-json` (`/tokens/access_token`, `/tokens/refresh_token`, `/tokens/account_id`), and slot
   `provider_api_key` minted by recipe `codex`. The recipe is the test recipe `codex()` with exactly the three §2.2
-  changes (`openai_codex_conformance_v1::the_recipe_is_the_test_recipe_with_the_three_r3_changes` pins the
-  difference). `south_runtime` stays 0.54.0: gate ① at `v0.54.0` admits every form used.
+  changes and item 8 below (`openai_codex_conformance_v1::the_recipe_is_the_test_recipe_with_the_r3_changes` pins
+  the difference). `south_runtime` stays 0.54.0: gate ① at `v0.54.0` admits every form used.
 - **Reference (§3.1).** For `openai-codex`: `{base_url}/codex/responses`, `accept: text/event-stream`,
   `chatgpt-account-id` from `ProviderConfig.declared["account_id"]` only, `stream: true`, a non-streaming request a
   400 capability error at build time, `instructions` defaulted, no `temperature`, no `max_output_tokens`, none of the
@@ -326,7 +332,7 @@ the package and the Q47 bumps; these notes.
    `.invalid` fake endpoint (its constant's contract), its cases are numbered host evidence in `compatibility.json`
    (one host records `credential_recipe` verified with 12 cases), and its `Rotating` kind already exercises the host
    invariants this recipe relies on. Adding the production recipe there would change that evidence, which §6 does not
-   list. **For lv to confirm.**
+   list. **Ruled (lv, 2026-10-12, RQ3-Q10): gate ② as implemented; §3.3 and §7 read accordingly.**
 3. **`response.nonzero-tool-usage` (§3.3)** is the stream row `stream.codex-nonzero-tool-usage`: Codex only
    streams, and the name would repeat the Responses pack's response row.
 4. **The stream sidecar** is opt-in per row; it is not made mandatory for the `stream.usage-terminal` row of every
@@ -340,9 +346,11 @@ the package and the Q47 bumps; these notes.
    (record §10.2) would need `min_ttl_seconds` above it under gate ① (boundary record §13.3).
 7. **No import `seed`** (record §10.2's sketch had one; §2.2 does not): an imported access token is used as stored
    only without a refresh token (`use_stored`); with one, the first request refreshes.
-8. **429 from the token endpoint is `reauth_required`**, the vocabulary default the record keeps (record §10.2, §7
-   here). `github-copilot` declares 429 `transient` so a rate limit does not latch a working credential; whether Codex
-   should do the same is **for lv** (a one-line `on_status` addition, a package change).
+8. **429 from the token endpoint is `transient`.** The vocabulary default is `reauth_required` (record §10.2, §7 here);
+   `github-copilot` declares 429 `transient` so a rate limit does not latch a working credential. **Ruled (lv,
+   2026-10-12, RQ3-Q9): the same for Codex** — the refresh step declares `on_status: {"429": "transient"}`, and the
+   row `credential.on-status.codex-rate-limited` expects `transient`. The host's native arm maps every non-2xx to an
+   operator error (§3.4), so this is one more registered difference for the host's dual run.
 9. **Import file kind** `codex-auth-json`; the three fields carry operator-form descriptions.
 10. **A failure frame whose `response` object has no `id`** (the shape of the host's unit test
     `codex_response_failed_keeps_the_upstream_error_message`) is a provider protocol error, not the mapped failure:
@@ -366,7 +374,7 @@ the package and the Q47 bumps; these notes.
   | Drop the account header | `the_account_header_comes_from_the_declared_attribute_only` |
   | Drop `store` | `codex_requests_never_carry_what_the_family_removes`, `every_request_is_stateless_whatever_the_ir_carries` |
   | Let `stream=false` through | `a_non_streaming_codex_request_is_refused_at_build_time` |
-  | Map 5xx to `reauth_required` (`on_status`) | `the_credential_rows_show_the_r3_test_plan`, `the_recipe_is_the_test_recipe_with_the_three_r3_changes` |
+  | Map 5xx to `reauth_required` (`on_status`) | `the_credential_rows_show_the_r3_test_plan`, `the_recipe_is_the_test_recipe_with_the_r3_changes` |
   | Drop `prompt_cache_key` from the body | `only_the_named_extension_keys_change_the_body`, `the_client_fields_are_held_to_the_codec_bounds` |
   | Skip the stream form of `UsageNeverDefaulted` | `every_codex_stream_row_that_reports_usage_runs_usage_never_defaulted`, `the_stream_usage_check_bites_on_a_component_that_defaults_missing_usage`, `a_stream_sidecar_that_names_nothing_fails_the_check` |
 
@@ -404,3 +412,6 @@ The workspace version and `compatibility.json` are not touched; this is not a re
 - 2026-10-12: lv ruled RQ3-Q1 to RQ3-Q8 as recommended (RQ3-Q6 re-rules the same day's scheduling of the tool-usage
   bucket with R3); the status is accepted.
 - 2026-10-12: implemented (§9, new); the status line notes it. The §3.2 measurement is still pending.
+- 2026-10-12: lv ruled the two implementation questions of §9: RQ3-Q9, a 429 from the token endpoint is `transient` for
+  Codex (item 8; package changed); RQ3-Q10, the recipe's fixtures run in gate ② (item 2). Release order (lv,
+  2026-10-12): this step ships first as 0.56.0; KC1 (canonical IR 4) follows as 0.57.0, rebased onto it.

@@ -359,11 +359,11 @@ fn test_recipe() -> Value {
     })
 }
 
-/// R3 record §2.2: the production recipe is the test recipe with exactly three changes — `scope`
-/// sent, `import` from the Codex CLI's `auth.json`, `account_id` of syntax `token` — scoped to the
-/// Codex family, plus the operator-form descriptions, which nothing interprets.
+/// R3 record §2.2: the production recipe is the test recipe with exactly the R3 changes — `scope`
+/// sent, `import` from the Codex CLI's `auth.json`, `account_id` of syntax `token`, and a 429 from the
+/// token endpoint `transient` (§9 item 8, RQ3-Q9) — scoped to the Codex family, plus the operator-form descriptions, which nothing interprets.
 #[test]
-fn the_recipe_is_the_test_recipe_with_the_three_r3_changes() {
+fn the_recipe_is_the_test_recipe_with_the_r3_changes() {
     let mut expected = test_recipe();
     expected["families"] = json!([CODEX_FAMILY]);
     expected["recipes"]["codex"]["steps"][0]["params"]["scope"] =
@@ -375,6 +375,8 @@ fn the_recipe_is_the_test_recipe_with_the_three_r3_changes() {
         "account_id": import("/tokens/account_id"),
     });
     expected["fields"]["account_id"]["syntax"] = json!("token");
+    // RQ3-Q9 (lv, 2026-10-12): a rate limit on the token endpoint is transient, as for Copilot.
+    expected["recipes"]["codex"]["steps"][0]["on_status"] = json!({"429": "transient"});
 
     let mut shipped = manifest_value()["credentials"].clone();
     for field in shipped["fields"].as_object_mut().unwrap().values_mut() {
@@ -542,7 +544,7 @@ fn the_credential_rows_show_the_r3_test_plan() {
     for (name, outcome) in [
         ("on-status.codex-invalid-grant", "reauth_required"),
         ("on-status.codex-revoked", "reauth_required"),
-        ("on-status.codex-rate-limited", "reauth_required"),
+        ("on-status.codex-rate-limited", "transient"),
         ("on-status.codex-outage", "transient"),
     ] {
         assert!(expected(name)["outcome"].get(outcome).is_some(), "{name}");

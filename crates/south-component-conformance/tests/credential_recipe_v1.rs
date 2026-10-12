@@ -178,8 +178,8 @@ fn the_kling_recipe_builds_the_jwt_the_host_builds_byte_for_byte() {
 // The interpreter, form by form, on the five families of §3.9.
 // ---------------------------------------------------------------------------------------------
 
-/// The recipe step R3 promoted to `provider-openai-responses` 1.2.0 with three changes (`scope`,
-/// `import`, an `account_id` of syntax `token`; R3 record §2.2). The shipped recipe has its own
+/// The recipe step R3 promoted to `provider-openai-responses` 1.2.0 with the R3 changes (`scope`,
+/// `import`, an `account_id` of syntax `token`, R3 record §2.2; 429 `transient`, §9 item 8). The shipped recipe has its own
 /// fixtures in `fixtures-openai-codex/`; `openai_codex_conformance_v1` pins the difference to this
 /// one. This copy stays as it was: it exercises the interpreter's forms.
 fn codex() -> Value {

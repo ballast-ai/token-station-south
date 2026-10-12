@@ -47,8 +47,8 @@ Each row's source:
   without-new-token` (nothing written back), `rotation.codex-account-mismatch` (an `id_token` naming another account:
   `reauth_required`, nothing written back), `clock.codex-fixed-window`, `clock.codex-use-stored` (no refresh token:
   the stored access token is used), `clock.codex-neither-token` (a configuration error naming `access_token`; the
-  host refuses such a credential at save time through `require_one_of`), and `on-status` 400, 401 and 429
-  (`reauth_required`, the defaults the record keeps) and 503 (`transient`). The `id_token` values are unsigned
+  host refuses such a credential at save time through `require_one_of`), and `on-status` 400 and 401
+  (`reauth_required`, the defaults the record keeps), 429 (`transient`, RQ3-Q9) and 503 (`transient`). The `id_token` values are unsigned
   JWTs whose payload names the account; every token is fake.
 
 Expectations were produced by the reference and the reference interpreter, then each was read against the records

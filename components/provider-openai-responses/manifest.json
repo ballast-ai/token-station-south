@@ -129,6 +129,9 @@
                 "const": "openid profile email offline_access"
               }
             },
+            "on_status": {
+              "429": "transient"
+            },
             "extract": {
               "access_token": {
                 "pointer": "/access_token",
