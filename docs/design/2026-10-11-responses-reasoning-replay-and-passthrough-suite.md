@@ -1,7 +1,7 @@
 # OpenAI reasoning replay through the IR (NC-1) and the pass-through delivery suite
 
-Status: proposed — drafted for review on branch `responses-nc1-passthrough`; no code. The two changes it designs were
-approved in principle by lv on 2026-10-11; the numbered questions of §8 are open.
+Status: accepted (lv, 2026-10-12: NP-Q1 to NP-Q13 ruled as recommended, §8). The two changes it designs were approved
+in principle by lv on 2026-10-11. Implementation follows on branch `responses-nc1-passthrough`; not released.
 
 Date: 2026-10-11
 
@@ -468,43 +468,57 @@ streams small enough for that.
   (`responses_opaque_reasoning_items`) and one new value of `reasoning_replay_protocol_family`, which the Responses
   component behaves on, gated by `reasoning_replay.openai.v1`. **Recommended: yes.** R-Q8 rules out the kernel, and
   `host_values` does not fit; promotion to a typed field joins R-Q15's kernel-chain change.
+  **Ruled (lv, 2026-10-12): as recommended.**
 - **NP-Q2** Only items with a non-empty, unmarked `encrypted_content` are replayable; items without it stay summary
   text and are not sent. **Recommended: yes** — on a stateless request the upstream cannot resolve an item by `id`
   alone (**unverified** by capture; item 15 checks it).
+  **Ruled (lv, 2026-10-12): as recommended.**
 - **NP-Q3** `include: ["reasoning.encrypted_content"]` is sent on every request to a model declaring the word, not only
   when the client asked. **Recommended: yes** — the codec does not carry `include`, and the word already says the
   model is a replay target.
+  **Ruled (lv, 2026-10-12): as recommended.**
 - **NP-Q4** The OpenAI-compatible and Gemini references refuse a message carrying the OpenAI family (400) instead of
   dropping the items. **Recommended: yes** (symmetric with the Claude carrier; costs a minor bump of two packages).
+  **Ruled (lv, 2026-10-12): as recommended.**
 - **NP-Q5** The codec stops writing `responses_reasoning_id` / `responses_reasoning_encrypted_content`.
   **Recommended: yes** — nothing in south reads them, the host only strips them, and keeping them would keep the
   overwrite defect visible as data.
+  **Ruled (lv, 2026-10-12): as recommended.**
 - **NP-Q6** Declare `include` in `immutable_body_paths` so operator extras cannot add or strip it. **Recommended: not
   now** — the gate ② check `ImmutablePathsHonoured` requires a path to be in one state across all of a family's rows,
   and `include` depends on the model's word; revisit with a per-declaration form of the check if extras misuse it.
+  **Ruled (lv, 2026-10-12): as recommended.**
 - **NP-Q7** The suite lives in `south-provider-conformance`, scripts the component with abstract verdicts, and takes a
   normal dependency on `south-host-grammars`; the reference executor lives in `south-testkit`. **Recommended: yes**
   (no boundary-allowlist change, no package bump).
+  **Ruled (lv, 2026-10-12): as recommended.**
 - **NP-Q8** Accept the G3 codec half of the render-gaps record (`RelayedResponseIdentity`, `responses_error_event`) and
   ship it with this change. **Recommended: yes** — the suite's failure cases and any host adoption need the one
   failure shape N-Q3 ruled; the rest of that record stays as it is.
+  **Ruled (lv, 2026-10-12): as recommended.**
 - **NP-Q9** Host keep-alive comments under pass-through: allowed only at frame boundaries, ignored by the suite's
   byte comparison, or forbidden. **Recommended: allowed at frame boundaries only** — SSE clients ignore comments, and
   a reasoning model can be silent long enough for intermediaries to drop an idle connection (**unverified** whether
   the host's keep-alive layer runs on this path today).
+  **Ruled (lv, 2026-10-12): as recommended.**
 - **NP-Q10** A terminal frame the upstream ended without a blank line: the host appends the minimal terminator
   (`\n`, or `\n\n` when the frame's last line has no line end) when it releases it, or parks. **Recommended: append**,
   pinned by `stream.terminal-at-end-of-input` — the evidence is complete and settled, and appending framing changes no
   event; parking would put a complete answer into manual review for a framing slip.
+  **Ruled (lv, 2026-10-12): as recommended.**
 - **NP-Q11** Bounds for the OpenAI family: 128 layout entries, 1 MiB per `encrypted_content`, 4 MiB per message, the
   Claude carrier's numbers. **Recommended: yes**; a run is bounded by tool outputs, so long agent sessions do not
   accumulate into one message (**unverified** against real Codex item sizes; item 15 records them).
+  **Ruled (lv, 2026-10-12): as recommended.**
 - **NP-Q12** Non-streaming pass-through also withholds the body until the settlement is persisted (the record states
   only "after `parse-response` succeeded"). **Recommended: yes** — the same settlement-before-visibility guarantee as
   streams.
+  **Ruled (lv, 2026-10-12): as recommended.**
 - **NP-Q13** Ship NC-1 and the suite together in 0.55.0 with image-azure 1.0.2. **Recommended: yes** — the suite alone
   moves no package and could ship earlier, but neither removes a client-visible loss without the other (§1.3, §2.5).
+  **Ruled (lv, 2026-10-12): as recommended.**
 
 ## Revision note
 
 - 2026-10-11: first draft (proposed).
+- 2026-10-12: lv ruled NP-Q1 to NP-Q13 as recommended; the status is accepted and each question records the ruling.
