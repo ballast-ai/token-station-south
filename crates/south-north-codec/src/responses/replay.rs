@@ -15,6 +15,25 @@ const MAX_ENCODED_BYTES: usize = 8 * 1024 * 1024;
 
 pub const CLAUDE_REASONING_REPLAY_CAPABILITY: &str = "reasoning_replay.claude.v1";
 
+/// The model capability that admits `OpenAI` encrypted reasoning replay.
+///
+/// NC-1, `docs/design/2026-10-11-responses-reasoning-replay-and-passthrough-suite.md` §2.3. A
+/// host takes the spelling from here for its reserved-word list; the target component checks it.
+pub const OPENAI_REASONING_REPLAY_CAPABILITY: &str = "reasoning_replay.openai.v1";
+
+/// The `reasoning_replay_protocol_family` value of an assistant turn that carries `OpenAI`'s own
+/// encrypted reasoning items (NC-1 §2.1).
+pub const OPENAI_REASONING_REPLAY_FAMILY: &str = "openai-encrypted-reasoning";
+
+/// The message extension holding an `OpenAI`-family turn's replayable reasoning items, in input
+/// order (NC-1 §2.1).
+pub const OPENAI_REASONING_ITEMS_EXTENSION: &str = "responses_opaque_reasoning_items";
+
+/// NC-1 bounds (§2.1, NP-Q11): the Claude carrier's numbers.
+pub(super) const MAX_OPENAI_LAYOUT_ENTRIES: usize = MAX_BLOCKS;
+pub(super) const MAX_OPENAI_ITEM_BYTES: usize = MAX_OPAQUE_BLOCK_BYTES;
+pub(super) const MAX_OPENAI_MESSAGE_BYTES: usize = MAX_OPAQUE_TOTAL_BYTES;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReasoningReplayBlock {
     Thinking { thinking: String, signature: String },

@@ -119,7 +119,16 @@ fn community_tool_families_i07_i08_i09_i10_i21_restore_o01() {
 #[test]
 fn reasoning_and_response_context_i12_i13_o02_o03_o04_o05_o06_o07() {
     let ir=checked_request(&json!({"model":"m","input":[{"type":"reasoning","id":"rs1","encrypted_content":"opaque","content":[{"type":"reasoning_text","text":"raw"}],"summary":[]},{"type":"function_call","call_id":"c","name":"f","arguments":"{}"}]}),&ResponsesRequestOptions::default()).unwrap();
-    assert_eq!(ir.messages[0].extensions["responses_reasoning_encrypted_content"], "opaque");
+    // NC-1 (NP-Q5): the opaque item is kept whole and in place, not as two single-valued keys.
+    assert_eq!(
+        ir.messages[0].extensions["responses_opaque_reasoning_items"][0]["encrypted_content"],
+        "opaque"
+    );
+    assert_eq!(
+        ir.messages[0].extensions["responses_opaque_reasoning_items"][0]["content"][0]["text"],
+        "raw"
+    );
+    assert!(!ir.messages[0].extensions.contains_key("responses_reasoning_encrypted_content"));
     assert_eq!(ir.messages.len(), 1);
     let mut ir = response();
     ir.choices[0].message.content = Some(Content::Parts(vec![
