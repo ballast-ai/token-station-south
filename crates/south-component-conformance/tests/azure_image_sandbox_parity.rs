@@ -254,7 +254,7 @@ fn the_shipped_package_passes_gate_one_and_the_tuple_handshake() {
     // declares (§8.6): one hex digit off is refused, the true values are accepted.
     let expectations = host_range::exact_expectations_for(&manifest);
     let off_by_one_digit = HostExpectationsV1 {
-        kernel_revision: "8e34f5a089d0b9c7273b49ddb6952dd87e960018".to_owned(),
+        kernel_revision: "c0bca10c2d9f9a439680865feb65c9edf598fc64".to_owned(),
         ..expectations.clone()
     };
     assert!(compatibility_matches(&manifest, &off_by_one_digit).is_err());

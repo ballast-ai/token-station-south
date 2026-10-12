@@ -323,6 +323,7 @@ fn sampling_from_wire(body: &Value) -> Result<Sampling, CodecError> {
                 array.iter().filter_map(|entry| entry.as_str().map(str::to_owned)).collect()
             })
             .unwrap_or_default(),
+        top_k: None,
     })
 }
 
@@ -332,15 +333,16 @@ fn tools_from_wire(tools: Option<&Value>) -> Vec<ToolDef> {
         .map(|array| {
             array
                 .iter()
-                .map(|tool| ToolDef {
-                    name: tool.get("name").and_then(Value::as_str).unwrap_or_default().to_owned(),
-                    description: tool.get("description").and_then(Value::as_str).map(str::to_owned),
-                    // Called `input_schema` on this wire and `parameters` on the
-                    // other; one concept, so one IR field.
-                    parameters: tool
-                        .get("input_schema")
-                        .cloned()
-                        .unwrap_or_else(|| json!({"type": "object", "properties": {}})),
+                .map(|tool| {
+                    ToolDef::new(
+                        tool.get("name").and_then(Value::as_str).unwrap_or_default(),
+                        tool.get("description").and_then(Value::as_str).map(str::to_owned),
+                        // Called `input_schema` on this wire and `parameters` on the
+                        // other; one concept, so one IR field.
+                        tool.get("input_schema")
+                            .cloned()
+                            .unwrap_or_else(|| json!({"type": "object", "properties": {}})),
+                    )
                 })
                 .collect()
         })
@@ -365,9 +367,9 @@ fn tool_choice_from_wire(choice: Option<&Value>) -> Option<ToolChoice> {
 
 fn part_from_wire(part: &Value) -> ContentPart {
     match part.get("type").and_then(Value::as_str) {
-        Some("text") => ContentPart::Text {
-            text: part.get("text").and_then(Value::as_str).unwrap_or_default().to_owned(),
-        },
+        Some("text") => ContentPart::text(
+            part.get("text").and_then(Value::as_str).unwrap_or_default().to_owned(),
+        ),
         Some("image") => {
             let Some(source) = part.get("source") else {
                 return ContentPart::Unknown(part.clone());
@@ -383,7 +385,7 @@ fn part_from_wire(part: &Value) -> ContentPart {
                 }
                 _ => return ContentPart::Unknown(part.clone()),
             };
-            ContentPart::ImageUrl { image_url: ImageUrl { url, detail: None } }
+            ContentPart::ImageUrl { image_url: ImageUrl { url, detail: None }, cache_control: None }
         }
         _ => ContentPart::Unknown(part.clone()),
     }
@@ -409,7 +411,7 @@ fn visible_text(content: Option<&Content>) -> String {
         Some(Content::Parts(parts)) => parts
             .iter()
             .filter_map(|part| match part {
-                ContentPart::Text { text } => Some(text.as_str()),
+                ContentPart::Text { text, .. } => Some(text.as_str()),
                 _ => None,
             })
             .collect::<Vec<_>>()

@@ -88,14 +88,16 @@ fn the_codec_writes_the_extension_keys_the_component_names() {
         "reasoning": {"effort": "low", "summary": "auto"}
     });
     let request = chat_request_from_responses(&body, &ResponsesRequestOptions::default()).unwrap();
-    for key in [
-        extension::TOOL_STRICT,
-        extension::PARALLEL_TOOL_CALLS,
-        extension::REASONING_EFFORT,
-        extension::REASONING_SUMMARY,
-    ] {
+    for key in [extension::TOOL_STRICT, extension::REASONING_SUMMARY] {
         assert!(request.extensions.contains_key(key), "the codec does not write `{key}`");
     }
+    // Protocol 0.6.0 (R-Q15) typed the other three; the wire keys of the first two are unchanged.
+    let wire = serde_json::to_value(&request).unwrap();
+    for key in [extension::PARALLEL_TOOL_CALLS, extension::REASONING_EFFORT] {
+        assert!(!request.extensions.contains_key(key), "`{key}` is typed now");
+        assert!(wire.get(key).is_some(), "the codec does not write `{key}`");
+    }
+    assert_eq!(request.tools[0].strict, Some(true));
     assert_eq!(request.messages[0].extensions[extension::TRANSIENT_INSTRUCTIONS], json!(true));
 }
 
@@ -212,7 +214,7 @@ fn the_codec_s_items_parts_and_incomplete_reasons_are_the_component_s() {
         role: Role::Assistant,
         content: Some(Content::Parts(vec![
             ContentPart::Thinking { thinking: "Hmm.".to_owned(), signature: None },
-            ContentPart::Text { text: "Hi".to_owned() },
+            ContentPart::text("Hi".to_owned()),
         ])),
         tool_calls: vec![ToolCall {
             id: "call_1".to_owned(),
@@ -320,7 +322,7 @@ fn kept(response: &ChatResponse) -> (String, Vec<ToolCall>, Option<FinishReason>
         Some(Content::Parts(parts)) => parts
             .iter()
             .filter_map(|part| match part {
-                ContentPart::Text { text } => Some(text.as_str()),
+                ContentPart::Text { text, .. } => Some(text.as_str()),
                 _ => None,
             })
             .collect(),

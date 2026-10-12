@@ -157,6 +157,7 @@ fn sampling_from_wire(body: &Value) -> Result<Sampling, CodecError> {
             }
             _ => Vec::new(),
         },
+        top_k: None,
     })
 }
 
@@ -171,21 +172,14 @@ fn tools_from_wire(tools: Option<&Value>) -> Vec<ToolDef> {
                     // back to the top level keeps a slightly-off shape from
                     // turning the whole tool into an empty shell.
                     let source = tool.get("function").unwrap_or(tool);
-                    ToolDef {
-                        name: source
-                            .get("name")
-                            .and_then(Value::as_str)
-                            .unwrap_or_default()
-                            .to_owned(),
-                        description: source
-                            .get("description")
-                            .and_then(Value::as_str)
-                            .map(str::to_owned),
-                        parameters: source
+                    ToolDef::new(
+                        source.get("name").and_then(Value::as_str).unwrap_or_default().to_owned(),
+                        source.get("description").and_then(Value::as_str).map(str::to_owned),
+                        source
                             .get("parameters")
                             .cloned()
                             .unwrap_or_else(|| json!({"type": "object", "properties": {}})),
-                    }
+                    )
                 })
                 .collect()
         })
@@ -227,7 +221,7 @@ fn prepend_thinking(message: &mut Message, reasoning: &str) {
             message.content = Some(Content::Parts(parts));
         }
         Some(Content::Text(text)) => {
-            message.content = Some(Content::Parts(vec![thinking, ContentPart::Text { text }]));
+            message.content = Some(Content::Parts(vec![thinking, ContentPart::text(text)]));
         }
         None => message.content = Some(Content::Parts(vec![thinking])),
     }
@@ -250,9 +244,9 @@ fn content_from_wire(content: Option<&Value>) -> Option<Content> {
 
 fn part_from_wire(part: &Value) -> ContentPart {
     match part.get("type").and_then(Value::as_str) {
-        Some("text") => ContentPart::Text {
-            text: part.get("text").and_then(Value::as_str).unwrap_or_default().to_owned(),
-        },
+        Some("text") => ContentPart::text(
+            part.get("text").and_then(Value::as_str).unwrap_or_default().to_owned(),
+        ),
         Some("image_url") => {
             let Some(image) = part.get("image_url") else {
                 return ContentPart::Unknown(part.clone());
@@ -267,6 +261,7 @@ fn part_from_wire(part: &Value) -> ContentPart {
                     url: url.to_owned(),
                     detail: image.get("detail").and_then(Value::as_str).map(str::to_owned),
                 },
+                cache_control: None,
             }
         }
         _ => ContentPart::Unknown(part.clone()),

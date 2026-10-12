@@ -4,8 +4,8 @@ use south_north_codec::{
     *,
 };
 use token_station_protocol::{
-    ChatResponse, Choice, Content, ContentPart, Extensions, FinishReason, Message, Role,
-    StreamEvent, ToolCall, Usage,
+    ChatResponse, Choice, Content, ContentPart, Extensions, FinishReason, Message, ReasoningEffort,
+    Role, StreamEvent, ToolCall, Usage,
 };
 fn context(mode: ResponsesReasoningMode) -> ResponsesContext {
     ResponsesContext {
@@ -46,8 +46,10 @@ fn request_preserves_semantic_options_i01_i02_i11_i14_i15_i16_i17_i18() {
     assert_eq!(ir.messages[0].content, Some(Content::Text("obey".into())));
     assert_eq!(ir.messages[1].role, Role::System);
     assert_eq!(ir.sampling.max_output_tokens, Some(25));
-    assert_eq!(ir.extensions["reasoning_effort"], "high");
-    assert_eq!(ir.extensions["parallel_tool_calls"], false);
+    // Typed since protocol 0.6.0 (R-Q15); the strict map stays as transition data.
+    assert_eq!(ir.reasoning.effort, Some(ReasoningEffort::High));
+    assert_eq!(ir.parallel_tool_calls, Some(false));
+    assert_eq!(ir.tools[0].strict, Some(true));
     assert_eq!(ir.extensions["responses_tool_strict"]["f"], true);
     assert!(ir.response_format.is_some());
     let facade: Value = serde_json::from_str(
@@ -133,7 +135,7 @@ fn reasoning_and_response_context_i12_i13_o02_o03_o04_o05_o06_o07() {
     let mut ir = response();
     ir.choices[0].message.content = Some(Content::Parts(vec![
         ContentPart::Thinking { thinking: "think".into(), signature: Some("signature".into()) },
-        ContentPart::Text { text: "answer".into() },
+        ContentPart::text("answer"),
     ]));
     ir.choices[0].finish_reason = Some(FinishReason::ContentFilter);
     for mode in [ResponsesReasoningMode::RawContent, ResponsesReasoningMode::Summary] {
@@ -376,7 +378,7 @@ fn image_inputs_and_invalid_roles_preserve_only_declared_compatibility_i02_i04_i
     let body = json!({"model":"m","input":[{"role":"user","content":[{"type":"input_image","image_url":"https://example.test/a","detail":"high"}]}]});
     let ir = checked_request(&body, &ResponsesRequestOptions::default()).unwrap();
     assert!(
-        matches!(&ir.messages[0].content,Some(Content::Parts(parts)) if matches!(&parts[0],ContentPart::ImageUrl{image_url} if image_url.detail.as_deref()==Some("high")))
+        matches!(&ir.messages[0].content,Some(Content::Parts(parts)) if matches!(&parts[0],ContentPart::ImageUrl{image_url, ..} if image_url.detail.as_deref()==Some("high")))
     );
     for input in [
         json!([{"type":"message"}]),
@@ -863,10 +865,7 @@ fn text_parts_shape_is_an_independent_compatibility_choice_i04() {
         },
     )
     .unwrap();
-    assert_eq!(
-        parts.messages[0].content,
-        Some(Content::Parts(vec![ContentPart::Text { text: "answer".into() }]))
-    );
+    assert_eq!(parts.messages[0].content, Some(Content::Parts(vec![ContentPart::text("answer")])));
     let text = checked_request(&body, &ResponsesRequestOptions::default()).unwrap();
     assert_eq!(text.messages[0].content, Some(Content::Text("answer".into())));
 }

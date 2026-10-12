@@ -798,15 +798,8 @@ fn the_kernel_repin_retires_every_published_045_package_identity() {
         )
         .unwrap();
         assert_ne!(manifest.version, published, "{name} reused its published identity");
-        assert_eq!(
-            manifest.compatibility.kernel_contracts.get("canonical_ir"),
-            Some(&3),
-            "{name}: built against protocol 0.5.0"
-        );
-        assert_eq!(
-            manifest.compatibility.ir_schema_id, "token-station-protocol@0.5.0/v0.4.0",
-            "{name}"
-        );
+        // The kernel tuple itself moved on with the KC1 re-pin (protocol 0.6.0, `canonical_ir` 4);
+        // `kc1_retires_every_r3_package_identity` pins the current one.
         assert_eq!(
             manifest.compatibility.south_runtime, "0.46.0",
             "{name}: needs canonical_ir 3, which 0.46.0 is the first runtime to record"
@@ -1006,7 +999,7 @@ fn the_invoke_package_declares_the_runtime_converse_declares() {
         .unwrap()
     };
     let invoke = read("provider-anthropic-bedrock-invoke");
-    assert_eq!(invoke.version, "1.0.4");
+    assert_eq!(invoke.version, "1.1.0");
     assert_eq!(invoke.compatibility.south_runtime, "0.46.0");
     assert_eq!(invoke.compatibility, read("provider-bedrock-converse").compatibility);
 }
@@ -1180,9 +1173,9 @@ fn every_shipped_package_declares_the_kernel_the_workspace_pins() {
 #[test]
 fn a_host_recording_the_old_kernel_contract_refuses_every_shipped_package() {
     let this_release = host_range::host_range();
-    assert_eq!(this_release.kernel_contracts.get("canonical_ir"), Some(&3));
+    assert_eq!(this_release.kernel_contracts.get("canonical_ir"), Some(&4));
     let mut previous = this_release.clone();
-    previous.kernel_contracts.insert("canonical_ir".to_owned(), 2);
+    previous.kernel_contracts.insert("canonical_ir".to_owned(), 3);
     let mut seen = 0;
     for package in shipped_packages() {
         let manifest: ComponentManifestV1 =
@@ -1194,8 +1187,8 @@ fn a_host_recording_the_old_kernel_contract_refuses_every_shipped_package() {
                 compatibility_admits(&manifest, &previous),
                 Err(CompatibilityMismatchV2::KernelContract {
                     ref name,
-                    declared: Some(3),
-                    expected: Some(2),
+                    declared: Some(4),
+                    expected: Some(3),
                 }) if name == "canonical_ir"
             ),
             "{}",
@@ -1297,9 +1290,9 @@ fn the_responses_package_declares_the_runtime_that_first_admits_its_declarations
         .unwrap(),
     )
     .unwrap();
-    // 1.0.0 shipped in 0.54.0; NC-1 made 1.1.0 and R3 1.2.0 (below), with the same runtime: the
+    // 1.0.0 shipped in 0.54.0; NC-1 made 1.1.0, R3 1.2.0 and KC1 1.3.0 (below), with the same runtime: the
     // Codex `credentials` section uses only forms the 0.54.0 gate ① admits.
-    assert_eq!(manifest.version, "1.2.0");
+    assert_eq!(manifest.version, "1.3.0");
     assert_eq!(manifest.compatibility.south_runtime, "0.54.0");
     assert!(!manifest.immutable_body_paths.is_empty() && !manifest.north_passthrough.is_empty());
     assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
@@ -1365,27 +1358,27 @@ fn nc1_retires_every_published_054_package_identity() {
 /// patch. None needs a newer runtime: the Codex section uses only manifest forms 0.54.0 admits.
 #[test]
 fn r3_retires_every_published_055_package_identity() {
-    for (name, published, now, runtime) in [
-        ("provider-openai-compatible", "2.5.0", "2.5.1", "0.46.0"),
-        ("provider-anthropic", "1.0.19", "1.0.20", "0.46.0"),
-        ("provider-anthropic-bedrock-invoke", "1.0.3", "1.0.4", "0.46.0"),
-        ("provider-gemini", "1.2.0", "1.2.1", "0.46.0"),
-        ("provider-bedrock-converse", "1.0.16", "1.0.17", "0.46.0"),
-        ("provider-bedrock-converse-bearer", "1.0.8", "1.0.9", "0.46.0"),
-        ("provider-openai-responses", "1.1.0", "1.2.0", "0.54.0"),
-        ("task-kling", "1.0.15", "1.0.16", "0.46.0"),
-        ("task-kling-v2", "0.32.13", "0.32.14", "0.46.0"),
-        ("task-minimax-v2", "0.31.12", "0.31.13", "0.46.0"),
-        ("task-bailian-v2", "0.31.12", "0.31.13", "0.46.0"),
-        ("task-xai-v2", "0.35.12", "0.35.13", "0.46.0"),
-        ("task-byteplus-v2", "0.36.12", "0.36.13", "0.46.0"),
-        ("task-veo-v2", "0.35.12", "0.35.13", "0.46.0"),
-        ("task-wan-image-v2", "0.35.12", "0.35.13", "0.46.0"),
-        ("task-gmi-image-v2", "0.35.12", "0.35.13", "0.46.0"),
-        ("embeddings-openai-compatible", "1.0.6", "1.0.7", "0.47.0"),
-        ("embeddings-gemini", "1.1.3", "1.1.4", "0.51.0"),
-        ("embeddings-vertex", "1.0.5", "1.0.6", "0.48.0"),
-        ("image-azure", "1.0.2", "1.0.3", "0.52.0"),
+    for (name, published, runtime) in [
+        ("provider-openai-compatible", "2.5.0", "0.46.0"),
+        ("provider-anthropic", "1.0.19", "0.46.0"),
+        ("provider-anthropic-bedrock-invoke", "1.0.3", "0.46.0"),
+        ("provider-gemini", "1.2.0", "0.46.0"),
+        ("provider-bedrock-converse", "1.0.16", "0.46.0"),
+        ("provider-bedrock-converse-bearer", "1.0.8", "0.46.0"),
+        ("provider-openai-responses", "1.1.0", "0.54.0"),
+        ("task-kling", "1.0.15", "0.46.0"),
+        ("task-kling-v2", "0.32.13", "0.46.0"),
+        ("task-minimax-v2", "0.31.12", "0.46.0"),
+        ("task-bailian-v2", "0.31.12", "0.46.0"),
+        ("task-xai-v2", "0.35.12", "0.46.0"),
+        ("task-byteplus-v2", "0.36.12", "0.46.0"),
+        ("task-veo-v2", "0.35.12", "0.46.0"),
+        ("task-wan-image-v2", "0.35.12", "0.46.0"),
+        ("task-gmi-image-v2", "0.35.12", "0.46.0"),
+        ("embeddings-openai-compatible", "1.0.6", "0.47.0"),
+        ("embeddings-gemini", "1.1.3", "0.51.0"),
+        ("embeddings-vertex", "1.0.5", "0.48.0"),
+        ("image-azure", "1.0.2", "0.52.0"),
     ] {
         let manifest: ComponentManifestV1 = serde_json::from_str(
             &std::fs::read_to_string(
@@ -1395,10 +1388,66 @@ fn r3_retires_every_published_055_package_identity() {
         )
         .unwrap();
         assert_ne!(manifest.version, published, "{name} reused its published identity");
-        assert_eq!(manifest.version, now, "{name}");
         assert_eq!(
             manifest.compatibility.south_runtime, runtime,
             "{name}: needs nothing newer than {runtime}, so it declares {runtime}"
+        );
+    }
+}
+
+/// KC1 (design record `2026-10-12-kc1-canonical-ir-4-south.md`) re-pins the kernel to mirror
+/// `v0.5.0` (protocol 0.6.0, `canonical_ir` 4) and changes `south-provider-api` (the
+/// `end_user_hash` host value, 0.52.0 → 0.53.0) and `south-component-conformance` (0.54.0 →
+/// 0.55.0, Q47). The tuple is package content and every `component.wasm` changes, so each identity
+/// R3 left for 0.56.0 retires. The seven provider packages change behaviour (markers, `top_k`,
+/// typed reasoning) and take a minor version; the others a patch. `south_runtime` moves to the
+/// release that carries the re-pin at the release step (record §2.4), as the 0.46.0 re-pin did.
+#[test]
+fn kc1_retires_every_r3_package_identity() {
+    for (name, r3, now) in [
+        ("provider-openai-compatible", "2.5.1", "2.6.0"),
+        ("provider-anthropic", "1.0.20", "1.1.0"),
+        ("provider-anthropic-bedrock-invoke", "1.0.4", "1.1.0"),
+        ("provider-gemini", "1.2.1", "1.3.0"),
+        ("provider-bedrock-converse", "1.0.17", "1.1.0"),
+        ("provider-bedrock-converse-bearer", "1.0.9", "1.1.0"),
+        ("provider-openai-responses", "1.2.0", "1.3.0"),
+        ("task-kling", "1.0.16", "1.0.17"),
+        ("task-kling-v2", "0.32.14", "0.32.15"),
+        ("task-minimax-v2", "0.31.13", "0.31.14"),
+        ("task-bailian-v2", "0.31.13", "0.31.14"),
+        ("task-xai-v2", "0.35.13", "0.35.14"),
+        ("task-byteplus-v2", "0.36.13", "0.36.14"),
+        ("task-veo-v2", "0.35.13", "0.35.14"),
+        ("task-wan-image-v2", "0.35.13", "0.35.14"),
+        ("task-gmi-image-v2", "0.35.13", "0.35.14"),
+        ("embeddings-openai-compatible", "1.0.7", "1.0.8"),
+        ("embeddings-gemini", "1.1.4", "1.1.5"),
+        ("embeddings-vertex", "1.0.6", "1.0.7"),
+        ("image-azure", "1.0.3", "1.0.4"),
+    ] {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_ne!(manifest.version, r3, "{name} reused its R3 identity");
+        assert_eq!(manifest.version, now, "{name}");
+        assert_eq!(
+            manifest.compatibility.kernel_contracts.get("canonical_ir"),
+            Some(&4),
+            "{name}: built against protocol 0.6.0"
+        );
+        assert_eq!(
+            manifest.compatibility.ir_schema_id, "token-station-protocol@0.6.0/v0.5.0",
+            "{name}"
+        );
+        assert_eq!(manifest.compatibility.kernel_version, "0.5.0", "{name}");
+        assert_eq!(
+            manifest.compatibility.kernel_revision, "c0bca10c2d9f9a439680865feb65c9edf598fc65",
+            "{name}: the upstream kernel-v0.6.0 commit the mirror records"
         );
     }
 }

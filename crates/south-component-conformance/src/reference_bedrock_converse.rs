@@ -136,8 +136,8 @@ fn text_blocks(content: Option<&Content>, allow_replay: bool) -> Vec<Value> {
 /// reject, refused locally so the message names the part.
 fn part_to_block(part: &ContentPart, allow_replay: bool) -> ComponentResultV1<Option<Value>> {
     match part {
-        ContentPart::Text { text } => Ok(Some(json!({"text": text}))),
-        ContentPart::ImageUrl { image_url } => {
+        ContentPart::Text { text, .. } => Ok(Some(json!({"text": text}))),
+        ContentPart::ImageUrl { image_url, .. } => {
             let url = image_url.url.as_str();
             // Converse takes inline bytes only. An `http(s)` image URL has no
             // representation here at all — saying so beats sending a request
@@ -824,7 +824,7 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-bedrock-converse".to_owned(),
-            version: "1.0.17".to_owned(),
+            version: "1.1.0".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
@@ -866,7 +866,7 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
         for block in blocks {
             if let Some(chunk) = block.get("text").and_then(Value::as_str) {
                 layout.push(json!({"kind":"content","ordinal":content_parts.len()}));
-                content_parts.push(ContentPart::Text { text: chunk.to_owned() });
+                content_parts.push(ContentPart::text(chunk.to_owned()));
                 continue;
             }
             if let Some(reasoning) = block.get("reasoningContent") {
@@ -913,7 +913,7 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
                 content_parts
                     .into_iter()
                     .filter_map(|part| match part {
-                        ContentPart::Text { text } => Some(text),
+                        ContentPart::Text { text, .. } => Some(text),
                         _ => None,
                     })
                     .collect(),
@@ -984,7 +984,7 @@ impl ProviderComponentV1 for BedrockConverseBearerReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-bedrock-converse-bearer".to_owned(),
-            version: "1.0.9".to_owned(),
+            version: "1.1.0".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }

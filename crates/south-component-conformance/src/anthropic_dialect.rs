@@ -198,14 +198,11 @@ impl Dialect {
         let Some(shape) = self.shape else {
             return Ok(None);
         };
-        let Some(effort) = request.extensions.get("reasoning_effort").filter(|v| !v.is_null())
-        else {
+        // Typed since protocol 0.6.0 (R-Q15); before, the same wire key arrived in `extensions`.
+        let Some(effort) = request.reasoning.effort.as_ref() else {
             return Ok(None);
         };
-        let Some(effort) = effort.as_str() else {
-            return Err(capability("reasoning effort must be a string"));
-        };
-        let level = match effort {
+        let level = match effort.as_str() {
             "none" | "minimal" => Level::Floor,
             "low" => Level::Low,
             "medium" => Level::Medium,
@@ -270,7 +267,9 @@ enum Level {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use token_station_protocol::{Message, ModelCapability, ProviderEndpoint, Role, ToolDef};
+    use token_station_protocol::{
+        Message, ModelCapability, ProviderEndpoint, ReasoningEffort, Role, ToolDef,
+    };
 
     fn config(words: &[&str]) -> ProviderConfig {
         let mut config = ProviderConfig::new(
@@ -288,17 +287,13 @@ mod tests {
     fn request(effort: Option<&str>) -> ChatRequest {
         let mut request = ChatRequest::new("m", vec![Message::text(Role::User, "hi")]);
         if let Some(effort) = effort {
-            request.extensions.insert("reasoning_effort".into(), json!(effort));
+            request.reasoning.effort = Some(serde_json::from_value(json!(effort)).unwrap());
         }
         request
     }
 
     fn with_tool(mut request: ChatRequest, choice: ToolChoice) -> ChatRequest {
-        request.tools.push(ToolDef {
-            name: "t".into(),
-            description: None,
-            parameters: json!({"type": "object"}),
-        });
+        request.tools.push(ToolDef::new("t", None, json!({"type": "object"})));
         request.tool_choice = Some(choice);
         request
     }
@@ -417,7 +412,7 @@ mod tests {
         assert!(Dialect::of(&request, &config(&[THINKING_ADAPTIVE, THINKING_BUDGET])).is_err());
         let dialect = Dialect::of(&request, &config(&[THINKING_ADAPTIVE])).unwrap();
         let mut odd = request;
-        odd.extensions.insert("reasoning_effort".into(), json!("max"));
+        odd.reasoning.effort = Some(ReasoningEffort::Other("max".to_owned()));
         assert!(dialect.thinking(&odd, Some(4096)).is_err(), "max is not in the OpenAI vocabulary");
     }
 }

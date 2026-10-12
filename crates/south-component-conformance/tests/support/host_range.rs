@@ -31,9 +31,9 @@ pub const SOUTH_RUNTIME_FLOOR: &str = "0.43.0";
 
 /// The IR, kernel release and kernel revision this release distributes. The range handshake records
 /// them for provenance only; the exact handshake still compares them.
-const IR_SCHEMA_ID: &str = "token-station-protocol@0.5.0/v0.4.0";
-const KERNEL_VERSION: &str = "0.4.0";
-const KERNEL_REVISION: &str = "8e34f5a089d0b9c7273b49ddb6952dd87e960019";
+const IR_SCHEMA_ID: &str = "token-station-protocol@0.6.0/v0.5.0";
+const KERNEL_VERSION: &str = "0.5.0";
+const KERNEL_REVISION: &str = "c0bca10c2d9f9a439680865feb65c9edf598fc65";
 
 /// The South release this tree builds: `[workspace.package] version` in the workspace
 /// `Cargo.toml`, the version the release workflow matches against the tag.

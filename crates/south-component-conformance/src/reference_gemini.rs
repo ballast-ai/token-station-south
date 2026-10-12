@@ -80,8 +80,8 @@ fn unmappable_part(value: &Value) -> ErrorEnvelope {
 
 fn part_to_gemini(part: &ContentPart) -> ComponentResultV1<Value> {
     Ok(match part {
-        ContentPart::Text { text } => json!({"text": text}),
-        ContentPart::ImageUrl { image_url } => {
+        ContentPart::Text { text, .. } => json!({"text": text}),
+        ContentPart::ImageUrl { image_url, .. } => {
             if let Some(rest) = image_url.url.strip_prefix("data:")
                 && let Some((mime, data)) = rest.split_once(";base64,")
             {
@@ -119,7 +119,7 @@ fn system_text_of(content: Option<&Content>) -> Vec<&str> {
         Some(Content::Parts(parts)) => parts
             .iter()
             .filter_map(|part| match part {
-                ContentPart::Text { text } if !text.is_empty() => Some(text.as_str()),
+                ContentPart::Text { text, .. } if !text.is_empty() => Some(text.as_str()),
                 _ => None,
             })
             .collect(),
@@ -182,7 +182,7 @@ fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<&str>, Vec<V
                     Some(Content::Parts(parts)) => parts
                         .iter()
                         .filter_map(|part| match part {
-                            ContentPart::Text { text } => Some(text.as_str()),
+                            ContentPart::Text { text, .. } => Some(text.as_str()),
                             _ => None,
                         })
                         .collect::<Vec<_>>()
@@ -567,7 +567,7 @@ impl ProviderComponentV1 for GeminiReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-gemini".to_owned(),
-            version: "1.2.1".to_owned(),
+            version: "1.3.0".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
@@ -680,7 +680,7 @@ impl ProviderComponentV1 for GeminiReferenceV1 {
         } else {
             let mut parts = thinking;
             if had_text {
-                parts.push(ContentPart::Text { text: joined });
+                parts.push(ContentPart::text(joined));
             }
             Some(Content::Parts(parts))
         };

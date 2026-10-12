@@ -340,7 +340,7 @@ checksum = "f9395f0f0eee849a9b707b2f06bb92a6a422090e2123bb2ef8e87a0e61892a8e"
 
 [[package]]
 name = "south-component-conformance"
-version = "0.54.0"
+version = "0.55.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -363,7 +363,7 @@ dependencies = [
 
 [[package]]
 name = "south-provider-api"
-version = "0.52.0"
+version = "0.53.0"
 dependencies = [
  "serde",
  "thiserror",
@@ -410,7 +410,7 @@ dependencies = [
 
 [[package]]
 name = "task-xai-v2"
-version = "0.35.13"
+version = "0.35.14"
 dependencies = [
  "south-component-conformance",
  "wit-bindgen",
@@ -448,8 +448,8 @@ dependencies = [
 
 [[package]]
 name = "token-station-protocol"
-version = "0.5.0"
-source = "git+https://github.com/ballast-ai/token-station-kernel.git?rev=c2581f37ad468201c903e0d596b59e796173e459#c2581f37ad468201c903e0d596b59e796173e459"
+version = "0.6.0"
+source = "git+https://github.com/ballast-ai/token-station-kernel.git?rev=356445c15b205f610f060b2f26ca9daa690cbd88#356445c15b205f610f060b2f26ca9daa690cbd88"
 dependencies = [
  "serde",
  "serde_json",

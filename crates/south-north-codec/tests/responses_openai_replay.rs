@@ -55,7 +55,7 @@ fn nc1_keeps_every_opaque_reasoning_item_of_a_run_in_order() {
     assert!(
         matches!(&parts[1], ContentPart::Thinking { thinking, signature: None } if thinking == "summary of rs_2")
     );
-    assert!(matches!(&parts[2], ContentPart::Text { text } if text == "done"));
+    assert!(matches!(&parts[2], ContentPart::Text { text, .. } if text == "done"));
     assert_eq!(
         turn.extensions["reasoning_replay_block_layout"],
         json!([
@@ -97,9 +97,9 @@ fn texts_around_an_item_stay_separate_parts_in_place() {
     ]));
     let turn = &request.messages[1];
     let Some(Content::Parts(parts)) = &turn.content else { panic!("parts expected") };
-    assert!(matches!(&parts[0], ContentPart::Text { text } if text == "A"));
+    assert!(matches!(&parts[0], ContentPart::Text { text, .. } if text == "A"));
     assert!(matches!(&parts[1], ContentPart::Thinking { signature: None, .. }));
-    assert!(matches!(&parts[2], ContentPart::Text { text } if text == "B"));
+    assert!(matches!(&parts[2], ContentPart::Text { text, .. } if text == "B"));
     assert_eq!(
         layout(turn),
         &json!([
@@ -158,9 +158,9 @@ fn runs_without_a_replayable_item_are_unchanged() {
     let turn = &request.messages[1];
     assert!(turn.extensions.is_empty(), "{:?}", turn.extensions);
     let Some(Content::Parts(parts)) = &turn.content else { panic!("parts expected") };
-    assert!(matches!(&parts[0], ContentPart::Text { text } if text == "A"));
+    assert!(matches!(&parts[0], ContentPart::Text { text, .. } if text == "A"));
     assert!(matches!(&parts[1], ContentPart::Thinking { thinking, .. } if thinking == "s"));
-    assert!(matches!(&parts[2], ContentPart::Text { text } if text == "B"));
+    assert!(matches!(&parts[2], ContentPart::Text { text, .. } if text == "B"));
 }
 
 #[test]

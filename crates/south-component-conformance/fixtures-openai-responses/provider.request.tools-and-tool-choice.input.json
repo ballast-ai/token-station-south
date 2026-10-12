@@ -34,7 +34,8 @@
             "city"
           ],
           "type": "object"
-        }
+        },
+        "strict": true
       },
       {
         "name": "get_time",
@@ -45,7 +46,8 @@
             }
           },
           "type": "object"
-        }
+        },
+        "strict": false
       }
     ]
   },

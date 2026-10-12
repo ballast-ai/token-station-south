@@ -80,7 +80,7 @@ fn system_text_of(content: Option<&Content>) -> Vec<&str> {
         Some(Content::Parts(parts)) => parts
             .iter()
             .filter_map(|part| match part {
-                ContentPart::Text { text } if !text.is_empty() => Some(text.as_str()),
+                ContentPart::Text { text, .. } if !text.is_empty() => Some(text.as_str()),
                 _ => None,
             })
             .collect(),
@@ -90,8 +90,8 @@ fn system_text_of(content: Option<&Content>) -> Vec<&str> {
 
 fn part_to_block(part: &ContentPart) -> Value {
     match part {
-        ContentPart::Text { text } => json!({"type": "text", "text": text}),
-        ContentPart::ImageUrl { image_url } => {
+        ContentPart::Text { text, .. } => json!({"type": "text", "text": text}),
+        ContentPart::ImageUrl { image_url, .. } => {
             if let Some(rest) = image_url.url.strip_prefix("data:")
                 && let Some((media_type, data)) = rest.split_once(";base64,")
             {
@@ -164,7 +164,7 @@ fn tool_result_text(content: Option<&Content>) -> String {
         Some(Content::Parts(parts)) => parts
             .iter()
             .filter_map(|part| match part {
-                ContentPart::Text { text } => Some(text.as_str()),
+                ContentPart::Text { text, .. } => Some(text.as_str()),
                 _ => None,
             })
             .collect::<Vec<_>>()
@@ -899,7 +899,7 @@ impl ProviderComponentV1 for AnthropicReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-anthropic".to_owned(),
-            version: "1.0.20".to_owned(),
+            version: "1.1.0".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
@@ -967,9 +967,9 @@ impl ProviderComponentV1 for AnthropicReferenceV1 {
             match block["type"].as_str() {
                 Some("text") => {
                     layout.push(json!({"kind":"content","ordinal":content_parts.len()}));
-                    content_parts.push(ContentPart::Text {
-                        text: block["text"].as_str().unwrap_or_default().to_owned(),
-                    });
+                    content_parts.push(ContentPart::text(
+                        block["text"].as_str().unwrap_or_default().to_owned(),
+                    ));
                 }
                 Some("thinking") => {
                     has_reasoning = true;
@@ -1011,7 +1011,7 @@ impl ProviderComponentV1 for AnthropicReferenceV1 {
                 content_parts
                     .into_iter()
                     .filter_map(|part| match part {
-                        ContentPart::Text { text } => Some(text),
+                        ContentPart::Text { text, .. } => Some(text),
                         _ => None,
                     })
                     .collect(),

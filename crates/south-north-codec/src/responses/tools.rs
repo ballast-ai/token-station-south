@@ -98,7 +98,7 @@ fn parse_tools(value: &Value) -> Result<(Vec<ToolDef>, Extensions, ToolMap), Cod
             "web_search" if tool["external_web_access"]==false=>{disabled.push(tool.clone());continue},
             _=>return Err(unsupported_tool(kind, &path)),
         };
-        insert(&mut tools, &mut map, ToolDef { name, description, parameters }, restore, &path)?;
+        insert(&mut tools, &mut map, ToolDef::new(name, description, parameters), restore, &path)?;
     }
     if strict.as_object().is_some_and(|o| !o.is_empty()) {
         extensions.insert("responses_tool_strict".into(), strict);
@@ -124,7 +124,7 @@ fn function_definition(tool: &Value, name: &str, path: &str) -> Result<ToolDef, 
         .filter(|v| !v.is_null())
         .map(|v| required_str(v, &format!("{path}.description")).map(str::to_owned))
         .transpose()?;
-    Ok(ToolDef { name: name.into(), description, parameters })
+    Ok(ToolDef::new(name, description, parameters))
 }
 fn capture_strict(
     tool: &Value,
