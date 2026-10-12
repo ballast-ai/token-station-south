@@ -240,6 +240,10 @@ Exactly `provider-anthropic`'s: anything that package drops or refuses, this one
 because the builder is shared. No InvokeModel-specific loss is introduced. **(inference)** Anthropic features the
 shared builder does not emit today (beta flags, `top_k`, `metadata`, citations, `cache_control` markers that the
 IR does not carry) are not added by this package; see I-Q10 for what that means on the Messages surface.
+*(2026-10-12, KC1, record `2026-10-12-kc1-canonical-ir-4-south.md` §4.1: protocol 0.6.0 carries prompt-cache markers,
+`top_k`, the caller's `thinking`, tool `strict` and `parallel_tool_calls`, and the shared builder now emits them; the
+package declares the `end_user_hash` host value for `metadata.user_id`. Beta flags, citations and `tool_result.is_error`
+are still not carried.)*
 
 ## 5. Response and stream mapping
 

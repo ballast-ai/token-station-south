@@ -1,6 +1,6 @@
 # KC1, south half: canonical IR 4 (prompt-cache markers, top_k, typed reasoning, the R-Q15 promotions)
 
-Status: accepted (lv, 2026-10-12: every question in §9 ruled as recommended; KC-Q10 ruled: R3 ships first as 0.56.0, KC1 ships as 0.57.0). Design only; nothing is implemented yet. The owner rulings it builds on (lv, 2026-10-09) are binding and
+Status: accepted (lv, 2026-10-12: every question in §9 ruled as recommended; KC-Q10 ruled: R3 ships first as 0.56.0, KC1 ships as 0.57.0). Implemented on branch `kc1-canonical-ir-4` (§11); not released. The owner rulings it builds on (lv, 2026-10-09) are binding and
 are not re-opened here; the questions in §9 are the decisions those rulings left open.
 
 Date: 2026-10-12
@@ -110,31 +110,44 @@ The tuple is package content, so all twenty packages change identity (Q47, bound
 because the manifest changes, and because `south-contracts`, `south-provider-api` and `south-component-conformance`
 change, which changes every `component.wasm`).
 
-| Package | 0.55.0 | Proposed | Why |
-|---|---|---|---|
-| `provider-anthropic` | 1.0.19 | 1.1.0 | new request fields (§4.1) |
-| `provider-anthropic-bedrock-invoke` | 1.0.3 | 1.1.0 | shares `body_of` (§4.1) |
-| `provider-bedrock-converse` | 1.0.16 | 1.1.0 | `cachePoint`, `cacheDetails`, typed reasoning (§4.2) |
-| `provider-bedrock-converse-bearer` | 1.0.8 | 1.1.0 | same code as above |
-| `provider-gemini` | 1.2.0 | 1.3.0 | `topK` (§4.4) |
-| `provider-openai-compatible` | 2.5.0 | 2.6.0 | typed reads, Chat `strict` now forwarded (§4.3) |
-| `provider-openai-responses` | 1.1.0 | 1.2.0 | typed reads (§4.5) |
-| `embeddings-*`, `image-azure`, every `task-*` (13 packages) | as published | patch bump | tuple only, no behaviour change |
+Final table (2026-10-12, after the rebase onto the 0.56.0 release `350ab72`, KC-Q10; the middle column is checked
+against the published v0.56.0 index). R3 (#186, `45d068a`) already retired every 0.55.0 identity for the 0.56.0 release and moved `south-component-conformance` to 0.54.0; under Q47 each package and crate
+KC1 changes takes its own bump on top of R3's numbers, and ships in 0.57.0.
 
-`crates/south-component-conformance/tests/shipped_packages_v1.rs` gains a test in the style of
-`the_kernel_repin_retires_every_published_045_package_identity`: no package reuses its 0.55.0 identity and each
-declares the new tuple.
+| Package | 0.55.0 (published) | 0.56.0 (published, R3) | KC1, ships in 0.57.0 | Why |
+|---|---|---|---|---|
+| `provider-anthropic` | 1.0.19 | 1.0.20 | 1.1.0 | markers, `top_k`, verbatim `thinking`, `metadata.user_id` (§4.1) |
+| `provider-anthropic-bedrock-invoke` | 1.0.3 | 1.0.4 | 1.1.0 | shares `body_of` (§4.1) |
+| `provider-bedrock-converse` | 1.0.16 | 1.0.17 | 1.1.0 | `cachePoint`, `cacheDetails`, verbatim `thinking`, `top_k` (§4.2) |
+| `provider-bedrock-converse-bearer` | 1.0.8 | 1.0.9 | 1.1.0 | same code as above |
+| `provider-gemini` | 1.2.0 | 1.2.1 | 1.3.0 | `topK` (§4.4) |
+| `provider-openai-compatible` | 2.5.0 | 2.5.1 | 2.6.0 | typed reads, Chat `strict` forwarded (§4.3) |
+| `provider-openai-responses` | 1.1.0 | 1.2.0 | 1.3.0 | typed reads (§4.5) |
+| `embeddings-openai-compatible` | 1.0.6 | 1.0.7 | 1.0.8 | tuple only |
+| `embeddings-gemini` | 1.1.3 | 1.1.4 | 1.1.5 | tuple only |
+| `embeddings-vertex` | 1.0.5 | 1.0.6 | 1.0.7 | tuple only |
+| `image-azure` | 1.0.2 | 1.0.3 | 1.0.4 | tuple only |
+| `task-kling` | 1.0.15 | 1.0.16 | 1.0.17 | tuple only |
+| `task-kling-v2` | 0.32.13 | 0.32.14 | 0.32.15 | tuple only |
+| `task-minimax-v2`, `task-bailian-v2` | 0.31.12 | 0.31.13 | 0.31.14 | tuple only |
+| `task-byteplus-v2` | 0.36.12 | 0.36.13 | 0.36.14 | tuple only |
+| `task-xai-v2`, `task-veo-v2`, `task-wan-image-v2`, `task-gmi-image-v2` | 0.35.12 | 0.35.13 | 0.35.14 | tuple only |
 
-`south_runtime`: every package declares the release that carries the re-pin (0.56.0 if §8's coordination keeps it
-there). An older runtime's range takes `canonical_ir` 3 from its own `compatibility.json`, so
-`scripts/check-declared-runtime.sh` would refuse any lower declaration, as in the 0.46.0 re-pin (§5 of that record).
-During development the declarations stay at their current values and move together at the release step, because
-`shipped_packages_v1` refuses a `south_runtime` newer than the workspace version; the release also updates whichever
-`host_feedback_*` test asserts the old declarations.
+| Crate (Q47) | 0.55.0 | 0.56.0 | KC1 | Why |
+|---|---|---|---|---|
+| `south-contracts` | 0.52.0 | 0.52.0 | 0.52.0 | unchanged: it does not depend on the kernel and KC1 does not touch it |
+| `south-provider-api` | 0.52.0 | 0.52.0 | 0.53.0 | the `end_user_hash` word and `is_end_user_hash` (§5) |
+| `south-component-conformance` | 0.53.0 | 0.54.0 | 0.55.0 | the kernel types, the dialect changes, `typed_request` |
 
-Crate versions (Q47): `south-contracts` 0.52.0 → 0.53.0, `south-provider-api` 0.52.0 → 0.53.0 (new `HOST_VALUES` word
-and its syntax helper, §5), `south-component-conformance` 0.53.0 → 0.54.0. Minor bumps: each has a public source break
-from the kernel types.
+`crates/south-component-conformance/tests/shipped_packages_v1.rs::kc1_retires_every_r3_package_identity` pins the KC1
+column and the new tuple; `r3_retires_every_published_055_package_identity` drops its "now" column, as each earlier
+retirement test did when the next change came, and the 0.46.0 re-pin test no longer pins the tuple it introduced.
+
+`south_runtime`: every package must declare the release that carries the re-pin (0.57.0). An older runtime's range
+takes `canonical_ir` 3 from its own `compatibility.json`, so `scripts/check-declared-runtime.sh` refuses any lower
+declaration, as in the 0.46.0 re-pin (§5 of that record). During development the declarations keep their current values
+and move together at the release step, because `shipped_packages_v1` refuses a `south_runtime` newer than the workspace
+version; the release also updates every retirement test that pins a package's runtime.
 
 ## 3. North codec
 
@@ -522,7 +535,8 @@ Every existing case must keep its expected output except the ones this table lis
 
 ## 10. Unverified, collected
 
-- The mirror tag `v0.5.0` and the upstream tag `kernel-v0.6.0` do not exist yet; the identifiers in §2.1 are assumed.
+- *(Resolved 2026-10-12: upstream `kernel-v0.6.0` is annotated on `c0bca10c`; mirror `v0.5.0` is `356445c1`, whose
+  `compatibility.json` records `canonical_ir` 4 and `source_commit` `c0bca10c`.)*
 - AWS Converse `cachePoint` TTL support per model and the `cacheDetails` shape come from AWS documentation, not capture;
   whether `cacheDetails` appears in the stream's `metadata` event is not checked.
 - Whether InvokeModel accepts `metadata` (§5.2).
@@ -530,3 +544,51 @@ Every existing case must keep its expected output except the ones this table lis
 - What serde does with a duplicated `sampling` or `host_values` key in the IR JSON (§3.2, §5.3).
 - Who writes the `anthropic_thinking` extension key read in §4.3.
 - Anthropic's `metadata.user_id` length limit (§5.1).
+
+## 11. Implementation (2026-10-12)
+
+Branch `kc1-canonical-ir-4`, rebased on R3 (`45d068a`). Commits, in order: the re-pin with the R-Q15 readers (§2), the
+`end_user_hash` word (§5), the north codec tests then the codec (§3), the gate ② rows then the dialect builders (§4),
+the top-level marker check (KC-Q1), and the records. The mirror is pinned at `356445c15b205f610f060b2f26ca9daa690cbd88`
+(tag `v0.5.0`); every manifest declares `kernel_revision` `c0bca10c2d9f9a439680865feb65c9edf598fc65`.
+
+Where the implementation is more specific than §3 to §5:
+
+- **System prompts stay a string unless marked.** The Messages decode keeps one part per system block only when a block
+  carries a marker; an unmarked array is the joined string it always was. So no unmarked request changes its IR, and
+  the existing system fixture is unchanged. The same holds for `system` / `developer` turns inside `messages`.
+- **A marked tool result carries text only.** As the flattened form did, a non-text block inside a `tool_result` is
+  not carried; a marker on such a block is checked and dropped.
+- **Markers with no IR slot.** A valid marker on a `tool_use`, `thinking` or `redacted_thinking` block is checked and
+  dropped (the kernel has no slot there); recorded as a loss beside KC-Q9.
+- **Dialects without inline markers render a marker-only part list as its joined text.** A system prompt or tool result
+  that is a part list only because of its markers is rendered as the `\n`-joined string it would otherwise have been, by
+  OpenAI-compatible (system and tool turns), Gemini (`systemInstruction`, `functionResponse`), Responses
+  (`instructions`, system items, `function_call_output`) and Converse (`system` without `bedrock.converse.cache_point`,
+  and every `toolResult`, which cannot hold a `cachePoint`). A marker therefore changes nothing else about a request on
+  these wires; the gate ② rows pin it.
+- **The codec reports the new refusals with the existing `unknown_value` and `out_of_range` codes**, with the field
+  path, so a host's mapping of `CodecError` needs no new arm.
+- **Converse** emits a caller's `thinking` and `top_k` only for a model that declares at least one `anthropic.*` dialect
+  word (KC-Q7 b), and exports `CACHE_POINT_PARAMETERS` for hosts that validate the reserved namespace.
+- **Bedrock Invoke declares `end_user_hash`.** The evidence is indirect: the host's native `aws_claude` row forwards the
+  client body, `metadata` included, and serves Claude Code traffic. A capture is still owed (§10).
+- **`south_runtime`** is unchanged on the branch and moves to 0.57.0 at the release step (§2.4);
+  `scripts/check-declared-runtime.sh` refuses the packages under their current declarations until then, as it did
+  during the 0.46.0 re-pin.
+
+### 11.1 Failing first, and the checks
+
+- North codec: with the codec sources of the re-pin commit and the new tests, all 15 tests of
+  `south-north-codec/tests/canonical_ir_4.rs` fail; with the change they pass.
+  `tests/unchanged_ir.rs` pins, byte for byte, the IR the codecs produced before the change for an unmarked Messages
+  request and an unmarked Chat request.
+- Gate ②: with the conformance sources of the commit before the dialect change and the new rows, six suites fail
+  (`gate_two_passes_over_the_shipped_pack` for Anthropic, Bedrock Invoke, Converse, Gemini and Responses, and the
+  OpenAI-compatible pack through `gemini_openai_compatible_v1`); with the change they pass.
+- The release replay (components built by the release scripts, gate ② reports over those bytes, `release_index.py
+  generate` with `--require-gate2-reports`, then `compare` against the published v0.55.0 index) passes: every
+  package changed version, the catalog is unchanged. `check_crate_versions.py` reports `south-provider-api` and
+  `south-component-conformance` moved and `south-contracts` unchanged.
+- `scripts/check-declared-runtime.sh --build` fails for every group, as expected until the release step (§2.4): each
+  older runtime records `canonical_ir` 3, and the 0.46.0 runtime also does not know `end_user_hash`.

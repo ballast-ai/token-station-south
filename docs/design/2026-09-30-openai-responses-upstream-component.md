@@ -1268,6 +1268,10 @@ failure frames) and R-Q2 (`content_filter`).
   **Ruled (lv, 2026-10-10): v1 follows the existing precedent** — the same three keys the compatible reference
   reads, no new key, no behaviour on `responses_reasoning_summary`. Promotion to typed IR fields goes through the
   kernel chain as a separate change, done once for both packages.
+  *(2026-10-12: done by KC1, protocol 0.6.0 / `canonical_ir` 4, record
+  `2026-10-12-kc1-canonical-ir-4-south.md` §2.3: both packages read `ChatRequest.reasoning.effort`,
+  `ChatRequest.parallel_tool_calls` and `ToolDef.strict`, the last falling back to the `responses_tool_strict` map,
+  which the north codec still writes during the transition.)*
 - **R-Q16 (S)** Third-party Responses upstreams (§3.3): admit each to `openai-responses` by a captured-traffic
   fixture pack in this package (recommended while their wire and usage match OpenAI's), or give every non-OpenAI
   upstream its own family from the start. Either way no upstream is routed without its own evidence.
