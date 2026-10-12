@@ -1,6 +1,6 @@
 # KC1, south half: canonical IR 4 (prompt-cache markers, top_k, typed reasoning, the R-Q15 promotions)
 
-Status: accepted (lv, 2026-10-12: every question in §9 ruled as recommended; KC-Q10 ruled: R3 ships first as 0.56.0, KC1 ships as 0.57.0). Implemented on branch `kc1-canonical-ir-4` (§11); not released. The owner rulings it builds on (lv, 2026-10-09) are binding and
+Status: accepted (lv, 2026-10-12: every question in §9 ruled as recommended; KC-Q10 ruled: R3 ships first as 0.56.0, KC1 ships as 0.57.0). Implemented on branch `kc1-canonical-ir-4` (§11), merged as #188; released in 0.57.0 (`docs/design/2026-10-12-release-0.57.0.md`). The owner rulings it builds on (lv, 2026-10-09) are binding and
 are not re-opened here; the questions in §9 are the decisions those rulings left open.
 
 Date: 2026-10-12
@@ -573,9 +573,9 @@ Where the implementation is more specific than §3 to §5:
   word (KC-Q7 b), and exports `CACHE_POINT_PARAMETERS` for hosts that validate the reserved namespace.
 - **Bedrock Invoke declares `end_user_hash`.** The evidence is indirect: the host's native `aws_claude` row forwards the
   client body, `metadata` included, and serves Claude Code traffic. A capture is still owed (§10).
-- **`south_runtime`** is unchanged on the branch and moves to 0.57.0 at the release step (§2.4);
-  `scripts/check-declared-runtime.sh` refuses the packages under their current declarations until then, as it did
-  during the 0.46.0 re-pin.
+- **`south_runtime`** stayed unchanged on the branch and moved to 0.57.0 in the release commit (§2.4); until then
+  `scripts/check-declared-runtime.sh` refused the packages under their old declarations, as it did during the 0.46.0
+  re-pin.
 
 ### 11.1 Failing first, and the checks
 
