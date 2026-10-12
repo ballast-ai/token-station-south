@@ -1548,3 +1548,8 @@ rest of S-I-5 because it depends only on S-I-1a's pure halves. Fixtures are in
   (`model`, `n`, `size`, `width`, `height`, `response_format`, `image`, `mask`) in its prepared call, and §7 `prepare`
   defines `immutable_body_paths` on a multipart descriptor. The doc change in `south-contracts` moves it to 0.52.0
   (Q47); `image-azure` takes 1.0.2, the one new version NC-1 (#183) gave it in the same release.
+- 2026-10-12: step I3-1 (`image-minimax`, `image-qwen`) has its own record,
+  [`2026-10-12-image-i3-1-minimax-and-qwen.md`](2026-10-12-image-i3-1-minimax-and-qwen.md), accepted by lv on
+  2026-10-12 (IM-Q1 to IM-Q7) and implemented on branch `image-i3-1` (its "Implementation" section). The OpenAI-compatible
+  fallback named in §14 / §19 for I3-1 is left out pending the host's decision D9. §13's MiniMax and Bailian Qwen-Image
+  rows are unchanged.

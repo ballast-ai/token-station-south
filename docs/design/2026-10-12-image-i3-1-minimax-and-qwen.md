@@ -1,6 +1,7 @@
 # Image world step I3-1: `image-minimax` and `image-qwen`
 
-Status: accepted (lv, 2026-10-12: IM-Q1 to IM-Q7 ruled as recommended, §8). Not implemented. lv chose on 2026-10-12 that the synchronous image
+Status: accepted (lv, 2026-10-12: IM-Q1 to IM-Q7 ruled as recommended, §8). Implemented on branch `image-i3-1` (see
+"Implementation"); not released. lv chose on 2026-10-12 that the synchronous image
 packages (the image world record's I3 batches) are the next lane, and that each batch's design is reviewed before it is
 built.
 
@@ -158,9 +159,88 @@ patch; `image-minimax` and `image-qwen` start at 1.0.0. Proposed to ship in the 
   and error vocabularies; one package per family matches `image-azure`.
   **Ruled (lv, 2026-10-12): as recommended.**
 
+## Implementation (2026-10-12)
+
+What landed, on branch `image-i3-1`:
+
+- `image-minimax` 1.0.0 and `image-qwen` 1.0.0: manifests, guest crates (thin shells like `image-azure`), references
+  `reference_minimax_image.rs` and `reference_qwen_image.rs`, fixture packs `fixtures-image-minimax/` and
+  `fixtures-image-qwen/` (each with a README), suite tests `minimax_image_suite` and `qwen_image_suite`, sandbox parity
+  tests `minimax_image_sandbox_parity` and `qwen_image_sandbox_parity`, build scripts, and the enumerations
+  (`ci.yml` rust-cache, `release.yml` build / gate ② / package lists, `shipped_packages_v1` official list and a test
+  pinning the two packages' runtime and declared keys, README and ARCHITECTURE).
+- The Bailian helpers (`wan_size`, the `image_url` parts, the pass-through list, the whole-count reader and where the
+  result's images sit) moved from `reference_wan_image_task_v2.rs` to the crate-private module `bailian_image.rs`,
+  which both packages use; `task-wan-image-v2`'s pack passes unchanged. Helpers the two new references share (placeholder
+  to `$south.ref`, status-to-code table, refusal shapes) are in the crate-private module `image_shared.rs`.
+- Q47 (§7): `south-component-conformance` was already 0.55.0 at 0.57.0 (KC1 took 0.54.0 → 0.55.0), so this step
+  moves it **0.55.0 → 0.56.0**, not the 0.54.0 → 0.55.0 written in §7. The fuzz requirement, every component lockfile
+  and `fuzz/Cargo.lock` follow; every published package takes a patch and keeps `south_runtime` 0.57.0
+  (`shipped_packages_v1::i3_1_retires_every_published_057_package_identity`; the KC1 test no longer pins KC1's
+  identities, as KC1 did to R3's).
+- `compatibility.json` needs no change: `media_component_capabilities` records the image contract per host
+  (`not_verified` for both), not per package.
+
+Failing first: with the references written and only three expectations written by hand (`prepare.group-id-sent` and
+`response.base-resp-1026` for MiniMax, `prepare.text-defaults` for Qwen), both pack tests failed on the 74 cases still
+without an expectation and passed the three hand-written ones. The other expectations were then taken from the
+reference and reviewed row by row against §2 and §3. Each of six mutations turns a named test red: dropping `GroupId`
+(`the_group_id_is_sent_only_when_configured`), 1026 as `rejected` (`an_output_violation_is_unknown`,
+`a_body_detected_failure_carries_the_hosts_status`), forwarding `size` (`the_size_is_neither_forwarded_nor_a_fact`), a
+`size` fact when none was sent (`the_size_fact_exists_only_when_the_client_sent_a_size`), an `X-DashScope-Async` header
+(`the_request_is_synchronous`) and ignoring a 2xx `code` (`a_2xx_carrying_a_code_is_unknown`); the pack test goes red
+for each as well.
+
+Versions:
+
+| Item | Before | After |
+|---|---|---|
+| `south-component-conformance` | 0.55.0 | 0.56.0 |
+| `image-minimax` / `image-qwen` | — | 1.0.0 / 1.0.0 (`south_runtime` 0.57.0) |
+| `image-azure` | 1.0.4 | 1.0.5 |
+| `provider-openai-compatible` | 2.6.0 | 2.6.1 |
+| `provider-anthropic`, `provider-anthropic-bedrock-invoke`, `provider-bedrock-converse`, `provider-bedrock-converse-bearer` | 1.1.0 | 1.1.1 |
+| `provider-gemini`, `provider-openai-responses` | 1.3.0 | 1.3.1 |
+| `embeddings-openai-compatible` / `embeddings-gemini` / `embeddings-vertex` | 1.0.8 / 1.1.5 / 1.0.7 | 1.0.9 / 1.1.6 / 1.0.8 |
+| `task-kling` / `task-kling-v2` | 1.0.17 / 0.32.15 | 1.0.18 / 0.32.16 |
+| `task-minimax-v2`, `task-bailian-v2` | 0.31.14 | 0.31.15 |
+| `task-xai-v2`, `task-veo-v2`, `task-wan-image-v2`, `task-gmi-image-v2` | 0.35.14 | 0.35.15 |
+| `task-byteplus-v2` | 0.36.14 | 0.36.15 |
+
+The workspace version, tags and `south_runtime` of the published packages are unchanged.
+
+Decisions where the record is silent:
+
+1. `image_url` on MiniMax is wrapped once: `[{"type": "character", "image_file": <the value>}]`, the value being the
+   client's string or array as sent (elided entries as `$south.ref`). `inputs.reference_image` counts the strings;
+   with `subject_reference` present it counts that array's entries (1 for a non-array value); a `null`
+   `subject_reference` counts as absent.
+2. Native refusal texts were not available; the packages use the record's wording for `n` ("'n' must be in 1..=9 for
+   MiniMax image models (got N)", "… 1..=6 for Bailian Qwen-Image …"), `image-azure`'s "Missing 'prompt' field" and
+   "'prompt' is longer than the gateway accepts" (an elided prompt), and the Wan package's `image_url` texts. The dual
+   run compares status and timing, not text.
+3. MiniMax non-2xx answers follow `image-azure`'s status table (`rejected` for a 4xx other than 408, else `unknown`);
+   a `base_resp.status_code` that is not an integer is `unknown`; a code the host table does not name is `unknown`
+   with a 502 envelope. `base_resp.status_msg` (capped at 256 characters) is the envelope's `provider_message`.
+4. `metadata.success_count` is read as a whole number or a string of digits (MiniMax writes strings); anything else is
+   `null` evidence. Neither package applies "≤ delivered + 1": Q9 keeps it in the host (IM-Q1).
+5. Request elision: MiniMax declares `/subject_reference/*/image_file`, `/image_url` and `/image_url/*` (§2); Qwen
+   declares `/image_url` and `/image_url/*` as well, so data URLs never enter the sandbox. Any forwarded value that
+   reaches `prepare` elided (declared or above the fallback threshold) is written back as an `as_is` `$south.ref`.
+6. Qwen declares `response_formats: [url]` and renders every artifact as `url`, as the native arm answers; MiniMax
+   declares `b64_json` and `url` and renders each artifact in its own form.
+7. Neither package sets `content-type`; like `image-azure`, it relies on the host's JSON body executor.
+8. Qwen's DashScope errors: a `code` containing `DataInspection` is `content_policy`, anything else follows the
+   status; `provider_message` is `code: message`, capped at 256 characters. A 2xx carrying a `code` is `unknown` with
+   a 502 `provider_protocol_error` envelope.
+9. Qwen's `size` fact is read from `WxH`, `WXH` or `W*H` with both edges 1 to 65,536; any other value is forwarded as
+   sent and gives no fact.
+
 ## Revision note
 
 - 2026-10-12: first draft (proposed).
 - 2026-10-12: lv ruled IM-Q1 to IM-Q7 as recommended; the status is accepted. The host takes IM-Q1 (settle
   `images_reported` when 0 < reported ≤ delivered + 1, capped at the reservation) and IM-Q6 (carry the component's
   `http_status`) as host changes.
+- 2026-10-12: implemented on branch `image-i3-1` ("Implementation"); §7's conformance version corrected to
+  0.55.0 → 0.56.0.
