@@ -1,6 +1,6 @@
 # Image world step I3-1: `image-minimax` and `image-qwen`
 
-Status: proposed (2026-10-12). Nothing here is implemented. lv chose on 2026-10-12 that the synchronous image
+Status: accepted (lv, 2026-10-12: IM-Q1 to IM-Q7 ruled as recommended, §8). Not implemented. lv chose on 2026-10-12 that the synchronous image
 packages (the image world record's I3 batches) are the next lane, and that each batch's design is reviewed before it is
 built.
 
@@ -138,19 +138,29 @@ patch; `image-minimax` and `image-qwen` start at 1.0.0. Proposed to ship in the 
 - **IM-Q1** Should the host's image executor adopt Q9's "settle `images_reported` when 0 < reported ≤ delivered + 1"?
   **Recommended: yes, with the reservation as the cap** — it is what both native arms do and what Q9 ruled, and capping
   at the reservation removes host defect §6 item 3. Otherwise register the difference.
+  **Ruled (lv, 2026-10-12): as recommended.**
 - **IM-Q2** Funds on non-2xx follow the P29 allow-list (as P22 Q2 for Azure), registered as a difference from the native
   sync arms. **Recommended: yes.**
+  **Ruled (lv, 2026-10-12): as recommended.**
 - **IM-Q3** `GroupId` as a declared config key `group_id`, syntax digits. **Recommended: yes** (MiniMax group ids are
   numeric, **unverified** for every account; the native arm percent-encodes any string).
+  **Ruled (lv, 2026-10-12): as recommended.**
 - **IM-Q4** MiniMax `base_resp` 1026 ("output violation") is `unknown` (parked), not `rejected`. **Recommended: yes** —
   it may be charged.
+  **Ruled (lv, 2026-10-12): as recommended.**
 - **IM-Q5** MiniMax inline base64 artifacts declare `image/png`. **Recommended: yes** (**unverified**: MiniMax's
   default output format; the host's held path sniffs today). Alternative: `image/jpeg`; a capture settles it.
+  **Ruled (lv, 2026-10-12): as recommended.**
 - **IM-Q6** A body-detected failure's client status: the host carries the component's `http_status` (a small host
   change) rather than answering 502. **Recommended: carry it** — clients see the same status as today.
+  **Ruled (lv, 2026-10-12): as recommended.**
 - **IM-Q7** Two packages, not one "bailian + minimax" package. **Recommended: two** — different families, auth hosts
   and error vocabularies; one package per family matches `image-azure`.
+  **Ruled (lv, 2026-10-12): as recommended.**
 
 ## Revision note
 
 - 2026-10-12: first draft (proposed).
+- 2026-10-12: lv ruled IM-Q1 to IM-Q7 as recommended; the status is accepted. The host takes IM-Q1 (settle
+  `images_reported` when 0 < reported ≤ delivered + 1, capped at the reservation) and IM-Q6 (carry the component's
+  `http_status`) as host changes.
