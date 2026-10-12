@@ -1,6 +1,6 @@
 # KC1, south half: canonical IR 4 (prompt-cache markers, top_k, typed reasoning, the R-Q15 promotions)
 
-Status: proposed. Design only; nothing is implemented. The owner rulings it builds on (lv, 2026-10-09) are binding and
+Status: accepted (lv, 2026-10-12: every question in §9 ruled as recommended; KC-Q10 ruled: R3 ships first as 0.56.0, KC1 ships as 0.57.0). Design only; nothing is implemented yet. The owner rulings it builds on (lv, 2026-10-09) are binding and
 are not re-opened here; the questions in §9 are the decisions those rulings left open.
 
 Date: 2026-10-12
@@ -512,6 +512,13 @@ Every existing case must keep its expected output except the ones this table lis
   declare the adaptive shape? *Recommended: keep the 400 in KC1; a Messages client's `max` already reaches the upstream
   through the verbatim arm because it comes with `thinking`.* (Not covered: a Messages client that sends
   `output_config.effort` without `thinking` goes through the effort rule; recorded.)
+
+### 9.1 Rulings (lv, 2026-10-12)
+
+- KC-Q1 to KC-Q9 and KC-Q11: as recommended.
+- KC-Q10: R3 (`openai-codex` and the four Responses fields) ships first as 0.56.0; KC1 rebases onto it and ships as 0.57.0.
+- Upstream tag `kernel-v0.6.0` now exists (annotated, on `c0bca10c`); the kernel mirror is synced to it with
+  `canonical_ir` 4 and is released as mirror `v0.5.0` once its gates pass.
 
 ## 10. Unverified, collected
 
