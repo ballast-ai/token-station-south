@@ -543,7 +543,10 @@ notes and the README / ARCHITECTURE paragraphs.
   spelling. Fixtures: `request.reasoning-replay`, `-interleaved`, `-multi-turn`, `-include-only` (codec-derived, from
   `replay_client_bodies()`), `request.refused-reasoning-replay-undeclared`, `-invalid-layout`,
   `response.reasoning-encrypted-content`, `stream.reasoning-encrypted-content`, and
-  `request.refused-openai-reasoning-replay` in the OpenAI-compatible, Gemini, Anthropic and Converse packs.
+  `request.refused-openai-reasoning-replay` in the OpenAI-compatible, Gemini, Anthropic, Converse and Converse-bearer
+  packs. Two existing tests learn that a refusal row is possible in a pack: the bearer-pack mirror test compares a
+  refusal byte for byte (it carries no auth), and `undeclared_values_v1` no longer expects a refusal row to catch a
+  component that reads a value after building.
 - **Suite.** `south.north-passthrough-delivery.v1`, 22 cases (§3.4's 21 plus
   `DeliveryPassesThroughWhenEveryConditionHolds`, the positive delivery case the mutants need), in
   `south-provider-conformance`; the reference executor and `NorthPassthroughFaultV1` (eighteen mistakes) in

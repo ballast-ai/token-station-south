@@ -215,6 +215,9 @@ fn the_bearer_pack_is_the_converse_pack_with_only_the_auth_delta() {
             expected["provider_config"]["provider"] = "bedrock-bearer".into();
             expected["provider_config"]["auth"] = "provider_api_key".into();
             assert_eq!(json(&to), expected, "{name}");
+        } else if name.starts_with("provider.request.") && json(&from).get("error").is_some() {
+            // A refusal carries no descriptor, so no auth to differ.
+            assert_eq!(from, to, "{name} is byte-identical in both packs");
         } else if name.starts_with("provider.request.") {
             let mut expected = json(&from);
             expected["auth"] =

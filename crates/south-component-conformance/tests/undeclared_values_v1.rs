@@ -107,11 +107,39 @@ fn the_shipped_reference_ignores_undeclared_values_on_every_request_case() {
     assert_eq!(failed, 0);
 }
 
+/// The request cases that expect a refusal. The wrapped reference refuses them before it reads any
+/// value, so they cannot catch a reader that acts on the built body (the NC-1
+/// `refused-openai-reasoning-replay` row is one).
+fn refusal_cases() -> Vec<String> {
+    let dir = root().join("fixtures");
+    let mut names = Vec::new();
+    for entry in std::fs::read_dir(&dir).unwrap() {
+        let name = entry.unwrap().file_name().into_string().unwrap();
+        if let Some(case) = name.strip_suffix(".expected.json")
+            && case.starts_with("provider.request.")
+        {
+            let expected: Value =
+                serde_json::from_str(&std::fs::read_to_string(dir.join(&name)).unwrap()).unwrap();
+            if expected.get("error").is_some() {
+                names.push(case.to_owned());
+            }
+        }
+    }
+    names
+}
+
 #[test]
 fn a_component_acting_on_an_undeclared_key_is_red() {
+    let refusals = refusal_cases();
     for reads in [Reads::AnyDeclaredKey, Reads::AnyHostValue] {
-        let (ran, failed) = tally(&run(&Reader(reads), &shipped()));
-        assert_eq!(failed, ran, "every request case must catch it");
+        let report = run(&Reader(reads), &shipped());
+        let (ran, failed) = tally(&report);
+        assert_eq!(failed, ran - refusals.len(), "every building request case must catch it");
+        for outcome in report.outcomes() {
+            if outcome.check == CheckV1::UndeclaredValuesIgnored && outcome.is_failure() {
+                assert!(!refusals.contains(&outcome.case), "{}", outcome.case);
+            }
+        }
     }
 }
 
