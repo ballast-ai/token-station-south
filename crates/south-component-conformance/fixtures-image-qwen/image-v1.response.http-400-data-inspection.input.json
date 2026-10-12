@@ -1,0 +1,11 @@
+{
+  "prepare_case": "image-v1.prepare.text-defaults",
+  "response": {
+    "status": 400,
+    "body": {
+      "code": "DataInspectionFailed",
+      "message": "Input data may contain inappropriate content.",
+      "request_id": "r-6"
+    }
+  }
+}

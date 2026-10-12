@@ -217,7 +217,8 @@
         "cases": 6
       },
       "provider_media_binary": {
-        "status": "not_verified"
+        "status": "verified",
+        "cases": 6
       },
       "credential_recipe": {
         "status": "verified",

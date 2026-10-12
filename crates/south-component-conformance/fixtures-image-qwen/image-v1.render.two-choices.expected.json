@@ -1,0 +1,25 @@
+{
+  "template": {
+    "created": 1700000001,
+    "data": [
+      {
+        "revised_prompt": null,
+        "url": {
+          "$south.artifact": {
+            "as": "url",
+            "index": 0
+          }
+        }
+      },
+      {
+        "revised_prompt": null,
+        "url": {
+          "$south.artifact": {
+            "as": "url",
+            "index": 1
+          }
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "prepare_case": "image-v1.prepare.text-defaults",
+  "response": {
+    "status": 200,
+    "body": {
+      "output": {
+        "choices": []
+      },
+      "usage": {
+        "image_count": 0
+      }
+    }
+  }
+}

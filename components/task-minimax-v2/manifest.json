@@ -1,6 +1,6 @@
 {
   "name": "task-minimax-v2",
-  "version": "0.31.14",
+  "version": "0.31.15",
   "api_version": "task-adapter-v2",
   "providers": [
     "minimax"

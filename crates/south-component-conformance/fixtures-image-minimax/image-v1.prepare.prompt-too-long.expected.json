@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "'prompt' must be at most 1500 characters for MiniMax image models (got 1501)"
+  }
+}

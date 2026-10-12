@@ -1,0 +1,9 @@
+{
+  "error": {
+    "code": "auth",
+    "http_status": 401,
+    "message": "the upstream rejected the credential",
+    "provider_message": "InvalidApiKey: Invalid API-key provided."
+  },
+  "outcome": "rejected"
+}

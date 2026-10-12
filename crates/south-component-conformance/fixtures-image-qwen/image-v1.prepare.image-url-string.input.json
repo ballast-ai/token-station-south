@@ -1,0 +1,19 @@
+{
+  "provider_config": {
+    "provider": "bailian-qwen-image",
+    "base_url": "https://dashscope.aliyuncs.com",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "json": {
+      "prompt": "make the sky purple",
+      "image_url": "https://example.com/source.png"
+    }
+  },
+  "context": {
+    "upstream_model": "qwen-image-edit",
+    "metering_required": [
+      "images"
+    ]
+  }
+}

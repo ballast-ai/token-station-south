@@ -1,0 +1,21 @@
+{
+  "provider_config": {
+    "provider": "minimax-image",
+    "base_url": "https://api.minimax.io",
+    "auth": "provider_api_key",
+    "declared": {
+      "group_id": "1782000000000000000"
+    }
+  },
+  "request": {
+    "json": {
+      "prompt": 42
+    }
+  },
+  "context": {
+    "upstream_model": "image-01",
+    "metering_required": [
+      "images"
+    ]
+  }
+}

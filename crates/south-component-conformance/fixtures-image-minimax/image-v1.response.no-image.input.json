@@ -1,0 +1,21 @@
+{
+  "prepare_case": "image-v1.prepare.group-id-sent",
+  "response": {
+    "status": 200,
+    "body": {
+      "data": {
+        "image_urls": [],
+        "image_base64": [
+          ""
+        ]
+      },
+      "metadata": {
+        "success_count": "0"
+      },
+      "base_resp": {
+        "status_code": 0,
+        "status_msg": "success"
+      }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "prepare_case": "image-v1.prepare.text-defaults",
+  "response": {
+    "status": 500,
+    "body": {
+      "code": "InternalError",
+      "message": "internal",
+      "request_id": "r-9"
+    }
+  }
+}

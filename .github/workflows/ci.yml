@@ -44,6 +44,8 @@ jobs:
             components/embeddings-openai-compatible
             components/embeddings-vertex
             components/image-azure
+            components/image-minimax
+            components/image-qwen
             components/provider-anthropic
             components/provider-anthropic-bedrock-invoke
             components/provider-bedrock-converse

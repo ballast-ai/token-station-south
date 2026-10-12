@@ -15,6 +15,7 @@
 //!
 //! `SUCCEEDED` with no usable image is a terminal failure (`empty_result`), not `unknown`: the
 //! upstream has said its last word, and `unknown` would only park the reservation for review.
+use crate::bailian_image::{PASSTHROUGH, image_url_parts, result_images, wan_size, whole_count};
 use crate::{ComponentResultV1, PreparedTaskV2, SubmitOutcomeV2, TaskComponentV2};
 use serde_json::{Map, Value, json};
 use south_contracts::{
@@ -34,8 +35,6 @@ const MAX_IMAGES: u64 = 4;
 /// Request-body paths the host must not rewrite (contract 6): the prompt and source images, and
 /// the count and size the reservation reads.
 const IMMUTABLE_BODY_PATHS: [&str; 4] = ["model", "input", "parameters.n", "parameters.size"];
-const PASSTHROUGH: [&str; 5] =
-    ["watermark", "bbox_list", "seed", "prompt_extend", "negative_prompt"];
 
 /// Managed Bailian Wan image dialect; no credentials, clock, price or persistence.
 #[derive(Debug, Default, Clone, Copy)]
@@ -52,31 +51,6 @@ fn field<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
 }
 fn bounded(text: Option<&str>) -> Option<String> {
     text.filter(|t| t.len() <= south_contracts::MAX_ARTIFACT_REF_BYTES).map(str::to_owned)
-}
-/// A whole, non-negative image count; `2.0` counts as two (some JSON producers write it so).
-fn whole_count(value: &Value) -> Option<u64> {
-    value.as_u64().or_else(|| {
-        value
-            .as_f64()
-            .filter(|f| f.is_finite() && *f >= 0.0 && f.fract() == 0.0 && *f < 1e15)
-            .and_then(|f| format!("{f:.0}").parse().ok())
-    })
-}
-/// `OpenAI` `WxH` → Wan `W*H`; named tiers and anything else pass through.
-fn wan_size(size: &str) -> String {
-    let trimmed = size.trim();
-    let lower = trimmed.to_ascii_lowercase();
-    if let Some((w, h)) = lower.split_once('x') {
-        let (w, h) = (w.trim(), h.trim());
-        if !w.is_empty()
-            && !h.is_empty()
-            && w.bytes().all(|b| b.is_ascii_digit())
-            && h.bytes().all(|b| b.is_ascii_digit())
-        {
-            return format!("{w}*{h}");
-        }
-    }
-    trimmed.to_owned()
 }
 fn identifier(id: &str) -> bool {
     !id.is_empty()
@@ -113,18 +87,7 @@ fn unknown(reason: &str) -> TaskObservationV2 {
 }
 /// Every non-empty `output.choices[].message.content[].image`, flattened across choices.
 fn image_urls(body: &Value) -> Vec<&str> {
-    body.pointer("/output/choices")
-        .and_then(Value::as_array)
-        .map(|choices| {
-            choices
-                .iter()
-                .filter_map(|c| c.pointer("/message/content").and_then(Value::as_array))
-                .flatten()
-                .filter_map(|part| field(part, "image"))
-                .filter(|url| !url.is_empty())
-                .collect()
-        })
-        .unwrap_or_default()
+    result_images(body).into_iter().map(|(_, url)| url).collect()
 }
 /// The billed count: a positive reported `usage.image_count` at most one above what was
 /// delivered, else the delivered count.
@@ -141,7 +104,7 @@ impl TaskComponentV2 for WanImageTaskComponentV2 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "task-wan-image-v2".into(),
-            version: "0.35.14".into(),
+            version: "0.35.15".into(),
             api_version: "task-adapter-v2".into(),
         }
     }
@@ -167,24 +130,8 @@ impl TaskComponentV2 for WanImageTaskComponentV2 {
                 n
             }
         };
-        let mut content = Vec::new();
-        match body.get("image_url") {
-            None | Some(Value::Null) => {}
-            Some(Value::String(url)) => content.push(json!({"image": url})),
-            Some(Value::Array(items)) => {
-                for item in items {
-                    let url = item
-                        .as_str()
-                        .ok_or_else(|| invalid("image_url array entries must be string URLs"))?;
-                    content.push(json!({"image": url}));
-                }
-            }
-            Some(other) => {
-                return Err(invalid(&format!(
-                    "image_url must be a string URL or an array of string URLs (got {other})"
-                )));
-            }
-        }
+        let mut content =
+            image_url_parts(body.get("image_url"), |entry| entry.as_str().map(|url| json!(url)))?;
         let image_count = u32::try_from(content.len()).unwrap_or(u32::MAX);
         content.push(json!({"text": field(body, "prompt").unwrap_or("")}));
         let mut parameters = Map::new();

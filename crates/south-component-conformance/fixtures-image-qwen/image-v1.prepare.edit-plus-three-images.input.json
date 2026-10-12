@@ -1,0 +1,36 @@
+{
+  "provider_config": {
+    "provider": "bailian-qwen-image",
+    "base_url": "https://dashscope.aliyuncs.com",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "json": {
+      "prompt": "put the cat from image 2 and the hat from image 3 on the person in image 1",
+      "image_url": [
+        {
+          "$south.blob": {
+            "id": "b0",
+            "bytes": 4096,
+            "head": "data"
+          }
+        },
+        {
+          "$south.blob": {
+            "id": "b1",
+            "bytes": 4096,
+            "head": "data"
+          }
+        },
+        "https://example.com/hat.png"
+      ],
+      "n": 1
+    }
+  },
+  "context": {
+    "upstream_model": "qwen-image-edit-plus",
+    "metering_required": [
+      "images"
+    ]
+  }
+}

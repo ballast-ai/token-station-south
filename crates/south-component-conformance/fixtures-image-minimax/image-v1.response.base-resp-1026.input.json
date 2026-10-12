@@ -1,0 +1,14 @@
+{
+  "prepare_case": "image-v1.prepare.group-id-sent",
+  "response": {
+    "status": 200,
+    "body": {
+      "id": "",
+      "data": null,
+      "base_resp": {
+        "status_code": 1026,
+        "status_msg": "output new_sensitive"
+      }
+    }
+  }
+}

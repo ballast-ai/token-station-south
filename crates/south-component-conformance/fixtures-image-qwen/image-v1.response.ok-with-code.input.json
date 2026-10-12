@@ -1,0 +1,11 @@
+{
+  "prepare_case": "image-v1.prepare.text-defaults",
+  "response": {
+    "status": 200,
+    "body": {
+      "code": "InternalError.Algo",
+      "message": "An internal error has occured during execution",
+      "request_id": "r-4"
+    }
+  }
+}

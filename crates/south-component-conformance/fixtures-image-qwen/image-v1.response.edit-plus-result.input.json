@@ -1,0 +1,26 @@
+{
+  "prepare_case": "image-v1.prepare.edit-plus-three-images",
+  "response": {
+    "status": 200,
+    "body": {
+      "output": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "image": "https://dashscope-result.example-oss.com/1/a.png?Expires=1"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "usage": {
+        "image_count": 1
+      }
+    }
+  }
+}

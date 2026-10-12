@@ -1,0 +1,40 @@
+{
+  "prepare_case": "image-v1.prepare.text-defaults",
+  "response": {
+    "status": 200,
+    "body": {
+      "output": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "image": "https://dashscope-result.example-oss.com/1/a.png?Expires=1"
+                }
+              ]
+            }
+          },
+          {
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "image": "https://dashscope-result.example-oss.com/1/b.png?Expires=1"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "usage": {
+        "width": 1328,
+        "height": 1328,
+        "image_count": 2
+      },
+      "request_id": "r-1"
+    }
+  }
+}

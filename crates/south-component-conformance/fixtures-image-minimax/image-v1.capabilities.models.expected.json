@@ -1,0 +1,64 @@
+[
+  {
+    "input_roles": [
+      {
+        "key": "subject_reference",
+        "role": "reference_image"
+      },
+      {
+        "key": "image_url",
+        "role": "reference_image"
+      }
+    ],
+    "metering_forms": [
+      "images"
+    ],
+    "model": "image-01",
+    "operations": [
+      "generate"
+    ],
+    "repeat": false,
+    "request_elision_paths": [
+      "/subject_reference/*/image_file",
+      "/image_url",
+      "/image_url/*"
+    ],
+    "response_formats": [
+      "b64_json",
+      "url"
+    ],
+    "tier_dimensions": [],
+    "token_buckets": []
+  },
+  {
+    "input_roles": [
+      {
+        "key": "subject_reference",
+        "role": "reference_image"
+      },
+      {
+        "key": "image_url",
+        "role": "reference_image"
+      }
+    ],
+    "metering_forms": [
+      "images"
+    ],
+    "model": "image-01-live",
+    "operations": [
+      "generate"
+    ],
+    "repeat": false,
+    "request_elision_paths": [
+      "/subject_reference/*/image_file",
+      "/image_url",
+      "/image_url/*"
+    ],
+    "response_formats": [
+      "b64_json",
+      "url"
+    ],
+    "tier_dimensions": [],
+    "token_buckets": []
+  }
+]
