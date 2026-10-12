@@ -435,11 +435,14 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 1
                 // record is held by that host's repository; this manifest records only the
                 // resulting status.
                 ("provider_binary", "verified", Some(6)),
-                // provider_media_binary (HTTP contract v12, image record S-I-2) is new and no host
-                // has run it. The `provider_binary` result above was measured on the JSON POST
-                // pairing only and is deliberately not carried over to these rows (image record
-                // §19, S-I-2 acceptance).
-                ("provider_media_binary", "not_verified", None),
+                // provider_media_binary (HTTP contract v12, image record S-I-2): verified 2026-10-13
+                // (lv, image record Q10). token-station-server's assembled executor passes all six
+                // cases through its production entry point (the two multipart rows through the
+                // same core function its image edit executor uses), including the `wire_auth_exact`
+                // claim added in 0.54.0 (server dev-v2 `c8f67c30`, `gateway/tests/south_adoption.rs`).
+                // The `provider_binary` result above was measured on the JSON POST pairing only and
+                // is still not carried over: these six rows are this suite's own evidence.
+                ("provider_media_binary", "verified", Some(6)),
                 // token-station-server credential_recipe demoted 2026-10-05. It was verified the
                 // same day against the nine-case table (P21 S3a, C3: its generic recipe executor
                 // passed 9/9 at server `8777b84f`, host feedback SF6). The suite has since grown

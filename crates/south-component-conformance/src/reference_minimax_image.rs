@@ -18,7 +18,8 @@
 //!   than 1500 characters; `n` not a whole number from 1 to 9; `image_url` of the wrong type.
 //! - **Response**: a 2xx whose `base_resp.status_code` is not `0` failed in the body (record §7).
 //!   Its envelope carries the host's status for the code (1004 / 2049 → 401, 1026 / 2013 → 400,
-//!   1002 → 429, 1008 / 2153 → 503, else 502; IM-Q6); the codes that mean "refused before output"
+//!   1002 → 429, 1008 / 2153 → 503, else 502; the token-station host answers 502 while the funds
+//!   are parked, IM-Q6 as re-ruled); the codes that mean "refused before output"
 //!   are `rejected`, and 1026 (an output violation, possibly charged; IM-Q4) and any code the table
 //!   does not name are `unknown`. A missing `base_resp` is success. Each non-empty
 //!   `data.image_urls[i]` is a `url` artifact and each non-empty `data.image_base64[i]` an inline

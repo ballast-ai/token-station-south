@@ -49,7 +49,8 @@ Reproduces the host's native arm (server:`…/handler/images/minimax.rs`, 374 pr
   declares a config key `group_id` (non-secret, optional, syntax `digits`, the HTTP contract's grammar for this query
   name) and adds the query only when it is set (**IM-Q3**).
 - **Response** (`parse-response`): HTTP 200 with a non-zero `base_resp.status_code` is a failure detected in the body
-  (record §7): mapped to an error envelope whose `http_status` follows the host's table
+  (record §7): mapped to an error envelope whose `http_status` follows the host's table (the envelope carries it; the
+  token-station host still answers 502 while the funds are parked, IM-Q6 as re-ruled)
   (server:`…/minimax_status.rs:43-61`: 1004 / 2049 → 401, 1026 / 2013 → 400, 1002 → 429, 1008 / 2153 → 503, else 502);
   outcome `rejected` for the codes that mean "refused before output" (1004, 2049, 2013, 1002, 1008, 2153) and
   **`unknown` for 1026** ("output violation", possibly charged; **IM-Q4**). A missing `base_resp` is tolerated. Success:
