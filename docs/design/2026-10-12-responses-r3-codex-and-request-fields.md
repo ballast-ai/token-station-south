@@ -1,8 +1,8 @@
 # Responses step R3: the `openai-codex` family, the four dropped request fields, and the tool-usage bucket
 
-Status: proposed (2026-10-12). Nothing here is implemented. lv approved in principle on 2026-10-12 that R3 starts now,
-that the four request fields of record §4.6 be carried, and that the IR tool-usage bucket (host SF23) be scheduled
-with R3; §5 asks lv to re-rule the last one on new evidence.
+Status: accepted (lv, 2026-10-12: RQ3-Q1 to RQ3-Q8 ruled as recommended, §8). Not implemented. lv approved in
+principle on 2026-10-12 that R3 starts now and that the four request fields of record §4.6 be carried; the same day lv
+had scheduled the IR tool-usage bucket (host SF23) with R3, and on the evidence of §5 re-ruled it out of R3 (RQ3-Q6).
 
 Date: 2026-10-12
 
@@ -189,13 +189,13 @@ the price of a full handshake break, and (B)'s keys are promoted by R-Q15 whenev
 lv ruled on 2026-10-12 to schedule the IR tool-usage bucket with R3. The ruling followed the host's Q-S5-2 (lv,
 2026-10-07) and Q-B6-7 (lv, 2026-10-09): keep the host's wire parsing of Responses usage until the IR has a tool-usage
 bucket, because refusing non-zero `image_gen` usage (R-Q3) "would make every Codex request that uses the image tool
-fail" (server:`docs/product-review-v2/plans/2026-10-07-P21-S5实施方案.md:158,165`).
+fail" (the host's P21 S5 implementation plan, server:`docs/product-review-v2/plans/2026-10-07-P21-S5-*.md`, lines 158 and 165).
 
 **On the host today no such request succeeds either.** Hosted tools, `image_generation` included, are refused at
 admission on the Responses surface: "OpenAI Responses text billing allows only flattened client functions"
 (server:…/token_counter/authorize.rs:564-584; a hosted `tool_choice` likewise at :663; tests at :1168-1196, :1421-1460), and
 the native Responses usage parser refuses any output item other than `message`, `function_call` and `reasoning`
-("Responses output item 未经成本准入", server:`crates/gateway-provider-protocol/src/usage_evidence.rs:887-910`), which is
+(its error reads, in the host's language, "Responses output item not admitted by cost admission"; server:`crates/gateway-provider-protocol/src/usage_evidence.rs:887-910`), which is
 where an image call's `image_generation_call` item would land. The host's image-tool pricing
 (server:…/token_counter/media.rs:214-278) is therefore reachable only from tests; record §13.5 #7 suspected this. Read,
 not run: no capture of a Codex response that used the image tool exists.
@@ -242,20 +242,30 @@ the measurement and could ship earlier on their own if lv prefers (**RQ3-Q7**); 
 
 - **RQ3-Q1** Persist the refreshed `account_id` (`persist: true`). **Recommended: yes** — the host does not persist it
   today (§3.4), so a credential imported without an account id sends no account header until the next refresh.
+  **Ruled (lv, 2026-10-12): as recommended.**
 - **RQ3-Q2** `account_id` value syntax `token` (RFC 9110). **Recommended: yes** — it goes into a header; the test's
   `printable_ascii: 128` would admit spaces.
+  **Ruled (lv, 2026-10-12): as recommended.**
 - **RQ3-Q3** Carry the four fields as named request extensions under the NC-1 D5 exception (§4.2 B), not as typed kernel
   fields. **Recommended: yes**; R-Q15 promotes them later.
+  **Ruled (lv, 2026-10-12): as recommended.**
 - **RQ3-Q4** Reuse the Chat codec's raw names (`user`, `metadata`, `prompt_cache_key`) plus `truncation`.
   **Recommended: yes** — one vocabulary for both north surfaces.
+  **Ruled (lv, 2026-10-12): as recommended.**
 - **RQ3-Q5** `openai-codex` sends none of the four until §3.2 measures the backend. **Recommended: yes.**
+  **Ruled (lv, 2026-10-12): as recommended.**
 - **RQ3-Q6** Take the IR tool-usage bucket out of R3 and keep R-Q3 (§5). **Recommended: yes** — this re-opens lv's
   2026-10-12 ruling on new evidence; if lv keeps the ruling, the bucket is a kernel-chain change of its own, and R3's
   release waits for it.
+  **Ruled (lv, 2026-10-12): as recommended.**
 - **RQ3-Q7** Ship §4 with R3 in 0.56.0 rather than in a release of its own. **Recommended: with R3** — one patch wave
   instead of two; the measurement gates only the Codex family, and if it stalls, §4 ships alone then.
+  **Ruled (lv, 2026-10-12): as recommended.**
 - **RQ3-Q8** Keep `scope` in the recipe (§2.2 item 1). **Recommended: yes**, until §3.2 (d) shows it is not needed.
+  **Ruled (lv, 2026-10-12): as recommended.**
 
 ## Revision note
 
 - 2026-10-12: first draft (proposed).
+- 2026-10-12: lv ruled RQ3-Q1 to RQ3-Q8 as recommended (RQ3-Q6 re-rules the same day's scheduling of the tool-usage
+  bucket with R3); the status is accepted.
