@@ -375,8 +375,9 @@ Departures from §10, each following the embeddings contract 2 precedent (0.51.0
    as they do for embeddings.
 2. `image-gemini` declares this tree's release, 0.58.0, as its `south_runtime` until the release commit, which moves
    the workspace version and the declaration together to the release that ships the word (as `embeddings-gemini`
-   1.1.0 declared 0.50.0 until the 0.51.0 release commit). Until then `scripts/check-declared-runtime.sh --build`
-   refuses the package: the 0.58.0 runtime decodes media 1 only.
+   1.1.0 declared 0.50.0 until the 0.51.0 release commit). `scripts/check-declared-runtime.sh --build` passes on this
+   branch only because a package declaring the workspace version is judged by this tree; the published 0.58.0
+   runtime decodes media 1 only and would refuse it, so the release commit must not ship the declaration unchanged.
 
 Decisions where the record is silent:
 
