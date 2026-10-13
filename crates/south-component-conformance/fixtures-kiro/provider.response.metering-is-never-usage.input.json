@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/vnd.amazon.eventstream"
+  },
+  "body": "event: assistantResponseEvent\ndata: {\"content\":\"Hi \",\"modelId\":\"claude-haiku-4.5\"}\n\nevent: assistantResponseEvent\ndata: {\"content\":\"there\"}\n\nevent: contextUsageEvent\ndata: {\"contextUsagePercentage\":2.0}\n\nevent: meteringEvent\ndata: {\"unit\":\"credit\",\"usage\":0.0055778}\n\n"
+}

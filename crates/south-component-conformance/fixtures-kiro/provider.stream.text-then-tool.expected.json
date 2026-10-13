@@ -1,0 +1,27 @@
+[
+  {
+    "content": "Let me check.",
+    "index": 0,
+    "type": "delta"
+  },
+  {
+    "arguments_delta": "",
+    "id": "tooluse_A",
+    "index": 0,
+    "name": "get_weather",
+    "type": "tool_call_delta"
+  },
+  {
+    "arguments_delta": "{\"city\":\"Paris\"}",
+    "index": 0,
+    "type": "tool_call_delta"
+  },
+  {
+    "finish_reason": "tool_calls",
+    "type": "finish"
+  },
+  {
+    "finish_reason": "tool_calls",
+    "type": "done"
+  }
+]

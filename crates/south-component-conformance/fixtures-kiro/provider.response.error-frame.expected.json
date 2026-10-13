@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "upstream_unavailable",
+    "http_status": 502,
+    "message": "the upstream is unavailable",
+    "provider_message": "We encountered an internal error."
+  }
+}

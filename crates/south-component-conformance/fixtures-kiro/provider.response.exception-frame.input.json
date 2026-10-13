@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/vnd.amazon.eventstream"
+  },
+  "body": "event: assistantResponseEvent\ndata: {\"content\":\"he\"}\n\nevent: assistantResponseEvent\ndata: {\"content\":\"llo\"}\n\nevent: exception:ThrottlingException\ndata: {\"message\":\"slow down\"}\n\n"
+}

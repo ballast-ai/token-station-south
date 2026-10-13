@@ -1,0 +1,19 @@
+[
+  {
+    "content": "he",
+    "index": 0,
+    "type": "delta"
+  },
+  {
+    "content": "llo",
+    "index": 0,
+    "type": "delta"
+  },
+  {
+    "arguments_delta": "{\"a\":1}",
+    "id": "t1",
+    "index": 0,
+    "name": "f",
+    "type": "tool_call_delta"
+  }
+]

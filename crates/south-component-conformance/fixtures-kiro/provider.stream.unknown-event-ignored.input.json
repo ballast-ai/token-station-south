@@ -1,0 +1,8 @@
+{
+  "chunks": [
+    "event: assistantResponseEvent\ndata: {\"content\":\"a\"}\n\n",
+    "event: followupPromptEvent\ndata: {\"followupPrompt\":{\"content\":\"more?\"}}\n\n",
+    "event: assistantResponseEvent\ndata: {\"content\":\"b\"}\n\n",
+    "event: meteringEvent\ndata: {\"unit\":\"credit\",\"usage\":0.02}\n\n"
+  ]
+}

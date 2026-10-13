@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "capability",
+    "http_status": 400,
+    "message": "a content part of a kind this component does not model has no slot on this upstream"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/vnd.amazon.eventstream"
+  },
+  "body": "event: toolUseEvent\ndata: {\"name\":\"get_weather\",\"toolUseId\":\"tooluse_X\"}\n\nevent: toolUseEvent\ndata: {\"input\":\"{\\\"city\\\": \\\"P\",\"name\":\"get_weather\",\"toolUseId\":\"tooluse_X\"}\n\nevent: toolUseEvent\ndata: {\"input\":\"aris\\\"}\",\"name\":\"get_weather\",\"toolUseId\":\"tooluse_X\"}\n\nevent: toolUseEvent\ndata: {\"name\":\"get_weather\",\"stop\":true,\"toolUseId\":\"tooluse_X\"}\n\nevent: meteringEvent\ndata: {\"unit\":\"credit\",\"usage\":0.0267}\n\n"
+}

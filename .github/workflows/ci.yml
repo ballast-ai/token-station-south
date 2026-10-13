@@ -54,6 +54,7 @@ jobs:
             components/provider-bedrock-converse
             components/provider-bedrock-converse-bearer
             components/provider-gemini
+            components/provider-kiro
             components/provider-openai-compatible
             components/provider-openai-responses
             components/task-bailian-v2

@@ -1,0 +1,6 @@
+{
+  "code": "upstream_unavailable",
+  "http_status": 500,
+  "message": "the upstream is unavailable",
+  "provider_message": "Encountered an unexpected error when processing the request, please try again."
+}

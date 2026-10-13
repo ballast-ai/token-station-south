@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/vnd.amazon.eventstream"
+  },
+  "body": "event: assistantResponseEvent\ndata: {\"content\":\"he\"}\n\nevent: assistantResponseEvent\ndata: {\"content\":\"llo\"}\n\nevent: toolUseEvent\ndata: {\"name\":\"f\",\"toolUseId\":\"t1\",\"input\":\"{\\\"a\\\":1}\"}\n\nevent: meteringEvent\ndata: {\"unit\":\"credit\",\"usage\":0.02}\n\n"
+}

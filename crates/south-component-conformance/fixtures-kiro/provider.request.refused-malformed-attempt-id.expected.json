@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "internal",
+    "http_status": 500,
+    "message": "host value attempt_id is not a lowercase hyphenated UUID; the host must mint one per upstream attempt"
+  }
+}

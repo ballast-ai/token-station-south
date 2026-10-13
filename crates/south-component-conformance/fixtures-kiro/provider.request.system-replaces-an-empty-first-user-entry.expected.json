@@ -1,0 +1,41 @@
+{
+  "auth": {
+    "scheme": "bearer",
+    "secret": "provider_api_key"
+  },
+  "body": {
+    "conversationState": {
+      "chatTriggerType": "MANUAL",
+      "conversationId": "3f2c8a9e-6b1d-4c7a-9e0f-5a4b3c2d1e0f",
+      "currentMessage": {
+        "userInputMessage": {
+          "content": "Go on.",
+          "modelId": "claude-sonnet-4.5",
+          "origin": "AI_EDITOR"
+        }
+      },
+      "history": [
+        {
+          "userInputMessage": {
+            "content": "Rule one.\nRule two.\nLate rule.",
+            "origin": "AI_EDITOR"
+          }
+        },
+        {
+          "assistantResponseMessage": {
+            "content": "Ready."
+          }
+        }
+      ]
+    },
+    "profileArn": "arn:aws:codewhisperer:us-east-1:123456789012:profile/FAKEPROFILE"
+  },
+  "headers": {
+    "accept": "application/vnd.amazon.eventstream",
+    "amz-sdk-request": "attempt=1; max=1",
+    "x-amz-target": "AmazonCodeWhispererStreamingService.GenerateAssistantResponse",
+    "x-amzn-kiro-agent-mode": "vibe"
+  },
+  "method": "POST",
+  "url": "https://q.us-east-1.amazonaws.com/generateAssistantResponse"
+}

@@ -1,0 +1,312 @@
+{
+  "name": "provider-kiro",
+  "version": "1.0.0",
+  "api_version": "provider-adapter-v2",
+  "providers": [
+    "kiro"
+  ],
+  "capabilities": [
+    "chat",
+    "stream",
+    "tool_call"
+  ],
+  "auth_arms": [
+    "bearer"
+  ],
+  "usage_evidence": "absent",
+  "stream_framing": "aws-eventstream",
+  "credentials": {
+    "schema": "south.credential-recipe.v1",
+    "fields": {
+      "refresh_token": {
+        "secret": true,
+        "description": "The Kiro refresh token, refreshToken in kiro-auth-token.json. Single use: every refresh rotates it and writes the new one back."
+      },
+      "client_id": {
+        "secret": false,
+        "syntax": {
+          "printable_ascii": 1024
+        },
+        "description": "The IAM Identity Center client id, clientId in kiro-auth-token.json. Only enterprise and Identity Center sign-ins have one."
+      },
+      "client_secret": {
+        "secret": true,
+        "description": "The IAM Identity Center client secret, clientSecret in kiro-auth-token.json. Only enterprise and Identity Center sign-ins have one."
+      },
+      "auth_method": {
+        "secret": false,
+        "syntax": {
+          "printable_ascii": 256
+        },
+        "description": "The sign-in method, authMethod in kiro-auth-token.json. IdC, enterprise or iam_identity_center (in any case) refresh through Identity Center; any other value through the Kiro sign-in service. Without it, a credential with a client id and secret refreshes through Identity Center."
+      },
+      "auth_region": {
+        "secret": false,
+        "syntax": "aws_region",
+        "default": "us-east-1",
+        "description": "The region the token is refreshed in, idcRegion or else region in kiro-auth-token.json."
+      },
+      "profile_arn": {
+        "secret": false,
+        "syntax": "aws_arn",
+        "description": "The CodeWhisperer profile ARN, profileArn in kiro-auth-token.json. Sent with every request when present."
+      }
+    },
+    "import": {
+      "refresh_token": {
+        "file": "kiro-auth-token-json",
+        "pointers": [
+          "/refreshToken"
+        ]
+      },
+      "client_id": {
+        "file": "kiro-auth-token-json",
+        "pointers": [
+          "/clientId"
+        ]
+      },
+      "client_secret": {
+        "file": "kiro-auth-token-json",
+        "pointers": [
+          "/clientSecret"
+        ]
+      },
+      "auth_method": {
+        "file": "kiro-auth-token-json",
+        "pointers": [
+          "/authMethod"
+        ]
+      },
+      "auth_region": {
+        "file": "kiro-auth-token-json",
+        "pointers": [
+          "/idcRegion",
+          "/region"
+        ]
+      },
+      "profile_arn": {
+        "file": "kiro-auth-token-json",
+        "pointers": [
+          "/profileArn"
+        ]
+      }
+    },
+    "seed": {
+      "file": "kiro-auth-token-json",
+      "slot": "provider_api_key",
+      "present": "/accessToken",
+      "expires_at": {
+        "rfc3339_or_epoch_seconds": "/expiresAt"
+      }
+    },
+    "slots": {
+      "provider_api_key": {
+        "minted": "kiro"
+      }
+    },
+    "recipes": {
+      "kiro": {
+        "select": [
+          {
+            "when": {
+              "field_in": {
+                "field": "auth_method",
+                "values": [
+                  "idc",
+                  "enterprise",
+                  "iam_identity_center"
+                ]
+              }
+            },
+            "recipe": "idc"
+          },
+          {
+            "when": {
+              "field_present": "auth_method"
+            },
+            "recipe": "social"
+          },
+          {
+            "when": {
+              "all_present": [
+                "client_id",
+                "client_secret"
+              ]
+            },
+            "recipe": "idc"
+          },
+          {
+            "recipe": "social"
+          }
+        ]
+      },
+      "social": {
+        "steps": [
+          {
+            "id": "social",
+            "kind": "http_exchange",
+            "method": "POST",
+            "encoding": "json",
+            "endpoint": "https://prod.{region}.auth.desktop.kiro.dev/refreshToken",
+            "endpoint_params": {
+              "region": {
+                "field": "auth_region"
+              }
+            },
+            "requires": [
+              "refresh_token"
+            ],
+            "params": {
+              "refreshToken": {
+                "field": "refresh_token"
+              }
+            },
+            "on_status": {
+              "400": "reauth_required",
+              "401": "reauth_required",
+              "4xx": "transient"
+            },
+            "extract": {
+              "access_token": {
+                "pointer": "/accessToken",
+                "secret": true
+              },
+              "refresh_token": {
+                "pointer": "/refreshToken",
+                "secret": true,
+                "optional": true
+              },
+              "expires_at": {
+                "relative_seconds": "/expiresIn"
+              }
+            }
+          }
+        ],
+        "present": "social.access_token",
+        "rotates_refresh_material": true,
+        "write_back": {
+          "refresh_token": "social.refresh_token"
+        },
+        "refresh_margin_seconds": 30,
+        "without_refresh_material": "fail",
+        "default_seconds": 3600,
+        "attributes": {
+          "profile_arn": {
+            "field": "profile_arn",
+            "export": true
+          }
+        }
+      },
+      "idc": {
+        "steps": [
+          {
+            "id": "idc",
+            "kind": "http_exchange",
+            "method": "POST",
+            "encoding": "json",
+            "endpoint": "https://oidc.{region}.amazonaws.com/token",
+            "endpoint_params": {
+              "region": {
+                "field": "auth_region"
+              }
+            },
+            "requires": [
+              "refresh_token",
+              "client_id",
+              "client_secret"
+            ],
+            "params": {
+              "refreshToken": {
+                "field": "refresh_token"
+              },
+              "clientId": {
+                "field": "client_id"
+              },
+              "clientSecret": {
+                "field": "client_secret"
+              },
+              "grantType": {
+                "const": "refresh_token"
+              }
+            },
+            "on_status": {
+              "400": "reauth_required",
+              "401": "reauth_required",
+              "4xx": "transient"
+            },
+            "extract": {
+              "access_token": {
+                "pointer": "/accessToken",
+                "secret": true
+              },
+              "refresh_token": {
+                "pointer": "/refreshToken",
+                "secret": true,
+                "optional": true
+              },
+              "expires_at": {
+                "relative_seconds": "/expiresIn"
+              }
+            }
+          }
+        ],
+        "present": "idc.access_token",
+        "rotates_refresh_material": true,
+        "write_back": {
+          "refresh_token": "idc.refresh_token"
+        },
+        "refresh_margin_seconds": 30,
+        "without_refresh_material": "fail",
+        "default_seconds": 3600,
+        "attributes": {
+          "profile_arn": {
+            "field": "profile_arn",
+            "export": true
+          }
+        }
+      }
+    }
+  },
+  "request_facts": {
+    "kiro": {
+      "output_cap": [],
+      "model": {
+        "body": "/conversationState/currentMessage/userInputMessage/modelId"
+      },
+      "stream": "none"
+    }
+  },
+  "user_agent": {
+    "kiro": "aws-sdk-js/1.0.0 KiroIDE"
+  },
+  "host_values": [
+    "attempt_id"
+  ],
+  "subscription_quota_families": [
+    "kiro"
+  ],
+  "permissions": {
+    "network": false,
+    "filesystem": false,
+    "secrets": [
+      "provider_api_key"
+    ]
+  },
+  "conformance": {
+    "required_suite": "south.provider-component.v1",
+    "fixtures": "fixtures-kiro/"
+  },
+  "compatibility": {
+    "ir_schema_id": "token-station-protocol@0.6.0/v0.5.0",
+    "kernel_version": "0.5.0",
+    "kernel_revision": "c0bca10c2d9f9a439680865feb65c9edf598fc65",
+    "wit_package": "token-station:adapter@2.0.0",
+    "south_runtime": "0.60.0",
+    "runtime_abi": 1,
+    "kernel_contracts": {
+      "canonical_ir": 4,
+      "error_catalog": 1,
+      "stream": 2
+    }
+  }
+}

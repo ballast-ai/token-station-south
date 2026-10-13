@@ -1,0 +1,5 @@
+{
+  "chunks": [
+    "event: toolUseEvent\ndata: {\"name\":\"get_weather\"}\n\n"
+  ]
+}

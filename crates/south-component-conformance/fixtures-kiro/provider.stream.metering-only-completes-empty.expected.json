@@ -1,0 +1,10 @@
+[
+  {
+    "finish_reason": "stop",
+    "type": "finish"
+  },
+  {
+    "finish_reason": "stop",
+    "type": "done"
+  }
+]

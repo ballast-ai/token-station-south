@@ -1,0 +1,15 @@
+[
+  {
+    "content": "hello from kiro",
+    "index": 0,
+    "type": "delta"
+  },
+  {
+    "finish_reason": "stop",
+    "type": "finish"
+  },
+  {
+    "finish_reason": "stop",
+    "type": "done"
+  }
+]

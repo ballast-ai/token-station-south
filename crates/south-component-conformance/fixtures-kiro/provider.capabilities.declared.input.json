@@ -1,0 +1,15 @@
+{
+  "provider": "kiro",
+  "base_url": "https://q.us-east-1.amazonaws.com",
+  "auth": "provider_api_key",
+  "models": [
+    {
+      "model": "claude-sonnet-4.5",
+      "tool": true,
+      "vision": false,
+      "json_schema": false,
+      "context_window": 200000,
+      "supported_parameters": []
+    }
+  ]
+}

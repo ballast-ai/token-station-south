@@ -1,0 +1,5 @@
+{
+  "status": 500,
+  "headers": {},
+  "body": "{\"message\": \"Encountered an unexpected error when processing the request, please try again.\"}"
+}
