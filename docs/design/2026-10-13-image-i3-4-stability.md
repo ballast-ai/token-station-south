@@ -163,8 +163,9 @@ None blocks the package. Per lv's I3-2 ruling, native-arm defects are registered
 
 - **P1 Funds on non-2xx**: the P29 allow-list (P22 Q2, I3-1 IM-Q2). Native sync parks every post-dispatch failure
   (`delivery_unknown`, `stability.rs:766-772`), 4xx included.
-- **P2 Client status while funds are parked**: 502 (I3-1 IM-Q6). Native also answers 502 for its 2xx failures, so this
-  only labels the non-2xx cases the host parks.
+- **P2 Client status while funds are parked**: 502 for a failure found inside a 2xx body (I3-1 IM-Q6). Native also
+  answers 502 for its 2xx failures. A non-2xx answer the host parks (401, 5xx) keeps the upstream status on both arms;
+  IM-Q6 covers only 2xx bodies (corrected 2026-10-13 from the host dual run, see the revision note).
 - **P3 Admission timing**: every §3 refusal is before admission; native refuses after admission and cancels
   (`stability.rs:730-742`; the host's `stability_url_format_and_multi_image_…` test pins zero funds either way). Same as
   the Azure / I3-1 timing ruling.
@@ -306,3 +307,6 @@ what the native `v.to_string()` sends.
 - 2026-10-13: first draft (proposed).
 - 2026-10-13: accepted; SI-Q4 ruled by lv, the other questions taken as recommended under the pre-approval.
 - 2026-10-13: implemented on branch `image-i3-4` (Implementation).
+- 2026-10-13: §7 P2 corrected after the host dual run (`server:gateway/tests/component_image_dual_run_i34_i35.rs`):
+  the host answers 502 only for failures found inside a 2xx body (IM-Q6); a parked non-2xx keeps the upstream status,
+  as native does and as the I3-1 dual run pins.

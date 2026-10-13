@@ -211,7 +211,10 @@ Reproduces `ideogram_dispatch` and `ideogram_image_result_to_openai` (`ideogram.
    (`reference_minimax_image.rs:337-340`): a held MiniMax or Qwen task's artifact is served with a generic type, where
    the native held path served the CDN's (whether the artifact endpoint serves the stored type is **unverified**).
 
-Per lv's I3-2 ruling, native-arm defects (items 1 to 6) are registered here and leave with the arm; item 7 is a
+8. **The sync `b64_json` path treats an empty download as success** (found by the host dual run, 2026-10-13): native
+   charges and answers 200 with `b64_json: ""`; the component parks it and answers 502 (§5 item 4, P8).
+
+Per lv's I3-2 ruling, native-arm defects (items 1 to 6 and 8) are registered here and leave with the arm; item 7 is a
 component-path gap for the host (IG-Q2).
 
 ## 7. Differences that follow precedent (accepted under lv's 2026-10-13 pre-approval)
@@ -220,8 +223,10 @@ component-path gap for the host (IG-Q2).
   111-119`) on both paths (P22 Q2, I3-1 IM-Q2). Native sync parks every post-dispatch failure (`ideogram.rs:457-465`);
   native held releases any 4xx (`ideogram.rs:340`, `durable.rs:1088-1090`). Ideogram's unsafe-prompt answer is 422,
   outside the allow-list, so on the held path it moves from released to parked; on the sync path it stays parked.
-- **P2 Client status while funds are parked**: 502 (I3-1 IM-Q6). Native answers the upstream status (for example 422)
-  on the sync path while it parks, and its own 422 for an all-filtered result (`ideogram.rs:376-380`).
+- **P2 Client status while funds are parked**: 502 for a failure found inside a 2xx body (I3-1 IM-Q6), such as the
+  all-filtered result, where native answers its own 422 (`ideogram.rs:376-380`). A non-2xx answer the host parks (401,
+  5xx, and the 422 unsafe-prompt answer) keeps the upstream status on both arms; IM-Q6 covers only 2xx bodies
+  (corrected 2026-10-13 from the host dual run, see the revision note).
 - **P3 Admission timing**: every §3 refusal is before admission; native refuses after admission and cancels
   (`ideogram.rs:420-432`). `n` is refused before admission on both (native through the catalog precheck,
   `handlers.rs:192-194`, `capabilities.rs:1411-1418`). Same as the Azure / I3-1 timing ruling.
@@ -386,3 +391,6 @@ a boolean (for example the string `"false"`) is not filtered on either side.
 - 2026-10-13: first draft (proposed).
 - 2026-10-13: lv ruled IG-Q1 to IG-Q3 as recommended; accepted.
 - 2026-10-13: implemented on branch `image-i3-5` (Implementation).
+- 2026-10-13: after the host dual run (`server:gateway/tests/component_image_dual_run_i34_i35.rs`): §7 P2 corrected
+  (502 only for failures inside a 2xx body, IM-Q6; a parked non-2xx keeps the upstream status on both arms); §6 item 8
+  added (native charges an empty `b64_json` download).
