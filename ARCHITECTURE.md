@@ -211,9 +211,18 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.59.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.53.0, 0.53.0 and 0.58.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
-**Unreleased (image world step I3-4: `image-stability`)**: Stability AI's Stable Image generation (design record
-`docs/design/2026-10-13-image-i3-4-stability.md`, accepted 2026-10-13; proposed for the next release). `image-stability`
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.60.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.53.0, 0.54.0 and 0.58.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**v0.60.0 (image world step I3-4: `image-stability`; D7: request pass-through for `generateContent`)**: release record
+`docs/design/2026-10-13-release-0.60.0.md`. D7 (design record `docs/design/2026-10-14-generate-content-request-passthrough.md`,
+accepted 2026-10-14): `NorthProtocolV1` gains `generate_content`, and the manifest field `north_request_passthrough`
+lets a family declare that the host may send the client's own body to the URL the component builds for the probe IR
+(gate ① requires the same protocol in `north_passthrough` and the Gemini wire in `request_facts`; gate ② checks that the
+descriptor does not depend on the body; gate ③'s `south.north-passthrough-delivery.v2` is parameterised by protocol).
+`provider-gemini` declares both for `gemini`. Riding along, `subscription_quota_families` lets a provider-world package
+name its subscription families (`github-copilot` in `provider-openai-compatible`, `openai-codex` in
+`provider-openai-responses`). The three packages declare `south_runtime` 0.60.0, the first runtime that parses the new
+fields. I3-4 (Stability AI's Stable Image generation; design record `docs/design/2026-10-13-image-i3-4-stability.md`,
+accepted 2026-10-13): `image-stability`
 1.0.0 (family `stability-image`, `bearer`) serves the five ids the host's native arm classifies, generation only: a
 multipart POST to `v2beta/stable-image/generate/{ultra,core,sd3}` with `accept: application/json`, the native parts in the
 native order, and a client's source image (`image_url` or `image`, always elided) as the last part through
