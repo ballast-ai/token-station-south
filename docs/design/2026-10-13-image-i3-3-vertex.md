@@ -1,6 +1,7 @@
 # Image world step I3-3: `image-vertex` (Nano Banana on Vertex AI)
 
-Status: proposed (awaiting lv's review).
+Status: proposed (awaiting lv's review of the rest; VI-Q1 and VI-Q2 ruled by lv on 2026-10-13 as recommended:
+the host re-reads a minted slot from round 2 on, and answers 400 for an operation the package does not declare).
 
 Date: 2026-10-13
 
@@ -285,3 +286,6 @@ implementation.
 ## Revision note
 
 - 2026-10-13: first draft (proposed).
+- 2026-10-13: lv ruled VI-Q1 (the host re-reads a minted slot from round 2 on; a precondition for `n > 1` Vertex rows) and
+  VI-Q2 (option (b): the host answers 400 for an operation the package does not declare) as recommended; the rest of
+  the record awaits lv's review.
