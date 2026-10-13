@@ -1,7 +1,7 @@
 # Image world step I3-2: `image-gemini` (Gemini API, token pricing first)
 
-Status: accepted (lv, 2026-10-13: GI-Q1 to GI-Q7 ruled as recommended, §11). Implemented on branch `image-i3-2` (see
-Implementation); not released.
+Status: accepted (lv, 2026-10-13: GI-Q1 to GI-Q7 ruled as recommended, §11). Implemented in #194 (see
+Implementation); released in 0.59.0 ([release record](2026-10-13-release-0.59.0.md)).
 
 Date: 2026-10-13
 
@@ -375,7 +375,7 @@ Departures from §10, each following the embeddings contract 2 precedent (0.51.0
    them and adds 2 to its range to admit `image-gemini` (§5 item 2). The test hosts (`host_range` in the conformance
    and runtime crates, `declared_runtime_v1`) decode every media contract up to the one `compatibility.json` records,
    as they do for embeddings.
-2. `image-gemini` declares this tree's release, 0.58.0, as its `south_runtime` until the release commit, which moves
+2. `image-gemini` declared this tree's release, 0.58.0, as its `south_runtime` until the release commit, which moved
    the workspace version and the declaration together to the release that ships the word (as `embeddings-gemini`
    1.1.0 declared 0.50.0 until the 0.51.0 release commit). `scripts/check-declared-runtime.sh --build` passes on this
    branch only because a package declaring the workspace version is judged by this tree; the published 0.58.0

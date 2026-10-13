@@ -14,7 +14,7 @@ sha2.workspace = true
 south-contracts = { path = "../south-contracts", version = "0.53.0" }
 # The host-only SSE decoder: the suite cuts frames exactly where a host must (NC-1 record §3.2).
 # Allowed here because no component links this crate; it keeps the workspace version.
-south-host-grammars = { path = "../south-host-grammars", version = "0.58.0" }
+south-host-grammars = { path = "../south-host-grammars", version = "0.59.0" }
 south-provider-api = { path = "../south-provider-api", version = "0.53.0" }
 
 [dev-dependencies]
