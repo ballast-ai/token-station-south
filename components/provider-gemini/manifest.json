@@ -27,6 +27,12 @@
   "endpoint": {
     "gemini": "https://generativelanguage.googleapis.com"
   },
+  "north_passthrough": {
+    "gemini": "generate_content"
+  },
+  "north_request_passthrough": {
+    "gemini": "generate_content"
+  },
   "permissions": {
     "network": false,
     "filesystem": false,
