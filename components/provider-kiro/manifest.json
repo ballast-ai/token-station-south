@@ -1,6 +1,6 @@
 {
   "name": "provider-kiro",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "api_version": "provider-adapter-v2",
   "providers": [
     "kiro"

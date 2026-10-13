@@ -93,6 +93,7 @@ jobs:
           scripts/build-xai-task-v2-component.sh
           scripts/build-byteplus-task-v2-component.sh
           scripts/build-veo-task-v2-component.sh
+          scripts/build-gemini-omni-task-v2-component.sh
           scripts/build-wan-image-task-v2-component.sh
           scripts/build-gmi-image-task-v2-component.sh
           scripts/build-embeddings-openai-compatible-component.sh
@@ -132,6 +133,7 @@ jobs:
             --test xai_task_sandbox_parity_v2 \
             --test byteplus_task_sandbox_parity_v2 \
             --test veo_task_sandbox_parity_v2 \
+            --test gemini_omni_task_sandbox_parity_v2 \
             --test wan_image_task_sandbox_parity_v2 \
             --test gmi_image_task_sandbox_parity_v2 \
             --test openai_compatible_embeddings_sandbox_parity \
@@ -180,6 +182,7 @@ jobs:
           package task-xai-v2 task_xai_v2.wasm
           package task-byteplus-v2 task_byteplus_v2.wasm
           package task-veo-v2 task_veo_v2.wasm
+          package task-gemini-omni-v2 task_gemini_omni_v2.wasm
           package task-wan-image-v2 task_wan_image_v2.wasm
           package task-gmi-image-v2 task_gmi_image_v2.wasm
           package embeddings-openai-compatible embeddings_openai_compatible.wasm

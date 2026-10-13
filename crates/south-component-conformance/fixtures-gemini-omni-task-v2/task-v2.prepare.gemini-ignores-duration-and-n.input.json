@@ -1,0 +1,16 @@
+{
+  "provider_config": {
+    "provider": "gemini-interactions-video",
+    "base_url": "https://generativelanguage.example",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "model": "gemini-omni-flash-preview",
+    "prompt": "a cat surfing a wave at sunset",
+    "duration": 8,
+    "n": 2
+  },
+  "minted": {
+    "task_id": "host-1"
+  }
+}

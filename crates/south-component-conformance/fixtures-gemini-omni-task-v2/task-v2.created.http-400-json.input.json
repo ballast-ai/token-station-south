@@ -1,0 +1,4 @@
+{
+  "status": 400,
+  "body": "{\"error\": {\"message\": \"Unknown parameter 'response_format.duration_seconds'.\", \"code\": \"invalid_request\"}}"
+}

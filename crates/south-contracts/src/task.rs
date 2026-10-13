@@ -34,8 +34,19 @@ use thiserror::Error;
 /// (docs/design/2026-09-27-task-contract-v6-facts.md). Version seven gives every URL artifact a
 /// role, so a component can report a companion such as a video's last frame beside the primary
 /// output without the host counting or delivering it
-/// (docs/design/2026-09-28-task-contract-v7-artifact-role.md). Every v1 type remains unchanged.
-pub const TASK_CONTRACT_VERSION: u16 = 7;
+/// (docs/design/2026-09-28-task-contract-v7-artifact-role.md). Version eight adds, additively,
+/// inline artifacts whose bytes the host holds and declared token buckets in usage and in the
+/// request estimate (docs/design/2026-10-01-omni-task-component.md §6, §7, §13): every new key is
+/// optional, so a version seven value decodes unchanged. Every v1 type remains unchanged.
+pub const TASK_CONTRACT_VERSION: u16 = 8;
+
+/// The oldest task contract this release decodes: version seven made `role` a required key, so a
+/// version six value is refused, while version eight only adds optional keys.
+pub const TASK_CONTRACT_VERSION_V7: u16 = 7;
+
+/// The task contracts a release decodes, for a host's range (as `EMBEDDINGS_CONTRACT_VERSIONS`):
+/// a package declaring 7 keeps working on a host that also admits 8.
+pub const TASK_CONTRACT_VERSIONS: [u16; 2] = [TASK_CONTRACT_VERSION_V7, TASK_CONTRACT_VERSION];
 
 /// The maximum byte length of a host-minted task identifier.
 pub const MAX_TASK_ID_BYTES: usize = 128;

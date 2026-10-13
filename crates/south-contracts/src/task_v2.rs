@@ -1,9 +1,12 @@
 //! Versioned task facts and the non-secret recovery locator; no wire derives.
 
+use crate::image::{ARTIFACT_KEY, ArtifactEncodingV1};
+use crate::media::{BlobIdV1, BlobSetV1, RESERVED_KEY_PREFIX, decode_base64, parse_data_url_v1};
 use crate::{
-    HostMintedValuesV1, MAX_ARTIFACT_REF_BYTES, MAX_ARTIFACT_URLS, RelativePathV1,
+    HostMintedValuesV1, JsonPointerV1, MAX_ARTIFACT_REF_BYTES, MAX_ARTIFACT_URLS, RelativePathV1,
     TaskFailureKindV1,
 };
+use serde_json::Value;
 use std::fmt;
 use thiserror::Error;
 
@@ -43,6 +46,15 @@ pub enum TaskContractErrorV2 {
     /// An artifact role word is not in the closed vocabulary.
     #[error("invalid task artifact role")]
     InvalidArtifactRole,
+    /// An inline artifact's pointer does not land on a blob of the call's view, or the blob does
+    /// not decode to a non-empty artifact within the host's limit (contract 8). The host observes
+    /// again rather than settling: the upstream answers the same pointer with fresh bytes.
+    #[error("unresolved inline task artifact")]
+    InlineArtifactUnresolved,
+    /// A rendered body names an artifact that does not exist, uses a malformed artifact marker, or
+    /// carries another `$south.` key (contract 8). The host refuses delivery.
+    #[error("task render breaks reference integrity")]
+    ReferenceIntegrity,
 }
 
 /// At most this many immutable request-body paths per prepared task.
@@ -95,6 +107,138 @@ impl TaskLocatorV2 {
     }
 }
 
+/// The closed vocabulary of token buckets a task component may report (contract 8).
+///
+/// The image world's nine words with the same spelling and meaning (image record §9.1), plus the
+/// modality and reasoning buckets video needs. `reasoning_output` is **outside** `total_output`,
+/// as the upstreams that report thoughts separately say it (`total = input + output + thought`);
+/// it is not the IR's `reasoning_tokens ⊂ output_tokens` convention, and a host folding buckets
+/// into a ledger adds the two. A new word is a contract bump, not a default.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum TaskTokenBucketV2 {
+    /// Text input tokens.
+    TextInput,
+    /// Image input tokens.
+    ImageInput,
+    /// Audio input tokens.
+    AudioInput,
+    /// Video input tokens.
+    VideoInput,
+    /// Cached text input tokens.
+    CachedTextInput,
+    /// Cached image input tokens.
+    CachedImageInput,
+    /// Cached input tokens the upstream does not split by modality.
+    CachedInput,
+    /// Text output tokens.
+    TextOutput,
+    /// Image output tokens.
+    ImageOutput,
+    /// Audio output tokens.
+    AudioOutput,
+    /// Video output tokens.
+    VideoOutput,
+    /// Reasoning ("thought") tokens, outside `total_output`.
+    ReasoningOutput,
+    /// Total input tokens.
+    TotalInput,
+    /// Total output tokens, reasoning excluded.
+    TotalOutput,
+}
+impl TaskTokenBucketV2 {
+    /// Every bucket, in wire order.
+    pub const ALL: [Self; 14] = [
+        Self::TextInput,
+        Self::ImageInput,
+        Self::AudioInput,
+        Self::VideoInput,
+        Self::CachedTextInput,
+        Self::CachedImageInput,
+        Self::CachedInput,
+        Self::TextOutput,
+        Self::ImageOutput,
+        Self::AudioOutput,
+        Self::VideoOutput,
+        Self::ReasoningOutput,
+        Self::TotalInput,
+        Self::TotalOutput,
+    ];
+    /// The wire spelling.
+    #[must_use]
+    pub const fn word(self) -> &'static str {
+        match self {
+            Self::TextInput => "text_input",
+            Self::ImageInput => "image_input",
+            Self::AudioInput => "audio_input",
+            Self::VideoInput => "video_input",
+            Self::CachedTextInput => "cached_text_input",
+            Self::CachedImageInput => "cached_image_input",
+            Self::CachedInput => "cached_input",
+            Self::TextOutput => "text_output",
+            Self::ImageOutput => "image_output",
+            Self::AudioOutput => "audio_output",
+            Self::VideoOutput => "video_output",
+            Self::ReasoningOutput => "reasoning_output",
+            Self::TotalInput => "total_input",
+            Self::TotalOutput => "total_output",
+        }
+    }
+    /// Parses the wire spelling; a word outside the vocabulary is `None`, never a default.
+    #[must_use]
+    pub fn from_word(word: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|bucket| bucket.word() == word)
+    }
+    const fn slot(self) -> usize {
+        self as usize
+    }
+}
+
+/// Token counts by bucket (contract 8): at least one bucket reported, each at most `i64::MAX`.
+/// A bucket that is not reported reads `None`, which is different from a reported zero.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct TaskTokenBucketsV2 {
+    counts: [Option<u64>; 14],
+}
+impl TaskTokenBucketsV2 {
+    /// Collects reported buckets; an empty set, a bucket reported twice or a count above
+    /// `i64::MAX` is refused.
+    pub fn new(
+        entries: impl IntoIterator<Item = (TaskTokenBucketV2, u64)>,
+    ) -> Result<Self, TaskContractErrorV2> {
+        let mut counts = [None; 14];
+        for (bucket, count) in entries {
+            let slot = &mut counts[bucket.slot()];
+            if slot.is_some() || i64::try_from(count).is_err() {
+                return Err(TaskContractErrorV2::InvalidUsage);
+            }
+            *slot = Some(count);
+        }
+        if counts.iter().all(Option::is_none) {
+            return Err(TaskContractErrorV2::InvalidUsage);
+        }
+        Ok(Self { counts })
+    }
+    /// The count of one bucket, `None` when it was not reported.
+    #[must_use]
+    pub const fn get(&self, bucket: TaskTokenBucketV2) -> Option<u64> {
+        self.counts[bucket.slot()]
+    }
+    /// The reported buckets, in wire order.
+    pub fn iter(&self) -> impl Iterator<Item = (TaskTokenBucketV2, u64)> + '_ {
+        TaskTokenBucketV2::ALL
+            .into_iter()
+            .filter_map(|bucket| self.get(bucket).map(|count| (bucket, count)))
+    }
+}
+impl fmt::Debug for TaskTokenBucketsV2 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_map()
+            .entries(self.iter().map(|(bucket, count)| (bucket.word(), count)))
+            .finish()
+    }
+}
+
 /// Independent upstream metering facts; no price or host settlement decision.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct TaskUsageFactsV2 {
@@ -102,6 +246,7 @@ pub struct TaskUsageFactsV2 {
     milliunits: Option<i64>,
     tokens: Option<i64>,
     outputs: Option<u32>,
+    token_buckets: Option<TaskTokenBucketsV2>,
 }
 impl TaskUsageFactsV2 {
     /// Validates all present facts without conflating zero with missing.
@@ -116,7 +261,24 @@ impl TaskUsageFactsV2 {
         {
             return Err(TaskContractErrorV2::InvalidUsage);
         }
-        Ok(Self { seconds, milliunits, tokens, outputs: None })
+        Ok(Self { seconds, milliunits, tokens, outputs: None, token_buckets: None })
+    }
+    /// Attaches token buckets (contract 8). Their presence is what tells the host the bill is
+    /// bucketed, so a single `tokens` count beside them is refused.
+    pub const fn with_token_buckets(
+        mut self,
+        token_buckets: Option<TaskTokenBucketsV2>,
+    ) -> Result<Self, TaskContractErrorV2> {
+        if token_buckets.is_some() && self.tokens.is_some() {
+            return Err(TaskContractErrorV2::InvalidUsage);
+        }
+        self.token_buckets = token_buckets;
+        Ok(self)
+    }
+    /// Returns the reported token buckets, if the upstream's bill is bucketed.
+    #[must_use]
+    pub const fn token_buckets(&self) -> Option<TaskTokenBucketsV2> {
+        self.token_buckets
     }
     /// Attaches the delivered output count (contract 6); absent is distinct from zero.
     pub fn with_outputs(mut self, outputs: Option<i64>) -> Result<Self, TaskContractErrorV2> {
@@ -291,6 +453,79 @@ impl fmt::Debug for TaskArtifactV2 {
     }
 }
 
+/// An artifact whose bytes are a string in the upstream response, held by the host (contract 8).
+///
+/// The pointer names which of the upstream's strings is the artifact; it never carries bytes, so
+/// the component cannot invent content. It must land on a `$south.blob` node of the view the
+/// component was given (the image world's `inline` form, image record §10.1).
+#[derive(Clone, PartialEq, Eq)]
+pub struct TaskInlineArtifactV2 {
+    pointer: JsonPointerV1,
+    encoding: ArtifactEncodingV1,
+    media_type: String,
+    role: TaskArtifactRoleV2,
+}
+impl TaskInlineArtifactV2 {
+    /// Validates a concrete, non-root RFC 6901 pointer and a `type/subtype` media type. The
+    /// artifact is a primary output until [`Self::with_role`] says otherwise.
+    pub fn new(
+        pointer: &str,
+        encoding: ArtifactEncodingV1,
+        media_type: &str,
+    ) -> Result<Self, TaskContractErrorV2> {
+        let pointer = JsonPointerV1::parse(pointer)
+            .ok()
+            .filter(|pointer| !pointer.as_str().is_empty())
+            .ok_or(TaskContractErrorV2::InvalidArtifact)?;
+        if !crate::media::is_media_type(media_type) {
+            return Err(TaskContractErrorV2::InvalidArtifact);
+        }
+        Ok(Self {
+            pointer,
+            encoding,
+            media_type: media_type.to_owned(),
+            role: TaskArtifactRoleV2::Primary,
+        })
+    }
+    /// Assigns the part this artifact plays (contract 7).
+    #[must_use]
+    pub const fn with_role(mut self, role: TaskArtifactRoleV2) -> Self {
+        self.role = role;
+        self
+    }
+    /// The pointer into the response view.
+    #[must_use]
+    pub fn pointer(&self) -> &str {
+        self.pointer.as_str()
+    }
+    /// How the string is encoded.
+    #[must_use]
+    pub const fn encoding(&self) -> ArtifactEncodingV1 {
+        self.encoding
+    }
+    /// The artifact's media type.
+    #[must_use]
+    pub fn media_type(&self) -> &str {
+        &self.media_type
+    }
+    /// The part this artifact plays in the task's result.
+    #[must_use]
+    pub const fn role(&self) -> TaskArtifactRoleV2 {
+        self.role
+    }
+}
+impl fmt::Debug for TaskInlineArtifactV2 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("TaskInlineArtifactV2")
+            .field("pointer", &self.pointer.as_str())
+            .field("encoding", &self.encoding)
+            .field("media_type", &self.media_type)
+            .field("role", &self.role)
+            .finish()
+    }
+}
+
 /// Direct artifacts, an id requiring another fetch, or an inline result.
 #[derive(Clone, PartialEq)]
 pub enum TaskArtifactRefV2 {
@@ -300,6 +535,9 @@ pub enum TaskArtifactRefV2 {
     FileId(String),
     /// A terminal result that has no separate artifact reference.
     None,
+    /// Contract 8: artifacts whose bytes are strings in the upstream response, held by the host.
+    /// The same bounds as [`Self::Urls`], and the pointers are distinct.
+    Inline(Vec<TaskInlineArtifactV2>),
 }
 impl TaskArtifactRefV2 {
     /// Validates direct artifact references.
@@ -307,6 +545,23 @@ impl TaskArtifactRefV2 {
         let value = Self::Urls(urls);
         value.validate()?;
         Ok(value)
+    }
+    /// Validates inline artifact references (contract 8).
+    pub fn inline(items: Vec<TaskInlineArtifactV2>) -> Result<Self, TaskContractErrorV2> {
+        let value = Self::Inline(items);
+        value.validate()?;
+        Ok(value)
+    }
+    /// The number of primary artifacts: what a host counts, stores and names `art_0` …
+    /// (contract 7). A file id is one artifact; an empty result none.
+    #[must_use]
+    pub fn primary_count(&self) -> usize {
+        match self {
+            Self::Urls(items) => items.iter().filter(|item| item.role().is_primary()).count(),
+            Self::Inline(items) => items.iter().filter(|item| item.role().is_primary()).count(),
+            Self::FileId(_) => 1,
+            Self::None => 0,
+        }
     }
     /// Validates a file reference.
     pub fn file_id(id: &str) -> Result<Self, TaskContractErrorV2> {
@@ -329,6 +584,16 @@ impl TaskArtifactRefV2 {
             Self::FileId(id) if id.is_empty() || id.len() > MAX_ARTIFACT_REF_BYTES => {
                 Err(TaskContractErrorV2::InvalidArtifact)
             }
+            Self::Inline(items)
+                if items.is_empty()
+                    || items.len() > MAX_ARTIFACT_URLS
+                    || !items.iter().any(|item| item.role().is_primary())
+                    || items.iter().enumerate().any(|(index, item)| {
+                        items[..index].iter().any(|earlier| earlier.pointer == item.pointer)
+                    }) =>
+            {
+                Err(TaskContractErrorV2::InvalidArtifact)
+            }
             _ => Ok(()),
         }
     }
@@ -341,12 +606,18 @@ impl fmt::Debug for TaskArtifactRefV2 {
                 formatter.debug_struct("FileId").field("byte_count", &id.len()).finish()
             }
             Self::None => formatter.write_str("None"),
+            Self::Inline(items) => formatter.debug_tuple("Inline").field(items).finish(),
         }
     }
 }
 
 /// The upstream's execution facts, independent of host billing and delivery.
 #[derive(Clone, Debug, PartialEq)]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "contract 8's token buckets keep usage `Copy`; boxing the variant would change the \
+              public pattern every host matches, for a value moved a few times per poll"
+)]
 pub enum TaskObservationV2 {
     /// Explicit queued/running distinction with the original status word.
     Progress { running: bool, status_word: String },
@@ -443,6 +714,7 @@ pub struct TaskRequestEstimateV2 {
     input_image_count: Option<u32>,
     tokens_per_second: Option<i64>,
     requested_outputs: Option<u32>,
+    bucket_ceilings: Option<TaskTokenBucketsV2>,
 }
 impl TaskRequestEstimateV2 {
     /// Validates protocol request duration and its optional unit rate.
@@ -462,7 +734,20 @@ impl TaskRequestEstimateV2 {
             input_image_count: None,
             tokens_per_second: None,
             requested_outputs: None,
+            bucket_ceilings: None,
         })
+    }
+    /// Attaches per-bucket ceilings that may only tighten the host's own reservation bound
+    /// (contract 8). The host compares reported buckets with its own bound, never with these.
+    #[must_use]
+    pub const fn with_bucket_ceilings(mut self, ceilings: Option<TaskTokenBucketsV2>) -> Self {
+        self.bucket_ceilings = ceilings;
+        self
+    }
+    /// Returns the component's per-bucket ceilings, if it states any.
+    #[must_use]
+    pub const fn bucket_ceilings(&self) -> Option<TaskTokenBucketsV2> {
+        self.bucket_ceilings
     }
     /// Attaches the protocol token rate and the requested output count (contract 6).
     ///
@@ -572,4 +857,93 @@ fn estimate_at_rate(
         return Err(TaskContractErrorV2::InvalidRequestEstimate);
     }
     Ok(Some(estimate as i64))
+}
+
+/// Resolves one inline artifact against the view and blobs of the call that produced it
+/// (contract 8, host obligation).
+///
+/// The pointer must land on a `{"$south.blob": {"id", …}}` node of `view`, the blob must be one of
+/// `blobs`, and its text must decode under the artifact's encoding (strict standard base64, or a
+/// `data:` URL) to between 1 and `max_bytes` bytes.
+///
+/// Every failure is [`TaskContractErrorV2::InlineArtifactUnresolved`]; a host observes again
+/// rather than settling, because the upstream returns the same interaction by id.
+pub fn resolve_task_inline_artifact_v1(
+    view: &str,
+    blobs: &BlobSetV1,
+    artifact: &TaskInlineArtifactV2,
+    max_bytes: usize,
+) -> Result<Vec<u8>, TaskContractErrorV2> {
+    let unresolved = || TaskContractErrorV2::InlineArtifactUnresolved;
+    let view: Value = serde_json::from_str(view).map_err(|_| unresolved())?;
+    let node =
+        view.pointer(artifact.pointer()).and_then(Value::as_object).ok_or_else(unresolved)?;
+    let blob = match node.iter().next() {
+        Some((key, placeholder)) if node.len() == 1 && key == crate::media::BLOB_KEY => placeholder,
+        _ => return Err(unresolved()),
+    };
+    let id = blob
+        .get("id")
+        .and_then(Value::as_str)
+        .and_then(|id| BlobIdV1::parse(id).ok())
+        .ok_or_else(unresolved)?;
+    let blob = blobs.get(&id).filter(|blob| blob.is_text()).ok_or_else(unresolved)?;
+    let text = std::str::from_utf8(blob.bytes()).map_err(|_| unresolved())?;
+    let bytes = match artifact.encoding() {
+        ArtifactEncodingV1::Base64 => decode_base64(text).map_err(|_| unresolved())?,
+        ArtifactEncodingV1::DataUrl => parse_data_url_v1(text).map_err(|_| unresolved())?.1,
+    };
+    if bytes.is_empty() || bytes.len() > max_bytes {
+        return Err(unresolved());
+    }
+    Ok(bytes)
+}
+
+/// Replaces every artifact marker `{"$south.artifact": {"index": i}}` in a rendered body with
+/// `path_of(i)` (contract 8, host obligation), returning how many it replaced.
+///
+/// `i` counts the primary artifacts of `artifacts` (contract 7: `art_0` is the first primary). A
+/// marker that is not exactly that shape, names no primary artifact, or any other `$south.` key
+/// left in the body refuses delivery with [`TaskContractErrorV2::ReferenceIntegrity`]; the body is
+/// then left partly replaced and must be discarded.
+pub fn fill_task_artifact_markers_v1(
+    render: &mut Value,
+    artifacts: &TaskArtifactRefV2,
+    path_of: impl Fn(usize) -> String,
+) -> Result<usize, TaskContractErrorV2> {
+    fn marker_index(node: &serde_json::Map<String, Value>, primaries: usize) -> Option<usize> {
+        let marker = node.get(ARTIFACT_KEY)?.as_object()?;
+        let index = marker.get("index")?.as_u64().and_then(|index| usize::try_from(index).ok())?;
+        (node.len() == 1 && marker.len() == 1 && index < primaries).then_some(index)
+    }
+    fn visit(
+        node: &mut Value,
+        primaries: usize,
+        path_of: &dyn Fn(usize) -> String,
+        filled: &mut usize,
+    ) -> Result<(), TaskContractErrorV2> {
+        match node {
+            Value::Array(items) => {
+                items.iter_mut().try_for_each(|item| visit(item, primaries, path_of, filled))
+            }
+            Value::Object(members) if members.contains_key(ARTIFACT_KEY) => {
+                let index = marker_index(members, primaries)
+                    .ok_or(TaskContractErrorV2::ReferenceIntegrity)?;
+                *node = Value::String(path_of(index));
+                *filled += 1;
+                Ok(())
+            }
+            Value::Object(members) => {
+                if members.keys().any(|key| key.starts_with(RESERVED_KEY_PREFIX)) {
+                    return Err(TaskContractErrorV2::ReferenceIntegrity);
+                }
+                members.values_mut().try_for_each(|value| visit(value, primaries, path_of, filled))
+            }
+            _ => Ok(()),
+        }
+    }
+    artifacts.validate()?;
+    let mut filled = 0;
+    visit(render, artifacts.primary_count(), &path_of, &mut filled)?;
+    Ok(filled)
 }

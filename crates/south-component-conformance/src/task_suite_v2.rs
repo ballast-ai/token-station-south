@@ -6,7 +6,10 @@ use crate::{
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
-use south_contracts::{HostMintedValuesV1, TaskObservationV2};
+use south_contracts::{
+    HostMintedValuesV1, TaskArtifactRefV2, TaskInlineArtifactV2, TaskObservationV2,
+    TaskUsageFactsV2, fill_task_artifact_markers_v1,
+};
 use south_provider_api::ComponentManifestV1;
 use token_station_protocol::{ErrorEnvelope, HttpResponseParts, ProviderConfig};
 
@@ -237,5 +240,210 @@ pub fn run_task_component_suite_v2_for_manifest(
     if let Some(credentials) = &manifest.credentials {
         outcomes.extend(credential_recipe_checks_v1(credentials, pack.credentials()));
     }
+    if !manifest.response_blob_paths.is_empty() || !manifest.token_buckets.is_empty() {
+        outcomes.extend(contract_8_checks(component, pack, manifest));
+    }
     ReportV1::new(TASK_COMPONENT_SUITE_V2, outcomes)
+}
+
+/// The checks that bind every task contract 8 package (docs/design/2026-10-01-omni-task-component.md
+/// §10): `DeclaredBucketsOnly` on every success, `ReferenceIntegrity` on every inline artifact and
+/// rendered body, and `UsageNeverDefaulted` / `MissingMeterIsNotZero` on every success observation
+/// that points at its usage with a sidecar.
+fn contract_8_checks(
+    component: &dyn TaskComponentV2,
+    pack: &TaskFixturePackV2,
+    manifest: &ComponentManifestV1,
+) -> Vec<OutcomeV1> {
+    let mut outcomes = Vec::new();
+    let mut pointed = false;
+    for case in pack.cases() {
+        match case.family {
+            TaskFamilyV2::Observation | TaskFamilyV2::Created => {
+                let Ok(parts) = parse::<HttpResponseParts>(&case.input) else { continue };
+                let observation = if case.family == TaskFamilyV2::Observation {
+                    component.parse_observation(&parts).ok()
+                } else {
+                    match component.parse_submit_response(&parts) {
+                        Ok(crate::SubmitOutcomeV2::AcceptedTerminal(observation)) => {
+                            Some(observation)
+                        }
+                        _ => None,
+                    }
+                };
+                let Some(TaskObservationV2::Succeeded { artifacts, usage }) = observation else {
+                    continue;
+                };
+                outcomes.push(declared_buckets_only(&case.name, &usage, manifest));
+                if let TaskArtifactRefV2::Inline(items) = &artifacts {
+                    outcomes.push(inline_lands_on_blobs(&case.name, &parts.body, items));
+                }
+                if let Some(meta) = pack.usage_meta(&case.name) {
+                    pointed = true;
+                    outcomes.extend(usage_deletions(component, &case.name, &parts, meta, manifest));
+                }
+            }
+            TaskFamilyV2::Render => outcomes.extend(render_references(component, case)),
+            _ => {}
+        }
+    }
+    if !pointed && !manifest.required_token_buckets.is_empty() {
+        outcomes.push(OutcomeV1::failed(
+            CheckV1::UsageNeverDefaulted,
+            TASK_COMPONENT_SUITE_V2,
+            "no success observation fixture carries a usage sidecar, so nothing is deleted",
+        ));
+    }
+    outcomes
+}
+
+fn declared_buckets_only(
+    case: &str,
+    usage: &TaskUsageFactsV2,
+    manifest: &ComponentManifestV1,
+) -> OutcomeV1 {
+    let reported: Vec<&str> = usage
+        .token_buckets()
+        .map(|buckets| buckets.iter().map(|(bucket, _)| bucket.word()).collect())
+        .unwrap_or_default();
+    if let Some(stray) =
+        reported.iter().find(|word| !manifest.token_buckets.iter().any(|d| d == *word))
+    {
+        return OutcomeV1::failed(
+            CheckV1::DeclaredBucketsOnly,
+            case,
+            format!("reports `{stray}`, which token_buckets does not declare"),
+        );
+    }
+    if let Some(missing) =
+        manifest.required_token_buckets.iter().find(|word| !reported.contains(&word.as_str()))
+    {
+        return OutcomeV1::failed(
+            CheckV1::DeclaredBucketsOnly,
+            case,
+            format!("a success without the required bucket `{missing}`"),
+        );
+    }
+    OutcomeV1::passed(CheckV1::DeclaredBucketsOnly, case)
+}
+
+/// Every inline pointer lands on a `$south.blob` placeholder of the response the component read:
+/// a pointer names which upstream string is the artifact, never bytes of its own.
+fn inline_lands_on_blobs(case: &str, body: &str, items: &[TaskInlineArtifactV2]) -> OutcomeV1 {
+    let view: Option<Value> = serde_json::from_str(body).ok();
+    let lands = |item: &TaskInlineArtifactV2| {
+        view.as_ref()
+            .and_then(|view| view.pointer(item.pointer()))
+            .and_then(Value::as_object)
+            .is_some_and(|node| {
+                node.len() == 1 && node.contains_key(south_contracts::media::BLOB_KEY)
+            })
+    };
+    if items.iter().all(lands) {
+        OutcomeV1::passed(CheckV1::ReferenceIntegrity, case)
+    } else {
+        OutcomeV1::failed(
+            CheckV1::ReferenceIntegrity,
+            case,
+            "an inline pointer does not land on a $south.blob of the response view",
+        )
+    }
+}
+
+/// A rendered body names only primary artifacts of its observation, through well-formed
+/// `$south.artifact` markers, and carries no other `$south.` key.
+fn render_references(
+    component: &dyn TaskComponentV2,
+    case: &crate::TaskCaseV2,
+) -> Option<OutcomeV1> {
+    let arg: RenderInput = parse(&case.input).ok()?;
+    let observation = wire::parse_observation_json(&arg.observation.to_string()).ok()?;
+    let context = wire::parse_render_context_json(&arg.context.to_string()).ok()?;
+    let mut body = component.render_success(&observation, arg.fetched.as_ref(), &context).ok()?;
+    let TaskObservationV2::Succeeded { artifacts, .. } = &observation else { return None };
+    Some(
+        match fill_task_artifact_markers_v1(&mut body, artifacts, |index| format!("art_{index}")) {
+            Ok(_) => OutcomeV1::passed(CheckV1::ReferenceIntegrity, &case.name),
+            Err(_) => OutcomeV1::failed(
+                CheckV1::ReferenceIntegrity,
+                &case.name,
+                "the rendered body names a missing artifact or leaves a $south. key",
+            ),
+        },
+    )
+}
+
+/// Removes the member an RFC 6901 pointer names; `false` when it names nothing.
+fn remove_at(document: &mut Value, pointer: &str) -> bool {
+    let Some((parent, last)) = pointer.rsplit_once('/') else { return false };
+    let last = last.replace("~1", "/").replace("~0", "~");
+    match document.pointer_mut(parent) {
+        Some(Value::Object(members)) => members.remove(&last).is_some(),
+        Some(Value::Array(items)) => match last.parse::<usize>() {
+            Ok(index) if index < items.len() => {
+                items.remove(index);
+                true
+            }
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+/// Deleting the usage object, or the wire member of any required bucket, makes the component
+/// answer `unknown` rather than bill a zero the upstream never said.
+fn usage_deletions(
+    component: &dyn TaskComponentV2,
+    case: &str,
+    parts: &HttpResponseParts,
+    meta: &crate::TaskUsageMetaV2,
+    manifest: &ComponentManifestV1,
+) -> Vec<OutcomeV1> {
+    let deleted = |pointer: &str| -> Option<bool> {
+        let mut body: Value = serde_json::from_str(&parts.body).ok()?;
+        if !remove_at(&mut body, pointer) {
+            return None;
+        }
+        let mut stripped = parts.clone();
+        stripped.body = body.to_string();
+        Some(matches!(
+            component.parse_observation(&stripped),
+            Ok(TaskObservationV2::Unknown { .. })
+        ))
+    };
+    let mut outcomes = vec![match deleted(&meta.usage_pointer) {
+        Some(true) => OutcomeV1::passed(CheckV1::UsageNeverDefaulted, case),
+        Some(false) => OutcomeV1::failed(
+            CheckV1::UsageNeverDefaulted,
+            case,
+            "deleting the usage object did not make the observation unknown",
+        ),
+        None => OutcomeV1::failed(
+            CheckV1::UsageNeverDefaulted,
+            case,
+            "usage_pointer names nothing in the body",
+        ),
+    }];
+    for bucket in &manifest.required_token_buckets {
+        let name = format!("{case}#{bucket}");
+        outcomes.push(match meta.bucket_pointers.get(bucket).map(|pointer| deleted(pointer)) {
+            Some(Some(true)) => OutcomeV1::passed(CheckV1::MissingMeterIsNotZero, &name),
+            Some(Some(false)) => OutcomeV1::failed(
+                CheckV1::MissingMeterIsNotZero,
+                &name,
+                "deleting a required bucket's wire member did not make the observation unknown",
+            ),
+            Some(None) => OutcomeV1::failed(
+                CheckV1::MissingMeterIsNotZero,
+                &name,
+                "the bucket pointer names nothing in the body",
+            ),
+            None => OutcomeV1::failed(
+                CheckV1::MissingMeterIsNotZero,
+                &name,
+                "the usage sidecar names no wire member for this required bucket",
+            ),
+        });
+    }
+    outcomes
 }

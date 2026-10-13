@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "capability",
+    "http_status": 400,
+    "message": "Omni generates one clip per request; 'n' must be 1"
+  }
+}

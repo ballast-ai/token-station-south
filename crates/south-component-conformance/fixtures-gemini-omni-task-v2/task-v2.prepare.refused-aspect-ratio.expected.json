@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "capability",
+    "http_status": 400,
+    "message": "Omni accepts the aspect ratios 16:9 and 9:16 only"
+  }
+}

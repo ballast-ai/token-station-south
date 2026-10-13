@@ -1,0 +1,15 @@
+{
+  "provider_config": {
+    "provider": "gemini-interactions-video",
+    "base_url": "https://generativelanguage.example",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "model": "gemini-omni-flash-preview",
+    "prompt": "p",
+    "image": "data:image/png;base64,iVBORw0KGgo="
+  },
+  "minted": {
+    "task_id": "host-1"
+  }
+}

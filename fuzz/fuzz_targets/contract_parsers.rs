@@ -516,6 +516,19 @@ fuzz_target!(|data: &[u8]| {
     {
         assert!(parse_submit_outcome_json(&encoded).is_ok());
     }
+    // Task contract 8: the Omni guest reads elided views with inline pointers and token buckets.
+    let omni = south_component_conformance::reference_gemini_omni_task_v2::GeminiOmniTaskComponentV2;
+    if let Ok(encoded) =
+        south_component_conformance::abi_task_v2::parse_observation_json(&omni, input)
+    {
+        let facts = parse_observation_json(&encoded).expect("guest output must decode");
+        assert!(facts.validate().is_ok());
+    }
+    if let Ok(encoded) =
+        south_component_conformance::abi_task_v2::parse_submit_response_json(&omni, input)
+    {
+        assert!(parse_submit_outcome_json(&encoded).is_ok());
+    }
 
     // Persisted task-v2 frames cross a separate trust boundary from provider JSON.
     // Accepted frames must survive the unique codec without losing typed facts.

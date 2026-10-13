@@ -1,0 +1,64 @@
+{
+  "descriptor": {
+    "method": "POST",
+    "url": "https://aiplatform.example/v1beta1/projects/sample-project/locations/global/interactions",
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "model": "gemini-omni-flash-preview",
+      "input": [
+        {
+          "type": "text",
+          "text": "animate this"
+        },
+        {
+          "type": "image",
+          "mime_type": "image/png",
+          "data": "iVBORw0KGgo="
+        },
+        {
+          "type": "image",
+          "mime_type": "image/jpeg",
+          "data": "/9j/4AAQ"
+        },
+        {
+          "type": "image",
+          "mime_type": "image/png",
+          "data": "iVBORw0KGgo="
+        }
+      ],
+      "response_format": {
+        "type": "video",
+        "delivery": "inline"
+      },
+      "background": true
+    },
+    "auth": {
+      "scheme": "bearer",
+      "secret": "provider_api_key"
+    }
+  },
+  "locator": {
+    "schema_version": 1,
+    "route": "interactions"
+  },
+  "request_estimate": {
+    "requested_seconds": 10.0,
+    "milliunits_per_second": null,
+    "resolution": null,
+    "input_image_count": 3,
+    "tokens_per_second": null,
+    "requested_outputs": 1,
+    "bucket_ceilings": {
+      "video_output": 57920
+    }
+  },
+  "immutable_body_paths": [
+    "model",
+    "input",
+    "response_format",
+    "background",
+    "stream"
+  ]
+}

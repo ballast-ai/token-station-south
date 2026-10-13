@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "capability",
+    "http_status": 400,
+    "message": "Omni accepts a first frame and reference images; last-frame and video inputs are not supported"
+  }
+}

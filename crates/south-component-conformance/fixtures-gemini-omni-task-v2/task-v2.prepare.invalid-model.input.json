@@ -1,0 +1,14 @@
+{
+  "provider_config": {
+    "provider": "vertex-interactions-video",
+    "base_url": "https://aiplatform.example/v1beta1/projects/sample-project/locations/global",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "model": "models/../x",
+    "prompt": "p"
+  },
+  "minted": {
+    "task_id": "host-1"
+  }
+}

@@ -12,10 +12,10 @@ version.workspace = true
 bytes.workspace = true
 http.workspace = true
 serde_json.workspace = true
-south-contracts = { path = "../south-contracts", version = "0.53.0" }
+south-contracts = { path = "../south-contracts", version = "0.54.0" }
 south-core = { path = "../south-core", version = "0.61.0" }
 south-host-grammars = { path = "../south-host-grammars", version = "0.61.0" }
-south-provider-api = { path = "../south-provider-api", version = "0.54.0" }
+south-provider-api = { path = "../south-provider-api", version = "0.55.0" }
 south-provider-conformance = { path = "../south-provider-conformance", version = "0.61.0" }
 tokio = { workspace = true, features = ["macros", "sync", "time"] }
 tokio-util = { workspace = true, features = ["rt"] }

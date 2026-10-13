@@ -1,0 +1,8 @@
+{
+  "outcome": "rejected",
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "Unknown parameter 'response_format.duration_seconds'."
+  }
+}

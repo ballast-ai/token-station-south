@@ -1,0 +1,8 @@
+{
+  "outcome": "rejected",
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "gcs_uri is required when delivery is 'uri'. See https://cloud.google.com/vertex-ai/docs"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "observation": {
+    "state": "progress",
+    "running": true,
+    "status_word": "in_progress"
+  },
+  "context": {
+    "task_id": "host-1",
+    "created": 1727683312,
+    "provider": "vertex",
+    "model": "omni-flash",
+    "upstream_task_id": "v1_ChdIc2JwYWVXc0pyeUZtY0FQOGVLUi1BbxIX"
+  }
+}

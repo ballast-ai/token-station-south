@@ -1,0 +1,28 @@
+{
+  "state": "succeeded",
+  "artifacts": {
+    "kind": "urls",
+    "items": [
+      {
+        "url": "https://generativelanguage.example/v1beta/files/omni-clip:download?alt=media",
+        "id": null,
+        "duration": null,
+        "fetch_with_credential": true,
+        "role": null
+      }
+    ]
+  },
+  "usage": {
+    "seconds": null,
+    "milliunits": null,
+    "tokens": null,
+    "outputs": 1,
+    "token_buckets": {
+      "text_input": 17,
+      "total_input": 17,
+      "video_output": 57920,
+      "total_output": 57920,
+      "reasoning_output": 234
+    }
+  }
+}

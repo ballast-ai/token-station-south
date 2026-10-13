@@ -1,0 +1,13 @@
+{
+  "provider_config": {
+    "provider": "gemini-interactions-video",
+    "base_url": "https://generativelanguage.example",
+    "auth": "provider_api_key"
+  },
+  "upstream_model": "gemini-omni-flash-preview",
+  "upstream_task_id": "v1_ChdIc2JwYWVXc0pyeUZtY0FQOGVLUi1BbxIX",
+  "locator": {
+    "schema_version": 1,
+    "route": "v1beta/interactions"
+  }
+}

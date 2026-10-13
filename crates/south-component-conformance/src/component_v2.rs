@@ -25,6 +25,10 @@ pub struct PreparedTaskV2 {
 
 /// Explicit submit outcomes; acceptance uncertainty is not rejection.
 #[derive(Clone, Debug, PartialEq)]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "a terminal observation carries contract 8's `Copy` token buckets; see `TaskObservationV2`"
+)]
 pub enum SubmitOutcomeV2 {
     /// The original upstream handle, without rewriting it.
     Accepted(String),
