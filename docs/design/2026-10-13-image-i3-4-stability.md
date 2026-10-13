@@ -2,8 +2,8 @@
 
 Status: accepted (2026-10-13). SI-Q4 ruled by lv (with I3-3's VI-Q2): the host answers 400 for an operation the package
 does not declare. SI-Q1, SI-Q2, SI-Q3 and SI-Q5 follow the recommendations, under lv's pre-approval to build I3-4
-directly per the image world record (each keeps the native arm's behaviour). Implemented on branch `image-i3-4` (not yet merged); see
-Implementation.
+directly per the image world record (each keeps the native arm's behaviour). Implemented in #197 (see Implementation); released in 0.60.0
+([release record](2026-10-13-release-0.60.0.md)).
 
 Date: 2026-10-13
 

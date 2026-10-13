@@ -1302,10 +1302,10 @@ fn the_responses_package_declares_the_runtime_that_first_admits_its_declarations
     )
     .unwrap();
     // 1.0.0 shipped in 0.54.0; NC-1 made 1.1.0, R3 1.2.0, KC1 1.3.0, I3-1's Q47 bump 1.3.1,
-    // I3-2's 1.3.2 and I3-4's 1.3.3 (below), with the same runtime: the Codex `credentials` section
-    // uses only forms the 0.54.0 gate ① admits.
+    // I3-2's 1.3.2 and I3-4's 1.3.3 (below). The Codex `credentials` section uses only forms the
+    // 0.54.0 gate ① admits; `subscription_quota_families` (D7, 0.60.0) needs the 0.60.0 runtime.
     assert_eq!(manifest.version, "1.3.3");
-    assert_eq!(manifest.compatibility.south_runtime, "0.57.0");
+    assert_eq!(manifest.compatibility.south_runtime, "0.60.0");
     assert!(!manifest.immutable_body_paths.is_empty() && !manifest.north_passthrough.is_empty());
     assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
     let mut on_053 = host_range::host_range();
@@ -1403,6 +1403,19 @@ fn r3_retires_every_published_055_package_identity() {
     }
 }
 
+/// The `south_runtime` a package declares today. Most packages still need only the 0.57.0 runtime
+/// (`canonical_ir` 4); the three that declare a manifest field added in 0.60.0
+/// (`north_request_passthrough`, `subscription_quota_families`; D7, record
+/// `2026-10-14-generate-content-request-passthrough.md`) need the first runtime that parses it, because
+/// `ComponentManifestV1` refuses unknown fields; `image-gemini` needs the first runtime with media 2.
+fn declared_runtime_now(name: &str) -> &'static str {
+    match name {
+        "provider-gemini" | "provider-openai-compatible" | "provider-openai-responses" => "0.60.0",
+        "image-gemini" => "0.59.0",
+        _ => "0.57.0",
+    }
+}
+
 /// KC1 (design record `2026-10-12-kc1-canonical-ir-4-south.md`) re-pins the kernel to mirror
 /// `v0.5.0` (protocol 0.6.0, `canonical_ir` 4) and changes `south-provider-api` (the
 /// `end_user_hash` host value, 0.52.0 → 0.53.0) and `south-component-conformance` (0.54.0 →
@@ -1456,7 +1469,8 @@ fn kc1_retires_every_r3_package_identity() {
         );
         assert_eq!(manifest.compatibility.kernel_version, "0.5.0", "{name}");
         assert_eq!(
-            manifest.compatibility.south_runtime, "0.57.0",
+            manifest.compatibility.south_runtime,
+            declared_runtime_now(name),
             "{name}: needs canonical_ir 4, which 0.57.0 is the first runtime to record"
         );
         assert_eq!(
@@ -1506,7 +1520,11 @@ fn i3_1_retires_every_published_057_package_identity() {
         )
         .unwrap();
         assert_ne!(manifest.version, published, "{name} reused its published identity");
-        assert_eq!(manifest.compatibility.south_runtime, "0.57.0", "{name}: no runtime moves");
+        assert_eq!(
+            manifest.compatibility.south_runtime,
+            declared_runtime_now(name),
+            "{name}: no runtime moves in that release"
+        );
         assert_eq!(
             manifest.compatibility.ir_schema_id, "token-station-protocol@0.6.0/v0.5.0",
             "{name}"
@@ -1558,7 +1576,11 @@ fn i3_2_retires_every_published_058_package_identity() {
         )
         .unwrap();
         assert_ne!(manifest.version, published, "{name} reused its published identity");
-        assert_eq!(manifest.compatibility.south_runtime, "0.57.0", "{name}: no runtime moves");
+        assert_eq!(
+            manifest.compatibility.south_runtime,
+            declared_runtime_now(name),
+            "{name}: no runtime moves in that release"
+        );
         if manifest.api_version == south_provider_api::IMAGE_WORLD {
             assert_eq!(manifest.compatibility.contracts.get("media"), Some(&1), "{name}");
         }
@@ -1611,8 +1633,12 @@ fn i3_4_retires_every_published_059_package_identity() {
         .unwrap();
         assert_ne!(manifest.version, published, "{name} reused its published identity");
         assert_eq!(manifest.version, now, "{name}");
-        let (runtime, media) = if name == "image-gemini" { ("0.59.0", 2) } else { ("0.57.0", 1) };
-        assert_eq!(manifest.compatibility.south_runtime, runtime, "{name}: no runtime moves");
+        let media = if name == "image-gemini" { 2 } else { 1 };
+        assert_eq!(
+            manifest.compatibility.south_runtime,
+            declared_runtime_now(name),
+            "{name}: I3-4 moves no runtime"
+        );
         if manifest.api_version == south_provider_api::IMAGE_WORLD {
             assert_eq!(manifest.compatibility.contracts.get("media"), Some(&media), "{name}");
         }
