@@ -47,6 +47,7 @@ jobs:
             components/image-gemini
             components/image-minimax
             components/image-qwen
+            components/image-stability
             components/provider-anthropic
             components/provider-anthropic-bedrock-invoke
             components/provider-bedrock-converse

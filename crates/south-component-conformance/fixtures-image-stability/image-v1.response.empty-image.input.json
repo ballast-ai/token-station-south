@@ -1,0 +1,11 @@
+{
+  "prepare_case": "image-v1.prepare.ultra-text-to-image-defaults",
+  "response": {
+    "status": 200,
+    "body": {
+      "image": "",
+      "finish_reason": "SUCCESS",
+      "seed": 42
+    }
+  }
+}

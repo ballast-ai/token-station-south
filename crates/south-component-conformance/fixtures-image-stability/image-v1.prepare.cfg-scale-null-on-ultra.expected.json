@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "`cfg_scale` is only supported for Stability SD3 models"
+  }
+}

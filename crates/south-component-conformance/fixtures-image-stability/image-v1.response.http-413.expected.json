@@ -1,0 +1,9 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 413,
+    "message": "the upstream refused the request as malformed",
+    "provider_message": "payload_too_large: body: payloads cannot be larger than 10MiB in size"
+  },
+  "outcome": "rejected"
+}

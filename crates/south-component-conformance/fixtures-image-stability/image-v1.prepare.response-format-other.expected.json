@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "`response_format` must be `b64_json` or {\"type\":\"b64_json\"} for Stability AI models (got 5)"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "Model upstream id 'sd3.5-flash' is not a supported Stability Stable Image SKU; expected stable-image-ultra, stable-image-core, sd3.5-large, sd3.5-large-turbo, or sd3.5-medium"
+  }
+}

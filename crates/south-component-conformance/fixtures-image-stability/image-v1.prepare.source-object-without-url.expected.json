@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "`image` object must contain a string `url` data URL for Stability AI"
+  }
+}

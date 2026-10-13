@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "Stability AI `image_url` only supports base64 data URLs in this release (data:<mime>;base64,<bytes>); HTTP(S) fetching is not enabled. Got 'https://example.com/cat.png'"
+  }
+}

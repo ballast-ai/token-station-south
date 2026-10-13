@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "`strength` must be in 0..=1 for Stability AI models (got 1.5)"
+  }
+}

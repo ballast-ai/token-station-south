@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "Stability image-to-image requests require numeric `strength` in 0..=1"
+  }
+}

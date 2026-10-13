@@ -1,0 +1,157 @@
+[
+  {
+    "input_roles": [
+      {
+        "key": "image_url",
+        "role": "input_image"
+      },
+      {
+        "key": "image",
+        "role": "input_image"
+      }
+    ],
+    "metering_forms": [
+      "images"
+    ],
+    "model": "stable-image-ultra",
+    "operations": [
+      "generate"
+    ],
+    "repeat": false,
+    "request_elision_paths": [
+      "/image_url",
+      "/image_url/url",
+      "/image",
+      "/image/url"
+    ],
+    "response_formats": [
+      "b64_json"
+    ],
+    "tier_dimensions": [],
+    "token_buckets": []
+  },
+  {
+    "input_roles": [
+      {
+        "key": "image_url",
+        "role": "input_image"
+      },
+      {
+        "key": "image",
+        "role": "input_image"
+      }
+    ],
+    "metering_forms": [
+      "images"
+    ],
+    "model": "stable-image-core",
+    "operations": [
+      "generate"
+    ],
+    "repeat": false,
+    "request_elision_paths": [
+      "/image_url",
+      "/image_url/url",
+      "/image",
+      "/image/url"
+    ],
+    "response_formats": [
+      "b64_json"
+    ],
+    "tier_dimensions": [],
+    "token_buckets": []
+  },
+  {
+    "input_roles": [
+      {
+        "key": "image_url",
+        "role": "input_image"
+      },
+      {
+        "key": "image",
+        "role": "input_image"
+      }
+    ],
+    "metering_forms": [
+      "images"
+    ],
+    "model": "sd3.5-large",
+    "operations": [
+      "generate"
+    ],
+    "repeat": false,
+    "request_elision_paths": [
+      "/image_url",
+      "/image_url/url",
+      "/image",
+      "/image/url"
+    ],
+    "response_formats": [
+      "b64_json"
+    ],
+    "tier_dimensions": [],
+    "token_buckets": []
+  },
+  {
+    "input_roles": [
+      {
+        "key": "image_url",
+        "role": "input_image"
+      },
+      {
+        "key": "image",
+        "role": "input_image"
+      }
+    ],
+    "metering_forms": [
+      "images"
+    ],
+    "model": "sd3.5-large-turbo",
+    "operations": [
+      "generate"
+    ],
+    "repeat": false,
+    "request_elision_paths": [
+      "/image_url",
+      "/image_url/url",
+      "/image",
+      "/image/url"
+    ],
+    "response_formats": [
+      "b64_json"
+    ],
+    "tier_dimensions": [],
+    "token_buckets": []
+  },
+  {
+    "input_roles": [
+      {
+        "key": "image_url",
+        "role": "input_image"
+      },
+      {
+        "key": "image",
+        "role": "input_image"
+      }
+    ],
+    "metering_forms": [
+      "images"
+    ],
+    "model": "sd3.5-medium",
+    "operations": [
+      "generate"
+    ],
+    "repeat": false,
+    "request_elision_paths": [
+      "/image_url",
+      "/image_url/url",
+      "/image",
+      "/image/url"
+    ],
+    "response_formats": [
+      "b64_json"
+    ],
+    "tier_dimensions": [],
+    "token_buckets": []
+  }
+]

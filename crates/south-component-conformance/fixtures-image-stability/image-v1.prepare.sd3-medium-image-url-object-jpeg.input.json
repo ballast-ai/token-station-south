@@ -1,0 +1,30 @@
+{
+  "provider_config": {
+    "provider": "stability-image",
+    "base_url": "https://api.stability.ai",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "json": {
+      "prompt": "make it cinematic",
+      "image_url": {
+        "url": {
+          "$south.blob": {
+            "id": "b0",
+            "bytes": 70023,
+            "head": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAgGBgcGB"
+          }
+        },
+        "detail": "high"
+      },
+      "strength": 0.6,
+      "image": null
+    }
+  },
+  "context": {
+    "upstream_model": "sd3.5-medium",
+    "metering_required": [
+      "images"
+    ]
+  }
+}

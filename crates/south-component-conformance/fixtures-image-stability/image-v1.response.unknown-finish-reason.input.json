@@ -1,0 +1,11 @@
+{
+  "prepare_case": "image-v1.prepare.ultra-text-to-image-defaults",
+  "response": {
+    "status": 200,
+    "body": {
+      "image": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==",
+      "finish_reason": "ERROR",
+      "seed": 42
+    }
+  }
+}

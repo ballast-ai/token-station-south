@@ -1,0 +1,10 @@
+{
+  "prepare_case": "image-v1.prepare.ultra-text-to-image-defaults",
+  "response": {
+    "status": 200,
+    "body": {
+      "image": 5,
+      "finish_reason": "SUCCESS"
+    }
+  }
+}

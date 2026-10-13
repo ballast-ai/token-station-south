@@ -1,0 +1,11 @@
+{
+  "prepare_case": "image-v1.prepare.core-text-to-image",
+  "response": {
+    "status": 200,
+    "body": {
+      "image": "UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAwA0JaQAA3AA/vuUAAA=",
+      "finish_reason": "SUCCESS",
+      "seed": 42
+    }
+  }
+}

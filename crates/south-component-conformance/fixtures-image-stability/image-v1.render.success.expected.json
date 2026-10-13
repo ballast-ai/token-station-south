@@ -1,0 +1,16 @@
+{
+  "template": {
+    "created": 1760000000,
+    "data": [
+      {
+        "b64_json": {
+          "$south.artifact": {
+            "as": "b64_json",
+            "index": 0
+          }
+        },
+        "revised_prompt": null
+      }
+    ]
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "Stable Image Core does not accept a source image on this endpoint; use Stable Image Ultra or an SD3.5 model for image-to-image"
+  }
+}

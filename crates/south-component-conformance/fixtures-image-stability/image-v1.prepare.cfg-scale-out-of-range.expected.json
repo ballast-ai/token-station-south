@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "`cfg_scale` must be in 1..=10 for Stability AI models (got 10.5)"
+  }
+}

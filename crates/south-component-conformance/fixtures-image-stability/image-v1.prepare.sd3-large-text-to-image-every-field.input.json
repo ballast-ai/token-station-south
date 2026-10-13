@@ -1,0 +1,25 @@
+{
+  "provider_config": {
+    "provider": "stability-image",
+    "base_url": "https://api.stability.ai",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "json": {
+      "prompt": "a lighthouse",
+      "negative_prompt": "fog",
+      "seed": 4294967294,
+      "style_preset": "cinematic",
+      "mode": "text-to-image",
+      "cfg_scale": 7.5,
+      "size": "1024X1792",
+      "output_format": "jpeg"
+    }
+  },
+  "context": {
+    "upstream_model": "sd3.5-large",
+    "metering_required": [
+      "images"
+    ]
+  }
+}

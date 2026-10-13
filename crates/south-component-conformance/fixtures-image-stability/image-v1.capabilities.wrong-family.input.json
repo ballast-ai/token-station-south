@@ -1,0 +1,12 @@
+{
+  "provider_config": {
+    "provider": "minimax-image",
+    "base_url": "https://api.stability.ai",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "stable-image-core"
+      }
+    ]
+  }
+}

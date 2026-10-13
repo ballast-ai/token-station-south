@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "`seed` must be in 0..=4294967294 for Stability AI models (got 4294967295)"
+  }
+}
