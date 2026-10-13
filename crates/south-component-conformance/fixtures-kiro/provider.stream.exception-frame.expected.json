@@ -1,0 +1,21 @@
+[
+  {
+    "content": "he",
+    "index": 0,
+    "type": "delta"
+  },
+  {
+    "content": "llo",
+    "index": 0,
+    "type": "delta"
+  },
+  {
+    "error": {
+      "code": "rate_limit",
+      "http_status": 502,
+      "message": "the upstream rate limited this request",
+      "provider_message": "slow down"
+    },
+    "type": "error"
+  }
+]

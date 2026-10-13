@@ -1,0 +1,32 @@
+{
+  "choices": [
+    {
+      "finish_reason": "tool_calls",
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "tool_calls": [
+          {
+            "arguments": "{\"city\":\"Paris\"}",
+            "id": "tooluse_A",
+            "name": "get_weather"
+          },
+          {
+            "arguments": "{}",
+            "id": "tooluse_B",
+            "name": "get_time"
+          }
+        ]
+      }
+    }
+  ],
+  "id": "",
+  "model": "",
+  "usage": {
+    "cache_read_tokens": 0,
+    "cache_write_tokens": 0,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "reasoning_tokens": 0
+  }
+}

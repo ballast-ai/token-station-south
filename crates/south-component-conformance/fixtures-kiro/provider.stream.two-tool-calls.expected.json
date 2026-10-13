@@ -1,0 +1,39 @@
+[
+  {
+    "arguments_delta": "",
+    "id": "tooluse_A",
+    "index": 0,
+    "name": "get_weather",
+    "type": "tool_call_delta"
+  },
+  {
+    "arguments_delta": "{\"city\":",
+    "index": 0,
+    "type": "tool_call_delta"
+  },
+  {
+    "arguments_delta": "\"Paris\"}",
+    "index": 0,
+    "type": "tool_call_delta"
+  },
+  {
+    "arguments_delta": "",
+    "id": "tooluse_B",
+    "index": 1,
+    "name": "get_time",
+    "type": "tool_call_delta"
+  },
+  {
+    "arguments_delta": "{}",
+    "index": 1,
+    "type": "tool_call_delta"
+  },
+  {
+    "finish_reason": "tool_calls",
+    "type": "finish"
+  },
+  {
+    "finish_reason": "tool_calls",
+    "type": "done"
+  }
+]

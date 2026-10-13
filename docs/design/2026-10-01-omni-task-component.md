@@ -901,9 +901,9 @@ and §4.5 show, and it is re-checked by the real-account test.
   must move it to itself**, as 0.59.0 did for `image-gemini`, or `check-declared-runtime.sh` refuses it.
 - **Compatibility**: `compatibility.json` records `contracts.task` 8; the test hosts admit task 7 and 8. Every
   published task package keeps `task: 7`. Q47: `south-contracts` 0.53.0 → 0.54.0, `south-provider-api` 0.54.0 →
-  0.55.0, `south-component-conformance` 0.59.0 → 0.60.0, so every package published with 0.61.0 takes a patch with
-  unchanged behaviour and keeps its `south_runtime` and contracts
-  (`task_contract_8_retires_every_published_061_package_identity`).
+  0.55.0, `south-component-conformance` 0.60.0 (the Kiro step, #204) → 0.61.0, so every package takes one patch past
+  the identity the Kiro step left, with unchanged behaviour, its `south_runtime` and its contracts
+  (`task_contract_8_retires_every_kiro_step_package_identity`).
 
 ### 17.2 Refusals and degrades this package introduces (numbered)
 
@@ -996,8 +996,7 @@ video edit, audio or video inputs, any other Interactions body field, and every 
   the host bound and parks (a catalog fix, not code).
 - Q-L5 (retention of stored interactions) bounds how long re-observation recovers a failed store.
 - A host must hold up to ~7 MB of response per poll (in-progress bodies echo input images) and elide every one.
-- The Q47 bump re-identifies all 25 published packages; a host re-pin moves every pinned digest. The parallel
-  `provider-kiro` work touches the same crate versions, so whichever merges second reconciles them.
+- The Q47 bump re-identifies every package (26, `provider-kiro` included); a host re-pin moves every pinned digest.
 
 ### 17.7 What the real-account test must settle
 

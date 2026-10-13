@@ -74,6 +74,7 @@ pub mod reference_anthropic;
 pub mod reference_anthropic_bedrock_invoke;
 pub mod reference_bedrock_converse;
 pub mod reference_gemini;
+pub mod reference_kiro;
 pub mod reference_kling_task;
 pub mod reference_openai_responses;
 mod report;

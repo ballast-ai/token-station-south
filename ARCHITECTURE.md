@@ -211,7 +211,17 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.61.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.54.0, 0.55.0 and 0.60.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.61.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.54.0, 0.55.0 and 0.61.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**Unreleased (the Kiro step: `provider-kiro`)**: the Kiro upstream as a package (design record
+`docs/design/2026-09-30-kiro-provider-component.md`, accepted 2026-10-13 with six rulings provisional until a
+real-account capture; proposed for the next release). `provider-kiro` 1.0.0 (family `kiro`, `bearer` on the minted slot
+`provider_api_key`) translates the IR straight to the `generateAssistantResponse` `conversationState` body, one history
+entry per message, with `conversationId` from the host's `attempt_id` and `profileArn` from the credential's exported
+attribute; it declares `stream_framing: aws-eventstream`, `request_facts.stream: "none"` (the buffered path for
+non-streaming callers), `output_cap: []`, `usage_evidence: absent`, the `user-agent` the native arm sends, the
+selector `kiro` over the two rotating refresh recipes `social` and `idc`, and `subscription_quota_families`
+(`south_runtime` 0.60.0). Under Q47 `south-component-conformance` moves to 0.60.0, so every published package takes a
+patch with unchanged behaviour and keeps its `south_runtime` and its `contracts`.
 **Unreleased (task contract 8 and `task-gemini-omni-v2`)**: design record
 `docs/design/2026-10-01-omni-task-component.md` (accepted 2026-10-13, provisional items pending a real-account test;
 proposed for the next release). Task contract 8 is additive: `TaskArtifactRefV2::Inline` names an artifact whose bytes
@@ -228,8 +238,8 @@ unchanged. `task-gemini-omni-v2` 0.1.0 serves Gemini Omni video over the Interac
 `vertex-interactions-video` (sampled: `background` submit, poll by id, inline clip, bearer) and
 `gemini-interactions-video` (provisional, the host's native arm: synchronous, Files API `uri` fetched with
 `x-goog-api-key`, text-to-video only). It declares `contracts` `{task: 8, media: 1}`; its `south_runtime` moves to the
-release that ships contract 8. Under Q47 the three guest-linked crates move to 0.54.0, 0.55.0 and 0.60.0, so every
-published package takes a patch with unchanged behaviour and keeps its `south_runtime` and its `contracts`.
+release that ships contract 8. Under Q47 the three guest-linked crates move to 0.54.0, 0.55.0 and 0.61.0 (one step past the
+Kiro step's 0.60.0), so every package takes a patch with unchanged behaviour and keeps its `south_runtime` and its `contracts`.
 **v0.61.0 (image world step I3-5: `image-ideogram`; north codec G1)**: release record
 `docs/design/2026-10-13-release-0.61.0.md`. North codec G1 (`docs/design/2026-09-30-north-codec-render-gaps.md`, G1
 accepted 2026-10-14): `OpenAiChatStream` renders complete OpenAI chat stream chunks from a host-supplied context (chunk

@@ -1,0 +1,5 @@
+{
+  "chunks": [
+    "event: meteringEvent\ndata: {\"unit\":\"credit\",\"usage\":0.02}\n\n"
+  ]
+}

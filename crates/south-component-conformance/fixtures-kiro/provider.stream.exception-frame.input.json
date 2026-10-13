@@ -1,0 +1,8 @@
+{
+  "chunks": [
+    "event: assistantResponseEvent\ndata: {\"content\":\"he\"}\n\n",
+    "event: assistantResponseEvent\ndata: {\"content\":\"llo\"}\n\n",
+    "event: exception:ThrottlingException\ndata: {\"message\":\"slow down\"}\n\n",
+    "event: assistantResponseEvent\ndata: {\"content\":\"never\"}\n\n"
+  ]
+}

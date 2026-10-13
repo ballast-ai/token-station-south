@@ -55,7 +55,7 @@ use crate::{ComponentResultV1, ImageComponentV1, ImageOutcomeV1, ImageRenderedV1
 /// The package name this reference is published as.
 pub const NAME: &str = "image-stability";
 /// The package version.
-pub const VERSION: &str = "1.0.2";
+pub const VERSION: &str = "1.0.3";
 /// The world this reference exports.
 pub const WORLD: &str = "image-adapter-v1";
 /// The family, as a host's image rows name it.

@@ -15,7 +15,7 @@ mod host_range;
 
 /// The official components this repository ships. Named, so that an empty or
 /// mistyped scan below cannot pass over nothing.
-const OFFICIAL_COMPONENTS: [&str; 26] = [
+const OFFICIAL_COMPONENTS: [&str; 27] = [
     "embeddings-gemini",
     "embeddings-openai-compatible",
     "embeddings-vertex",
@@ -30,6 +30,7 @@ const OFFICIAL_COMPONENTS: [&str; 26] = [
     "provider-bedrock-converse",
     "provider-bedrock-converse-bearer",
     "provider-gemini",
+    "provider-kiro",
     "provider-openai-compatible",
     "provider-openai-responses",
     "task-kling",
@@ -1014,9 +1015,10 @@ fn the_invoke_package_declares_the_runtime_converse_declares() {
         .unwrap()
     };
     let invoke = read("provider-anthropic-bedrock-invoke");
-    // KC1 made 1.1.0, I3-1's Q47 bump 1.1.1, I3-2's 1.1.2, I3-4's 1.1.3, I3-5's 1.1.4 and task
-    // contract 8's 1.1.5 (`task_contract_8_retires_every_published_061_package_identity`).
-    assert_eq!(invoke.version, "1.1.5");
+    // KC1 made 1.1.0, I3-1's Q47 bump 1.1.1, I3-2's 1.1.2, I3-4's 1.1.3, I3-5's 1.1.4, the Kiro
+    // step's 1.1.5 and task contract 8's 1.1.6
+    // (`task_contract_8_retires_every_kiro_step_package_identity`).
+    assert_eq!(invoke.version, "1.1.6");
     assert_eq!(invoke.compatibility.south_runtime, "0.57.0");
     assert_eq!(invoke.compatibility, read("provider-bedrock-converse").compatibility);
 }
@@ -1314,9 +1316,9 @@ fn the_responses_package_declares_the_runtime_that_first_admits_its_declarations
     )
     .unwrap();
     // 1.0.0 shipped in 0.54.0; NC-1 made 1.1.0, R3 1.2.0, KC1 1.3.0, I3-1's Q47 bump 1.3.1,
-    // I3-2's 1.3.2, I3-4's 1.3.3, I3-5's 1.3.4 and task contract 8's 1.3.5 (below). The Codex `credentials` section uses only forms the
+    // I3-2's 1.3.2, I3-4's 1.3.3, I3-5's 1.3.4, the Kiro step's 1.3.5 and task contract 8's 1.3.6 (below). The Codex `credentials` section uses only forms the
     // 0.54.0 gate ① admits; `subscription_quota_families` (D7, 0.60.0) needs the 0.60.0 runtime.
-    assert_eq!(manifest.version, "1.3.5");
+    assert_eq!(manifest.version, "1.3.6");
     assert_eq!(manifest.compatibility.south_runtime, "0.60.0");
     assert!(!manifest.immutable_body_paths.is_empty() && !manifest.north_passthrough.is_empty());
     assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
@@ -1422,7 +1424,10 @@ fn r3_retires_every_published_055_package_identity() {
 /// `ComponentManifestV1` refuses unknown fields; `image-gemini` needs the first runtime with media 2.
 fn declared_runtime_now(name: &str) -> &'static str {
     match name {
-        "provider-gemini" | "provider-openai-compatible" | "provider-openai-responses" => "0.60.0",
+        "provider-gemini"
+        | "provider-kiro"
+        | "provider-openai-compatible"
+        | "provider-openai-responses" => "0.60.0",
         "image-gemini" => "0.59.0",
         _ => "0.57.0",
     }
@@ -1666,7 +1671,9 @@ fn i3_4_retires_every_published_059_package_identity() {
 /// links, so every `component.wasm` changes: each identity published with 0.60.0 retires. No
 /// published package changes behaviour: each takes a patch and keeps its `south_runtime` (three
 /// provider packages on 0.60.0, `image-gemini` on 0.59.0, the rest on 0.57.0) and its `contracts`
-/// (`image-gemini` stays at media 2, every other image package at media 1).
+/// (`image-gemini` stays at media 2, every other image package at media 1). The identity each
+/// package took in I3-5 is no longer pinned: the Kiro step gave every package one more
+/// (`kiro_retires_every_published_061_package_identity`).
 #[test]
 fn i3_5_retires_every_published_060_package_identity() {
     for (name, published, _i3_5) in [
@@ -1719,8 +1726,8 @@ fn i3_5_retires_every_published_060_package_identity() {
     }
 }
 
-/// `image-gemini` (I3-2) started at 1.0.0 in the image world (I3-4's Q47 bump made it 1.0.1 and
-/// I3-5's 1.0.2), family `gemini-image`, no config keys.
+/// `image-gemini` (I3-2) started at 1.0.0 in the image world (I3-4's Q47 bump made it 1.0.1,
+/// I3-5's 1.0.2 and the Kiro step's 1.0.3), family `gemini-image`, no config keys.
 /// It names the transform word `data_url_payload`, so it declares `contracts.media` 2: a host whose
 /// range lists media 1 only refuses it through the contract number. Its `south_runtime` must be the
 /// first runtime that decodes media 2, the release that ships the word: 0.59.0 (the release commit
@@ -1732,8 +1739,8 @@ fn image_gemini_declares_media_2_which_a_media_1_host_refuses() {
             .unwrap(),
     )
     .unwrap();
-    // 1.0.2 after I3-5; task contract 8's Q47 bump made it 1.0.3.
-    assert_eq!(manifest.version, "1.0.3");
+    // 1.0.3 after the Kiro step; task contract 8's Q47 bump made it 1.0.4.
+    assert_eq!(manifest.version, "1.0.4");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["gemini-image"]);
     assert!(manifest.declared_keys("gemini-image").is_empty());
@@ -1756,7 +1763,7 @@ fn image_gemini_declares_media_2_which_a_media_1_host_refuses() {
 }
 
 /// The two packages of I3-1 started at 1.0.0 in the image world (published with 0.58.0; I3-2's Q47
-/// bump made them 1.0.1, I3-4's 1.0.2 and I3-5's 1.0.3) and declare the oldest runtime that admits their declarations, 0.57.0
+/// bump made them 1.0.1, I3-4's 1.0.2, I3-5's 1.0.3 and the Kiro step's 1.0.4) and declare the oldest runtime that admits their declarations, 0.57.0
 /// (the first to record `canonical_ir` 4, which every package of this tuple needs).
 /// `image-minimax` declares one non-secret config key, `group_id` (IM-Q3); `image-qwen` declares
 /// none.
@@ -1773,8 +1780,8 @@ fn the_i3_1_image_packages_declare_the_runtime_and_values_of_the_record() {
             .unwrap(),
         )
         .unwrap();
-        // 1.0.3 after I3-5; task contract 8's Q47 bump made it 1.0.4.
-        assert_eq!(manifest.version, "1.0.4", "{name}");
+        // 1.0.4 after the Kiro step; task contract 8's Q47 bump made it 1.0.5.
+        assert_eq!(manifest.version, "1.0.5", "{name}");
         assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD, "{name}");
         assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), [family], "{name}");
         assert_eq!(manifest.compatibility.south_runtime, "0.57.0", "{name}");
@@ -1786,7 +1793,7 @@ fn the_i3_1_image_packages_declare_the_runtime_and_values_of_the_record() {
 }
 
 /// `image-stability` (I3-4, record §1) started at 1.0.0 in the image world (I3-5's Q47 bump made
-/// it 1.0.1), family
+/// it 1.0.1 and the Kiro step's 1.0.2), family
 /// `stability-image`, no config keys, `bearer` only, `generate` only, and `contracts`
 /// `{image: 1, media: 1}`: it names no word past media 1, so it declares the oldest runtime that
 /// admits its declarations, 0.57.0, as the I3-1 packages do, and a media 1 host admits it.
@@ -1797,8 +1804,8 @@ fn image_stability_declares_media_1_and_the_runtime_of_the_record() {
             .unwrap(),
     )
     .unwrap();
-    // 1.0.1 after I3-5; task contract 8's Q47 bump made it 1.0.2.
-    assert_eq!(manifest.version, "1.0.2");
+    // 1.0.2 after the Kiro step; task contract 8's Q47 bump made it 1.0.3.
+    assert_eq!(manifest.version, "1.0.3");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["stability-image"]);
     assert!(manifest.declared_keys("stability-image").is_empty());
@@ -1811,7 +1818,8 @@ fn image_stability_declares_media_1_and_the_runtime_of_the_record() {
     assert_eq!(compatibility_admits(&manifest, &media_1_only), Ok(()));
 }
 
-/// `image-ideogram` (I3-5, record §1) starts at 1.0.0 in the image world, family
+/// `image-ideogram` (I3-5, record §1) started at 1.0.0 in the image world (the Kiro step's Q47 bump
+/// made it 1.0.1), family
 /// `ideogram-image`, no config keys, `header_secret` only (the native `Api-Key` header), `generate`
 /// only, and `contracts` `{image: 1, media: 1}`: it names no word past media 1, so it declares the
 /// oldest runtime that admits its declarations, 0.57.0, as `image-azure` (which already uses
@@ -1823,8 +1831,8 @@ fn image_ideogram_declares_media_1_and_the_runtime_of_the_record() {
             .unwrap(),
     )
     .unwrap();
-    // 1.0.0 as I3-5 shipped it; task contract 8's Q47 bump made it 1.0.1.
-    assert_eq!(manifest.version, "1.0.1");
+    // 1.0.1 after the Kiro step; task contract 8's Q47 bump made it 1.0.2.
+    assert_eq!(manifest.version, "1.0.2");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["ideogram-image"]);
     assert!(manifest.declared_keys("ideogram-image").is_empty());
@@ -1839,29 +1847,32 @@ fn image_ideogram_declares_media_1_and_the_runtime_of_the_record() {
 }
 
 /// KC1 record §5: the two Anthropic-family packages read the host's per-tenant end-user hash
-/// (`end_user_hash`, mapped to `metadata.user_id`); no other package declares a host value.
+/// (`end_user_hash`, mapped to `metadata.user_id`); the Kiro record (§4.5, boundary §13.8) has
+/// `provider-kiro` read the attempt id (`attempt_id`, its `conversationId`); no other package
+/// declares a host value.
 #[test]
-fn only_the_anthropic_family_declares_the_end_user_hash() {
+fn only_the_records_that_decided_a_host_value_declare_one() {
     for package in shipped_packages() {
         let manifest: ComponentManifestV1 =
             serde_json::from_str(&std::fs::read_to_string(package.join("manifest.json")).unwrap())
                 .unwrap();
         let expected: &[&str] = match manifest.name.as_str() {
             "provider-anthropic" | "provider-anthropic-bedrock-invoke" => &["end_user_hash"],
+            "provider-kiro" => &["attempt_id"],
             _ => &[],
         };
         assert_eq!(manifest.host_values, expected, "{}", manifest.name);
     }
 }
 
-/// Task contract 8 (the Omni record §13) changed `south-contracts`, `south-provider-api` and
-/// `south-component-conformance`, which every guest links (0.53.0 → 0.54.0, 0.54.0 → 0.55.0 and
-/// 0.59.0 → 0.60.0), so every package published with 0.61.0 takes a patch with unchanged
-/// behaviour. None moves its `south_runtime` or its contracts: contract 8 is additive, and every
-/// existing task package stays at the contract 7 it was published with.
+/// The Kiro step (design record `2026-09-30-kiro-provider-component.md`, accepted 2026-10-13) adds
+/// the `provider-kiro` reference to `south-component-conformance` (0.59.0 → 0.60.0), which every
+/// guest links, so every `component.wasm` changes: each identity published with 0.61.0 retires. No
+/// published package changes behaviour: each takes a patch and keeps its `south_runtime` and its
+/// `contracts`.
 #[test]
-fn task_contract_8_retires_every_published_061_package_identity() {
-    for (name, published, now) in [
+fn kiro_retires_every_published_061_package_identity() {
+    for (name, published, _kiro) in [
         ("provider-openai-compatible", "2.6.4", "2.6.5"),
         ("provider-anthropic", "1.1.4", "1.1.5"),
         ("provider-anthropic-bedrock-invoke", "1.1.4", "1.1.5"),
@@ -1896,16 +1907,47 @@ fn task_contract_8_retires_every_published_061_package_identity() {
         )
         .unwrap();
         assert_ne!(manifest.version, published, "{name} reused its published identity");
-        assert_eq!(manifest.version, now, "{name}");
+        let media = if name == "image-gemini" { 2 } else { 1 };
         assert_eq!(
             manifest.compatibility.south_runtime,
             declared_runtime_now(name),
-            "{name}: task contract 8 moves no runtime"
+            "{name}: the Kiro step moves no runtime"
         );
-        if manifest.api_version.starts_with("task") {
-            assert_eq!(manifest.compatibility.contracts.get("task"), Some(&7), "{name}");
+        if manifest.api_version == south_provider_api::IMAGE_WORLD {
+            assert_eq!(manifest.compatibility.contracts.get("media"), Some(&media), "{name}");
         }
+        assert_eq!(
+            manifest.compatibility.ir_schema_id, "token-station-protocol@0.6.0/v0.5.0",
+            "{name}"
+        );
     }
+}
+
+/// `provider-kiro` (Kiro record §3) starts at 1.0.0, family `kiro`. It declares the oldest runtime
+/// that admits its declarations: `subscription_quota_families` (the native arm counts Kiro among
+/// the subscription families whose 429 raises the quota alert) is a 0.60.0 manifest field, which an
+/// older runtime refuses as unknown, so 0.60.0 and not 0.57.0.
+#[test]
+fn provider_kiro_declares_the_runtime_of_its_newest_declaration() {
+    let manifest: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(repo_root().join("components/provider-kiro/manifest.json"))
+            .unwrap(),
+    )
+    .unwrap();
+    // 1.0.0 as the Kiro step shipped it; task contract 8's Q47 bump made it 1.0.1.
+    assert_eq!(manifest.version, "1.0.1");
+    assert_eq!(manifest.api_version, south_provider_api::PROVIDER_WORLD);
+    assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["kiro"]);
+    assert!(manifest.subscription_quota_families.contains("kiro"));
+    assert_eq!(manifest.compatibility.south_runtime, "0.60.0");
+    assert!(manifest.compatibility.contracts.is_empty());
+    assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
+    let mut on_059 = host_range::host_range();
+    "0.59.0".clone_into(&mut on_059.south_runtime);
+    assert!(matches!(
+        compatibility_admits(&manifest, &on_059),
+        Err(CompatibilityMismatchV2::SouthRuntimeAboveHost { .. })
+    ));
 }
 
 /// `task-gemini-omni-v2` 0.1.0 (the Omni record): the first task package on contract 8, with the
@@ -1936,4 +1978,62 @@ fn task_gemini_omni_v2_declares_task_8_which_a_task_7_host_refuses() {
     )
     .unwrap();
     assert_eq!(compatibility_admits(&veo, &task_7_only), Ok(()));
+}
+
+/// Task contract 8 (the Omni record §13) changes `south-contracts` (0.53.0 → 0.54.0) and
+/// `south-provider-api` (0.54.0 → 0.55.0), and moves `south-component-conformance` one step past
+/// the Kiro step (0.60.0 → 0.61.0); every guest links all three, so each identity the Kiro step
+/// left (none of them published) takes one more patch with unchanged behaviour. None moves its
+/// `south_runtime` or its contracts: contract 8 is additive, and every existing task package
+/// stays at the contract 7 it was published with.
+#[test]
+fn task_contract_8_retires_every_kiro_step_package_identity() {
+    for (name, kiro_step, now) in [
+        ("embeddings-gemini", "1.1.10", "1.1.11"),
+        ("embeddings-openai-compatible", "1.0.13", "1.0.14"),
+        ("embeddings-vertex", "1.0.12", "1.0.13"),
+        ("image-azure", "1.0.9", "1.0.10"),
+        ("image-gemini", "1.0.3", "1.0.4"),
+        ("image-ideogram", "1.0.1", "1.0.2"),
+        ("image-minimax", "1.0.4", "1.0.5"),
+        ("image-qwen", "1.0.4", "1.0.5"),
+        ("image-stability", "1.0.2", "1.0.3"),
+        ("provider-anthropic-bedrock-invoke", "1.1.5", "1.1.6"),
+        ("provider-anthropic", "1.1.5", "1.1.6"),
+        ("provider-bedrock-converse-bearer", "1.1.5", "1.1.6"),
+        ("provider-bedrock-converse", "1.1.5", "1.1.6"),
+        ("provider-gemini", "1.3.5", "1.3.6"),
+        ("provider-kiro", "1.0.0", "1.0.1"),
+        ("provider-openai-compatible", "2.6.5", "2.6.6"),
+        ("provider-openai-responses", "1.3.5", "1.3.6"),
+        ("task-bailian-v2", "0.31.19", "0.31.20"),
+        ("task-byteplus-v2", "0.36.19", "0.36.20"),
+        ("task-gmi-image-v2", "0.35.19", "0.35.20"),
+        ("task-kling-v2", "0.32.20", "0.32.21"),
+        ("task-kling", "1.0.22", "1.0.23"),
+        ("task-minimax-v2", "0.31.19", "0.31.20"),
+        ("task-veo-v2", "0.35.19", "0.35.20"),
+        ("task-wan-image-v2", "0.35.19", "0.35.20"),
+        ("task-xai-v2", "0.35.19", "0.35.20"),
+    ] {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_ne!(manifest.version, kiro_step, "{name} kept the Kiro step's identity");
+        assert_eq!(manifest.version, now, "{name}");
+        if name != "provider-kiro" {
+            assert_eq!(
+                manifest.compatibility.south_runtime,
+                declared_runtime_now(name),
+                "{name}: task contract 8 moves no runtime"
+            );
+        }
+        if manifest.api_version.starts_with("task") {
+            assert_eq!(manifest.compatibility.contracts.get("task"), Some(&7), "{name}");
+        }
+    }
 }

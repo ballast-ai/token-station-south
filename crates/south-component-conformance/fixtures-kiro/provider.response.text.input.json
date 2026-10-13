@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/vnd.amazon.eventstream"
+  },
+  "body": "event: assistantResponseEvent\ndata: {\"content\":\"hello from kiro\"}\n\nevent: meteringEvent\ndata: {\"unit\":\"credit\",\"usage\":0.02}\n\n"
+}

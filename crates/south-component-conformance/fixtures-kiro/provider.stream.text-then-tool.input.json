@@ -1,0 +1,9 @@
+{
+  "chunks": [
+    "event: assistantResponseEvent\ndata: {\"content\":\"Let me check.\"}\n\n",
+    "event: toolUseEvent\ndata: {\"name\":\"get_weather\",\"toolUseId\":\"tooluse_A\"}\n\n",
+    "event: toolUseEvent\ndata: {\"input\":\"{\\\"city\\\":\\\"Paris\\\"}\",\"name\":\"get_weather\",\"toolUseId\":\"tooluse_A\"}\n\n",
+    "event: toolUseEvent\ndata: {\"name\":\"get_weather\",\"stop\":true,\"toolUseId\":\"tooluse_A\"}\n\n",
+    "event: meteringEvent\ndata: {\"unit\":\"credit\",\"usage\":0.02}\n\n"
+  ]
+}

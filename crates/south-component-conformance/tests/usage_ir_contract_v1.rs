@@ -46,6 +46,7 @@ use south_component_conformance::{
     reference_anthropic_bedrock_invoke::AnthropicBedrockInvokeReferenceV1,
     reference_bedrock_converse::{BedrockConverseBearerReferenceV1, BedrockConverseReferenceV1},
     reference_gemini::GeminiReferenceV1,
+    reference_kiro::KiroReferenceV1,
     reference_openai_responses::{OpenAiResponsesReferenceV1, failure_code},
 };
 use token_station_protocol::{ErrorCode, HttpResponseParts, StreamEvent, Usage};
@@ -1028,4 +1029,96 @@ fn responses_failure_codes_follow_the_published_list() {
     ] {
         assert_eq!(failure_code(code), expected, "`{code}`");
     }
+}
+
+// ── Kiro (`usage_evidence: absent`) ──────────────────────────────────────────
+// The upstream reports no token counts: its only usage-like signal is `meteringEvent`, a credit
+// total (the host's native translator, server `translate_kiro.rs`, "the wire reports NO token
+// counts"). The package declares `usage_evidence: absent` (Kiro record §6), so the judge is the
+// declaration's own property, not the reference: whatever numbers the upstream sends, the component
+// emits no `Usage` event and returns all-zero usage on the buffered path. A credit is not a token,
+// and a component that turned one into the other would make an `absent` family lie about having
+// evidence (record §14).
+
+fn kiro_frame(event: &str, payload: &Value) -> String {
+    format!("event: {event}\ndata: {payload}\n\n")
+}
+
+/// An answer carrying every number this upstream is known or imagined to send: the credit meter,
+/// the context gauge, and token-shaped members a future wire might add.
+fn kiro_answer(credits: f64, tokens: u64) -> String {
+    [
+        kiro_frame("assistantResponseEvent", &json!({"content": "hello"})),
+        kiro_frame(
+            "meteringEvent",
+            &json!({"unit": "credit", "unitPlural": "credits", "usage": credits}),
+        ),
+        kiro_frame(
+            "contextUsageEvent",
+            &json!({"contextUsagePercentage": 12.5, "inputTokens": tokens, "outputTokens": tokens,
+                    "usage": {"input_tokens": tokens, "output_tokens": tokens}}),
+        ),
+        kiro_frame("meteringEvent", &json!({"usage": {"inputTokens": tokens}})),
+    ]
+    .concat()
+}
+
+proptest::proptest! {
+    #[test]
+    fn kiro_never_reports_usage_whatever_the_wire_carries(
+        credits in 0.0f64..1.0e6,
+        tokens in 1u64..u64::from(u32::MAX),
+        split in 0usize..400,
+    ) {
+        let body = kiro_answer(credits, tokens);
+        let split = split.min(body.len());
+        let mut parser = KiroReferenceV1.stream_parser();
+        let mut events = Vec::new();
+        for piece in [&body.as_bytes()[..split], &body.as_bytes()[split..]] {
+            events.extend(parser.parse_chunk(piece).expect("the answer parses"));
+        }
+        events.extend(parser.finish().expect("the answer finishes"));
+        let emitted_usage = events.iter().any(|event| matches!(event, StreamEvent::Usage { .. }));
+        let completed = events.iter().any(|event| matches!(event, StreamEvent::Done { .. }));
+        proptest::prop_assert!(!emitted_usage, "an absent package emitted usage: {:?}", events);
+        proptest::prop_assert!(completed, "the answer did not complete: {:?}", events);
+
+        let parsed = KiroReferenceV1.parse_response(&response_text(&body)).expect("the answer folds");
+        proptest::prop_assert_eq!(parsed.usage, Usage::default());
+    }
+}
+
+fn response_text(body: &str) -> HttpResponseParts {
+    serde_json::from_value(json!({"status": 200, "headers": {}, "body": body})).unwrap()
+}
+
+/// Every Kiro stream and response row in the shipped pack, judged by the same property: no usage
+/// event, and an all-zero usage object.
+#[test]
+fn every_shipped_kiro_fixture_reports_no_usage() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures-kiro");
+    let mut judged = 0;
+    for entry in std::fs::read_dir(&root).unwrap() {
+        let path = entry.unwrap().path();
+        let name = path.file_name().unwrap().to_string_lossy().into_owned();
+        let is_output = (name.starts_with("provider.response.")
+            || name.starts_with("provider.stream."))
+            && name.ends_with(".expected.json");
+        if !is_output {
+            continue;
+        }
+        let expected: Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        if let Some(events) = expected.as_array() {
+            assert!(events.iter().all(|event| event["type"] != "usage"), "{name}");
+        }
+        let mut reports = Vec::new();
+        objects_under(&expected, "usage", &mut reports);
+        for usage in reports {
+            let counts = usage.as_object().expect("a usage object");
+            assert!(counts.values().all(|count| count.as_u64() == Some(0)), "{name}: {usage}");
+        }
+        judged += 1;
+    }
+    assert!(judged >= 20, "only {judged} Kiro output rows");
 }

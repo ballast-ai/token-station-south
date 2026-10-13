@@ -1,0 +1,20 @@
+[
+  {
+    "content": "a",
+    "index": 0,
+    "type": "delta"
+  },
+  {
+    "content": "b",
+    "index": 0,
+    "type": "delta"
+  },
+  {
+    "finish_reason": "stop",
+    "type": "finish"
+  },
+  {
+    "finish_reason": "stop",
+    "type": "done"
+  }
+]

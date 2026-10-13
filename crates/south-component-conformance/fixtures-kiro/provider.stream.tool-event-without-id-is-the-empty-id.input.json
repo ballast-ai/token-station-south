@@ -1,0 +1,7 @@
+{
+  "chunks": [
+    "event: toolUseEvent\ndata: {\"name\":\"get_weather\"}\n\n",
+    "event: toolUseEvent\ndata: {\"input\":\"{}\",\"name\":\"get_weather\"}\n\n",
+    "event: toolUseEvent\ndata: {\"name\":\"get_weather\",\"stop\":true}\n\n"
+  ]
+}

@@ -1,0 +1,15 @@
+event: assistantResponseEvent
+data: {"content":"Let me check."}
+
+event: toolUseEvent
+data: {"name":"get_weather","toolUseId":"tooluse_A"}
+
+event: toolUseEvent
+data: {"input":"{\"city\":\"Paris\"}","name":"get_weather","toolUseId":"tooluse_A"}
+
+event: toolUseEvent
+data: {"name":"get_weather","stop":true,"toolUseId":"tooluse_A"}
+
+event: meteringEvent
+data: {"unit":"credit","usage":0.02}
+
