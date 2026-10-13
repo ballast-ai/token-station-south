@@ -1,6 +1,8 @@
 # The Gemini Omni video task component and task contract 8 (inline artifacts, token buckets)
 
-Status: proposed — drafted for review by the host team (token-station-server P21 / P26), not accepted
+Status: accepted 2026-10-13 (provisional items pending a real-account test). Rulings in §16; what landed, the numbered
+refusals and the intended differences from the host's native arm in §17. Drafted 2026-10-01 for review by the host
+team (token-station-server P21 / P26).
 
 Date: 2026-10-01
 
@@ -87,7 +89,9 @@ the sandbox (image record §6), and it would put the clip through the sandbox on
 
 - **D1 One new task package, Vertex first.** `task-gemini-omni-v2`, world `task-adapter-v2`, one family in v1:
   `vertex-interactions-video` (§3). The Gemini API line is deferred (not sampled, and no production row needs it:
-  host plan P26 "O0-a" found no `gemini`-type provider rows).
+  host plan P26 "O0-a" found no `gemini`-type provider rows). **Amended 2026-10-13 (§16, R-A1):** the Gemini API line
+  ships in v1 too, as a second family `gemini-interactions-video` transcribed from the host's native arm and marked
+  provisional, so the host can move the arm it actually runs and dual-run it.
 - **D2 Submit, then poll by id (DO7).** The component submits with `background: true` and polls `GET
   interactions/{id}`; the upstream id is persisted before the first poll, so a host restart resumes polling instead
   of parking the call. Terminal-on-submit is never used for a success (§4).
@@ -119,7 +123,7 @@ the sandbox (image record §6), and it would put the clip through the sandbox on
 | World / WIT | `task-adapter-v2` / `token-station:task-adapter@2.0.0` (unchanged) |
 | Task contract | 8 (§13); the package does not decode under contract 7 |
 | Suite | `south.task-component.v2`, with the rows of §10 |
-| Families | v1: `vertex-interactions-video`. Deferred: `gemini-interactions-video` (§3.3) |
+| Families | v1: `vertex-interactions-video` (sampled) and `gemini-interactions-video` (provisional, the host's native arm; §16 R-A1) |
 | Reference implementation | `reference_gemini_omni_task_v2.rs` in `south-component-conformance`, transcribed from the O0-b samples, not from the host bridge (the bridge speaks `delivery: uri` to a different upstream) |
 
 The family names describe the wire (Interactions video on Vertex / on the Gemini API), not a model, so a later Omni
@@ -143,6 +147,10 @@ already emits bearer or `api-key` per family inside one package (umbrella §4.1)
 (Q-S1), this record does not pre-commit: the deferred family is either a second family here or a sibling package.
 
 ### 3.4 Manifest sketch
+
+(The shipped manifest differs from this sketch as §17.1 says: both families, `bearer` and `header_secret`, no
+`credentials` or `endpoint` section — the task world has neither yet, and Q-L7 ships on the §9.3 stopgap — and
+`cached_input` declared.)
 
 ```json
 {
@@ -827,3 +835,175 @@ Tags: S = south maintainers, L = lv, K = kernel. No kernel change is proposed; n
   values, with a bound hit parking for review?
   **Ruled (lv, 2026-10-02): as recommended.** `video_output` 57,920 and `reasoning_output` 4,096 per output as catalog
   data; a bound hit parks for review.
+
+## 16. Rulings (lv, 2026-10-13: implement now, real-account test later; DP0-consistent questions take the recommendation)
+
+lv's instruction of 2026-10-13 (in translation: "migrate the Kiro and Omni code first; we test with an account later")
+accepts this record. Every open question takes its recommendation where it has one and the option is
+consistent with DP0 (provider logic only in South, the host generic); a question without a recommendation takes the
+DP0-consistent minimal option. A question that genuinely needs upstream traffic is **provisional**: it is implemented as
+the host's native Omni arm does it today (token-station-server `dev-v2` `3437d586`, `handler/video/gemini.rs`
+`proxy_gemini_omni_video` and `engine/token_counter/media.rs`), or, where that arm has no answer, as the samples of §1.2
+and §4.5 show, and it is re-checked by the real-account test.
+
+| Item | Ruling | Provisional |
+|---|---|---|
+| Q-S1 | As recommended: R6 reads "only `host_signed` stands alone", so the Gemini API line is a second family of this package (`bearer` for Vertex, `header_secret` `x-goog-api-key` for the Gemini API) | no |
+| Q-S2 | As recommended: buckets are wire-faithful; `reasoning_output` is outside `total_output`, stated on `TaskTokenBucketV2`; the ledger fold adds them (§7.3) | no |
+| Q-S3 | As recommended: a host elides only for a package that declares `response_blob_paths` (contract 8); no existing package's responses change | no |
+| Q-S4 | No recommendation; DP0-minimal: v1 accepts the 16 MiB payload bound for task request media (`data:` URIs cross the sandbox, as for Veo); blob references for task requests wait for a contract that needs them | no |
+| Q-S5 | No recommendation; DP0-minimal: declared buckets are per package in the task world (it has no `model-capabilities` call) and per model in the image world | no |
+| Q-S6 | Ruled as E-Q5, image Q5 and speech Q9 (the same question): the release record states that a community-host implementation is recommended, and `task_component_capabilities` stays `not_verified` for the community host until it lands | no |
+| Q-L1 to Q-L8 | Ruled 2026-10-02 (§15), unchanged | Q-L2, Q-L3, Q-L5 depend on traffic not yet seen |
+| R-A1 (new) | D1 amended: the Gemini API family `gemini-interactions-video` ships in v1, transcribed from the native arm: `POST {base}/v1beta/interactions`, `x-goog-api-key`, `response_format.delivery = "uri"`, no `background`, the synchronous `completed` answer settled at submit with its Files API `uri` as a credential-gated URL artifact, text-to-video only (every visual input key refused, as native), `aspect_ratio` verbatim, `duration` and `n` ignored | **yes**: the whole family (not sampled) |
+| R-A2 (new) | The native arm reads `output_video` before `steps[]`; so does the component (pointer `/output_video/data`, a declared elision path) | **yes** |
+| R-A3 (new) | `cached_input` is declared (optional): `usage.total_cached_tokens`, when present, is reported, so the host deducts it as the native arm does (`media.rs` bills the cached subset at the cached rate); a count above `total_input_tokens` is `unknown` | **yes**: no sample shows the field |
+| R-A4 (new) | Reference-image bound (Q-L3): at most 20 image parts per request, first frame included — the count O0-c accepted, not a documented limit | **yes** |
+| R-A5 (new) | An accepted-terminal receipt never carries inline artifacts (a codec rule of contract 8): a host resolves inline pointers only against an observation's view, so a `completed` submit answer whose clip is inline is polled by id (§4.2) | no |
+| R-A6 (new) | The render marker is `{"$south.artifact": {"index": i}}`, `i` counting the primary artifacts (contract 7's `art_i`); a host fills it with `fill_task_artifact_markers_v1`. It is the image world's key without its `as` member: the task world has one delivery, the gateway path | no |
+| R-A7 (new) | `parse-submit-response` receives no configuration, so the error classification of §8.2 applies to both families: a 4xx is `rejected` (released), a 5xx `unknown`. Measured on Vertex only (the missing-`gcs_uri` 400 was not billed) | **yes** for the Gemini API line |
+| R-A8 (new) | Immutable paths: Vertex as §5.2; the Gemini family keeps the native arm's reservation (`model`, `input`, `response_format.type`, `response_format.delivery`) plus `background` and `stream`, which would change the answer's shape | no |
+| R-A9 (new) | Gate ③ (§11) and the `price_token_buckets` golden vectors (§12.1 O2a) are host work: prices do not enter South (§11 item 4). South ships the host's two pure halves, `resolve_task_inline_artifact_v1` and `fill_task_artifact_markers_v1`, beside `elide_v1`; a frozen gate ③ suite for contract 8 is a follow-up when the host adopts it | no |
+
+## 17. Implementation (2026-10-13)
+
+### 17.1 What landed
+
+- **Task contract 8** (`south-contracts`): `TASK_CONTRACT_VERSION` 8, `TASK_CONTRACT_VERSION_V7` and
+  `TASK_CONTRACT_VERSIONS = [7, 8]` for a host's range; `TaskArtifactRefV2::Inline(Vec<TaskInlineArtifactV2>)`
+  (pointer, `ArtifactEncodingV1`, media type, contract 7 role; 1 to 16 items, a primary, distinct pointers) with
+  `primary_count`; the closed `TaskTokenBucketV2` vocabulary (fourteen words) and `TaskTokenBucketsV2` (at least one
+  bucket, each at most `i64::MAX`); `TaskUsageFactsV2::with_token_buckets` (exclusive with `tokens`);
+  `TaskRequestEstimateV2::with_bucket_ceilings`; the host's pure halves `resolve_task_inline_artifact_v1` and
+  `fill_task_artifact_markers_v1`; two error variants (`InlineArtifactUnresolved`, `ReferenceIntegrity`). The WIT is
+  unchanged.
+- **Codec** (`task_v2_json`): artifacts kind `inline`; optional `usage.token_buckets` and
+  `request_estimate.bucket_ceilings`, written only when present, so **a contract 7 value decodes and re-encodes byte for
+  byte** and a guest built before contract 8 still decodes everything a host hands back to it; an accepted-terminal
+  receipt with inline artifacts is refused (R-A5).
+- **Gate ①** (`south-provider-api`): `response_blob_paths`, `token_buckets` and `required_token_buckets` — task-v2
+  world only, `compatibility.contracts.task` ≥ 8 only, paths under the media elision grammar (at most 32 of at most 256
+  bytes, distinct), bucket words from `TASK_TOKEN_BUCKETS`, required ⊆ declared. Absent, a manifest validates as before.
+- **Gate ②** (`south-component-conformance`): for a manifest declaring those fields,
+  `run_task_component_suite_v2_for_manifest` adds `DeclaredBucketsOnly` (new `CheckV1`), `ReferenceIntegrity` (inline
+  pointers land on `$south.blob` nodes; rendered markers name existing primaries; no other `$south.` key),
+  `UsageNeverDefaulted` and `MissingMeterIsNotZero` (an observation fixture's `.meta.json` sidecar names the usage
+  object and each required bucket's wire member; deleting any one must give `unknown`).
+- **Package** `task-gemini-omni-v2` 0.1.0: reference `reference_gemini_omni_task_v2.rs`, 63 fixture cases (three with usage sidecars) and a README in
+  `fixtures-gemini-omni-task-v2/` (inputs transcribed from the O0-b / O0-c samples as elided views, with placeholders for
+  the clip and the thought signatures; Gemini API rows from the native arm), the guest shell, the build script, the
+  sandbox parity test (wasm ≡ reference check for check, and the host half driven end to end with a 2 MiB base64 clip
+  that never enters the sandbox) and the ci / release workflow lists. Manifest: families
+  `gemini-interactions-video` and `vertex-interactions-video`, arms `bearer` and `header_secret`,
+  `response_blob_paths` `/steps/*/content/*/data` and `/output_video/data`, `token_buckets` `text_input`,
+  `image_input`, `cached_input`, `video_output`, `reasoning_output`, `total_input`, `total_output` (the last four
+  required), `contracts` `{task: 8, media: 1}`, `south_runtime` this tree's 0.61.0 — **the release that ships contract 8
+  must move it to itself**, as 0.59.0 did for `image-gemini`, or `check-declared-runtime.sh` refuses it.
+- **Compatibility**: `compatibility.json` records `contracts.task` 8; the test hosts admit task 7 and 8. Every
+  published task package keeps `task: 7`. Q47: `south-contracts` 0.53.0 → 0.54.0, `south-provider-api` 0.54.0 →
+  0.55.0, `south-component-conformance` 0.59.0 → 0.60.0, so every package published with 0.61.0 takes a patch with
+  unchanged behaviour and keeps its `south_runtime` and contracts
+  (`task_contract_8_retires_every_published_061_package_identity`).
+
+### 17.2 Refusals and degrades this package introduces (numbered)
+
+Refused in `build-submit-request`, before admission, with no descriptor:
+
+| # | Family | Input | Answer |
+|---|---|---|---|
+| OM-R1 | Vertex | `duration` other than 10 (number or numeric string) | 400 `capability` |
+| OM-R2 | Vertex | `n` other than 1 | 400 `capability` |
+| OM-R3 | Vertex | `aspect_ratio` other than `16:9` / `9:16` (O0-c) | 400 `capability` |
+| OM-R4 | Vertex | `last_frame`, `last_frame_url`, `video`, `video_url` | 400 `capability` |
+| OM-R5 | Vertex | an image that is not an `image/*` base64 `data:` URI (the host's prefetch makes it one) | 400 `invalid_request` |
+| OM-R6 | Vertex | more than 20 image parts, first frame included (R-A4) | 400 `invalid_request` |
+| OM-R7 | Vertex | `reference_images` that is not an array | 400 `invalid_request` |
+| OM-R8 | both | a `model` that is not a plain identifier (host-written; only a misconfigured row) | 400 `invalid_request` |
+| OM-R9 | both | a provider family the package does not declare | 400 `invalid_request` |
+
+The Gemini family's refusal of every visual input key (even `null`) and of a missing `prompt` are the native arm's, not
+new.
+
+Answered `unknown` (polling continues; after the host's budget, manual review with the reservation held):
+
+| # | Where | Answer from the upstream |
+|---|---|---|
+| OM-U1 | observe | `completed` without `usage`, without `total_input_tokens` / `total_output_tokens` / `total_thought_tokens`, without a `video` output modality, or with a count that is not a whole number |
+| OM-U2 | observe | an input modality other than `text` / `image`, an output modality other than `video`, or a modality repeated |
+| OM-U3 | observe | input modalities ≠ `total_input_tokens`, output modalities ≠ `total_output_tokens`, `total_tokens` ≠ input + output + thought, or cached > input |
+| OM-U4 | observe | `completed` with no video, more than one video part, an inline `data` the host did not elide, or an inline part whose `mime_type` is not `video/*` |
+| OM-U5 | observe | a status word other than `in_progress` / `completed` (Q-L2), a non-2xx, a body that is not JSON |
+| OM-U6 | submit | a 2xx without a valid id (`[A-Za-z0-9_-]`, at most 128 bytes) that is not a settleable `uri` answer; a 5xx; a body that is not JSON |
+
+Contract-level refusals: the codec refuses an unknown bucket word, an empty bucket map, `tokens` beside buckets, a count
+above `i64::MAX`, repeated inline pointers and an accepted-terminal receipt with inline artifacts; gate ① refuses the
+three declarations outside task-v2, below contract 8, or malformed.
+
+### 17.3 Intended differences from the native Omni arm
+
+| # | Native arm today | This package (and the host adopting it) |
+|---|---|---|
+| OM-D1 | Synchronous sealed stream settlement; `Prefer: respond-async` ignored; a process lost mid-wait goes to manual review | A task row: `respond-async` returns 202 (DO3); Vertex polls a stored interaction by id, so a restart resumes |
+| OM-D2 | Blocking body `data[0].b64_json` | `data[0].url` = the host's artifact path (DO4, Q-L6); for the Gemini family the host's proxy path of the Files API URI |
+| OM-D3 | Every upstream 4xx after dispatch: `delivery_unknown`, reservation held | A 4xx at submit is `rejected` and released (§8.4; R-A7 provisional for the Gemini line) |
+| OM-D4 | Missing usage members default to 0; an unknown output modality bills at the text rate; `audio` bills at the text rate | `unknown` (OM-U1 to OM-U3) |
+| OM-D5 | More than one video part: the first is delivered | `unknown` (OM-U4) |
+| OM-D6 | Reservation: every output modality at `default_max_output_tokens` (P26-F1: every clip parks) | Host bound from catalog data per bucket, tightened by `bucket_ceilings` (§7.4; host work) |
+| OM-D7 | `response_format.aspect_ratio` may be set by an operator extra | Vertex reserves `response_format` whole; both families reserve `background` and `stream` (R-A8) |
+| OM-D8 | No Vertex line; no image input anywhere since the native Interactions routes went (host `54db58aa`) | Vertex accepts a first frame and reference images (OM-R1 to OM-R7 bound it) |
+| OM-D9 | `calculate_gemini_interactions_cost` falls back through `image_input_text_price_per_million` | The host's generic `price_token_buckets` has no such fallback (§7.3; host work) |
+
+Same as native, deliberately: the Gemini family's body (`model`, `input`, `response_format {type, delivery: uri,
+aspect_ratio?}`), its `x-goog-api-key` header, `duration` / `n` ignored, `aspect_ratio` verbatim, the visual-input
+refusal, the `output_video`-first reading, the cached subset, thoughts billed beside output, and the ledger fold
+(input = `total_input`, output = `total_output + reasoning_output`).
+
+### 17.4 Host 03 #107 (no entry for Omni image-to-video since `54db58aa`)
+
+Contract 8 is not itself the image entry: image input is ordinary task-request machinery (a `data:` URI after the host's
+prefetch, as for Veo). Contract 8 is what makes the **Vertex** family deliverable at all — its clip arrives inline and
+its bill is bucketed — and the Vertex family is the one with an image-input sample (O0-c). So once the host adopts
+contract 8 and routes an Omni model row to `vertex-interactions-video`, `POST /v1/video/generations` serves
+image-to-video (`image` / `image_url` / `first_frame`) and reference images again. Still without an entry: a last frame,
+video edit, audio or video inputs, any other Interactions body field, and every visual input on the Gemini API line
+(text-to-video only until the real-account test).
+
+### 17.5 What the host does next
+
+1. Re-pin the release that ships contract 8; its range admits task 7 and 8 and media 1.
+2. Adopt contract 8 once, for every provider (§11): elide every response of a package declaring
+   `response_blob_paths` before the component sees it (`elide_v1`; `unknown` on a `$south.` key); resolve inline
+   artifacts with `resolve_task_inline_artifact_v1` and store the bytes before the terminal state and settlement,
+   re-observing on failure; fill render markers with `fill_task_artifact_markers_v1`; serve `art_i` with the declared
+   media type; the bucketed meter with `price_token_buckets`, per-output catalog maxima (`video_output` 57,920,
+   `reasoning_output` 4,096, Q-L8) and a load-time refusal of an output bucket the row cannot price or bound.
+3. Install `task-gemini-omni-v2` in the task component registry and route Omni rows by `component_task`:
+   `gemini-interactions-video` for the rows the native arm serves today; `vertex-interactions-video` through the §9.3
+   stopgap (`task_component` row with the full `v1beta1` base and the `VertexSa` binding recipe) for the component leg
+   and the dual run only, cutover after umbrella B2 / B4 (Q-L7).
+4. Dual run against the native arm: only the Gemini family reaches the native arm's upstream, so compare item by item
+   there — upstream body (identical by construction), `x-goog-api-key`, settled amount and ledger row on the same usage,
+   delivered bytes (native `b64_json` decoded = bytes served at `art_0`) — with OM-D1 to OM-D9 asserted on their own.
+   The Vertex family has no native counterpart: §12.2's amount and ledger reconciliation applies.
+5. A cutover preflight for the Omni rows (route present and parsable, binding family, package digest, in-flight sealed
+   Omni settlements drained), then delete the native arm (§12.4); J1 drops with it.
+
+### 17.6 Risks
+
+- The Gemini API family is unsampled end to end; if its answer is not synchronous, its usage lacks a required member, or
+  its errors differ, every call ends `unknown` (funds held, nothing delivered) until a sample corrects the package.
+- 57,920 video tokens per 10 s clip and 4,096 reasoning tokens are measured constants; a different upstream count hits
+  the host bound and parks (a catalog fix, not code).
+- Q-L5 (retention of stored interactions) bounds how long re-observation recovers a failed store.
+- A host must hold up to ~7 MB of response per poll (in-progress bodies echo input images) and elide every one.
+- The Q47 bump re-identifies all 25 published packages; a host re-pin moves every pinned digest. The parallel
+  `provider-kiro` work touches the same crate versions, so whichever merges second reconciles them.
+
+### 17.7 What the real-account test must settle
+
+- Gemini API line: the submit answer (synchronous or not; `id`; poll by id), `delivery: "uri"` and the Files API URI's
+  host, the usage members, error bodies and whether a 4xx is billed, accepted aspect ratios, image input.
+- Vertex: failure and content-policy words (Q-L2), retention (Q-L5), the documented image limit (Q-L3), whether
+  `total_cached_tokens` ever appears, 401 / 429 bodies, and whether `gemini-omni-1.1-flash-preview` also produces 57,920
+  video tokens per clip.
+- The host's dual run and a component-leg run on a real key in both billing forms.
