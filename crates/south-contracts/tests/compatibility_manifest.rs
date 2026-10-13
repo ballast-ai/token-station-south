@@ -178,7 +178,7 @@ struct ProviderRuntime {
 /// status is not `verified`.
 type ExpectedCapability = (&'static str, &'static str, Option<usize>);
 
-fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 16]> {
+fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 17]> {
     BTreeMap::from([
         (
             "token-station",
@@ -242,12 +242,16 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 1
                 // no artifact URL.
                 ("safe_fetch", "not_verified", None),
                 // north_passthrough_delivery (gate ③ of `north_passthrough`, Responses record
-                // §8.2 / §12.4, designed in the 2026-10-11 NC-1 record §3) is new and no host has
-                // run it; until a host has, it renders every Responses answer.
+                // §8.2 / §12.4, designed in the 2026-10-11 NC-1 record §3) has not been run by the
+                // community host; until it has, that host renders every Responses answer.
                 ("north_passthrough_delivery", "not_verified", None),
                 // The protocol-parameterised v2 (the `generateContent` request pass-through record
-                // §6): no host has run it yet.
+                // §6): the community host has not run it.
                 ("north_passthrough_delivery_v2", "not_verified", None),
+                // north_render (render-gaps record §8: the north codec's `chat.stream` fixture
+                // pack, compared as canonical frame sequences through the host's own seam) stays
+                // not_verified: the community host has no parity test against the pack.
+                ("north_render", "not_verified", None),
             ],
         ),
         // token-station-server provider_stream verified 2026-08-17: the durable
@@ -498,12 +502,31 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 1
                 // pass.
                 ("safe_fetch", "not_verified", None),
                 // north_passthrough_delivery (gate ③ of `north_passthrough`, Responses record
-                // §8.2 / §12.4, designed in the 2026-10-11 NC-1 record §3) is new and no host has
-                // run it; until a host has, it renders every Responses answer.
-                ("north_passthrough_delivery", "not_verified", None),
+                // §8.2 / §12.4, designed in the 2026-10-11 NC-1 record §3) verified at v0.61.0:
+                // server dev-v2 `ec832f0d` (2026-10-12) added the host's pass-through executor
+                // (`sender/passthrough.rs`, Responses pass-through delivery) and runs
+                // south.north-passthrough-delivery.v1 over all 22 distinct cases as the unit test
+                // `host_passes_the_north_passthrough_delivery_suite` in that file. Server dev-v2
+                // `4ecf5526`, pinned to the v0.61.0 tag, runs it under both its balance and quota
+                // billing forms with its full local matrix of 118 legs green. The adoption record
+                // is held by that host's repository.
+                ("north_passthrough_delivery", "verified", Some(22)),
                 // The protocol-parameterised v2 (the `generateContent` request pass-through record
-                // §6): no host has run it yet.
-                ("north_passthrough_delivery_v2", "not_verified", None),
+                // §6) verified at v0.61.0: server `b2715a19` (D7 step 2) runs
+                // south.north-passthrough-delivery.v2 once per protocol in
+                // `NorthPassthroughProtocolV2::ALL` as
+                // `host_passes_the_north_passthrough_delivery_suite_v2`, asserting that the passed
+                // case ids equal every distinct case id of each protocol; 43 is that sum.
+                // Same pin, billing forms and matrix as v1 above.
+                ("north_passthrough_delivery_v2", "verified", Some(43)),
+                // north_render (render-gaps record §8, G1) verified at v0.61.0: server `0ae71a52`
+                // (carried in dev-v2 `4ecf5526`) adds `chat_stream_render_parity_tests` in
+                // `text_admission/sender.rs`, two tests that load all eight files of
+                // `crates/south-north-codec/fixtures/render-gaps/chat.stream/` from the pinned
+                // checkout, drive the host's own seam and compare canonical frame sequences as JSON
+                // values (the D7 equality rule, N-Q5). Same pin, billing forms and matrix as above.
+                // The adoption record is held by that host's repository.
+                ("north_render", "verified", Some(8)),
             ],
         ),
     ])
@@ -753,7 +776,13 @@ fn compatibility_manifest_describes_the_library_slice() {
     // top-level `hosts` value mirrors `provider_call` (the first adopted
     // capability). Every newer capability is recorded independently and may
     // become verified only through its own adoption evidence. A capability
-    // listed here must have a conformance suite in this manifest.
+    // listed here must have a conformance suite in this manifest, with one
+    // exception: `north_render` is the north codec's render-gaps fixture pack
+    // (render-gaps record §8), which a host reads from its pinned checkout and
+    // compares through its own seam. It has no runnable suite and no contract
+    // number (record §10), so it has no `conformance` entry; its case count is
+    // the number of fixture files, checked by the freshness test in
+    // south-provider-conformance.
     assert_eq!(manifest.task_component_capabilities.len(), 2);
     for host in ["token-station", "token-station-server"] {
         let capabilities = &manifest.task_component_capabilities[host];
