@@ -1,0 +1,118 @@
+{
+  "context": {
+    "created": 1700000000,
+    "id": "chatcmpl-g1",
+    "model": "upstream-model"
+  },
+  "description": "The first delta frame of each choice index carries role assistant, whatever it carries; dropped events do not consume it; later deltas do not repeat it.",
+  "expected": {
+    "error": null,
+    "frames": [
+      {
+        "data": {
+          "choices": [
+            {
+              "delta": {
+                "reasoning_content": "t",
+                "role": "assistant"
+              },
+              "finish_reason": null,
+              "index": 0
+            }
+          ],
+          "created": 1700000000,
+          "id": "chatcmpl-g1",
+          "model": "upstream-model",
+          "object": "chat.completion.chunk"
+        },
+        "kind": "delta"
+      },
+      {
+        "data": {
+          "choices": [
+            {
+              "delta": {
+                "content": "b",
+                "role": "assistant"
+              },
+              "finish_reason": null,
+              "index": 1
+            }
+          ],
+          "created": 1700000000,
+          "id": "chatcmpl-g1",
+          "model": "upstream-model",
+          "object": "chat.completion.chunk"
+        },
+        "kind": "delta"
+      },
+      {
+        "data": {
+          "choices": [
+            {
+              "delta": {
+                "content": "a"
+              },
+              "finish_reason": null,
+              "index": 0
+            }
+          ],
+          "created": 1700000000,
+          "id": "chatcmpl-g1",
+          "model": "upstream-model",
+          "object": "chat.completion.chunk"
+        },
+        "kind": "delta"
+      },
+      {
+        "data": {
+          "choices": [
+            {
+              "delta": {
+                "content": "c"
+              },
+              "finish_reason": null,
+              "index": 1
+            }
+          ],
+          "created": 1700000000,
+          "id": "chatcmpl-g1",
+          "model": "upstream-model",
+          "object": "chat.completion.chunk"
+        },
+        "kind": "delta"
+      }
+    ]
+  },
+  "input": [
+    [
+      {
+        "block_index": 0,
+        "index": 0,
+        "signature_delta": "sig",
+        "type": "thinking_signature_delta"
+      },
+      {
+        "block_index": 0,
+        "index": 0,
+        "thinking_delta": "t",
+        "type": "thinking_delta"
+      },
+      {
+        "content": "b",
+        "index": 1,
+        "type": "delta"
+      },
+      {
+        "content": "a",
+        "index": 0,
+        "type": "delta"
+      },
+      {
+        "content": "c",
+        "index": 1,
+        "type": "delta"
+      }
+    ]
+  ]
+}

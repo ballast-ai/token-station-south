@@ -1,0 +1,63 @@
+{
+  "context": {
+    "created": 1700000000,
+    "id": "chatcmpl-g1",
+    "model": "upstream-model"
+  },
+  "description": "A Finish with no reason renders a chunk with a null finish_reason, and that chunk is terminal.",
+  "expected": {
+    "error": null,
+    "frames": [
+      {
+        "data": {
+          "choices": [
+            {
+              "delta": {
+                "content": "x",
+                "role": "assistant"
+              },
+              "finish_reason": null,
+              "index": 0
+            }
+          ],
+          "created": 1700000000,
+          "id": "chatcmpl-g1",
+          "model": "upstream-model",
+          "object": "chat.completion.chunk"
+        },
+        "kind": "delta"
+      },
+      {
+        "data": {
+          "choices": [
+            {
+              "delta": {},
+              "finish_reason": null,
+              "index": 0
+            }
+          ],
+          "created": 1700000000,
+          "id": "chatcmpl-g1",
+          "model": "upstream-model",
+          "object": "chat.completion.chunk"
+        },
+        "kind": "terminal"
+      }
+    ]
+  },
+  "input": [
+    [
+      {
+        "content": "x",
+        "index": 0,
+        "type": "delta"
+      },
+      {
+        "type": "finish"
+      },
+      {
+        "type": "done"
+      }
+    ]
+  ]
+}

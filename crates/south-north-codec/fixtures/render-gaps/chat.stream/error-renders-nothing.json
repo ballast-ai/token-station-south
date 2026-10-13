@@ -1,0 +1,70 @@
+{
+  "context": {
+    "created": 1700000000,
+    "id": "chatcmpl-g1",
+    "model": "upstream-model"
+  },
+  "description": "An Error renders nothing, drops the pending finish and the folded usage, and nothing is rendered after it.",
+  "expected": {
+    "error": null,
+    "frames": [
+      {
+        "data": {
+          "choices": [
+            {
+              "delta": {
+                "content": "half",
+                "role": "assistant"
+              },
+              "finish_reason": null,
+              "index": 0
+            }
+          ],
+          "created": 1700000000,
+          "id": "chatcmpl-g1",
+          "model": "upstream-model",
+          "object": "chat.completion.chunk"
+        },
+        "kind": "delta"
+      }
+    ]
+  },
+  "input": [
+    [
+      {
+        "content": "half",
+        "index": 0,
+        "type": "delta"
+      },
+      {
+        "finish_reason": "stop",
+        "type": "finish"
+      },
+      {
+        "type": "usage",
+        "usage": {
+          "input_tokens": 1,
+          "output_tokens": 1
+        }
+      },
+      {
+        "error": {
+          "code": "upstream_unavailable",
+          "http_status": 502,
+          "message": "upstream died"
+        },
+        "type": "error"
+      }
+    ],
+    [
+      {
+        "content": "more",
+        "index": 0,
+        "type": "delta"
+      },
+      {
+        "type": "done"
+      }
+    ]
+  ]
+}

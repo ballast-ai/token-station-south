@@ -1,0 +1,119 @@
+{
+  "context": {
+    "created": 1700000000,
+    "id": "chatcmpl-g1",
+    "model": "upstream-model"
+  },
+  "description": "The chunk rendered from a Finish is terminal whether Done or a later event flushes it; a Finish never flushed renders nothing.",
+  "expected": {
+    "error": null,
+    "frames": [
+      {
+        "data": {
+          "choices": [
+            {
+              "delta": {
+                "content": "x",
+                "role": "assistant"
+              },
+              "finish_reason": null,
+              "index": 0
+            }
+          ],
+          "created": 1700000000,
+          "id": "chatcmpl-g1",
+          "model": "upstream-model",
+          "object": "chat.completion.chunk"
+        },
+        "kind": "delta"
+      },
+      {
+        "data": {
+          "choices": [
+            {
+              "delta": {},
+              "finish_reason": "length",
+              "index": 0
+            }
+          ],
+          "created": 1700000000,
+          "id": "chatcmpl-g1",
+          "model": "upstream-model",
+          "object": "chat.completion.chunk"
+        },
+        "kind": "terminal"
+      },
+      {
+        "data": {
+          "choices": [
+            {
+              "delta": {
+                "content": "late"
+              },
+              "finish_reason": null,
+              "index": 0
+            }
+          ],
+          "created": 1700000000,
+          "id": "chatcmpl-g1",
+          "model": "upstream-model",
+          "object": "chat.completion.chunk"
+        },
+        "kind": "delta"
+      },
+      {
+        "data": {
+          "choices": [
+            {
+              "delta": {},
+              "finish_reason": "stop",
+              "index": 0
+            }
+          ],
+          "created": 1700000000,
+          "id": "chatcmpl-g1",
+          "model": "upstream-model",
+          "object": "chat.completion.chunk"
+        },
+        "kind": "terminal"
+      }
+    ]
+  },
+  "input": [
+    [
+      {
+        "content": "x",
+        "index": 0,
+        "type": "delta"
+      },
+      {
+        "finish_reason": "length",
+        "type": "finish"
+      }
+    ],
+    [
+      {
+        "content": "late",
+        "index": 0,
+        "type": "delta"
+      }
+    ],
+    [
+      {
+        "finish_reason": "stop",
+        "type": "finish"
+      }
+    ],
+    [
+      {
+        "type": "done"
+      }
+    ],
+    [
+      {
+        "finish_reason": "stop",
+        "type": "finish"
+      }
+    ]
+  ]
+}
