@@ -31,7 +31,7 @@ Each row's source:
   and without `content-type`, as natively (K-Q10). `conversationId` is the host's `attempt_id`.
 - **Tool-call arguments**, read as the native arm reads them (the Anthropic first hop parses them, keeps any JSON value
   and sends unparseable text as a JSON string): `non-object-arguments-pass-through` (`Paris`, `[1,2]`, `42`, `null`)
-  and `empty-arguments-are-an-empty-object` (`""` and whitespace become `{}`; natively the string itself, KD14).
+  and `empty-arguments-pass-through` (`""` and whitespace-only text are sent as JSON strings, as natively).
 - **Refused request rows**, one per numbered refusal of the record (KR1 to KR5, KR7 to KR9): `refused-image`,
   `refused-image-in-history`, `refused-unknown-part`, `refused-json-response-format`, `refused-required-tool-choice`,
   `refused-named-tool-choice`, `refused-assistant-final-turn`, `refused-empty-tool-call-id`,

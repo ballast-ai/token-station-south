@@ -302,7 +302,7 @@ captures to settle it.
 | `response_format` other than text | **Refused**: capability error; the package does not declare `json_schema` | Never reaches the upstream (the second hop reads only `messages`, `system`, `tools`) |
 | `tool_choice: required` or a named tool (`ToolChoice::Other`) | **Refused**: capability error — the wire cannot force a call | Silently dropped |
 | Final message is an assistant turn (prefill) | **Refused**: capability error | Sent as the current **user** message (server:translate_kiro.rs:77-86 reads the last message without checking its role) |
-| `ToolCall.arguments` that is not a JSON object | ~~Refused~~ *Revised 2026-10-14 (§18):* sent as natively — a non-object JSON value as is, unparseable text as a JSON string; empty or whitespace-only arguments become `{}` (KD14) | Sent: a non-object JSON value as is, unparseable text as a JSON string (reference_anthropic.rs:191-192) |
+| `ToolCall.arguments` that is not a JSON object | ~~Refused~~ *Revised 2026-10-14 (§18):* sent exactly as natively — any JSON value as is, unparseable text (empty and whitespace-only included) as a JSON string | Sent: a non-object JSON value as is, unparseable text as a JSON string (reference_anthropic.rs:191-192) |
 | A tool call with an empty `id` or `name`; a `Tool` message with no `tool_call_id` | **Refused**: capability error | Refused by the first hop (reference_anthropic.rs:177-186, 249-254) |
 | Empty `messages` | **Refused**: invalid request | Refused (server:translate_kiro.rs:62-68) |
 | `sampling.temperature`, `top_p`, `stop` | **Dropped** — no slot on the wire; documented, and pinned by a fixture | Dropped |
@@ -1217,8 +1217,8 @@ Implemented on branch `provider-kiro`; not released (Q47: the next release bumps
   row. Mutations run against the tests: emitting `Usage` from `meteringEvent` (caught by gate ②, the metering
   mutation check and the usage judge), a non-zero response usage (gate ②, the judge, the parity test), a
   `conversationId` not taken from the attempt id (gate ②, the attempt-id check), an end of body that does not
-  complete a tool call (gate ②, the parity test), and whitespace-only arguments not read as `{}` (gate ②, the
-  arguments test). (A first-round mutation, a `stop` that does not close the call, no longer applies: since the
+  complete a tool call (gate ②, the parity test), and empty arguments rewritten to `{}` (gate ②, the arguments
+  test). (A first-round mutation, a `stop` that does not close the call, no longer applies: since the
   review `stop` closes nothing the IR has to close.)
 
 **Where the shipped manifest differs from the §3.4 / §7.2 sketches** (the vocabulary as released, not new
@@ -1253,7 +1253,7 @@ native arm succeeds each carry the reason in the last column.
 | KR3 | `response_format` other than text | Capability error | Ignored | D3, as KR2 |
 | KR4 | `tool_choice` `required` or a named tool | Capability error | Dropped | D3, as KR2 |
 | KR5 | The last non-system message is an assistant turn | Capability error | Sent as the current user message | D3, as KR2 |
-| ~~KR6~~ | Tool-call `arguments` that are not a JSON object | Withdrawn: sent as natively (KD14 for empty arguments) | Sent as parsed, unparseable text as a string | — |
+| ~~KR6~~ | Tool-call `arguments` that are not a JSON object | Withdrawn: sent exactly as natively, `""` as the JSON string `""` | Sent as parsed, unparseable text as a string | — |
 | KR7 | A tool call with an empty `id` or `name`; a tool message without `tool_call_id` | Capability error | Refused by the first hop | — |
 | KR8 | No non-system message | Invalid request | Refused | — |
 | KR9 | `host_values.attempt_id` absent, or not a lowercase hyphenated UUID | Internal error (500): a host defect | The host mints its own id | Impossible in a component: gate ② `Determinism` forbids it minting a random id (§4.5) |
@@ -1297,9 +1297,6 @@ native arm succeeds each carry the reason in the last column.
   that id's call. The native streaming path instead opens a new block on every start, and attaches a fragment to
   whichever block is open; keying by id is the reading both native paths agree on when ids are consistent, and the IR
   has one index per call.
-- KD14 Empty or whitespace-only tool-call arguments are sent as `{}`, the input of a call without arguments (clients
-  send `""` for one); natively the Anthropic first hop fails to parse them and sends the string itself as `input`.
-  Every other value is sent as natively.
 
 **What needs the real account** (§12.2 item 7): K-Q5 (is `meteringEvent` on every completed answer?), K-Q6 (the
 exception names and statuses, and what an exhausted allowance looks like), K-Q10 (`content-type`), K-Q11 (is
@@ -1604,10 +1601,13 @@ They matter here because a dual run pins whatever the native arm does as "correc
   take the recommendation); six rulings are provisional until the capture (§17).
 - §17 added: one ruling per question K-Q1 to K-Q19.
 - §18 added: what landed, where the shipped manifest differs from the §3.4 / §7.2 sketches, the numbered refusals
-  KR1–KR25 and differences KD1–KD14, what needs the real account, and the host's next steps.
+  KR1–KR25 and differences KD1–KD13, what needs the real account, and the host's next steps.
 - Review of the same day: every refusal where the native arm succeeds checked against the native code. Withdrawn:
-  KR6 (tool arguments are sent as natively; empty arguments become `{}`, KD14), KR17–KR19 (malformed tool events are
+  KR6 (tool arguments are sent exactly as natively, `""` as the JSON string `""`), KR17–KR19 (malformed tool events are
   read as natively), KR21 (a tool call without `stop` completes at the end of the body, as natively; §5.3 revised).
   Narrowed: KR20 (only the streaming path, where gate ②'s incrementality check makes matching impossible; the
   buffered path answers an empty success). Relaxed: KR23 (`profile_arn` is `printable_ascii` 2048) and KR24
   (`printable_ascii` 4096). Each remaining refusal where the native arm succeeds states its reason.
+- Second review of the same day: the interim rule that sent empty or whitespace-only tool-call arguments as `{}`
+  (KD14) rested on a misreading of KD7 (a response-side fold, not the request) and is removed; the request now sends
+  every argument string exactly as the native first hop does, `""` as the JSON string `""`.

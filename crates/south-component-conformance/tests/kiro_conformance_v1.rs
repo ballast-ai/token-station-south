@@ -144,7 +144,7 @@ fn the_shipped_pack_carries_every_decided_row() {
         "provider.request.refused-required-tool-choice",
         "provider.request.refused-named-tool-choice",
         "provider.request.refused-assistant-final-turn",
-        "provider.request.empty-arguments-are-an-empty-object",
+        "provider.request.empty-arguments-pass-through",
         "provider.request.non-object-arguments-pass-through",
         "provider.request.refused-empty-tool-call-id",
         "provider.request.refused-tool-result-without-id",
@@ -546,8 +546,8 @@ fn every_built_request_carries_the_native_headers_and_the_bearer_slot() {
 
 /// The native arm's request-side reading of tool-call arguments (server `reference_anthropic.rs`
 /// `tool_use_block`, then `translate_kiro.rs` `content_tool_uses`): any JSON value is sent as it
-/// parses and text that does not parse as a JSON string; only empty or whitespace-only arguments
-/// differ, becoming `{}` (KD14). Nothing about the arguments is refused.
+/// parses and text that does not parse, empty or whitespace-only text included, as a JSON string.
+/// Nothing about the arguments is refused or rewritten.
 #[test]
 fn tool_arguments_follow_the_native_reading() {
     let (mut request, config) = chat_row();
@@ -558,8 +558,8 @@ fn tool_arguments_follow_the_native_reading() {
     };
     for (arguments, input) in [
         ("{\"city\":\"Paris\"}", json!({"city": "Paris"})),
-        ("", json!({})),
-        (" \t\n", json!({})),
+        ("", json!("")),
+        (" \t\n", json!(" \t\n")),
         ("Paris", json!("Paris")),
         ("{\"city\":", json!("{\"city\":")),
         ("[1,2]", json!([1, 2])),
