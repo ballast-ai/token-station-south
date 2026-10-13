@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "Gemini Nano Banana `image_url` data URL payload is not valid base64 (must use the standard alphabet A-Z/a-z/0-9/+/, length a multiple of 4, 0-2 trailing '=' padding chars)"
+  }
+}

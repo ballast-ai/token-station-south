@@ -1,0 +1,28 @@
+{
+  "artifacts": [
+    {
+      "encoding": "base64",
+      "form": "inline",
+      "media_type": "image/png",
+      "pointer": "/candidates/0/content/parts/1/inlineData/data"
+    }
+  ],
+  "extras": null,
+  "metering": {
+    "credits": null,
+    "images_reported": null,
+    "tokens": {
+      "cached_image_input": null,
+      "cached_input": null,
+      "cached_text_input": null,
+      "image_input": null,
+      "image_output": 1290,
+      "text_input": 12,
+      "text_output": 10,
+      "total_input": 12,
+      "total_output": 1300
+    },
+    "upstream_cost": null
+  },
+  "outcome": "succeeded"
+}

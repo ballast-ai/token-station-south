@@ -1,0 +1,17 @@
+{
+  "provider_config": {
+    "provider": "gemini-image",
+    "base_url": "https://generativelanguage.googleapis.com"
+  },
+  "request": {
+    "json": {
+      "prompt": "a red fox"
+    }
+  },
+  "context": {
+    "upstream_model": "gemini-3.1-flash-image",
+    "metering_required": [
+      "tokens"
+    ]
+  }
+}

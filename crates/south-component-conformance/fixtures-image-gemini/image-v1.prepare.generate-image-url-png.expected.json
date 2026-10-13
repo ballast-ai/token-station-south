@@ -1,0 +1,72 @@
+{
+  "facts": {
+    "operation": "generate",
+    "inputs": {
+      "input_image": 0,
+      "reference_image": 1,
+      "mask": 0
+    },
+    "requested_outputs": 1,
+    "tier": {},
+    "metering_forms": [
+      "tokens"
+    ]
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "v1beta/models/gemini-3.1-flash-image:generateContent",
+    "auth": {
+      "arm": "header_secret",
+      "header": "x-goog-api-key",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "inlineData": {
+                    "mimeType": "image/png",
+                    "data": {
+                      "$south.ref": {
+                        "blob": "b0",
+                        "transform": "data_url_payload"
+                      }
+                    }
+                  }
+                },
+                {
+                  "text": "the same fox at night"
+                }
+              ]
+            }
+          ],
+          "generationConfig": {
+            "responseModalities": [
+              "IMAGE"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "repeat": 1,
+  "response_body_form": "json",
+  "response_elision_paths": [
+    "/candidates/*/content/parts/*/inlineData/data"
+  ],
+  "immutable_body_paths": [
+    "contents",
+    "generationConfig.imageConfig",
+    "generationConfig.candidateCount",
+    "generationConfig.responseModalities"
+  ],
+  "state": {
+    "metering_required": [
+      "tokens"
+    ]
+  }
+}

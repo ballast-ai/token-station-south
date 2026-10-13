@@ -1,0 +1,61 @@
+{
+  "descriptor": {
+    "auth": {
+      "arm": "header_secret",
+      "header": "x-goog-api-key",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "a red fox in the snow"
+                }
+              ],
+              "role": "user"
+            }
+          ],
+          "generationConfig": {
+            "responseModalities": [
+              "IMAGE"
+            ]
+          }
+        }
+      }
+    },
+    "method": "POST",
+    "path": "v1beta/models/gemini-3.1-flash-image:generateContent"
+  },
+  "facts": {
+    "inputs": {
+      "input_image": 0,
+      "mask": 0,
+      "reference_image": 0
+    },
+    "metering_forms": [
+      "tokens"
+    ],
+    "operation": "generate",
+    "requested_outputs": 1,
+    "tier": {}
+  },
+  "immutable_body_paths": [
+    "contents",
+    "generationConfig.imageConfig",
+    "generationConfig.candidateCount",
+    "generationConfig.responseModalities"
+  ],
+  "repeat": 1,
+  "response_body_form": "json",
+  "response_elision_paths": [
+    "/candidates/*/content/parts/*/inlineData/data"
+  ],
+  "state": {
+    "metering_required": [
+      "tokens"
+    ]
+  }
+}

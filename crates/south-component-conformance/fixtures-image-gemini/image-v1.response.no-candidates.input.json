@@ -1,0 +1,11 @@
+{
+  "prepare_case": "image-v1.prepare.generate-text-only",
+  "response": {
+    "status": 200,
+    "body": {
+      "usageMetadata": {
+        "promptTokenCount": 12
+      }
+    }
+  }
+}

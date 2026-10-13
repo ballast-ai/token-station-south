@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "Gemini Nano Banana `aspect_ratio` must be a string (got [\"16\",\"9\"])"
+  }
+}

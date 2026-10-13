@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "Missing `image` file part in multipart body — /v1/images/edits requires a source image to edit"
+  }
+}

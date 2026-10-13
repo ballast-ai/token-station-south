@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "Gemini Nano Banana `image_url` must be a single base64 data URL string (data:<mime>;base64,<bytes>); got non-string array — multi-source compose (e.g. `image_url: [url1, url2]`) is not supported in this release"
+  }
+}

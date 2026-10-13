@@ -131,6 +131,10 @@ name = "qwen_image_sandbox_parity"
 required-features = ["sandbox"]
 
 [[test]]
+name = "gemini_image_sandbox_parity"
+required-features = ["sandbox"]
+
+[[test]]
 name = "embeddings_payload_measurement"
 required-features = ["sandbox"]
 

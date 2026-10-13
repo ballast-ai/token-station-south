@@ -15,11 +15,12 @@ mod host_range;
 
 /// The official components this repository ships. Named, so that an empty or
 /// mistyped scan below cannot pass over nothing.
-const OFFICIAL_COMPONENTS: [&str; 22] = [
+const OFFICIAL_COMPONENTS: [&str; 23] = [
     "embeddings-gemini",
     "embeddings-openai-compatible",
     "embeddings-vertex",
     "image-azure",
+    "image-gemini",
     "image-minimax",
     "image-qwen",
     "provider-anthropic",
@@ -658,9 +659,16 @@ fn every_shipped_package_declares_the_range_handshake() {
                 [("embeddings".to_owned(), u32::from(contract))].into()
             } else if manifest.api_version == south_provider_api::IMAGE_WORLD {
                 // The image world speaks the shared media vocabulary and its own contract
-                // (image record §15).
+                // (image record §15). Only `image-gemini` names a contract 2 transform word
+                // (`data_url_payload`, I3-2 GI-Q1); the others stay at the media 1 they were
+                // published with.
+                let media = if manifest.name == "image-gemini" {
+                    south_contracts::media::MEDIA_CONTRACT_VERSION_V2
+                } else {
+                    south_contracts::media::MEDIA_CONTRACT_VERSION
+                };
                 [
-                    ("media".to_owned(), u32::from(south_contracts::media::MEDIA_CONTRACT_VERSION)),
+                    ("media".to_owned(), u32::from(media)),
                     ("image".to_owned(), u32::from(south_contracts::image::IMAGE_CONTRACT_VERSION)),
                 ]
                 .into()
@@ -1555,6 +1563,40 @@ fn i3_2_retires_every_published_058_package_identity() {
             "{name}"
         );
     }
+}
+
+/// `image-gemini` (I3-2) starts at 1.0.0 in the image world, family `gemini-image`, no config keys.
+/// It names the transform word `data_url_payload`, so it declares `contracts.media` 2: a host whose
+/// range lists media 1 only refuses it through the contract number. Its `south_runtime` must be the
+/// first runtime that decodes media 2, the release that ships the word; until that release bumps the
+/// workspace version the declaration is this tree's release (0.58.0), as `embeddings-gemini` 1.1.0
+/// declared 0.50.0 until the 0.51.0 release commit, and the release commit moves both together.
+#[test]
+fn image_gemini_declares_media_2_which_a_media_1_host_refuses() {
+    let manifest: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(repo_root().join("components/image-gemini/manifest.json"))
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(manifest.version, "1.0.0");
+    assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
+    assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["gemini-image"]);
+    assert!(manifest.declared_keys("gemini-image").is_empty());
+    assert_eq!(manifest.compatibility.contracts.get("media"), Some(&2));
+    assert_eq!(manifest.compatibility.south_runtime, host_range::south_release());
+    assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
+    let mut media_1_only = host_range::host_range();
+    media_1_only.contracts.insert("media".to_owned(), BTreeSet::from([1]));
+    assert!(matches!(
+        compatibility_admits(&manifest, &media_1_only),
+        Err(CompatibilityMismatchV2::Contract { declared: 2, .. })
+    ));
+    // The packages declaring media 1 still load on that host.
+    let azure: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(repo_root().join("components/image-azure/manifest.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(compatibility_admits(&azure, &media_1_only), Ok(()));
 }
 
 /// The two packages of I3-1 started at 1.0.0 in the image world (published with 0.58.0; I3-2's Q47

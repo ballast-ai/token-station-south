@@ -1,0 +1,13 @@
+{
+  "prepare_case": "image-v1.prepare.generate-text-only",
+  "response": {
+    "status": 404,
+    "body": {
+      "error": {
+        "code": 404,
+        "message": "models/gemini-2.5-flash-image-preview is not found for API version v1beta.",
+        "status": "NOT_FOUND"
+      }
+    }
+  }
+}

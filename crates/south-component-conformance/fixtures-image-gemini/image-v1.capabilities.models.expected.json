@@ -1,0 +1,107 @@
+[
+  {
+    "input_roles": [
+      {
+        "key": "image_url",
+        "role": "reference_image"
+      },
+      {
+        "key": "image",
+        "role": "reference_image"
+      }
+    ],
+    "metering_forms": [
+      "tokens",
+      "images"
+    ],
+    "model": "gemini-3-pro-image",
+    "operations": [
+      "generate",
+      "edit"
+    ],
+    "repeat": true,
+    "request_elision_paths": [
+      "/image_url"
+    ],
+    "response_formats": [
+      "b64_json"
+    ],
+    "tier_dimensions": [
+      "resolution"
+    ],
+    "token_buckets": [
+      "total_input",
+      "total_output"
+    ]
+  },
+  {
+    "input_roles": [
+      {
+        "key": "image_url",
+        "role": "reference_image"
+      },
+      {
+        "key": "image",
+        "role": "reference_image"
+      }
+    ],
+    "metering_forms": [
+      "tokens",
+      "images"
+    ],
+    "model": "gemini-3.1-flash-image",
+    "operations": [
+      "generate",
+      "edit"
+    ],
+    "repeat": true,
+    "request_elision_paths": [
+      "/image_url"
+    ],
+    "response_formats": [
+      "b64_json"
+    ],
+    "tier_dimensions": [
+      "resolution"
+    ],
+    "token_buckets": [
+      "total_input",
+      "total_output"
+    ]
+  },
+  {
+    "input_roles": [
+      {
+        "key": "image_url",
+        "role": "reference_image"
+      },
+      {
+        "key": "image",
+        "role": "reference_image"
+      }
+    ],
+    "metering_forms": [
+      "tokens",
+      "images"
+    ],
+    "model": "gemini-3.1-flash-lite-image",
+    "operations": [
+      "generate",
+      "edit"
+    ],
+    "repeat": true,
+    "request_elision_paths": [
+      "/image_url"
+    ],
+    "response_formats": [
+      "b64_json"
+    ],
+    "tier_dimensions": [
+      "resolution"
+    ],
+    "token_buckets": [
+      "total_input",
+      "total_output"
+    ]
+  }
+]
