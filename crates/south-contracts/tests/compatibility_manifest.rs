@@ -588,7 +588,13 @@ fn compatibility_manifest_describes_the_library_slice() {
     assert_eq!(manifest.contracts.embeddings, south_contracts::EMBEDDINGS_CONTRACT_VERSION_V2);
     // The media worlds' shared vocabulary and the image world (image record §15): the limits
     // are the crate's own, so a bound that moves in one place and not the other fails here.
-    assert_eq!(manifest.contracts.media, south_contracts::media::MEDIA_CONTRACT_VERSION);
+    // `media` records the newest contract this release decodes, as `embeddings` does; contract 1
+    // packages keep working on a host whose range lists both (I3-2 GI-Q1).
+    assert_eq!(
+        Some(&manifest.contracts.media),
+        south_contracts::media::MEDIA_CONTRACT_VERSIONS.last()
+    );
+    assert_eq!(manifest.contracts.media, south_contracts::media::MEDIA_CONTRACT_VERSION_V2);
     assert_eq!(manifest.contracts.image, south_contracts::image::IMAGE_CONTRACT_VERSION);
     assert_eq!(manifest.contracts.media_limits, south_contracts::media::MediaLimitsV1::V1);
     assert_eq!(manifest.contracts.task_limits.artifact_urls, south_contracts::MAX_ARTIFACT_URLS);

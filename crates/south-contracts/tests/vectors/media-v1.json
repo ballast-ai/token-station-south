@@ -1,7 +1,7 @@
 {
   "contract": "media",
-  "version": 1,
-  "note": "Golden vectors of contracts.media v1 (image record §6, §11). A host that does not link south-contracts reproduces every output byte for byte (host obligation §12.3). Byte strings are given as UTF-8 text in `*_text` fields or as standard base64 in `*_base64` fields. Limits are MediaLimitsV1::V1 unless a case sets `inline_string_bytes`.",
+  "version": 2,
+  "note": "Golden vectors of contracts.media (image record §6, §11); the `data_url_payload` cases are contract 2 (image world step I3-2, GI-Q1), every other case contract 1. A host that does not link south-contracts reproduces every output byte for byte (host obligation §12.3). Byte strings are given as UTF-8 text in `*_text` fields or as standard base64 in `*_base64` fields. Limits are MediaLimitsV1::V1 unless a case sets `inline_string_bytes`.",
   "elide": [
     {
       "name": "declared-wildcard-paths",
@@ -139,6 +139,17 @@
   ],
   "template_expand": [
     {
+      "name": "data-url-payload-reference",
+      "blobs": [
+        {
+          "id": "b0",
+          "text": "data:image/png;base64,aGk="
+        }
+      ],
+      "template": "{\"inlineData\":{\"mimeType\":\"image/png\",\"data\":{\"$south.ref\":{\"blob\":\"b0\",\"transform\":\"data_url_payload\"}}}}",
+      "body": "{\"inlineData\":{\"mimeType\":\"image/png\",\"data\":\"aGk=\"}}"
+    },
+    {
       "name": "data-url-reference-keeps-order",
       "blobs": [
         {
@@ -189,6 +200,16 @@
       "output_text": "data:image/png;base64,aGk="
     },
     {
+      "transform": "data_url_payload",
+      "input_text": "DATA:image/jpeg;q=1;BASE64,aGk=",
+      "output_text": "aGk="
+    },
+    {
+      "transform": "data_url_payload",
+      "input_text": "data:;base64,",
+      "output_text": ""
+    },
+    {
       "transform": {
         "wav_pcm_s16le": {
           "sample_rate": 24000,
@@ -223,6 +244,22 @@
     {
       "transform": "data_url",
       "input_text": "hi"
+    },
+    {
+      "transform": "data_url_payload",
+      "input_text": "data:image/png,aGk="
+    },
+    {
+      "transform": "data_url_payload",
+      "input_text": "data:image/png;base64aGk="
+    },
+    {
+      "transform": "data_url_payload",
+      "input_text": "data:image/png;base64,aGl="
+    },
+    {
+      "transform": "data_url_payload",
+      "input_base64": "//4="
     }
   ],
   "forbidden_addresses": [

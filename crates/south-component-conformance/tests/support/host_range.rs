@@ -100,10 +100,16 @@ pub fn host_range() -> HostRangeV1 {
                     .map(u32::from)
                     .collect(),
             ),
-            // The image world's two contracts (image record §15).
+            // The image world's two contracts (image record §15); both media contracts the
+            // release decodes, so the packages declaring media 1 keep loading next to one that
+            // declares media 2 (image world step I3-2, GI-Q1).
             (
                 "media".to_owned(),
-                BTreeSet::from([u32::from(south_contracts::media::MEDIA_CONTRACT_VERSION)]),
+                south_contracts::media::MEDIA_CONTRACT_VERSIONS
+                    .iter()
+                    .copied()
+                    .map(u32::from)
+                    .collect(),
             ),
             (
                 "image".to_owned(),

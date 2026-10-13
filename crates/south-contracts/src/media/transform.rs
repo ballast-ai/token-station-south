@@ -1,8 +1,10 @@
-//! The closed transforms of `contracts.media` v1 (image record §6.4, speech record §6) and the
-//! codecs under them.
+//! The closed transforms of `contracts.media` (image record §6.4, speech record §6) and the codecs
+//! under them.
 //!
 //! Every word names a public standard and is implemented once, here, as a pure function. The set
-//! is closed: a new word is a `contracts.media` version change. The codecs are crate-private
+//! is closed: a new word is a `contracts.media` version change. Contract 1 carries the first eight
+//! words; contract 2 adds `data_url_payload` (image world step I3-2, GI-Q1), and
+//! [`MediaTransformV1::minimum_contract_version`] says which contract a word needs. The codecs are crate-private
 //! rather than a `base64` dependency because every component links this crate (the
 //! `south-component-conformance` base64 module makes the same choice, Invoke record I-Q4); their
 //! decisions are pinned against the `base64` crate, a dev-dependency only, by a property test.
@@ -33,6 +35,10 @@ pub enum MediaTransformV1 {
     DataUrl,
     /// A base64 `data:` URL to its bytes.
     FromDataUrl,
+    /// A base64 `data:` URL to its payload, as canonical base64 text (`contracts.media` 2). It reads
+    /// and produces text, so it can stand in a JSON template where an upstream wants the bare
+    /// base64 of a client's data URL (Gemini's `inlineData.data`, image world step I3-2, GI-Q1).
+    DataUrlPayload,
     /// A standard base64 string with canonical padding to its bytes.
     FromBase64,
     /// A hexadecimal string (either case, even length) to its bytes.
@@ -56,6 +62,7 @@ impl fmt::Debug for MediaTransformV1 {
             Self::Base64 => formatter.write_str("base64"),
             Self::DataUrl => formatter.write_str("data_url"),
             Self::FromDataUrl => formatter.write_str("from_data_url"),
+            Self::DataUrlPayload => formatter.write_str("data_url_payload"),
             Self::FromBase64 => formatter.write_str("from_base64"),
             Self::FromHex => formatter.write_str("from_hex"),
             Self::Concat => formatter.write_str("concat"),
@@ -113,6 +120,7 @@ impl MediaTransformV1 {
                 Ok(format!("data:{media_type};base64,{}", encode_base64(input)).into_bytes())
             }
             Self::FromDataUrl => Ok(parse_data_url_v1(text(input)?)?.1),
+            Self::DataUrlPayload => data_url_payload_v1(text(input)?).map(String::into_bytes),
             Self::FromBase64 => decode_base64(text(input)?),
             Self::FromHex => decode_hex(text(input)?),
             Self::Concat => Err(TransformErrorV1::ConcatNeedsList),
@@ -125,13 +133,24 @@ impl MediaTransformV1 {
     /// Whether the word reads its input as text (and therefore refuses bytes that are not UTF-8).
     #[must_use]
     pub const fn reads_text(&self) -> bool {
-        matches!(self, Self::FromDataUrl | Self::FromBase64 | Self::FromHex)
+        matches!(self, Self::FromDataUrl | Self::DataUrlPayload | Self::FromBase64 | Self::FromHex)
     }
 
     /// Whether the word always produces text (so its result can stand as a JSON string).
     #[must_use]
     pub const fn produces_text(&self) -> bool {
-        matches!(self, Self::Base64 | Self::DataUrl)
+        matches!(self, Self::Base64 | Self::DataUrl | Self::DataUrlPayload)
+    }
+
+    /// The lowest `contracts.media` version that carries this word: 2 for `data_url_payload`, 1
+    /// for the words contract 1 released. A host admitting a package that declares `media` 1
+    /// may refuse a descriptor naming a word above it.
+    #[must_use]
+    pub const fn minimum_contract_version(&self) -> u16 {
+        match self {
+            Self::DataUrlPayload => super::MEDIA_CONTRACT_VERSION_V2,
+            _ => super::MEDIA_CONTRACT_VERSION,
+        }
     }
 }
 
@@ -182,6 +201,16 @@ pub fn parse_data_url_v1(url: &str) -> Result<(Option<String>, Vec<u8>), Transfo
     };
     let bytes = decode_base64(payload).map_err(|_| TransformErrorV1::InvalidDataUrl)?;
     Ok((media_type, bytes))
+}
+
+/// The payload of a base64 `data:` URL, as canonical base64 text (`data_url_payload`).
+///
+/// The URL is read by [`parse_data_url_v1`], so the same URLs are refused (no `data:` scheme, no
+/// comma, no `;base64` marker, a media type outside the grammar, a payload that is not canonical
+/// base64), and the result is the canonical encoding of the decoded bytes, which is the payload as
+/// written whenever the URL is accepted.
+pub fn data_url_payload_v1(url: &str) -> Result<String, TransformErrorV1> {
+    Ok(encode_base64(&parse_data_url_v1(url)?.1))
 }
 
 fn strip_prefix_ignore_case<'a>(value: &'a str, prefix: &str) -> Option<&'a str> {
@@ -363,6 +392,7 @@ mod tests {
             (MediaTransformV1::Base64, r#""base64""#),
             (MediaTransformV1::DataUrl, r#""data_url""#),
             (MediaTransformV1::FromDataUrl, r#""from_data_url""#),
+            (MediaTransformV1::DataUrlPayload, r#""data_url_payload""#),
             (MediaTransformV1::FromBase64, r#""from_base64""#),
             (MediaTransformV1::FromHex, r#""from_hex""#),
             (MediaTransformV1::Concat, r#""concat""#),
@@ -402,6 +432,56 @@ mod tests {
             MediaTransformV1::DataUrl.apply(b"hi", None),
             Err(TransformErrorV1::InvalidMediaType)
         );
+    }
+
+    #[test]
+    fn data_url_payload_yields_the_base64_text_of_a_data_url() {
+        let word = MediaTransformV1::DataUrlPayload;
+        assert_eq!(
+            word.apply(b"data:image/png;base64,aGk=", None).expect("valid"),
+            b"aGk=".to_vec()
+        );
+        // The scheme and marker match case-insensitively and parameters are dropped, as
+        // `from_data_url` reads them; an empty payload is an empty string.
+        assert_eq!(
+            word.apply(b"DATA:image/jpeg;q=1;BASE64,aGk=", Some("image/png")).expect("valid"),
+            b"aGk=".to_vec()
+        );
+        assert_eq!(word.apply(b"data:;base64,", None).expect("valid"), Vec::<u8>::new());
+        for bad in [
+            // Percent-encoded, not base64.
+            "data:image/png,aGk=",
+            // No comma between the header and the payload.
+            "data:image/png;base64aGk=",
+            // Not canonical base64.
+            "data:image/png;base64,aGk",
+            "data:image/png;base64,aGl=",
+            "data:image/png;base64,aG k=",
+            // Not a data URL.
+            "https://example.com/a.png",
+            "aGk=",
+        ] {
+            assert_eq!(
+                word.apply(bad.as_bytes(), None),
+                Err(TransformErrorV1::InvalidDataUrl),
+                "{bad}"
+            );
+        }
+        assert_eq!(word.apply(&[0xff, 0xfe], None), Err(TransformErrorV1::NotText));
+        assert!(word.reads_text() && word.produces_text());
+        assert_eq!(word.minimum_contract_version(), 2);
+        for earlier in [
+            MediaTransformV1::AsIs,
+            MediaTransformV1::Base64,
+            MediaTransformV1::DataUrl,
+            MediaTransformV1::FromDataUrl,
+            MediaTransformV1::FromBase64,
+            MediaTransformV1::FromHex,
+            MediaTransformV1::Concat,
+            MediaTransformV1::WavPcmS16le { sample_rate: 8000, channels: 1 },
+        ] {
+            assert_eq!(earlier.minimum_contract_version(), 1, "{earlier:?}");
+        }
     }
 
     #[test]
@@ -449,6 +529,30 @@ mod tests {
             let reference = base64::engine::general_purpose::STANDARD.encode(&bytes);
             prop_assert_eq!(&encode_base64(&bytes), &reference);
             prop_assert_eq!(decode_base64(&reference).expect("canonical"), bytes);
+        }
+
+        /// `data_url_payload` inverts `data_url`: the payload it yields is the `base64` of the
+        /// bytes, and `from_base64` of it gives the bytes back.
+        #[test]
+        fn data_url_payload_round_trips_with_data_url(
+            bytes in proptest::collection::vec(any::<u8>(), 0..64),
+            media_type in "(image|audio|application)/[a-z0-9.+-]{1,16}",
+        ) {
+            let url = MediaTransformV1::DataUrl.apply(&bytes, Some(&media_type)).expect("encodes");
+            let payload = MediaTransformV1::DataUrlPayload.apply(&url, None).expect("reads");
+            prop_assert_eq!(&payload, &MediaTransformV1::Base64.apply(&bytes, None).expect("encodes"));
+            prop_assert_eq!(MediaTransformV1::FromBase64.apply(&payload, None).expect("decodes"), bytes);
+        }
+
+        /// It accepts exactly the URLs `from_data_url` accepts.
+        #[test]
+        fn data_url_payload_decisions_agree_with_from_data_url(text in "(data:|DATA:)?[a-z/;=,A-Za-z0-9+]{0,24}") {
+            let payload = MediaTransformV1::DataUrlPayload.apply(text.as_bytes(), None);
+            let bytes = MediaTransformV1::FromDataUrl.apply(text.as_bytes(), None);
+            prop_assert_eq!(payload.is_ok(), bytes.is_ok());
+            if let (Ok(payload), Ok(bytes)) = (payload, bytes) {
+                prop_assert_eq!(payload, encode_base64(&bytes).into_bytes());
+            }
         }
 
         #[test]

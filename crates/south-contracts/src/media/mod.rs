@@ -38,8 +38,8 @@ pub use response::{
 };
 pub use transform::{
     MAX_MEDIA_TYPE_BYTES, MAX_WAV_CHANNELS, MAX_WAV_SAMPLE_RATE, MediaTransformV1,
-    TransformErrorV1, concat_v1, decode_base64, decode_hex, encode_base64, is_media_type,
-    parse_data_url_v1, wav_pcm_s16le_v1,
+    TransformErrorV1, concat_v1, data_url_payload_v1, decode_base64, decode_hex, encode_base64,
+    is_media_type, parse_data_url_v1, wav_pcm_s16le_v1,
 };
 
 use serde::{Deserialize, Serialize};
@@ -48,7 +48,16 @@ use thiserror::Error;
 
 /// `contracts.media` v1: the whole vocabulary of both media worlds, released once (image record
 /// §6.4).
+///
+/// The number every package published before contract 2 declares; the newest contract is
+/// [`MEDIA_CONTRACT_VERSION_V2`].
 pub const MEDIA_CONTRACT_VERSION: u16 = 1;
+/// `contracts.media` v2: contract 1 plus the transform word `data_url_payload` (image world step
+/// I3-2, GI-Q1). Nothing else changes, so a contract 1 package keeps working on a host that also
+/// decodes 2.
+pub const MEDIA_CONTRACT_VERSION_V2: u16 = 2;
+/// The media contracts a release decodes, for a host's range (as `EMBEDDINGS_CONTRACT_VERSIONS`).
+pub const MEDIA_CONTRACT_VERSIONS: [u16; 2] = [MEDIA_CONTRACT_VERSION, MEDIA_CONTRACT_VERSION_V2];
 
 /// Keys under this prefix are the placeholder namespace (`$south.blob`, `$south.ref`,
 /// `$south.artifact`); a document that uses one is refused (image record §6.1, §6.5).
