@@ -3,8 +3,8 @@
 Status: accepted (lv, 2026-10-13: IG-Q1 to IG-Q3 ruled as recommended, §10): the three v4 ids, generation only;
 the host sniffs the stored bytes of a URL artifact whose media type the package does not declare (a generic host change
 that also covers `image-minimax` and `image-qwen` held tasks), so the package leaves the type undeclared; `facts.size`
-reports the snapped resolution when one is sent. Implemented on branch `image-i3-5` (not yet merged); see
-Implementation.
+reports the snapped resolution when one is sent. Implemented in #200 (see Implementation); released in
+0.61.0 ([release record](2026-10-13-release-0.61.0.md)).
 
 Date: 2026-10-13
 
