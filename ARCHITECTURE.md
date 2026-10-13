@@ -211,9 +211,13 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.60.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.53.0, 0.54.0 and 0.59.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
-**Unreleased (image world step I3-5: `image-ideogram`)**: Ideogram 4.0 generation (design record
-`docs/design/2026-10-13-image-i3-5-ideogram.md`, accepted 2026-10-13; proposed for the next release). `image-ideogram`
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.61.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.53.0, 0.54.0 and 0.59.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**v0.61.0 (image world step I3-5: `image-ideogram`; north codec G1)**: release record
+`docs/design/2026-10-13-release-0.61.0.md`. North codec G1 (`docs/design/2026-09-30-north-codec-render-gaps.md`, G1
+accepted 2026-10-14): `OpenAiChatStream` renders complete OpenAI chat stream chunks from a host-supplied context (chunk
+identity, `role` on the first delta, frame kinds, the usage fold; N-Q5 = JSON-value equality over the canonical frame
+sequence); `south-north-codec` is not guest-linked, so G1 re-identifies no package. I3-5: Ideogram 4.0 generation (design
+record `docs/design/2026-10-13-image-i3-5-ideogram.md`, accepted 2026-10-13). `image-ideogram`
 1.0.0 (family `ideogram-image`, `header_secret` `api-key`) serves the three v4 ids the host's native arm maps, generation
 only: a multipart POST of text parts to `v1/ideogram-v4/generate` (`text_prompt`, the `rendering_speed` the id pins, and
 `resolution` snapped from `size` to the native 38-entry list, which is also the `size` fact). Each safe entry of the

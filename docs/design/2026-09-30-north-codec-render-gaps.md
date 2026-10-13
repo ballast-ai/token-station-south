@@ -1,7 +1,7 @@
 # North codec: closing the remaining northbound render gaps
 
 Status: accepted in part, gap by gap. **G1 accepted** (lv, 2026-10-14, with N-Q5 ruled: JSON-value equality over the
-canonical frame sequence) and implemented on branch `north-chat-stream-g1` (§3, "Implemented"); not yet released.
+canonical frame sequence) and implemented in #199 (§3, "Implemented"); released in 0.61.0 ([release record](2026-10-13-release-0.61.0.md)).
 **G3's codec half accepted** (lv, 2026-10-12, as NP-Q8 of
 `2026-10-11-responses-reasoning-replay-and-passthrough-suite.md`) and released in 0.55.0; G3's host half (§5.3) is the
 host's. **G2, G4 and G5 remain proposed**, not accepted.
