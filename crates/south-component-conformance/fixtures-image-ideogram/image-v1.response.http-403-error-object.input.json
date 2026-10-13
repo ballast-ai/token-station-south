@@ -1,0 +1,11 @@
+{
+  "prepare_case": "image-v1.prepare.default-speed",
+  "response": {
+    "status": 403,
+    "body": {
+      "error": {
+        "message": "This API key does not have access"
+      }
+    }
+  }
+}

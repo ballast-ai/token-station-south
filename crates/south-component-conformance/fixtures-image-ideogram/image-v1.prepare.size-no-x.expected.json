@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "'size' value '1024' is not supported for Ideogram models; pass 'auto', a WxH pair like '1024x1024', or a native Ideogram v4 resolution (e.g. '2048x2048')"
+  }
+}

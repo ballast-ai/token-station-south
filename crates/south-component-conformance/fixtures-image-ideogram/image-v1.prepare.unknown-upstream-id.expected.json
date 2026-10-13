@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "Model upstream id 'ideogram-v4-flash' is not an Ideogram v4 image SKU; expected 'ideogram-v4', 'ideogram-v4-turbo', or 'ideogram-v4-quality'"
+  }
+}

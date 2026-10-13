@@ -1,0 +1,29 @@
+{
+  "provider_config": {
+    "provider": "ideogram-image",
+    "base_url": "https://api.ideogram.ai",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "json": {
+      "prompt": "a red fox",
+      "image_url": "https://example.test/fox.png",
+      "quality": "hd",
+      "style": "vivid",
+      "seed": 7,
+      "negative_prompt": "blur",
+      "user": "u1",
+      "stream": false,
+      "image_size": "2K",
+      "num_images": 4,
+      "rendering_speed": "QUALITY",
+      "resolution": "1024x1024"
+    }
+  },
+  "context": {
+    "upstream_model": "ideogram-v4-turbo",
+    "metering_required": [
+      "images"
+    ]
+  }
+}

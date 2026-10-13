@@ -1,0 +1,20 @@
+{
+  "prepare_case": "image-v1.prepare.turbo-url-generation",
+  "response": {
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "url": "https://ideogram.ai/api/images/ephemeral/one.png",
+          "prompt": "first",
+          "is_image_safe": true
+        },
+        {
+          "url": "https://ideogram.ai/api/images/ephemeral/two.png",
+          "prompt": "second",
+          "is_image_safe": true
+        }
+      ]
+    }
+  }
+}

@@ -45,6 +45,7 @@ jobs:
             components/embeddings-vertex
             components/image-azure
             components/image-gemini
+            components/image-ideogram
             components/image-minimax
             components/image-qwen
             components/image-stability

@@ -1,0 +1,56 @@
+[
+  {
+    "input_roles": [],
+    "metering_forms": [
+      "images"
+    ],
+    "model": "ideogram-v4-turbo",
+    "operations": [
+      "generate"
+    ],
+    "repeat": false,
+    "request_elision_paths": [],
+    "response_formats": [
+      "url",
+      "b64_json"
+    ],
+    "tier_dimensions": [],
+    "token_buckets": []
+  },
+  {
+    "input_roles": [],
+    "metering_forms": [
+      "images"
+    ],
+    "model": "ideogram-v4",
+    "operations": [
+      "generate"
+    ],
+    "repeat": false,
+    "request_elision_paths": [],
+    "response_formats": [
+      "url",
+      "b64_json"
+    ],
+    "tier_dimensions": [],
+    "token_buckets": []
+  },
+  {
+    "input_roles": [],
+    "metering_forms": [
+      "images"
+    ],
+    "model": "ideogram-v4-quality",
+    "operations": [
+      "generate"
+    ],
+    "repeat": false,
+    "request_elision_paths": [],
+    "response_formats": [
+      "url",
+      "b64_json"
+    ],
+    "tier_dimensions": [],
+    "token_buckets": []
+  }
+]

@@ -1,0 +1,18 @@
+{
+  "prepare_case": "image-v1.prepare.turbo-url-generation",
+  "response": {
+    "status": 200,
+    "body": {
+      "created": "2026-09-30T00:00:00Z",
+      "data": [
+        {
+          "url": "https://ideogram.test/ephemeral/fox.png",
+          "prompt": "a red fox, rewritten",
+          "resolution": "2496x1664",
+          "is_image_safe": true,
+          "seed": 7
+        }
+      ]
+    }
+  }
+}

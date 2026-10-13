@@ -1,0 +1,10 @@
+{
+  "prepare_case": "image-v1.prepare.default-speed",
+  "response": {
+    "status": 200,
+    "body": {
+      "created": "2026-09-30T00:00:00Z",
+      "data": []
+    }
+  }
+}

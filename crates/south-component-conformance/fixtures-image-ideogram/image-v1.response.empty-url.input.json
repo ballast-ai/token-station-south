@@ -1,0 +1,15 @@
+{
+  "prepare_case": "image-v1.prepare.default-speed",
+  "response": {
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "url": "",
+          "prompt": "x",
+          "is_image_safe": true
+        }
+      ]
+    }
+  }
+}

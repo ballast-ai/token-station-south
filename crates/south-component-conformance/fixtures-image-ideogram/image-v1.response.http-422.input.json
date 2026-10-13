@@ -1,0 +1,9 @@
+{
+  "prepare_case": "image-v1.prepare.default-speed",
+  "response": {
+    "status": 422,
+    "body": {
+      "error": "Prompt failed the safety check"
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "prepare_case": "image-v1.prepare.turbo-url-generation",
+  "response": {
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "url": "https://ideogram.ai/api/images/ephemeral/unsafe-but-has-url.png",
+          "prompt": "unsafe",
+          "is_image_safe": false
+        }
+      ]
+    }
+  }
+}
