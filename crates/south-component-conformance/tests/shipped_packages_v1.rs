@@ -15,7 +15,7 @@ mod host_range;
 
 /// The official components this repository ships. Named, so that an empty or
 /// mistyped scan below cannot pass over nothing.
-const OFFICIAL_COMPONENTS: [&str; 23] = [
+const OFFICIAL_COMPONENTS: [&str; 24] = [
     "embeddings-gemini",
     "embeddings-openai-compatible",
     "embeddings-vertex",
@@ -23,6 +23,7 @@ const OFFICIAL_COMPONENTS: [&str; 23] = [
     "image-gemini",
     "image-minimax",
     "image-qwen",
+    "image-stability",
     "provider-anthropic",
     "provider-anthropic-bedrock-invoke",
     "provider-bedrock-converse",
@@ -1001,9 +1002,9 @@ fn the_invoke_package_declares_the_runtime_converse_declares() {
         .unwrap()
     };
     let invoke = read("provider-anthropic-bedrock-invoke");
-    // KC1 made 1.1.0, I3-1's Q47 bump 1.1.1 and I3-2's 1.1.2
-    // (`i3_2_retires_every_published_058_package_identity`).
-    assert_eq!(invoke.version, "1.1.2");
+    // KC1 made 1.1.0, I3-1's Q47 bump 1.1.1, I3-2's 1.1.2 and I3-4's 1.1.3
+    // (`i3_4_retires_every_published_059_package_identity`).
+    assert_eq!(invoke.version, "1.1.3");
     assert_eq!(invoke.compatibility.south_runtime, "0.57.0");
     assert_eq!(invoke.compatibility, read("provider-bedrock-converse").compatibility);
 }
@@ -1300,10 +1301,10 @@ fn the_responses_package_declares_the_runtime_that_first_admits_its_declarations
         .unwrap(),
     )
     .unwrap();
-    // 1.0.0 shipped in 0.54.0; NC-1 made 1.1.0, R3 1.2.0, KC1 1.3.0, I3-1's Q47 bump 1.3.1 and
-    // I3-2's 1.3.2 (below), with the same runtime: the Codex `credentials` section uses only forms
-    // the 0.54.0 gate ① admits.
-    assert_eq!(manifest.version, "1.3.2");
+    // 1.0.0 shipped in 0.54.0; NC-1 made 1.1.0, R3 1.2.0, KC1 1.3.0, I3-1's Q47 bump 1.3.1,
+    // I3-2's 1.3.2 and I3-4's 1.3.3 (below), with the same runtime: the Codex `credentials` section
+    // uses only forms the 0.54.0 gate ① admits.
+    assert_eq!(manifest.version, "1.3.3");
     assert_eq!(manifest.compatibility.south_runtime, "0.57.0");
     assert!(!manifest.immutable_body_paths.is_empty() && !manifest.north_passthrough.is_empty());
     assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
@@ -1520,10 +1521,12 @@ fn i3_1_retires_every_published_057_package_identity() {
 /// published with 0.58.0 retires. Each takes a patch and keeps its `south_runtime` and its
 /// `contracts` (a package declaring `media` 1 stays at 1). No published package changes behaviour
 /// except `image-minimax` 1.0.1, which also carries the I3-1 decision 1 fix (each `image_url`
-/// array string its own character reference, as native).
+/// array string its own character reference, as native). The identity each package took in I3-2
+/// is no longer pinned: I3-4 gave every package one more
+/// (`i3_4_retires_every_published_059_package_identity`).
 #[test]
 fn i3_2_retires_every_published_058_package_identity() {
-    for (name, published, now) in [
+    for (name, published, _i3_2) in [
         ("provider-openai-compatible", "2.6.1", "2.6.2"),
         ("provider-anthropic", "1.1.1", "1.1.2"),
         ("provider-anthropic-bedrock-invoke", "1.1.1", "1.1.2"),
@@ -1555,7 +1558,6 @@ fn i3_2_retires_every_published_058_package_identity() {
         )
         .unwrap();
         assert_ne!(manifest.version, published, "{name} reused its published identity");
-        assert_eq!(manifest.version, now, "{name}");
         assert_eq!(manifest.compatibility.south_runtime, "0.57.0", "{name}: no runtime moves");
         if manifest.api_version == south_provider_api::IMAGE_WORLD {
             assert_eq!(manifest.compatibility.contracts.get("media"), Some(&1), "{name}");
@@ -1567,7 +1569,61 @@ fn i3_2_retires_every_published_058_package_identity() {
     }
 }
 
-/// `image-gemini` (I3-2) starts at 1.0.0 in the image world, family `gemini-image`, no config keys.
+/// Image world step I3-4 (design record `2026-10-13-image-i3-4-stability.md` §9) adds the
+/// `image-stability` reference to `south-component-conformance` (0.57.0 → 0.58.0), which every guest
+/// links, so every `component.wasm` changes: each identity published with 0.59.0 retires. No
+/// published package changes behaviour: each takes a patch and keeps its `south_runtime` and its
+/// `contracts` (`image-gemini` stays at media 2 and the 0.59.0 runtime, every other image package
+/// at media 1).
+#[test]
+fn i3_4_retires_every_published_059_package_identity() {
+    for (name, published, now) in [
+        ("provider-openai-compatible", "2.6.2", "2.6.3"),
+        ("provider-anthropic", "1.1.2", "1.1.3"),
+        ("provider-anthropic-bedrock-invoke", "1.1.2", "1.1.3"),
+        ("provider-gemini", "1.3.2", "1.3.3"),
+        ("provider-bedrock-converse", "1.1.2", "1.1.3"),
+        ("provider-bedrock-converse-bearer", "1.1.2", "1.1.3"),
+        ("provider-openai-responses", "1.3.2", "1.3.3"),
+        ("task-kling", "1.0.19", "1.0.20"),
+        ("task-kling-v2", "0.32.17", "0.32.18"),
+        ("task-minimax-v2", "0.31.16", "0.31.17"),
+        ("task-bailian-v2", "0.31.16", "0.31.17"),
+        ("task-xai-v2", "0.35.16", "0.35.17"),
+        ("task-byteplus-v2", "0.36.16", "0.36.17"),
+        ("task-veo-v2", "0.35.16", "0.35.17"),
+        ("task-wan-image-v2", "0.35.16", "0.35.17"),
+        ("task-gmi-image-v2", "0.35.16", "0.35.17"),
+        ("embeddings-openai-compatible", "1.0.10", "1.0.11"),
+        ("embeddings-gemini", "1.1.7", "1.1.8"),
+        ("embeddings-vertex", "1.0.9", "1.0.10"),
+        ("image-azure", "1.0.6", "1.0.7"),
+        ("image-minimax", "1.0.1", "1.0.2"),
+        ("image-qwen", "1.0.1", "1.0.2"),
+        ("image-gemini", "1.0.0", "1.0.1"),
+    ] {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_ne!(manifest.version, published, "{name} reused its published identity");
+        assert_eq!(manifest.version, now, "{name}");
+        let (runtime, media) = if name == "image-gemini" { ("0.59.0", 2) } else { ("0.57.0", 1) };
+        assert_eq!(manifest.compatibility.south_runtime, runtime, "{name}: no runtime moves");
+        if manifest.api_version == south_provider_api::IMAGE_WORLD {
+            assert_eq!(manifest.compatibility.contracts.get("media"), Some(&media), "{name}");
+        }
+        assert_eq!(
+            manifest.compatibility.ir_schema_id, "token-station-protocol@0.6.0/v0.5.0",
+            "{name}"
+        );
+    }
+}
+
+/// `image-gemini` (I3-2) started at 1.0.0 in the image world (I3-4's Q47 bump made it 1.0.1), family `gemini-image`, no config keys.
 /// It names the transform word `data_url_payload`, so it declares `contracts.media` 2: a host whose
 /// range lists media 1 only refuses it through the contract number. Its `south_runtime` must be the
 /// first runtime that decodes media 2, the release that ships the word: 0.59.0 (the release commit
@@ -1579,12 +1635,13 @@ fn image_gemini_declares_media_2_which_a_media_1_host_refuses() {
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(manifest.version, "1.0.0");
+    assert_eq!(manifest.version, "1.0.1");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["gemini-image"]);
     assert!(manifest.declared_keys("gemini-image").is_empty());
     assert_eq!(manifest.compatibility.contracts.get("media"), Some(&2));
-    assert_eq!(manifest.compatibility.south_runtime, host_range::south_release());
+    // Published with 0.59.0, so the literal: a later release bump must not move it.
+    assert_eq!(manifest.compatibility.south_runtime, "0.59.0");
     assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
     let mut media_1_only = host_range::host_range();
     media_1_only.contracts.insert("media".to_owned(), BTreeSet::from([1]));
@@ -1601,7 +1658,7 @@ fn image_gemini_declares_media_2_which_a_media_1_host_refuses() {
 }
 
 /// The two packages of I3-1 started at 1.0.0 in the image world (published with 0.58.0; I3-2's Q47
-/// bump made them 1.0.1) and declare the oldest runtime that admits their declarations, 0.57.0
+/// bump made them 1.0.1 and I3-4's 1.0.2) and declare the oldest runtime that admits their declarations, 0.57.0
 /// (the first to record `canonical_ir` 4, which every package of this tuple needs).
 /// `image-minimax` declares one non-secret config key, `group_id` (IM-Q3); `image-qwen` declares
 /// none.
@@ -1618,7 +1675,7 @@ fn the_i3_1_image_packages_declare_the_runtime_and_values_of_the_record() {
             .unwrap(),
         )
         .unwrap();
-        assert_eq!(manifest.version, "1.0.1", "{name}");
+        assert_eq!(manifest.version, "1.0.2", "{name}");
         assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD, "{name}");
         assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), [family], "{name}");
         assert_eq!(manifest.compatibility.south_runtime, "0.57.0", "{name}");
@@ -1627,6 +1684,30 @@ fn the_i3_1_image_packages_declare_the_runtime_and_values_of_the_record() {
             manifest.declared_keys(family).into_iter().map(str::to_owned).collect();
         assert_eq!(declared, keys, "{name}");
     }
+}
+
+/// `image-stability` (I3-4, record §1) starts at 1.0.0 in the image world, family
+/// `stability-image`, no config keys, `bearer` only, `generate` only, and `contracts`
+/// `{image: 1, media: 1}`: it names no word past media 1, so it declares the oldest runtime that
+/// admits its declarations, 0.57.0, as the I3-1 packages do, and a media 1 host admits it.
+#[test]
+fn image_stability_declares_media_1_and_the_runtime_of_the_record() {
+    let manifest: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(repo_root().join("components/image-stability/manifest.json"))
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(manifest.version, "1.0.0");
+    assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
+    assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["stability-image"]);
+    assert!(manifest.declared_keys("stability-image").is_empty());
+    assert_eq!(manifest.compatibility.contracts.get("media"), Some(&1));
+    assert_eq!(manifest.compatibility.contracts.get("image"), Some(&1));
+    assert_eq!(manifest.compatibility.south_runtime, "0.57.0");
+    assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
+    let mut media_1_only = host_range::host_range();
+    media_1_only.contracts.insert("media".to_owned(), BTreeSet::from([1]));
+    assert_eq!(compatibility_admits(&manifest, &media_1_only), Ok(()));
 }
 
 /// KC1 record §5: the two Anthropic-family packages read the host's per-tenant end-user hash

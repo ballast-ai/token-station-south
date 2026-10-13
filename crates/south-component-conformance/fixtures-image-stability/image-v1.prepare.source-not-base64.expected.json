@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "Stability AI `image_url` data URL must use base64 encoding (data:<mime>;base64,<bytes>)"
+  }
+}

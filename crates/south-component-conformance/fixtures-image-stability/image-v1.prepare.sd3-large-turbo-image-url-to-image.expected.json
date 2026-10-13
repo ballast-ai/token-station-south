@@ -1,0 +1,79 @@
+{
+  "descriptor": {
+    "method": "POST",
+    "path": "v2beta/stable-image/generate/sd3",
+    "headers": [
+      {
+        "name": "accept",
+        "value": "application/json"
+      }
+    ],
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "multipart": {
+        "parts": [
+          {
+            "name": "prompt",
+            "value": "make it cinematic"
+          },
+          {
+            "name": "output_format",
+            "value": "png"
+          },
+          {
+            "name": "strength",
+            "value": "0.75"
+          },
+          {
+            "name": "mode",
+            "value": "image-to-image"
+          },
+          {
+            "name": "model",
+            "value": "sd3.5-large-turbo"
+          },
+          {
+            "name": "cfg_scale",
+            "value": "2"
+          },
+          {
+            "name": "image",
+            "blob": "b0",
+            "transform": "from_data_url",
+            "filename": "source.webp",
+            "media_type": "image/webp"
+          }
+        ]
+      }
+    }
+  },
+  "facts": {
+    "inputs": {
+      "input_image": 1,
+      "mask": 0,
+      "reference_image": 0
+    },
+    "metering_forms": [
+      "images"
+    ],
+    "operation": "generate",
+    "requested_outputs": 1,
+    "tier": {}
+  },
+  "immutable_body_paths": [
+    "model",
+    "aspect_ratio",
+    "output_format"
+  ],
+  "repeat": 1,
+  "response_body_form": "json",
+  "response_elision_paths": [
+    "/image"
+  ],
+  "state": {
+    "media_type": "image/png"
+  }
+}

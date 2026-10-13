@@ -1,0 +1,72 @@
+{
+  "descriptor": {
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "multipart": {
+        "parts": [
+          {
+            "name": "prompt",
+            "value": "a quiet library"
+          },
+          {
+            "name": "output_format",
+            "value": "webp"
+          },
+          {
+            "name": "negative_prompt",
+            "value": "blur"
+          },
+          {
+            "name": "seed",
+            "value": "42"
+          },
+          {
+            "name": "style_preset",
+            "value": "photographic"
+          },
+          {
+            "name": "aspect_ratio",
+            "value": "1:1"
+          }
+        ]
+      }
+    },
+    "headers": [
+      {
+        "name": "accept",
+        "value": "application/json"
+      }
+    ],
+    "method": "POST",
+    "path": "v2beta/stable-image/generate/core"
+  },
+  "facts": {
+    "inputs": {
+      "input_image": 0,
+      "mask": 0,
+      "reference_image": 0
+    },
+    "metering_forms": [
+      "images"
+    ],
+    "operation": "generate",
+    "requested_outputs": 1,
+    "tier": {}
+  },
+  "immutable_body_paths": [
+    "model",
+    "aspect_ratio",
+    "output_format"
+  ],
+  "repeat": 1,
+  "response_body_form": "json",
+  "response_elision_paths": [
+    "/image"
+  ],
+  "state": {
+    "media_type": "image/webp"
+  }
+}

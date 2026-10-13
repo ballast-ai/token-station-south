@@ -1,0 +1,23 @@
+{
+  "provider_config": {
+    "provider": "stability-image",
+    "base_url": "https://api.stability.ai",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "json": {
+      "prompt": "a quiet library",
+      "negative_prompt": "blur",
+      "size": "1024x1024",
+      "style_preset": "photographic",
+      "seed": 42,
+      "output_format": "webp"
+    }
+  },
+  "context": {
+    "upstream_model": "stable-image-core",
+    "metering_required": [
+      "images"
+    ]
+  }
+}

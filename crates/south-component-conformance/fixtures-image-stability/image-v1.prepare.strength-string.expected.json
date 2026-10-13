@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "`strength` must be a number (got \"0.5\")"
+  }
+}

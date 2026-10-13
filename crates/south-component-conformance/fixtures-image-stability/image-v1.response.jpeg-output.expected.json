@@ -1,0 +1,18 @@
+{
+  "artifacts": [
+    {
+      "encoding": "base64",
+      "form": "inline",
+      "media_type": "image/jpeg",
+      "pointer": "/image"
+    }
+  ],
+  "extras": null,
+  "metering": {
+    "credits": null,
+    "images_reported": null,
+    "tokens": null,
+    "upstream_cost": null
+  },
+  "outcome": "succeeded"
+}

@@ -1,0 +1,19 @@
+{
+  "provider_config": {
+    "provider": "stability-image",
+    "base_url": "https://api.stability.ai",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "json": {
+      "prompt": "p",
+      "seed": 4294967295
+    }
+  },
+  "context": {
+    "upstream_model": "stable-image-core",
+    "metering_required": [
+      "images"
+    ]
+  }
+}

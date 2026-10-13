@@ -1,0 +1,13 @@
+{
+  "prepare_case": "image-v1.prepare.ultra-image-url-to-image",
+  "response": {
+    "status": 413,
+    "body": {
+      "id": "a1b2c3d4",
+      "name": "payload_too_large",
+      "errors": [
+        "body: payloads cannot be larger than 10MiB in size"
+      ]
+    }
+  }
+}

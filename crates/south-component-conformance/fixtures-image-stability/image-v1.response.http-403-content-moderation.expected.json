@@ -1,0 +1,9 @@
+{
+  "error": {
+    "code": "content_policy",
+    "http_status": 403,
+    "message": "the upstream refused on content-policy grounds",
+    "provider_message": "content_moderation: Your request was flagged by our content moderation system, as a result your request was denied and you were not charged."
+  },
+  "outcome": "rejected"
+}

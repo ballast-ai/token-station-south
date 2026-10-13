@@ -1,0 +1,68 @@
+{
+  "descriptor": {
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "multipart": {
+        "parts": [
+          {
+            "name": "prompt",
+            "value": "a lighthouse"
+          },
+          {
+            "name": "output_format",
+            "value": "webp"
+          },
+          {
+            "name": "aspect_ratio",
+            "value": "16:9"
+          },
+          {
+            "name": "model",
+            "value": "sd3.5-large"
+          },
+          {
+            "name": "mode",
+            "value": "text-to-image"
+          }
+        ]
+      }
+    },
+    "headers": [
+      {
+        "name": "accept",
+        "value": "application/json"
+      }
+    ],
+    "method": "POST",
+    "path": "v2beta/stable-image/generate/sd3"
+  },
+  "facts": {
+    "inputs": {
+      "input_image": 0,
+      "mask": 0,
+      "reference_image": 0
+    },
+    "metering_forms": [
+      "images"
+    ],
+    "operation": "generate",
+    "requested_outputs": 1,
+    "tier": {}
+  },
+  "immutable_body_paths": [
+    "model",
+    "aspect_ratio",
+    "output_format"
+  ],
+  "repeat": 1,
+  "response_body_form": "json",
+  "response_elision_paths": [
+    "/image"
+  ],
+  "state": {
+    "media_type": "image/webp"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "error": {
+    "code": "rate_limit",
+    "http_status": 429,
+    "message": "the upstream rate limited this request",
+    "provider_message": "rate_limit_exceeded: You have exceeded the rate limit of 150 requests within a 10 second period"
+  },
+  "outcome": "rejected"
+}

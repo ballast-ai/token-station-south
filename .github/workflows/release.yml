@@ -101,6 +101,7 @@ jobs:
           scripts/build-image-gemini-component.sh
           scripts/build-image-minimax-component.sh
           scripts/build-image-qwen-component.sh
+          scripts/build-image-stability-component.sh
 
       # Gate ② over the bytes just built: each sandbox parity test runs the
       # package's required suite against its component.wasm and, with
@@ -137,6 +138,7 @@ jobs:
             --test gemini_image_sandbox_parity \
             --test minimax_image_sandbox_parity \
             --test qwen_image_sandbox_parity \
+            --test stability_image_sandbox_parity \
             -- --exact the_sandboxed_component_passes_gate_two_byte_for_byte
           ls -l "${SOUTH_GATE2_REPORT_DIR}"
 
@@ -182,6 +184,7 @@ jobs:
           package image-gemini image_gemini.wasm
           package image-minimax image_minimax.wasm
           package image-qwen image_qwen.wasm
+          package image-stability image_stability.wasm
           # Catalog data (boundary record §7.5, §13.11): each catalogs/<name>.json is
           # published verbatim as <name>-<tag>.json; the index step below refuses a
           # published catalog whose bytes differ from the source file.

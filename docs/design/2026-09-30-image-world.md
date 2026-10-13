@@ -1559,3 +1559,6 @@ rest of S-I-5 because it depends only on S-I-1a's pure halves. Fixtures are in
   `contracts.media` 2 adds `data_url_payload` (a base64 data URL to its base64 payload, as text), as §6.4 and Q3
   require of a later word. `MEDIA_CONTRACT_VERSION` stays 1 and `MEDIA_CONTRACT_VERSION_V2` / `MEDIA_CONTRACT_VERSIONS`
   are added, so the packages declaring media 1 keep loading on a host whose range lists both.
+- 2026-10-13: step I3-4 (`image-stability`) has its own record,
+  [`2026-10-13-image-i3-4-stability.md`](2026-10-13-image-i3-4-stability.md), accepted on 2026-10-13 and implemented on
+  branch `image-i3-4`. §14 item 5's "HTTP contract 10" is the contract renumbered 12 by §18.1; no contract changes.

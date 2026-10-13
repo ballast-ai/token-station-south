@@ -1,0 +1,67 @@
+{
+  "descriptor": {
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "multipart": {
+        "parts": [
+          {
+            "name": "prompt",
+            "value": "make it cinematic"
+          },
+          {
+            "name": "output_format",
+            "value": "png"
+          },
+          {
+            "name": "strength",
+            "value": "0.25"
+          },
+          {
+            "blob": "b0",
+            "filename": "source.png",
+            "media_type": "image/png",
+            "name": "image",
+            "transform": "from_data_url"
+          }
+        ]
+      }
+    },
+    "headers": [
+      {
+        "name": "accept",
+        "value": "application/json"
+      }
+    ],
+    "method": "POST",
+    "path": "v2beta/stable-image/generate/ultra"
+  },
+  "facts": {
+    "inputs": {
+      "input_image": 1,
+      "mask": 0,
+      "reference_image": 0
+    },
+    "metering_forms": [
+      "images"
+    ],
+    "operation": "generate",
+    "requested_outputs": 1,
+    "tier": {}
+  },
+  "immutable_body_paths": [
+    "model",
+    "aspect_ratio",
+    "output_format"
+  ],
+  "repeat": 1,
+  "response_body_form": "json",
+  "response_elision_paths": [
+    "/image"
+  ],
+  "state": {
+    "media_type": "image/png"
+  }
+}

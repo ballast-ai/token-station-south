@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "Stability SD3 image-to-image mode requires `image_url` or `image` as a base64 data URL"
+  }
+}

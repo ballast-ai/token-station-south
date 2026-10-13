@@ -1,0 +1,11 @@
+{
+  "prepare_case": "image-v1.prepare.ultra-text-to-image-defaults",
+  "response": {
+    "status": 404,
+    "body": {
+      "errors": [
+        "not found"
+      ]
+    }
+  }
+}

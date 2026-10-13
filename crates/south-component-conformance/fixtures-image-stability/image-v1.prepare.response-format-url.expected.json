@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "Stability AI does not return hosted image URLs; omit `response_format` or set it to `b64_json`"
+  }
+}

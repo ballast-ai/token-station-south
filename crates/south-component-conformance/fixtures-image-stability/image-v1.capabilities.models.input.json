@@ -1,0 +1,27 @@
+{
+  "provider_config": {
+    "provider": "stability-image",
+    "base_url": "https://api.stability.ai",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "stable-image-ultra"
+      },
+      {
+        "model": "stable-image-core"
+      },
+      {
+        "model": "sd3.5-large"
+      },
+      {
+        "model": "sd3.5-large-turbo"
+      },
+      {
+        "model": "sd3.5-medium"
+      },
+      {
+        "model": "sd3.5-flash"
+      }
+    ]
+  }
+}

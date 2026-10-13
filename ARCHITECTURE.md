@@ -211,7 +211,16 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.59.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.53.0, 0.53.0 and 0.57.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.59.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.53.0, 0.53.0 and 0.58.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**Unreleased (image world step I3-4: `image-stability`)**: Stability AI's Stable Image generation (design record
+`docs/design/2026-10-13-image-i3-4-stability.md`, accepted 2026-10-13; proposed for the next release). `image-stability`
+1.0.0 (family `stability-image`, `bearer`) serves the five ids the host's native arm classifies, generation only: a
+multipart POST to `v2beta/stable-image/generate/{ultra,core,sd3}` with `accept: application/json`, the native parts in the
+native order, and a client's source image (`image_url` or `image`, always elided) as the last part through
+`from_data_url`. It meters `images` only (`images_reported` always `null`), delivers `CONTENT_FILTERED` like `SUCCESS`,
+and declares `contracts` `{image: 1, media: 1}` and `south_runtime` 0.57.0; no contract changes. Under Q47
+`south-component-conformance` moves to 0.58.0, so every published package takes a patch with unchanged behaviour and
+keeps its `south_runtime` and its `contracts`.
 **v0.59.0 (image world step I3-2: `image-gemini`)**: Google's Nano Banana image models through the Gemini API (design
 record `docs/design/2026-10-13-image-i3-2-gemini.md`, accepted 2026-10-13; release record
 `docs/design/2026-10-13-release-0.59.0.md`).

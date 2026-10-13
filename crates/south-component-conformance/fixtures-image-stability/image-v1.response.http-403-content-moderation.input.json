@@ -1,0 +1,13 @@
+{
+  "prepare_case": "image-v1.prepare.ultra-text-to-image-defaults",
+  "response": {
+    "status": 403,
+    "body": {
+      "id": "a1b2c3d4",
+      "name": "content_moderation",
+      "errors": [
+        "Your request was flagged by our content moderation system, as a result your request was denied and you were not charged."
+      ]
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "provider_config": {
+    "provider": "stability-image",
+    "base_url": "https://api.stability.ai",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "json": {
+      "prompt": "a lighthouse",
+      "aspect_ratio": null,
+      "size": "1024x1024"
+    }
+  },
+  "context": {
+    "upstream_model": "stable-image-core",
+    "metering_required": [
+      "images"
+    ]
+  }
+}

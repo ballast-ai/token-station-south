@@ -1,0 +1,14 @@
+{
+  "prepare_case": "image-v1.prepare.sd3-large-text-to-image",
+  "response": {
+    "status": 400,
+    "body": {
+      "id": "a1b2c3d4",
+      "name": "bad_request",
+      "errors": [
+        "prompt: cannot be empty",
+        "aspect_ratio: must be one of the allowed values"
+      ]
+    }
+  }
+}

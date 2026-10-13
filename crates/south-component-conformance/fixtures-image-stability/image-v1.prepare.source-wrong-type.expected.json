@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "`image_url` must be a base64 data URL string, or an object with a string `url` data URL (got 7)"
+  }
+}

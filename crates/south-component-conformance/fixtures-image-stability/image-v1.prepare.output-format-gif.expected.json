@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "`output_format` must be one of png, jpeg, webp for Stability AI models (got 'gif')"
+  }
+}

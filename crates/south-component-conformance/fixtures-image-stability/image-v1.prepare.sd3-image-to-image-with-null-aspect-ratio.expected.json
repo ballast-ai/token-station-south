@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "`size` / `aspect_ratio` are only valid for Stability SD3 text-to-image; image-to-image uses the source image's aspect ratio"
+  }
+}

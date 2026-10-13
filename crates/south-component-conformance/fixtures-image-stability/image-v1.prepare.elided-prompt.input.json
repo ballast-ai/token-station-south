@@ -1,0 +1,24 @@
+{
+  "provider_config": {
+    "provider": "stability-image",
+    "base_url": "https://api.stability.ai",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "json": {
+      "prompt": {
+        "$south.blob": {
+          "id": "b0",
+          "bytes": 1048577,
+          "head": "a lighthouse, described at great length"
+        }
+      }
+    }
+  },
+  "context": {
+    "upstream_model": "stable-image-core",
+    "metering_required": [
+      "images"
+    ]
+  }
+}
