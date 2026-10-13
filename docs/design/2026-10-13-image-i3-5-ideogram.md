@@ -1,7 +1,9 @@
 # Image world step I3-5: `image-ideogram` (Ideogram 4.0)
 
-Status: proposed (2026-10-13). Under lv's pre-approval (2026-10-13), I3-5 may be built directly from the image world
-record once this design is reviewed; IG-Q1 to IG-Q3 (§10) are the only new decisions.
+Status: accepted (lv, 2026-10-13: IG-Q1 to IG-Q3 ruled as recommended, §10): the three v4 ids, generation only;
+the host sniffs the stored bytes of a URL artifact whose media type the package does not declare (a generic host change
+that also covers `image-minimax` and `image-qwen` held tasks), so the package leaves the type undeclared; `facts.size`
+reports the snapped resolution when one is sent.
 
 Date: 2026-10-13
 
@@ -305,3 +307,4 @@ at implementation.
 ## Revision note
 
 - 2026-10-13: first draft (proposed).
+- 2026-10-13: lv ruled IG-Q1 to IG-Q3 as recommended; accepted.
