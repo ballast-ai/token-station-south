@@ -57,12 +57,12 @@
             "content": "",
             "toolUses": [
               {
-                "input": {},
+                "input": "",
                 "name": "get_weather",
                 "toolUseId": "call_a"
               },
               {
-                "input": {},
+                "input": "  \n",
                 "name": "get_weather",
                 "toolUseId": "call_b"
               }
