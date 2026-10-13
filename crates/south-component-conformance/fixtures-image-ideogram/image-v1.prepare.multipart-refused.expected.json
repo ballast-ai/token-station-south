@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "Ideogram image models only generate from a JSON request"
+  }
+}

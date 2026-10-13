@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "content_policy",
+    "http_status": 422,
+    "message": "Ideogram filtered all generated images as unsafe; nothing was billed"
+  },
+  "outcome": "rejected"
+}

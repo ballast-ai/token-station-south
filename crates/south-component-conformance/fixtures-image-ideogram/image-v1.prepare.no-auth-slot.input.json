@@ -1,0 +1,17 @@
+{
+  "provider_config": {
+    "provider": "ideogram-image",
+    "base_url": "https://api.ideogram.ai"
+  },
+  "request": {
+    "json": {
+      "prompt": "a red fox"
+    }
+  },
+  "context": {
+    "upstream_model": "ideogram-v4-turbo",
+    "metering_required": [
+      "images"
+    ]
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "provider_config": {
+    "provider": "stability-image",
+    "base_url": "https://api.ideogram.ai",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "ideogram-v4"
+      }
+    ]
+  }
+}

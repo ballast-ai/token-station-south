@@ -1,0 +1,8 @@
+{
+  "response_cases": [
+    "image-v1.response.b64-json"
+  ],
+  "context": {
+    "created": 1760000000
+  }
+}

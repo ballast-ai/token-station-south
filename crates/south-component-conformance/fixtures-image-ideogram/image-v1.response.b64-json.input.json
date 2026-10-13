@@ -1,0 +1,15 @@
+{
+  "prepare_case": "image-v1.prepare.response-format-b64-json",
+  "response": {
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "url": "https://ideogram.test/ephemeral/fox.png",
+          "prompt": "a red fox, rewritten",
+          "is_image_safe": true
+        }
+      ]
+    }
+  }
+}

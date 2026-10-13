@@ -1,0 +1,58 @@
+{
+  "descriptor": {
+    "auth": {
+      "arm": "header_secret",
+      "header": "api-key",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "multipart": {
+        "parts": [
+          {
+            "name": "text_prompt",
+            "value": "a red fox"
+          },
+          {
+            "name": "rendering_speed",
+            "value": "TURBO"
+          },
+          {
+            "name": "resolution",
+            "value": "2560x1440"
+          }
+        ]
+      }
+    },
+    "method": "POST",
+    "path": "v1/ideogram-v4/generate"
+  },
+  "facts": {
+    "inputs": {
+      "input_image": 0,
+      "mask": 0,
+      "reference_image": 0
+    },
+    "metering_forms": [
+      "images"
+    ],
+    "operation": "generate",
+    "requested_outputs": 1,
+    "size": {
+      "height": 1440,
+      "width": 2560
+    },
+    "tier": {}
+  },
+  "immutable_body_paths": [
+    "text_prompt",
+    "rendering_speed",
+    "resolution",
+    "num_images"
+  ],
+  "repeat": 1,
+  "response_body_form": "json",
+  "response_elision_paths": [],
+  "state": {
+    "format": "url"
+  }
+}

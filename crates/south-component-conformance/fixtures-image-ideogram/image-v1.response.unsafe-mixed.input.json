@@ -1,0 +1,32 @@
+{
+  "prepare_case": "image-v1.prepare.turbo-url-generation",
+  "response": {
+    "status": 200,
+    "body": {
+      "created": "2026-06-04T00:00:00Z",
+      "data": [
+        {
+          "url": "https://ideogram.ai/api/images/ephemeral/abc.png",
+          "prompt": "A rewritten, more detailed prompt",
+          "resolution": "2048x2048",
+          "is_image_safe": true,
+          "seed": 12345
+        },
+        {
+          "url": "",
+          "prompt": "unsafe slot",
+          "resolution": "2048x2048",
+          "is_image_safe": false,
+          "seed": 67890
+        },
+        {
+          "url": null,
+          "prompt": "unsafe slot (null url)",
+          "resolution": "2048x2048",
+          "is_image_safe": false,
+          "seed": 13579
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "prepare_case": "image-v1.prepare.default-speed",
+  "response": {
+    "status": 504
+  }
+}

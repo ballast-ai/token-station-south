@@ -1,0 +1,24 @@
+{
+  "provider_config": {
+    "provider": "ideogram-image",
+    "base_url": "https://api.ideogram.ai",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "json": {
+      "prompt": {
+        "$south.blob": {
+          "id": "b0",
+          "bytes": 1048577,
+          "head": "a red fox, described at great length"
+        }
+      }
+    }
+  },
+  "context": {
+    "upstream_model": "ideogram-v4-turbo",
+    "metering_required": [
+      "images"
+    ]
+  }
+}

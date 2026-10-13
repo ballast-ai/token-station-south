@@ -1,0 +1,9 @@
+{
+  "prepare_case": "image-v1.prepare.default-speed",
+  "response": {
+    "status": 400,
+    "body": {
+      "detail": "rendering_speed: invalid value"
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "'response_format' must be 'url', 'b64_json', or {\"type\": \"...\"} for Ideogram models (got \"png\")"
+  }
+}

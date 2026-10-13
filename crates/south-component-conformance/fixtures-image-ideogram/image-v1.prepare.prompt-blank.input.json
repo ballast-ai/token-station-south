@@ -1,0 +1,18 @@
+{
+  "provider_config": {
+    "provider": "ideogram-image",
+    "base_url": "https://api.ideogram.ai",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "json": {
+      "prompt": " \n\t "
+    }
+  },
+  "context": {
+    "upstream_model": "ideogram-v4-turbo",
+    "metering_required": [
+      "images"
+    ]
+  }
+}

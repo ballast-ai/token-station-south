@@ -1,0 +1,12 @@
+{
+  "prepare_case": "image-v1.prepare.default-speed",
+  "response": {
+    "status": 200,
+    "body": [
+      {
+        "url": "https://ideogram.test/ephemeral/fox.png",
+        "is_image_safe": true
+      }
+    ]
+  }
+}
