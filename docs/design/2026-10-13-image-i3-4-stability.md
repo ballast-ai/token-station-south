@@ -1,6 +1,8 @@
 # Image world step I3-4: `image-stability` (Stability AI Stable Image)
 
-Status: proposed
+Status: accepted (2026-10-13). SI-Q4 ruled by lv (with I3-3's VI-Q2): the host answers 400 for an operation the package
+does not declare. SI-Q1, SI-Q2, SI-Q3 and SI-Q5 follow the recommendations, under lv's pre-approval to build I3-4
+directly per the image world record (each keeps the native arm's behaviour).
 
 Date: 2026-10-13
 
@@ -228,3 +230,4 @@ at implementation.
 ## Revision note
 
 - 2026-10-13: first draft (proposed).
+- 2026-10-13: accepted; SI-Q4 ruled by lv, the other questions taken as recommended under the pre-approval.
