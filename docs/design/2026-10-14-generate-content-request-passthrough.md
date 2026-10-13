@@ -1,7 +1,9 @@
 # Request pass-through for the `generateContent` surface (D7)
 
-Status: proposed (south side of the host's D7, ruled by lv on 2026-10-14: D7-Q1 to D7-Q5 as recommended in
-the host's D7 plan, `server:docs/product-review-v2/plans/2026-10-14-D7-*.md` §6). Not implemented.
+Status: accepted (south side of the host's D7, ruled by lv on 2026-10-14: D7-Q1 to D7-Q5 as recommended in
+the host's D7 plan, `server:docs/product-review-v2/plans/2026-10-14-D7-*.md` §6). Implemented on branch
+`generate-content-request-passthrough` (§6.1); intended for release 0.60.0 together with image step I3-4.
+`compatibility.json` lists `south.north-passthrough-delivery.v2` as `not_verified` for both hosts until a host runs it.
 
 Date: 2026-10-14
 
