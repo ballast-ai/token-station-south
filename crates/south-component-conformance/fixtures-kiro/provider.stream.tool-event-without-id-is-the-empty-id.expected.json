@@ -1,0 +1,22 @@
+[
+  {
+    "arguments_delta": "",
+    "id": "",
+    "index": 0,
+    "name": "get_weather",
+    "type": "tool_call_delta"
+  },
+  {
+    "arguments_delta": "{}",
+    "index": 0,
+    "type": "tool_call_delta"
+  },
+  {
+    "finish_reason": "tool_calls",
+    "type": "finish"
+  },
+  {
+    "finish_reason": "tool_calls",
+    "type": "done"
+  }
+]

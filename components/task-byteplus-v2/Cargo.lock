@@ -340,7 +340,7 @@ checksum = "f9395f0f0eee849a9b707b2f06bb92a6a422090e2123bb2ef8e87a0e61892a8e"
 
 [[package]]
 name = "south-component-conformance"
-version = "0.59.0"
+version = "0.60.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -410,7 +410,7 @@ dependencies = [
 
 [[package]]
 name = "task-byteplus-v2"
-version = "0.36.18"
+version = "0.36.19"
 dependencies = [
  "south-component-conformance",
  "wit-bindgen",

@@ -1,6 +1,8 @@
 # The Kiro provider component (`provider-kiro`)
 
-Status: proposed — drafted for review by the host team (token-station-server P21), not accepted
+Status: accepted 2026-10-13 (provisional items pending a real-account capture). lv ruled on 2026-10-13: implement
+now, test with a real account later; every open question takes its recommendation (§17). Implemented 2026-10-14 on
+branch `provider-kiro`, not yet released (§18).
 
 Date: 2026-09-30
 
@@ -300,7 +302,7 @@ captures to settle it.
 | `response_format` other than text | **Refused**: capability error; the package does not declare `json_schema` | Never reaches the upstream (the second hop reads only `messages`, `system`, `tools`) |
 | `tool_choice: required` or a named tool (`ToolChoice::Other`) | **Refused**: capability error — the wire cannot force a call | Silently dropped |
 | Final message is an assistant turn (prefill) | **Refused**: capability error | Sent as the current **user** message (server:translate_kiro.rs:77-86 reads the last message without checking its role) |
-| `ToolCall.arguments` that is not a JSON object | **Refused**: invalid request | Sent: a non-object JSON value as is, unparseable text as a JSON string (reference_anthropic.rs:191-192) |
+| `ToolCall.arguments` that is not a JSON object | ~~Refused~~ *Revised 2026-10-14 (§18):* sent as natively — a non-object JSON value as is, unparseable text as a JSON string; empty or whitespace-only arguments become `{}` (KD14) | Sent: a non-object JSON value as is, unparseable text as a JSON string (reference_anthropic.rs:191-192) |
 | A tool call with an empty `id` or `name`; a `Tool` message with no `tool_call_id` | **Refused**: capability error | Refused by the first hop (reference_anthropic.rs:177-186, 249-254) |
 | Empty `messages` | **Refused**: invalid request | Refused (server:translate_kiro.rs:62-68) |
 | `sampling.temperature`, `top_p`, `stop` | **Dropped** — no slot on the wire; documented, and pinned by a fixture | Dropped |
@@ -467,9 +469,11 @@ component does the same on the EOF flush (the empty chunk, crates/south-componen
 - If nothing has been parsed: no events. An empty chunk before any data is not EOF — the incrementality check
   feeds one (suite.rs:296) — and a 2xx with no frames at all is not a completed answer, so it gets no `Done` and
   the host does not settle it as a success.
-- If a tool call is open at EOF (a start with no `stop`): no `Done`. The body was cut inside a call.
+- ~~If a tool call is open at EOF (a start with no `stop`): no `Done`.~~ *Revised 2026-10-14 (§18):* a tool call
+  without its `stop` is completed at EOF, as natively; the host's own corpus has such a call.
 
-The last two rules differ from the native arm, which completes both cases (§12.2).
+The rule for a body with no frames differs from the native arm on the streaming path only (KR20, §18); the buffered
+path answers it with an empty success, as natively.
 
 Two limits of this wire follow, and the component cannot remove them:
 
@@ -503,8 +507,8 @@ binary, so it uses the buffered binary transport.
 - `choices[0].message.content` — the concatenated text; `None` when there is none.
 - `choices[0].message.tool_calls` — one per tool-use id, in first-seen order, `arguments` being the concatenated
   fragments **verbatim** (the IR carries arguments as a string, kernel:chat.rs:72-76).
-- `finish_reason` — as in §5.3. If the fold ends without a `Done` (no frames, or an open call), or meets an
-  `exception:` / `error:` frame, the result is an error, not a response.
+- `finish_reason` — as in §5.3. If the fold meets an `exception:` / `error:` frame, the result is an error, not a
+  response. *Revised 2026-10-14 (§18):* a body with no frames folds to an empty answer with `Stop`, as natively.
 - `id` and `model` — left empty for the host to fill, as the Converse and Gemini references do
   (reference_bedrock_converse.rs:37-41).
 - `usage` — all zeros (§6.1).
@@ -737,7 +741,8 @@ Every form below is in the recipe vocabulary of boundary §3.3, under that name;
 
 ### 7.5 Exported attribute
 
-`profile_arn` is a static, non-secret credential field with value syntax `aws_arn`, exported as an attribute
+`profile_arn` is a static, non-secret credential field with value syntax `aws_arn` (*revised 2026-10-14, §18:*
+`printable_ascii` 2048, since the native arm sends any string), exported as an attribute
 (boundary §3.3); it is not a `config_schema` key. An attribute takes its value only from a field declared non-secret,
 never from an exchange response (boundary §3.3, §3.4 rule 4); this one complies. The component writes it to
 `profileArn` when present and omits it otherwise — exactly today's behavior (server:translate_kiro.rs:153-155).
@@ -891,12 +896,12 @@ Stream and response inputs are written in the canonical re-encoding, as boundary
 | `request.model-is-verbatim` | A dashed id is **not** rewritten |
 | `request.refused-*` | One row each: image, unknown part, `required` tool choice, assistant-final turn, non-object arguments, empty tool-call id, tool result without `tool_call_id`, missing attempt id → the stated error code |
 | `response.text` / `response.tool-use` | The fold of §5.4; `usage` all zeros; `id` and `model` empty |
-| `response.no-frames` / `response.open-tool-call` / `response.exception-frame` / `response.error-frame` | An error, not a response |
+| `response.no-frames` / `response.open-tool-call` / `response.exception-frame` / `response.error-frame` | An error, not a response (*revised 2026-10-14:* no frames is an empty answer and an open call completes, as natively) |
 | `stream.text` / `stream.tool-use` / `stream.text-then-tool` | The events of §5.2 and the EOF flush of §5.3 |
 | `stream.metering-is-never-usage` | A `meteringEvent` is present; **no `Usage` event** in the output |
 | `stream.unknown-event-ignored` / `stream.empty-content-ignored` | §5.2 |
 | `stream.exception-frame` / `stream.error-frame` | `event: exception:<type>` and `event: error:<code>` → `Error`, and nothing after |
-| `stream.open-tool-call-at-eof` / `stream.no-frames` | No `Done` |
+| `stream.open-tool-call-at-eof` / `stream.no-frames` | No `Done` (*revised 2026-10-14:* only for no frames; an open call completes) |
 | `error.rejected-credential` (401, 403) / `error.throttled-carries-retry-after` / `error.opaque-500` | §9 |
 | `capabilities.declared` | Echoes the operator's models, as the other packages do (reference_bedrock_converse.rs:791-798) |
 | `credential.social` / `credential.idc` / `credential.select-*` / `credential.rotation` / `credential.rotation-absent-keeps` / `credential.no-refresh-token-seeded` / `credential.expiry-default` / `credential.status-400` / `credential.status-403` / `credential.status-500` / `credential.idc-missing-client-fields` | The rendered exchange request and the extraction (boundary §3.7), including each of the four `select` rules; an absent rotated token yields no rotation output; 403 is `transient`; missing IdC client fields fail with no request rendered |
@@ -989,9 +994,10 @@ item:
 
 - The refusals of §4.3 marked as differing from native, unless K0 has already corrected the native arm: `Unknown`
   parts, `required` or named tool choice, an assistant-final turn, non-object tool arguments.
-- A 2xx with no frames: the component returns an error; the native arm answers an empty success
+- A 2xx with no frames: on the streaming path the component emits no `Done`; the native arm answers an empty success
   (server:translate_kiro.rs:632-634, 641 on the non-streaming path; `finish()` at :545-565 on the streaming path).
-- A tool call open at end of body: the component emits no `Done`; the native arm completes the call (:545-565).
+  *Revised 2026-10-14:* the buffered path now answers an empty success too (KR20, §18).
+- ~~A tool call open at end of body~~ *Withdrawn 2026-10-14:* the component completes it, as natively.
 - A non-JSON event payload on the non-streaming path: the component returns an error; the native decoder turns it
   into `null` and the fold ignores it (server:kiro.rs:147; Appendix D N-7).
 - Unparseable tool arguments on the non-streaming path: the component passes the concatenated string; the native
@@ -1154,6 +1160,158 @@ of these, lv ruled K-Q19 on 2026-10-01.
   frames would bill only what the client received.
   **Ruled (lv, 2026-10-01): count output as produced** — the IR events the upstream produced, not what was delivered
   to the client.
+
+## 17. Rulings (lv, 2026-10-13: implement now, real-account test later; DP0-consistent questions take the recommendation)
+
+lv's instruction of 2026-10-13: migrate the code now and test with a real account later; an open question whose
+recommended option is consistent with DP0 (provider logic only in south, the host generic) takes the recommendation,
+and a question with no recommendation takes the minimal DP0-consistent option. **Provisional** marks a ruling that
+the package implements as the native arm behaves today and that the real-account capture (§12.2 item 7) confirms or
+changes; a change is a later package release with its own fixtures.
+
+| Question | Ruling | Provisional |
+|---|---|---|
+| K-Q1 | As ruled 2026-09-30: for `output_cap: []` with `usage_evidence: absent` the host enforces the cap on its own meter and ends with `length`, after cutover; §8.3's two cases (a streaming cut at an event boundary, a non-streaming fold cut at the cap with an incomplete tool call removed) are accepted as written | No |
+| K-Q2 | As ruled 2026-09-30: the native arm moves to the generic estimator first (host step K0) | No |
+| K-Q3 | As ruled 2026-09-30: no per-provider surface switch in the host; staging by acceptance | No |
+| K-Q4 | As ruled 2026-09-30: `extras.refreshUrl` is dropped (KR25), after the host's read-only production query | No |
+| K-Q5 | Recommendation: `meteringEvent` is **not** required in version 1; the end of the body completes an answer, as natively. The capture decides whether a later release requires it | Yes |
+| K-Q6 | Recommendation: the status column of §9 is authoritative; the exception-name arm maps the names §9 lists, and an unlisted name falls back to the status (`internal` in band) | Yes |
+| K-Q7 | Recommendation: the buffered path (P-5, boundary §5.2): a non-streaming answer reaches `parse-response` as the canonical re-encoding and the stream parser folds it | No |
+| K-Q8 | Recommendation: P-8(b) is accepted as a rule separate from boundary §3.6 — a package that exports no catalog world gets no upstream liveness request; its health is the credential state | No |
+| K-Q9 | Recommendation: the family is `kiro` | No |
+| K-Q10 | Recommendation: no `content-type` on the inference request, as the native arm sends none | Yes |
+| K-Q11 | `conversationId` is sent on every request and is the host's `attempt_id` (a lowercase hyphenated UUID); a request without one is refused (KR9). If the capture shows the upstream accepts its absence, a later release may omit it | Yes |
+| K-Q12 | As ruled for the host on 2026-09-30, and for south now: version 1 refuses images (KR1) | No |
+| K-Q13 | No recommendation: the minimal option. Version 1 ships no catalog entry for `kiro`; `model-capabilities` echoes the operator's models, and the catalog waits for the capture to verify ids | Yes |
+| K-Q14 | Recommendation: no IR change now; a tool result is always sent with `status: "success"` (KR11), as natively | No |
+| K-Q15 | No recommendation: the minimal option. The package proceeds; the contracts it relies on (the attempt id, the buffered path, the declared user agent) are already released boundary contracts, and the community host's view is a follow-up, not a blocker | No |
+| K-Q16 | As settled 2026-10-08 (boundary §13.8): `host_values: ["attempt_id"]` | No |
+| K-Q17 | Recommendation: amend both doc comments. The WIT usage rule was amended in B1 (provider-adapter.wit now states the `absent` exception); the kernel's `HttpResponseParts.body` comment goes through the kernel chain and does not block this package | No |
+| K-Q18 | Recommendation: version 1 keeps the native layout, one entry per IR message, consecutive tool results not merged | Yes |
+| K-Q19 | As ruled 2026-10-01: output is counted as produced | No |
+
+The status line's "provisional items" are the six rows marked **Yes**.
+
+## 18. Implementation (2026-10-14)
+
+Implemented on branch `provider-kiro`; not released (Q47: the next release bumps every package).
+
+**What landed.**
+
+- `crates/south-component-conformance/src/reference_kiro.rs` — the reference (`KiroReferenceV1`), one hop each way as
+  §4 and §5 describe. `components/provider-kiro/` — the wit-bindgen shell, `manifest.json` and a lockfile identical
+  to its siblings'. `scripts/build-kiro-component.sh`, the CI cache entry and the release workflow's build, parity
+  and package lines.
+- `fixtures-kiro/` — 81 cases (28 request, 11 response, 17 stream, 7 error, 1 capabilities, 17 credential); sources
+  in its README. `tests/kiro_conformance_v1.rs` — gates ① and ②, the declarations, the row list, the host-bytes
+  check (the stream rows taken from the host are its binary bodies, deframed and re-encoded by south byte for byte),
+  the three mutation checks of §11.2, the buffered-path parity, and the header and slot of every built request.
+  `tests/kiro_sandbox_parity_v1.rs` — the built `component.wasm` passes the same gate ②.
+- The usage judge (`usage_ir_contract_v1`): for any credit value and any token-shaped member on any frame, split at
+  any byte, the component emits no `Usage` and folds to all-zero usage; and every shipped Kiro output row reports no
+  usage. A fuzz function (`contract_parsers`, `fuzz_kiro_stream`) holds chunking invariance, no usage, and "the
+  buffered fold succeeds exactly when the stream ends without an error" on arbitrary bytes.
+- Failing first: with `request.chat`, `stream.tool-use` and `response.text` written by hand, gate ② failed 149
+  outcomes on the null expectations and passed the three; the rest were produced by the reference and read row by
+  row. Mutations run against the tests: emitting `Usage` from `meteringEvent` (caught by gate ②, the metering
+  mutation check and the usage judge), a non-zero response usage (gate ②, the judge, the parity test), a
+  `conversationId` not taken from the attempt id (gate ②, the attempt-id check), an end of body that does not
+  complete a tool call (gate ②, the parity test), and whitespace-only arguments not read as `{}` (gate ②, the
+  arguments test). (A first-round mutation, a `stop` that does not close the call, no longer applies: since the
+  review `stop` closes nothing the IR has to close.)
+
+**Where the shipped manifest differs from the §3.4 / §7.2 sketches** (the vocabulary as released, not new
+decisions):
+
+- `import` is keyed by field (`{file, pointers}`), and `seed` is one section-level entry (`file`, `slot`, `present`,
+  `expires_at`); the file kind is `kiro-auth-token-json`.
+- `refresh_margin_seconds` is 30, not 300: gate ① requires the margin to be shorter than the shortest validity after
+  the clamp (boundary §13.3), and a recipe floor above 60 s would make the host trust a short-lived token longer than
+  the upstream granted it. 30 s is the host default the Copilot recipe took under the same rule (boundary §13.5,
+  P21 Q-A). KD9.
+- `auth_method` and `client_id` have value syntax `printable_ascii` 4096, the vocabulary's largest (the native arm
+  accepts any string), and `profile_arn` `printable_ascii` 2048 rather than §7.2's `aws_arn` (the native arm sends
+  any string; a stricter syntax would refuse credentials that work today); `auth_region` keeps `aws_region` and its
+  `us-east-1` default, which matches the native check.
+- `subscription_quota_families: ["kiro"]`: the native arm counts Kiro among the subscription families whose 429
+  raises the host's quota alert (server `ProviderType::is_coding_plan`). The field is a 0.60.0 declaration, so the
+  package declares `south_runtime` 0.60.0, the oldest runtime that admits it.
+- `compatibility` is the tuple every package of this kernel declares (protocol 0.6.0, `canonical_ir` 4); no
+  `contracts`, no `endpoint`, no `config_schema`.
+
+**Numbered refusals and degradations.** Every one is pinned by a fixture. "Native" is the host arm today.
+*Revised 2026-10-14 after the coordinator's review:* every refusal where the native arm succeeds was checked against
+the native code; KR6, KR17, KR18, KR19 and KR21 are withdrawn (the package now does what the native arm does), KR20
+is narrowed to the one path where matching is impossible, and KR23 and KR24 are relaxed. The refusals left where the
+native arm succeeds each carry the reason in the last column.
+
+| # | Input | Package | Native | Why it differs |
+|---|---|---|---|---|
+| KR1 | An image part, in any message | Capability error (400) before admission | Refused too, in the shape check before the token refresh (host K0-a) | — |
+| KR2 | A content part this crate does not model (`ContentPart::Unknown`) | Capability error | Dropped unless it is a `text` block | D3 (§4.3): dropping it silently changes what the model is asked. Matching is possible; this is the record's choice, for lv |
+| KR3 | `response_format` other than text | Capability error | Ignored | D3, as KR2 |
+| KR4 | `tool_choice` `required` or a named tool | Capability error | Dropped | D3, as KR2 |
+| KR5 | The last non-system message is an assistant turn | Capability error | Sent as the current user message | D3, as KR2 |
+| ~~KR6~~ | Tool-call `arguments` that are not a JSON object | Withdrawn: sent as natively (KD14 for empty arguments) | Sent as parsed, unparseable text as a string | — |
+| KR7 | A tool call with an empty `id` or `name`; a tool message without `tool_call_id` | Capability error | Refused by the first hop | — |
+| KR8 | No non-system message | Invalid request | Refused | — |
+| KR9 | `host_values.attempt_id` absent, or not a lowercase hyphenated UUID | Internal error (500): a host defect | The host mints its own id | Impossible in a component: gate ② `Determinism` forbids it minting a random id (§4.5) |
+| KR10 | A `provider_config.provider` other than `kiro` | Capability error | — | — |
+| KR11 | A tool result | Always `status: "success"` (lossy; K-Q14) | The same | — |
+| KR12 | Reasoning parts in earlier turns | Dropped | Dropped | — |
+| KR13 | `temperature`, `top_p`, `top_k`, `stop`, the output cap | Dropped (the cap is the host's, K-Q1) | Dropped | — |
+| KR14 | `parallel_tool_calls`, the reasoning request, a tool's `strict` | Dropped | Dropped | — |
+| KR15 | Prompt-cache markers | Dropped | Dropped | — |
+| KR16 | A frame whose `data` is not JSON | Provider protocol error | Streaming: an error too; non-streaming: `null`, ignored | Unreachable on real traffic: south's `reencode_eventstream_v1` refuses a non-JSON payload in the host's deframing step on both paths, before any component; one parser cannot both fail (streaming) and ignore (non-streaming) |
+| ~~KR17~~ | A `toolUseEvent` without a `toolUseId` | Withdrawn: the empty id, as natively | A call with an empty id | — |
+| ~~KR18~~ | A tool `input` that is not a string | Withdrawn: no fragment, as natively | Treated as empty | — |
+| ~~KR19~~ | A tool event after that call's `stop` | Withdrawn: extends the call (KD13) | Streaming: a new block; non-streaming: appended | — |
+| KR20 | A 2xx with no frames | Streaming: no `Done`; buffered path: an empty answer, as natively | An empty success on both paths | Impossible on the streaming path: gate ②'s `StreamIncrementality` feeds an empty chunk at split 0, which a parser cannot tell from the end of a body, so an empty chunk before any frame must emit nothing |
+| ~~KR21~~ | A tool call still open at the end of the body | Withdrawn: completed, as natively | Completed | — |
+| KR22 | `auth_region` not region-shaped | Configuration error, nothing sent | The same since host `a82c852b` | — |
+| KR23 | `profile_arn` with a non-printable byte or above 2048 bytes | The host refuses the field | Any string is sent | The value channel carries printable ASCII only (kernel `ComponentValues`) |
+| KR24 | `auth_method` or `client_id` above 4096 bytes or with a non-printable byte | Configuration error | Accepted | 4096 is the vocabulary's largest `printable_ascii` |
+| KR25 | `extras.refreshUrl` | No equivalent (K-Q4) | Replaces the token endpoint | Ruled by lv (K-Q4): a host taken from credential contents is what boundary §3.3 rules out |
+
+**Intentional differences from the native arm** (for the dual run, §12.2):
+
+- KD1 The model id is written verbatim (§4.4); the host rewrites dashed ids on the model rows first (K0-c).
+- KD2 The refusals KR2–KR5 and KR9 (above), where the native arm silently changed the request or minted its own id.
+- KD3 One hop: operator body extras reach the real upstream body (Appendix D N-10).
+- KD4 A 2xx with no frames emits no `Done` on the streaming path (KR20); the buffered path matches native.
+- KD5 Withdrawn 2026-10-14: a tool call without `stop` is completed, as natively.
+- KD6 A non-JSON payload is a protocol error on the buffered path too (KR16); natively it is ignored there. Unreachable
+  through south's re-encoding.
+- KD7 Non-streaming tool arguments are the concatenated fragments verbatim; natively unparseable input became `{}`.
+- KD8 A token refresh answered 403, 429 or 5xx is `transient`; natively every non-2xx is a 400-class operator error
+  (N-6). 400 and 401 stay terminal.
+- KD9 The refresh margin is 30 s (native 300 s), above.
+- KD10 Only camelCase refresh responses are read (§7.4).
+- KD11 A missing refresh token, or a missing IdC client id or secret, is a configuration error before any request in
+  both forms (§7.4).
+- KD12 A non-2xx inference answer is mapped by status and exception name (§9); natively it is an upstream error
+  without a mapping. In-band exception frames map by name, `error` frames to `upstream_unavailable`.
+- KD13 Stream tool calls are keyed by `toolUseId`, as the native non-streaming fold keys them: a repeated start of a
+  known call is ignored, a fragment after its call's `stop` extends that call, and a fragment for another id opens
+  that id's call. The native streaming path instead opens a new block on every start, and attaches a fragment to
+  whichever block is open; keying by id is the reading both native paths agree on when ids are consistent, and the IR
+  has one index per call.
+- KD14 Empty or whitespace-only tool-call arguments are sent as `{}`, the input of a call without arguments (clients
+  send `""` for one); natively the Anthropic first hop fails to parse them and sends the string itself as `input`.
+  Every other value is sent as natively.
+
+**What needs the real account** (§12.2 item 7): K-Q5 (is `meteringEvent` on every completed answer?), K-Q6 (the
+exception names and statuses, and what an exhausted allowance looks like), K-Q10 (`content-type`), K-Q11 (is
+`conversationId` required, and must it be a UUID?), K-Q13 (the model ids for a catalog entry), K-Q18 (a multi-result
+turn layout). The capture is archived, redacted, as fixtures.
+
+**What the host does next** (Appendix C, K2): admit the package (its range must include `south_runtime` 0.60.0 and
+lift its R13 / R14 refusals of `usage_evidence: absent` and `output_cap: []`); register it for the family `kiro`;
+hand each native credential over to the recipe fields in one transaction (refresh token, `clientId`,
+`clientSecret`, `authMethod`, `idcRegion` or else `region` into `auth_region`, `profileArn`), never leaving two rows
+on one rotating chain; run the replaying dual run of §12.2 against the native arm; then a cutover preflight before
+routing rows.
 
 ## Appendix A. The native arm today (host material)
 
@@ -1439,3 +1597,17 @@ They matter here because a dual run pins whatever the native arm does as "correc
     client. §6.2 and Appendix B.1 state it.
   - The §11 absent-usage fixture row and the Appendix C K0 row state the ruled rule (output counted as the IR events
     produced) instead of referring to K-Q19 as a choice.
+
+## Revision note (2026-10-14)
+
+- Status: accepted 2026-10-13 on lv's instruction (implement now, real-account test later; DP0-consistent questions
+  take the recommendation); six rulings are provisional until the capture (§17).
+- §17 added: one ruling per question K-Q1 to K-Q19.
+- §18 added: what landed, where the shipped manifest differs from the §3.4 / §7.2 sketches, the numbered refusals
+  KR1–KR25 and differences KD1–KD14, what needs the real account, and the host's next steps.
+- Review of the same day: every refusal where the native arm succeeds checked against the native code. Withdrawn:
+  KR6 (tool arguments are sent as natively; empty arguments become `{}`, KD14), KR17–KR19 (malformed tool events are
+  read as natively), KR21 (a tool call without `stop` completes at the end of the body, as natively; §5.3 revised).
+  Narrowed: KR20 (only the streaming path, where gate ②'s incrementality check makes matching impossible; the
+  buffered path answers an empty success). Relaxed: KR23 (`profile_arn` is `printable_ascii` 2048) and KR24
+  (`printable_ascii` 4096). Each remaining refusal where the native arm succeeds states its reason.

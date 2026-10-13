@@ -85,6 +85,7 @@ jobs:
           scripts/build-bedrock-converse-component.sh
           scripts/build-bedrock-converse-bearer-component.sh
           scripts/build-gemini-component.sh
+          scripts/build-kiro-component.sh
           scripts/build-kling-task-component.sh
           scripts/build-kling-task-v2-component.sh
           scripts/build-minimax-task-v2-component.sh
@@ -123,6 +124,7 @@ jobs:
             --test bedrock_converse_sandbox_parity_v1 \
             --test bedrock_converse_bearer_sandbox_parity_v1 \
             --test gemini_sandbox_parity_v1 \
+            --test kiro_sandbox_parity_v1 \
             --test kling_task_sandbox_parity_v1 \
             --test kling_task_sandbox_parity_v2 \
             --test minimax_task_sandbox_parity_v2 \
@@ -170,6 +172,7 @@ jobs:
           package provider-bedrock-converse provider_bedrock_converse.wasm
           package provider-bedrock-converse-bearer provider_bedrock_converse_bearer.wasm
           package provider-gemini provider_gemini.wasm
+          package provider-kiro provider_kiro.wasm
           package task-kling task_kling.wasm
           package task-kling-v2 task_kling_v2.wasm
           package task-minimax-v2 task_minimax_v2.wasm

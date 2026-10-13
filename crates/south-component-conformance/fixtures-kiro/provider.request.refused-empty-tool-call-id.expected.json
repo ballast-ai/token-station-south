@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "capability",
+    "http_status": 400,
+    "message": "an assistant tool call has no id; this upstream needs one to pair the result with the call"
+  }
+}

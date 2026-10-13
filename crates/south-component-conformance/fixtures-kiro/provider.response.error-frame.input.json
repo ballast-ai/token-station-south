@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/vnd.amazon.eventstream"
+  },
+  "body": "event: assistantResponseEvent\ndata: {\"content\":\"hello from kiro\"}\n\nevent: error:InternalError\ndata: {\"message\":\"We encountered an internal error.\"}\n\n"
+}

@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "internal",
+    "http_status": 500,
+    "message": "host value attempt_id is absent; this package declares it and the host must fill it on every call"
+  }
+}

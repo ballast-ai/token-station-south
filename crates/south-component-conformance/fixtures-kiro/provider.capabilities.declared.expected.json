@@ -1,0 +1,9 @@
+[
+  {
+    "context_window": 200000,
+    "json_schema": false,
+    "model": "claude-sonnet-4.5",
+    "tool": true,
+    "vision": false
+  }
+]

@@ -1,0 +1,8 @@
+{
+  "chunks": [
+    "event: assistantResponseEvent\ndata: {\"content\":\"Hi \",\"modelId\":\"claude-haiku-4.5\"}\n\n",
+    "event: assistantResponseEvent\ndata: {\"content\":\"there\"}\n\n",
+    "event: contextUsageEvent\ndata: {\"contextUsagePercentage\":2.0}\n\n",
+    "event: meteringEvent\ndata: {\"unit\":\"credit\",\"usage\":0.0055778}\n\n"
+  ]
+}

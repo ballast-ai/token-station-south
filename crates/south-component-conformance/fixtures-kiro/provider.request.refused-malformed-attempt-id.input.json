@@ -1,0 +1,32 @@
+{
+  "provider_config": {
+    "provider": "kiro",
+    "base_url": "https://q.us-east-1.amazonaws.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "claude-sonnet-4.5",
+        "tool": true,
+        "vision": false,
+        "json_schema": false,
+        "context_window": 200000,
+        "supported_parameters": []
+      }
+    ],
+    "declared": {
+      "profile_arn": "arn:aws:codewhisperer:us-east-1:123456789012:profile/FAKEPROFILE"
+    }
+  },
+  "chat_request": {
+    "model": "claude-sonnet-4.5",
+    "messages": [
+      {
+        "role": "user",
+        "content": "hi"
+      }
+    ],
+    "host_values": {
+      "attempt_id": "3F2C8A9E-6B1D-4C7A-9E0F-5A4B3C2D1E0F"
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "chunks": [
+    "event: assistantResponseEvent\ndata: {\"content\":\"hello from kiro\"}\n\n",
+    "event: error:InternalError\ndata: {\"message\":\"We encountered an internal error.\"}\n\n",
+    "event: assistantResponseEvent\ndata: {\"content\":\"never\"}\n\n"
+  ]
+}

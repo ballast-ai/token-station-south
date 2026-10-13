@@ -6,6 +6,7 @@ use south_component_conformance::embeddings_json::{
     parse_provider_error_json, prepared_embeddings_json, provider_error_json,
 };
 use south_component_conformance::reference_anthropic_bedrock_invoke::AnthropicBedrockInvokeReferenceV1;
+use south_component_conformance::reference_kiro::KiroReferenceV1;
 use south_component_conformance::reference_openai_responses::OpenAiResponsesReferenceV1;
 use south_component_conformance::sse_split::{SseSplitErrorV1, SseSplitterV1};
 use south_component_conformance::ProviderComponentV1;
@@ -425,9 +426,61 @@ fn fuzz_embeddings(input: &str) {
     }
 }
 
+/// The Kiro stream parser (`provider-kiro`): the canonical re-encoding of the upstream's
+/// eventstream messages, fed upstream bytes. Chunking never changes the events or the first
+/// error, the package never reports usage (`usage_evidence: absent`), and the buffered path folds
+/// the same body to a response exactly when the stream ends without an error (a body with no frame
+/// is an empty answer there, and emits no `Done` on the stream path).
+fn fuzz_kiro_stream(data: &[u8]) {
+    let run = |stride: usize| {
+        let mut parser = KiroReferenceV1.stream_parser();
+        let mut events = Vec::new();
+        for piece in data.chunks(stride) {
+            match parser.parse_chunk(piece) {
+                Ok(more) => events.extend(more),
+                Err(error) => return (events, Some(error)),
+            }
+        }
+        match parser.finish() {
+            Ok(more) => events.extend(more),
+            Err(error) => return (events, Some(error)),
+        }
+        (events, None)
+    };
+    let stride = usize::from(data.first().copied().unwrap_or(0) % 17) + 1;
+    let (events, error) = run(data.len().max(1));
+    assert_eq!(format!("{:?}", run(stride)), format!("{:?}", (&events, &error)));
+    let kinds: Vec<String> = events
+        .iter()
+        .map(|event| {
+            serde_json::to_value(event).expect("an event serializes")["type"]
+                .as_str()
+                .unwrap_or_default()
+                .to_owned()
+        })
+        .collect();
+    assert!(!kinds.iter().any(|kind| kind == "usage"));
+    let Ok(body) = std::str::from_utf8(data) else {
+        return;
+    };
+    let completed = error.is_none() && !kinds.iter().any(|kind| kind == "error");
+    let parts = serde_json::json!({"status": 200, "body": body}).to_string();
+    match south_component_conformance::abi::parse_response_json(&KiroReferenceV1, &parts) {
+        Ok(response) => {
+            assert!(completed);
+            let response: serde_json::Value =
+                serde_json::from_str(&response).expect("a response is JSON");
+            let usage = response["usage"].as_object().expect("a response carries usage");
+            assert!(usage.values().all(|count| count.as_u64() == Some(0)));
+        }
+        Err(_) => assert!(!completed),
+    }
+}
+
 fuzz_target!(|data: &[u8]| {
     fuzz_eventstream(data);
     fuzz_invoke_stream(data);
+    fuzz_kiro_stream(data);
     fuzz_responses_stream(data);
     fuzz_sse(data);
 
