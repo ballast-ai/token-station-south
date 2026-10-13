@@ -45,15 +45,16 @@ pub use secret_header::{
 
 pub use task_v2::{
     MAX_IMMUTABLE_BODY_PATH_BYTES, MAX_IMMUTABLE_BODY_PATHS, TASK_LOCATOR_SCHEMA_VERSION,
-    TaskArtifactRefV2, TaskArtifactRoleV2, TaskArtifactV2, TaskContractErrorV2, TaskLocatorV2,
-    TaskObservationV2, TaskRenderContextV2, TaskRequestEstimateV2, TaskScalarV2, TaskUsageFactsV2,
-    validate_immutable_body_paths,
+    TaskArtifactRefV2, TaskArtifactRoleV2, TaskArtifactV2, TaskContractErrorV2,
+    TaskInlineArtifactV2, TaskLocatorV2, TaskObservationV2, TaskRenderContextV2,
+    TaskRequestEstimateV2, TaskScalarV2, TaskTokenBucketV2, TaskTokenBucketsV2, TaskUsageFactsV2,
+    fill_task_artifact_markers_v1, resolve_task_inline_artifact_v1, validate_immutable_body_paths,
 };
 
 pub use task::{
     HostMintedValuesV1, MAX_ARTIFACT_REF_BYTES, MAX_ARTIFACT_URLS, MAX_CALLBACK_URL_BYTES,
-    MAX_TASK_ID_BYTES, TASK_CONTRACT_VERSION, TaskArtifactRefV1, TaskContractErrorV1,
-    TaskFailureKindV1, TaskMeterV1, TaskObservationV1,
+    MAX_TASK_ID_BYTES, TASK_CONTRACT_VERSION, TASK_CONTRACT_VERSION_V7, TASK_CONTRACT_VERSIONS,
+    TaskArtifactRefV1, TaskContractErrorV1, TaskFailureKindV1, TaskMeterV1, TaskObservationV1,
 };
 
 use std::{collections::BTreeMap, fmt, sync::Arc, time::Duration};

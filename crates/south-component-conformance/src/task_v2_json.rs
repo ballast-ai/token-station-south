@@ -2,11 +2,14 @@
 use crate::{PreparedTaskV2, SubmitOutcomeV2};
 use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::{Value, json};
+use south_contracts::image::ArtifactEncodingV1;
 use south_contracts::{
     MAX_ARTIFACT_REF_BYTES, MAX_JSON_REQUEST_BODY_BYTES, TaskArtifactRefV2, TaskArtifactRoleV2,
-    TaskArtifactV2, TaskFailureKindV1, TaskLocatorV2, TaskObservationV2, TaskRenderContextV2,
-    TaskRequestEstimateV2, TaskScalarV2, TaskUsageFactsV2,
+    TaskArtifactV2, TaskFailureKindV1, TaskInlineArtifactV2, TaskLocatorV2, TaskObservationV2,
+    TaskRenderContextV2, TaskRequestEstimateV2, TaskScalarV2, TaskTokenBucketV2,
+    TaskTokenBucketsV2, TaskUsageFactsV2,
 };
+use std::collections::BTreeMap;
 use token_station_protocol::{ErrorEnvelope, HttpRequestDescriptor};
 
 /// Maximum encoded fact frame, including worst-case JSON string escaping.
@@ -87,17 +90,41 @@ struct ArtifactWire {
     #[serde(deserialize_with = "explicit_optional")]
     role: Option<String>,
 }
+/// Contract 8: an artifact whose bytes the host holds; every key is required.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InlineArtifactWire {
+    pointer: String,
+    encoding: ArtifactEncodingV1,
+    media_type: String,
+    #[serde(deserialize_with = "explicit_optional")]
+    role: Option<String>,
+}
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 enum ArtifactsWire {
     Urls { items: Vec<ArtifactWire> },
     FileId { file_id: String },
     None {},
+    Inline { items: Vec<InlineArtifactWire> },
 }
 impl ArtifactsWire {
     fn build(self) -> Result<TaskArtifactRefV2, String> {
         match self {
             Self::None {} => Ok(TaskArtifactRefV2::None),
+            Self::Inline { items } => {
+                let items = items
+                    .into_iter()
+                    .map(|item| {
+                        let role = TaskArtifactRoleV2::from_word(item.role.as_deref())
+                            .map_err(|error| error.to_string())?;
+                        TaskInlineArtifactV2::new(&item.pointer, item.encoding, &item.media_type)
+                            .map(|artifact| artifact.with_role(role))
+                            .map_err(|error| error.to_string())
+                    })
+                    .collect::<Result<Vec<_>, String>>()?;
+                TaskArtifactRefV2::inline(items).map_err(|error| error.to_string())
+            }
             Self::FileId { file_id } => {
                 TaskArtifactRefV2::file_id(&file_id).map_err(|error| error.to_string())
             }
@@ -135,13 +162,42 @@ struct UsageWire {
     /// Contract 6: required key, `null` when the upstream reported no count.
     #[serde(deserialize_with = "explicit_optional")]
     outputs: Option<i64>,
+    /// Contract 8: optional; absent means the bill is not bucketed.
+    #[serde(default)]
+    token_buckets: Option<BucketsWire>,
 }
 impl UsageWire {
     fn build(self) -> Result<TaskUsageFactsV2, String> {
+        let buckets = self.token_buckets.map(BucketsWire::build).transpose()?;
         TaskUsageFactsV2::new(self.seconds, self.milliunits, self.tokens)
             .and_then(|usage| usage.with_outputs(self.outputs))
+            .and_then(|usage| usage.with_token_buckets(buckets))
             .map_err(|error| error.to_string())
     }
+}
+/// Contract 8: `{bucket word: count}`; a `null` count is a bucket not reported, an unknown word or
+/// a set with nothing reported is refused.
+#[derive(Deserialize)]
+#[serde(transparent)]
+struct BucketsWire(BTreeMap<String, Option<u64>>);
+impl BucketsWire {
+    fn build(self) -> Result<TaskTokenBucketsV2, String> {
+        let entries = self
+            .0
+            .into_iter()
+            .map(|(word, count)| {
+                TaskTokenBucketV2::from_word(&word)
+                    .map(|bucket| count.map(|count| (bucket, count)))
+                    .ok_or_else(|| "unknown task token bucket".to_owned())
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        TaskTokenBucketsV2::new(entries.into_iter().flatten()).map_err(|error| error.to_string())
+    }
+}
+fn buckets_json(buckets: &TaskTokenBucketsV2) -> Value {
+    Value::Object(
+        buckets.iter().map(|(bucket, count)| (bucket.word().to_owned(), json!(count))).collect(),
+    )
 }
 #[derive(Deserialize)]
 #[serde(tag = "state", rename_all = "kebab-case", deny_unknown_fields)]
@@ -198,10 +254,26 @@ pub fn observation_json(observation: &TaskObservationV2) -> Result<Value, String
                         .collect::<Result<Vec<Value>,String>>()?;
                     json!({"kind":"urls","items":items})
                 }
+                TaskArtifactRefV2::Inline(items) => {
+                    let items = items
+                        .iter()
+                        .map(|item| {
+                            json!({"pointer": item.pointer(), "encoding": item.encoding(),
+                                "media_type": item.media_type(), "role": item.role().word()})
+                        })
+                        .collect::<Vec<Value>>();
+                    json!({"kind":"inline","items":items})
+                }
             };
-            json!({"state":"succeeded","artifacts":artifacts,"usage":{
+            let mut usage_json = json!({
                 "seconds":usage.seconds(),"milliunits":usage.milliunits(),"tokens":usage.tokens(),
-                "outputs":usage.outputs()}})
+                "outputs":usage.outputs()});
+            // Contract 8 keys are written only when present, so a contract 7 value re-encodes
+            // byte for byte and a guest built before contract 8 still decodes it.
+            if let Some(buckets) = usage.token_buckets() {
+                usage_json["token_buckets"] = buckets_json(&buckets);
+            }
+            json!({"state":"succeeded","artifacts":artifacts,"usage":usage_json})
         }
     };
     bounded(value, MAX_TASK_V2_FACT_JSON_BYTES)
@@ -219,6 +291,14 @@ fn validate_terminal(observation: &TaskObservationV2) -> Result<(), String> {
         TaskObservationV2::Succeeded { .. } | TaskObservationV2::Failed { .. }
     ) {
         return Err("accepted-terminal must carry a terminal task observation".into());
+    }
+    // Contract 8: a host resolves inline pointers only against an observation's view, never the
+    // submit answer, so a component that receives the bytes at submit polls for them instead.
+    if matches!(
+        observation,
+        TaskObservationV2::Succeeded { artifacts: TaskArtifactRefV2::Inline(_), .. }
+    ) {
+        return Err("accepted-terminal must not carry inline artifacts".into());
     }
     Ok(())
 }
@@ -279,6 +359,9 @@ struct RequestEstimateWire {
     tokens_per_second: Option<i64>,
     #[serde(deserialize_with = "explicit_optional")]
     requested_outputs: Option<i64>,
+    /// Contract 8: optional; absent means the component states no ceiling.
+    #[serde(default)]
+    bucket_ceilings: Option<BucketsWire>,
 }
 fn explicit_optional<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
 where
@@ -297,6 +380,11 @@ impl RequestEstimateWire {
                 estimate.with_output_facts(self.tokens_per_second, self.requested_outputs)
             })
             .map_err(|error| error.to_string())
+            .and_then(|estimate| {
+                Ok(estimate.with_bucket_ceilings(
+                    self.bucket_ceilings.map(BucketsWire::build).transpose()?,
+                ))
+            })
     }
 }
 #[derive(Deserialize)]
@@ -329,13 +417,18 @@ pub fn prepared_task_json(value: &PreparedTaskV2) -> Result<Value, String> {
         south_contracts::validate_immutable_body_paths(paths).map_err(|error| error.to_string())?;
     }
     let estimate = &value.request_estimate;
+    let mut estimate_json = json!({"requested_seconds":estimate.requested_seconds(),
+        "milliunits_per_second":estimate.milliunits_per_second(),
+        "resolution":estimate.resolution(),"input_image_count":estimate.input_image_count(),
+        "tokens_per_second":estimate.tokens_per_second(),
+        "requested_outputs":estimate.requested_outputs()});
+    // Contract 8: written only when present (see `observation_json`).
+    if let Some(ceilings) = estimate.bucket_ceilings() {
+        estimate_json["bucket_ceilings"] = buckets_json(&ceilings);
+    }
     bounded(
         json!({"descriptor":value.descriptor,"locator":locator_json(&value.locator),
-            "request_estimate":{"requested_seconds":estimate.requested_seconds(),
-                "milliunits_per_second":estimate.milliunits_per_second(),
-                "resolution":estimate.resolution(),"input_image_count":estimate.input_image_count(),
-                "tokens_per_second":estimate.tokens_per_second(),
-                "requested_outputs":estimate.requested_outputs()},
+            "request_estimate":estimate_json,
             "immutable_body_paths":value.immutable_body_paths}),
         MAX_JSON_REQUEST_BODY_BYTES,
     )

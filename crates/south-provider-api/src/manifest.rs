@@ -314,6 +314,38 @@ pub const TASK_CAPABILITIES: &[&str] = &["submit", "observe", "render", "artifac
 /// The lifecycle stages every task component must declare.
 pub const TASK_REQUIRED_CAPABILITIES: &[&str] = &["submit", "observe", "render"];
 
+/// The first task contract with inline artifacts and token buckets.
+///
+/// A task-v2 package declaring `response_blob_paths`, `token_buckets` or `required_token_buckets`
+/// must speak it (docs/design/2026-10-01-omni-task-component.md §13). Mirrors
+/// `south_contracts::TASK_CONTRACT_VERSION`, repeated because this crate deliberately does not
+/// depend on `south-contracts`.
+pub const TASK_INLINE_CONTRACT: u32 = 8;
+
+/// The task token bucket vocabulary (contract 8), in wire order. Mirrors
+/// `south_contracts::TaskTokenBucketV2::ALL`, for the reason given on [`TASK_INLINE_CONTRACT`].
+pub const TASK_TOKEN_BUCKETS: &[&str] = &[
+    "text_input",
+    "image_input",
+    "audio_input",
+    "video_input",
+    "cached_text_input",
+    "cached_image_input",
+    "cached_input",
+    "text_output",
+    "image_output",
+    "audio_output",
+    "video_output",
+    "reasoning_output",
+    "total_input",
+    "total_output",
+];
+
+/// The most response elision paths a task package declares, and the longest one in bytes: the
+/// media contract's bounds (`south_contracts::media::MediaLimitsV1::V1`).
+const MAX_RESPONSE_BLOB_PATHS: usize = 32;
+const MAX_RESPONSE_BLOB_PATH_BYTES: usize = 256;
+
 /// The task world, as gate ① validates it.
 ///
 /// Its auth arms are [`TASK_AUTH_ARMS`]: a task component authenticates as a
@@ -630,6 +662,22 @@ pub struct ComponentManifestV1 {
     /// means no family is a subscription. Provider world only.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub subscription_quota_families: BTreeSet<String>,
+    /// Response paths whose strings the host elides with the media contract's `elide_v1` before
+    /// any response reaches the component, so bytes stay out of the sandbox (task contract 8,
+    /// `docs/design/2026-10-01-omni-task-component.md` §6.2). RFC 6901 pointers in which a `*`
+    /// segment matches any index or key, at most 32 of at most 256 bytes. Package level, because
+    /// response parsing receives no configuration. Task-v2 world only; absent means none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub response_blob_paths: Vec<String>,
+    /// Every token bucket the package may report on a success, from [`TASK_TOKEN_BUCKETS`] (task
+    /// contract 8, §7.1). A success reporting another bucket is not a success. Task-v2 world only;
+    /// absent means the package reports no buckets.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub token_buckets: Vec<String>,
+    /// The declared buckets the package reports on every success; a success missing one is
+    /// `unknown`, never a partial bill (task contract 8, §7.1). Each is in `token_buckets`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub required_token_buckets: Vec<String>,
     pub permissions: ComponentPermissionsV1,
     pub conformance: ConformanceSpecV1,
     pub compatibility: CompatibilityDeclarationV1,
@@ -1104,6 +1152,7 @@ impl ComponentManifestV1 {
         } else if !self.request_facts.is_empty() {
             return Err(ManifestErrorV1::RequestFactsIsAProviderWorldDeclaration);
         }
+        self.validate_task_response_declarations(world)?;
         if matches!(world.world, TASK_WORLD | TASK_WORLD_V2) {
             // Three stages, all required: a component missing one cannot carry
             // a task to a terminal state. `artifact_fetch` is deliberately not
@@ -1154,6 +1203,69 @@ impl ComponentManifestV1 {
         for provider in &self.providers {
             validate_component_name(provider)
                 .map_err(|_| ManifestErrorV1::InvalidProviderFamily(provider.clone()))?;
+        }
+        Ok(())
+    }
+
+    /// Task contract 8's declarations (`docs/design/2026-10-01-omni-task-component.md` §3.4): only
+    /// in the task-v2 world, only with task contract 8, elision paths under the media grammar, and
+    /// bucket words from the closed vocabulary with every required one declared.
+    fn validate_task_response_declarations(
+        &self,
+        world: &WorldSchemaV1,
+    ) -> Result<(), ManifestErrorV1> {
+        if self.response_blob_paths.is_empty()
+            && self.token_buckets.is_empty()
+            && self.required_token_buckets.is_empty()
+        {
+            return Ok(());
+        }
+        if world.world != TASK_WORLD_V2 {
+            return Err(ManifestErrorV1::TaskResponseDeclarationsAreTaskV2Declarations);
+        }
+        let declared = self.compatibility.contracts.get("task").copied();
+        if declared.is_none_or(|contract| contract < TASK_INLINE_CONTRACT) {
+            return Err(ManifestErrorV1::TaskResponseDeclarationsRequireContract8 { declared });
+        }
+        let paths = &self.response_blob_paths;
+        if paths.len() > MAX_RESPONSE_BLOB_PATHS {
+            return Err(ManifestErrorV1::InvalidResponseBlobPaths(format!(
+                "{} paths declared; at most {MAX_RESPONSE_BLOB_PATHS} are allowed",
+                paths.len()
+            )));
+        }
+        for (index, path) in paths.iter().enumerate() {
+            let escapes_valid =
+                path.split('~').skip(1).all(|rest| rest.starts_with('0') || rest.starts_with('1'));
+            if !path.starts_with('/') || path.len() > MAX_RESPONSE_BLOB_PATH_BYTES || !escapes_valid
+            {
+                return Err(ManifestErrorV1::InvalidResponseBlobPaths(format!(
+                    "`{path}` is not an RFC 6901 pointer of at most \
+                     {MAX_RESPONSE_BLOB_PATH_BYTES} bytes"
+                )));
+            }
+            if paths[..index].contains(path) {
+                return Err(ManifestErrorV1::InvalidResponseBlobPaths(format!(
+                    "`{path}` is declared twice"
+                )));
+            }
+        }
+        let invalid = |detail: String| Err(ManifestErrorV1::InvalidTokenBuckets(detail));
+        for (index, bucket) in self.token_buckets.iter().enumerate() {
+            if !TASK_TOKEN_BUCKETS.contains(&bucket.as_str()) {
+                return invalid(format!("`{bucket}` is not in the task token bucket vocabulary"));
+            }
+            if self.token_buckets[..index].contains(bucket) {
+                return invalid(format!("`{bucket}` is declared twice"));
+            }
+        }
+        for (index, bucket) in self.required_token_buckets.iter().enumerate() {
+            if !self.token_buckets.contains(bucket) {
+                return invalid(format!("required bucket `{bucket}` is not in token_buckets"));
+            }
+            if self.required_token_buckets[..index].contains(bucket) {
+                return invalid(format!("required bucket `{bucket}` is declared twice"));
+            }
         }
         Ok(())
     }
@@ -1647,6 +1759,22 @@ pub enum ManifestErrorV1 {
          share one namespace in ProviderConfig.declared"
     )]
     DeclaredValueNameCollision { family: String, name: String },
+    // Task contract 8 (docs/design/2026-10-01-omni-task-component.md §3.4). Added with the
+    // contract: a host that matches this enum exhaustively must add the arms on re-pin.
+    #[error(
+        "response_blob_paths, token_buckets and required_token_buckets are task-v2 world \
+         declarations"
+    )]
+    TaskResponseDeclarationsAreTaskV2Declarations,
+    #[error(
+        "response_blob_paths, token_buckets and required_token_buckets need \
+         `compatibility.contracts.task` {TASK_INLINE_CONTRACT}; the manifest declares {declared:?}"
+    )]
+    TaskResponseDeclarationsRequireContract8 { declared: Option<u32> },
+    #[error("response_blob_paths: {0}")]
+    InvalidResponseBlobPaths(String),
+    #[error("token_buckets: {0}")]
+    InvalidTokenBuckets(String),
 }
 
 // -- compatibility admission -------------------------------------------------

@@ -1,0 +1,13 @@
+{
+  "provider_config": {
+    "provider": "vertex-interactions-video",
+    "base_url": "https://aiplatform.example/v1beta1/projects/sample-project/locations/global",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "model": "gemini-omni-flash-preview"
+  },
+  "minted": {
+    "task_id": "host-1"
+  }
+}

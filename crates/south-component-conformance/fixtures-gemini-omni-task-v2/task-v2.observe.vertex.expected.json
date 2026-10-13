@@ -1,0 +1,8 @@
+{
+  "method": "GET",
+  "url": "https://aiplatform.example/v1beta1/projects/sample-project/locations/global/interactions/v1_ChdIc2JwYWVXc0pyeUZtY0FQOGVLUi1BbxIX",
+  "auth": {
+    "scheme": "bearer",
+    "secret": "provider_api_key"
+  }
+}

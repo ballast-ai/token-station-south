@@ -124,6 +124,9 @@ fn reference_manifest() -> ComponentManifestV1 {
         north_passthrough: std::collections::BTreeMap::new(),
         north_request_passthrough: std::collections::BTreeMap::new(),
         subscription_quota_families: std::collections::BTreeSet::new(),
+        response_blob_paths: Vec::new(),
+        token_buckets: Vec::new(),
+        required_token_buckets: Vec::new(),
         permissions: ComponentPermissionsV1 {
             network: false,
             filesystem: false,
@@ -750,6 +753,9 @@ fn task_manifest() -> ComponentManifestV1 {
         north_passthrough: std::collections::BTreeMap::new(),
         north_request_passthrough: std::collections::BTreeMap::new(),
         subscription_quota_families: std::collections::BTreeSet::new(),
+        response_blob_paths: Vec::new(),
+        token_buckets: Vec::new(),
+        required_token_buckets: Vec::new(),
         permissions: ComponentPermissionsV1 {
             network: false,
             filesystem: false,

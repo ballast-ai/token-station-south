@@ -15,7 +15,7 @@ mod host_range;
 
 /// The official components this repository ships. Named, so that an empty or
 /// mistyped scan below cannot pass over nothing.
-const OFFICIAL_COMPONENTS: [&str; 25] = [
+const OFFICIAL_COMPONENTS: [&str; 26] = [
     "embeddings-gemini",
     "embeddings-openai-compatible",
     "embeddings-vertex",
@@ -41,6 +41,7 @@ const OFFICIAL_COMPONENTS: [&str; 25] = [
     "task-veo-v2",
     "task-wan-image-v2",
     "task-gmi-image-v2",
+    "task-gemini-omni-v2",
 ];
 
 fn repo_root() -> &'static Path {
@@ -648,8 +649,18 @@ fn every_shipped_package_declares_the_range_handshake() {
         );
         assert_eq!(declared.kernel_contracts, kernel_contracts, "{}", manifest.name);
         let expected_contracts: std::collections::BTreeMap<String, u32> =
-            if manifest.api_version.starts_with("task") {
-                [("task".to_owned(), u32::from(south_contracts::TASK_CONTRACT_VERSION))].into()
+            if manifest.name == "task-gemini-omni-v2" {
+                // The one task package on contract 8: inline artifacts are named by pointers into
+                // a view elided with the media vocabulary (the Omni record §13).
+                [
+                    ("task".to_owned(), u32::from(south_contracts::TASK_CONTRACT_VERSION)),
+                    ("media".to_owned(), u32::from(south_contracts::media::MEDIA_CONTRACT_VERSION)),
+                ]
+                .into()
+            } else if manifest.api_version.starts_with("task") {
+                // Contract 8 is additive, so every other task package stays at the contract 7 it
+                // was published with.
+                [("task".to_owned(), u32::from(south_contracts::TASK_CONTRACT_VERSION_V7))].into()
             } else if manifest.api_version == south_provider_api::EMBEDDINGS_WORLD {
                 // Only a package that accepts media speaks contract 2 (embeddings record §17.4);
                 // the others stay at the contract 1 they were published with.
@@ -1003,9 +1014,9 @@ fn the_invoke_package_declares_the_runtime_converse_declares() {
         .unwrap()
     };
     let invoke = read("provider-anthropic-bedrock-invoke");
-    // KC1 made 1.1.0, I3-1's Q47 bump 1.1.1, I3-2's 1.1.2, I3-4's 1.1.3 and I3-5's 1.1.4
-    // (`i3_5_retires_every_published_060_package_identity`).
-    assert_eq!(invoke.version, "1.1.4");
+    // KC1 made 1.1.0, I3-1's Q47 bump 1.1.1, I3-2's 1.1.2, I3-4's 1.1.3, I3-5's 1.1.4 and task
+    // contract 8's 1.1.5 (`task_contract_8_retires_every_published_061_package_identity`).
+    assert_eq!(invoke.version, "1.1.5");
     assert_eq!(invoke.compatibility.south_runtime, "0.57.0");
     assert_eq!(invoke.compatibility, read("provider-bedrock-converse").compatibility);
 }
@@ -1303,9 +1314,9 @@ fn the_responses_package_declares_the_runtime_that_first_admits_its_declarations
     )
     .unwrap();
     // 1.0.0 shipped in 0.54.0; NC-1 made 1.1.0, R3 1.2.0, KC1 1.3.0, I3-1's Q47 bump 1.3.1,
-    // I3-2's 1.3.2, I3-4's 1.3.3 and I3-5's 1.3.4 (below). The Codex `credentials` section uses only forms the
+    // I3-2's 1.3.2, I3-4's 1.3.3, I3-5's 1.3.4 and task contract 8's 1.3.5 (below). The Codex `credentials` section uses only forms the
     // 0.54.0 gate ① admits; `subscription_quota_families` (D7, 0.60.0) needs the 0.60.0 runtime.
-    assert_eq!(manifest.version, "1.3.4");
+    assert_eq!(manifest.version, "1.3.5");
     assert_eq!(manifest.compatibility.south_runtime, "0.60.0");
     assert!(!manifest.immutable_body_paths.is_empty() && !manifest.north_passthrough.is_empty());
     assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
@@ -1658,7 +1669,7 @@ fn i3_4_retires_every_published_059_package_identity() {
 /// (`image-gemini` stays at media 2, every other image package at media 1).
 #[test]
 fn i3_5_retires_every_published_060_package_identity() {
-    for (name, published, now) in [
+    for (name, published, _i3_5) in [
         ("provider-openai-compatible", "2.6.3", "2.6.4"),
         ("provider-anthropic", "1.1.3", "1.1.4"),
         ("provider-anthropic-bedrock-invoke", "1.1.3", "1.1.4"),
@@ -1692,7 +1703,6 @@ fn i3_5_retires_every_published_060_package_identity() {
         )
         .unwrap();
         assert_ne!(manifest.version, published, "{name} reused its published identity");
-        assert_eq!(manifest.version, now, "{name}");
         let media = if name == "image-gemini" { 2 } else { 1 };
         assert_eq!(
             manifest.compatibility.south_runtime,
@@ -1722,7 +1732,8 @@ fn image_gemini_declares_media_2_which_a_media_1_host_refuses() {
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(manifest.version, "1.0.2");
+    // 1.0.2 after I3-5; task contract 8's Q47 bump made it 1.0.3.
+    assert_eq!(manifest.version, "1.0.3");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["gemini-image"]);
     assert!(manifest.declared_keys("gemini-image").is_empty());
@@ -1762,7 +1773,8 @@ fn the_i3_1_image_packages_declare_the_runtime_and_values_of_the_record() {
             .unwrap(),
         )
         .unwrap();
-        assert_eq!(manifest.version, "1.0.3", "{name}");
+        // 1.0.3 after I3-5; task contract 8's Q47 bump made it 1.0.4.
+        assert_eq!(manifest.version, "1.0.4", "{name}");
         assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD, "{name}");
         assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), [family], "{name}");
         assert_eq!(manifest.compatibility.south_runtime, "0.57.0", "{name}");
@@ -1785,7 +1797,8 @@ fn image_stability_declares_media_1_and_the_runtime_of_the_record() {
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(manifest.version, "1.0.1");
+    // 1.0.1 after I3-5; task contract 8's Q47 bump made it 1.0.2.
+    assert_eq!(manifest.version, "1.0.2");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["stability-image"]);
     assert!(manifest.declared_keys("stability-image").is_empty());
@@ -1810,7 +1823,8 @@ fn image_ideogram_declares_media_1_and_the_runtime_of_the_record() {
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(manifest.version, "1.0.0");
+    // 1.0.0 as I3-5 shipped it; task contract 8's Q47 bump made it 1.0.1.
+    assert_eq!(manifest.version, "1.0.1");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["ideogram-image"]);
     assert!(manifest.declared_keys("ideogram-image").is_empty());
@@ -1838,4 +1852,88 @@ fn only_the_anthropic_family_declares_the_end_user_hash() {
         };
         assert_eq!(manifest.host_values, expected, "{}", manifest.name);
     }
+}
+
+/// Task contract 8 (the Omni record §13) changed `south-contracts`, `south-provider-api` and
+/// `south-component-conformance`, which every guest links (0.53.0 → 0.54.0, 0.54.0 → 0.55.0 and
+/// 0.59.0 → 0.60.0), so every package published with 0.61.0 takes a patch with unchanged
+/// behaviour. None moves its `south_runtime` or its contracts: contract 8 is additive, and every
+/// existing task package stays at the contract 7 it was published with.
+#[test]
+fn task_contract_8_retires_every_published_061_package_identity() {
+    for (name, published, now) in [
+        ("provider-openai-compatible", "2.6.4", "2.6.5"),
+        ("provider-anthropic", "1.1.4", "1.1.5"),
+        ("provider-anthropic-bedrock-invoke", "1.1.4", "1.1.5"),
+        ("provider-gemini", "1.3.4", "1.3.5"),
+        ("provider-bedrock-converse", "1.1.4", "1.1.5"),
+        ("provider-bedrock-converse-bearer", "1.1.4", "1.1.5"),
+        ("provider-openai-responses", "1.3.4", "1.3.5"),
+        ("task-kling", "1.0.21", "1.0.22"),
+        ("task-kling-v2", "0.32.19", "0.32.20"),
+        ("task-minimax-v2", "0.31.18", "0.31.19"),
+        ("task-bailian-v2", "0.31.18", "0.31.19"),
+        ("task-xai-v2", "0.35.18", "0.35.19"),
+        ("task-byteplus-v2", "0.36.18", "0.36.19"),
+        ("task-veo-v2", "0.35.18", "0.35.19"),
+        ("task-wan-image-v2", "0.35.18", "0.35.19"),
+        ("task-gmi-image-v2", "0.35.18", "0.35.19"),
+        ("embeddings-openai-compatible", "1.0.12", "1.0.13"),
+        ("embeddings-gemini", "1.1.9", "1.1.10"),
+        ("embeddings-vertex", "1.0.11", "1.0.12"),
+        ("image-azure", "1.0.8", "1.0.9"),
+        ("image-minimax", "1.0.3", "1.0.4"),
+        ("image-qwen", "1.0.3", "1.0.4"),
+        ("image-gemini", "1.0.2", "1.0.3"),
+        ("image-stability", "1.0.1", "1.0.2"),
+        ("image-ideogram", "1.0.0", "1.0.1"),
+    ] {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_ne!(manifest.version, published, "{name} reused its published identity");
+        assert_eq!(manifest.version, now, "{name}");
+        assert_eq!(
+            manifest.compatibility.south_runtime,
+            declared_runtime_now(name),
+            "{name}: task contract 8 moves no runtime"
+        );
+        if manifest.api_version.starts_with("task") {
+            assert_eq!(manifest.compatibility.contracts.get("task"), Some(&7), "{name}");
+        }
+    }
+}
+
+/// `task-gemini-omni-v2` 0.1.0 (the Omni record): the first task package on contract 8, with the
+/// media vocabulary its inline artifacts are named in. A host whose range lists task 7 only refuses
+/// it by the contract number, while every contract 7 package stays admitted next to it. Its
+/// `south_runtime` is this tree's release until the release that ships contract 8 moves it to
+/// itself, as 0.59.0 did for `image-gemini`.
+#[test]
+fn task_gemini_omni_v2_declares_task_8_which_a_task_7_host_refuses() {
+    let manifest: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(repo_root().join("components/task-gemini-omni-v2/manifest.json"))
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(manifest.version, "0.1.0");
+    assert_eq!(manifest.api_version, south_provider_api::TASK_WORLD_V2);
+    assert_eq!(manifest.compatibility.contracts.get("task"), Some(&8));
+    assert_eq!(manifest.compatibility.contracts.get("media"), Some(&1));
+    assert_eq!(manifest.compatibility.south_runtime, host_range::south_release());
+    assert_eq!(manifest.response_blob_paths, ["/steps/*/content/*/data", "/output_video/data"]);
+    let this_release = host_range::host_range();
+    assert_eq!(compatibility_admits(&manifest, &this_release), Ok(()));
+    let mut task_7_only = this_release;
+    task_7_only.contracts.insert("task".to_owned(), [7].into());
+    assert!(compatibility_admits(&manifest, &task_7_only).is_err());
+    let veo: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(repo_root().join("components/task-veo-v2/manifest.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(compatibility_admits(&veo, &task_7_only), Ok(()));
 }

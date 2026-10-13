@@ -71,11 +71,11 @@ pub use manifest::{
     NorthProtocolV1, PROVIDER_AUTH_ARMS, PROVIDER_CAPABILITIES, PROVIDER_WORLD,
     PROVIDER_WORLD_SCHEMA, RUNTIME_ABI, RequestFactsV1, SIGNED_HEADER_NAMES, SigningSchemeV1,
     SigningV1, StreamFramingV1, StreamLocationV1, TASK_AUTH_ARMS, TASK_BEHAVIOR_SUITE,
-    TASK_BEHAVIOR_SUITE_V2, TASK_CAPABILITIES, TASK_REQUIRED_CAPABILITIES, TASK_WIT_PACKAGE,
-    TASK_WIT_PACKAGE_V2, TASK_WORLD, TASK_WORLD_SCHEMA, TASK_WORLD_SCHEMA_V2, TASK_WORLD_V2,
-    TemplateParamV1, UsageEvidenceV1, WIT_PACKAGE, WorldSchemaV1, are_immutable_body_paths,
-    compatibility_admits, compatibility_matches, known_world, validate_component_name,
-    validate_package_relative_path,
+    TASK_BEHAVIOR_SUITE_V2, TASK_CAPABILITIES, TASK_INLINE_CONTRACT, TASK_REQUIRED_CAPABILITIES,
+    TASK_TOKEN_BUCKETS, TASK_WIT_PACKAGE, TASK_WIT_PACKAGE_V2, TASK_WORLD, TASK_WORLD_SCHEMA,
+    TASK_WORLD_SCHEMA_V2, TASK_WORLD_V2, TemplateParamV1, UsageEvidenceV1, WIT_PACKAGE,
+    WorldSchemaV1, are_immutable_body_paths, compatibility_admits, compatibility_matches,
+    known_world, validate_component_name, validate_package_relative_path,
 };
 
 // The component value channel (Q14, host-zero-vendor-boundary §13.8).

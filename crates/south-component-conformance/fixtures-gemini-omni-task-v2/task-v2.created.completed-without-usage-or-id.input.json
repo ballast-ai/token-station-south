@@ -1,0 +1,4 @@
+{
+  "status": 200,
+  "body": "{\"status\": \"completed\", \"object\": \"interaction\", \"model\": \"gemini-omni-flash-preview\", \"steps\": [{\"type\": \"thought\", \"signature\": \"CpQBAb4+9vt0truncated\", \"summary\": []}, {\"type\": \"model_output\", \"content\": [{\"type\": \"video\", \"mime_type\": \"video/mp4\", \"uri\": \"https://generativelanguage.example/v1beta/files/omni-clip:download?alt=media\"}]}]}"
+}

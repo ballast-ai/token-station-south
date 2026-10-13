@@ -55,10 +55,11 @@ fn this_runtime_only() -> HostRangeV1 {
         .iter()
         .map(|(name, number)| (name.clone(), as_u32(number, name)))
         .collect();
-    let mut contracts = BTreeMap::from([(
-        "task".to_owned(),
-        BTreeSet::from([as_u32(&record["contracts"]["task"], "contracts.task")]),
-    )]);
+    // The newest task contract the release decodes; from contract 8 a host decodes 7 too (the Omni
+    // record §13). Releases before 8 record 7 or older and decode only that one.
+    let task = as_u32(&record["contracts"]["task"], "contracts.task");
+    let mut contracts =
+        BTreeMap::from([("task".to_owned(), (task.min(7)..=task).collect::<BTreeSet<_>>())]);
     if let Some(embeddings) = record["contracts"].get("embeddings") {
         // The newest embeddings contract the release decodes is what `compatibility.json`
         // records; a host decodes every contract up to it.

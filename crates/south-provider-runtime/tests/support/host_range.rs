@@ -49,9 +49,11 @@ pub fn host_range() -> HostRangeV1 {
         south_runtime: env!("CARGO_PKG_VERSION").to_owned(),
         kernel_contracts,
         contracts: BTreeMap::from([
+            // `compatibility.json` records the newest task contract; a host decodes every one from
+            // 7 (the first with a required artifact `role`) up to it: contract 8 is additive.
             (
                 "task".to_owned(),
-                BTreeSet::from([as_u32(&record["contracts"]["task"], "contracts.task")]),
+                (7..=as_u32(&record["contracts"]["task"], "contracts.task")).collect(),
             ),
             // `compatibility.json` records the newest embeddings contract the release decodes; a
             // host decodes every contract up to it (contract 1 packages keep working).

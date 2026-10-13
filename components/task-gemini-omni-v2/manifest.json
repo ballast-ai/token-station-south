@@ -1,0 +1,65 @@
+{
+  "name": "task-gemini-omni-v2",
+  "version": "0.1.0",
+  "api_version": "task-adapter-v2",
+  "providers": [
+    "gemini-interactions-video",
+    "vertex-interactions-video"
+  ],
+  "capabilities": [
+    "submit",
+    "observe",
+    "render"
+  ],
+  "auth_arms": [
+    "bearer",
+    "header_secret"
+  ],
+  "permissions": {
+    "network": false,
+    "filesystem": false,
+    "secrets": [
+      "provider_api_key"
+    ]
+  },
+  "response_blob_paths": [
+    "/steps/*/content/*/data",
+    "/output_video/data"
+  ],
+  "token_buckets": [
+    "text_input",
+    "image_input",
+    "cached_input",
+    "video_output",
+    "reasoning_output",
+    "total_input",
+    "total_output"
+  ],
+  "required_token_buckets": [
+    "video_output",
+    "reasoning_output",
+    "total_input",
+    "total_output"
+  ],
+  "conformance": {
+    "required_suite": "south.task-component.v2",
+    "fixtures": "fixtures-gemini-omni-task-v2/"
+  },
+  "compatibility": {
+    "ir_schema_id": "token-station-protocol@0.6.0/v0.5.0",
+    "kernel_version": "0.5.0",
+    "kernel_revision": "c0bca10c2d9f9a439680865feb65c9edf598fc65",
+    "wit_package": "token-station:task-adapter@2.0.0",
+    "south_runtime": "0.61.0",
+    "runtime_abi": 1,
+    "kernel_contracts": {
+      "canonical_ir": 4,
+      "error_catalog": 1,
+      "stream": 2
+    },
+    "contracts": {
+      "media": 1,
+      "task": 8
+    }
+  }
+}

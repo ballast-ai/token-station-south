@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "capability",
+    "http_status": 400,
+    "message": "Omni always generates a 10-second clip; 'duration' must be 10"
+  }
+}

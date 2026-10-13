@@ -1,0 +1,4 @@
+{
+  "status": 200,
+  "body": "{\"id\": \"v1_ChdIc2JwYWVXc0pyeUZtY0FQOGVLUi1BbxIX\", \"status\": \"in_progress\", \"object\": \"interaction\", \"model\": \"gemini-omni-flash-preview\"}"
+}

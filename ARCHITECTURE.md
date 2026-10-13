@@ -211,7 +211,25 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.61.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.53.0, 0.54.0 and 0.59.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.61.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.54.0, 0.55.0 and 0.60.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**Unreleased (task contract 8 and `task-gemini-omni-v2`)**: design record
+`docs/design/2026-10-01-omni-task-component.md` (accepted 2026-10-13, provisional items pending a real-account test;
+proposed for the next release). Task contract 8 is additive: `TaskArtifactRefV2::Inline` names an artifact whose bytes
+are a string in the upstream response by a pointer into the view the host elided with `elide_v1` and the package's
+`response_blob_paths`; `TaskUsageFactsV2` gains declared token buckets from a closed fourteen-word vocabulary (the image
+world's nine plus `audio_input`, `video_input`, `audio_output`, `video_output` and `reasoning_output`, the last outside
+`total_output`); the request estimate gains `bucket_ceilings`, which may only tighten the host's bound. Every new key is
+optional and written only when present, so a contract 7 value decodes and re-encodes unchanged and the published task
+packages keep declaring `task: 7`; a host decodes both (`TASK_CONTRACT_VERSIONS`). Gate ① admits `response_blob_paths`,
+`token_buckets` and `required_token_buckets` in the task-v2 world with contract 8 only; gate ② adds
+`DeclaredBucketsOnly` and runs `ReferenceIntegrity`, `UsageNeverDefaulted` and `MissingMeterIsNotZero` on contract 8
+packages; `resolve_task_inline_artifact_v1` and `fill_task_artifact_markers_v1` are the host's pure halves. The WIT is
+unchanged. `task-gemini-omni-v2` 0.1.0 serves Gemini Omni video over the Interactions API in two families:
+`vertex-interactions-video` (sampled: `background` submit, poll by id, inline clip, bearer) and
+`gemini-interactions-video` (provisional, the host's native arm: synchronous, Files API `uri` fetched with
+`x-goog-api-key`, text-to-video only). It declares `contracts` `{task: 8, media: 1}`; its `south_runtime` moves to the
+release that ships contract 8. Under Q47 the three guest-linked crates move to 0.54.0, 0.55.0 and 0.60.0, so every
+published package takes a patch with unchanged behaviour and keeps its `south_runtime` and its `contracts`.
 **v0.61.0 (image world step I3-5: `image-ideogram`; north codec G1)**: release record
 `docs/design/2026-10-13-release-0.61.0.md`. North codec G1 (`docs/design/2026-09-30-north-codec-render-gaps.md`, G1
 accepted 2026-10-14): `OpenAiChatStream` renders complete OpenAI chat stream chunks from a host-supplied context (chunk

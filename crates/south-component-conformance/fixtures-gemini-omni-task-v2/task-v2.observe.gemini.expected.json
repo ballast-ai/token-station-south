@@ -1,0 +1,9 @@
+{
+  "method": "GET",
+  "url": "https://generativelanguage.example/v1beta/interactions/v1_ChdIc2JwYWVXc0pyeUZtY0FQOGVLUi1BbxIX",
+  "auth": {
+    "scheme": "header",
+    "name": "x-goog-api-key",
+    "secret": "provider_api_key"
+  }
+}

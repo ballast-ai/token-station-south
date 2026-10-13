@@ -1,0 +1,7 @@
+{
+  "status": 400,
+  "body": "event: error\ndata: {\"error\": {\"message\": \"gcs_uri is required when delivery is 'uri'. See https://cloud.google.com/vertex-ai/docs\", \"code\": \"invalid_request\"}, \"event_type\": \"error\"}\n\n",
+  "headers": {
+    "content-type": "application/json"
+  }
+}

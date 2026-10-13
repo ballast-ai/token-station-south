@@ -42,7 +42,9 @@ pub mod reference_kling_task_v2;
 mod task_fixture_v2;
 mod task_suite_v2;
 pub mod task_v2_json;
-pub use task_fixture_v2::{TASK_FIXTURE_KIND_V2, TaskCaseV2, TaskFamilyV2, TaskFixturePackV2};
+pub use task_fixture_v2::{
+    TASK_FIXTURE_KIND_V2, TaskCaseV2, TaskFamilyV2, TaskFixturePackV2, TaskUsageMetaV2,
+};
 pub use task_suite_v2::{
     TASK_COMPONENT_SUITE_V2, run_task_component_suite_v2, run_task_component_suite_v2_for_manifest,
 };
@@ -133,6 +135,8 @@ pub mod reference_minimax_task_v2;
 /// Managed Bailian video dialect.
 pub mod reference_bailian_task_v2;
 pub mod reference_byteplus_task_v2;
+/// Gemini Omni video over the Interactions API (task contract 8).
+pub mod reference_gemini_omni_task_v2;
 pub mod reference_gmi_image_task_v2;
 pub mod reference_veo_task_v2;
 pub mod reference_wan_image_task_v2;

@@ -193,6 +193,14 @@ pub enum CheckV1 {
     /// family fixes only if the family really fixes it: a path the component writes for some
     /// requests and not for others is not a fixed field.
     ImmutablePathsHonoured,
+    /// Every success a task contract 8 package reports carries only token buckets its manifest
+    /// declares in `token_buckets`, and every bucket it declares in `required_token_buckets`
+    /// (docs/design/2026-10-01-omni-task-component.md §10, `DeclaredBucketsOnly`).
+    ///
+    /// The host prices only the buckets a row can price and refuses a binding whose declared
+    /// buckets it cannot; a bucket outside the declaration would be billed by no rule, and a
+    /// missing required one would settle part of the bill as free.
+    DeclaredBucketsOnly,
 }
 
 impl CheckV1 {
@@ -225,6 +233,7 @@ impl CheckV1 {
             Self::PreDispatchRefusal => "pre_dispatch_refusal",
             Self::ReferenceIntegrity => "reference_integrity",
             Self::ImmutablePathsHonoured => "immutable_paths_honoured",
+            Self::DeclaredBucketsOnly => "declared_buckets_only",
         }
     }
 }

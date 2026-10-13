@@ -1,0 +1,28 @@
+{
+  "state": "succeeded",
+  "artifacts": {
+    "kind": "inline",
+    "items": [
+      {
+        "pointer": "/steps/2/content/0/data",
+        "encoding": "base64",
+        "media_type": "video/mp4",
+        "role": null
+      }
+    ]
+  },
+  "usage": {
+    "seconds": null,
+    "milliunits": null,
+    "tokens": null,
+    "outputs": 1,
+    "token_buckets": {
+      "text_input": 6,
+      "total_input": 22006,
+      "video_output": 57920,
+      "total_output": 57920,
+      "reasoning_output": 612,
+      "image_input": 22000
+    }
+  }
+}

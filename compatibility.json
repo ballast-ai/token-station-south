@@ -42,7 +42,7 @@
       "value_bytes": 4096,
       "total_bytes": 16384
     },
-    "task": 7,
+    "task": 8,
     "task_limits": {
       "task_id_bytes": 128,
       "callback_url_bytes": 8192,

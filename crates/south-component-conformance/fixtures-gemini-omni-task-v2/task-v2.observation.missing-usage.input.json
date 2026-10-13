@@ -1,0 +1,4 @@
+{
+  "status": 200,
+  "body": "{\"id\": \"v1_ChdIc2JwYWVXc0pyeUZtY0FQOGVLUi1BbxIX\", \"status\": \"completed\", \"role\": \"model\", \"created\": \"2026-09-30T08:01:12Z\", \"updated\": \"2026-09-30T08:01:52Z\", \"event_id\": \"evt-s2\", \"service_tier\": \"standard\", \"object\": \"interaction\", \"model\": \"gemini-omni-flash-preview\", \"steps\": [{\"type\": \"thought\", \"signature\": \"CpQBAb4+9vt0truncated\", \"summary\": []}, {\"type\": \"model_output\", \"content\": [{\"type\": \"video\", \"mime_type\": \"video/mp4\", \"data\": {\"$south.blob\": {\"id\": \"b0\", \"bytes\": 4927004, \"head\": \"AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAAAAAAAA\"}}}]}]}"
+}

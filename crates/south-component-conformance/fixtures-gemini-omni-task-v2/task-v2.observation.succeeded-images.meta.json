@@ -1,0 +1,9 @@
+{
+  "usage_pointer": "/usage",
+  "bucket_pointers": {
+    "total_input": "/usage/total_input_tokens",
+    "video_output": "/usage/output_tokens_by_modality/0",
+    "total_output": "/usage/total_output_tokens",
+    "reasoning_output": "/usage/total_thought_tokens"
+  }
+}

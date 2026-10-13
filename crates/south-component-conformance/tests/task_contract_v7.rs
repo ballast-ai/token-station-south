@@ -2,12 +2,14 @@
 //! artifact states the part it plays. The `role` key is required and `null` names the primary
 //! role; a word outside the closed vocabulary is refused rather than defaulted, and a set that
 //! carries no primary artifact is refused because the host would have nothing to deliver.
+//! Contract 8 added only optional keys, so every rule here still holds; the version assertion
+//! moved to `task_contract_v8.rs`, which pins that contract 7 is still decoded.
 
 use serde_json::{Value, json};
 use south_component_conformance::task_v2_json::*;
 use south_contracts::{
-    TASK_CONTRACT_VERSION, TaskArtifactRefV2, TaskArtifactRoleV2, TaskArtifactV2,
-    TaskObservationV2, TaskScalarV2, TaskUsageFactsV2,
+    TaskArtifactRefV2, TaskArtifactRoleV2, TaskArtifactV2, TaskObservationV2, TaskScalarV2,
+    TaskUsageFactsV2,
 };
 
 const VIDEO: &str = "https://cdn.example/a.mp4";
@@ -31,11 +33,6 @@ fn frame() -> TaskArtifactV2 {
     TaskArtifactV2::new(FRAME, TaskScalarV2::Null, TaskScalarV2::Null)
         .unwrap()
         .with_role(TaskArtifactRoleV2::LastFrame)
-}
-
-#[test]
-fn the_contract_version_is_seven() {
-    assert_eq!(TASK_CONTRACT_VERSION, 7);
 }
 
 #[test]
