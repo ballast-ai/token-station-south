@@ -1,8 +1,8 @@
 # The Kiro provider component (`provider-kiro`)
 
 Status: accepted 2026-10-13 (provisional items pending a real-account capture). lv ruled on 2026-10-13: implement
-now, test with a real account later; every open question takes its recommendation (§17). Implemented 2026-10-14 on
-branch `provider-kiro`, not yet released (§18).
+now, test with a real account later; every open question takes its recommendation (§17). Implemented 2026-10-14 in
+#204 and #207 (§18); released in 0.62.0 as `provider-kiro` 1.0.1 ([release record](2026-10-14-release-0.62.0.md)).
 
 Date: 2026-09-30
 
@@ -1195,7 +1195,8 @@ The status line's "provisional items" are the six rows marked **Yes**.
 
 ## 18. Implementation (2026-10-14)
 
-Implemented on branch `provider-kiro`; not released (Q47: the next release bumps every package).
+Implemented in #204 (and #207, below); released in 0.62.0 ([release record](2026-10-14-release-0.62.0.md)) as 1.0.1:
+task contract 8's Q47 bump (#205) moved it one patch past the 1.0.0 this section describes, with unchanged behaviour.
 
 **What landed.**
 
