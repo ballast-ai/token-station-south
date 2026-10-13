@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "`mask` is not supported for Gemini Nano Banana edits — Gemini conditions on the input image directly via the prompt rather than a separate mask."
+  }
+}

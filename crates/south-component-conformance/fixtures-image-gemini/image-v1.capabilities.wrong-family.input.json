@@ -1,0 +1,12 @@
+{
+  "provider_config": {
+    "provider": "vertex-ai-image",
+    "base_url": "https://generativelanguage.googleapis.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "gemini-3.1-flash-image"
+      }
+    ]
+  }
+}

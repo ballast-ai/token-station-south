@@ -97,6 +97,7 @@ fuzz_target!(|data: &[u8]| {
                 MediaTransformV1::Base64,
                 MediaTransformV1::DataUrl,
                 MediaTransformV1::FromDataUrl,
+                MediaTransformV1::DataUrlPayload,
                 MediaTransformV1::FromBase64,
                 MediaTransformV1::FromHex,
                 MediaTransformV1::WavPcmS16le { sample_rate: 24_000, channels: 1 },

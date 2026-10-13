@@ -1,0 +1,6 @@
+{
+  "prepare_case": "image-v1.prepare.generate-text-only",
+  "response": {
+    "status": 504
+  }
+}

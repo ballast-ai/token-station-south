@@ -1,0 +1,10 @@
+{
+  "error": {
+    "code": "content_policy",
+    "http_status": 400,
+    "message": "the upstream refused on content-policy grounds",
+    "provider_message": "NO_IMAGE"
+  },
+  "outcome": "unknown",
+  "reason": "a candidate finished for NO_IMAGE without an image"
+}

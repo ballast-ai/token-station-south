@@ -1,0 +1,25 @@
+{
+  "provider_config": {
+    "provider": "gemini-image",
+    "base_url": "https://generativelanguage.googleapis.com",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "json": {
+      "prompt": "the same fox at night",
+      "image_url": {
+        "$south.blob": {
+          "id": "b0",
+          "bytes": 90000,
+          "head": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAgGBgcGBQgHBwcJCQ"
+        }
+      }
+    }
+  },
+  "context": {
+    "upstream_model": "gemini-3-pro-image",
+    "metering_required": [
+      "tokens"
+    ]
+  }
+}

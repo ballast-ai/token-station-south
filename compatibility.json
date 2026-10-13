@@ -50,7 +50,7 @@
       "artifact_ref_bytes": 8192
     },
     "embeddings": 2,
-    "media": 1,
+    "media": 2,
     "image": 1,
     "media_limits": {
       "inline_string_bytes": 1048576,

@@ -1,0 +1,13 @@
+{
+  "prepare_case": "image-v1.prepare.generate-text-only",
+  "response": {
+    "status": 500,
+    "body": {
+      "error": {
+        "code": 500,
+        "message": "An internal error has occurred.",
+        "status": "INTERNAL"
+      }
+    }
+  }
+}

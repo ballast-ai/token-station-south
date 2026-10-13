@@ -1,0 +1,10 @@
+{
+  "response_cases": [
+    "image-v1.response.round-one",
+    "image-v1.response.round-two",
+    "image-v1.response.round-three"
+  ],
+  "context": {
+    "created": 1760000000
+  }
+}

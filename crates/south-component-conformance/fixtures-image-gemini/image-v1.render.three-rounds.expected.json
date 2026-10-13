@@ -1,0 +1,43 @@
+{
+  "template": {
+    "created": 1760000000,
+    "data": [
+      {
+        "b64_json": {
+          "$south.artifact": {
+            "as": "b64_json",
+            "index": 0
+          }
+        },
+        "revised_prompt": null
+      },
+      {
+        "b64_json": {
+          "$south.artifact": {
+            "as": "b64_json",
+            "index": 1
+          }
+        },
+        "revised_prompt": null
+      },
+      {
+        "b64_json": {
+          "$south.artifact": {
+            "as": "b64_json",
+            "index": 2
+          }
+        },
+        "revised_prompt": null
+      },
+      {
+        "b64_json": {
+          "$south.artifact": {
+            "as": "b64_json",
+            "index": 3
+          }
+        },
+        "revised_prompt": null
+      }
+    ]
+  }
+}

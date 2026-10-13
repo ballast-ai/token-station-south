@@ -1,0 +1,72 @@
+{
+  "descriptor": {
+    "auth": {
+      "arm": "header_secret",
+      "header": "x-goog-api-key",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "inlineData": {
+                    "data": {
+                      "$south.ref": {
+                        "blob": "b0",
+                        "transform": "base64"
+                      }
+                    },
+                    "mimeType": "image/png"
+                  }
+                },
+                {
+                  "text": "add a scarf"
+                }
+              ],
+              "role": "user"
+            }
+          ],
+          "generationConfig": {
+            "responseModalities": [
+              "IMAGE"
+            ]
+          }
+        }
+      }
+    },
+    "method": "POST",
+    "path": "v1beta/models/gemini-3.1-flash-image:generateContent"
+  },
+  "facts": {
+    "inputs": {
+      "input_image": 0,
+      "mask": 0,
+      "reference_image": 1
+    },
+    "metering_forms": [
+      "tokens"
+    ],
+    "operation": "edit",
+    "requested_outputs": 1,
+    "tier": {}
+  },
+  "immutable_body_paths": [
+    "contents",
+    "generationConfig.imageConfig",
+    "generationConfig.candidateCount",
+    "generationConfig.responseModalities"
+  ],
+  "repeat": 1,
+  "response_body_form": "json",
+  "response_elision_paths": [
+    "/candidates/*/content/parts/*/inlineData/data"
+  ],
+  "state": {
+    "metering_required": [
+      "tokens"
+    ]
+  }
+}

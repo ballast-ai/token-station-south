@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "`n` must be in 1..=10 for Gemini Nano Banana models, got 11"
+  }
+}

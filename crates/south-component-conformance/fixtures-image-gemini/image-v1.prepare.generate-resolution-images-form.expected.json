@@ -1,0 +1,66 @@
+{
+  "facts": {
+    "operation": "generate",
+    "inputs": {
+      "input_image": 0,
+      "reference_image": 0,
+      "mask": 0
+    },
+    "requested_outputs": 1,
+    "tier": {
+      "resolution": "2K"
+    },
+    "metering_forms": [
+      "images"
+    ]
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "v1beta/models/gemini-3.1-flash-image:generateContent",
+    "auth": {
+      "arm": "header_secret",
+      "header": "x-goog-api-key",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "a red fox"
+                }
+              ]
+            }
+          ],
+          "generationConfig": {
+            "responseModalities": [
+              "IMAGE"
+            ],
+            "imageConfig": {
+              "imageSize": "2K"
+            }
+          }
+        }
+      }
+    }
+  },
+  "repeat": 1,
+  "response_body_form": "json",
+  "response_elision_paths": [
+    "/candidates/*/content/parts/*/inlineData/data"
+  ],
+  "immutable_body_paths": [
+    "contents",
+    "generationConfig.imageConfig",
+    "generationConfig.candidateCount",
+    "generationConfig.responseModalities"
+  ],
+  "state": {
+    "metering_required": [
+      "images"
+    ]
+  }
+}

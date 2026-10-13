@@ -1,0 +1,13 @@
+{
+  "prepare_case": "image-v1.prepare.generate-text-only",
+  "response": {
+    "status": 400,
+    "body": {
+      "error": {
+        "code": 400,
+        "message": "API key not valid. Please pass a valid API key.",
+        "status": "INVALID_ARGUMENT"
+      }
+    }
+  }
+}

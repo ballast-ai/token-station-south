@@ -11,16 +11,17 @@
           "prompt": "the same character on a beach",
           "subject_reference": [
             {
-              "image_file": [
-                "https://example.com/face.png",
-                {
-                  "$south.ref": {
-                    "blob": "b0",
-                    "transform": "as_is"
-                  }
+              "type": "character",
+              "image_file": "https://example.com/face.png"
+            },
+            {
+              "type": "character",
+              "image_file": {
+                "$south.ref": {
+                  "blob": "b0",
+                  "transform": "as_is"
                 }
-              ],
-              "type": "character"
+              }
             }
           ]
         }

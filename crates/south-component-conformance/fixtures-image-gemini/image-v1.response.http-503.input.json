@@ -1,0 +1,13 @@
+{
+  "prepare_case": "image-v1.prepare.generate-text-only",
+  "response": {
+    "status": 503,
+    "body": {
+      "error": {
+        "code": 503,
+        "message": "The model is overloaded. Please try again later.",
+        "status": "UNAVAILABLE"
+      }
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "prepare_case": "image-v1.prepare.generate-text-only",
+  "response": {
+    "status": 200,
+    "body": {
+      "candidates": [
+        {
+          "content": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Here is a description of a fox."
+              }
+            ]
+          },
+          "finishReason": "STOP",
+          "index": 0
+        }
+      ],
+      "usageMetadata": {
+        "promptTokenCount": 12,
+        "candidatesTokenCount": 9
+      }
+    }
+  }
+}

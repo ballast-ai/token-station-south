@@ -407,6 +407,33 @@ impl MediaRequestDescriptorV1 {
         }
         ids
     }
+
+    /// The lowest `contracts.media` version that carries every transform the descriptor names
+    /// (JSON template references and multipart file parts): 2 when it names `data_url_payload`,
+    /// else 1. A host may compare it with the `media` contract the package declares.
+    #[must_use]
+    pub fn minimum_contract_version(&self) -> u16 {
+        let mut version = super::MEDIA_CONTRACT_VERSION;
+        match &self.body {
+            MediaBodyV1::Json(text) => {
+                if let Ok(node) = json::parse(text.as_bytes()) {
+                    let _ = walk_references(&node, &mut |reference| {
+                        version = version.max(reference.transform.minimum_contract_version());
+                        Ok(())
+                    });
+                }
+            }
+            MediaBodyV1::Multipart(parts) => {
+                for part in parts {
+                    if let MediaPartV1::File { transform, .. } = part {
+                        version = version.max(transform.minimum_contract_version());
+                    }
+                }
+            }
+            MediaBodyV1::Text(_) | MediaBodyV1::Empty => {}
+        }
+        version
+    }
 }
 
 impl fmt::Debug for MediaRequestDescriptorV1 {
@@ -502,7 +529,8 @@ fn reference_of(members: &[Member]) -> Result<Option<MediaReferenceV1>, MediaDes
 /// value within the request bound).
 ///
 /// A transform whose output is not UTF-8 text is refused: a JSON body can only carry text, so a
-/// component that wants bytes in JSON names `base64` or `data_url`.
+/// component that wants bytes in JSON names `base64` or `data_url`, and one that wants the bare
+/// base64 of a client's data URL names `data_url_payload` (contract 2).
 pub fn expand_json_template_v1(
     template: &str,
     blobs: &BlobSetV1,
@@ -569,6 +597,40 @@ mod tests {
             BlobSetV1::new([BlobV1::file(BlobIdV1::from_index(0), b"hi".to_vec())]).expect("ids");
         let body = expand_json_template_v1(template, &blobs).expect("expands");
         assert_eq!(body.as_str(), r#"{"prompt":"x","image":"data:image/png;base64,aGk=","n":1}"#);
+    }
+
+    #[test]
+    fn data_url_payload_expands_a_text_blob_to_its_base64_payload() {
+        let descriptor = parse(
+            r#"{"method":"POST","path":"v1beta/models/m:generateContent",
+                "body":{"json":{"template":{"contents":[{"parts":[{"inlineData":{"mimeType":"image/png","data":{"$south.ref":{"blob":"b0","transform":"data_url_payload"}}}}]}]}}}}"#,
+        )
+        .expect("valid");
+        assert_eq!(descriptor.minimum_contract_version(), 2);
+        let MediaBodyV1::Json(template) = descriptor.body() else { panic!("json") };
+        let blobs = BlobSetV1::new([BlobV1::text(
+            BlobIdV1::from_index(0),
+            "data:image/png;base64,aGk=".into(),
+        )])
+        .expect("ids");
+        let body = expand_json_template_v1(template, &blobs).expect("expands");
+        assert_eq!(
+            body.as_str(),
+            r#"{"contents":[{"parts":[{"inlineData":{"mimeType":"image/png","data":"aGk="}}]}]}"#
+        );
+        let bad =
+            BlobSetV1::new([BlobV1::text(BlobIdV1::from_index(0), "data:image/png,aGk=".into())])
+                .expect("ids");
+        assert_eq!(
+            expand_json_template_v1(template, &bad).map(|_| ()),
+            Err(MediaDescriptorErrorV1::Transform(TransformErrorV1::InvalidDataUrl))
+        );
+        // A descriptor naming only contract 1 words needs contract 1.
+        let earlier = parse(
+            r#"{"method":"POST","path":"p","body":{"json":{"template":{"a":{"$south.ref":{"blob":"b0","transform":"base64"}}}}}}"#,
+        )
+        .expect("valid");
+        assert_eq!(earlier.minimum_contract_version(), 1);
     }
 
     #[test]

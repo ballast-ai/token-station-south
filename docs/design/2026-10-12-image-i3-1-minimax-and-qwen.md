@@ -215,8 +215,13 @@ The workspace version, tags and `south_runtime` of the published packages are un
 
 Decisions where the record is silent:
 
-1. `image_url` on MiniMax is wrapped once: `[{"type": "character", "image_file": <the value>}]`, the value being the
-   client's string or array as sent (elided entries as `$south.ref`). `inputs.reference_image` counts the strings;
+1. ~~`image_url` on MiniMax is wrapped once: `[{"type": "character", "image_file": <the value>}]`, the value being the
+   client's string or array as sent (elided entries as `$south.ref`).~~ **Corrected 2026-10-13 (found by the host's
+   dual run; `image-minimax` 1.0.1):** as the native arm does (server `handler/images/minimax.rs:86-110`), each string
+   of an `image_url` array is its own `{"type": "character", "image_file": <string>}` entry (an elided entry as a
+   `$south.ref`), and a single string is one entry; a non-string array entry is refused with the native "image_url array
+   entries must be string URLs or data URIs", any other type with "image_url must be a string or an array of strings
+   (got …)". 1.0.0 (released in 0.58.0) sent the whole array as one entry's `image_file`. `inputs.reference_image` counts the strings;
    with `subject_reference` present it counts that array's entries (1 for a non-array value); a `null`
    `subject_reference` counts as absent.
 2. Native refusal texts were not available; the packages use the record's wording for `n` ("'n' must be in 1..=9 for
@@ -249,3 +254,5 @@ Decisions where the record is silent:
   a difference.
 - 2026-10-12: implemented on branch `image-i3-1` ("Implementation"); §7's conformance version corrected to
   0.55.0 → 0.56.0.
+- 2026-10-13: decision 1 corrected (an `image_url` array becomes one character reference per string, as native), found
+  by the host's dual run; shipped as `image-minimax` 1.0.1 with the I3-2 branch.

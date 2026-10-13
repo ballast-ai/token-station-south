@@ -1553,3 +1553,9 @@ rest of S-I-5 because it depends only on S-I-1a's pure halves. Fixtures are in
   2026-10-12 (IM-Q1 to IM-Q7) and implemented on branch `image-i3-1` (its "Implementation" section). The OpenAI-compatible
   fallback named in §14 / §19 for I3-1 is left out pending the host's decision D9. §13's MiniMax and Bailian Qwen-Image
   rows are unchanged.
+- 2026-10-13: step I3-2 (`image-gemini`) has its own record,
+  [`2026-10-13-image-i3-2-gemini.md`](2026-10-13-image-i3-2-gemini.md), accepted by lv on 2026-10-13 (GI-Q1 to GI-Q7)
+  and implemented on branch `image-i3-2`. Its GI-Q1 is the first word after the vocabulary §6.4 released once:
+  `contracts.media` 2 adds `data_url_payload` (a base64 data URL to its base64 payload, as text), as §6.4 and Q3
+  require of a later word. `MEDIA_CONTRACT_VERSION` stays 1 and `MEDIA_CONTRACT_VERSION_V2` / `MEDIA_CONTRACT_VERSIONS`
+  are added, so the packages declaring media 1 keep loading on a host whose range lists both.

@@ -211,7 +211,24 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.58.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.52.0, 0.53.0 and 0.56.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.58.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.53.0, 0.53.0 and 0.57.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**Unreleased (image world step I3-2: `image-gemini`)**: Google's Nano Banana image models through the Gemini API (design
+record `docs/design/2026-10-13-image-i3-2-gemini.md`, accepted 2026-10-13; proposed for the next release).
+`contracts.media` 2 adds one transform word, `data_url_payload` (a base64 `data:` URL to its base64 payload, as text, so
+a JSON template can carry the bare base64 of a client's data URL); `MEDIA_CONTRACT_VERSION` stays 1,
+`MEDIA_CONTRACT_VERSION_V2` is 2 and `MEDIA_CONTRACT_VERSIONS` lists both, as embeddings contract 2 did, so packages
+declaring media 1 keep loading on a host whose range lists both. `image-gemini` 1.0.0 (family `gemini-image`,
+`header_secret` `x-goog-api-key`) posts `v1beta/models/{model}:generateContent` for generation and multipart edit, sends
+`n` as `repeat` (one image per upstream call; the host's multi-round dispatch is a cutover prerequisite), meters
+`tokens` (`total_input` / `total_output` required, the modality split only when it adds up) or `images`
+(`images_reported` always `null`), and reports the `resolution` tier word only when the host prices the call per image
+and the client sent one. The request and response pieces are the crate-private module `gemini_image`, for the Vertex
+package of I3-3. It declares `contracts.media` 2 and, until the release commit, this tree's release as its
+`south_runtime`. Under Q47 `south-contracts` moves to 0.53.0 and `south-component-conformance` to 0.57.0, so every
+published package takes a patch and keeps its `south_runtime` and its `contracts`; the behaviour is unchanged except in
+`image-minimax` 1.0.1, which also fixes what the host's dual run found in I3-1 (each `image_url` array string becomes its
+own character reference, as native).
+
 **v0.58.0 (image world step I3-1: `image-minimax` and `image-qwen`)**: the first synchronous image packages after
 `image-azure` (design record `docs/design/2026-10-12-image-i3-1-minimax-and-qwen.md`, accepted 2026-10-12; release record
 `docs/design/2026-10-13-release-0.58.0.md`). `image-minimax` 1.0.0 (family `minimax-image`) posts `v1/image_generation` with `bearer`, appends

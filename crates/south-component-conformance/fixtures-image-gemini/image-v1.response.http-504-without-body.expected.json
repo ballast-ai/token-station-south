@@ -1,0 +1,9 @@
+{
+  "error": {
+    "code": "upstream_unavailable",
+    "http_status": 504,
+    "message": "the upstream is unavailable"
+  },
+  "outcome": "unknown",
+  "reason": "upstream status 504"
+}

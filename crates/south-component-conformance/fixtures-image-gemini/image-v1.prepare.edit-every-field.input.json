@@ -1,0 +1,62 @@
+{
+  "provider_config": {
+    "provider": "gemini-image",
+    "base_url": "https://generativelanguage.googleapis.com",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "multipart": {
+      "parts": [
+        {
+          "kind": "text",
+          "name": "prompt",
+          "value": "add a scarf"
+        },
+        {
+          "kind": "file",
+          "name": "image",
+          "blob": "b0",
+          "filename": "in.png",
+          "bytes": 4096,
+          "media_type": "image/png"
+        },
+        {
+          "kind": "text",
+          "name": "n",
+          "value": "3"
+        },
+        {
+          "kind": "text",
+          "name": "aspect_ratio",
+          "value": " 1:1 "
+        },
+        {
+          "kind": "text",
+          "name": "resolution",
+          "value": "4k"
+        },
+        {
+          "kind": "text",
+          "name": "stream",
+          "value": "false"
+        },
+        {
+          "kind": "text",
+          "name": "size",
+          "value": "1024x1024"
+        },
+        {
+          "kind": "text",
+          "name": "response_format",
+          "value": "url"
+        }
+      ]
+    }
+  },
+  "context": {
+    "upstream_model": "gemini-3.1-flash-image",
+    "metering_required": [
+      "images"
+    ]
+  }
+}
