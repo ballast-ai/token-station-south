@@ -127,7 +127,12 @@ impl NorthPassthroughHarnessV1 for ReferenceNorthPassthroughExecutorV1 {
         chunks: &[&[u8]],
         script: &NorthPassthroughScriptV1,
     ) -> NorthPassthroughTimelineV1 {
-        NorthPassthroughHarnessV2::stream(self, NorthPassthroughProtocolV2::Responses, chunks, script)
+        NorthPassthroughHarnessV2::stream(
+            self,
+            NorthPassthroughProtocolV2::Responses,
+            chunks,
+            script,
+        )
     }
 
     fn buffered(
@@ -163,7 +168,7 @@ impl NorthPassthroughHarnessV2 for ReferenceNorthPassthroughExecutorV1 {
                     .all(|tool| tool["type"] == "function" && tool.get("namespace").is_none())
             });
         let declared: Option<NorthProtocolV1> = if self.is(Fault::DeliveryIgnoresDeclaration) {
-            setup.declared().or(Some(setup.inbound()))
+            setup.declared().or_else(|| Some(setup.inbound()))
         } else {
             setup.declared()
         };

@@ -51,10 +51,10 @@ pub trait NorthPassthroughHarnessV1 {
     ) -> NorthPassthroughTimelineV1;
 }
 
-/// What a host implements to run suite version two
-/// ([`super::NORTH_PASSTHROUGH_DELIVERY_SUITE_V2_ID`]) for one or more protocols: the
-/// [`NorthPassthroughHarnessV1`] methods, with `stream` and `buffered` told the protocol of the
-/// exchange.
+/// What a host implements to run suite version two, one protocol at a time.
+///
+/// It has the [`NorthPassthroughHarnessV1`] methods, with `stream` and `buffered` told the
+/// protocol of the exchange ([`super::NORTH_PASSTHROUGH_DELIVERY_SUITE_V2_ID`]).
 ///
 /// Each `stream` or `buffered` call is one independent exchange in which the host has already
 /// chosen pass-through delivery for a client of `protocol`, to a family declaring
@@ -390,7 +390,7 @@ pub fn run_north_passthrough_conformance_v1(
 
 /// Runs every case of suite version two for `protocol`, in table order, without failing fast.
 ///
-/// The cases are [`north_passthrough_fixtures_v2`]`(protocol)`; for Responses they are the
+/// The cases are those [`north_passthrough_fixtures_v2`] gives for `protocol`; for Responses they are the
 /// version-one cases, checked the same way. A host that serves several protocols by pass-through
 /// runs this once per protocol.
 pub fn run_north_passthrough_conformance_v2(

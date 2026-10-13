@@ -113,9 +113,10 @@ impl NorthPassthroughProtocolV2 {
     }
 }
 
-/// Whether one frame's JSON data marks the end of a successful stream of `protocol`: a terminal
-/// `type` ([`NORTH_PASSTHROUGH_TERMINAL_TYPES_V1`]) for Responses, some
-/// `candidates[*].finishReason` set (not null) for `generate_content`. A host releases such a
+/// Whether one frame's JSON data marks the end of a successful stream of `protocol`.
+///
+/// For Responses, a terminal `type` ([`NORTH_PASSTHROUGH_TERMINAL_TYPES_V1`]); for
+/// `generate_content`, some `candidates[*].finishReason` set (not null). A host releases such a
 /// frame only when its call also returned `Done`.
 #[must_use]
 pub fn north_passthrough_is_terminal_data_v2(

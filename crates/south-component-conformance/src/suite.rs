@@ -600,22 +600,21 @@ fn descriptor_independent_of_body(
         return None;
     }
     let descriptor = |built: &Invoked| -> Result<HttpRequestDescriptor, String> {
-        let built = built.as_ref().map_err(|failure| failure.detail())?;
+        let built = built.as_ref().map_err(Failure::detail)?;
         parse(built).map_err(|failure| failure.detail())
     };
     let mut probe = input.chat_request.clone();
-    probe.messages = vec![token_station_protocol::Message::text(
-        token_station_protocol::Role::User,
-        ".",
-    )];
+    probe.messages =
+        vec![token_station_protocol::Message::text(token_station_protocol::Role::User, ".")];
     probe.tools.clear();
     probe.tool_choice = None;
     probe.response_format = None;
     let cap = probe.sampling.max_output_tokens;
     probe.sampling = token_station_protocol::Sampling::default();
     probe.sampling.max_output_tokens = cap;
-    let probe_built =
-        invoke(&serde_json::json!({"provider_config": input.provider_config, "chat_request": probe}));
+    let probe_built = invoke(
+        &serde_json::json!({"provider_config": input.provider_config, "chat_request": probe}),
+    );
     let outcome = match (descriptor(built), descriptor(&probe_built)) {
         (Ok(own), Ok(probed)) => {
             let differs = [
@@ -629,7 +628,9 @@ fn descriptor_independent_of_body(
                 Some((_, what)) => OutcomeV1::failed(
                     check,
                     &case.name,
-                    format!("the probe IR's {what} differs from the request's: it depends on the body"),
+                    format!(
+                        "the probe IR's {what} differs from the request's: it depends on the body"
+                    ),
                 ),
             }
         }

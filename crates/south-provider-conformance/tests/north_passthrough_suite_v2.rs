@@ -47,9 +47,7 @@ fn each_generate_content_passthrough_body_cuts_into_the_frames_its_cases_count_o
         Body::GeminiMixedFraming.bytes()
     );
     // The split `data` field joins into one JSON value with its text.
-    assert!(
-        frames[1].bytes().windows(b"and sunny.".len()).any(|window| window == b"and sunny.")
-    );
+    assert!(frames[1].bytes().windows(b"and sunny.".len()).any(|window| window == b"and sunny."));
 }
 
 #[test]
@@ -74,8 +72,8 @@ fn the_generate_content_passthrough_terminal_rule() {
 /// Two suite bodies are the Gemini fixture pack's own stream rows.
 #[test]
 fn the_copied_generate_content_passthrough_bodies_equal_the_gemini_pack_rows() {
-    let pack =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../south-component-conformance/fixtures-gemini");
+    let pack = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../south-component-conformance/fixtures-gemini");
     for (body, row) in [
         (Body::GeminiText, "text-and-terminal"),
         (Body::GeminiMaxTokens, "eof-terminates-without-a-usage-frame"),

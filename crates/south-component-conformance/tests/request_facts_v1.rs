@@ -183,7 +183,8 @@ impl Rogues {
             }
             Rogue::BodyInUrl => {
                 let size = serde_json::to_string(&request.messages).unwrap_or_default().len();
-                descriptor.url = descriptor.url.replace(&request.model, &format!("{}-{size}", request.model));
+                descriptor.url =
+                    descriptor.url.replace(&request.model, &format!("{}-{size}", request.model));
             }
         }
         descriptor
@@ -313,10 +314,7 @@ fn the_descriptor_must_not_depend_on_the_body_where_the_request_passes_through()
         &shipped("provider-gemini"),
     );
     let (_, failed) = independence(&report);
-    assert!(
-        failed.iter().any(|failure| failure.contains("depends on the body")),
-        "{failed:#?}"
-    );
+    assert!(failed.iter().any(|failure| failure.contains("depends on the body")), "{failed:#?}");
 
     let report = run_provider_component_suite_v1_for_manifest(
         &OpenAiCompatibleReferenceV1,

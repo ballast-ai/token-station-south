@@ -6,6 +6,7 @@
 //! without keep-alive comments between frames, and each deliberate mistake fails exactly the cases
 //! that guard it.
 
+use south_provider_api::NorthProtocolV1;
 use south_provider_conformance::{
     NORTH_PASSTHROUGH_DELIVERY_SUITE_ID, NORTH_PASSTHROUGH_DELIVERY_SUITE_V2_ID,
     NORTH_PASSTHROUGH_DELIVERY_SUITE_V2_VERSION, NORTH_PASSTHROUGH_DELIVERY_SUITE_VERSION,
@@ -14,7 +15,6 @@ use south_provider_conformance::{
     north_passthrough_fixtures_v2, run_north_passthrough_conformance_v1,
     run_north_passthrough_conformance_v2,
 };
-use south_provider_api::NorthProtocolV1;
 use south_testkit::{NorthPassthroughFaultV1 as Fault, ReferenceNorthPassthroughExecutorV1};
 
 const EVERY_GENERATE_CONTENT_CASE: [Case; 21] = [
@@ -98,7 +98,10 @@ fn failed(harness: &dyn NorthPassthroughHarnessV2, protocol: Protocol) -> Vec<Ca
             assert_eq!(report.suite_id(), NORTH_PASSTHROUGH_DELIVERY_SUITE_V2_ID);
             assert_eq!(report.suite_version(), NORTH_PASSTHROUGH_DELIVERY_SUITE_V2_VERSION);
             assert_eq!(report.protocol(), protocol);
-            assert_eq!(report.passed_case_ids(), case_ids(&north_passthrough_fixtures_v2(protocol)));
+            assert_eq!(
+                report.passed_case_ids(),
+                case_ids(&north_passthrough_fixtures_v2(protocol))
+            );
             Vec::new()
         }
         Err(failure) => {
@@ -240,10 +243,19 @@ fn each_generate_content_passthrough_mistake_fails_exactly_the_cases_that_guard_
         (Fault::GenerateContentNon2xxStatusRewritten, &[Case::BufferedNon2xxDeliveredAsSent]),
         (Fault::TerminalOnFirstCandidateOnly, &[Case::FinishReasonOnAnyCandidateIsTerminal]),
     ];
-    assert_eq!(expectations.map(|(fault, _)| fault), EVERY_FAULT);
+    // Every fault has an expectation, once.
+    for fault in EVERY_FAULT {
+        assert_eq!(
+            expectations.iter().filter(|(listed, _)| *listed == fault).count(),
+            1,
+            "{fault:?}"
+        );
+    }
     for (fault, expected) in expectations {
-        let got =
-            failed(&ReferenceNorthPassthroughExecutorV1::with_fault(fault), Protocol::GenerateContent);
+        let got = failed(
+            &ReferenceNorthPassthroughExecutorV1::with_fault(fault),
+            Protocol::GenerateContent,
+        );
         assert_eq!(got, expected, "{fault:?}");
     }
 }
