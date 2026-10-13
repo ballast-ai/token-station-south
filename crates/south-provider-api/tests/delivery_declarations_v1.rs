@@ -232,3 +232,36 @@ fn other_worlds_refuse_request_passthrough() {
         );
     }
 }
+
+/// `subscription_quota_families` (the host's subscription-quota alert, lv 2026-10-14): the shipped
+/// packages declare their subscription families; gate ① refuses an undeclared family and any world
+/// but the provider world.
+#[test]
+fn subscription_quota_families_name_declared_provider_families() {
+    let copilot = shipped("provider-openai-compatible");
+    assert!(copilot.subscription_quota_families.contains("github-copilot"));
+    assert!(!copilot.subscription_quota_families.contains("openai-compatible"));
+    assert_eq!(copilot.validate(), Ok(()));
+    let codex = shipped("provider-openai-responses");
+    assert!(codex.subscription_quota_families.contains("openai-codex"));
+    assert_eq!(codex.validate(), Ok(()));
+    assert!(shipped("provider-gemini").subscription_quota_families.is_empty());
+
+    let mut undeclared = shipped("provider-openai-compatible");
+    undeclared.subscription_quota_families.insert("nowhere".to_owned());
+    assert_eq!(
+        undeclared.validate(),
+        Err(ManifestErrorV1::InvalidSubscriptionQuotaFamily("nowhere".to_owned()))
+    );
+
+    for package in ["embeddings-openai-compatible", "task-kling-v2", "image-azure"] {
+        let mut manifest = shipped(package);
+        let family = manifest.providers[0].clone();
+        manifest.subscription_quota_families.insert(family);
+        assert_eq!(
+            manifest.validate(),
+            Err(ManifestErrorV1::DeliveryIsAProviderWorldDeclaration),
+            "{package}"
+        );
+    }
+}

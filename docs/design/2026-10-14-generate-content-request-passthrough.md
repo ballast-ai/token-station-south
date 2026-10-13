@@ -155,3 +155,13 @@ changed what "passes v1" means after the fact.
 
 None for south. `countTokens` stays out of scope (D7-Q4): there is no south operation for it and the host keeps
 refusing component rows there.
+
+## 8. Riding along: `subscription_quota_families`
+
+Ruled by lv on 2026-10-14 for the host's Copilot cut-over (host lane H3): a host alerts its operators when a coding-plan
+upstream answers `429`, because that usually means the subscription's quota is spent. The host keyed that on its own
+provider types; a `component` row has none, so the alert would vanish. South therefore lets a package say which of its
+families are subscriptions: the provider-world manifest field `subscription_quota_families` (a set of declared
+families; gate ① refuses an undeclared family and any other world). It is a fact about the family and changes nothing a
+component builds. `provider-openai-compatible` declares `github-copilot`; `provider-openai-responses` declares
+`openai-codex`. It ships in the same release so every package takes its Q47 patch once.

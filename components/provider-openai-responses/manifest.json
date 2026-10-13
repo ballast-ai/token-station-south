@@ -173,6 +173,9 @@
       }
     }
   },
+  "subscription_quota_families": [
+    "openai-codex"
+  ],
   "permissions": {
     "network": false,
     "filesystem": false,

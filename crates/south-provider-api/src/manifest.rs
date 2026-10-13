@@ -623,6 +623,13 @@ pub struct ComponentManifestV1 {
     /// request is always built from the IR. Provider world only.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub north_request_passthrough: BTreeMap<String, NorthProtocolV1>,
+    /// Families whose credentials are subscriptions with a usage quota (coding plans): a `429` from
+    /// such an upstream usually means the subscription's quota is spent, not a transient rate limit,
+    /// so a host may alert its operators (the host's subscription-quota alert, ruled by lv on
+    /// 2026-10-14). A plain fact about the family; it changes nothing a component builds. Absent
+    /// means no family is a subscription. Provider world only.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub subscription_quota_families: BTreeSet<String>,
     pub permissions: ComponentPermissionsV1,
     pub conformance: ConformanceSpecV1,
     pub compatibility: CompatibilityDeclarationV1,
@@ -1079,6 +1086,7 @@ impl ComponentManifestV1 {
         } else if !self.immutable_body_paths.is_empty()
             || !self.north_passthrough.is_empty()
             || !self.north_request_passthrough.is_empty()
+            || !self.subscription_quota_families.is_empty()
         {
             return Err(ManifestErrorV1::DeliveryIsAProviderWorldDeclaration);
         } else if self.signing.is_some() {
@@ -1177,6 +1185,11 @@ impl ComponentManifestV1 {
                 family: family.clone(),
                 detail: "names a family the manifest does not declare".to_owned(),
             });
+        }
+        if let Some(family) =
+            self.subscription_quota_families.iter().find(|family| !self.providers.contains(*family))
+        {
+            return Err(ManifestErrorV1::InvalidSubscriptionQuotaFamily(family.clone()));
         }
         self.validate_request_passthrough()
     }
@@ -1561,11 +1574,11 @@ pub enum ManifestErrorV1 {
     RequestFactsIsAProviderWorldDeclaration,
     #[error("request_facts for family `{family}`: {detail}")]
     InvalidRequestFacts { family: String, detail: String },
-    /// `immutable_body_paths`, `north_passthrough` or `north_request_passthrough` in a world without
-    /// request declarations.
+    /// `immutable_body_paths`, `north_passthrough`, `north_request_passthrough` or
+    /// `subscription_quota_families` in a world without request declarations.
     #[error(
-        "immutable_body_paths, north_passthrough and north_request_passthrough are provider-world \
-         declarations"
+        "immutable_body_paths, north_passthrough, north_request_passthrough and \
+         subscription_quota_families are provider-world declarations"
     )]
     DeliveryIsAProviderWorldDeclaration,
     #[error("immutable_body_paths for family `{family}`: {detail}")]
@@ -1574,6 +1587,8 @@ pub enum ManifestErrorV1 {
     InvalidNorthPassthrough { family: String, detail: String },
     #[error("north_request_passthrough for family `{family}`: {detail}")]
     InvalidNorthRequestPassthrough { family: String, detail: String },
+    #[error("subscription_quota_families names `{0}`, a family the manifest does not declare")]
+    InvalidSubscriptionQuotaFamily(String),
     #[error("credentials: {0}")]
     InvalidCredentials(String),
     #[error("signing: {0}")]
