@@ -993,8 +993,9 @@ fn the_invoke_package_declares_the_runtime_converse_declares() {
         .unwrap()
     };
     let invoke = read("provider-anthropic-bedrock-invoke");
-    // KC1 made 1.1.0; I3-1's Q47 bump 1.1.1 (`i3_1_retires_every_published_057_package_identity`).
-    assert_eq!(invoke.version, "1.1.1");
+    // KC1 made 1.1.0, I3-1's Q47 bump 1.1.1 and I3-2's 1.1.2
+    // (`i3_2_retires_every_published_058_package_identity`).
+    assert_eq!(invoke.version, "1.1.2");
     assert_eq!(invoke.compatibility.south_runtime, "0.57.0");
     assert_eq!(invoke.compatibility, read("provider-bedrock-converse").compatibility);
 }
@@ -1291,10 +1292,10 @@ fn the_responses_package_declares_the_runtime_that_first_admits_its_declarations
         .unwrap(),
     )
     .unwrap();
-    // 1.0.0 shipped in 0.54.0; NC-1 made 1.1.0, R3 1.2.0, KC1 1.3.0 and I3-1's Q47 bump 1.3.1
-    // (below), with the same runtime: the Codex `credentials` section uses only forms the 0.54.0
-    // gate ① admits.
-    assert_eq!(manifest.version, "1.3.1");
+    // 1.0.0 shipped in 0.54.0; NC-1 made 1.1.0, R3 1.2.0, KC1 1.3.0, I3-1's Q47 bump 1.3.1 and
+    // I3-2's 1.3.2 (below), with the same runtime: the Codex `credentials` section uses only forms
+    // the 0.54.0 gate ① admits.
+    assert_eq!(manifest.version, "1.3.2");
     assert_eq!(manifest.compatibility.south_runtime, "0.57.0");
     assert!(!manifest.immutable_body_paths.is_empty() && !manifest.north_passthrough.is_empty());
     assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
@@ -1461,10 +1462,12 @@ fn kc1_retires_every_r3_package_identity() {
 /// helpers the Wan task package now shares), which every guest links, so the crate takes a new
 /// version (0.55.0 → 0.56.0, Q47) and every `component.wasm` changes: each identity published with
 /// 0.57.0 retires. No published package changes behaviour, so each takes a patch and keeps its
-/// `south_runtime`; the kernel tuple is the one KC1 pinned.
+/// `south_runtime`; the kernel tuple is the one KC1 pinned. The identity each package took in I3-1
+/// is no longer pinned: I3-2 gave every package one more
+/// (`i3_2_retires_every_published_058_package_identity`).
 #[test]
 fn i3_1_retires_every_published_057_package_identity() {
-    for (name, published, now) in [
+    for (name, published, _i3_1) in [
         ("provider-openai-compatible", "2.6.0", "2.6.1"),
         ("provider-anthropic", "1.1.0", "1.1.1"),
         ("provider-anthropic-bedrock-invoke", "1.1.0", "1.1.1"),
@@ -1494,7 +1497,6 @@ fn i3_1_retires_every_published_057_package_identity() {
         )
         .unwrap();
         assert_ne!(manifest.version, published, "{name} reused its published identity");
-        assert_eq!(manifest.version, now, "{name}");
         assert_eq!(manifest.compatibility.south_runtime, "0.57.0", "{name}: no runtime moves");
         assert_eq!(
             manifest.compatibility.ir_schema_id, "token-station-protocol@0.6.0/v0.5.0",
@@ -1503,10 +1505,63 @@ fn i3_1_retires_every_published_057_package_identity() {
     }
 }
 
-/// The two packages of I3-1 start at 1.0.0 in the image world and declare the oldest runtime that
-/// admits their declarations, 0.57.0 (the first to record `canonical_ir` 4, which every package of
-/// this tuple needs). `image-minimax` declares one non-secret config key, `group_id` (IM-Q3);
-/// `image-qwen` declares none.
+/// Image world step I3-2 (design record `2026-10-13-image-i3-2-gemini.md` §10) adds the transform
+/// word `data_url_payload` to `south-contracts` (`contracts.media` 2, 0.52.0 → 0.53.0) and the
+/// `image-gemini` reference and the shared Gemini image module to `south-component-conformance`
+/// (0.56.0 → 0.57.0), which every guest links, so every `component.wasm` changes: each identity
+/// published with 0.58.0 retires. No published package changes behaviour, so each takes a patch
+/// and keeps its `south_runtime` and its `contracts` (a package declaring `media` 1 stays at 1).
+#[test]
+fn i3_2_retires_every_published_058_package_identity() {
+    for (name, published, now) in [
+        ("provider-openai-compatible", "2.6.1", "2.6.2"),
+        ("provider-anthropic", "1.1.1", "1.1.2"),
+        ("provider-anthropic-bedrock-invoke", "1.1.1", "1.1.2"),
+        ("provider-gemini", "1.3.1", "1.3.2"),
+        ("provider-bedrock-converse", "1.1.1", "1.1.2"),
+        ("provider-bedrock-converse-bearer", "1.1.1", "1.1.2"),
+        ("provider-openai-responses", "1.3.1", "1.3.2"),
+        ("task-kling", "1.0.18", "1.0.19"),
+        ("task-kling-v2", "0.32.16", "0.32.17"),
+        ("task-minimax-v2", "0.31.15", "0.31.16"),
+        ("task-bailian-v2", "0.31.15", "0.31.16"),
+        ("task-xai-v2", "0.35.15", "0.35.16"),
+        ("task-byteplus-v2", "0.36.15", "0.36.16"),
+        ("task-veo-v2", "0.35.15", "0.35.16"),
+        ("task-wan-image-v2", "0.35.15", "0.35.16"),
+        ("task-gmi-image-v2", "0.35.15", "0.35.16"),
+        ("embeddings-openai-compatible", "1.0.9", "1.0.10"),
+        ("embeddings-gemini", "1.1.6", "1.1.7"),
+        ("embeddings-vertex", "1.0.8", "1.0.9"),
+        ("image-azure", "1.0.5", "1.0.6"),
+        ("image-minimax", "1.0.0", "1.0.1"),
+        ("image-qwen", "1.0.0", "1.0.1"),
+    ] {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_ne!(manifest.version, published, "{name} reused its published identity");
+        assert_eq!(manifest.version, now, "{name}");
+        assert_eq!(manifest.compatibility.south_runtime, "0.57.0", "{name}: no runtime moves");
+        if manifest.api_version == south_provider_api::IMAGE_WORLD {
+            assert_eq!(manifest.compatibility.contracts.get("media"), Some(&1), "{name}");
+        }
+        assert_eq!(
+            manifest.compatibility.ir_schema_id, "token-station-protocol@0.6.0/v0.5.0",
+            "{name}"
+        );
+    }
+}
+
+/// The two packages of I3-1 started at 1.0.0 in the image world (published with 0.58.0; I3-2's Q47
+/// bump made them 1.0.1) and declare the oldest runtime that admits their declarations, 0.57.0
+/// (the first to record `canonical_ir` 4, which every package of this tuple needs).
+/// `image-minimax` declares one non-secret config key, `group_id` (IM-Q3); `image-qwen` declares
+/// none.
 #[test]
 fn the_i3_1_image_packages_declare_the_runtime_and_values_of_the_record() {
     for (name, family, keys) in [
@@ -1520,7 +1575,7 @@ fn the_i3_1_image_packages_declare_the_runtime_and_values_of_the_record() {
             .unwrap(),
         )
         .unwrap();
-        assert_eq!(manifest.version, "1.0.0", "{name}");
+        assert_eq!(manifest.version, "1.0.1", "{name}");
         assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD, "{name}");
         assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), [family], "{name}");
         assert_eq!(manifest.compatibility.south_runtime, "0.57.0", "{name}");

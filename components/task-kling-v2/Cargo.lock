@@ -410,7 +410,7 @@ dependencies = [
 
 [[package]]
 name = "task-kling-v2"
-version = "0.32.16"
+version = "0.32.17"
 dependencies = [
  "south-component-conformance",
  "wit-bindgen",
