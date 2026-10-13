@@ -2,7 +2,8 @@
 
 Status: accepted (2026-10-13). SI-Q4 ruled by lv (with I3-3's VI-Q2): the host answers 400 for an operation the package
 does not declare. SI-Q1, SI-Q2, SI-Q3 and SI-Q5 follow the recommendations, under lv's pre-approval to build I3-4
-directly per the image world record (each keeps the native arm's behaviour).
+directly per the image world record (each keeps the native arm's behaviour). Implemented on branch `image-i3-4` (not yet merged); see
+Implementation.
 
 Date: 2026-10-13
 
@@ -227,7 +228,81 @@ at implementation.
   `repeat = n` would be possible, but a client `seed` would make every round identical and it needs a catalog change.
   **Recommended: keep `n` = 1.**
 
+## Implementation (2026-10-13)
+
+What landed on branch `image-i3-4` (on `origin/main` = `2a95713`, release 0.59.0):
+
+- **`image-stability` 1.0.0**: manifest (family `stability-image`, `bearer` on `provider_api_key`, `generate`,
+  `contracts` `{image: 1, media: 1}`, `south_runtime` 0.57.0, no config keys); guest crate (a thin shell like
+  `image-minimax`); reference `crates/south-component-conformance/src/reference_stability_image.rs`, which follows §2–§4
+  and the native order of checks (`n`, then the upstream id, `response_format`, `prompt`, the source image, Core with an
+  image, `mode`, then each field in part order); the fixture pack `fixtures-image-stability/` (105 cases, with a
+  README); the suite test `stability_image_suite` (the pack, eleven named behaviour tests and a mutations module); the
+  sandbox parity test `stability_image_sandbox_parity`; the build script `scripts/build-image-stability-component.sh`;
+  and the enumerations (`ci.yml` rust-cache, the `release.yml` build / gate ② / package lists, the conformance crate's
+  `[[test]]` entry, the `shipped_packages_v1` official list and a manifest test, README and ARCHITECTURE).
+- No contract changes. `south-contracts` and `south-provider-api` are unchanged.
+
+Failing first: with the reference written and only three expectations written by hand
+(`prepare.sd3-large-turbo-image-url-to-image`, `prepare.core-with-a-source-image`, `response.content-filtered`), the
+pack's other 102 expectations were `null` and failed; the three hand-written ones passed. The other expectations were
+then taken from the reference and reviewed row by row against §2–§4 and the native source (`server:…/handler/images/
+stability.rs`). The mutations module checks that each of five broken components (a retriable 401, a placeholder in
+`extras`, an inline image delivered as `url`, an `internal` refusal, `CONTENT_FILTERED` as `unknown`) turns the matching
+suite row red.
+
+Versions (§9, Q47): `south-component-conformance` 0.57.0 → 0.58.0, with `fuzz/Cargo.toml` and `fuzz/Cargo.lock` and every
+component lockfile following. Every package published with 0.59.0 takes a patch with unchanged behaviour and keeps its
+`south_runtime` and its `contracts` (`shipped_packages_v1::i3_4_retires_every_published_059_package_identity`):
+
+| Package | 0.59.0 | Now |
+|---|---|---|
+| `provider-openai-compatible` | 2.6.2 | 2.6.3 |
+| `provider-anthropic`, `provider-anthropic-bedrock-invoke`, `provider-bedrock-converse`, `provider-bedrock-converse-bearer` | 1.1.2 | 1.1.3 |
+| `provider-gemini`, `provider-openai-responses` | 1.3.2 | 1.3.3 |
+| `task-kling` / `task-kling-v2` | 1.0.19 / 0.32.17 | 1.0.20 / 0.32.18 |
+| `task-minimax-v2`, `task-bailian-v2` | 0.31.16 | 0.31.17 |
+| `task-xai-v2`, `task-veo-v2`, `task-wan-image-v2`, `task-gmi-image-v2` | 0.35.16 | 0.35.17 |
+| `task-byteplus-v2` | 0.36.16 | 0.36.17 |
+| `embeddings-openai-compatible` / `embeddings-gemini` / `embeddings-vertex` | 1.0.10 / 1.1.7 / 1.0.9 | 1.0.11 / 1.1.8 / 1.0.10 |
+| `image-azure` / `image-minimax` / `image-qwen` / `image-gemini` | 1.0.6 / 1.0.1 / 1.0.1 / 1.0.0 | 1.0.7 / 1.0.2 / 1.0.2 / 1.0.1 |
+| `image-stability` | — | 1.0.0 |
+
+The I3-2 retirement test no longer pins I3-2's identities. `image-gemini`'s test now pins its `south_runtime` as the
+literal 0.59.0 (it was published with that runtime) instead of the tree's release, so the next release bump does not
+turn it red. The workspace version and tags are unchanged; that is the release step.
+
+Implementation interpretations (where the record is silent):
+
+1. **`provider_message`** of a non-2xx is `"{name}: {errors joined with "; "}"`, or `name` alone, or the joined errors
+   alone, capped at 256 characters (§4 says "joined" without a separator). `content_moderation` maps to
+   `content_policy` on any non-2xx status, not only 403.
+2. **Elided text fields** other than `prompt` and `negative_prompt` (`mode`, `output_format`, `style_preset`,
+   `aspect_ratio`, `size`) are refused with `image-azure`'s generic "'{field}' is longer than the gateway accepts".
+   Natively each would fail its type or word check with a different text; both are 400 before dispatch.
+3. **Echoed values**: a refusal text that echoes a request value (as native) names the value's type instead when it
+   holds an elided string ("a string longer than the gateway accepts", "an array", "an object"), so a placeholder never
+   reaches a message. A source given as an array is named "an array" in the shape refusal, following I3-2's decision 2.
+4. **The 10 MiB refusal text** reads "image is more than 10485760 bytes after base64 decode; maximum is 10485760
+   bytes", since the exact decoded size cannot be known from the payload length (decision 2).
+5. **The non-`data:` preview** is taken from the placeholder's 64-byte head (native: the URL's first 80 characters), so
+   a URL longer than 64 bytes is echoed shorter. As in I3-2 decision 1, a data URL whose `;base64,` marker lies past
+   the head is refused with the native "must use base64 encoding" text.
+6. **A source string the host did not elide** (all four source paths are declared, so a conforming host always elides
+   them) is refused `internal`: a multipart file part must name a blob, and there is no inline form for it.
+7. **An undeclared upstream id** reaching `prepare` is refused with the native text as `invalid_request`;
+   `model-capabilities` declares only the configured models among the five ids, so the host refuses such an id first
+   (P4).
+8. **"A request-extras row on an immutable name"** (§8): the gate ② pack cannot express operator request extras, so it
+   is covered by every prepared expectation carrying `immutable_body_paths` `["model", "aspect_ratio",
+   "output_format"]` and by the named test `the_immutable_parts_are_the_native_owned_fields`.
+
+Differences from native the record does not list: none found beyond items 2 to 6 above. One is noted for the host's
+dual run: a number such as `strength: 1.0` is sent as `1.0` (as `serde_json` renders a parsed float), which is also
+what the native `v.to_string()` sends.
+
 ## Revision note
 
 - 2026-10-13: first draft (proposed).
 - 2026-10-13: accepted; SI-Q4 ruled by lv, the other questions taken as recommended under the pre-approval.
+- 2026-10-13: implemented on branch `image-i3-4` (Implementation).
