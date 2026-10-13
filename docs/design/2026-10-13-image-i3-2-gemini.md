@@ -1,7 +1,7 @@
 # Image world step I3-2: `image-gemini` (Gemini API, token pricing first)
 
-Status: accepted (lv, 2026-10-13: GI-Q1 to GI-Q7 ruled as recommended, §11). Design only; nothing is implemented,
-built or run yet.
+Status: accepted (lv, 2026-10-13: GI-Q1 to GI-Q7 ruled as recommended, §11). Implemented on branch `image-i3-2` (see
+Implementation); not released.
 
 Date: 2026-10-13
 
@@ -310,8 +310,107 @@ here and leave with the arm after cutover.
   them). They appear only if a request asks for thoughts, which operator request extras can do
   (`generationConfig.thinkingConfig` is not immutable). **Recommended: skip.**
 
+## Implementation (2026-10-13)
+
+What landed, on branch `image-i3-2` (on `origin/main` = `57c4ae8`, release 0.58.0):
+
+- **GI-Q1, `contracts.media` 2.** `MediaTransformV1::DataUrlPayload` (`"data_url_payload"`) reads a base64 `data:` URL as
+  `from_data_url` does and yields the canonical base64 of its bytes as text (`data_url_payload_v1`); it refuses exactly
+  what `from_data_url` refuses (no `data:` scheme, no comma, no `;base64` marker, a media type outside the grammar,
+  non-canonical base64, non-UTF-8 input). Unit tests, two property tests (round trip with `data_url` and `base64`; the
+  same decisions as `from_data_url`), a template expansion test, golden vectors in `tests/vectors/media-v1.json` (two
+  outputs, four refusals, one template; the file's `version` is now 2) and the `media_parsers` fuzz word list.
+  `compatibility.json` records `contracts.media` 2. `MediaTransformV1::minimum_contract_version` and
+  `MediaRequestDescriptorV1::minimum_contract_version` say which media contract a word or a descriptor needs.
+- **`image-gemini` 1.0.0**: manifest, guest crate (a thin shell like `image-minimax`), reference
+  `reference_gemini_image.rs` over the crate-private module `gemini_image.rs` (§7: body builders, response reader,
+  usage reader, render, refusal texts; the family passes its path, its auth member and whether it edits), fixture pack
+  `fixtures-image-gemini/` (90 cases, with a README), suite test `gemini_image_suite` (the pack plus eleven named
+  behaviour tests), sandbox parity test `gemini_image_sandbox_parity`, build script, and the enumerations (`ci.yml`
+  rust-cache, `release.yml` build / gate ② / package lists, `shipped_packages_v1` official list, the image-world contract
+  check and a test that a media 1 host refuses the package while still admitting `image-azure`, README and
+  ARCHITECTURE).
+
+Failing first: with the reference written and only three expectations written by hand
+(`prepare.generate-image-url-png`, `prepare.generate-resolution-images-form`, `response.prompt-blocked`), the pack test
+failed on the 87 cases still without an expectation and passed the three hand-written ones. The other expectations were
+then taken from the reference and reviewed row by row against §2 to §4. Each of six mutations turns a named test red,
+and the pack test with it: `data_url_payload` written as `as_is`
+(`the_reference_image_is_sent_as_its_base64_payload`), the tier word reported whatever the metering form
+(`the_tier_word_exists_only_on_per_image_calls_with_a_resolution`), a blocked prompt `unknown`
+(`a_blocked_prompt_is_rejected_and_a_policy_stop_is_unknown`), `thought` images delivered
+(`thought_images_are_not_delivered`), the modality split reported without the closing check
+(`the_modality_split_is_reported_only_when_it_adds_up`) and `repeat` fixed at 1 (`n_is_repeat_and_never_sent_upstream`).
+
+Versions (§10):
+
+| Item | Before | After |
+|---|---|---|
+| `south-contracts` | 0.52.0 | 0.53.0 |
+| `south-component-conformance` | 0.56.0 | 0.57.0 |
+| `image-gemini` | — | 1.0.0 (`contracts` `{image: 1, media: 2}`) |
+| `image-azure` / `image-minimax` / `image-qwen` | 1.0.5 / 1.0.0 / 1.0.0 | 1.0.6 / 1.0.1 / 1.0.1 |
+| `provider-openai-compatible` | 2.6.1 | 2.6.2 |
+| `provider-anthropic`, `provider-anthropic-bedrock-invoke`, `provider-bedrock-converse`, `provider-bedrock-converse-bearer` | 1.1.1 | 1.1.2 |
+| `provider-gemini`, `provider-openai-responses` | 1.3.1 | 1.3.2 |
+| `embeddings-openai-compatible` / `embeddings-gemini` / `embeddings-vertex` | 1.0.9 / 1.1.6 / 1.0.8 | 1.0.10 / 1.1.7 / 1.0.9 |
+| `task-kling` / `task-kling-v2` | 1.0.18 / 0.32.16 | 1.0.19 / 0.32.17 |
+| `task-minimax-v2`, `task-bailian-v2` | 0.31.15 | 0.31.16 |
+| `task-xai-v2`, `task-veo-v2`, `task-wan-image-v2`, `task-gmi-image-v2` | 0.35.15 | 0.35.16 |
+| `task-byteplus-v2` | 0.36.15 | 0.36.16 |
+
+`south-provider-api` is unchanged (0.53.0). Every published package keeps `south_runtime` 0.57.0 and its `contracts`
+(`shipped_packages_v1::i3_2_retires_every_published_058_package_identity`); the I3-1 retirement test no longer pins
+I3-1's identities. The workspace version and tags are unchanged.
+
+Departures from §10, each following the embeddings contract 2 precedent (0.51.0):
+
+1. `MEDIA_CONTRACT_VERSION` keeps its value 1 and a new `MEDIA_CONTRACT_VERSION_V2` is 2, with
+   `MEDIA_CONTRACT_VERSIONS` = `[1, 2]` for a host's range; §10 says the constant itself moves to 2. Every published
+   image package declares media 1, and token-station-server builds its media range from that constant (its
+   `south_component.rs` test asserts the range equals `{MEDIA_CONTRACT_VERSION}`): moving the constant would make a
+   host that re-pins without other changes refuse every image package. With the precedent, a host keeps admitting
+   them and adds 2 to its range to admit `image-gemini` (§5 item 2). The test hosts (`host_range` in the conformance
+   and runtime crates, `declared_runtime_v1`) decode every media contract up to the one `compatibility.json` records,
+   as they do for embeddings.
+2. `image-gemini` declares this tree's release, 0.58.0, as its `south_runtime` until the release commit, which moves
+   the workspace version and the declaration together to the release that ships the word (as `embeddings-gemini`
+   1.1.0 declared 0.50.0 until the 0.51.0 release commit). Until then `scripts/check-declared-runtime.sh --build`
+   refuses the package: the 0.58.0 runtime decodes media 1 only.
+
+Decisions where the record is silent:
+
+1. **`image_url` from the placeholder head.** The 64-byte `head` must start with `data:` (case-sensitive, as native)
+   and contain `;base64,`; the `mimeType` sent is the text between them, verbatim, as native. A data URL whose media
+   type and parameters push `;base64,` past the head is refused with the native "must use base64 encoding" text (no
+   image media type comes close). A value a non-conforming host did not elide is read the native way, with its
+   syntax-only base64 check, and inlined.
+2. **Refusal texts**: the native ones, except that a non-string `image_url` is named by its JSON type rather than
+   echoed (an array of data URLs would otherwise be copied into the error), an elided `prompt`, `aspect_ratio`,
+   `resolution` or edit text field uses `image-azure`'s "longer than the gateway accepts", and an `n` that is not a
+   whole number on generation uses the host entry's text.
+3. **A resolution outside the tier grammar on a per-image call** (`images` required) is refused before dispatch: no
+   tier row could price it, and the native per-image guard refuses any resolution its row does not price. On a
+   token-priced call it is sent as is, as native.
+4. **Edit parts**: only file parts named `image` count (a text part named `image` does not; `image[]` is not read);
+   `prompt`, `n`, `stream`, `aspect_ratio` and `resolution` are read from text parts; the part's media type is used
+   when it starts with `image/` (either case) and is a valid media type (GI-Q6).
+5. **Artifacts**: `inlineData.mimeType` is used when it starts with `image/` and is a valid media type; an empty
+   `data` is skipped; an image present wins over a block or finish reason.
+6. **GI-Q5 details**: a blocked prompt is `rejected` with a `content_policy` 400 envelope whose `provider_message` is
+   the `blockReason`; a policy stop is `unknown` with the same envelope naming the finish reason. The finish reasons
+   are the record's seven plus `RECITATION` and `IMAGE_RECITATION` (still **unverified**); any other image-less 2xx is
+   `unknown` without an envelope.
+7. **Usage**: as `image-azure`, a missing declared bucket is `unknown` only when `tokens` is required (a per-image call
+   succeeds without usage), and a malformed count anywhere, the modality details included, is `unknown`; a details
+   entry without `tokenCount` counts 0 (proto3 omits zeros); a details list with non-zero tokens of another modality
+   reports no split; `cachedContentTokenCount` is `cached_input`.
+8. **Non-2xx**: the code follows the HTTP status (`image-azure`'s table); Google's `error.status` word is not read.
+
 ## Revision note
 
 - 2026-10-13: first draft (proposed).
 - 2026-10-13: lv ruled GI-Q1 to GI-Q7 as recommended and chose not to fix the native-arm defects in the native arm;
   the status is accepted.
+- 2026-10-13: implemented on branch `image-i3-2` ("Implementation"): `MEDIA_CONTRACT_VERSION` keeps 1 with a new `_V2`
+  and `MEDIA_CONTRACT_VERSIONS` (embeddings precedent), and `image-gemini` declares 0.58.0 until the release commit.
