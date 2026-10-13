@@ -6,13 +6,14 @@ use serde_json::Value;
 use south_host_grammars::decode_sse_v1;
 
 use super::{
-    NORTH_PASSTHROUGH_DELIVERY_SUITE_ID, NORTH_PASSTHROUGH_DELIVERY_SUITE_VERSION,
+    NORTH_PASSTHROUGH_DELIVERY_SUITE_ID, NORTH_PASSTHROUGH_DELIVERY_SUITE_V2_ID,
+    NORTH_PASSTHROUGH_DELIVERY_SUITE_V2_VERSION, NORTH_PASSTHROUGH_DELIVERY_SUITE_VERSION,
     NorthPassthroughBodyV1, NorthPassthroughBufferedVerdictV1, NorthPassthroughCaseIdV1,
     NorthPassthroughDeliveryV1, NorthPassthroughFixtureV1, NorthPassthroughFrameV1,
-    NorthPassthroughPathV1, NorthPassthroughScriptV1, NorthPassthroughSetupV1,
-    NorthPassthroughSplitV1, NorthPassthroughStreamOutcomeV1,
+    NorthPassthroughPathV1, NorthPassthroughProtocolV2, NorthPassthroughScriptV1,
+    NorthPassthroughSetupV1, NorthPassthroughSplitV1, NorthPassthroughStreamOutcomeV1,
     north_passthrough_buffered_upstream_text_v1, north_passthrough_fixtures_v1,
-    north_passthrough_frames_v1,
+    north_passthrough_fixtures_v2, north_passthrough_frames_v1,
 };
 
 /// What a host implements to run the suite: its pass-through executor, with the component
@@ -50,6 +51,74 @@ pub trait NorthPassthroughHarnessV1 {
     ) -> NorthPassthroughTimelineV1;
 }
 
+/// What a host implements to run suite version two
+/// ([`super::NORTH_PASSTHROUGH_DELIVERY_SUITE_V2_ID`]) for one or more protocols: the
+/// [`NorthPassthroughHarnessV1`] methods, with `stream` and `buffered` told the protocol of the
+/// exchange.
+///
+/// Each `stream` or `buffered` call is one independent exchange in which the host has already
+/// chosen pass-through delivery for a client of `protocol`, to a family declaring
+/// `north_passthrough: <protocol>` (and, for `generate_content`, `north_request_passthrough` too).
+pub trait NorthPassthroughHarnessV2 {
+    /// The fixed public message of the host's Responses failure event. The suite reads it only for
+    /// Responses: `generate_content` has no failure event.
+    fn fixed_failure_message(&self) -> String;
+
+    /// The delivery the host chooses for `setup`, before dispatch.
+    fn delivery(&self, setup: &NorthPassthroughSetupV1) -> NorthPassthroughDeliveryV1;
+
+    /// As [`NorthPassthroughHarnessV1::stream`], for an exchange of `protocol`.
+    fn stream(
+        &self,
+        protocol: NorthPassthroughProtocolV2,
+        chunks: &[&[u8]],
+        script: &NorthPassthroughScriptV1,
+    ) -> NorthPassthroughTimelineV1;
+
+    /// As [`NorthPassthroughHarnessV1::buffered`], for an exchange of `protocol`. When the host
+    /// delivers a non-2xx `generate_content` answer it reports the status it wrote with
+    /// [`NorthPassthroughStepV1::StatusWritten`].
+    fn buffered(
+        &self,
+        protocol: NorthPassthroughProtocolV2,
+        status: u16,
+        body: &[u8],
+        verdict: NorthPassthroughBufferedVerdictV1,
+    ) -> NorthPassthroughTimelineV1;
+}
+
+/// A version-one harness seen as a version-two harness for Responses only.
+struct ResponsesOnly<'a>(&'a dyn NorthPassthroughHarnessV1);
+
+impl NorthPassthroughHarnessV2 for ResponsesOnly<'_> {
+    fn fixed_failure_message(&self) -> String {
+        self.0.fixed_failure_message()
+    }
+
+    fn delivery(&self, setup: &NorthPassthroughSetupV1) -> NorthPassthroughDeliveryV1 {
+        self.0.delivery(setup)
+    }
+
+    fn stream(
+        &self,
+        _protocol: NorthPassthroughProtocolV2,
+        chunks: &[&[u8]],
+        script: &NorthPassthroughScriptV1,
+    ) -> NorthPassthroughTimelineV1 {
+        self.0.stream(chunks, script)
+    }
+
+    fn buffered(
+        &self,
+        _protocol: NorthPassthroughProtocolV2,
+        status: u16,
+        body: &[u8],
+        verdict: NorthPassthroughBufferedVerdictV1,
+    ) -> NorthPassthroughTimelineV1 {
+        self.0.buffered(status, body, verdict)
+    }
+}
+
 /// One step a host took, in the order it took them.
 #[derive(Clone, PartialEq, Eq)]
 pub enum NorthPassthroughStepV1 {
@@ -69,6 +138,10 @@ pub enum NorthPassthroughStepV1 {
     SettledAsFailure,
     /// The client response ended.
     Ended,
+    /// The client response's status line was written with this status. Suite version two reads
+    /// it only where the upstream's own status must reach the client (a non-2xx
+    /// `generate_content` answer); elsewhere a host may report it or not.
+    StatusWritten(u16),
 }
 
 impl fmt::Debug for NorthPassthroughStepV1 {
@@ -86,6 +159,9 @@ impl fmt::Debug for NorthPassthroughStepV1 {
             Self::MarkedDeliveryUnknown => formatter.write_str("MarkedDeliveryUnknown"),
             Self::SettledAsFailure => formatter.write_str("SettledAsFailure"),
             Self::Ended => formatter.write_str("Ended"),
+            Self::StatusWritten(status) => {
+                formatter.debug_tuple("StatusWritten").field(status).finish()
+            }
         }
     }
 }
@@ -132,7 +208,8 @@ pub enum NorthPassthroughMismatchCategoryV1 {
     Terminal,
     /// The funds transition of a failed exchange: missing, repeated, or after the failure event.
     Funds,
-    /// The host's failure event: its shape, identity, sequence number or message.
+    /// The host's failure event: its shape, identity, sequence number or message (Responses), or
+    /// any frame at all written after the relayed ones (`generate_content`).
     FailureEvent,
     /// The upstream's own failure text reached the client.
     Leak,
@@ -194,6 +271,7 @@ impl fmt::Debug for NorthPassthroughMismatchV1 {
 /// A passing run.
 #[derive(Clone, PartialEq, Eq)]
 pub struct NorthPassthroughConformanceReportV1 {
+    suite: Suite,
     passed_case_ids: Vec<NorthPassthroughCaseIdV1>,
 }
 
@@ -201,13 +279,19 @@ impl NorthPassthroughConformanceReportV1 {
     /// The suite identifier.
     #[must_use]
     pub const fn suite_id(&self) -> &'static str {
-        NORTH_PASSTHROUGH_DELIVERY_SUITE_ID
+        self.suite.id
     }
 
     /// The suite version.
     #[must_use]
     pub const fn suite_version(&self) -> u32 {
-        NORTH_PASSTHROUGH_DELIVERY_SUITE_VERSION
+        self.suite.version
+    }
+
+    /// The protocol the cases were for (always Responses for version one).
+    #[must_use]
+    pub const fn protocol(&self) -> NorthPassthroughProtocolV2 {
+        self.suite.protocol
     }
 
     /// Every case, in table order, once.
@@ -222,6 +306,7 @@ impl fmt::Debug for NorthPassthroughConformanceReportV1 {
         formatter
             .debug_struct("NorthPassthroughConformanceReportV1")
             .field("suite_id", &self.suite_id())
+            .field("protocol", &self.suite.protocol)
             .field("passed_case_ids", &self.passed_case_ids)
             .finish()
     }
@@ -230,6 +315,7 @@ impl fmt::Debug for NorthPassthroughConformanceReportV1 {
 /// A failing run: every mismatch, without failing fast.
 #[derive(Clone, PartialEq, Eq)]
 pub struct NorthPassthroughConformanceFailureV1 {
+    suite: Suite,
     evaluated_case_count: usize,
     mismatches: Vec<NorthPassthroughMismatchV1>,
 }
@@ -238,13 +324,19 @@ impl NorthPassthroughConformanceFailureV1 {
     /// The suite identifier.
     #[must_use]
     pub const fn suite_id(&self) -> &'static str {
-        NORTH_PASSTHROUGH_DELIVERY_SUITE_ID
+        self.suite.id
     }
 
     /// The suite version.
     #[must_use]
     pub const fn suite_version(&self) -> u32 {
-        NORTH_PASSTHROUGH_DELIVERY_SUITE_VERSION
+        self.suite.version
+    }
+
+    /// The protocol the cases were for (always Responses for version one).
+    #[must_use]
+    pub const fn protocol(&self) -> NorthPassthroughProtocolV2 {
+        self.suite.protocol
     }
 
     /// How many distinct cases ran.
@@ -273,6 +365,7 @@ impl fmt::Debug for NorthPassthroughConformanceFailureV1 {
         formatter
             .debug_struct("NorthPassthroughConformanceFailureV1")
             .field("suite_id", &self.suite_id())
+            .field("protocol", &self.suite.protocol)
             .field("evaluated_case_count", &self.evaluated_case_count)
             .field("mismatches", &self.mismatches)
             .finish()
@@ -287,13 +380,51 @@ impl fmt::Debug for NorthPassthroughConformanceFailureV1 {
 pub fn run_north_passthrough_conformance_v1(
     harness: &dyn NorthPassthroughHarnessV1,
 ) -> Result<NorthPassthroughConformanceReportV1, NorthPassthroughConformanceFailureV1> {
-    let fixtures = north_passthrough_fixtures_v1();
+    let suite = Suite {
+        id: NORTH_PASSTHROUGH_DELIVERY_SUITE_ID,
+        version: NORTH_PASSTHROUGH_DELIVERY_SUITE_VERSION,
+        protocol: NorthPassthroughProtocolV2::Responses,
+    };
+    run(&ResponsesOnly(harness), suite, &north_passthrough_fixtures_v1())
+}
+
+/// Runs every case of suite version two for `protocol`, in table order, without failing fast.
+///
+/// The cases are [`north_passthrough_fixtures_v2`]`(protocol)`; for Responses they are the
+/// version-one cases, checked the same way. A host that serves several protocols by pass-through
+/// runs this once per protocol.
+pub fn run_north_passthrough_conformance_v2(
+    harness: &dyn NorthPassthroughHarnessV2,
+    protocol: NorthPassthroughProtocolV2,
+) -> Result<NorthPassthroughConformanceReportV1, NorthPassthroughConformanceFailureV1> {
+    let suite = Suite {
+        id: NORTH_PASSTHROUGH_DELIVERY_SUITE_V2_ID,
+        version: NORTH_PASSTHROUGH_DELIVERY_SUITE_V2_VERSION,
+        protocol,
+    };
+    run(harness, suite, &north_passthrough_fixtures_v2(protocol))
+}
+
+/// Which suite a run belongs to.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct Suite {
+    id: &'static str,
+    version: u32,
+    protocol: NorthPassthroughProtocolV2,
+}
+
+fn run(
+    harness: &dyn NorthPassthroughHarnessV2,
+    suite: Suite,
+    fixtures: &[NorthPassthroughFixtureV1],
+) -> Result<NorthPassthroughConformanceReportV1, NorthPassthroughConformanceFailureV1> {
+    let protocol = suite.protocol;
     let mut case_ids: Vec<NorthPassthroughCaseIdV1> =
         fixtures.iter().map(NorthPassthroughFixtureV1::case_id).collect();
     case_ids.dedup();
     let mut mismatches = Vec::new();
     let fixed = harness.fixed_failure_message();
-    for fixture in &fixtures {
+    for fixture in fixtures {
         let mut checker =
             Checker { case_id: fixture.case_id(), variant: 0, mismatches: &mut mismatches };
         match fixture.path() {
@@ -311,21 +442,23 @@ pub fn run_north_passthrough_conformance_v1(
             NorthPassthroughPathV1::Stream { body, split, script, outcome } => {
                 let bytes = body.bytes();
                 for chunks in variants(*split, &bytes) {
-                    let timeline = harness.stream(&chunks, script);
-                    check_stream(&mut checker, *body, &bytes, *outcome, &timeline, &fixed);
+                    let timeline = harness.stream(protocol, &chunks, script);
+                    let expected = StreamExpectation { protocol, body: *body, outcome: *outcome };
+                    check_stream(&mut checker, &expected, &bytes, &timeline, &fixed);
                     checker.variant += 1;
                 }
             }
             NorthPassthroughPathV1::Buffered { status, body, verdict, forwarded } => {
-                let timeline = harness.buffered(*status, body.as_bytes(), *verdict);
-                check_buffered(&mut checker, body, *forwarded, &timeline);
+                let timeline = harness.buffered(protocol, *status, body.as_bytes(), *verdict);
+                check_buffered(&mut checker, *status, body, *forwarded, &timeline);
             }
         }
     }
     if mismatches.is_empty() {
-        Ok(NorthPassthroughConformanceReportV1 { passed_case_ids: case_ids })
+        Ok(NorthPassthroughConformanceReportV1 { suite, passed_case_ids: case_ids })
     } else {
         Err(NorthPassthroughConformanceFailureV1 {
+            suite,
             evaluated_case_count: case_ids.len(),
             mismatches,
         })
@@ -435,15 +568,22 @@ fn ended_once_last(steps: &[NorthPassthroughStepV1]) -> bool {
         && steps.last() == Some(&NorthPassthroughStepV1::Ended)
 }
 
+/// What one streaming case expects.
+struct StreamExpectation {
+    protocol: NorthPassthroughProtocolV2,
+    body: NorthPassthroughBodyV1,
+    outcome: NorthPassthroughStreamOutcomeV1,
+}
+
 fn check_stream(
     checker: &mut Checker<'_>,
-    body: NorthPassthroughBodyV1,
+    expected: &StreamExpectation,
     bytes: &[u8],
-    outcome: NorthPassthroughStreamOutcomeV1,
     timeline: &NorthPassthroughTimelineV1,
     fixed: &str,
 ) {
     use NorthPassthroughMismatchCategoryV1 as Category;
+    let StreamExpectation { protocol, body, outcome } = *expected;
     let steps = timeline.steps();
     let frames = north_passthrough_frames_v1(bytes).unwrap_or_default();
     let (relayed, fed_count, completes) = match outcome {
@@ -534,17 +674,21 @@ fn check_stream(
     };
     checker.check(!funds_right, Category::Funds);
 
-    // The failure event.
+    // The failure event: the host's own `response.failed` for Responses; for `generate_content`,
+    // which has no failure event, nothing at all.
     if !completes {
-        let identity = frames.iter().take(relayed).find_map(relayed_identity);
-        let last_sequence = frames
-            .get(..relayed)
-            .and_then(|relayed| relayed.last())
-            .and_then(NorthPassthroughFrameV1::sequence_number);
-        checker.check(
-            !failure_event_right(tail, relayed, identity.as_ref(), last_sequence, fixed),
-            Category::FailureEvent,
-        );
+        let right = match protocol {
+            NorthPassthroughProtocolV2::Responses => {
+                let identity = frames.iter().take(relayed).find_map(relayed_identity);
+                let last_sequence = frames
+                    .get(..relayed)
+                    .and_then(|relayed| relayed.last())
+                    .and_then(NorthPassthroughFrameV1::sequence_number);
+                failure_event_right(tail, relayed, identity.as_ref(), last_sequence, fixed)
+            }
+            NorthPassthroughProtocolV2::GenerateContent => tail.is_empty(),
+        };
+        checker.check(!right, Category::FailureEvent);
     }
 
     // Leak.
@@ -615,6 +759,7 @@ fn failure_event_right(
 
 fn check_buffered(
     checker: &mut Checker<'_>,
+    status: u16,
     body: &str,
     forwarded_expected: bool,
     timeline: &NorthPassthroughTimelineV1,
@@ -625,7 +770,34 @@ fn check_buffered(
     let first_forward = owners.first().copied();
     let returned = position(steps, &NorthPassthroughStepV1::Returned);
     let settled = position(steps, &NorthPassthroughStepV1::SettlementPersisted);
-    if forwarded_expected {
+    if forwarded_expected && !(200..300).contains(&status) {
+        // Delivered as sent (`generate_content`): the upstream's status and body, after
+        // `map-provider-error` returned and the funds transition was recorded; never settled as a
+        // success.
+        let statuses: Vec<(usize, u16)> = steps
+            .iter()
+            .enumerate()
+            .filter_map(|(index, step)| match step {
+                NorthPassthroughStepV1::StatusWritten(written) => Some((index, *written)),
+                _ => None,
+            })
+            .collect();
+        let status_right = matches!(
+            (statuses.as_slice(), first_forward),
+            ([(index, written)], Some(forward)) if *written == status && *index < forward
+        );
+        checker.check(raw != body.as_bytes() || !status_right, Category::Forwarded);
+        checker.check(
+            !matches!((returned, first_forward), (Some(r), Some(f)) if r < f),
+            Category::Order,
+        );
+        checker.check(settled.is_some(), Category::Terminal);
+        let funds = funds_steps(steps);
+        checker.check(
+            funds.len() != 1 || first_forward.is_some_and(|forward| funds[0] > forward),
+            Category::Funds,
+        );
+    } else if forwarded_expected {
         checker.check(raw != body.as_bytes(), Category::Forwarded);
         checker.check(
             !matches!((returned, first_forward), (Some(r), Some(f)) if r < f),

@@ -78,18 +78,21 @@ pub use header_auth::{
     HeaderAuthUpstreamV1, header_auth_fixtures_v1,
 };
 pub use north_passthrough::{
-    NORTH_PASSTHROUGH_DELIVERY_SUITE_ID, NORTH_PASSTHROUGH_DELIVERY_SUITE_VERSION,
+    NORTH_PASSTHROUGH_DELIVERY_SUITE_ID, NORTH_PASSTHROUGH_DELIVERY_SUITE_V2_ID,
+    NORTH_PASSTHROUGH_DELIVERY_SUITE_V2_VERSION, NORTH_PASSTHROUGH_DELIVERY_SUITE_VERSION,
     NORTH_PASSTHROUGH_TERMINAL_TYPES_V1, NorthPassthroughBodyV1, NorthPassthroughBufferedVerdictV1,
     NorthPassthroughCaseIdV1, NorthPassthroughConformanceFailureV1,
     NorthPassthroughConformanceReportV1, NorthPassthroughDeliveryV1,
     NorthPassthroughFinishVerdictV1, NorthPassthroughFixtureV1, NorthPassthroughFrameV1,
-    NorthPassthroughFrameVerdictV1, NorthPassthroughHarnessV1, NorthPassthroughMismatchCategoryV1,
-    NorthPassthroughMismatchV1, NorthPassthroughPathV1, NorthPassthroughScriptV1,
-    NorthPassthroughSettlementV1, NorthPassthroughSetupV1, NorthPassthroughSplitV1,
-    NorthPassthroughStepV1, NorthPassthroughStreamOutcomeV1, NorthPassthroughTimelineV1,
+    NorthPassthroughFrameVerdictV1, NorthPassthroughHarnessV1, NorthPassthroughHarnessV2,
+    NorthPassthroughMismatchCategoryV1, NorthPassthroughMismatchV1, NorthPassthroughPathV1,
+    NorthPassthroughProtocolV2, NorthPassthroughScriptV1, NorthPassthroughSettlementV1,
+    NorthPassthroughSetupV1, NorthPassthroughSplitV1, NorthPassthroughStepV1,
+    NorthPassthroughStreamOutcomeV1, NorthPassthroughTimelineV1,
     north_passthrough_buffered_upstream_text_v1, north_passthrough_fixtures_v1,
-    north_passthrough_frames_v1, north_passthrough_terminator_v1,
-    run_north_passthrough_conformance_v1,
+    north_passthrough_fixtures_v2, north_passthrough_frames_v1,
+    north_passthrough_is_terminal_data_v2, north_passthrough_terminator_v1,
+    run_north_passthrough_conformance_v1, run_north_passthrough_conformance_v2,
 };
 pub use provider_binary::{
     PROVIDER_BINARY_CONFORMANCE_SUITE_ID, PROVIDER_BINARY_CONFORMANCE_SUITE_VERSION,

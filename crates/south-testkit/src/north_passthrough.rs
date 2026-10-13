@@ -1,4 +1,5 @@
-//! The reference pass-through executor for `south.north-passthrough-delivery.v1`.
+//! The reference pass-through executor for `south.north-passthrough-delivery.v1` and, for both
+//! of its protocols, `south.north-passthrough-delivery.v2`.
 //!
 //! It is what the suite describes, written as plainly as possible: cut the upstream bytes with
 //! `SseDecoderV1::position`, feed one frame per call, forward a frame after its call returned,
@@ -7,19 +8,24 @@
 //! fixed-message `response.failed`. Design record
 //! `docs/design/2026-10-11-responses-reasoning-replay-and-passthrough-suite.md` §3.
 //!
+//! For `generate_content` (record `docs/design/2026-10-14-generate-content-request-passthrough.md`
+//! §6) the terminal frame is one with some `candidates[*].finishReason` set, a failure ends the
+//! stream without any frame of the executor's own, and a non-2xx answer is delivered with the
+//! upstream's status and body.
+//!
 //! [`NorthPassthroughFaultV1`] names one deliberate wiring mistake per assertion of the suite.
-//! The suite's self-test (`tests/north_passthrough_runner_v1.rs`) shows the reference passes and
-//! each mistake fails exactly the cases that guard it.
+//! The suite's self-tests (`tests/north_passthrough_runner_v1.rs`, `..._v2.rs`) show the
+//! reference passes and each mistake fails exactly the cases that guard it.
 
 use serde_json::{Value, json};
 use south_host_grammars::{SseDecoderV1, decode_sse_v1};
 use south_provider_api::NorthProtocolV1;
 use south_provider_conformance::{
-    NORTH_PASSTHROUGH_TERMINAL_TYPES_V1, NorthPassthroughBufferedVerdictV1,
-    NorthPassthroughDeliveryV1, NorthPassthroughFinishVerdictV1, NorthPassthroughFrameVerdictV1,
-    NorthPassthroughHarnessV1, NorthPassthroughScriptV1, NorthPassthroughSettlementV1,
+    NorthPassthroughBufferedVerdictV1, NorthPassthroughDeliveryV1, NorthPassthroughFinishVerdictV1,
+    NorthPassthroughFrameVerdictV1, NorthPassthroughHarnessV1, NorthPassthroughHarnessV2,
+    NorthPassthroughProtocolV2, NorthPassthroughScriptV1, NorthPassthroughSettlementV1,
     NorthPassthroughSetupV1, NorthPassthroughStepV1, NorthPassthroughTimelineV1,
-    north_passthrough_terminator_v1,
+    north_passthrough_is_terminal_data_v2, north_passthrough_terminator_v1,
 };
 
 /// The reference executor's fixed public failure message.
@@ -65,6 +71,14 @@ pub enum NorthPassthroughFaultV1 {
     BufferedForwardBeforeSettlement,
     /// Forwards a non-streaming body the component refused, or a non-2xx body.
     BufferedRelaysFailure,
+    /// `generate_content`: ends a failed stream with a frame of its own.
+    GenerateContentFailureFrame,
+    /// `generate_content`: answers a non-2xx upstream with its own error, as for Responses.
+    GenerateContentNon2xxReplaced,
+    /// `generate_content`: delivers a non-2xx body under a status of its own.
+    GenerateContentNon2xxStatusRewritten,
+    /// `generate_content`: looks for `finishReason` on the first candidate only.
+    TerminalOnFirstCandidateOnly,
 }
 
 /// The reference executor.
@@ -101,19 +115,55 @@ impl ReferenceNorthPassthroughExecutorV1 {
 
 impl NorthPassthroughHarnessV1 for ReferenceNorthPassthroughExecutorV1 {
     fn fixed_failure_message(&self) -> String {
+        NorthPassthroughHarnessV2::fixed_failure_message(self)
+    }
+
+    fn delivery(&self, setup: &NorthPassthroughSetupV1) -> NorthPassthroughDeliveryV1 {
+        NorthPassthroughHarnessV2::delivery(self, setup)
+    }
+
+    fn stream(
+        &self,
+        chunks: &[&[u8]],
+        script: &NorthPassthroughScriptV1,
+    ) -> NorthPassthroughTimelineV1 {
+        NorthPassthroughHarnessV2::stream(self, NorthPassthroughProtocolV2::Responses, chunks, script)
+    }
+
+    fn buffered(
+        &self,
+        status: u16,
+        body: &[u8],
+        verdict: NorthPassthroughBufferedVerdictV1,
+    ) -> NorthPassthroughTimelineV1 {
+        NorthPassthroughHarnessV2::buffered(
+            self,
+            NorthPassthroughProtocolV2::Responses,
+            status,
+            body,
+            verdict,
+        )
+    }
+}
+
+impl NorthPassthroughHarnessV2 for ReferenceNorthPassthroughExecutorV1 {
+    fn fixed_failure_message(&self) -> String {
         REFERENCE_NORTH_PASSTHROUGH_FAILURE_MESSAGE_V1.to_owned()
     }
 
     fn delivery(&self, setup: &NorthPassthroughSetupV1) -> NorthPassthroughDeliveryV1 {
         use NorthPassthroughFaultV1 as Fault;
-        let lossless = self.is(Fault::DeliveryIgnoresLossless)
+        // The client's tools matter only when the codec maps the request; a protocol without a
+        // codec passes the request through too.
+        let lossless = !setup.inbound().has_north_codec()
+            || self.is(Fault::DeliveryIgnoresLossless)
             || setup.client_tools().as_array().is_some_and(|tools| {
                 tools
                     .iter()
                     .all(|tool| tool["type"] == "function" && tool.get("namespace").is_none())
             });
-        let declared = if self.is(Fault::DeliveryIgnoresDeclaration) {
-            setup.declared().or(Some(NorthProtocolV1::Responses))
+        let declared: Option<NorthProtocolV1> = if self.is(Fault::DeliveryIgnoresDeclaration) {
+            setup.declared().or(Some(setup.inbound()))
         } else {
             setup.declared()
         };
@@ -131,10 +181,11 @@ impl NorthPassthroughHarnessV1 for ReferenceNorthPassthroughExecutorV1 {
 
     fn stream(
         &self,
+        protocol: NorthPassthroughProtocolV2,
         chunks: &[&[u8]],
         script: &NorthPassthroughScriptV1,
     ) -> NorthPassthroughTimelineV1 {
-        let mut run = Run::new(*self, script);
+        let mut run = Run::new(*self, protocol, script);
         let mut decoder = SseDecoderV1::new();
         let mut buffer = Vec::new();
         let mut start = 0usize;
@@ -185,15 +236,26 @@ impl NorthPassthroughHarnessV1 for ReferenceNorthPassthroughExecutorV1 {
 
     fn buffered(
         &self,
+        protocol: NorthPassthroughProtocolV2,
         status: u16,
         body: &[u8],
         verdict: NorthPassthroughBufferedVerdictV1,
     ) -> NorthPassthroughTimelineV1 {
+        use NorthPassthroughFaultV1 as Fault;
         use NorthPassthroughStepV1 as Step;
         let mut steps = vec![Step::Fed(Vec::new()), Step::Returned];
-        let success =
-            (200..300).contains(&status) && verdict == NorthPassthroughBufferedVerdictV1::Parses;
-        if success {
+        let is_2xx = (200..300).contains(&status);
+        let success = is_2xx && verdict == NorthPassthroughBufferedVerdictV1::Parses;
+        let delivered_as_sent = protocol == NorthPassthroughProtocolV2::GenerateContent
+            && !is_2xx
+            && !self.is(Fault::GenerateContentNon2xxReplaced);
+        if delivered_as_sent {
+            steps.push(Step::SettledAsFailure);
+            let written =
+                if self.is(Fault::GenerateContentNon2xxStatusRewritten) { 502 } else { status };
+            steps.push(Step::StatusWritten(written));
+            steps.push(Step::Forwarded(body.to_vec()));
+        } else if success {
             if self.is(NorthPassthroughFaultV1::BufferedForwardBeforeSettlement) {
                 steps.push(Step::Forwarded(body.to_vec()));
                 steps.push(Step::SettlementPersisted);
@@ -223,6 +285,7 @@ type Identity = (Value, Value, Value);
 
 struct Run<'a> {
     executor: ReferenceNorthPassthroughExecutorV1,
+    protocol: NorthPassthroughProtocolV2,
     script: &'a NorthPassthroughScriptV1,
     steps: Vec<NorthPassthroughStepV1>,
     calls: usize,
@@ -240,10 +303,12 @@ fn data_of(frame: &[u8]) -> Option<Value> {
 impl<'a> Run<'a> {
     const fn new(
         executor: ReferenceNorthPassthroughExecutorV1,
+        protocol: NorthPassthroughProtocolV2,
         script: &'a NorthPassthroughScriptV1,
     ) -> Self {
         Self {
             executor,
+            protocol,
             script,
             steps: Vec::new(),
             calls: 0,
@@ -262,9 +327,7 @@ impl<'a> Run<'a> {
         use NorthPassthroughFrameVerdictV1 as Verdict;
         use NorthPassthroughStepV1 as Step;
         let data = data_of(&frame);
-        let kind = data.as_ref().and_then(|data| data["type"].as_str().map(str::to_owned));
-        let terminal_type =
-            kind.as_deref().is_some_and(|kind| NORTH_PASSTHROUGH_TERMINAL_TYPES_V1.contains(&kind));
+        let terminal_type = data.as_ref().is_some_and(|data| self.is_terminal(data));
         self.steps.push(Step::Fed(frame.clone()));
         let verdict = self.script.frame(self.calls);
         self.calls += 1;
@@ -298,6 +361,16 @@ impl<'a> Run<'a> {
                 }
             }
         }
+    }
+
+    /// Whether `data` marks the terminal frame of the run's protocol.
+    fn is_terminal(&self, data: &Value) -> bool {
+        if self.protocol == NorthPassthroughProtocolV2::GenerateContent
+            && self.is(NorthPassthroughFaultV1::TerminalOnFirstCandidateOnly)
+        {
+            return !data["candidates"][0]["finishReason"].is_null();
+        }
+        north_passthrough_is_terminal_data_v2(self.protocol, data)
     }
 
     fn forward(&mut self, frame: &[u8], data: Option<&Value>) {
@@ -373,6 +446,20 @@ impl<'a> Run<'a> {
     }
 
     fn fail(&mut self, funds: NorthPassthroughStepV1, failing: Option<&Value>) {
+        if self.protocol == NorthPassthroughProtocolV2::GenerateContent {
+            // No failure event exists: record the funds transition and end the stream.
+            self.steps.push(funds);
+            if self.is(NorthPassthroughFaultV1::GenerateContentFailureFrame) {
+                let message = REFERENCE_NORTH_PASSTHROUGH_FAILURE_MESSAGE_V1;
+                let data =
+                    json!({"error": {"code": 500, "status": "INTERNAL", "message": message}});
+                self.steps.push(NorthPassthroughStepV1::Forwarded(
+                    format!("data: {data}\r\n\r\n").into_bytes(),
+                ));
+            }
+            self.end();
+            return;
+        }
         let event = self.failure_event(failing);
         if self.is(NorthPassthroughFaultV1::FailureEventBeforeFunds) {
             self.steps.push(NorthPassthroughStepV1::Forwarded(event));

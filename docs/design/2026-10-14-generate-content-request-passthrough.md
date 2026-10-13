@@ -1,7 +1,7 @@
 # Request pass-through for the `generateContent` surface (D7)
 
 Status: proposed (south side of the host's D7, ruled by lv on 2026-10-14: D7-Q1 to D7-Q5 as recommended in
-`server:docs/product-review-v2/plans/2026-10-14-D7-v1beta透传接受组件行方案.md` §6). Not implemented.
+the host's D7 plan, `server:docs/product-review-v2/plans/2026-10-14-D7-*.md` §6). Not implemented.
 
 Date: 2026-10-14
 
@@ -114,6 +114,40 @@ The `generate_content` rules of the parameterised delivery suite:
   behaviour of the host's native rows); the suite asserts no synthetic frame appears.
 - **Non-2xx** responses are delivered to the client as the upstream sent them (D7-Q3), status and body.
 - **Non-stream**: the body is delivered verbatim after the component has parsed it and the host has settled.
+
+### 6.1 Implementation
+
+The parameterised suite is a second identifier, `south.north-passthrough-delivery.v2` (version 2), next to an unchanged
+v1. A host that ran v1 against Responses (the server's `host_passes_the_north_passthrough_delivery_suite`) keeps its
+harness, its 22 cases and the meaning of its claim; adding `generate_content` cases under the v1 identifier would have
+changed what "passes v1" means after the fact.
+
+- `south-provider-conformance` adds `NorthPassthroughProtocolV2` (`Responses`, `GenerateContent`: the subset of
+  `NorthProtocolV1` the suite has rules for, with `from_north_protocol` / `north_protocol`), the harness trait
+  `NorthPassthroughHarnessV2` (v1's methods, with `stream` and `buffered` told the protocol),
+  `run_north_passthrough_conformance_v2(harness, protocol)`, `north_passthrough_fixtures_v2(protocol)` and
+  `north_passthrough_is_terminal_data_v2(protocol, data)`. For Responses, v2's table is v1's table and its checks are
+  v1's checks; v1's runner is v2's runner over an adapter, so the two cannot drift. Reports gain `protocol()`.
+- New public enum members: `NorthPassthroughBodyV1::Gemini*` (nine bodies; two are rows of `fixtures-gemini`, checked
+  byte for byte), four case ids (`OtherFinishReasonIsTerminal`, `FinishReasonOnAnyCandidateIsTerminal`,
+  `UpstreamErrorFrameNotRelayed`, `BufferedNon2xxDeliveredAsSent`) and the step `StatusWritten(u16)`.
+  `NorthPassthroughFrameV1` gains `has_finish_reason()` and `is_terminal_frame(protocol)`.
+- The `generate_content` table has 21 cases. Twelve reuse v1 ids whose rule does not depend on the protocol
+  (forwarding, order, terminal withheld until settlement, parking on a terminal frame without `Done` and on `Done`
+  without a terminal frame, a lagging component, component errors and traps, a failure on the first frame, truncation,
+  a failed settlement, the end-of-input terminator); three are delivery cases (the client's tools decide nothing,
+  since the request is passed through too); two are buffered cases as in v1; four are new. v1's `LossyToolMapRenders`,
+  `IncompleteIsTerminal`, `UpstreamFailureReplaced`, `ErrorEventReplaced` and `BufferedNon2xxNotRelayed` have no
+  `generate_content` form.
+- Every `generate_content` failure case requires that nothing but comment lines follows the relayed frames (category
+  `FailureEvent`), in place of v1's fixed-message `response.failed`. The non-2xx case requires the upstream's body
+  byte for byte, exactly one `StatusWritten` equal to the upstream status before the first byte, `map-provider-error`
+  returned before it, one funds transition before it and no persisted success settlement.
+- `south-testkit`'s reference executor implements both harnesses and passes both protocols. Four new faults
+  (`GenerateContentFailureFrame`, `GenerateContentNon2xxReplaced`, `GenerateContentNon2xxStatusRewritten`,
+  `TerminalOnFirstCandidateOnly`) each fail exactly the cases that guard them; for Responses, v2 fails exactly what v1
+  fails for every fault (`tests/north_passthrough_runner_v2.rs`).
+- `compatibility.json` still names only the v1 suite; adding the v2 identifier there is part of the release.
 
 ## 7. Open points
 
