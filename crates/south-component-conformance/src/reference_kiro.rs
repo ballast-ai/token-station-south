@@ -213,14 +213,10 @@ fn tool_use(call: &ToolCall) -> ComponentResultV1<Value> {
     Ok(json!({"toolUseId": call.id, "name": call.name, "input": tool_input(&call.arguments)}))
 }
 
-/// The `input` of a tool use, as the native arm sends it: the arguments parsed as JSON, any JSON
-/// value kept as it is, and text that does not parse sent as a JSON string. Empty or whitespace-only
-/// arguments (clients send `""` for a call without arguments) become `{}`, the input of a call
-/// without arguments; natively they are sent as the string itself (KD14).
+/// The `input` of a tool use, exactly as the native arm sends it (the Anthropic first hop): the
+/// arguments parsed as JSON, any JSON value kept as it is, and text that does not parse, empty or
+/// whitespace-only text included, sent as that text in a JSON string.
 fn tool_input(arguments: &str) -> Value {
-    if arguments.trim().is_empty() {
-        return json!({});
-    }
     serde_json::from_str::<Value>(arguments).unwrap_or_else(|_| json!(arguments))
 }
 
