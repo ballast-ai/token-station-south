@@ -15,5 +15,13 @@
     "index": 0,
     "name": "f",
     "type": "tool_call_delta"
+  },
+  {
+    "finish_reason": "tool_calls",
+    "type": "finish"
+  },
+  {
+    "finish_reason": "tool_calls",
+    "type": "done"
   }
 ]

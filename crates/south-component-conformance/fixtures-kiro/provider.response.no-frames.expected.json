@@ -1,7 +1,20 @@
 {
-  "error": {
-    "code": "provider_protocol_error",
-    "http_status": 502,
-    "message": "the upstream answer did not complete: it carried no frames or ended inside a tool call"
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "role": "assistant"
+      }
+    }
+  ],
+  "id": "",
+  "model": "",
+  "usage": {
+    "cache_read_tokens": 0,
+    "cache_write_tokens": 0,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "reasoning_tokens": 0
   }
 }

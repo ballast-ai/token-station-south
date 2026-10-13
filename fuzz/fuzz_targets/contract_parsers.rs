@@ -429,7 +429,8 @@ fn fuzz_embeddings(input: &str) {
 /// The Kiro stream parser (`provider-kiro`): the canonical re-encoding of the upstream's
 /// eventstream messages, fed upstream bytes. Chunking never changes the events or the first
 /// error, the package never reports usage (`usage_evidence: absent`), and the buffered path folds
-/// the same body to a response exactly when the stream completes.
+/// the same body to a response exactly when the stream ends without an error (a body with no frame
+/// is an empty answer there, and emits no `Done` on the stream path).
 fn fuzz_kiro_stream(data: &[u8]) {
     let run = |stride: usize| {
         let mut parser = KiroReferenceV1.stream_parser();
@@ -462,9 +463,7 @@ fn fuzz_kiro_stream(data: &[u8]) {
     let Ok(body) = std::str::from_utf8(data) else {
         return;
     };
-    let completed = error.is_none()
-        && kinds.iter().any(|kind| kind == "done")
-        && !kinds.iter().any(|kind| kind == "error");
+    let completed = error.is_none() && !kinds.iter().any(|kind| kind == "error");
     let parts = serde_json::json!({"status": 200, "body": body}).to_string();
     match south_component_conformance::abi::parse_response_json(&KiroReferenceV1, &parts) {
         Ok(response) => {

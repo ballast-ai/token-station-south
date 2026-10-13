@@ -30,13 +30,23 @@
           {
             "id": "call_a",
             "name": "get_weather",
-            "arguments": "Paris"
+            "arguments": ""
+          },
+          {
+            "id": "call_b",
+            "name": "get_weather",
+            "arguments": "  \n"
           }
         ]
       },
       {
         "role": "tool",
         "tool_call_id": "call_a",
+        "content": "rain"
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_b",
         "content": "rain"
       }
     ],

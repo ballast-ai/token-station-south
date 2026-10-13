@@ -25,7 +25,7 @@
       "client_id": {
         "secret": false,
         "syntax": {
-          "printable_ascii": 1024
+          "printable_ascii": 4096
         },
         "description": "The IAM Identity Center client id, clientId in kiro-auth-token.json. Only enterprise and Identity Center sign-ins have one."
       },
@@ -36,7 +36,7 @@
       "auth_method": {
         "secret": false,
         "syntax": {
-          "printable_ascii": 256
+          "printable_ascii": 4096
         },
         "description": "The sign-in method, authMethod in kiro-auth-token.json. IdC, enterprise or iam_identity_center (in any case) refresh through Identity Center; any other value through the Kiro sign-in service. Without it, a credential with a client id and secret refreshes through Identity Center."
       },
@@ -48,7 +48,9 @@
       },
       "profile_arn": {
         "secret": false,
-        "syntax": "aws_arn",
+        "syntax": {
+          "printable_ascii": 2048
+        },
         "description": "The CodeWhisperer profile ARN, profileArn in kiro-auth-token.json. Sent with every request when present."
       }
     },

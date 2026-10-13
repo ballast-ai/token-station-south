@@ -29,25 +29,29 @@ Each row's source:
   `stream-is-the-same-request` (no stream switch). The headers are the native arm's (server
   `…/engine/upstream.rs` `apply_kiro_auth`, `…/engine/kiro.rs`), without `user-agent`, which the manifest declares,
   and without `content-type`, as natively (K-Q10). `conversationId` is the host's `attempt_id`.
-- **Refused request rows**, one per numbered refusal of the record (KR1 to KR9): `refused-image`,
+- **Tool-call arguments**, read as the native arm reads them (the Anthropic first hop parses them, keeps any JSON value
+  and sends unparseable text as a JSON string): `non-object-arguments-pass-through` (`Paris`, `[1,2]`, `42`, `null`)
+  and `empty-arguments-are-an-empty-object` (`""` and whitespace become `{}`; natively the string itself, KD14).
+- **Refused request rows**, one per numbered refusal of the record (KR1 to KR5, KR7 to KR9): `refused-image`,
   `refused-image-in-history`, `refused-unknown-part`, `refused-json-response-format`, `refused-required-tool-choice`,
-  `refused-named-tool-choice`, `refused-assistant-final-turn`, `refused-non-object-arguments`,
-  `refused-empty-tool-call-id`, `refused-tool-result-without-id`, `refused-no-message`, `refused-missing-attempt-id`,
-  `refused-malformed-attempt-id`.
+  `refused-named-tool-choice`, `refused-assistant-final-turn`, `refused-empty-tool-call-id`,
+  `refused-tool-result-without-id`, `refused-no-message`, `refused-missing-attempt-id`, `refused-malformed-attempt-id`.
 - **Stream and response rows taken from the host's bytes**: `text` is server `gateway/tests/kiro_eventstream.rs`
   `normal()`; `metering-is-never-usage` is `translate_kiro.rs` `kiro_accumulate_builds_text_message_and_sums_credits`
   (with `contextUsageEvent` and a `modelId`); `tool-use` is
   `kiro_accumulate_builds_tool_use_from_streamed_input_fragments`, which that test calls "exactly the captured
   sequence"; `open-tool-call-at-eof` / `open-tool-call` is server `…/engine/kiro.rs` tests `normal()` (a tool fragment
-  with no start and no stop, which the native arm completes and this package does not: KD5). The test
+  with no start and no stop, which the end of the body completes, as natively). The test
   `the_host_derived_stream_rows_are_the_hosts_bytes_re_encoded` rebuilds those binary bodies and checks that south's
   deframer and re-encoding produce these rows byte for byte.
 - **Stream and response rows written for the record**: `text-then-tool`, `two-tool-calls`, `unknown-event-ignored`,
-  `empty-content-ignored`, `metering-only-completes-empty`, `tool-call-without-stop-at-eof`, `no-frames` (KD4),
+  `empty-content-ignored`, `metering-only-completes-empty`, `tool-call-without-stop-at-eof` (completed, as natively),
+  `no-frames` (no `Done` on the stream path, KR20; an empty answer on the buffered path, as natively),
   `exception-frame` (the host corpus' `ThrottlingException` frame), `error-frame` (an `error` frame with its
   `:error-message`; the host corpus' bare `error` frame has none, so south's re-encoding refuses it before the
-  component), `non-json-data-refused` (KR16), `tool-event-without-id-refused` (KR17),
-  `tool-input-not-a-string-refused` (KR18), `tool-event-after-stop-refused` (KR19).
+  component), `non-json-data-refused` (KR16). The native arm's reading of malformed tool events
+  (`translate_kiro.rs`): `tool-event-without-id-is-the-empty-id`, `tool-input-not-a-string-is-no-fragment`, and
+  `tool-input-after-stop-extends-the-call` (keyed by `toolUseId`, as the native non-streaming fold, KD13).
 - **Error rows**: the status table of record §9 and the AWS exception-name arm (K-Q6, provisional:
   `rejected-credential` 403 with `AccessDeniedException`, `expired-token-is-auth` 401, `throttled-carries-retry-after`
   429 with `__type` `ThrottlingException` and `retry-after`, `validation-is-invalid-request` with a suffixed
@@ -61,7 +65,8 @@ Each row's source:
   `clock.expiry-clamped-to-a-day`, `clock.select-client-fields-pick-idc`,
   `clock.select-explicit-social-wins-over-client-fields`, `clock.select-enterprise-is-idc`,
   `clock.no-refresh-token-fails-as-configuration`, `clock.idc-missing-client-fields-sends-nothing`,
-  `clock.region-not-region-shaped-sends-nothing`, and `on-status` 400 and 401 (`reauth_required`, the only terminal
+  `clock.region-not-region-shaped-sends-nothing`, `clock.any-printable-profile-arn-is-exported` (no ARN shape is
+  required, as natively), and `on-status` 400 and 401 (`reauth_required`, the only terminal
   statuses natively), 403 and 429 (`transient`), 500 (`transient`, KD8).
 
 There is no usage row: the package declares `usage_evidence: absent`, so every response and stream row is held to

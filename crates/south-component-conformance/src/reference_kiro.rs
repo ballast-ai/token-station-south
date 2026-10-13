@@ -18,8 +18,8 @@
 //! - **Stream.** The package declares `stream_framing: aws-eventstream`, so each message arrives as
 //!   the canonical re-encoding (`event: <name>` / `data: <json>`). Text and tool-call fragments
 //!   become IR events; `meteringEvent` and `contextUsageEvent` carry nothing the IR has a field
-//!   for. The wire has no terminal event: the end of the body completes the answer, unless nothing
-//!   was parsed or a tool call is still open (record §5.3).
+//!   for. The wire has no terminal event: the end of the body completes the answer, a tool call
+//!   without its `stop` included, as natively, unless no frame was parsed (record §5.3, §18).
 //! - **Response.** The family declares `request_facts.stream: "none"`, so a non-streaming answer
 //!   reaches `parse-response` as the same canonical re-encoding, whole (the buffered path,
 //!   boundary §5.2), and is folded by the same parser.
@@ -210,13 +210,18 @@ fn tool_use(call: &ToolCall) -> ComponentResultV1<Value> {
             "an assistant tool call has no name; this upstream needs one to name the tool",
         ));
     }
-    let Ok(input @ Value::Object(_)) = serde_json::from_str::<Value>(&call.arguments) else {
-        return Err(invalid_request(
-            "an assistant tool call's arguments are not a JSON object; this upstream carries tool \
-             input as an object",
-        ));
-    };
-    Ok(json!({"toolUseId": call.id, "name": call.name, "input": input}))
+    Ok(json!({"toolUseId": call.id, "name": call.name, "input": tool_input(&call.arguments)}))
+}
+
+/// The `input` of a tool use, as the native arm sends it: the arguments parsed as JSON, any JSON
+/// value kept as it is, and text that does not parse sent as a JSON string. Empty or whitespace-only
+/// arguments (clients send `""` for a call without arguments) become `{}`, the input of a call
+/// without arguments; natively they are sent as the string itself (KD14).
+fn tool_input(arguments: &str) -> Value {
+    if arguments.trim().is_empty() {
+        return json!({});
+    }
+    serde_json::from_str::<Value>(arguments).unwrap_or_else(|_| json!(arguments))
 }
 
 /// One wire entry for a non-system message, before the system text is placed.
@@ -362,13 +367,6 @@ fn body_of(request: &ChatRequest, config: &ProviderConfig) -> ComponentResultV1<
 
 // -- stream ------------------------------------------------------------------
 
-/// One tool call seen on the stream.
-#[derive(Debug)]
-struct StreamedCall {
-    id: String,
-    open: bool,
-}
-
 /// The stream parser: the canonical re-encoding of the upstream's eventstream messages in,
 /// IR events out.
 #[derive(Debug, Default)]
@@ -378,8 +376,8 @@ struct KiroStreamParser {
     parsed: bool,
     /// Whether `Done` or an in-band failure has ended the stream.
     closed: bool,
-    /// Every tool call so far; its position is its IR index.
-    calls: Vec<StreamedCall>,
+    /// The `toolUseId` of every tool call so far; its position is its IR index.
+    calls: Vec<String>,
 }
 
 impl KiroStreamParser {
@@ -392,65 +390,41 @@ impl KiroStreamParser {
         vec![StreamEvent::Error { error }]
     }
 
+    /// One `toolUseEvent`, read as the native arm reads it (server `translate_kiro.rs`): a missing
+    /// `toolUseId` is the empty id, an `input` that is not a string is no fragment, and `stop` ends
+    /// nothing the IR has to close. Calls are keyed by `toolUseId`, as the native non-streaming fold
+    /// keys them, so a fragment after its call's `stop` extends that call (KD13).
     fn tool_events(&mut self, data: &Value) -> ComponentResultV1<Vec<StreamEvent>> {
-        let Some(id) = data.get("toolUseId").and_then(Value::as_str).filter(|id| !id.is_empty())
-        else {
-            return Err(provider_protocol_error(
-                "the upstream sent a tool event without a toolUseId",
-            ));
-        };
-        let position = self.calls.iter().position(|call| call.id == id);
+        let id = data.get("toolUseId").and_then(Value::as_str).unwrap_or_default();
         if data.get("stop").and_then(Value::as_bool) == Some(true) {
-            if let Some(position) = position {
-                self.calls[position].open = false;
-            }
             return Ok(Vec::new());
         }
-        let fragment = match data.get("input") {
-            None => None,
-            Some(Value::String(fragment)) => Some(fragment.as_str()),
-            Some(_) => {
-                return Err(provider_protocol_error(
-                    "the upstream sent a tool input fragment that is not a string",
-                ));
-            }
+        let fragment = data.get("input").and_then(Value::as_str).unwrap_or_default();
+        let index = |position: usize| {
+            u32::try_from(position)
+                .map_err(|_| provider_protocol_error("the upstream opened too many tool calls"))
         };
-        match position {
+        match self.calls.iter().position(|call| call == id) {
+            // The first event of a call opens it and names it, whether or not it carries input.
             None => {
-                let index = u32::try_from(self.calls.len()).map_err(|_| {
-                    provider_protocol_error("the upstream opened too many tool calls")
-                })?;
-                self.calls.push(StreamedCall { id: id.to_owned(), open: true });
+                let index = index(self.calls.len())?;
+                self.calls.push(id.to_owned());
                 Ok(vec![StreamEvent::ToolCallDelta {
                     index,
                     id: Some(id.to_owned()),
                     name: Some(
                         data.get("name").and_then(Value::as_str).unwrap_or_default().to_owned(),
                     ),
-                    arguments_delta: fragment.unwrap_or_default().to_owned(),
+                    arguments_delta: fragment.to_owned(),
                 }])
             }
-            Some(position) => {
-                if !self.calls[position].open {
-                    return Err(provider_protocol_error(
-                        "the upstream sent a tool event after that tool call stopped",
-                    ));
-                }
-                match fragment {
-                    Some(fragment) if !fragment.is_empty() => {
-                        let index = u32::try_from(position).map_err(|_| {
-                            provider_protocol_error("the upstream opened too many tool calls")
-                        })?;
-                        Ok(vec![StreamEvent::ToolCallDelta {
-                            index,
-                            id: None,
-                            name: None,
-                            arguments_delta: fragment.to_owned(),
-                        }])
-                    }
-                    _ => Ok(Vec::new()),
-                }
-            }
+            Some(_) if fragment.is_empty() => Ok(Vec::new()),
+            Some(position) => Ok(vec![StreamEvent::ToolCallDelta {
+                index: index(position)?,
+                id: None,
+                name: None,
+                arguments_delta: fragment.to_owned(),
+            }]),
         }
     }
 
@@ -483,11 +457,12 @@ impl KiroStreamParser {
         }
     }
 
-    /// The end of the body. The wire has no terminal event, so the end completes the answer —
-    /// unless nothing was parsed (a body with no frames is not an answer) or a tool call is still
-    /// open (the body was cut inside it). In both cases no `Done` is emitted (record §5.3).
+    /// The end of the body. The wire has no terminal event, so the end completes the answer, a tool
+    /// call without its `stop` included, as natively (record §5.3, as revised 2026-10-14). Before
+    /// any frame an empty chunk is not the end of a body (gate ②'s incrementality check feeds one at
+    /// split 0), so a stream that carried no frame emits no `Done` (KR20).
     fn end_of_body(&mut self) -> Vec<StreamEvent> {
-        if self.closed || !self.parsed || self.calls.iter().any(|call| call.open) {
+        if self.closed || !self.parsed {
             return Vec::new();
         }
         self.closed = true;
@@ -634,12 +609,9 @@ impl ProviderComponentV1 for KiroReferenceV1 {
                 _ => {}
             }
         }
-        let Some(finish_reason) = finish_reason else {
-            return Err(provider_protocol_error(
-                "the upstream answer did not complete: it carried no frames or ended inside a tool \
-                 call",
-            ));
-        };
+        // Without `Done` and without an error the body carried no frame at all: the native arm
+        // answers that with an empty success, and so does the buffered path (record §5.4).
+        let finish_reason = finish_reason.unwrap_or(FinishReason::Stop);
 
         Ok(ChatResponse {
             // The wire carries neither a response id nor the model; the host fills both.

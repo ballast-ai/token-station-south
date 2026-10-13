@@ -1,7 +1,0 @@
-{
-  "error": {
-    "code": "invalid_request",
-    "http_status": 400,
-    "message": "an assistant tool call's arguments are not a JSON object; this upstream carries tool input as an object"
-  }
-}

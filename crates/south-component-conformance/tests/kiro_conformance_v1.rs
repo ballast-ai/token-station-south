@@ -144,7 +144,8 @@ fn the_shipped_pack_carries_every_decided_row() {
         "provider.request.refused-required-tool-choice",
         "provider.request.refused-named-tool-choice",
         "provider.request.refused-assistant-final-turn",
-        "provider.request.refused-non-object-arguments",
+        "provider.request.empty-arguments-are-an-empty-object",
+        "provider.request.non-object-arguments-pass-through",
         "provider.request.refused-empty-tool-call-id",
         "provider.request.refused-tool-result-without-id",
         "provider.request.refused-json-response-format",
@@ -167,9 +168,10 @@ fn the_shipped_pack_carries_every_decided_row() {
         "provider.stream.error-frame",
         "provider.stream.open-tool-call-at-eof",
         "provider.stream.no-frames",
-        "provider.stream.tool-event-without-id-refused",
-        "provider.stream.tool-input-not-a-string-refused",
-        "provider.stream.tool-event-after-stop-refused",
+        "provider.stream.tool-call-without-stop-at-eof",
+        "provider.stream.tool-event-without-id-is-the-empty-id",
+        "provider.stream.tool-input-not-a-string-is-no-fragment",
+        "provider.stream.tool-input-after-stop-extends-the-call",
         "provider.error.rejected-credential",
         "provider.error.throttled-carries-retry-after",
         "provider.error.opaque-500",
@@ -269,7 +271,7 @@ fn the_host_derived_stream_rows_are_the_hosts_bytes_re_encoded() {
     assert_eq!(re_encoded(&kiro_eventstream_normal), stream_body("text"));
 
     // gateway/src/modules/inference/engine/kiro.rs tests `normal()`: a tool fragment with no start
-    // and no stop, which the native arm completes and this package does not (KD5).
+    // and no stop, which the end of the body completes, as natively.
     let decoder_normal = [
         event("assistantResponseEvent", br#"{"content":"he"}"#),
         event("assistantResponseEvent", br#"{"content":"llo"}"#),
@@ -468,9 +470,16 @@ fn tool_input_fragments_are_kept_in_wire_order() {
 /// tool calls and finish reason: `parse-response` runs the stream parser (the buffered path).
 #[test]
 fn the_buffered_path_folds_what_the_stream_emits() {
-    for row in ["text", "metering-is-never-usage", "tool-use", "text-then-tool", "two-tool-calls"] {
+    for (row, response_row) in [
+        ("text", "text"),
+        ("metering-is-never-usage", "metering-is-never-usage"),
+        ("tool-use", "tool-use"),
+        ("text-then-tool", "text-then-tool"),
+        ("two-tool-calls", "two-tool-calls"),
+        ("open-tool-call-at-eof", "open-tool-call"),
+    ] {
         let stream = read_json(&format!("provider.stream.{row}.input.json"));
-        let response = read_json(&format!("provider.response.{row}.input.json"));
+        let response = read_json(&format!("provider.response.{response_row}.input.json"));
         let chunks: Vec<String> = serde_json::from_value(stream["chunks"].clone()).unwrap();
         assert_eq!(response["body"], json!(chunks.concat()), "{row}: the same upstream bytes");
 
@@ -533,4 +542,38 @@ fn every_built_request_carries_the_native_headers_and_the_bearer_slot() {
         built += 1;
     }
     assert!(built >= 10);
+}
+
+/// The native arm's request-side reading of tool-call arguments (server `reference_anthropic.rs`
+/// `tool_use_block`, then `translate_kiro.rs` `content_tool_uses`): any JSON value is sent as it
+/// parses and text that does not parse as a JSON string; only empty or whitespace-only arguments
+/// differ, becoming `{}` (KD14). Nothing about the arguments is refused.
+#[test]
+fn tool_arguments_follow_the_native_reading() {
+    let (mut request, config) = chat_row();
+    let input_for = |request: &ChatRequest| {
+        let body = KiroReferenceV1.build_http_request(request, &config).unwrap().body.unwrap();
+        body["conversationState"]["history"][1]["assistantResponseMessage"]["toolUses"][0]["input"]
+            .clone()
+    };
+    for (arguments, input) in [
+        ("{\"city\":\"Paris\"}", json!({"city": "Paris"})),
+        ("", json!({})),
+        (" \t\n", json!({})),
+        ("Paris", json!("Paris")),
+        ("{\"city\":", json!("{\"city\":")),
+        ("[1,2]", json!([1, 2])),
+        ("42", json!(42)),
+        ("null", Value::Null),
+        ("\"x\"", json!("x")),
+    ] {
+        request.messages = serde_json::from_value(json!([
+            {"role": "user", "content": "Weather?"},
+            {"role": "assistant", "tool_calls": [
+                {"id": "call_a", "name": "get_weather", "arguments": arguments}]},
+            {"role": "tool", "tool_call_id": "call_a", "content": "rain"},
+        ]))
+        .unwrap();
+        assert_eq!(input_for(&request), input, "{arguments:?}");
+    }
 }

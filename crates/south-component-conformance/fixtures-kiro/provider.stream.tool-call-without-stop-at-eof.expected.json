@@ -15,5 +15,13 @@
     "arguments_delta": "aris\"}",
     "index": 0,
     "type": "tool_call_delta"
+  },
+  {
+    "finish_reason": "tool_calls",
+    "type": "finish"
+  },
+  {
+    "finish_reason": "tool_calls",
+    "type": "done"
   }
 ]
