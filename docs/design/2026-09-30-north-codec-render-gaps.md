@@ -2,6 +2,8 @@
 
 Status: accepted in part, gap by gap. **G1 accepted** (lv, 2026-10-14, with N-Q5 ruled: JSON-value equality over the
 canonical frame sequence) and implemented in #199 (§3, "Implemented"); released in 0.61.0 ([release record](2026-10-13-release-0.61.0.md)).
+G1 adopted by token-station-server at v0.61.0, server dev-v2 `4ecf5526` (`north_render` in `compatibility.json`
+`host_capabilities`, §8).
 **G3's codec half accepted** (lv, 2026-10-12, as NP-Q8 of
 `2026-10-11-responses-reasoning-replay-and-passthrough-suite.md`) and released in 0.55.0; G3's host half (§5.3) is the
 host's. **G2, G4 and G5 remain proposed**, not accepted.

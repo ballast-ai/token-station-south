@@ -182,6 +182,9 @@
       },
       "north_passthrough_delivery_v2": {
         "status": "not_verified"
+      },
+      "north_render": {
+        "status": "not_verified"
       }
     },
     "token-station-server": {
@@ -241,10 +244,16 @@
         "status": "not_verified"
       },
       "north_passthrough_delivery": {
-        "status": "not_verified"
+        "status": "verified",
+        "cases": 22
       },
       "north_passthrough_delivery_v2": {
-        "status": "not_verified"
+        "status": "verified",
+        "cases": 43
+      },
+      "north_render": {
+        "status": "verified",
+        "cases": 8
       }
     }
   },

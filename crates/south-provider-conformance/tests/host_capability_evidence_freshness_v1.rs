@@ -50,6 +50,7 @@ enum CapabilityV1 {
     SafeFetch,
     NorthPassthroughDelivery,
     NorthPassthroughDeliveryV2,
+    NorthRender,
 }
 
 impl CapabilityV1 {
@@ -72,6 +73,7 @@ impl CapabilityV1 {
             Self::SafeFetch => "safe_fetch",
             Self::NorthPassthroughDelivery => "north_passthrough_delivery",
             Self::NorthPassthroughDeliveryV2 => "north_passthrough_delivery_v2",
+            Self::NorthRender => "north_render",
         }
     }
 
@@ -113,11 +115,17 @@ impl CapabilityV1 {
                     ids.len()
                 })
                 .sum(),
+            // The render-gaps pack (render-gaps record §8): one JSON file per case, read by a
+            // host's parity test from its pinned checkout. It is a fixture pack in
+            // `south-north-codec`, not a table in this crate, and this crate may not depend on the
+            // codec (it carries the kernel IR; see scripts/check-boundaries.sh), so the files are
+            // counted on disk.
+            Self::NorthRender => render_gaps_case_count("chat.stream"),
         }
     }
 
     /// Every capability, so the test can prove the manifest annotates exactly this set.
-    const fn all() -> [Self; 16] {
+    const fn all() -> [Self; 17] {
         [
             Self::ProviderCall,
             Self::ProviderStream,
@@ -135,8 +143,23 @@ impl CapabilityV1 {
             Self::SafeFetch,
             Self::NorthPassthroughDelivery,
             Self::NorthPassthroughDeliveryV2,
+            Self::NorthRender,
         ]
     }
+}
+
+/// The number of cases in one family of the north codec's render-gaps fixture pack.
+fn render_gaps_case_count(family: &str) -> usize {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../south-north-codec/fixtures/render-gaps")
+        .join(family);
+    let count = fs::read_dir(&dir)
+        .unwrap_or_else(|error| panic!("cannot read {}: {error}", dir.display()))
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.extension().is_some_and(|extension| extension == "json"))
+        .count();
+    assert!(count > 0, "{} holds no fixture", dir.display());
+    count
 }
 
 /// Reads the manifest's `host_capabilities` as `host -> capability -> (status, cases)`.
