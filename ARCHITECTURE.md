@@ -225,7 +225,9 @@ declaring media 1 keep loading on a host whose range lists both. `image-gemini` 
 and the client sent one. The request and response pieces are the crate-private module `gemini_image`, for the Vertex
 package of I3-3. It declares `contracts.media` 2 and, until the release commit, this tree's release as its
 `south_runtime`. Under Q47 `south-contracts` moves to 0.53.0 and `south-component-conformance` to 0.57.0, so every
-published package takes a patch with unchanged behaviour and keeps its `south_runtime` and its `contracts`.
+published package takes a patch and keeps its `south_runtime` and its `contracts`; the behaviour is unchanged except in
+`image-minimax` 1.0.1, which also fixes what the host's dual run found in I3-1 (each `image_url` array string becomes its
+own character reference, as native).
 
 **v0.58.0 (image world step I3-1: `image-minimax` and `image-qwen`)**: the first synchronous image packages after
 `image-azure` (design record `docs/design/2026-10-12-image-i3-1-minimax-and-qwen.md`, accepted 2026-10-12; release record

@@ -14,3 +14,6 @@ multipart request); `GroupId` sent and absent; every forwarded and dropped field
 array, wrapped as a `subject_reference`; `subject_reference` as sent; both artifact forms and their order; every
 `base_resp` code class (1004, 2049, 1026, 2013, 1002, 1008, 2153, and an unlisted code); `images_reported` equal to,
 one above and far above the delivered count, and absent.
+
+Corrected 2026-10-13 (1.0.1, found by the host's dual run): an `image_url` array becomes one `subject_reference` entry
+per string, as the native arm wraps each (`prepare.image-url-array`); the two `image_url` refusals use the native texts.

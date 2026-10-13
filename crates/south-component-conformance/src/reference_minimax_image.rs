@@ -11,7 +11,8 @@
 //!   `prompt`; `n` only when the client sent it, as an integer; `aspect_ratio`, `width`, `height`,
 //!   `seed` and `prompt_optimizer` copied when present; `response_format` with `b64_json` mapped to
 //!   `base64` (any other value as sent); `subject_reference` as sent, else the client's `image_url`
-//!   (a string or an array of strings) wrapped as `[{"type": "character", "image_file": …}]`. Every
+//!   (a string or an array of strings) with each string wrapped as its own
+//!   `{"type": "character", "image_file": …}` entry (corrected 2026-10-13, 1.0.1). Every
 //!   other field, `size` included, is dropped. `?GroupId=` is appended only when the family's config
 //!   key `group_id` is set (IM-Q3). Auth is `bearer` on the configured slot.
 //! - **Refusals before dispatch** (`invalid_request`): `prompt` missing or not a string, or longer
@@ -109,25 +110,23 @@ fn prompt(body: &Map<String, Value>) -> ComponentResultV1<&str> {
     }
 }
 
-/// The client's `image_url` as template values, in order: one string, or each string of an array.
-fn image_urls(body: &Map<String, Value>) -> ComponentResultV1<Option<(Value, u32)>> {
+/// The client's `image_url` as template values, in order: one string, or each string of an array
+/// (each a host-elided string as a reference). The native arm wraps every entry as its own
+/// character reference, so an array of N strings becomes N `subject_reference` entries.
+fn image_urls(body: &Map<String, Value>) -> ComponentResultV1<Option<Vec<Value>>> {
     match body.get("image_url") {
         None | Some(Value::Null) => Ok(None),
-        Some(Value::Array(items)) => {
-            let values = items
-                .iter()
-                .map(|item| {
-                    url_entry(item)
-                        .ok_or_else(|| invalid("image_url array entries must be string URLs"))
+        Some(Value::Array(items)) => items
+            .iter()
+            .map(|item| {
+                url_entry(item).ok_or_else(|| {
+                    invalid("image_url array entries must be string URLs or data URIs")
                 })
-                .collect::<ComponentResultV1<Vec<_>>>()?;
-            let count = u32::try_from(values.len()).unwrap_or(u32::MAX);
-            Ok(Some((Value::Array(values), count)))
-        }
-        Some(other) => url_entry(other).map(|value| Some((value, 1))).ok_or_else(|| {
-            invalid(format!(
-                "image_url must be a string URL or an array of string URLs (got {other})"
-            ))
+            })
+            .collect::<ComponentResultV1<Vec<_>>>()
+            .map(Some),
+        Some(other) => url_entry(other).map(|value| Some(vec![value])).ok_or_else(|| {
+            invalid(format!("image_url must be a string or an array of strings (got {other})"))
         }),
     }
 }
@@ -233,11 +232,13 @@ impl ImageComponentV1 for MiniMaxImageReferenceV1 {
                 Value::Array(items) => u32::try_from(items.len()).unwrap_or(u32::MAX),
                 _ => 1,
             }
-        } else if let Some((image_file, count)) = image_url {
-            template.insert(
-                "subject_reference".to_owned(),
-                json!([{ "type": "character", "image_file": image_file }]),
-            );
+        } else if let Some(image_files) = image_url {
+            let count = u32::try_from(image_files.len()).unwrap_or(u32::MAX);
+            let entries: Vec<Value> = image_files
+                .into_iter()
+                .map(|image_file| json!({ "type": "character", "image_file": image_file }))
+                .collect();
+            template.insert("subject_reference".to_owned(), Value::Array(entries));
             count
         } else {
             0

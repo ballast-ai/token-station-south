@@ -359,7 +359,9 @@ Versions (§10):
 | `task-xai-v2`, `task-veo-v2`, `task-wan-image-v2`, `task-gmi-image-v2` | 0.35.15 | 0.35.16 |
 | `task-byteplus-v2` | 0.36.15 | 0.36.16 |
 
-`south-provider-api` is unchanged (0.53.0). Every published package keeps `south_runtime` 0.57.0 and its `contracts`
+`image-minimax` 1.0.1 is not behaviour-neutral: it also carries the fix the host's dual run found in I3-1 decision 1 (an
+`image_url` array becomes one character reference per string, as native; that record's decision 1 is marked
+corrected). `south-provider-api` is unchanged (0.53.0). Every published package keeps `south_runtime` 0.57.0 and its `contracts`
 (`shipped_packages_v1::i3_2_retires_every_published_058_package_identity`); the I3-1 retirement test no longer pins
 I3-1's identities. The workspace version and tags are unchanged.
 

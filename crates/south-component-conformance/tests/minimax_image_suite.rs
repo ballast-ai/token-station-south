@@ -263,3 +263,36 @@ mod mutations {
         }
     }
 }
+
+/// I3-1 decision 1 as corrected 2026-10-13 (found by the host's dual run): the native arm wraps
+/// each `image_url` string as its own character reference, elided entries included; a single
+/// string is one entry; a non-string entry is refused with the native text.
+#[test]
+fn each_image_url_entry_is_its_own_character_reference() {
+    let blob =
+        json!({"$south.blob": {"id": "b0", "bytes": 2048, "head": "data:image/png;base64,"}});
+    let prepared = prepare(
+        &config(None),
+        &json!({"prompt": "x", "image_url": ["https://example.com/a.png", blob]}),
+    )
+    .unwrap();
+    assert_eq!(
+        prepared["descriptor"]["body"]["json"]["template"]["subject_reference"],
+        json!([
+            {"type": "character", "image_file": "https://example.com/a.png"},
+            {"type": "character", "image_file": {"$south.ref": {"blob": "b0", "transform": "as_is"}}},
+        ])
+    );
+    assert_eq!(prepared["facts"]["inputs"]["reference_image"], 2);
+    let single =
+        prepare(&config(None), &json!({"prompt": "x", "image_url": "https://example.com/a.png"}))
+            .unwrap();
+    assert_eq!(
+        single["descriptor"]["body"]["json"]["template"]["subject_reference"],
+        json!([{"type": "character", "image_file": "https://example.com/a.png"}])
+    );
+    let refused =
+        prepare(&config(None), &json!({"prompt": "x", "image_url": ["https://a/b.png", 7]}))
+            .unwrap_err();
+    assert_eq!(refused["message"], "image_url array entries must be string URLs or data URIs");
+}

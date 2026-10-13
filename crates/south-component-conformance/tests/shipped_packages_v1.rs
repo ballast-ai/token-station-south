@@ -1517,8 +1517,10 @@ fn i3_1_retires_every_published_057_package_identity() {
 /// word `data_url_payload` to `south-contracts` (`contracts.media` 2, 0.52.0 → 0.53.0) and the
 /// `image-gemini` reference and the shared Gemini image module to `south-component-conformance`
 /// (0.56.0 → 0.57.0), which every guest links, so every `component.wasm` changes: each identity
-/// published with 0.58.0 retires. No published package changes behaviour, so each takes a patch
-/// and keeps its `south_runtime` and its `contracts` (a package declaring `media` 1 stays at 1).
+/// published with 0.58.0 retires. Each takes a patch and keeps its `south_runtime` and its
+/// `contracts` (a package declaring `media` 1 stays at 1). No published package changes behaviour
+/// except `image-minimax` 1.0.1, which also carries the I3-1 decision 1 fix (each `image_url`
+/// array string its own character reference, as native).
 #[test]
 fn i3_2_retires_every_published_058_package_identity() {
     for (name, published, now) in [

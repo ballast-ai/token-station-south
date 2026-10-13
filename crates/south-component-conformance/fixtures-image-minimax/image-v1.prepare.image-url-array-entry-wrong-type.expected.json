@@ -2,6 +2,6 @@
   "error": {
     "code": "invalid_request",
     "http_status": 400,
-    "message": "image_url array entries must be string URLs"
+    "message": "image_url array entries must be string URLs or data URIs"
   }
 }
