@@ -1570,9 +1570,8 @@ fn i3_2_retires_every_published_058_package_identity() {
 /// `image-gemini` (I3-2) starts at 1.0.0 in the image world, family `gemini-image`, no config keys.
 /// It names the transform word `data_url_payload`, so it declares `contracts.media` 2: a host whose
 /// range lists media 1 only refuses it through the contract number. Its `south_runtime` must be the
-/// first runtime that decodes media 2, the release that ships the word; until that release bumps the
-/// workspace version the declaration is this tree's release (0.58.0), as `embeddings-gemini` 1.1.0
-/// declared 0.50.0 until the 0.51.0 release commit, and the release commit moves both together.
+/// first runtime that decodes media 2, the release that ships the word: 0.59.0 (the release commit
+/// moved the declaration with the workspace version, as 0.51.0 did for `embeddings-gemini` 1.1.0).
 #[test]
 fn image_gemini_declares_media_2_which_a_media_1_host_refuses() {
     let manifest: ComponentManifestV1 = serde_json::from_str(

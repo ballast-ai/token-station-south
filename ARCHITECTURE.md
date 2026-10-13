@@ -211,9 +211,10 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.58.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.53.0, 0.53.0 and 0.57.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
-**Unreleased (image world step I3-2: `image-gemini`)**: Google's Nano Banana image models through the Gemini API (design
-record `docs/design/2026-10-13-image-i3-2-gemini.md`, accepted 2026-10-13; proposed for the next release).
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.59.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.53.0, 0.53.0 and 0.57.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**v0.59.0 (image world step I3-2: `image-gemini`)**: Google's Nano Banana image models through the Gemini API (design
+record `docs/design/2026-10-13-image-i3-2-gemini.md`, accepted 2026-10-13; release record
+`docs/design/2026-10-13-release-0.59.0.md`).
 `contracts.media` 2 adds one transform word, `data_url_payload` (a base64 `data:` URL to its base64 payload, as text, so
 a JSON template can carry the bare base64 of a client's data URL); `MEDIA_CONTRACT_VERSION` stays 1,
 `MEDIA_CONTRACT_VERSION_V2` is 2 and `MEDIA_CONTRACT_VERSIONS` lists both, as embeddings contract 2 did, so packages
