@@ -131,6 +131,8 @@ struct Conformance {
     safe_fetch_suite: u32,
     north_passthrough_delivery_suite_id: String,
     north_passthrough_delivery_suite: u32,
+    north_passthrough_delivery_v2_suite_id: String,
+    north_passthrough_delivery_v2_suite: u32,
     provider_component_suite_id: String,
     provider_component_suite: u32,
     task_component_v1_suite_id: String,
@@ -176,7 +178,7 @@ struct ProviderRuntime {
 /// status is not `verified`.
 type ExpectedCapability = (&'static str, &'static str, Option<usize>);
 
-fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 15]> {
+fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 16]> {
     BTreeMap::from([
         (
             "token-station",
@@ -243,6 +245,9 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 1
                 // §8.2 / §12.4, designed in the 2026-10-11 NC-1 record §3) is new and no host has
                 // run it; until a host has, it renders every Responses answer.
                 ("north_passthrough_delivery", "not_verified", None),
+                // The protocol-parameterised v2 (the `generateContent` request pass-through record
+                // §6): no host has run it yet.
+                ("north_passthrough_delivery_v2", "not_verified", None),
             ],
         ),
         // token-station-server provider_stream verified 2026-08-17: the durable
@@ -496,6 +501,9 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 1
                 // §8.2 / §12.4, designed in the 2026-10-11 NC-1 record §3) is new and no host has
                 // run it; until a host has, it renders every Responses answer.
                 ("north_passthrough_delivery", "not_verified", None),
+                // The protocol-parameterised v2 (the `generateContent` request pass-through record
+                // §6): no host has run it yet.
+                ("north_passthrough_delivery_v2", "not_verified", None),
             ],
         ),
     ])
@@ -674,6 +682,11 @@ fn compatibility_manifest_describes_the_library_slice() {
         "south.north-passthrough-delivery.v1"
     );
     assert_eq!(manifest.conformance.north_passthrough_delivery_suite, 1);
+    assert_eq!(
+        manifest.conformance.north_passthrough_delivery_v2_suite_id,
+        "south.north-passthrough-delivery.v2"
+    );
+    assert_eq!(manifest.conformance.north_passthrough_delivery_v2_suite, 2);
     assert_eq!(manifest.conformance.provider_component_suite_id, "south.provider-component.v1");
     assert_eq!(manifest.conformance.provider_component_suite, 1);
     assert_eq!(manifest.conformance.task_component_v1_suite_id, "south.task-component.v1");

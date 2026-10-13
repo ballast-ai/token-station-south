@@ -17,6 +17,29 @@
 //! per-call [`NorthPassthroughFrameVerdictV1`] script, and reports an ordered
 //! [`NorthPassthroughTimelineV1`]; the order of its steps is the evidence. South's reference
 //! executor is in `south-testkit`.
+//!
+//! # Version two: the suite parameterised by protocol
+//!
+//! `south.north-passthrough-delivery.v2` (design record
+//! `docs/design/2026-10-14-generate-content-request-passthrough.md` §6) runs the same checks for
+//! one [`NorthPassthroughProtocolV2`] at a time: [`run_north_passthrough_conformance_v2`] with a
+//! [`NorthPassthroughHarnessV2`], whose `stream` and `buffered` take the protocol. Its Responses
+//! cases are exactly the version-one table ([`north_passthrough_fixtures_v1`]), so a host passing
+//! version one passes version two for Responses; version one stays the Responses-only suite with
+//! its own harness, identifier and 22 cases, unchanged. The `generate_content` cases
+//! ([`north_passthrough_fixtures_v2`]) keep the frame, order and settlement rules and change three:
+//!
+//! - **Terminal frame**: a frame whose JSON data has some `candidates[*].finishReason` set (not
+//!   null), and whose call returned `Done`.
+//! - **Failure**: the protocol has no failure event, so the host ends the stream without writing
+//!   any frame of its own; the suite requires that nothing but comment lines follows the relayed
+//!   frames.
+//! - **Non-2xx**: the upstream's status and body reach the client as the upstream sent them,
+//!   after `map-provider-error` returned and the funds transition was recorded; the host reports
+//!   the status it wrote as [`NorthPassthroughStepV1::StatusWritten`].
+//!
+//! A second suite identifier, rather than more cases under the first, keeps a host's claim
+//! "passes `south.north-passthrough-delivery.v1`" meaning what it meant when it was made.
 
 use std::fmt;
 
@@ -28,8 +51,9 @@ mod runner;
 
 pub use runner::{
     NorthPassthroughConformanceFailureV1, NorthPassthroughConformanceReportV1,
-    NorthPassthroughHarnessV1, NorthPassthroughMismatchCategoryV1, NorthPassthroughMismatchV1,
-    NorthPassthroughStepV1, NorthPassthroughTimelineV1, run_north_passthrough_conformance_v1,
+    NorthPassthroughHarnessV1, NorthPassthroughHarnessV2, NorthPassthroughMismatchCategoryV1,
+    NorthPassthroughMismatchV1, NorthPassthroughStepV1, NorthPassthroughTimelineV1,
+    run_north_passthrough_conformance_v1, run_north_passthrough_conformance_v2,
 };
 
 /// The pass-through delivery conformance suite version.
@@ -42,12 +66,87 @@ pub const NORTH_PASSTHROUGH_DELIVERY_SUITE_ID: &str = "south.north-passthrough-d
 pub const NORTH_PASSTHROUGH_TERMINAL_TYPES_V1: [&str; 2] =
     ["response.completed", "response.incomplete"];
 
+/// The pass-through delivery conformance suite version, parameterised by protocol.
+pub const NORTH_PASSTHROUGH_DELIVERY_SUITE_V2_VERSION: u32 = 2;
+
+/// The stable identifier for pass-through delivery conformance version two.
+pub const NORTH_PASSTHROUGH_DELIVERY_SUITE_V2_ID: &str = "south.north-passthrough-delivery.v2";
+
+/// A northbound protocol the delivery suite has rules for: the closed subset of
+/// [`NorthProtocolV1`] a family may declare in `north_passthrough` and a host may be checked on.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum NorthPassthroughProtocolV2 {
+    /// `OpenAI` Responses: the version-one rules.
+    Responses,
+    /// The `generateContent` / `streamGenerateContent` surface (design record
+    /// `docs/design/2026-10-14-generate-content-request-passthrough.md` §6).
+    GenerateContent,
+}
+
+fixed_debug!(NorthPassthroughProtocolV2 {
+    Responses => "Responses",
+    GenerateContent => "GenerateContent",
+});
+
+impl NorthPassthroughProtocolV2 {
+    /// Every protocol the suite has rules for, in order.
+    pub const ALL: [Self; 2] = [Self::Responses, Self::GenerateContent];
+
+    /// The manifest's spelling of the protocol.
+    #[must_use]
+    pub const fn north_protocol(self) -> NorthProtocolV1 {
+        match self {
+            Self::Responses => NorthProtocolV1::Responses,
+            Self::GenerateContent => NorthProtocolV1::GenerateContent,
+        }
+    }
+
+    /// The suite's protocol for a manifest protocol, or `None` when the suite has no rules for it
+    /// (Chat Completions and Messages are never passed through).
+    #[must_use]
+    pub const fn from_north_protocol(protocol: NorthProtocolV1) -> Option<Self> {
+        match protocol {
+            NorthProtocolV1::Responses => Some(Self::Responses),
+            NorthProtocolV1::GenerateContent => Some(Self::GenerateContent),
+            NorthProtocolV1::ChatCompletions | NorthProtocolV1::Messages => None,
+        }
+    }
+}
+
+/// Whether one frame's JSON data marks the end of a successful stream of `protocol`.
+///
+/// For Responses, a terminal `type` ([`NORTH_PASSTHROUGH_TERMINAL_TYPES_V1`]); for
+/// `generate_content`, some `candidates[*].finishReason` set (not null). A host releases such a
+/// frame only when its call also returned `Done`.
+#[must_use]
+pub fn north_passthrough_is_terminal_data_v2(
+    protocol: NorthPassthroughProtocolV2,
+    data: &Value,
+) -> bool {
+    match protocol {
+        NorthPassthroughProtocolV2::Responses => data
+            .get("type")
+            .and_then(Value::as_str)
+            .is_some_and(|kind| NORTH_PASSTHROUGH_TERMINAL_TYPES_V1.contains(&kind)),
+        NorthPassthroughProtocolV2::GenerateContent => has_finish_reason(data),
+    }
+}
+
+fn has_finish_reason(data: &Value) -> bool {
+    data.get("candidates").and_then(Value::as_array).is_some_and(|candidates| {
+        candidates
+            .iter()
+            .any(|candidate| candidate.get("finishReason").is_some_and(|reason| !reason.is_null()))
+    })
+}
+
 /// One frame of an upstream stream, as the host cuts it.
 #[derive(Clone, PartialEq, Eq)]
 pub struct NorthPassthroughFrameV1 {
     bytes: Vec<u8>,
     kind: Option<String>,
     sequence_number: Option<u64>,
+    finish_reason: bool,
     at_end_of_input: bool,
 }
 
@@ -77,6 +176,22 @@ impl NorthPassthroughFrameV1 {
         self.sequence_number
     }
 
+    /// Whether some `candidates[*].finishReason` of the frame's JSON data is set (not null).
+    #[must_use]
+    pub const fn has_finish_reason(&self) -> bool {
+        self.finish_reason
+    }
+
+    /// Whether the frame marks the end of a successful stream of `protocol`
+    /// ([`north_passthrough_is_terminal_data_v2`]).
+    #[must_use]
+    pub fn is_terminal_frame(&self, protocol: NorthPassthroughProtocolV2) -> bool {
+        match protocol {
+            NorthPassthroughProtocolV2::Responses => self.is_terminal_type(),
+            NorthPassthroughProtocolV2::GenerateContent => self.finish_reason,
+        }
+    }
+
     /// Whether the end of input dispatched the frame (no blank line ended it).
     #[must_use]
     pub const fn at_end_of_input(&self) -> bool {
@@ -101,7 +216,8 @@ impl NorthPassthroughFrameV1 {
             .map(str::to_owned);
         let sequence_number =
             json.as_ref().and_then(|value| value.get("sequence_number")).and_then(Value::as_u64);
-        Self { bytes, kind, sequence_number, at_end_of_input }
+        let finish_reason = json.as_ref().is_some_and(has_finish_reason);
+        Self { bytes, kind, sequence_number, finish_reason, at_end_of_input }
     }
 }
 
@@ -112,6 +228,7 @@ impl fmt::Debug for NorthPassthroughFrameV1 {
             .field("byte_count", &self.bytes.len())
             .field("kind", &self.kind)
             .field("sequence_number", &self.sequence_number)
+            .field("finish_reason", &self.finish_reason)
             .field("at_end_of_input", &self.at_end_of_input)
             .finish()
     }
@@ -195,6 +312,29 @@ pub enum NorthPassthroughBodyV1 {
     TerminalWithoutBlankLine,
     /// [`Self::MixedFraming`] whose terminal frame's last line has no line ending at all.
     TerminalWithoutLineEnd,
+    /// A completed `generate_content` stream mixing LF, CR and CRLF line ends, with a byte order
+    /// mark, comment keep-alives and a `data` field split over two lines: two text frames, then
+    /// one with `finishReason: "STOP"` and `usageMetadata`.
+    GeminiMixedFraming,
+    /// `provider.stream.text-and-terminal` of the Gemini fixture pack: a completed text answer.
+    GeminiText,
+    /// `provider.stream.eof-terminates-without-a-usage-frame` of the pack: a stream ending in
+    /// `finishReason: "MAX_TOKENS"`.
+    GeminiMaxTokens,
+    /// A CRLF stream of two candidates whose last frame sets `finishReason` on the second
+    /// candidate only.
+    GeminiSecondCandidateFinishes,
+    /// One `error` frame (the shape Gemini streams an error in), nothing before it.
+    GeminiErrorFirst,
+    /// [`Self::GeminiMixedFraming`]'s first two frames, then an `error` frame.
+    GeminiErrorAfterFrames,
+    /// [`Self::GeminiMixedFraming`] without its terminal frame: the upstream stopped early.
+    GeminiTruncated,
+    /// [`Self::GeminiMixedFraming`] whose terminal frame's last line ends the input, with no
+    /// blank line.
+    GeminiTerminalWithoutBlankLine,
+    /// [`Self::GeminiMixedFraming`] whose terminal frame's last line has no line ending at all.
+    GeminiTerminalWithoutLineEnd,
 }
 
 fixed_debug!(NorthPassthroughBodyV1 {
@@ -207,6 +347,15 @@ fixed_debug!(NorthPassthroughBodyV1 {
     Truncated => "Truncated",
     TerminalWithoutBlankLine => "TerminalWithoutBlankLine",
     TerminalWithoutLineEnd => "TerminalWithoutLineEnd",
+    GeminiMixedFraming => "GeminiMixedFraming",
+    GeminiText => "GeminiText",
+    GeminiMaxTokens => "GeminiMaxTokens",
+    GeminiSecondCandidateFinishes => "GeminiSecondCandidateFinishes",
+    GeminiErrorFirst => "GeminiErrorFirst",
+    GeminiErrorAfterFrames => "GeminiErrorAfterFrames",
+    GeminiTruncated => "GeminiTruncated",
+    GeminiTerminalWithoutBlankLine => "GeminiTerminalWithoutBlankLine",
+    GeminiTerminalWithoutLineEnd => "GeminiTerminalWithoutLineEnd",
 });
 
 impl NorthPassthroughBodyV1 {
@@ -228,6 +377,23 @@ impl NorthPassthroughBodyV1 {
                 [MIXED_HEAD, MIXED_TERMINAL.strip_suffix(b"\n\n").unwrap_or(MIXED_TERMINAL)]
                     .concat()
             }
+            Self::GeminiMixedFraming => [GEMINI_MIXED_HEAD, GEMINI_MIXED_TERMINAL].concat(),
+            Self::GeminiText => GEMINI_TEXT.as_bytes().to_vec(),
+            Self::GeminiMaxTokens => GEMINI_MAX_TOKENS.as_bytes().to_vec(),
+            Self::GeminiSecondCandidateFinishes => GEMINI_SECOND_CANDIDATE.to_vec(),
+            Self::GeminiErrorFirst => GEMINI_ERROR_FIRST.to_vec(),
+            Self::GeminiErrorAfterFrames => [GEMINI_MIXED_HEAD, GEMINI_ERROR_EVENT].concat(),
+            Self::GeminiTruncated => GEMINI_MIXED_HEAD.to_vec(),
+            Self::GeminiTerminalWithoutBlankLine => [
+                GEMINI_MIXED_HEAD,
+                GEMINI_MIXED_TERMINAL.strip_suffix(b"\n").unwrap_or(GEMINI_MIXED_TERMINAL),
+            ]
+            .concat(),
+            Self::GeminiTerminalWithoutLineEnd => [
+                GEMINI_MIXED_HEAD,
+                GEMINI_MIXED_TERMINAL.strip_suffix(b"\n\n").unwrap_or(GEMINI_MIXED_TERMINAL),
+            ]
+            .concat(),
         }
     }
 
@@ -238,12 +404,21 @@ impl NorthPassthroughBodyV1 {
             Self::OpenAiFailed => Some(OPENAI_FAILED_TEXT),
             Self::OpenAiErrorFirst => Some(OPENAI_ERROR_FIRST_TEXT),
             Self::ErrorEventAfterFrames => Some(ERROR_EVENT_TEXT),
+            Self::GeminiErrorFirst => Some(GEMINI_ERROR_FIRST_TEXT),
+            Self::GeminiErrorAfterFrames => Some(GEMINI_ERROR_EVENT_TEXT),
             Self::MixedFraming
             | Self::OpenAiText
             | Self::OpenAiIncomplete
             | Self::Truncated
             | Self::TerminalWithoutBlankLine
-            | Self::TerminalWithoutLineEnd => None,
+            | Self::TerminalWithoutLineEnd
+            | Self::GeminiMixedFraming
+            | Self::GeminiText
+            | Self::GeminiMaxTokens
+            | Self::GeminiSecondCandidateFinishes
+            | Self::GeminiTruncated
+            | Self::GeminiTerminalWithoutBlankLine
+            | Self::GeminiTerminalWithoutLineEnd => None,
         }
     }
 }
@@ -419,8 +594,9 @@ pub enum NorthPassthroughStreamOutcomeV1 {
     /// Every frame is forwarded unchanged, the terminal frame (repaired if the end of input
     /// dispatched it) only after the settlement is persisted.
     Completes,
-    /// The first `relayed` frames are forwarded, then the host's own failure event, after the
-    /// funds transition; the stream is never settled as a success.
+    /// The first `relayed` frames are forwarded, then, after the funds transition, the host's own
+    /// failure event (Responses) or nothing at all (`generate_content`); the stream is never
+    /// settled as a success.
     FailsAfter {
         /// How many upstream frames the client receives before the failure event.
         relayed: usize,
@@ -537,9 +713,10 @@ pub enum NorthPassthroughCaseIdV1 {
     TerminalWithheldUntilSettled,
     /// `response.incomplete` is a terminal type like `response.completed`.
     IncompleteIsTerminal,
-    /// A terminal-type frame whose call did not return `Done` parks the stream.
+    /// A terminal frame (a terminal type; for `generate_content`, a `finishReason`) whose call did
+    /// not return `Done` parks the stream.
     TerminalTypeWithoutDoneParks,
-    /// `Done` from a call whose frame is not of a terminal type parks the stream.
+    /// `Done` from a call whose frame is not a terminal frame parks the stream.
     DoneWithoutTerminalTypeParks,
     /// A component that holds a frame back (its `Done` arrives only at `finish`) parks the stream.
     LaggingComponentParks,
@@ -551,7 +728,8 @@ pub enum NorthPassthroughCaseIdV1 {
     ComponentErrorForwardsNothing,
     /// A failing component call forwards nothing more.
     ComponentTrapForwardsNothing,
-    /// A failure on the first frame: the client sees only the host's own created and failed events.
+    /// A failure on the first frame: the client sees only the host's own created and failed events
+    /// (Responses), or no frame at all (`generate_content`).
     FailureBeforeFirstFrame,
     /// A stream that ends before its terminal frame is never settled as a success.
     TruncatedStreamFails,
@@ -563,8 +741,19 @@ pub enum NorthPassthroughCaseIdV1 {
     BufferedForwardedAfterParseAndSettlement,
     /// A non-streaming body the component refused is never forwarded.
     BufferedParseFailureNotRelayed,
-    /// A non-2xx upstream body is never forwarded.
+    /// A non-2xx upstream body is never forwarded (Responses).
     BufferedNon2xxNotRelayed,
+    /// `generate_content`: a `finishReason` other than `STOP` ends the stream like `STOP`.
+    OtherFinishReasonIsTerminal,
+    /// `generate_content`: a `finishReason` on any candidate, not only the first, marks the
+    /// terminal frame.
+    FinishReasonOnAnyCandidateIsTerminal,
+    /// `generate_content`: an upstream `error` frame is never forwarded, and the host writes no
+    /// frame of its own in its place.
+    UpstreamErrorFrameNotRelayed,
+    /// `generate_content`: a non-2xx upstream answer reaches the client as the upstream sent it,
+    /// status and body, after `map-provider-error` returned and the funds transition.
+    BufferedNon2xxDeliveredAsSent,
 }
 
 fixed_debug!(NorthPassthroughCaseIdV1 {
@@ -590,6 +779,10 @@ fixed_debug!(NorthPassthroughCaseIdV1 {
     BufferedForwardedAfterParseAndSettlement => "BufferedForwardedAfterParseAndSettlement",
     BufferedParseFailureNotRelayed => "BufferedParseFailureNotRelayed",
     BufferedNon2xxNotRelayed => "BufferedNon2xxNotRelayed",
+    OtherFinishReasonIsTerminal => "OtherFinishReasonIsTerminal",
+    FinishReasonOnAnyCandidateIsTerminal => "FinishReasonOnAnyCandidateIsTerminal",
+    UpstreamErrorFrameNotRelayed => "UpstreamErrorFrameNotRelayed",
+    BufferedNon2xxDeliveredAsSent => "BufferedNon2xxDeliveredAsSent",
 });
 
 /// One immutable canonical pass-through delivery case.
@@ -665,6 +858,63 @@ const OPENAI_FAILED: &str = include_str!("north_passthrough/openai_failed.sse");
 /// `provider.stream.error-event-without-sequence` of `fixtures-openai-responses`.
 const OPENAI_ERROR_FIRST: &str = include_str!("north_passthrough/openai_error_first.sse");
 
+const GEMINI_MIXED_HEAD: &[u8] = b"\xEF\xBB\xBF: keep-alive\r\n\
+data: {\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"18C \"}]},\
+\"index\":0}],\"modelVersion\":\"gemini-2.5-flash\",\"responseId\":\"gc_mixed\"}\r\n\
+\r\n\
+data: {\"candidates\":[{\"content\":{\"role\":\"model\",\r\
+data: \"parts\":[{\"text\":\"and sunny.\"}]},\"index\":0}],\"modelVersion\":\"gemini-2.5-flash\",\
+\"responseId\":\"gc_mixed\"}\r\
+\r\
+: ping\n\
+\n";
+
+const GEMINI_MIXED_TERMINAL: &[u8] = b"data: {\"candidates\":[{\"content\":{\"role\":\"model\",\
+\"parts\":[]},\"finishReason\":\"STOP\",\"index\":0}],\"usageMetadata\":{\"promptTokenCount\":10,\
+\"candidatesTokenCount\":5,\"totalTokenCount\":15},\"modelVersion\":\"gemini-2.5-flash\",\
+\"responseId\":\"gc_mixed\"}\n\
+\n";
+
+const GEMINI_SECOND_CANDIDATE: &[u8] = b"data: {\"candidates\":[{\"content\":{\"role\":\"model\",\
+\"parts\":[{\"text\":\"Yes.\"}]},\"finishReason\":null,\"index\":0},{\"content\":{\"role\":\"model\",\
+\"parts\":[{\"text\":\"No.\"}]},\"index\":1}]}\r\n\
+\r\n\
+data: {\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[]},\"index\":0},\
+{\"content\":{\"role\":\"model\",\"parts\":[]},\"finishReason\":\"STOP\",\"index\":1}],\
+\"usageMetadata\":{\"promptTokenCount\":4,\"candidatesTokenCount\":2,\"totalTokenCount\":6}}\r\n\
+\r\n";
+
+const GEMINI_ERROR_EVENT_TEXT: &str =
+    "The model is overloaded. Please try again later. (backend pool 9c)";
+
+const GEMINI_ERROR_EVENT: &[u8] = b"data: {\"error\":{\"code\":503,\"message\":\"The model is \
+overloaded. Please try again later. (backend pool 9c)\",\"status\":\"UNAVAILABLE\"}}\r\n\
+\r\n";
+
+const GEMINI_ERROR_FIRST_TEXT: &str =
+    "The input token count (1048577) exceeds the maximum number of tokens allowed (1048576).";
+
+const GEMINI_ERROR_FIRST: &[u8] = b"data: {\"error\":{\"code\":400,\"message\":\"The input token \
+count (1048577) exceeds the maximum number of tokens allowed (1048576).\",\"status\":\
+\"INVALID_ARGUMENT\"}}\r\n\
+\r\n";
+
+/// `provider.stream.text-and-terminal` of `fixtures-gemini`, its chunks joined.
+const GEMINI_TEXT: &str = include_str!("north_passthrough/gemini_text.sse");
+/// `provider.stream.eof-terminates-without-a-usage-frame` of `fixtures-gemini`, its chunks joined.
+const GEMINI_MAX_TOKENS: &str = include_str!("north_passthrough/gemini_max_tokens.sse");
+
+const GEMINI_BUFFERED_OK: &str = "{\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":\
+[{\"text\":\"Hello.\"}]},\"finishReason\":\"STOP\",\"index\":0}],\"usageMetadata\":\
+{\"promptTokenCount\":3,\"candidatesTokenCount\":2,\"totalTokenCount\":5},\"modelVersion\":\
+\"gemini-2.5-flash\",\"responseId\":\"gc_buffered\"}";
+
+const GEMINI_BUFFERED_REFUSED: &str = "{\"error\":{\"code\":500,\"message\":\"Internal error \
+encountered in cell 4; request dropped.\",\"status\":\"INTERNAL\"}}";
+
+const GEMINI_BUFFERED_429: &str = "{\"error\":{\"code\":429,\"message\":\"Resource has been \
+exhausted (e.g. check quota).\",\"status\":\"RESOURCE_EXHAUSTED\"}}";
+
 const BUFFERED_OK: &str = "{\"id\":\"resp_buffered\",\"object\":\"response\",\"created_at\":1756367388,\
 \"status\":\"completed\",\"error\":null,\"model\":\"gpt-5.5\",\"output\":[{\"id\":\"msg_1\",\
 \"type\":\"message\",\"status\":\"completed\",\"role\":\"assistant\",\"content\":[{\"type\":\
@@ -678,13 +928,16 @@ abandoned.\"},\"output\":[]}";
 const BUFFERED_429: &str = "{\"error\":{\"message\":\"Rate limit reached for org-7Qx on tokens \
 per min; limit 30000, used 29981.\",\"type\":\"tokens\",\"code\":\"rate_limit_exceeded\"}}";
 
-/// The upstream's own text in each buffered body that must never reach the client.
+/// The upstream's own text in each buffered body that must never reach the client. A body the
+/// suite expects delivered as sent (a `generate_content` non-2xx answer) has none.
 #[must_use]
 pub fn north_passthrough_buffered_upstream_text_v1(body: &str) -> Option<&'static str> {
     if body == BUFFERED_REFUSED {
         Some("Shard 12 lost its lease; request abandoned.")
     } else if body == BUFFERED_429 {
         Some("Rate limit reached for org-7Qx on tokens per min; limit 30000, used 29981.")
+    } else if body == GEMINI_BUFFERED_REFUSED {
+        Some("Internal error encountered in cell 4; request dropped.")
     } else {
         None
     }
@@ -914,6 +1167,207 @@ pub fn north_passthrough_fixtures_v1() -> Vec<NorthPassthroughFixtureV1> {
             BUFFERED_429,
             NorthPassthroughBufferedVerdictV1::Parses,
             false,
+        ),
+    ]
+}
+
+fn gemini_tools() -> Value {
+    serde_json::json!([{"functionDeclarations": [{"name": "get_weather",
+                        "parameters": {"type": "object", "properties": {}}}]}])
+}
+
+/// The canonical pass-through delivery cases of suite version two for `protocol`, in table order.
+///
+/// For [`NorthPassthroughProtocolV2::Responses`] they are exactly [`north_passthrough_fixtures_v1`].
+#[must_use]
+pub fn north_passthrough_fixtures_v2(
+    protocol: NorthPassthroughProtocolV2,
+) -> Vec<NorthPassthroughFixtureV1> {
+    match protocol {
+        NorthPassthroughProtocolV2::Responses => north_passthrough_fixtures_v1(),
+        NorthPassthroughProtocolV2::GenerateContent => generate_content_fixtures(),
+    }
+}
+
+/// The `generate_content` table (design record
+/// `docs/design/2026-10-14-generate-content-request-passthrough.md` §6). The client's tools never
+/// decide delivery: the request is passed through too, so no codec maps them.
+#[expect(clippy::too_many_lines, reason = "one flat table of every case, in order")]
+fn generate_content_fixtures() -> Vec<NorthPassthroughFixtureV1> {
+    use NorthPassthroughBodyV1 as Body;
+    use NorthPassthroughCaseIdV1 as Case;
+    use NorthPassthroughFinishVerdictV1 as Finish;
+    use NorthPassthroughFrameVerdictV1::{Done, Error, Events, Trap};
+    use NorthPassthroughSettlementV1::{Fails, Persists};
+    use NorthPassthroughSplitV1::{EveryByteBoundary, Whole};
+    use NorthPassthroughStreamOutcomeV1::{Completes, FailsAfter};
+    use NorthProtocolV1::{ChatCompletions, GenerateContent, Messages, Responses};
+
+    let completes = script(&[Events, Events, Done], Finish::Clean, Persists);
+    let delivery = |case_id, setups, passes_through| NorthPassthroughFixtureV1 {
+        case_id,
+        path: NorthPassthroughPathV1::Delivery { setups, passes_through },
+    };
+    let buffered = |case_id, status, body, verdict, forwarded| NorthPassthroughFixtureV1 {
+        case_id,
+        path: NorthPassthroughPathV1::Buffered { status, body, verdict, forwarded },
+    };
+    vec![
+        delivery(
+            Case::DeliveryPassesThroughWhenEveryConditionHolds,
+            vec![
+                setup(GenerateContent, Some(GenerateContent), gemini_tools()),
+                setup(GenerateContent, Some(GenerateContent), serde_json::json!([])),
+            ],
+            true,
+        ),
+        delivery(
+            Case::UndeclaredFamilyRenders,
+            vec![setup(GenerateContent, None, gemini_tools())],
+            false,
+        ),
+        delivery(
+            Case::OtherSurfaceRenders,
+            vec![
+                setup(Responses, Some(GenerateContent), plain_tools()),
+                setup(ChatCompletions, Some(GenerateContent), plain_tools()),
+                setup(Messages, Some(GenerateContent), plain_tools()),
+                setup(GenerateContent, Some(Responses), gemini_tools()),
+            ],
+            false,
+        ),
+        stream(
+            Case::ForwardedUnchanged,
+            Body::GeminiMixedFraming,
+            EveryByteBoundary,
+            completes.clone(),
+            Completes,
+        ),
+        stream(
+            Case::ForwardAfterReturn,
+            Body::GeminiText,
+            Whole,
+            script(&[Events, Events, Done], Finish::Clean, Persists),
+            Completes,
+        ),
+        stream(
+            Case::TerminalWithheldUntilSettled,
+            Body::GeminiMixedFraming,
+            Whole,
+            completes.clone(),
+            Completes,
+        ),
+        stream(
+            Case::OtherFinishReasonIsTerminal,
+            Body::GeminiMaxTokens,
+            Whole,
+            script(&[Events, Done], Finish::Clean, Persists),
+            Completes,
+        ),
+        stream(
+            Case::FinishReasonOnAnyCandidateIsTerminal,
+            Body::GeminiSecondCandidateFinishes,
+            Whole,
+            script(&[Events, Done], Finish::Clean, Persists),
+            Completes,
+        ),
+        stream(
+            Case::TerminalTypeWithoutDoneParks,
+            Body::GeminiMixedFraming,
+            Whole,
+            script(&[Events, Events, Events], Finish::Clean, Persists),
+            FailsAfter { relayed: 2, fed: 3 },
+        ),
+        stream(
+            Case::DoneWithoutTerminalTypeParks,
+            Body::GeminiMixedFraming,
+            Whole,
+            script(&[Events, Done, Done], Finish::Clean, Persists),
+            FailsAfter { relayed: 1, fed: 2 },
+        ),
+        stream(
+            Case::LaggingComponentParks,
+            Body::GeminiMixedFraming,
+            Whole,
+            script(&[Events, Events, Events], Finish::Done, Persists),
+            FailsAfter { relayed: 2, fed: 3 },
+        ),
+        stream(
+            Case::UpstreamErrorFrameNotRelayed,
+            Body::GeminiErrorAfterFrames,
+            Whole,
+            script(&[Events, Events, Error], Finish::Clean, Persists),
+            FailsAfter { relayed: 2, fed: 3 },
+        ),
+        stream(
+            Case::ComponentErrorForwardsNothing,
+            Body::GeminiMixedFraming,
+            Whole,
+            script(&[Events, Error, Done], Finish::Clean, Persists),
+            FailsAfter { relayed: 1, fed: 2 },
+        ),
+        stream(
+            Case::ComponentTrapForwardsNothing,
+            Body::GeminiMixedFraming,
+            Whole,
+            script(&[Events, Trap, Done], Finish::Clean, Persists),
+            FailsAfter { relayed: 1, fed: 2 },
+        ),
+        stream(
+            Case::FailureBeforeFirstFrame,
+            Body::GeminiErrorFirst,
+            Whole,
+            script(&[Error], Finish::Clean, Persists),
+            FailsAfter { relayed: 0, fed: 1 },
+        ),
+        stream(
+            Case::TruncatedStreamFails,
+            Body::GeminiTruncated,
+            Whole,
+            script(&[Events, Events], Finish::Truncated, Persists),
+            FailsAfter { relayed: 2, fed: 2 },
+        ),
+        stream(
+            Case::SettlementFailureWithholdsTerminal,
+            Body::GeminiMixedFraming,
+            Whole,
+            script(&[Events, Events, Done], Finish::Clean, Fails),
+            FailsAfter { relayed: 2, fed: 3 },
+        ),
+        stream(
+            Case::TerminalAtEndOfInputIsRepaired,
+            Body::GeminiTerminalWithoutBlankLine,
+            Whole,
+            completes.clone(),
+            Completes,
+        ),
+        stream(
+            Case::TerminalAtEndOfInputIsRepaired,
+            Body::GeminiTerminalWithoutLineEnd,
+            Whole,
+            completes,
+            Completes,
+        ),
+        buffered(
+            Case::BufferedForwardedAfterParseAndSettlement,
+            200,
+            GEMINI_BUFFERED_OK,
+            NorthPassthroughBufferedVerdictV1::Parses,
+            true,
+        ),
+        buffered(
+            Case::BufferedParseFailureNotRelayed,
+            200,
+            GEMINI_BUFFERED_REFUSED,
+            NorthPassthroughBufferedVerdictV1::Refuses,
+            false,
+        ),
+        buffered(
+            Case::BufferedNon2xxDeliveredAsSent,
+            429,
+            GEMINI_BUFFERED_429,
+            NorthPassthroughBufferedVerdictV1::Parses,
+            true,
         ),
     ]
 }

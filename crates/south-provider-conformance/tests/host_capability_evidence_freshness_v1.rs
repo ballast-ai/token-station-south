@@ -19,12 +19,12 @@
 use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use south_provider_conformance::{
-    controlled_query_fixtures_v1, controlled_user_agent_fixtures_v1, credential_recipe_fixtures_v1,
-    eventstream_framing_fixtures_v1, header_auth_fixtures_v1, north_passthrough_fixtures_v1,
-    provider_binary_fixtures_v1, provider_call_fixtures_v1, provider_get_fixtures_v1,
-    provider_media_binary_fixtures_v1, provider_multipart_fixtures_v1,
-    provider_quota_metadata_fixtures_v1, provider_stream_fixtures_v1, request_signing_fixtures_v1,
-    safe_fetch_fixtures_v1,
+    NorthPassthroughProtocolV2, controlled_query_fixtures_v1, controlled_user_agent_fixtures_v1,
+    credential_recipe_fixtures_v1, eventstream_framing_fixtures_v1, header_auth_fixtures_v1,
+    north_passthrough_fixtures_v1, north_passthrough_fixtures_v2, provider_binary_fixtures_v1,
+    provider_call_fixtures_v1, provider_get_fixtures_v1, provider_media_binary_fixtures_v1,
+    provider_multipart_fixtures_v1, provider_quota_metadata_fixtures_v1,
+    provider_stream_fixtures_v1, request_signing_fixtures_v1, safe_fetch_fixtures_v1,
 };
 
 /// Every capability the manifest may annotate.
@@ -49,6 +49,7 @@ enum CapabilityV1 {
     RequestSigning,
     SafeFetch,
     NorthPassthroughDelivery,
+    NorthPassthroughDeliveryV2,
 }
 
 impl CapabilityV1 {
@@ -70,6 +71,7 @@ impl CapabilityV1 {
             Self::RequestSigning => "request_signing",
             Self::SafeFetch => "safe_fetch",
             Self::NorthPassthroughDelivery => "north_passthrough_delivery",
+            Self::NorthPassthroughDeliveryV2 => "north_passthrough_delivery_v2",
         }
     }
 
@@ -99,11 +101,23 @@ impl CapabilityV1 {
                 ids.dedup();
                 ids.len()
             }
+            // v2 is run once per protocol; a host's run covers every protocol's distinct cases.
+            Self::NorthPassthroughDeliveryV2 => NorthPassthroughProtocolV2::ALL
+                .iter()
+                .map(|protocol| {
+                    let mut ids: Vec<_> = north_passthrough_fixtures_v2(*protocol)
+                        .iter()
+                        .map(south_provider_conformance::NorthPassthroughFixtureV1::case_id)
+                        .collect();
+                    ids.dedup();
+                    ids.len()
+                })
+                .sum(),
         }
     }
 
     /// Every capability, so the test can prove the manifest annotates exactly this set.
-    const fn all() -> [Self; 15] {
+    const fn all() -> [Self; 16] {
         [
             Self::ProviderCall,
             Self::ProviderStream,
@@ -120,6 +134,7 @@ impl CapabilityV1 {
             Self::RequestSigning,
             Self::SafeFetch,
             Self::NorthPassthroughDelivery,
+            Self::NorthPassthroughDeliveryV2,
         ]
     }
 }

@@ -159,6 +159,9 @@
   "user_agent": {
     "github-copilot": "GitHubCopilotChat/0.43.0"
   },
+  "subscription_quota_families": [
+    "github-copilot"
+  ],
   "permissions": {
     "network": false,
     "filesystem": false,

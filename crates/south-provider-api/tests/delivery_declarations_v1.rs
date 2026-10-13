@@ -150,3 +150,118 @@ fn other_worlds_refuse_both_declarations() {
         );
     }
 }
+
+/// `north_request_passthrough` (the `generateContent` request pass-through record §3.1): the shipped
+/// `provider-gemini` declares it for `gemini` on both sides, and gate ① admits it.
+#[test]
+fn the_gemini_package_passes_generate_content_through_on_both_sides() {
+    let manifest = shipped("provider-gemini");
+    assert_eq!(
+        manifest.north_request_passthrough.get("gemini"),
+        Some(&NorthProtocolV1::GenerateContent)
+    );
+    assert_eq!(manifest.north_passthrough.get("gemini"), Some(&NorthProtocolV1::GenerateContent));
+    assert_eq!(manifest.validate(), Ok(()));
+    let wire = serde_json::to_value(&manifest).unwrap();
+    assert_eq!(wire["north_request_passthrough"], json!({"gemini": "generate_content"}));
+    let back: ComponentManifestV1 = serde_json::from_value(wire).unwrap();
+    assert_eq!(back, manifest);
+    assert!(!NorthProtocolV1::GenerateContent.has_north_codec());
+    for protocol in
+        [NorthProtocolV1::ChatCompletions, NorthProtocolV1::Responses, NorthProtocolV1::Messages]
+    {
+        assert!(protocol.has_north_codec(), "{protocol:?}");
+    }
+}
+
+#[test]
+fn request_passthrough_is_refused_unless_every_condition_holds() {
+    let refused = |edit: &dyn Fn(&mut ComponentManifestV1), needle: &str| {
+        let mut manifest = shipped("provider-gemini");
+        edit(&mut manifest);
+        match manifest.validate() {
+            Err(ManifestErrorV1::InvalidNorthRequestPassthrough { detail, .. }) => {
+                assert!(detail.contains(needle), "{detail}");
+            }
+            other => panic!("{needle}: {other:?}"),
+        }
+    };
+    refused(
+        &|m| {
+            m.north_request_passthrough =
+                BTreeMap::from([("other".to_owned(), NorthProtocolV1::GenerateContent)]);
+        },
+        "does not declare",
+    );
+    refused(
+        &|m| {
+            m.north_request_passthrough =
+                BTreeMap::from([("gemini".to_owned(), NorthProtocolV1::ChatCompletions)]);
+            m.north_passthrough =
+                BTreeMap::from([("gemini".to_owned(), NorthProtocolV1::ChatCompletions)]);
+        },
+        "north codec does not speak",
+    );
+    refused(&|m| m.north_passthrough.clear(), "response side must pass through");
+    refused(
+        &|m| {
+            m.request_facts.get_mut("gemini").unwrap().output_cap = vec!["/max_tokens".to_owned()];
+        },
+        "request_facts must put the cap",
+    );
+    refused(
+        &|m| {
+            m.request_facts.get_mut("gemini").unwrap().stream =
+                south_provider_api::StreamLocationV1::Body("/stream".to_owned());
+        },
+        "request_facts must put the cap",
+    );
+}
+
+#[test]
+fn other_worlds_refuse_request_passthrough() {
+    for package in ["embeddings-openai-compatible", "task-kling-v2", "image-azure"] {
+        let mut manifest = shipped(package);
+        let family = manifest.providers[0].clone();
+        manifest.north_request_passthrough =
+            BTreeMap::from([(family, NorthProtocolV1::GenerateContent)]);
+        assert_eq!(
+            manifest.validate(),
+            Err(ManifestErrorV1::DeliveryIsAProviderWorldDeclaration),
+            "{package}"
+        );
+    }
+}
+
+/// `subscription_quota_families` (the host's subscription-quota alert, lv 2026-10-14): the shipped
+/// packages declare their subscription families; gate ① refuses an undeclared family and any world
+/// but the provider world.
+#[test]
+fn subscription_quota_families_name_declared_provider_families() {
+    let copilot = shipped("provider-openai-compatible");
+    assert!(copilot.subscription_quota_families.contains("github-copilot"));
+    assert!(!copilot.subscription_quota_families.contains("openai-compatible"));
+    assert_eq!(copilot.validate(), Ok(()));
+    let codex = shipped("provider-openai-responses");
+    assert!(codex.subscription_quota_families.contains("openai-codex"));
+    assert_eq!(codex.validate(), Ok(()));
+    assert!(shipped("provider-gemini").subscription_quota_families.is_empty());
+
+    let mut undeclared = shipped("provider-openai-compatible");
+    undeclared.subscription_quota_families.insert("nowhere".to_owned());
+    assert_eq!(
+        undeclared.validate(),
+        Err(ManifestErrorV1::InvalidSubscriptionQuotaFamily("nowhere".to_owned()))
+    );
+
+    for package in ["embeddings-openai-compatible", "task-kling-v2", "image-azure"] {
+        let mut manifest = shipped(package);
+        let family = manifest.providers[0].clone();
+        manifest.subscription_quota_families.insert(family);
+        assert_eq!(
+            manifest.validate(),
+            Err(ManifestErrorV1::DeliveryIsAProviderWorldDeclaration),
+            "{package}"
+        );
+    }
+}

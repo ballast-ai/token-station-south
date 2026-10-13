@@ -614,6 +614,22 @@ pub struct ComponentManifestV1 {
     /// Provider world only.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub north_passthrough: BTreeMap<String, NorthProtocolV1>,
+    /// Each family whose request a host may send as the **client's own body** for a protocol the
+    /// north codec does not speak, keeping the method, URL, headers and authentication the component
+    /// builds for the probe IR (the `generateContent` request pass-through record,
+    /// `docs/design/2026-10-14-generate-content-request-passthrough.md` §3). Gate ① admits only
+    /// [`NorthProtocolV1::GenerateContent`], only together with the same protocol in
+    /// `north_passthrough`, and only with request facts on that protocol's wire. Absent means the
+    /// request is always built from the IR. Provider world only.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub north_request_passthrough: BTreeMap<String, NorthProtocolV1>,
+    /// Families whose credentials are subscriptions with a usage quota (coding plans): a `429` from
+    /// such an upstream usually means the subscription's quota is spent, not a transient rate limit,
+    /// so a host may alert its operators (the host's subscription-quota alert, ruled by lv on
+    /// 2026-10-14). A plain fact about the family; it changes nothing a component builds. Absent
+    /// means no family is a subscription. Provider world only.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub subscription_quota_families: BTreeSet<String>,
     pub permissions: ComponentPermissionsV1,
     pub conformance: ConformanceSpecV1,
     pub compatibility: CompatibilityDeclarationV1,
@@ -762,7 +778,24 @@ pub enum NorthProtocolV1 {
     Responses,
     /// Anthropic Messages.
     Messages,
+    /// The `generateContent` / `streamGenerateContent` surface (the Gemini SDK's native wire). The
+    /// north codec does not speak it, so a host serves it only by request and response pass-through
+    /// (`north_request_passthrough` and `north_passthrough` together).
+    GenerateContent,
 }
+
+impl NorthProtocolV1 {
+    /// Whether the north codec renders this protocol. A protocol it does not render can only be
+    /// served by pass-through in both directions.
+    #[must_use]
+    pub const fn has_north_codec(self) -> bool {
+        !matches!(self, Self::GenerateContent)
+    }
+}
+
+/// The request facts every family declaring `generate_content` request pass-through must have:
+/// the client's own wire puts the cap at this pointer and the model and stream flag in the URL.
+pub const GENERATE_CONTENT_OUTPUT_CAP: &str = "/generationConfig/maxOutputTokens";
 
 /// Whether `paths` are valid immutable body paths.
 ///
@@ -1050,7 +1083,11 @@ impl ComponentManifestV1 {
             self.validate_endpoints()?;
             self.validate_signing_declaration()?;
             self.validate_delivery_declarations()?;
-        } else if !self.immutable_body_paths.is_empty() || !self.north_passthrough.is_empty() {
+        } else if !self.immutable_body_paths.is_empty()
+            || !self.north_passthrough.is_empty()
+            || !self.north_request_passthrough.is_empty()
+            || !self.subscription_quota_families.is_empty()
+        {
             return Err(ManifestErrorV1::DeliveryIsAProviderWorldDeclaration);
         } else if self.signing.is_some() {
             return Err(ManifestErrorV1::InvalidSigning(
@@ -1148,6 +1185,50 @@ impl ComponentManifestV1 {
                 family: family.clone(),
                 detail: "names a family the manifest does not declare".to_owned(),
             });
+        }
+        if let Some(family) =
+            self.subscription_quota_families.iter().find(|family| !self.providers.contains(*family))
+        {
+            return Err(ManifestErrorV1::InvalidSubscriptionQuotaFamily(family.clone()));
+        }
+        self.validate_request_passthrough()
+    }
+
+    /// `north_request_passthrough` (the `generateContent` request pass-through record §3.1): a
+    /// declared family, a protocol the north codec does not speak, the same protocol on the
+    /// response side, and request facts on the client's own wire.
+    fn validate_request_passthrough(&self) -> Result<(), ManifestErrorV1> {
+        for (family, protocol) in &self.north_request_passthrough {
+            let invalid = |detail: &str| ManifestErrorV1::InvalidNorthRequestPassthrough {
+                family: family.clone(),
+                detail: detail.to_owned(),
+            };
+            if !self.providers.contains(family) {
+                return Err(invalid("names a family the manifest does not declare"));
+            }
+            if protocol.has_north_codec() {
+                return Err(invalid(
+                    "only a protocol the north codec does not speak may pass the request through",
+                ));
+            }
+            if self.north_passthrough.get(family) != Some(protocol) {
+                return Err(invalid(
+                    "the response side must pass through too: declare the same protocol in \
+                     north_passthrough",
+                ));
+            }
+            let facts = self.request_facts.get(family);
+            let on_the_wire = facts.is_some_and(|facts| {
+                facts.output_cap == [GENERATE_CONTENT_OUTPUT_CAP]
+                    && matches!(facts.model, ModelLocationV1::Url(_))
+                    && facts.stream == StreamLocationV1::Url
+            });
+            if !on_the_wire {
+                return Err(invalid(
+                    "request_facts must put the cap at /generationConfig/maxOutputTokens and the \
+                     model and stream flag in the URL",
+                ));
+            }
         }
         Ok(())
     }
@@ -1493,13 +1574,21 @@ pub enum ManifestErrorV1 {
     RequestFactsIsAProviderWorldDeclaration,
     #[error("request_facts for family `{family}`: {detail}")]
     InvalidRequestFacts { family: String, detail: String },
-    /// `immutable_body_paths` or `north_passthrough` in a world without request declarations.
-    #[error("immutable_body_paths and north_passthrough are provider-world declarations")]
+    /// `immutable_body_paths`, `north_passthrough`, `north_request_passthrough` or
+    /// `subscription_quota_families` in a world without request declarations.
+    #[error(
+        "immutable_body_paths, north_passthrough, north_request_passthrough and \
+         subscription_quota_families are provider-world declarations"
+    )]
     DeliveryIsAProviderWorldDeclaration,
     #[error("immutable_body_paths for family `{family}`: {detail}")]
     InvalidImmutableBodyPaths { family: String, detail: String },
     #[error("north_passthrough for family `{family}`: {detail}")]
     InvalidNorthPassthrough { family: String, detail: String },
+    #[error("north_request_passthrough for family `{family}`: {detail}")]
+    InvalidNorthRequestPassthrough { family: String, detail: String },
+    #[error("subscription_quota_families names `{0}`, a family the manifest does not declare")]
+    InvalidSubscriptionQuotaFamily(String),
     #[error("credentials: {0}")]
     InvalidCredentials(String),
     #[error("signing: {0}")]

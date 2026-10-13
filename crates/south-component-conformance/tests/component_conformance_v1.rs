@@ -122,6 +122,8 @@ fn reference_manifest() -> ComponentManifestV1 {
         host_values: Vec::new(),
         immutable_body_paths: std::collections::BTreeMap::new(),
         north_passthrough: std::collections::BTreeMap::new(),
+        north_request_passthrough: std::collections::BTreeMap::new(),
+        subscription_quota_families: std::collections::BTreeSet::new(),
         permissions: ComponentPermissionsV1 {
             network: false,
             filesystem: false,

@@ -105,6 +105,14 @@ pub enum CheckV1 {
     /// keyed by provider type; a component that writes the cap elsewhere would
     /// spend more than the host reserved.
     RequestFactsHonoured,
+    /// For a family that declares `north_request_passthrough`, the descriptor the component builds
+    /// for the probe IR equals the one it builds for every fixture request in method, URL, headers
+    /// and authentication; only the body may differ (the `generateContent` request pass-through
+    /// record, `docs/design/2026-10-14-generate-content-request-passthrough.md` §5).
+    ///
+    /// The host keeps the probe's descriptor and sends the client's own body; a component that put
+    /// anything from the body into the URL or a header would send a request the host never sealed.
+    DescriptorIndependentOfBody,
     /// Each `credential.*` fixture's run of the package's credential recipe, by south's reference
     /// interpreter, equals the fixture's expected run: the rendered exchange requests, the
     /// extracted values, the expiry, the write-back and the exported attributes (B4,
@@ -205,6 +213,7 @@ impl CheckV1 {
             Self::UsagePartition => "usage_partition",
             Self::DescriptorAuthWithinManifest => "descriptor_auth_within_manifest",
             Self::RequestFactsHonoured => "request_facts_honoured",
+            Self::DescriptorIndependentOfBody => "descriptor_independent_of_body",
             Self::CredentialRecipeMatch => "credential_recipe_match",
             Self::UndeclaredValuesIgnored => "undeclared_values_ignored",
             Self::LocatorResolves => "locator_resolves",

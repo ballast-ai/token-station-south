@@ -193,6 +193,9 @@ fn run_suite(
                     if !refused {
                         outcomes.push(descriptor_auth_within_manifest(case, &built, manifest));
                         outcomes.push(request_facts_honoured(case, &built, manifest, &invoke));
+                        outcomes.extend(descriptor_independent_of_body(
+                            case, &built, manifest, &invoke,
+                        ));
                     }
                     outcomes.push(undeclared_values_ignored(case, &built, manifest, &invoke));
                 }
@@ -575,6 +578,65 @@ fn request_facts_problem(
         }
     }
     None
+}
+
+/// `DescriptorIndependentOfBody` (the `generateContent` request pass-through record §5): for a
+/// family declaring `north_request_passthrough`, build the probe IR — the fixture's request with
+/// one `"."` user message and nothing else but the model, the stream flag and the cap — and
+/// require the same method, URL, headers and authentication as the fixture's own descriptor.
+/// `None` for a family that declares nothing.
+fn descriptor_independent_of_body(
+    case: &CaseV1,
+    built: &Invoked,
+    manifest: &ComponentManifestV1,
+    invoke: &dyn Fn(&Value) -> Invoked,
+) -> Option<OutcomeV1> {
+    let check = CheckV1::DescriptorIndependentOfBody;
+    let input: RequestInput = match parse(&case.input) {
+        Ok(input) => input,
+        Err(failure) => return Some(OutcomeV1::failed(check, &case.name, failure.detail())),
+    };
+    if !manifest.north_request_passthrough.contains_key(&input.provider_config.provider) {
+        return None;
+    }
+    let descriptor = |built: &Invoked| -> Result<HttpRequestDescriptor, String> {
+        let built = built.as_ref().map_err(Failure::detail)?;
+        parse(built).map_err(|failure| failure.detail())
+    };
+    let mut probe = input.chat_request.clone();
+    probe.messages =
+        vec![token_station_protocol::Message::text(token_station_protocol::Role::User, ".")];
+    probe.tools.clear();
+    probe.tool_choice = None;
+    probe.response_format = None;
+    let cap = probe.sampling.max_output_tokens;
+    probe.sampling = token_station_protocol::Sampling::default();
+    probe.sampling.max_output_tokens = cap;
+    let probe_built = invoke(
+        &serde_json::json!({"provider_config": input.provider_config, "chat_request": probe}),
+    );
+    let outcome = match (descriptor(built), descriptor(&probe_built)) {
+        (Ok(own), Ok(probed)) => {
+            let differs = [
+                (own.method != probed.method, "method"),
+                (own.url != probed.url, "URL"),
+                (own.headers != probed.headers, "headers"),
+                (own.auth != probed.auth, "authentication"),
+            ];
+            match differs.iter().find(|(differs, _)| *differs) {
+                None => OutcomeV1::passed(check, &case.name),
+                Some((_, what)) => OutcomeV1::failed(
+                    check,
+                    &case.name,
+                    format!(
+                        "the probe IR's {what} differs from the request's: it depends on the body"
+                    ),
+                ),
+            }
+        }
+        (Err(problem), _) | (_, Err(problem)) => OutcomeV1::failed(check, &case.name, problem),
+    };
+    Some(outcome)
 }
 
 /// Builds the request twice through the same serialization, once with a

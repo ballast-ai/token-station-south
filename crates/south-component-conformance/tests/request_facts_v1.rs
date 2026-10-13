@@ -54,6 +54,9 @@ fn gate_one_refuses_a_malformed_declaration() {
     let declared = |family: &str, facts: RequestFactsV1| {
         let mut manifest = shipped("provider-gemini");
         manifest.request_facts.clear();
+        // Request pass-through requires the family's facts on its wire; this test varies them.
+        manifest.north_request_passthrough.clear();
+        manifest.north_passthrough.clear();
         manifest.request_facts.insert(family.to_owned(), facts);
         manifest.validate()
     };
@@ -154,6 +157,8 @@ enum Rogue {
     AlwaysStream,
     /// Sends the request to another model's URL.
     OtherModelInUrl,
+    /// Puts the size of the request's messages into the URL: a descriptor that depends on the body.
+    BodyInUrl,
 }
 
 struct Rogues(Rogue);
@@ -176,13 +181,18 @@ impl Rogues {
             Rogue::OtherModelInUrl => {
                 descriptor.url = descriptor.url.replace(&request.model, "another-model");
             }
+            Rogue::BodyInUrl => {
+                let size = serde_json::to_string(&request.messages).unwrap_or_default().len();
+                descriptor.url =
+                    descriptor.url.replace(&request.model, &format!("{}-{size}", request.model));
+            }
         }
         descriptor
     }
 
     fn inner(&self) -> &dyn ProviderComponentV1 {
         match self.0 {
-            Rogue::OtherModelInUrl => &GeminiReferenceV1,
+            Rogue::OtherModelInUrl | Rogue::BodyInUrl => &GeminiReferenceV1,
             Rogue::CapTwice | Rogue::OtherModelInBody | Rogue::AlwaysStream => {
                 &OpenAiCompatibleReferenceV1
             }
@@ -269,4 +279,47 @@ fn a_model_with_a_slash_stays_one_url_segment() {
         "{}",
         built.url
     );
+}
+
+/// `DescriptorIndependentOfBody` (the `generateContent` request pass-through record §5): it runs on
+/// `provider-gemini`, which declares request pass-through, and passes for the reference; a component
+/// that lets the body shape the URL fails it. A family that declares nothing never runs it.
+#[test]
+fn the_descriptor_must_not_depend_on_the_body_where_the_request_passes_through() {
+    let independence = |report: &ReportV1| -> (usize, Vec<String>) {
+        let ran = report
+            .outcomes()
+            .iter()
+            .filter(|outcome| outcome.check == CheckV1::DescriptorIndependentOfBody)
+            .count();
+        let failed = report
+            .failures()
+            .filter(|outcome| outcome.check == CheckV1::DescriptorIndependentOfBody)
+            .map(|outcome| format!("{}: {}", outcome.case, outcome.detail()))
+            .collect();
+        (ran, failed)
+    };
+    let report = run_provider_component_suite_v1_for_manifest(
+        &GeminiReferenceV1,
+        &pack("fixtures-gemini"),
+        &shipped("provider-gemini"),
+    );
+    let (ran, failed) = independence(&report);
+    assert!(ran > 0, "the check must run for a declaring family: {report}");
+    assert!(failed.is_empty(), "{failed:#?}");
+
+    let report = run_provider_component_suite_v1_for_manifest(
+        &Rogues(Rogue::BodyInUrl),
+        &pack("fixtures-gemini"),
+        &shipped("provider-gemini"),
+    );
+    let (_, failed) = independence(&report);
+    assert!(failed.iter().any(|failure| failure.contains("depends on the body")), "{failed:#?}");
+
+    let report = run_provider_component_suite_v1_for_manifest(
+        &OpenAiCompatibleReferenceV1,
+        &pack("fixtures"),
+        &shipped("provider-openai-compatible"),
+    );
+    assert_eq!(independence(&report).0, 0, "a family that declares nothing never runs it");
 }
