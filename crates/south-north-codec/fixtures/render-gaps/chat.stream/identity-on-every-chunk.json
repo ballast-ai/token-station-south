@@ -1,0 +1,136 @@
+{
+  "context": {
+    "created": 1700000000,
+    "id": "g1",
+    "model": "upstream-model"
+  },
+  "description": "Every chunk carries id, object, created and model from the context; a bare context id gains the chatcmpl- prefix once.",
+  "expected": {
+    "error": null,
+    "frames": [
+      {
+        "data": {
+          "choices": [
+            {
+              "delta": {
+                "content": "hel",
+                "role": "assistant"
+              },
+              "finish_reason": null,
+              "index": 0
+            }
+          ],
+          "created": 1700000000,
+          "id": "chatcmpl-g1",
+          "model": "upstream-model",
+          "object": "chat.completion.chunk"
+        },
+        "kind": "delta"
+      },
+      {
+        "data": {
+          "choices": [
+            {
+              "delta": {
+                "reasoning_content": "t"
+              },
+              "finish_reason": null,
+              "index": 0
+            }
+          ],
+          "created": 1700000000,
+          "id": "chatcmpl-g1",
+          "model": "upstream-model",
+          "object": "chat.completion.chunk"
+        },
+        "kind": "delta"
+      },
+      {
+        "data": {
+          "choices": [
+            {
+              "delta": {
+                "tool_calls": [
+                  {
+                    "function": {
+                      "arguments": "{}",
+                      "name": "f"
+                    },
+                    "id": "call_1",
+                    "index": 0
+                  }
+                ]
+              },
+              "finish_reason": null,
+              "index": 0
+            }
+          ],
+          "created": 1700000000,
+          "id": "chatcmpl-g1",
+          "model": "upstream-model",
+          "object": "chat.completion.chunk"
+        },
+        "kind": "delta"
+      },
+      {
+        "data": {
+          "choices": [
+            {
+              "delta": {},
+              "finish_reason": "tool_calls",
+              "index": 0
+            }
+          ],
+          "created": 1700000000,
+          "id": "chatcmpl-g1",
+          "model": "upstream-model",
+          "object": "chat.completion.chunk",
+          "usage": {
+            "completion_tokens": 4,
+            "prompt_tokens": 3,
+            "total_tokens": 7
+          }
+        },
+        "kind": "terminal"
+      }
+    ]
+  },
+  "input": [
+    [
+      {
+        "content": "hel",
+        "index": 0,
+        "type": "delta"
+      },
+      {
+        "block_index": 0,
+        "index": 0,
+        "thinking_delta": "t",
+        "type": "thinking_delta"
+      }
+    ],
+    [
+      {
+        "arguments_delta": "{}",
+        "id": "call_1",
+        "index": 0,
+        "name": "f",
+        "type": "tool_call_delta"
+      },
+      {
+        "finish_reason": "tool_calls",
+        "type": "finish"
+      },
+      {
+        "type": "usage",
+        "usage": {
+          "input_tokens": 3,
+          "output_tokens": 4
+        }
+      },
+      {
+        "type": "done"
+      }
+    ]
+  ]
+}

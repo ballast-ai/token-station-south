@@ -1,0 +1,94 @@
+{
+  "context": {
+    "created": 1700000000,
+    "id": "chatcmpl-g1",
+    "model": "upstream-model"
+  },
+  "description": "Usage reported before content and after the Finish is folded (field-wise, last non-zero wins) and written on the terminal frame; no choices-empty chunk is emitted.",
+  "expected": {
+    "error": null,
+    "frames": [
+      {
+        "data": {
+          "choices": [
+            {
+              "delta": {
+                "content": "x",
+                "role": "assistant"
+              },
+              "finish_reason": null,
+              "index": 0
+            }
+          ],
+          "created": 1700000000,
+          "id": "chatcmpl-g1",
+          "model": "upstream-model",
+          "object": "chat.completion.chunk"
+        },
+        "kind": "delta"
+      },
+      {
+        "data": {
+          "choices": [
+            {
+              "delta": {},
+              "finish_reason": "stop",
+              "index": 0
+            }
+          ],
+          "created": 1700000000,
+          "id": "chatcmpl-g1",
+          "model": "upstream-model",
+          "object": "chat.completion.chunk",
+          "usage": {
+            "completion_tokens": 50,
+            "completion_tokens_details": {
+              "reasoning_tokens": 20
+            },
+            "prompt_tokens": 700,
+            "prompt_tokens_details": {
+              "cached_tokens": 300
+            },
+            "total_tokens": 750
+          }
+        },
+        "kind": "terminal"
+      }
+    ]
+  },
+  "input": [
+    [
+      {
+        "type": "usage",
+        "usage": {
+          "cache_read_tokens": 300,
+          "input_tokens": 700,
+          "output_tokens": 1
+        }
+      }
+    ],
+    [
+      {
+        "content": "x",
+        "index": 0,
+        "type": "delta"
+      }
+    ],
+    [
+      {
+        "finish_reason": "stop",
+        "type": "finish"
+      },
+      {
+        "type": "usage",
+        "usage": {
+          "output_tokens": 50,
+          "reasoning_tokens": 20
+        }
+      },
+      {
+        "type": "done"
+      }
+    ]
+  ]
+}

@@ -1,0 +1,68 @@
+{
+  "context": {
+    "created": 1700000000,
+    "id": "chatcmpl-g1",
+    "model": "upstream-model"
+  },
+  "description": "Done with no Finish ever seen emits one choices-empty usage frame carrying the folded usage.",
+  "expected": {
+    "error": null,
+    "frames": [
+      {
+        "data": {
+          "choices": [
+            {
+              "delta": {
+                "content": "x",
+                "role": "assistant"
+              },
+              "finish_reason": null,
+              "index": 0
+            }
+          ],
+          "created": 1700000000,
+          "id": "chatcmpl-g1",
+          "model": "upstream-model",
+          "object": "chat.completion.chunk"
+        },
+        "kind": "delta"
+      },
+      {
+        "data": {
+          "choices": [],
+          "created": 1700000000,
+          "id": "chatcmpl-g1",
+          "model": "upstream-model",
+          "object": "chat.completion.chunk",
+          "usage": {
+            "completion_tokens": 3,
+            "prompt_tokens": 2,
+            "total_tokens": 5
+          }
+        },
+        "kind": "usage"
+      }
+    ]
+  },
+  "input": [
+    [
+      {
+        "content": "x",
+        "index": 0,
+        "type": "delta"
+      },
+      {
+        "type": "usage",
+        "usage": {
+          "input_tokens": 2,
+          "output_tokens": 3
+        }
+      }
+    ],
+    [
+      {
+        "type": "done"
+      }
+    ]
+  ]
+}

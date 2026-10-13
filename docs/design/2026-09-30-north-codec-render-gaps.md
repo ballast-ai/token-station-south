@@ -1,6 +1,10 @@
 # North codec: closing the remaining northbound render gaps
 
-Status: proposed — drafted for review by the host team (token-station-server P21), not accepted
+Status: accepted in part, gap by gap. **G1 accepted** (lv, 2026-10-14, with N-Q5 ruled: JSON-value equality over the
+canonical frame sequence) and implemented on branch `north-chat-stream-g1` (§3, "Implemented"); not yet released.
+**G3's codec half accepted** (lv, 2026-10-12, as NP-Q8 of
+`2026-10-11-responses-reasoning-replay-and-passthrough-suite.md`) and released in 0.55.0; G3's host half (§5.3) is the
+host's. **G2, G4 and G5 remain proposed**, not accepted.
 
 Date: 2026-09-30
 
@@ -92,8 +96,8 @@ Reading the code changed the list in three ways:
   output as produced, over the IR events, so the forwarded count stays checkpoint and manual-review evidence only
   (§7); N-Q10 asks the community host.
 - **D7 Equality rule.** Two renderings are equal when their canonical frame sequences are equal and each JSON
-  payload is equal as a JSON value (§8). This record does not require equal bytes across hosts; N-Q5 must be ruled
-  before G1 ships.
+  payload is equal as a JSON value (§8). This record does not require equal bytes across hosts; N-Q5 was ruled
+  before G1 shipped (lv, 2026-10-14: JSON-value equality, the codec does not own key order).
 
 ## 3. G1 — Chat chunk identity
 
@@ -174,6 +178,29 @@ holding the `Terminal` / `Usage` frames until settlement; the settled numbers; t
   whether or not the client sent `stream_options.include_usage`.
 - Key order: identity fields first. Under the host's `preserve_order` build the old stamp appended them after
   `choices`; the new frames are JSON-equal but not byte-equal to the old ones (§8).
+
+**Implemented (2026-10-14).** `codec:chat_stream.rs`, exported from the crate root; `openai_chat_frames` and
+`OpenAiChatSseState` are unchanged. The wrapper renders each event on its own, so its frames do not depend on how the
+caller batches events (property test at 32 samples). Tests: `tests/openai_chat_stream.rs`; the `chat.stream` rows of
+the §8 pack are in `fixtures/render-gaps/chat.stream/` and are checked against the code by the same test file. Where
+this section is silent the implementation takes the conservative reading below; each is pinned by a test or a fixture
+row and is open to review before the host adopts the wrapper.
+
+- A `Terminal` frame carries `usage` only when a `Usage` event was folded before it was emitted; otherwise it has no
+  `usage` key, as the older renderer's flushed finish chunk.
+- Usage folded **after** the terminal frame was emitted (a `Finish` flushed by a later delta, then `Usage`, then
+  `Done`) is not rendered: a `Finish` was seen, so the `Usage` frame rule does not apply. The host writes its settled
+  usage on the held terminal frame either way.
+- At most one `Usage` frame per stream, even if `Done` repeats.
+- An `Error` drops the pending finish and the folded usage with everything after it.
+- An overflowing total fails the call that would render the frame carrying it; frames rendered earlier in the same
+  call are not returned, and the stream renders nothing afterwards (the terminal cannot be rendered truthfully).
+- The role goes on the first `Delta` frame of a choice index whatever it carries, reasoning or a tool call included;
+  tool-call fragments are on choice 0, as the older renderer puts them, so they consume choice 0's role. A choice
+  that never gets a `Delta` frame (a stream that is only a `Finish`) never carries the role. Events the wire drops
+  (`RedactedThinking`, signature fragments) do not consume it.
+- An empty context `id` renders as `"chatcmpl-"`: `prefixed_id` falls back to the same empty string. The host mints a
+  non-empty id; the codec does not refuse an empty one.
 
 ## 4. G2 — Replay carrier classification
 
@@ -436,7 +463,10 @@ implementation of that provider). N-Q10 asks the community host.
 ## 8. Conformance and acceptance
 
 **Fixtures.** A pack under `crates/south-north-codec/fixtures/render-gaps/`, one JSON file per case holding
-`input`, `context` and `expected`. The codec's existing tests keep their inline fixtures (validation record, :7);
+`input`, `context` and `expected`. *(2026-10-14, `chat.stream` rows: one directory per family; `input` is a list of
+`frames` calls, each a list of IR `StreamEvent`s in their serde form; `expected` is `{"frames": [{"kind", "data"}],
+"error": null | {"call", "code", "field"}}`, `kind` being `delta`, `terminal` or `usage` and `code` the
+`CodecError::stable_code`; each file also has a `description`.)* The codec's existing tests keep their inline fixtures (validation record, :7);
 files are needed here because a second repository must read them at the pinned tag.
 
 | Family | Rows required by name | Assertion |
@@ -463,7 +493,8 @@ what south's own build produces. Properties, at the codec's fixed 32 samples: ba
 
 **What this does not promise.** Byte-equal output across the two hosts: key order depends on each host's
 `serde_json` features, and framing bytes are each host's. Whether south should own key order (typed serializers, or
-`preserve_order` in the codec) is N-Q5, an open south question. It must be ruled **before G1 ships**, because G1
+`preserve_order` in the codec) is N-Q5, ruled 2026-10-14 for JSON-value equality (§12). It had to be ruled **before G1
+ships**, because G1
 changes the server's key order anyway (§3) and should change it once. This record recommends JSON-value equality.
 
 **What a host must run.** A parity test that loads the pack from the pinned south checkout, drives the host's own
@@ -477,7 +508,7 @@ count beside the existing `provider_stream` entries.
 | Order | Gap | Why here | South | Host |
 |---|---|---|---|---|
 | 1 | G2 | Smallest; no rendered bytes change; the community half of P15 R3 is unwritten, so this prevents a second copy; closes the field mismatch of §4 | `classify_reasoning_replay`, exported marker | Replace `classify`; keep the leg filter |
-| 2 | G1 | Every Chat stream path; prerequisite of G4. Needs N-Q5 ruled first | `OpenAiChatStream`, `openai_chat_usage` | Replace the stamp, its seven application sites and the five terminal probes |
+| 2 | G1 | Every Chat stream path; prerequisite of G4. N-Q5 ruled 2026-10-14; implemented (§3) | `OpenAiChatStream`, `openai_chat_usage` | Replace the stamp, its seven application sites and the five terminal probes |
 | 3 | G4 | One call site; reuses G1 | `openai_chat_burst` | Replace the burst renderer; keep render-then-settle |
 | 4 | G3 | **Mandatory**: the owner's N-Q3 and R-Q1 rulings need one failure shape for gateway-originated failures on every Responses stream, relayed ones included; a prerequisite of the Responses record's pass-through cutover | `responses_error_event`, `RelayedResponseIdentity` | The generator refactor and host test of §5.3; delete the hand encoders and the recovery wrapper |
 | 5 | G5 | Waits for N-Q9 / N-Q10 (a second consumer); stays in the host until then. Not the settlement meter for `absent` families — the Kiro record's K-Q19 (ruled 2026-10-01) counts output as produced IR events — so it remains checkpoint and manual-review evidence only | `forwarded_text`, `forwarded_text_of_response` | Replace three of the four arms |
@@ -524,7 +555,10 @@ About 330 lines of production code besides the dead file. The case for this reco
   ships only with the community host's agreement (N-Q6).
 - Each step is a south minor. Raising the south pin counts as modifying the host (ruled 2026-09-30, P21 §1.3).
   That is acceptable outside DP0, but it argues for few releases: G2 alone; then G1, G4 and G3's
-  `responses_error_event` together, after N-Q5; G5 only if N-Q10 finds a second consumer.
+  `responses_error_event` together, after N-Q5; G5 only if N-Q10 finds a second consumer. *(2026-10-14: G3's codec
+  half shipped earlier, in 0.55.0, with the pass-through suite; G1 is accepted ahead of G2 and ships in the next
+  release. `south-north-codec` is workspace-versioned and linked by no component, so that release changes no package,
+  `component.wasm` or guest-linked crate version.)*
 - The Responses record depends on two further codec changes (its NC-1 and NC-2, about OpenAI reasoning items).
   They are specified there, not here.
 
@@ -589,6 +623,9 @@ halves tagged S or C remain open.
 - **N-Q5 (S)** Is JSON-value equality over the canonical frame sequence (D7, §8) enough, or should the codec own key
   order — typed serializers for the new frames, or enabling `preserve_order` itself? Recommended: JSON-value
   equality. **Must be ruled before G1 ships** (§9 order 2).
+  **Ruled (lv, 2026-10-14): JSON-value equality over the canonical frame sequence.** The codec does not own key
+  order: no `preserve_order` in the codec, no typed serializers. G1's frames insert keys in the order §3 states, which
+  a `preserve_order` host serializes as is; nothing tests or promises it.
 - **N-Q6 (S, C)** Tighten `chat_request_from_responses` to refuse unknown `tsr.` versions and mixed carriers (§4)?
   Will the community half of the P15 R3 carrier work take `classify_reasoning_replay` from the codec?
 - **N-Q7 (S, with the Responses record)** Is the Responses record's pass-through delivery (`north_passthrough`, its
@@ -653,3 +690,7 @@ halves tagged S or C remain open.
     release grouping, the N-Q9 note and N-Q10 state it; "not yet ruled" is dropped.
 - 2026-10-10: §5.3's `decode_sse_v1` home amended to the host-only crate `south-host-grammars` (boundary record
   §13.13).
+- 2026-10-14: lv accepted G1 and ruled N-Q5 (JSON-value equality over the canonical frame sequence; the codec does
+  not own key order). Status line, D7, §8, §9 order 2, §10 and N-Q5 updated; G3's codec half recorded as accepted
+  (NP-Q8, 2026-10-12) and released in 0.55.0. §3 gains "Implemented" with the readings taken where it is silent; §8
+  states the fixture file format of the `chat.stream` rows.

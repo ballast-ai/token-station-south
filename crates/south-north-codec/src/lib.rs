@@ -42,6 +42,7 @@ use token_station_protocol::ReasoningEffort;
 
 pub mod anthropic;
 pub mod anthropic_sse;
+pub mod chat_stream;
 mod fidelity;
 pub mod request;
 pub mod response;
@@ -49,6 +50,9 @@ pub mod sse;
 
 pub use anthropic::{anthropic_message_response, chat_request_from_anthropic_messages};
 pub use anthropic_sse::{AnthropicFrame, AnthropicSseState, anthropic_frames};
+pub use chat_stream::{
+    ChatStreamContext, OpenAiChatFrame, OpenAiChatFrameKind, OpenAiChatStream, openai_chat_usage,
+};
 pub use request::chat_request_from_openai_chat;
 pub use response::{ResponseContext, openai_chat_response};
 pub use sse::{OpenAiChatSseState, openai_chat_frames};

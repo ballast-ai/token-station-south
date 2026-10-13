@@ -1,0 +1,61 @@
+{
+  "context": {
+    "created": 1700000000,
+    "id": "chatcmpl-g1",
+    "model": "upstream-model"
+  },
+  "description": "A folded usage whose total does not fit in u64 fails the call that would render it with out_of_range at usage.total_tokens.",
+  "expected": {
+    "error": {
+      "call": 1,
+      "code": "out_of_range",
+      "field": "usage.total_tokens"
+    },
+    "frames": [
+      {
+        "data": {
+          "choices": [
+            {
+              "delta": {
+                "content": "x",
+                "role": "assistant"
+              },
+              "finish_reason": null,
+              "index": 0
+            }
+          ],
+          "created": 1700000000,
+          "id": "chatcmpl-g1",
+          "model": "upstream-model",
+          "object": "chat.completion.chunk"
+        },
+        "kind": "delta"
+      }
+    ]
+  },
+  "input": [
+    [
+      {
+        "content": "x",
+        "index": 0,
+        "type": "delta"
+      },
+      {
+        "finish_reason": "stop",
+        "type": "finish"
+      },
+      {
+        "type": "usage",
+        "usage": {
+          "input_tokens": 18446744073709551615,
+          "output_tokens": 1
+        }
+      }
+    ],
+    [
+      {
+        "type": "done"
+      }
+    ]
+  ]
+}
