@@ -3,7 +3,8 @@
 Status: accepted (lv, 2026-10-13: IG-Q1 to IG-Q3 ruled as recommended, §10): the three v4 ids, generation only;
 the host sniffs the stored bytes of a URL artifact whose media type the package does not declare (a generic host change
 that also covers `image-minimax` and `image-qwen` held tasks), so the package leaves the type undeclared; `facts.size`
-reports the snapped resolution when one is sent.
+reports the snapped resolution when one is sent. Implemented on branch `image-i3-5` (not yet merged); see
+Implementation.
 
 Date: 2026-10-13
 
@@ -304,7 +305,84 @@ at implementation.
   flat per speed, so none of the three changes a bill today. **Recommended: (a)**, registered as a difference from
   native for rows with tier prices.
 
+## Implementation (2026-10-13)
+
+What landed on branch `image-i3-5` (on `origin/main` = `93246d5`, release 0.60.0):
+
+- **`image-ideogram` 1.0.0**: manifest (family `ideogram-image`, `header_secret` on `provider_api_key`, `generate`,
+  `contracts` `{image: 1, media: 1}`, `south_runtime` 0.57.0, no config keys); guest crate (a thin shell like
+  `image-stability`); reference `crates/south-component-conformance/src/reference_ideogram_image.rs`, which follows §2–§4
+  and the native order of checks (the upstream id, then `prompt`, `n`, `response_format`, `size`); the fixture pack
+  `fixtures-image-ideogram/` (94 cases, with a README); the suite test `ideogram_image_suite` (the pack, ten named
+  behaviour tests and a mutations module); the sandbox parity test `ideogram_image_sandbox_parity`; the build script
+  `scripts/build-image-ideogram-component.sh`; and the enumerations (`ci.yml` rust-cache, the `release.yml` build / gate ②
+  / package lists, the conformance crate's `[[test]]` entry, the `shipped_packages_v1` official list (now 25) and a
+  manifest test, README and ARCHITECTURE).
+- No contract changes. `south-contracts` and `south-provider-api` are unchanged.
+
+Failing first: with the reference written and only three expectations written by hand
+(`prepare.turbo-url-generation`, transcribed from the host's `images_ideogram_stability.rs` url test;
+`response.unsafe-mixed`, from the host's `ideogram_reshape_maps_urls_and_drops_unsafe_entries`; `render.b64-json`), the
+pack's other 91 expectations were `null` and failed; the three hand-written ones passed. The other expectations were then
+taken from the reference and reviewed row by row against §2–§4 and the native source (`server:…/handler/images/
+ideogram.rs`); the review caught two inputs that named the wrong upstream id (`prepare.default-speed`,
+`prepare.quality-speed`), which were corrected before their expectations were taken. The mutations module checks that each
+of five broken components (a retriable 401, a placeholder in `extras`, an `internal` refusal, the all-filtered answer as
+`unknown`, a render that ignores the client's `response_format`) turns the matching suite row red.
+
+Versions (§9, Q47): `south-component-conformance` 0.58.0 → 0.59.0, with `fuzz/Cargo.toml` and `fuzz/Cargo.lock` and every
+component lockfile following. Every package published with 0.60.0 takes a patch with unchanged behaviour and keeps its
+`south_runtime` (0.60.0 for the three provider packages that declare D7's fields, 0.59.0 for `image-gemini`, 0.57.0 for
+the rest) and its `contracts` (`shipped_packages_v1::i3_5_retires_every_published_060_package_identity`):
+
+| Package | 0.60.0 | Now |
+|---|---|---|
+| `provider-openai-compatible` | 2.6.3 | 2.6.4 |
+| `provider-anthropic`, `provider-anthropic-bedrock-invoke`, `provider-bedrock-converse`, `provider-bedrock-converse-bearer` | 1.1.3 | 1.1.4 |
+| `provider-gemini`, `provider-openai-responses` | 1.3.3 | 1.3.4 |
+| `task-kling` / `task-kling-v2` | 1.0.20 / 0.32.18 | 1.0.21 / 0.32.19 |
+| `task-minimax-v2`, `task-bailian-v2` | 0.31.17 | 0.31.18 |
+| `task-xai-v2`, `task-veo-v2`, `task-wan-image-v2`, `task-gmi-image-v2` | 0.35.17 | 0.35.18 |
+| `task-byteplus-v2` | 0.36.17 | 0.36.18 |
+| `embeddings-openai-compatible` / `embeddings-gemini` / `embeddings-vertex` | 1.0.11 / 1.1.8 / 1.0.10 | 1.0.12 / 1.1.9 / 1.0.11 |
+| `image-azure` / `image-minimax` / `image-qwen` / `image-gemini` / `image-stability` | 1.0.7 / 1.0.2 / 1.0.2 / 1.0.1 / 1.0.0 | 1.0.8 / 1.0.3 / 1.0.3 / 1.0.2 / 1.0.1 |
+| `image-ideogram` | — | 1.0.0 |
+
+The I3-4 retirement test no longer pins I3-4's identities. The workspace version and tags are unchanged; that is the
+release step (until it, `scripts/check_crate_versions.py --unreleased` fails because the workspace version still names
+the tagged 0.60.0).
+
+Implementation interpretations (where the record is silent):
+
+1. **An elided URL** (a `url` above the host's 1 MiB fallback threshold, a placeholder in the view) counts as a present,
+   non-empty URL: the entry becomes a `url` artifact, and the host refuses to deliver it (it fails `ArtifactUrlV1` above
+   8 KiB, P9). Treating it as "not a string" would turn an answer with only such entries into the all-filtered
+   content-policy refusal, which the upstream did not say. Natively the string is a non-empty URL too.
+2. **`response_format`**: a placeholder as the value or as its `type` is refused as an elided `response_format`
+   (natively a string `type` other than the two words is refused); a placeholder elsewhere inside the object is ignored, as
+   native ignores every other key.
+3. **`n` that is not a count** (a fraction, a string) is refused at the `n` step with the host handler's text "'n' must be a
+   non-negative integer (got …)", as I3-4; natively and on the component path the host refuses it before either arm runs.
+4. **`provider_message`** of a non-2xx is the first string among the body's `error`, `message`, `detail` and
+   `error.message`, capped at 256 characters; the code follows the status (`image_shared::status_code`).
+5. **`unknown` reasons**: "a 2xx without images" for a missing, `null`, non-array or empty `data`; "a 2xx without a JSON
+   object body" for a JSON value that is not an object. A 2xx that is not JSON never reaches the component: the host's
+   view building refuses it (`response.not-json`, as I3-4).
+6. **An undeclared upstream id** reaching `prepare` is refused with the native text as `invalid_request`;
+   `model-capabilities` declares only the configured models among the three ids, so the host refuses such an id first (P4).
+7. **A multipart request** is refused ("Ideogram image models only generate from a JSON request"), and a `tokens`
+   requirement with the shared capability text; the host refuses both before the component (§2, P12).
+8. **"A request-extras row on an immutable name"** (§8): the gate ② pack cannot express operator request extras, so it is
+   covered by every prepared expectation carrying `immutable_body_paths` `["text_prompt", "rendering_speed", "resolution",
+   "num_images"]` and by the named test `the_immutable_parts_are_the_native_owned_fields`.
+
+Differences from native the record does not list: none found beyond item 1 (whose client outcome differs only in the
+host's delivery, P9) and the refusal texts of items 2 and 3. For the host's dual run: `size` `"1600 x 900"` (spaces
+around the `x`) is accepted and snapped on both sides, since each half is trimmed; an entry whose `is_image_safe` is not
+a boolean (for example the string `"false"`) is not filtered on either side.
+
 ## Revision note
 
 - 2026-10-13: first draft (proposed).
 - 2026-10-13: lv ruled IG-Q1 to IG-Q3 as recommended; accepted.
+- 2026-10-13: implemented on branch `image-i3-5` (Implementation).

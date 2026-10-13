@@ -1562,3 +1562,6 @@ rest of S-I-5 because it depends only on S-I-1a's pure halves. Fixtures are in
 - 2026-10-13: step I3-4 (`image-stability`) has its own record,
   [`2026-10-13-image-i3-4-stability.md`](2026-10-13-image-i3-4-stability.md), accepted on 2026-10-13 and implemented on
   branch `image-i3-4`. §14 item 5's "HTTP contract 10" is the contract renumbered 12 by §18.1; no contract changes.
+- 2026-10-13: step I3-5 (`image-ideogram`) has its own record,
+  [`2026-10-13-image-i3-5-ideogram.md`](2026-10-13-image-i3-5-ideogram.md), accepted on 2026-10-13 (IG-Q1 to IG-Q3) and
+  implemented on branch `image-i3-5`; no contract changes.
