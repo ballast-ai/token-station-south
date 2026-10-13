@@ -1,6 +1,8 @@
 # The Kiro provider component (`provider-kiro`)
 
-Status: proposed — drafted for review by the host team (token-station-server P21), not accepted
+Status: accepted 2026-10-13 (provisional items pending a real-account capture). lv ruled on 2026-10-13: implement
+now, test with a real account later; every open question takes its recommendation (§17). Implemented 2026-10-14 on
+branch `provider-kiro`, not yet released (§18).
 
 Date: 2026-09-30
 
@@ -1155,6 +1157,141 @@ of these, lv ruled K-Q19 on 2026-10-01.
   **Ruled (lv, 2026-10-01): count output as produced** — the IR events the upstream produced, not what was delivered
   to the client.
 
+## 17. Rulings (lv, 2026-10-13: implement now, real-account test later; DP0-consistent questions take the recommendation)
+
+lv's instruction of 2026-10-13: migrate the code now and test with a real account later; an open question whose
+recommended option is consistent with DP0 (provider logic only in south, the host generic) takes the recommendation,
+and a question with no recommendation takes the minimal DP0-consistent option. **Provisional** marks a ruling that
+the package implements as the native arm behaves today and that the real-account capture (§12.2 item 7) confirms or
+changes; a change is a later package release with its own fixtures.
+
+| Question | Ruling | Provisional |
+|---|---|---|
+| K-Q1 | As ruled 2026-09-30: for `output_cap: []` with `usage_evidence: absent` the host enforces the cap on its own meter and ends with `length`, after cutover; §8.3's two cases (a streaming cut at an event boundary, a non-streaming fold cut at the cap with an incomplete tool call removed) are accepted as written | No |
+| K-Q2 | As ruled 2026-09-30: the native arm moves to the generic estimator first (host step K0) | No |
+| K-Q3 | As ruled 2026-09-30: no per-provider surface switch in the host; staging by acceptance | No |
+| K-Q4 | As ruled 2026-09-30: `extras.refreshUrl` is dropped (KR25), after the host's read-only production query | No |
+| K-Q5 | Recommendation: `meteringEvent` is **not** required in version 1; the end of the body completes an answer, as natively. The capture decides whether a later release requires it | Yes |
+| K-Q6 | Recommendation: the status column of §9 is authoritative; the exception-name arm maps the names §9 lists, and an unlisted name falls back to the status (`internal` in band) | Yes |
+| K-Q7 | Recommendation: the buffered path (P-5, boundary §5.2): a non-streaming answer reaches `parse-response` as the canonical re-encoding and the stream parser folds it | No |
+| K-Q8 | Recommendation: P-8(b) is accepted as a rule separate from boundary §3.6 — a package that exports no catalog world gets no upstream liveness request; its health is the credential state | No |
+| K-Q9 | Recommendation: the family is `kiro` | No |
+| K-Q10 | Recommendation: no `content-type` on the inference request, as the native arm sends none | Yes |
+| K-Q11 | `conversationId` is sent on every request and is the host's `attempt_id` (a lowercase hyphenated UUID); a request without one is refused (KR9). If the capture shows the upstream accepts its absence, a later release may omit it | Yes |
+| K-Q12 | As ruled for the host on 2026-09-30, and for south now: version 1 refuses images (KR1) | No |
+| K-Q13 | No recommendation: the minimal option. Version 1 ships no catalog entry for `kiro`; `model-capabilities` echoes the operator's models, and the catalog waits for the capture to verify ids | Yes |
+| K-Q14 | Recommendation: no IR change now; a tool result is always sent with `status: "success"` (KR11), as natively | No |
+| K-Q15 | No recommendation: the minimal option. The package proceeds; the contracts it relies on (the attempt id, the buffered path, the declared user agent) are already released boundary contracts, and the community host's view is a follow-up, not a blocker | No |
+| K-Q16 | As settled 2026-10-08 (boundary §13.8): `host_values: ["attempt_id"]` | No |
+| K-Q17 | Recommendation: amend both doc comments. The WIT usage rule was amended in B1 (provider-adapter.wit now states the `absent` exception); the kernel's `HttpResponseParts.body` comment goes through the kernel chain and does not block this package | No |
+| K-Q18 | Recommendation: version 1 keeps the native layout, one entry per IR message, consecutive tool results not merged | Yes |
+| K-Q19 | As ruled 2026-10-01: output is counted as produced | No |
+
+The status line's "provisional items" are the six rows marked **Yes**.
+
+## 18. Implementation (2026-10-14)
+
+Implemented on branch `provider-kiro`; not released (Q47: the next release bumps every package).
+
+**What landed.**
+
+- `crates/south-component-conformance/src/reference_kiro.rs` — the reference (`KiroReferenceV1`), one hop each way as
+  §4 and §5 describe. `components/provider-kiro/` — the wit-bindgen shell, `manifest.json` and a lockfile identical
+  to its siblings'. `scripts/build-kiro-component.sh`, the CI cache entry and the release workflow's build, parity
+  and package lines.
+- `fixtures-kiro/` — 80 cases (27 request, 11 response, 18 stream, 7 error, 1 capabilities, 16 credential); sources
+  in its README. `tests/kiro_conformance_v1.rs` — gates ① and ②, the declarations, the row list, the host-bytes
+  check (the stream rows taken from the host are its binary bodies, deframed and re-encoded by south byte for byte),
+  the three mutation checks of §11.2, the buffered-path parity, and the header and slot of every built request.
+  `tests/kiro_sandbox_parity_v1.rs` — the built `component.wasm` passes the same gate ②.
+- The usage judge (`usage_ir_contract_v1`): for any credit value and any token-shaped member on any frame, split at
+  any byte, the component emits no `Usage` and folds to all-zero usage; and every shipped Kiro output row reports no
+  usage. A fuzz function (`contract_parsers`, `fuzz_kiro_stream`) holds chunking invariance, no usage, and "the
+  buffered fold succeeds exactly when the stream completes" on arbitrary bytes.
+- Failing first: with `request.chat`, `stream.tool-use` and `response.text` written by hand, gate ② failed 149
+  outcomes on the null expectations and passed the three; the rest were produced by the reference and read row by
+  row. Mutations run against the tests: emitting `Usage` from `meteringEvent` (caught by gate ②, the metering
+  mutation check and the usage judge), a non-zero response usage (gate ②, the judge, the parity test), a
+  `conversationId` not taken from the attempt id (gate ②, the attempt-id check), and a `stop` that does not close the
+  call (gate ②, the parity test).
+
+**Where the shipped manifest differs from the §3.4 / §7.2 sketches** (the vocabulary as released, not new
+decisions):
+
+- `import` is keyed by field (`{file, pointers}`), and `seed` is one section-level entry (`file`, `slot`, `present`,
+  `expires_at`); the file kind is `kiro-auth-token-json`.
+- `refresh_margin_seconds` is 30, not 300: gate ① requires the margin to be shorter than the shortest validity after
+  the clamp (boundary §13.3), and a recipe floor above 60 s would make the host trust a short-lived token longer than
+  the upstream granted it. 30 s is the host default the Copilot recipe took under the same rule (boundary §13.5,
+  P21 Q-A). KD9.
+- `auth_method` has value syntax `printable_ascii` 256 (the native arm accepts any string as a method) and
+  `client_id` `printable_ascii` 1024 (an IAM Identity Center client id is opaque); `auth_region` keeps `aws_region`
+  and its `us-east-1` default; `profile_arn` keeps `aws_arn`.
+- `subscription_quota_families: ["kiro"]`: the native arm counts Kiro among the subscription families whose 429
+  raises the host's quota alert (server `ProviderType::is_coding_plan`). The field is a 0.60.0 declaration, so the
+  package declares `south_runtime` 0.60.0, the oldest runtime that admits it.
+- `compatibility` is the tuple every package of this kernel declares (protocol 0.6.0, `canonical_ir` 4); no
+  `contracts`, no `endpoint`, no `config_schema`.
+
+**Numbered refusals and degradations.** Every one is pinned by a fixture. "Native" is the host arm today.
+
+| # | Input | Package | Native |
+|---|---|---|---|
+| KR1 | An image part, in any message | Capability error (400) before admission | Refused too, in the shape check before the token refresh (host K0-a) |
+| KR2 | A content part this crate does not model (`ContentPart::Unknown`) | Capability error | Dropped unless it is a `text` block |
+| KR3 | `response_format` other than text | Capability error | Ignored |
+| KR4 | `tool_choice` `required` or a named tool | Capability error | Dropped |
+| KR5 | The last non-system message is an assistant turn | Capability error | Sent as the current user message |
+| KR6 | Tool-call `arguments` that are not a JSON object | Invalid request | Sent as a non-object value or a JSON string |
+| KR7 | A tool call with an empty `id` or `name`; a tool message without `tool_call_id` | Capability error | Refused by the first hop |
+| KR8 | No non-system message | Invalid request | Refused |
+| KR9 | `host_values.attempt_id` absent, or not a lowercase hyphenated UUID | Internal error (500): a host defect | The host mints its own id |
+| KR10 | A `provider_config.provider` other than `kiro` | Capability error | — |
+| KR11 | A tool result | Always `status: "success"` (lossy; K-Q14) | The same |
+| KR12 | Reasoning parts in earlier turns | Dropped | Dropped |
+| KR13 | `temperature`, `top_p`, `top_k`, `stop`, the output cap | Dropped (the cap is the host's, K-Q1) | Dropped |
+| KR14 | `parallel_tool_calls`, the reasoning request, a tool's `strict` | Dropped | Dropped |
+| KR15 | Prompt-cache markers | Dropped | Dropped |
+| KR16 | A stream or buffered frame whose `data` is not JSON | Provider protocol error | Non-streaming: `null`, ignored; streaming: an error |
+| KR17 | A `toolUseEvent` without a `toolUseId` | Provider protocol error | A call with an empty id |
+| KR18 | A tool `input` fragment that is not a string | Provider protocol error | Treated as empty |
+| KR19 | A tool event after that call's `stop` | Provider protocol error | Attached to whichever block is open |
+| KR20 | A 2xx with no frames | No `Done`; `parse-response` errors | An empty success |
+| KR21 | A tool call still open at the end of the body | No `Done`; `parse-response` errors | Completed |
+| KR22 | `auth_region` not region-shaped | Configuration error, nothing sent | The same since host `a82c852b` |
+| KR23 | `profile_arn` not ARN-shaped (`aws_arn`) | The host refuses the field (no attribute, configuration error) | Any string is sent |
+| KR24 | `auth_method` above 256 printable ASCII bytes, `client_id` above 1024 | Configuration error | Accepted |
+| KR25 | `extras.refreshUrl` | No equivalent (K-Q4) | Replaces the token endpoint |
+
+**Intentional differences from the native arm** (for the dual run, §12.2):
+
+- KD1 The model id is written verbatim (§4.4); the host rewrites dashed ids on the model rows first (K0-c).
+- KD2 The refusals KR2–KR6 and KR9 (above), where the native arm silently changed or completed the request.
+- KD3 One hop: operator body extras reach the real upstream body (Appendix D N-10).
+- KD4 / KD5 / KD6 The stream refusals KR20, KR21 and KR16, and KR17–KR19 for malformed tool events.
+- KD7 Non-streaming tool arguments are the concatenated fragments verbatim; natively unparseable input became `{}`.
+- KD8 A token refresh answered 403, 429 or 5xx is `transient`; natively every non-2xx is a 400-class operator error
+  (N-6). 400 and 401 stay terminal.
+- KD9 The refresh margin is 30 s (native 300 s), above.
+- KD10 Only camelCase refresh responses are read (§7.4).
+- KD11 A missing refresh token, or a missing IdC client id or secret, is a configuration error before any request in
+  both forms (§7.4).
+- KD12 A non-2xx inference answer is mapped by status and exception name (§9); natively it is an upstream error
+  without a mapping. In-band exception frames map by name, `error` frames to `upstream_unavailable`.
+- KD13 A repeated tool start for a call already open is ignored; natively it opens another block.
+
+**What needs the real account** (§12.2 item 7): K-Q5 (is `meteringEvent` on every completed answer?), K-Q6 (the
+exception names and statuses, and what an exhausted allowance looks like), K-Q10 (`content-type`), K-Q11 (is
+`conversationId` required, and must it be a UUID?), K-Q13 (the model ids for a catalog entry), K-Q18 (a multi-result
+turn layout), and whether a tool call always ends with `stop` (KR21). The capture is archived, redacted, as fixtures.
+
+**What the host does next** (Appendix C, K2): admit the package (its range must include `south_runtime` 0.60.0 and
+lift its R13 / R14 refusals of `usage_evidence: absent` and `output_cap: []`); register it for the family `kiro`;
+hand each native credential over to the recipe fields in one transaction (refresh token, `clientId`,
+`clientSecret`, `authMethod`, `idcRegion` or else `region` into `auth_region`, `profileArn`), never leaving two rows
+on one rotating chain; run the replaying dual run of §12.2 against the native arm; then a cutover preflight before
+routing rows.
+
 ## Appendix A. The native arm today (host material)
 
 Citations are at host `a82c852b`.
@@ -1439,3 +1576,11 @@ They matter here because a dual run pins whatever the native arm does as "correc
     client. §6.2 and Appendix B.1 state it.
   - The §11 absent-usage fixture row and the Appendix C K0 row state the ruled rule (output counted as the IR events
     produced) instead of referring to K-Q19 as a choice.
+
+## Revision note (2026-10-14)
+
+- Status: accepted 2026-10-13 on lv's instruction (implement now, real-account test later; DP0-consistent questions
+  take the recommendation); six rulings are provisional until the capture (§17).
+- §17 added: one ruling per question K-Q1 to K-Q19.
+- §18 added: what landed, where the shipped manifest differs from the §3.4 / §7.2 sketches, the numbered refusals
+  KR1–KR25 and differences KD1–KD13, what needs the real account, and the host's next steps.
