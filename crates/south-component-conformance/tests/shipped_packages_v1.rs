@@ -1431,6 +1431,9 @@ fn declared_runtime_now(name: &str) -> &'static str {
         | "provider-openai-compatible"
         | "provider-openai-responses" => "0.60.0",
         "image-gemini" => "0.59.0",
+        // V-Q8 (design record `2026-10-14-task-min-poll-interval.md`): the first package to declare
+        // `min_poll_interval_seconds`; the release that ships it moves this to its own runtime.
+        "task-minimax-v2" => "0.62.0",
         _ => "0.57.0",
     }
 }
@@ -2119,7 +2122,7 @@ fn i3_3_retires_every_published_062_package_identity() {
         ("task-gmi-image-v2", "0.35.20", "0.35.21"),
         ("task-kling-v2", "0.32.21", "0.32.22"),
         ("task-kling", "1.0.23", "1.0.24"),
-        ("task-minimax-v2", "0.31.20", "0.31.21"),
+        ("task-minimax-v2", "0.31.20", "0.32.0"),
         ("task-veo-v2", "0.35.20", "0.35.21"),
         ("task-wan-image-v2", "0.35.20", "0.35.21"),
         ("task-xai-v2", "0.35.20", "0.35.21"),

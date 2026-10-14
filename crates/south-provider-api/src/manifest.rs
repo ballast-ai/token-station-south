@@ -341,6 +341,17 @@ pub const TASK_TOKEN_BUCKETS: &[&str] = &[
     "total_output",
 ];
 
+/// The smallest `min_poll_interval_seconds` a task package may declare (inclusive).
+///
+/// Zero would let a host poll in a busy loop (the task poll interval record,
+/// `docs/design/2026-10-14-task-min-poll-interval.md` §3).
+pub const MIN_TASK_POLL_INTERVAL_SECONDS: u32 = 1;
+/// The largest `min_poll_interval_seconds` a task package may declare (inclusive).
+///
+/// Ten minutes: the ceiling keeps a unit mistake (milliseconds written as seconds) from parking
+/// every task of the package for hours (the task poll interval record §3).
+pub const MAX_TASK_POLL_INTERVAL_SECONDS: u32 = 600;
+
 /// The most response elision paths a task package declares, and the longest one in bytes: the
 /// media contract's bounds (`south_contracts::media::MediaLimitsV1::V1`).
 const MAX_RESPONSE_BLOB_PATHS: usize = 32;
@@ -678,6 +689,16 @@ pub struct ComponentManifestV1 {
     /// `unknown`, never a partial bill (task contract 8, §7.1). Each is in `token_buckets`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub required_token_buckets: Vec<String>,
+    /// The shortest interval, in whole seconds, between two observation requests a host sends for
+    /// one task of this package (the task poll interval record,
+    /// `docs/design/2026-10-14-task-min-poll-interval.md`; ruled V-Q8 (a) on 2026-10-14). Package
+    /// level: one value for every family and every task of the package, because the observe
+    /// exports carry no cadence. A host schedules no observation of a task sooner than this after
+    /// the previous one; its own backoff may wait longer. Between
+    /// [`MIN_TASK_POLL_INTERVAL_SECONDS`] and [`MAX_TASK_POLL_INTERVAL_SECONDS`] inclusive. Task
+    /// worlds only; absent means the host's own default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_poll_interval_seconds: Option<u32>,
     pub permissions: ComponentPermissionsV1,
     pub conformance: ConformanceSpecV1,
     pub compatibility: CompatibilityDeclarationV1,
@@ -1153,6 +1174,7 @@ impl ComponentManifestV1 {
             return Err(ManifestErrorV1::RequestFactsIsAProviderWorldDeclaration);
         }
         self.validate_task_response_declarations(world)?;
+        self.validate_min_poll_interval(world)?;
         if matches!(world.world, TASK_WORLD | TASK_WORLD_V2) {
             // Three stages, all required: a component missing one cannot carry
             // a task to a terminal state. `artifact_fetch` is deliberately not
@@ -1266,6 +1288,23 @@ impl ComponentManifestV1 {
             if self.required_token_buckets[..index].contains(bucket) {
                 return invalid(format!("required bucket `{bucket}` is declared twice"));
             }
+        }
+        Ok(())
+    }
+
+    /// `min_poll_interval_seconds` (the task poll interval record §3): only in a task world, and
+    /// within the inclusive bounds. No contract number gates it: it changes no value a component
+    /// exchanges with its host, and a runtime before the one that ships it refuses the unknown
+    /// field, so the declared `south_runtime` alone keeps an older host from misreading it.
+    fn validate_min_poll_interval(&self, world: &WorldSchemaV1) -> Result<(), ManifestErrorV1> {
+        let Some(seconds) = self.min_poll_interval_seconds else {
+            return Ok(());
+        };
+        if !matches!(world.world, TASK_WORLD | TASK_WORLD_V2) {
+            return Err(ManifestErrorV1::MinPollIntervalIsATaskWorldDeclaration);
+        }
+        if !(MIN_TASK_POLL_INTERVAL_SECONDS..=MAX_TASK_POLL_INTERVAL_SECONDS).contains(&seconds) {
+            return Err(ManifestErrorV1::MinPollIntervalOutOfBounds(seconds));
         }
         Ok(())
     }
@@ -1775,6 +1814,15 @@ pub enum ManifestErrorV1 {
     InvalidResponseBlobPaths(String),
     #[error("token_buckets: {0}")]
     InvalidTokenBuckets(String),
+    // The task poll interval (docs/design/2026-10-14-task-min-poll-interval.md §3). Added with the
+    // field: a host that matches this enum exhaustively must add the arms on re-pin.
+    #[error("min_poll_interval_seconds is a task-world declaration")]
+    MinPollIntervalIsATaskWorldDeclaration,
+    #[error(
+        "min_poll_interval_seconds {0} is outside {MIN_TASK_POLL_INTERVAL_SECONDS}..=\
+         {MAX_TASK_POLL_INTERVAL_SECONDS}"
+    )]
+    MinPollIntervalOutOfBounds(u32),
 }
 
 // -- compatibility admission -------------------------------------------------

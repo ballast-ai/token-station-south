@@ -127,6 +127,7 @@ fn reference_manifest() -> ComponentManifestV1 {
         response_blob_paths: Vec::new(),
         token_buckets: Vec::new(),
         required_token_buckets: Vec::new(),
+        min_poll_interval_seconds: None,
         permissions: ComponentPermissionsV1 {
             network: false,
             filesystem: false,
@@ -756,6 +757,7 @@ fn task_manifest() -> ComponentManifestV1 {
         response_blob_paths: Vec::new(),
         token_buckets: Vec::new(),
         required_token_buckets: Vec::new(),
+        min_poll_interval_seconds: None,
         permissions: ComponentPermissionsV1 {
             network: false,
             filesystem: false,
