@@ -1,0 +1,48 @@
+{
+  "facts": {
+    "operation": "synthesize",
+    "characters": {
+      "count": 14,
+      "upper": 17
+    },
+    "metering_forms": [
+      "characters"
+    ],
+    "output_media_type": "audio/mpeg"
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "v1/speech/inline",
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "model": "tts-inline-1",
+          "text": "Grüße aus Köln",
+          "format": "mp3",
+          "voice": "warm"
+        }
+      }
+    }
+  },
+  "response_body_form": "json",
+  "response_elision_paths": [
+    "/audio/data"
+  ],
+  "immutable_body_paths": [
+    "model",
+    "format"
+  ],
+  "state": {
+    "mode": "inline",
+    "client_format": "mp3",
+    "media_type": "audio/mpeg",
+    "characters": 14,
+    "forms": [
+      "characters"
+    ]
+  }
+}

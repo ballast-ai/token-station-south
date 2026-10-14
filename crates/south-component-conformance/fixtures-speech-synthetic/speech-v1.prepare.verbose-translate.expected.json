@@ -1,0 +1,52 @@
+{
+  "facts": {
+    "operation": "translate",
+    "metering_forms": [
+      "seconds"
+    ]
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "v1/audio/translations",
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "multipart": {
+        "parts": [
+          {
+            "name": "file",
+            "blob": "b0",
+            "transform": "as_is",
+            "filename": "clip.mp3",
+            "media_type": "audio/mpeg"
+          },
+          {
+            "name": "model",
+            "value": "asr-verbose-1"
+          },
+          {
+            "name": "response_format",
+            "value": "verbose_json"
+          }
+        ]
+      }
+    }
+  },
+  "response_body_form": "json",
+  "response_elision_paths": [],
+  "immutable_form_fields": [
+    "file",
+    "model",
+    "response_format"
+  ],
+  "state": {
+    "mode": "recognition",
+    "client_format": "json",
+    "verbose": true,
+    "forms": [
+      "seconds"
+    ]
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "facts": {
+    "operation": "synthesize",
+    "characters": {
+      "count": 13
+    },
+    "metering_forms": [
+      "characters"
+    ],
+    "output_media_type": "audio/wav"
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "v1/speech/url",
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "model": "tts-url-1",
+          "input": "Hello, world.",
+          "voice": "calm"
+        }
+      }
+    }
+  },
+  "response_body_form": "json",
+  "response_elision_paths": [],
+  "immutable_body_paths": [
+    "model"
+  ],
+  "state": {
+    "mode": "url",
+    "characters": 13,
+    "forms": [
+      "characters"
+    ]
+  }
+}

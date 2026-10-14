@@ -1,0 +1,47 @@
+{
+  "facts": {
+    "operation": "synthesize",
+    "characters": {
+      "count": 13,
+      "upper": 13
+    },
+    "metering_forms": [
+      "characters"
+    ],
+    "output_media_type": "audio/wav"
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "v1/speech/inline",
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "model": "tts-inline-1",
+          "text": "Hello, world.",
+          "format": "pcm"
+        }
+      }
+    }
+  },
+  "response_body_form": "json",
+  "response_elision_paths": [
+    "/audio/data"
+  ],
+  "immutable_body_paths": [
+    "model",
+    "format"
+  ],
+  "state": {
+    "mode": "inline",
+    "client_format": "wav",
+    "media_type": "audio/wav",
+    "characters": 13,
+    "forms": [
+      "characters"
+    ]
+  }
+}

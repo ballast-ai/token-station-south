@@ -28,6 +28,8 @@ jobs+=("cd ${guests}/test-embeddings && cargo build --target wasm32-wasip2")
 jobs+=("cd ${guests}/test-image && cargo build --target wasm32-wasip2")
 jobs+=("cd ${guests}/test-speech && cargo build --target wasm32-wasip2")
 jobs+=("cd ${guests}/t21-unseen-eventstream && cargo build --target wasm32-wasip2")
+# The speech suite's synthetic reference as a guest, for its sandbox parity test (speech record S-S-3).
+jobs+=("cd crates/south-component-conformance/tests/guests/synthetic-speech && cargo build --target wasm32-wasip2")
 # Bounded parallelism: every build already uses all cores, so more than a few at once only
 # thrashes the disk. The variable is cleared for the children in case the caller exported it.
 printf '%s\n' "${jobs[@]}" |

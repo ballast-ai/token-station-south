@@ -1,0 +1,45 @@
+{
+  "facts": {
+    "operation": "synthesize",
+    "characters": {
+      "count": 13
+    },
+    "metering_forms": [
+      "characters"
+    ],
+    "output_media_type": "audio/mpeg"
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "v1/speech",
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "model": "tts-stream-1",
+          "input": "Hello, world.",
+          "format": "mp3",
+          "voice": "alloy"
+        }
+      }
+    }
+  },
+  "response_body_form": "binary",
+  "response_elision_paths": [],
+  "immutable_body_paths": [
+    "model",
+    "format",
+    "stream_format"
+  ],
+  "state": {
+    "mode": "binary",
+    "media_type": "audio/mpeg",
+    "characters": 13,
+    "forms": [
+      "characters"
+    ]
+  }
+}

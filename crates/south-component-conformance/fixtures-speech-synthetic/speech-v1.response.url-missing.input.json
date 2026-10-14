@@ -1,0 +1,14 @@
+{
+  "prepare_case": "speech-v1.prepare.url",
+  "response": {
+    "status": 200,
+    "body": {
+      "output": {
+        "audio": {}
+      },
+      "usage": {
+        "characters": 13
+      }
+    }
+  }
+}

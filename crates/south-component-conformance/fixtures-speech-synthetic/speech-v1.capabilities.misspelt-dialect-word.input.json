@@ -1,0 +1,15 @@
+{
+  "provider_config": {
+    "provider": "synthetic-speech",
+    "base_url": "https://speech.synthetic.test",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "asr-basic-1",
+        "supported_parameters": [
+          "speech.verbose-json"
+        ]
+      }
+    ]
+  }
+}

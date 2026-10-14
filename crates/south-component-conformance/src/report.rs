@@ -153,14 +153,17 @@ pub enum CheckV1 {
     /// cannot carry it, or turn a per-model refusal into a failure the host cannot word.
     MediaInputsFollowTheDeclaration,
     /// For every metering form a media package declares, at least one response case gives exact
-    /// metering facts with a `succeeded` outcome (image record §12.1, `metering_sample`).
+    /// metering facts with a `succeeded` outcome (image record §12.1, `metering_sample`; in the
+    /// speech world also each `characters` source and `seconds` basis the package uses, speech
+    /// record §11).
     ///
     /// The samples are DP1's usage samples: transcribed from the native arm, they are the only
     /// evidence that what the component reports is what the upstream billed.
     MeteringSample,
     /// For every required metering fact a media package can report — each declared token bucket,
-    /// `credits`, `images_reported` on `charged_failure` — a 2xx case missing it ends `unknown`
-    /// (image record §12.1, `missing_meter_is_not_zero`).
+    /// `credits`, `images_reported` on `charged_failure`; in the speech world each token count and
+    /// the whole `usage` — a 2xx case missing it ends `unknown` (image record §12.1, speech record
+    /// §11, `missing_meter_is_not_zero`).
     ///
     /// A missing fact read as zero would settle a call as free.
     MissingMeterIsNotZero,
@@ -171,7 +174,8 @@ pub enum CheckV1 {
     /// would hand the host a number nobody reported.
     EvidenceAbsentIsNull,
     /// Every refusal a media package makes in `prepare` is an `invalid_request` or `capability`
-    /// error and produces no descriptor (image record §12.1, `pre_dispatch_refusal`).
+    /// error and produces no descriptor (image record §12.1, `pre_dispatch_refusal`; speech record
+    /// §8).
     ///
     /// A refusal there is answered before anything is reserved or sent; any other code, or a
     /// refusal after a descriptor, would blur the line between "never sent" and "sent and failed".
@@ -180,7 +184,8 @@ pub enum CheckV1 {
     /// `reference_integrity`): every `$south.ref` names a blob of the view, no `$south.blob`
     /// appears in any output, every `$south.artifact` names an existing artifact with an allowed
     /// delivery, every `inline` and `url` pointer lands on a string of the response, and no output
-    /// string exceeds the fallback threshold.
+    /// string exceeds the fallback threshold. In the speech world every `segments` pointer lands on
+    /// an elided string, and an artifact fits the declared response body form (speech record §6).
     ///
     /// The bytes stay out of the sandbox only if nothing the component returns can carry them, or
     /// point the host at bytes the upstream did not send.
@@ -201,6 +206,49 @@ pub enum CheckV1 {
     /// buckets it cannot; a bucket outside the declaration would be billed by no rule, and a
     /// missing required one would settle part of the bill as free.
     DeclaredBucketsOnly,
+    /// A speech package that declares `seconds` has a 2xx response case missing the duration, and
+    /// every such case ends with `seconds: null` or `unknown`, never `0` or any other number
+    /// (speech record §11, `absent_duration_is_null_or_unknown`).
+    ///
+    /// The host estimates a `null` duration and marks it estimated; a number the upstream never
+    /// gave would be billed as a measurement.
+    AbsentDurationIsNullOrUnknown,
+    /// A speech package that handles the dialect word `speech.verbose_json` renders, from one
+    /// duration-bearing upstream response, every client format it accepts (`json`, `text`,
+    /// `verbose_json`, `srt`, `vtt`) with the same `seconds` (speech record §9, §11,
+    /// `client_format_rendering`).
+    ///
+    /// The client's format may change what it receives, never what it is billed: a component that
+    /// asked the upstream for the client's subtitle format would lose the duration.
+    ClientFormatRendering,
+    /// `prepare` refuses an operation the model does not declare, and produces no descriptor
+    /// (speech record §4, §11, `undeclared_operation_refused`); a prepared call names the
+    /// operation it was asked for.
+    ///
+    /// A recognition model without `speech.translate` that transcribed when asked to translate is
+    /// the defect this world was opened to fix.
+    UndeclaredOperationRefused,
+    /// Every SSML request body a speech package builds is well-formed XML that carries the
+    /// northbound `input` unchanged as text and the northbound `voice` unchanged as an attribute
+    /// value, and the pack has a case with `<`, `&`, `'` and `"` in both (speech record §5, §11,
+    /// `ssml_escaping`).
+    ///
+    /// Both values are the client's; an unescaped one rewrites the upstream request.
+    SsmlEscaping,
+    /// A speech package that declares `artifact_fetch` has a `url` artifact case, and every `url`
+    /// artifact of any package points at a string of the upstream response that passes the
+    /// `ArtifactUrlV1` grammar (speech record §10, §11, `second_hop_artifact`).
+    ///
+    /// The host fetches only through its safe fetch executor; a pointer at anything else is a
+    /// delivery that can never be verified.
+    SecondHopArtifact,
+    /// A 2xx that carries no audio — an empty body, an empty inline string, no `segments`
+    /// fragment, no URL — ends `unknown`, and the pack has such a case for every response body form
+    /// its successful syntheses use (speech record §10, §11, `empty_audio_is_unknown`).
+    ///
+    /// The host verifies the bytes before it settles; a `succeeded` with nothing to deliver would
+    /// ask it to settle a call it cannot deliver.
+    EmptyAudioIsUnknown,
 }
 
 impl CheckV1 {
@@ -234,6 +282,12 @@ impl CheckV1 {
             Self::ReferenceIntegrity => "reference_integrity",
             Self::ImmutablePathsHonoured => "immutable_paths_honoured",
             Self::DeclaredBucketsOnly => "declared_buckets_only",
+            Self::AbsentDurationIsNullOrUnknown => "absent_duration_is_null_or_unknown",
+            Self::ClientFormatRendering => "client_format_rendering",
+            Self::UndeclaredOperationRefused => "undeclared_operation_refused",
+            Self::SsmlEscaping => "ssml_escaping",
+            Self::SecondHopArtifact => "second_hop_artifact",
+            Self::EmptyAudioIsUnknown => "empty_audio_is_unknown",
         }
     }
 }

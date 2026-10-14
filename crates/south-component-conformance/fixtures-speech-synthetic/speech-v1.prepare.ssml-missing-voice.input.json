@@ -1,0 +1,43 @@
+{
+  "provider_config": {
+    "provider": "synthetic-speech",
+    "base_url": "https://speech.synthetic.test",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "tts-stream-1"
+      },
+      {
+        "model": "tts-inline-1"
+      },
+      {
+        "model": "tts-url-1"
+      },
+      {
+        "model": "tts-ssml-1"
+      },
+      {
+        "model": "asr-verbose-1",
+        "supported_parameters": [
+          "speech.translate",
+          "speech.verbose_json"
+        ]
+      },
+      {
+        "model": "asr-basic-1"
+      }
+    ]
+  },
+  "request": {
+    "json": {
+      "input": "Hello, world."
+    }
+  },
+  "context": {
+    "upstream_model": "tts-ssml-1",
+    "operation": "synthesize",
+    "metering_required": [
+      "characters"
+    ]
+  }
+}

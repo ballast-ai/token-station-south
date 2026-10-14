@@ -1,0 +1,14 @@
+{
+  "prepare_case": "speech-v1.prepare.stream-binary",
+  "response": {
+    "status": 429,
+    "headers": {
+      "retry-after": "3"
+    },
+    "body": {
+      "error": {
+        "message": "slow down"
+      }
+    }
+  }
+}

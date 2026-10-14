@@ -186,5 +186,19 @@ pub mod reference_vertex_image;
 pub mod sandbox_embeddings;
 #[cfg(feature = "sandbox")]
 pub mod sandbox_image;
+
+// The speech world (docs/design/2026-09-30-speech-world.md §7, §11; step S-S-3).
+pub mod abi_speech;
+mod component_speech;
+pub use component_speech::{SpeechComponentV1, SpeechDeliveryV1, SpeechOutcomeV1};
+pub mod reference_synthetic_speech;
+#[cfg(feature = "sandbox")]
+pub mod sandbox_speech;
+pub mod speech_fixture;
+pub mod speech_json;
+pub mod speech_suite;
+pub use speech_suite::{SPEECH_COMPONENT_SUITE_V1, run_speech_component_suite_v1};
+// The XML well-formedness reader the `ssml_escaping` row uses.
+mod ssml_check;
 // The location rules the two Vertex AI references share (image record I3-3 §4).
 mod vertex_location;

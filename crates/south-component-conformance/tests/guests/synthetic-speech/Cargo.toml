@@ -1,0 +1,25 @@
+# The speech suite's synthetic reference (`reference_synthetic_speech`), compiled to a
+# `wasm32-wasip2` component so `synthetic_speech_sandbox_parity` can run gate ② through the
+# sandbox seam (speech record §11, step S-S-3). A test guest, not an official component: no
+# release ships it, and no host routes to the `synthetic-speech` family.
+#
+# Standalone (not a workspace member): the main workspace must stay buildable without a wasm
+# toolchain, and this crate must stay buildable without wasmtime (the conformance dependency's
+# `sandbox` feature stays off).
+[package]
+name = "synthetic-speech"
+version = "1.0.0"
+edition = "2021"
+publish = false
+
+# Standalone: stops cargo from walking up into the main workspace.
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# The translation logic and the guest-side JSON shims: the guest and the native reference are the
+# same code.
+south-component-conformance = { path = "../../..", default-features = false }
+wit-bindgen = "0.59"

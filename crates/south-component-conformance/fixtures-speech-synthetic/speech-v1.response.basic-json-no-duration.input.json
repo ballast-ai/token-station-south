@@ -1,0 +1,9 @@
+{
+  "prepare_case": "speech-v1.prepare.basic-json",
+  "response": {
+    "status": 200,
+    "body": {
+      "text": "Hi."
+    }
+  }
+}

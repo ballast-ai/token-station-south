@@ -1,0 +1,23 @@
+{
+  "outcome": "succeeded",
+  "artifact": {
+    "form": "inline",
+    "pointer": "/audio/data",
+    "encoding": "base64",
+    "media_type": "audio/wav",
+    "container": {
+      "wav_pcm_s16le": {
+        "sample_rate": 24000,
+        "channels": 1
+      }
+    }
+  },
+  "metering": {
+    "characters": {
+      "value": 13,
+      "source": "request"
+    },
+    "seconds": null,
+    "tokens": null
+  }
+}

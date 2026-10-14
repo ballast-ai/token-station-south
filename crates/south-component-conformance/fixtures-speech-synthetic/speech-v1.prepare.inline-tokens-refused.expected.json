@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "capability",
+    "http_status": 400,
+    "message": "the model 'tts-inline-1' cannot report Tokens metering"
+  }
+}

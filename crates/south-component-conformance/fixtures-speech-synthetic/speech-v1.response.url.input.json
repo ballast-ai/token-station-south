@@ -1,0 +1,17 @@
+{
+  "prepare_case": "speech-v1.prepare.url",
+  "response": {
+    "status": 200,
+    "body": {
+      "output": {
+        "audio": {
+          "url": "https://cdn.speech.synthetic.test/out/a1.wav",
+          "expires_at": 1700000000
+        }
+      },
+      "usage": {
+        "characters": 13
+      }
+    }
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "provider_config": {
+    "provider": "synthetic-speech",
+    "base_url": "https://speech.synthetic.test",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "tts-stream-1"
+      },
+      {
+        "model": "tts-inline-1"
+      },
+      {
+        "model": "tts-url-1"
+      },
+      {
+        "model": "tts-ssml-1"
+      },
+      {
+        "model": "asr-verbose-1",
+        "supported_parameters": [
+          "speech.translate",
+          "speech.verbose_json"
+        ]
+      },
+      {
+        "model": "asr-basic-1"
+      }
+    ]
+  },
+  "request": {
+    "multipart": {
+      "parts": [
+        {
+          "kind": "file",
+          "name": "file",
+          "blob": "b0",
+          "filename": "clip.mp3",
+          "media_type": "audio/mpeg",
+          "bytes": 4096
+        },
+        {
+          "kind": "text",
+          "name": "model",
+          "value": "whisper-1"
+        },
+        {
+          "kind": "text",
+          "name": "response_format",
+          "value": "json"
+        }
+      ]
+    }
+  },
+  "context": {
+    "upstream_model": "asr-basic-1",
+    "operation": "translate",
+    "metering_required": [
+      "seconds"
+    ]
+  }
+}

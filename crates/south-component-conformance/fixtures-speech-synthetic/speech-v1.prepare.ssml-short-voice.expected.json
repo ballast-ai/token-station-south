@@ -1,0 +1,37 @@
+{
+  "facts": {
+    "operation": "synthesize",
+    "characters": {
+      "count": 10
+    },
+    "metering_forms": [
+      "characters"
+    ],
+    "output_media_type": "audio/mpeg"
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "v1/speech/ssml",
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "text": {
+        "media_type": "application/ssml+xml",
+        "text": "<speak version='1.0' xml:lang='en-US'><voice name='Ava'>plain text</voice></speak>"
+      }
+    }
+  },
+  "response_body_form": "binary",
+  "response_elision_paths": [],
+  "immutable_body_paths": null,
+  "state": {
+    "mode": "binary",
+    "media_type": "audio/mpeg",
+    "characters": 10,
+    "forms": [
+      "characters"
+    ]
+  }
+}
