@@ -1,0 +1,56 @@
+{
+  "facts": {
+    "operation": "synthesize",
+    "characters": {
+      "count": 2,
+      "upper": 2
+    },
+    "metering_forms": [
+      "characters"
+    ],
+    "output_media_type": "audio/pcm"
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "v1/chat/completions",
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "model": "mimo-v2.5-tts-voicedesign",
+          "messages": [
+            {
+              "role": "user",
+              "content": "calm narrator"
+            },
+            {
+              "role": "assistant",
+              "content": "hi"
+            }
+          ],
+          "audio": {
+            "format": "pcm16"
+          },
+          "stream": false
+        }
+      }
+    }
+  },
+  "response_body_form": "json",
+  "response_elision_paths": [
+    "/choices/*/message/audio/data"
+  ],
+  "immutable_body_paths": [
+    "messages",
+    "stream",
+    "audio.format",
+    "model"
+  ],
+  "state": {
+    "format": "pcm16",
+    "characters": 2
+  }
+}

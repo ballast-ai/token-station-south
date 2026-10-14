@@ -1,0 +1,12 @@
+{
+  "prepare_case": "speech-v1.prepare.native-mp3",
+  "response": {
+    "status": 404,
+    "body": {
+      "error": {
+        "message": "The model `mimo-x` does not exist",
+        "code": "model_not_found"
+      }
+    }
+  }
+}

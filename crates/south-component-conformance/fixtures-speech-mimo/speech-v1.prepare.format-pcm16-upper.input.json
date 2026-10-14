@@ -1,0 +1,33 @@
+{
+  "provider_config": {
+    "provider": "mimo-speech",
+    "base_url": "https://api.xiaomimimo.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "mimo-v2.5-tts"
+      },
+      {
+        "model": "mimo-v2.5-tts-voiceclone"
+      },
+      {
+        "model": "mimo-v2.5-tts-voicedesign"
+      }
+    ]
+  },
+  "request": {
+    "json": {
+      "model": "media/tts",
+      "input": "hello world",
+      "voice": "alloy",
+      "response_format": "PCM16"
+    }
+  },
+  "context": {
+    "upstream_model": "mimo-v2.5-tts",
+    "operation": "synthesize",
+    "metering_required": [
+      "characters"
+    ]
+  }
+}

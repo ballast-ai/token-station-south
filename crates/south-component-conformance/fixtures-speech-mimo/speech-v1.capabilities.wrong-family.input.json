@@ -1,0 +1,18 @@
+{
+  "provider_config": {
+    "provider": "minimax-speech",
+    "base_url": "https://api.xiaomimimo.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "mimo-v2.5-tts"
+      },
+      {
+        "model": "mimo-v2.5-tts-voiceclone"
+      },
+      {
+        "model": "mimo-v2.5-tts-voicedesign"
+      }
+    ]
+  }
+}

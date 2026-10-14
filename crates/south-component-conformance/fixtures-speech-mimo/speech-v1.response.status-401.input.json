@@ -1,0 +1,12 @@
+{
+  "prepare_case": "speech-v1.prepare.native-mp3",
+  "response": {
+    "status": 401,
+    "body": {
+      "error": {
+        "message": "Invalid API Key",
+        "type": "invalid_request_error"
+      }
+    }
+  }
+}

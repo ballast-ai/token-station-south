@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "Xiaomi MiMo TTS cannot emit response_format='aac'. Supported: wav, pcm16 (mp3 is served as wav)."
+  }
+}

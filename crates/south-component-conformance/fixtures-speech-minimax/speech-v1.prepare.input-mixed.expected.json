@@ -1,0 +1,53 @@
+{
+  "facts": {
+    "operation": "synthesize",
+    "characters": {
+      "count": 5,
+      "upper": 7
+    },
+    "metering_forms": [
+      "characters"
+    ],
+    "output_media_type": "audio/mpeg"
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "v1/t2a_v2",
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "model": "speech-2.6-hd",
+          "text": "hi 안녕",
+          "stream": false,
+          "output_format": "hex",
+          "voice_setting": {
+            "voice_id": "Wise_Woman"
+          },
+          "audio_setting": {
+            "format": "mp3"
+          }
+        }
+      }
+    }
+  },
+  "response_body_form": "json",
+  "response_elision_paths": [
+    "/data/audio"
+  ],
+  "immutable_body_paths": [
+    "text",
+    "output_format",
+    "stream",
+    "audio_setting.format",
+    "voice_setting.voice_id",
+    "model"
+  ],
+  "state": {
+    "format": "mp3",
+    "characters": 5
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "provider_config": {
+    "provider": "minimax-speech",
+    "base_url": "https://api.minimax.io",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "speech-2.6-hd"
+      },
+      {
+        "model": "speech-02-hd"
+      }
+    ]
+  },
+  "request": {
+    "json": {
+      "input": "hello world",
+      "response_format": "WAV"
+    }
+  },
+  "context": {
+    "upstream_model": "speech-2.6-hd",
+    "operation": "synthesize",
+    "metering_required": [
+      "characters"
+    ]
+  }
+}

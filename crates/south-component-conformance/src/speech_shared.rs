@@ -1,7 +1,7 @@
-//! Pieces the four text-to-speech references of speech world batch V3-1 share (design record
-//! `docs/design/2026-10-14-speech-v3-1-tts.md` §1): the northbound `input`, the operation and
-//! metering checks, the facts, the descriptor, the delivered media type, the `binary` success and
-//! the non-2xx table.
+//! Pieces the text-to-speech references of speech world batches V3-1 and V3-2 share (design records
+//! `docs/design/2026-10-14-speech-v3-1-tts.md` §1 and `docs/design/2026-10-14-speech-v3-2-tts.md`
+//! §1): the northbound `input`, the operation and metering checks, the facts, the descriptor, the
+//! delivered media type, the `binary` and `inline` successes and the non-2xx table.
 //!
 //! Every package reads the northbound speech request `{input, voice?, response_format?, …}` from the
 //! request view's `json` member. A string above the 1 MiB fallback threshold arrives as a
@@ -9,16 +9,16 @@
 //! reference ([`with_refs`]), and `input` itself may not be elided (§1).
 
 use serde_json::{Map, Value, json};
-use south_contracts::DeclaredQueryParameterV1;
 use south_contracts::media::{
     MediaLimitsV1, MediaRequestDescriptorV1, PathPatternV1, ResponseBodyFormV1,
 };
 use south_contracts::speech::{
     PreparedSpeechCallV1, SpeechArtifactFormV1, SpeechArtifactV1, SpeechCallContextV1,
-    SpeechCharacterMeterV1, SpeechCharacterSourceV1, SpeechCharactersV1, SpeechFactsV1,
-    SpeechMeteringFormV1, SpeechMeteringV1, SpeechModelCapabilitiesV1, SpeechOperationV1,
-    is_speech_media_type,
+    SpeechCharacterMeterV1, SpeechCharacterSourceV1, SpeechCharactersV1, SpeechEncodingV1,
+    SpeechFactsV1, SpeechMeteringFormV1, SpeechMeteringV1, SpeechModelCapabilitiesV1,
+    SpeechOperationV1, is_speech_media_type,
 };
+use south_contracts::{DeclaredQueryParameterV1, JsonPointerV1};
 use token_station_protocol::{ErrorEnvelope, ProviderConfig};
 
 pub use crate::image_shared::{bearer, capability, internal, invalid, is_blob, with_refs};
@@ -233,6 +233,40 @@ pub fn binary_outcome(state: &Value, response: &Value) -> ComponentResultV1<Spee
             characters: Some(state_characters(state)?),
             ..SpeechMeteringV1::default()
         },
+    })
+}
+
+/// The JSON object a 2xx view of the `json` form carries, `None` for any other JSON value
+/// (`image-minimax`'s rule: such a 2xx is `unknown`, V3-2 record §1).
+pub fn json_object(response: &Value) -> Option<&Map<String, Value>> {
+    response.pointer("/body/json").and_then(Value::as_object)
+}
+
+/// Whether the view's value at a declared `inline` audio path holds audio: a placeholder of at least
+/// one byte or (from a host that did not elide it) a non-empty string. A missing value, another JSON
+/// type and a 0-byte string do not (record §10, `empty_audio_is_unknown`).
+pub fn holds_audio(value: Option<&Value>) -> bool {
+    value.is_some_and(crate::image_shared::non_empty_inline)
+}
+
+/// A 2xx of the `json` form that delivered audio (V3-2 record §1): an `inline` artifact at
+/// `pointer`, decoded by the host with `encoding` and delivered as `media_type` (the media type of
+/// the format the package asked the upstream for), billed by `characters`.
+pub fn inline_outcome(
+    pointer: &str,
+    encoding: SpeechEncodingV1,
+    media_type: &str,
+    characters: SpeechCharacterMeterV1,
+) -> ComponentResultV1<SpeechOutcomeV1> {
+    let pointer =
+        JsonPointerV1::parse(pointer).map_err(|_| internal("invalid artifact pointer"))?;
+    Ok(SpeechOutcomeV1::Succeeded {
+        delivery: SpeechDeliveryV1::Audio(SpeechArtifactV1 {
+            form: SpeechArtifactFormV1::Inline { pointer, encoding },
+            media_type: media_type.to_owned(),
+            container: None,
+        }),
+        metering: SpeechMeteringV1 { characters: Some(characters), ..SpeechMeteringV1::default() },
     })
 }
 

@@ -1,0 +1,34 @@
+{
+  "provider_config": {
+    "provider": "minimax-speech",
+    "base_url": "https://api.minimax.io",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "speech-2.6-hd"
+      },
+      {
+        "model": "speech-02-hd"
+      }
+    ]
+  },
+  "request": {
+    "json": {
+      "input": "hello world",
+      "response_format": {
+        "$south.blob": {
+          "id": "b0",
+          "bytes": 1048577,
+          "head": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        }
+      }
+    }
+  },
+  "context": {
+    "upstream_model": "speech-2.6-hd",
+    "operation": "synthesize",
+    "metering_required": [
+      "characters"
+    ]
+  }
+}

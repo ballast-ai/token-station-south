@@ -1,0 +1,10 @@
+{
+  "outcome": "unknown",
+  "reason": "MiniMax base_resp status code 2054",
+  "error": {
+    "code": "provider_protocol_error",
+    "http_status": 502,
+    "message": "the upstream reported a failure in a 2xx answer",
+    "provider_message": "voice id not exist"
+  }
+}

@@ -110,6 +110,8 @@ jobs:
           scripts/build-speech-xai-component.sh
           scripts/build-speech-groq-component.sh
           scripts/build-speech-elevenlabs-component.sh
+          scripts/build-speech-mimo-component.sh
+          scripts/build-speech-minimax-component.sh
 
       # Gate ② over the bytes just built: each sandbox parity test runs the
       # package's required suite against its component.wasm and, with
@@ -155,6 +157,8 @@ jobs:
             --test xai_speech_sandbox_parity \
             --test groq_speech_sandbox_parity \
             --test elevenlabs_speech_sandbox_parity \
+            --test mimo_speech_sandbox_parity \
+            --test minimax_speech_sandbox_parity \
             -- --exact the_sandboxed_component_passes_gate_two_byte_for_byte
           ls -l "${SOUTH_GATE2_REPORT_DIR}"
 
@@ -209,6 +213,8 @@ jobs:
           package speech-xai speech_xai.wasm
           package speech-groq speech_groq.wasm
           package speech-elevenlabs speech_elevenlabs.wasm
+          package speech-mimo speech_mimo.wasm
+          package speech-minimax speech_minimax.wasm
           # Catalog data (boundary record §7.5, §13.11): each catalogs/<name>.json is
           # published verbatim as <name>-<tag>.json; the index step below refuses a
           # published catalog whose bytes differ from the source file.

@@ -1,0 +1,53 @@
+{
+  "facts": {
+    "operation": "synthesize",
+    "characters": {
+      "count": 5,
+      "upper": 5
+    },
+    "metering_forms": [
+      "characters"
+    ],
+    "output_media_type": "audio/wav"
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "v1/chat/completions",
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "model": "mimo-v2.5-tts",
+          "messages": [
+            {
+              "role": "assistant",
+              "content": "안녕하세요"
+            }
+          ],
+          "audio": {
+            "format": "wav",
+            "voice": "mimo_default"
+          },
+          "stream": false
+        }
+      }
+    }
+  },
+  "response_body_form": "json",
+  "response_elision_paths": [
+    "/choices/*/message/audio/data"
+  ],
+  "immutable_body_paths": [
+    "messages",
+    "stream",
+    "audio.format",
+    "model"
+  ],
+  "state": {
+    "format": "wav",
+    "characters": 5
+  }
+}

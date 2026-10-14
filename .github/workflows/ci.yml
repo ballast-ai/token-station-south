@@ -60,6 +60,8 @@ jobs:
             components/provider-openai-responses
             components/speech-elevenlabs
             components/speech-groq
+            components/speech-mimo
+            components/speech-minimax
             components/speech-openai-compatible
             components/speech-xai
             components/task-bailian-v2
