@@ -1,0 +1,58 @@
+[
+  {
+    "model": "tts-stream-1",
+    "operations": [
+      "synthesize"
+    ],
+    "metering_forms": [
+      "characters",
+      "tokens"
+    ]
+  },
+  {
+    "model": "tts-inline-1",
+    "operations": [
+      "synthesize"
+    ],
+    "metering_forms": [
+      "characters"
+    ]
+  },
+  {
+    "model": "tts-url-1",
+    "operations": [
+      "synthesize"
+    ],
+    "metering_forms": [
+      "characters"
+    ]
+  },
+  {
+    "model": "tts-ssml-1",
+    "operations": [
+      "synthesize"
+    ],
+    "metering_forms": [
+      "characters"
+    ]
+  },
+  {
+    "model": "asr-verbose-1",
+    "operations": [
+      "transcribe",
+      "translate"
+    ],
+    "metering_forms": [
+      "seconds"
+    ]
+  },
+  {
+    "model": "asr-basic-1",
+    "operations": [
+      "transcribe"
+    ],
+    "metering_forms": [
+      "seconds"
+    ]
+  }
+]

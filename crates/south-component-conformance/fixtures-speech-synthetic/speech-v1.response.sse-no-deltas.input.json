@@ -1,0 +1,8 @@
+{
+  "prepare_case": "speech-v1.prepare.stream-sse-tokens",
+  "response": {
+    "status": 200,
+    "content_type": "text/event-stream",
+    "body_text": "event: speech.audio.done\ndata: {\"usage\":{\"input_tokens\":13,\"output_tokens\":420}}\n\ndata: [DONE]\n\n"
+  }
+}

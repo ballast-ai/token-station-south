@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "capability",
+    "http_status": 400,
+    "message": "the model 'asr-basic-1' does not declare the operation Translate"
+  }
+}

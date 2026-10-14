@@ -1,0 +1,15 @@
+{
+  "prepare_case": "speech-v1.prepare.inline-mp3",
+  "response": {
+    "status": 200,
+    "body": {
+      "audio": {
+        "data": "fffb9064",
+        "format": "mp3"
+      },
+      "usage": {
+        "characters": 17
+      }
+    }
+  }
+}

@@ -200,7 +200,11 @@ pub fn elide_v1(
 }
 
 /// [`elide_v1`] with the id sequence starting at `first_id`, for a host that elides several
-/// documents into one view (the `sse` response form, one document per event).
+/// documents into one view.
+///
+/// The `sse` response form is not such a view: its decoded event list is elided as **one**
+/// document whose root is the array (speech record §6; `build_media_sse_response_view_v1`), so a
+/// declared path reads `/*/data/delta` and the ids run across the whole list.
 pub fn elide_from(
     document: &[u8],
     declared: &[PathPatternV1],

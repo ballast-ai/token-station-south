@@ -1,0 +1,27 @@
+{
+  "outcome": "succeeded",
+  "artifact": {
+    "form": "segments",
+    "items": [
+      {
+        "pointer": "/0/data/delta",
+        "encoding": "base64"
+      },
+      {
+        "pointer": "/1/data/delta",
+        "encoding": "base64"
+      }
+    ],
+    "media_type": "audio/opus"
+  },
+  "metering": {
+    "characters": null,
+    "seconds": null,
+    "tokens": {
+      "input": 13,
+      "output": 420,
+      "input_text": null,
+      "input_audio": null
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "outcome": "succeeded",
+  "artifact": {
+    "form": "inline",
+    "pointer": "/audio/data",
+    "encoding": "hex",
+    "media_type": "audio/mpeg"
+  },
+  "metering": {
+    "characters": {
+      "value": 17,
+      "source": "upstream"
+    },
+    "seconds": null,
+    "tokens": null
+  }
+}

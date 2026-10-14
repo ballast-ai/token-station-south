@@ -68,6 +68,7 @@ jobs:
             components/task-veo-v2
             components/task-wan-image-v2
             components/task-xai-v2
+            crates/south-component-conformance/tests/guests/synthetic-speech
             crates/south-provider-runtime/tests/guests/t03-canary-provider
             crates/south-provider-runtime/tests/guests/t09-canary-task
             crates/south-provider-runtime/tests/guests/t21-unseen-eventstream

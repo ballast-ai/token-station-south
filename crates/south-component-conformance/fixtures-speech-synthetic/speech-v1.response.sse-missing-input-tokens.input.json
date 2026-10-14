@@ -1,0 +1,7 @@
+{
+  "prepare_case": "speech-v1.prepare.stream-sse-tokens",
+  "response": {
+    "status": 200,
+    "body_text": "event: speech.audio.delta\ndata: {\"delta\":\"T2dnUw==\",\"index\":0}\n\nevent: speech.audio.done\ndata: {\"usage\":{\"output_tokens\":420}}\n\n"
+  }
+}

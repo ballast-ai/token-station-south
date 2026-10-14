@@ -1,0 +1,25 @@
+{
+  "prepare_case": "speech-v1.prepare.verbose-json",
+  "response": {
+    "status": 200,
+    "body": {
+      "task": "transcribe",
+      "language": "english",
+      "text": "Hello there. Good morning.",
+      "segments": [
+        {
+          "id": 0,
+          "start": 0.0,
+          "end": 1.5,
+          "text": " Hello there."
+        },
+        {
+          "id": 1,
+          "start": 1.5,
+          "end": 3.52,
+          "text": " Good morning."
+        }
+      ]
+    }
+  }
+}

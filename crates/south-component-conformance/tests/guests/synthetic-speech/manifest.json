@@ -1,0 +1,44 @@
+{
+  "name": "synthetic-speech",
+  "version": "1.0.0",
+  "api_version": "speech-adapter-v1",
+  "providers": [
+    "synthetic-speech"
+  ],
+  "capabilities": [
+    "artifact_fetch",
+    "synthesize",
+    "transcribe",
+    "translate"
+  ],
+  "auth_arms": [
+    "bearer"
+  ],
+  "permissions": {
+    "network": false,
+    "filesystem": false,
+    "secrets": [
+      "provider_api_key"
+    ]
+  },
+  "conformance": {
+    "required_suite": "south.speech-component.v1",
+    "fixtures": "fixtures-speech-synthetic/"
+  },
+  "compatibility": {
+    "ir_schema_id": "token-station-protocol@0.6.0/v0.5.0",
+    "kernel_version": "0.5.0",
+    "kernel_revision": "c0bca10c2d9f9a439680865feb65c9edf598fc65",
+    "wit_package": "token-station:speech-adapter@1.0.0",
+    "south_runtime": "0.63.0",
+    "runtime_abi": 1,
+    "kernel_contracts": {
+      "canonical_ir": 4,
+      "error_catalog": 1,
+      "stream": 2
+    },
+    "contracts": {
+      "media": 1
+    }
+  }
+}

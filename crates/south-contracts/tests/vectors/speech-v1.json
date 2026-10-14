@@ -1,0 +1,194 @@
+{
+  "contract": "speech",
+  "version": 1,
+  "note": "Host-obligation vectors of the speech world (speech record §6, §10, §11; step S-S-3). `wav_container`: the RIFF/WAVE header a host adds for a `container: {\"wav_pcm_s16le\": …}` artifact, byte for byte (wav_pcm_s16le_v1); `deliverable: false` marks an output the function produces but a host must not settle, since verify-then-settle (§10) requires a non-empty PCM body. `wav_container_refusals`: inputs the function refuses (PCM not whole frames, parameters out of range); a host judges the delivery unknown. `sse_view`: a buffered `sse` body, the events decode_sse_v1 (south-host-grammars) gives for it, and the response view build_media_sse_response_view_v1 builds from those events with the declared paths (status 200, no headers), with the blobs in id order. `sse_view_refusals`: event lists whose view is refused, with the error. Byte strings are base64 (`*_base64`) or UTF-8 text.",
+  "wav_container": [
+    {
+      "name": "mono-24000-the-native-vertex-shape",
+      "sample_rate": 24000,
+      "channels": 1,
+      "pcm_base64": "AQACAA==",
+      "wav_base64": "UklGRigAAABXQVZFZm10IBAAAAABAAEAwF0AAIC7AAACABAAZGF0YQQAAAABAAIA",
+      "deliverable": true
+    },
+    {
+      "name": "stereo-16000",
+      "sample_rate": 16000,
+      "channels": 2,
+      "pcm_base64": "AQACAAMABAA=",
+      "wav_base64": "UklGRiwAAABXQVZFZm10IBAAAAABAAIAgD4AAAD6AAAEABAAZGF0YQgAAAABAAIAAwAEAA==",
+      "deliverable": true
+    },
+    {
+      "name": "one-frame-44100",
+      "sample_rate": 44100,
+      "channels": 1,
+      "pcm_base64": "/38=",
+      "wav_base64": "UklGRiYAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQIAAAD/fw==",
+      "deliverable": true
+    },
+    {
+      "name": "six-channels-48000",
+      "sample_rate": 48000,
+      "channels": 6,
+      "pcm_base64": "AAECAwQFBgcICQoL",
+      "wav_base64": "UklGRjAAAABXQVZFZm10IBAAAAABAAYAgLsAAADKCAAMABAAZGF0YQwAAAAAAQIDBAUGBwgJCgs=",
+      "deliverable": true
+    },
+    {
+      "name": "empty-pcm-is-a-header-only-and-never-settled",
+      "sample_rate": 24000,
+      "channels": 1,
+      "pcm_base64": "",
+      "wav_base64": "UklGRiQAAABXQVZFZm10IBAAAAABAAEAwF0AAIC7AAACABAAZGF0YQAAAAA=",
+      "deliverable": false
+    }
+  ],
+  "wav_container_refusals": [
+    {
+      "name": "odd-length-mono",
+      "sample_rate": 24000,
+      "channels": 1,
+      "pcm_base64": "AQAC"
+    },
+    {
+      "name": "stereo-not-whole-frames",
+      "sample_rate": 24000,
+      "channels": 2,
+      "pcm_base64": "AAAAAAAA"
+    },
+    {
+      "name": "zero-sample-rate",
+      "sample_rate": 0,
+      "channels": 1,
+      "pcm_base64": "AQACAA=="
+    },
+    {
+      "name": "sample-rate-above-the-bound",
+      "sample_rate": 384001,
+      "channels": 1,
+      "pcm_base64": "AQACAA=="
+    },
+    {
+      "name": "zero-channels",
+      "sample_rate": 24000,
+      "channels": 0,
+      "pcm_base64": "AQACAA=="
+    },
+    {
+      "name": "nine-channels",
+      "sample_rate": 24000,
+      "channels": 9,
+      "pcm_base64": "AAECAwQFBgcICQoLDA0ODxAR"
+    }
+  ],
+  "sse_view": [
+    {
+      "name": "token-priced-speech-stream",
+      "note": "Comment lines and CRLF; the declared path elides every delta whatever its length, with ids across the whole list; a data that is not JSON stays a string",
+      "body": ": keep-alive\r\nevent: speech.audio.delta\r\ndata: {\"delta\":\"UklG\",\"seq\":1}\r\n\r\nevent: speech.audio.delta\ndata: {\"delta\":\"AAEC\",\"seq\":2}\n\nevent: speech.audio.done\ndata: {\"usage\":{\"input_tokens\":12,\"output_tokens\":340}}\n\ndata: [DONE]\n\n",
+      "events": [
+        {
+          "event": "speech.audio.delta",
+          "data": "{\"delta\":\"UklG\",\"seq\":1}"
+        },
+        {
+          "event": "speech.audio.delta",
+          "data": "{\"delta\":\"AAEC\",\"seq\":2}"
+        },
+        {
+          "event": "speech.audio.done",
+          "data": "{\"usage\":{\"input_tokens\":12,\"output_tokens\":340}}"
+        },
+        {
+          "event": "message",
+          "data": "[DONE]"
+        }
+      ],
+      "declared": [
+        "/*/data/delta"
+      ],
+      "view": "{\"status\":200,\"headers\":[],\"body\":{\"sse\":[{\"event\":\"speech.audio.delta\",\"data\":{\"delta\":{\"$south.blob\":{\"id\":\"b0\",\"bytes\":4,\"head\":\"UklG\"}},\"seq\":1}},{\"event\":\"speech.audio.delta\",\"data\":{\"delta\":{\"$south.blob\":{\"id\":\"b1\",\"bytes\":4,\"head\":\"AAEC\"}},\"seq\":2}},{\"event\":\"speech.audio.done\",\"data\":{\"usage\":{\"input_tokens\":12,\"output_tokens\":340}}},{\"event\":\"message\",\"data\":\"[DONE]\"}]}}",
+      "blobs": [
+        {
+          "id": "b0",
+          "text": "UklG"
+        },
+        {
+          "id": "b1",
+          "text": "AAEC"
+        }
+      ]
+    },
+    {
+      "name": "no-audio-deltas-and-no-final-blank-line",
+      "note": "The final event is dispatched at the end of the body (speech record §6); a view with no delta is what `empty_audio_is_unknown` judges",
+      "body": "event: speech.audio.done\ndata: {\"usage\":{\"input_tokens\":3,\"output_tokens\":0}}\n",
+      "events": [
+        {
+          "event": "speech.audio.done",
+          "data": "{\"usage\":{\"input_tokens\":3,\"output_tokens\":0}}"
+        }
+      ],
+      "declared": [
+        "/*/data/delta"
+      ],
+      "view": "{\"status\":200,\"headers\":[],\"body\":{\"sse\":[{\"event\":\"speech.audio.done\",\"data\":{\"usage\":{\"input_tokens\":3,\"output_tokens\":0}}}]}}",
+      "blobs": []
+    },
+    {
+      "name": "multiline-data-default-type-and-number-text",
+      "note": "A leading BOM is dropped; two data lines join with LF and are not JSON; an empty event type is `message`; a JSON data keeps its member order and number text and loses its whitespace",
+      "body": "﻿data: first\ndata: second\n\nevent:\ndata: {\"a\": [1, 2.50]}\n\n",
+      "events": [
+        {
+          "event": "message",
+          "data": "first\nsecond"
+        },
+        {
+          "event": "message",
+          "data": "{\"a\": [1, 2.50]}"
+        }
+      ],
+      "declared": [],
+      "view": "{\"status\":200,\"headers\":[],\"body\":{\"sse\":[{\"event\":\"message\",\"data\":\"first\\nsecond\"},{\"event\":\"message\",\"data\":{\"a\":[1,2.50]}}]}}",
+      "blobs": []
+    },
+    {
+      "name": "empty-body",
+      "body": "",
+      "events": [],
+      "declared": [
+        "/*/data/delta"
+      ],
+      "view": "{\"status\":200,\"headers\":[],\"body\":{\"sse\":[]}}",
+      "blobs": []
+    }
+  ],
+  "sse_view_refusals": [
+    {
+      "name": "forged-reference-in-an-event",
+      "events": [
+        {
+          "event": "speech.audio.delta",
+          "data": "{\"delta\":{\"$south.blob\":{\"id\":\"b0\"}}}"
+        }
+      ],
+      "declared": [
+        "/*/data/delta"
+      ],
+      "error": "reserved_key"
+    },
+    {
+      "name": "repeated-key-in-an-event",
+      "events": [
+        {
+          "event": "message",
+          "data": "{\"delta\":\"a\",\"delta\":\"b\"}"
+        }
+      ],
+      "declared": [],
+      "error": "duplicate_key"
+    }
+  ]
+}

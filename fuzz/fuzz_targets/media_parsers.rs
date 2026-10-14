@@ -2,8 +2,8 @@
 
 //! Fuzz targets for the grammars of `contracts.media` v1 (image record §6, §11): the elider, the
 //! multipart parser and encoder, the descriptor and its template expansion, the transforms and
-//! the artifact URL grammar, and the speech contract's codecs (speech record §6–§8). Besides
-//! "never panics", each checks an invariant a host relies on.
+//! the artifact URL grammar, the speech contract's codecs and the `sse` response view (speech
+//! record §6–§8). Besides "never panics", each checks an invariant a host relies on.
 
 use libfuzzer_sys::fuzz_target;
 use south_contracts::MultipartBoundaryV1;
@@ -12,8 +12,9 @@ use south_contracts::image::{
     fill_render_template_v1, parse_image_model_capabilities_v1, parse_prepared_image_call_v1,
 };
 use south_contracts::media::{
-    ArtifactUrlV1, BlobSetV1, MediaLimitsV1, MediaPartV1, MediaPartViewV1, MediaRequestDescriptorV1,
-    MediaTransformV1, PathPatternV1, decode_base64, decode_hex, elide_v1, encode_base64,
+    ArtifactUrlV1, BlobSetV1, MediaLimitsV1, MediaPartV1, MediaPartViewV1,
+    MediaRequestDescriptorV1, MediaTransformV1, PathPatternV1, SseEventFieldsV1, UpstreamRoundV1,
+    build_media_sse_response_view_v1, decode_base64, decode_hex, elide_v1, encode_base64,
     encode_multipart_v1, expand_json_template_v1, parse_data_url_v1, parse_multipart_parts_v1,
 };
 use south_contracts::speech::{
@@ -151,6 +152,31 @@ fuzz_target!(|data: &[u8]| {
                                 .expect("a checked template fills");
                         }
                     }
+                }
+                // The `sse` view (speech record §6): each blank-line-separated chunk is one event's
+                // data. The view is one JSON document, and every blob it references is returned.
+                let events: Vec<SseEventFieldsV1<'_>> = text
+                    .split("\n\n")
+                    .map(|data| SseEventFieldsV1 { event: "message", data })
+                    .collect();
+                let declared = [PathPatternV1::parse("/*/data/delta").expect("a fixed pattern")];
+                let round = UpstreamRoundV1 {
+                    status: 200,
+                    headers: &[],
+                    body: &[],
+                    content_type: Some("text/event-stream"),
+                };
+                if let Ok((view, blobs)) =
+                    build_media_sse_response_view_v1(round, &events, &[], &declared, &small)
+                {
+                    let parsed: serde_json::Value =
+                        serde_json::from_str(&view.to_json()).expect("an sse view is JSON");
+                    assert_eq!(
+                        parsed["body"]["sse"].as_array().map(Vec::len),
+                        Some(events.len()),
+                        "one entry per event"
+                    );
+                    assert!(blobs.iter().all(|blob| blob.is_text()));
                 }
                 let artifacts = [ImageArtifactV1::Body { media_type: "image/png".to_owned() }];
                 if check_render_template_v1(text, &artifacts, &small).is_ok() {
