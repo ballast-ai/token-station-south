@@ -276,7 +276,7 @@ dependencies = [
 
 [[package]]
 name = "provider-openai-responses"
-version = "1.3.8"
+version = "1.3.9"
 dependencies = [
  "south-component-conformance",
  "wit-bindgen",
