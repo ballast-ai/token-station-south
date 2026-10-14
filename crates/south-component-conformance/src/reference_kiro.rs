@@ -253,7 +253,10 @@ fn user_input(content: &str, tool_results: Vec<Value>) -> Map<String, Value> {
     entry.insert("content".to_owned(), json!(content));
     entry.insert("origin".to_owned(), json!(ORIGIN));
     if !tool_results.is_empty() {
-        entry.insert("userInputMessageContext".to_owned(), json!({"toolResults": tool_results}));
+        entry.insert(
+            "userInputMessageContext".to_owned(),
+            json!({"toolResults": Value::Array(tool_results)}),
+        );
     }
     entry
 }
