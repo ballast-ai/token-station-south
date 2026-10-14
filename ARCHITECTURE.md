@@ -212,6 +212,16 @@ misread as a boundary violation.
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
 This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.64.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.58.0 and 0.64.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**Unreleased (speech world batch V3-2: MiMo and MiniMax TTS)**: design record
+`docs/design/2026-10-14-speech-v3-2-tts.md` (accepted 2026-10-14, SV-Q7 as recommended; proposed for the next release,
+with V3-1). Two synthesis-only speech packages, each 1.0.0, media 1 and `south_runtime` 0.64.0, transcribed from the
+host's native TTS arms: `speech-mimo` (family `mimo-speech`, `bearer`; `v1/chat/completions` with the input as the
+assistant turn and an `audio` object, the base64 audio of `choices[0]` as an `inline` artifact) and `speech-minimax`
+(`minimax-speech`, `bearer`; `v1/t2a_v2` with `?GroupId=` from the digits config key `group_id`, the hex `data.audio`
+as an `inline` artifact, `base_resp` failures decided in the component, the weighted character count as `upper`, and
+`extra_info.usage_characters` as the upstream's count; `0` or a malformed count is `unknown`, SV-Q7). The `base_resp`
+table moves to the crate-private `minimax_shared.rs`, which `image-minimax` reads unchanged. No contract changes, and
+no crate version moves again: V3-1 already moved `south-component-conformance` to 0.64.0 in this unreleased cycle.
 **Unreleased (speech world batch V3-1: OpenAI-compatible, xAI, Groq and ElevenLabs TTS; `contracts.media` 3)**: design
 record `docs/design/2026-10-14-speech-v3-1-tts.md` (accepted 2026-10-14, SV-Q1 to SV-Q6 as recommended; proposed for
 the next release). Four synthesis-only speech packages, each 1.0.0 and transcribed from the host's native TTS arm:
