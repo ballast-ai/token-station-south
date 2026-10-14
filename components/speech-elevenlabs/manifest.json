@@ -42,7 +42,8 @@
       "stream": 2
     },
     "contracts": {
-      "media": 3
+      "media": 3,
+      "speech": 1
     }
   }
 }

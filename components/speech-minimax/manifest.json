@@ -43,7 +43,8 @@
       "stream": 2
     },
     "contracts": {
-      "media": 1
+      "media": 1,
+      "speech": 1
     }
   }
 }

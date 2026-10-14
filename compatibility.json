@@ -52,6 +52,7 @@
     "embeddings": 2,
     "media": 3,
     "image": 1,
+    "speech": 1,
     "media_limits": {
       "inline_string_bytes": 1048576,
       "elision_paths": 32,
@@ -106,7 +107,9 @@
     "embeddings_component_v1_suite_id": "south.embeddings-component.v1",
     "embeddings_component_v1_suite": 1,
     "image_component_v1_suite_id": "south.image-component.v1",
-    "image_component_v1_suite": 1
+    "image_component_v1_suite": 1,
+    "speech_component_v1_suite_id": "south.speech-component.v1",
+    "speech_component_v1_suite": 1
   },
   "provider_api": {
     "wit_version": "token-station:adapter@2.0.0"
@@ -291,10 +294,16 @@
     "token-station": {
       "image_v1": {
         "status": "not_verified"
+      },
+      "speech_v1": {
+        "status": "not_verified"
       }
     },
     "token-station-server": {
       "image_v1": {
+        "status": "not_verified"
+      },
+      "speech_v1": {
         "status": "not_verified"
       }
     }

@@ -212,6 +212,20 @@ misread as a boundary violation.
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
 This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.64.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.58.0 and 0.64.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**Unreleased (speech world step S-S-5: `contracts.speech` 1)**: speech record
+`docs/design/2026-09-30-speech-world.md` §14, §18 and "S-S-5 implementation" (to be released in 0.65.0 with V3-1 to V4).
+`compatibility.json` records `contracts.speech` 1 (the speech module of `south-contracts` as released in 0.64.0 plus the
+`url` form's optional `upgrade_insecure` member of V4, SV-Q10; no number moves), the suite fields
+`speech_component_v1_suite_id` `south.speech-component.v1` and `speech_component_v1_suite` 1, and a `speech_v1` entry in
+`media_component_capabilities`, `not_verified` for both hosts. As ruled for Q9 (the same ruling as image Q5 and
+embeddings E-Q5), South states in writing that **a synchronous speech implementation in the community host is
+recommended** (P21 §7); until a host lands it, `speech_v1` stays `not_verified`, and a gate ② pass of the packages is not
+host adoption. All nine speech packages declare `contracts` `{"media": 1, "speech": 1}` (`speech-elevenlabs`
+`{"media": 3, "speech": 1}`) at their unpublished 1.0.0. No published runtime records the `speech` key, so a host
+linking 0.64.0 or older refuses every speech package; each declares this tree's release as `south_runtime`, moved by the
+release commit with the workspace version. A host admits them with a range listing `speech` 1 beside `media` `{1, 2,
+3}`. No crate version moves (this cycle already moved the three guest-linked crates), and no other package changes.
+`speech-vertex` 1.1.0 (Q7's refusal) is not part of this release.
 **Unreleased (speech world batch V4: Bailian, Vertex and Azure SSML TTS; SV-Q10, SV-Q11)**: design record
 `docs/design/2026-10-15-speech-v4-tts.md` (accepted 2026-10-15, SV-Q10 and SV-Q11 as recommended; proposed for the next
 release, with V3-1 to V3-3). Two new synthesis packages, each 1.0.0, media 1 and `south_runtime` 0.64.0: `speech-qwen`
@@ -269,7 +283,7 @@ declares in `query_parameters` (`MediaRequestDescriptorV1::parse_with_declared`,
 declares `query_parameters` under media below 3 (`ManifestErrorV1::SpeechQueryParametersRequireMedia3`, SV-Q5). The
 suite and the sandbox seam parse prepared calls with the package's own declarations. Three packages declare media 1 and
 `south_runtime` 0.64.0; `speech-elevenlabs` declares media 3 and this tree's release, moved by the release commit.
-`contracts.speech` is still not recorded (S-S-5), so no speech package declares it yet. Under Q47 `south-contracts`
+`contracts.speech` is not recorded by this batch (S-S-5 records it, above). Under Q47 `south-contracts`
 moves to 0.56.0, `south-provider-api` to 0.58.0 and `south-component-conformance` to 0.64.0, so every package published
 with 0.64.0 takes a patch with unchanged behaviour and keeps its `south_runtime` and its `contracts`. **Breaking for
 hosts on re-pin**: `ManifestErrorV1` gains `SpeechQueryParametersRequireMedia3` (exhaustive matches), and a host's media

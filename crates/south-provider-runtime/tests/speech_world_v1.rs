@@ -369,6 +369,24 @@ fn speech_admission_keeps_both_handshakes() {
         .expect_err("speech contract 999 is unknown");
     assert!(matches!(error, LoadErrorV1::OutsideRange(_)), "{error}");
 
+    // `compatibility.json` records `contracts.speech` 1 (step S-S-5): a package declaring it with
+    // media 1 loads under this tree's range, and a range without the key refuses it.
+    let mut declared = speech_manifest_value();
+    declared["compatibility"]["contracts"] = json!({ "media": 1, "speech": 1 });
+    load_embedded(&runtime(), &declared.to_string(), &bytes)
+        .expect("this tree's range admits speech contract 1");
+    let mut without_speech = host_range::host_range();
+    assert!(without_speech.contracts.remove("speech").is_some());
+    let error = LoadedComponentV1::load_embedded(
+        &runtime(),
+        &declared.to_string(),
+        &bytes,
+        &without_speech,
+        FixedSigner,
+    )
+    .expect_err("a range without speech refuses the package");
+    assert!(matches!(error, LoadErrorV1::OutsideRange(_)), "{error}");
+
     // The exact handshake: a host holding the manifest's own declaration,
     // except for the runtime, which no release can equal.
     let mut host = host_range::exact_expectations_for(&speech_manifest());

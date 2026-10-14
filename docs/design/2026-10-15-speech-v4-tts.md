@@ -1,7 +1,8 @@
 # Speech world batch V4: Bailian Qwen-TTS, Vertex Gemini TTS and Azure Speech SSML TTS
 
-Status: accepted (lv reviewed it on 2026-10-15 and ruled SV-Q10 and SV-Q11 as recommended, §12); implemented on branch
-`speech-v4` (Implementation, below).
+Status: accepted (lv reviewed it on 2026-10-15 and ruled SV-Q10 and SV-Q11 as recommended, §12); implemented
+(Implementation, below); declared in `contracts.speech` 1 at speech step S-S-5, to be released in 0.65.0 (`speech-vertex`
+1.1.0 is not part of it).
 
 Date: 2026-10-15
 
@@ -892,3 +893,6 @@ turns its row red on all three packs.
 - 2026-10-15: Implementation section added (what landed, thirteen interpretations, two points that contradict the record:
   `reference_integrity` has no `url` branch and the function's module; two open questions; gate results and mutations);
   status implemented on branch `speech-v4`. No design decision of this record changed.
+- 2026-10-15: speech step S-S-5 records `contracts.speech` 1 in `compatibility.json` and adds `"speech": 1` to this
+  batch's manifests (speech record, S-S-5 implementation); status declared in `contracts.speech` 1, to be released in
+  0.65.0. No design decision of this record changed.

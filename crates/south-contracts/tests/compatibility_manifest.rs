@@ -69,6 +69,7 @@ struct Contracts {
     embeddings: u16,
     media: u16,
     image: u16,
+    speech: u16,
     media_limits: south_contracts::media::MediaLimitsV1,
 }
 
@@ -143,6 +144,8 @@ struct Conformance {
     embeddings_component_v1_suite: u32,
     image_component_v1_suite_id: String,
     image_component_v1_suite: u32,
+    speech_component_v1_suite_id: String,
+    speech_component_v1_suite: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -628,6 +631,10 @@ fn compatibility_manifest_describes_the_library_slice() {
     );
     assert_eq!(manifest.contracts.media, south_contracts::media::MEDIA_CONTRACT_VERSION_V3);
     assert_eq!(manifest.contracts.image, south_contracts::image::IMAGE_CONTRACT_VERSION);
+    // The speech world (speech record §14), recorded at step S-S-5: contract 1 includes the `url`
+    // artifact form's optional `upgrade_insecure` member (speech batch V4, SV-Q10), so that member
+    // moves no number.
+    assert_eq!(manifest.contracts.speech, south_contracts::speech::SPEECH_CONTRACT_VERSION);
     assert_eq!(manifest.contracts.media_limits, south_contracts::media::MediaLimitsV1::V1);
     assert_eq!(manifest.contracts.task_limits.artifact_urls, south_contracts::MAX_ARTIFACT_URLS);
     assert_eq!(
@@ -724,6 +731,8 @@ fn compatibility_manifest_describes_the_library_slice() {
     assert_eq!(manifest.conformance.embeddings_component_v1_suite, 1);
     assert_eq!(manifest.conformance.image_component_v1_suite_id, "south.image-component.v1");
     assert_eq!(manifest.conformance.image_component_v1_suite, 1);
+    assert_eq!(manifest.conformance.speech_component_v1_suite_id, "south.speech-component.v1");
+    assert_eq!(manifest.conformance.speech_component_v1_suite, 1);
     assert_eq!(manifest.provider_api.wit_version.as_deref(), Some("token-station:adapter@2.0.0"));
     assert_eq!(manifest.provider_runtime.abi_version.as_deref(), Some("provider-adapter-v2"));
     let expected_crates = BTreeMap::from([
@@ -804,13 +813,18 @@ fn compatibility_manifest_describes_the_library_slice() {
         assert_eq!(capabilities["embeddings_v1"].cases, None);
     }
     // Neither host serves the image world yet: the server's generic media executor is P22 I2–I4,
-    // and a gate ② pass is not host adoption (image record §15, Q5).
+    // and a gate ② pass is not host adoption (image record §15, Q5). The speech world takes the
+    // same entry and the same status: the community host stays `not_verified` until it lands a
+    // synchronous implementation, and the server until its own gate ③ run (speech record §16 Q9,
+    // ruled as image Q5).
     assert_eq!(manifest.media_component_capabilities.len(), 2);
     for host in ["token-station", "token-station-server"] {
         let capabilities = &manifest.media_component_capabilities[host];
-        assert_eq!(capabilities.len(), 1);
-        assert_eq!(capabilities["image_v1"].status, "not_verified");
-        assert_eq!(capabilities["image_v1"].cases, None);
+        assert_eq!(capabilities.len(), 2);
+        for world in ["image_v1", "speech_v1"] {
+            assert_eq!(capabilities[world].status, "not_verified", "{host}/{world}");
+            assert_eq!(capabilities[world].cases, None, "{host}/{world}");
+        }
     }
     let expected_capabilities = expected_host_capabilities();
     assert_eq!(manifest.host_capabilities.len(), expected_capabilities.len());
