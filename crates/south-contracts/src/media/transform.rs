@@ -232,7 +232,7 @@ pub fn is_media_type(value: &str) -> bool {
     token(kind) && token(subtype)
 }
 
-const fn is_tchar(byte: u8) -> bool {
+pub const fn is_tchar(byte: u8) -> bool {
     byte.is_ascii_alphanumeric()
         || matches!(
             byte,

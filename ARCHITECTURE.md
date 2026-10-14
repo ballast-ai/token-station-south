@@ -211,7 +211,17 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.63.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.54.0, 0.56.0 and 0.62.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.63.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.55.0, 0.56.0 and 0.63.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**Unreleased (speech world step S-S-1: the `speech` contract module)**: speech record
+`docs/design/2026-09-30-speech-world.md` §18 and its S-S-1 implementation section. `south_contracts::speech` carries
+`contracts.speech` v1's types and codecs: the pre-dispatch facts (`characters {count, upper?}`, `metering_forms`,
+`reservation`, `output_media_type`), `SpeechMeteringV1` (characters with `source`, seconds with `basis`, tokens),
+`SpeechArtifactV1` (`body`, `inline`, `segments`, `url`, an optional `wav_pcm_s16le` container), the transcript
+deliveries, the two dialect words, `immutable_form_fields` and `PreparedSpeechCallV1`. The outcome enum lands with the
+component trait in the conformance crate (S-S-3), as the image world's did. No WIT, manifest, runtime or suite change and
+no `compatibility.json` entry yet. Under Q47 `south-contracts` moves to 0.55.0 and `south-component-conformance` (whose
+reference version constants move) to 0.63.0, so every package published with 0.63.0 takes a patch with unchanged
+behaviour and keeps its `south_runtime` and its `contracts`.
 **v0.63.0 (image world step I3-3: `image-vertex`; the task poll interval)**: release record
 `docs/design/2026-10-14-release-0.63.0.md`. Image world step I3-3: Nano Banana on Vertex AI (design record
 `docs/design/2026-10-13-image-i3-3-vertex.md`, accepted 2026-10-14). `image-vertex` 1.0.0

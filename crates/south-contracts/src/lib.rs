@@ -8,6 +8,7 @@ mod eventstream;
 pub mod image;
 pub mod media;
 mod secret_header;
+pub mod speech;
 mod task;
 mod task_v2;
 
