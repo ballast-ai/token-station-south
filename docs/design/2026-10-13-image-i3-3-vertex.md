@@ -208,9 +208,13 @@ generic tier text, the tier word only when the client sent one, the host bound f
   from `get_valid_vertex_token_for`; both mint for the same account and scope and share the stored token (P24 B1/B2,
   embeddings precedent).
 - **V7 Non-image ids** (LLMs, Veo, Imagen) on a routed Vertex model: native 400 after admission (`handlers.rs:
-  378-391`); the component path refuses a model the package does not declare with 503 before admission, and the host
-  lets only image-modality models be routed (the P22 preflight's `ROUTABLE_MODALITY`), so the case needs a misrouted
-  row (P22 generic routing rule).
+  378-391`). The host lets only image-modality models be routed (the P22 preflight's `ROUTABLE_MODALITY`), so the case
+  needs a misrouted row (P22 generic routing rule). Corrected 2026-10-14 after the server's live dual run (I3-3 host
+  step H4): this record first said the component path refuses such a model with 503 before admission, but the shared
+  `gemini_image::model_capabilities` declares every model the host passes in, so the host never refuses it as
+  undeclared. The component sends the non-image id to Vertex and the upstream 400 is released under P29 (zero usage,
+  nothing charged). lv ruled it a registered difference the same day; both arms charge nothing, the component makes one
+  upstream call more.
 
 ## 8. Fixtures, tests, wiring; decisions where the record is silent
 
