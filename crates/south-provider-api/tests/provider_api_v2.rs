@@ -8,11 +8,13 @@ use south_provider_api::{
     EMBEDDINGS_BEHAVIOR_SUITE, EMBEDDINGS_CAPABILITIES, EMBEDDINGS_MEDIA_CAPABILITY,
     EMBEDDINGS_MEDIA_CONTRACT, EMBEDDINGS_WIT_PACKAGE, EMBEDDINGS_WORLD, EMBEDDINGS_WORLD_SCHEMA,
     HostExpectationsV1, HostImportV1, IMAGE_ADAPTER_WIT, IMAGE_BEHAVIOR_SUITE, IMAGE_CAPABILITIES,
-    IMAGE_WIT_PACKAGE, IMAGE_WORLD, IMAGE_WORLD_SCHEMA, KNOWN_WORLDS, ManifestErrorV1,
-    PROVIDER_AUTH_ARMS, PROVIDER_WORLD, PROVIDER_WORLD_SCHEMA, TASK_ADAPTER_V2_WIT,
-    TASK_ADAPTER_WIT, TASK_AUTH_ARMS, TASK_BEHAVIOR_SUITE, TASK_CAPABILITIES, TASK_WIT_PACKAGE,
-    TASK_WORLD, TASK_WORLD_SCHEMA, TASK_WORLD_SCHEMA_V2, TASK_WORLD_V2, UsageEvidenceV1,
-    WIT_PACKAGE, compatibility_matches, known_world,
+    IMAGE_WIT_PACKAGE, IMAGE_WORLD, IMAGE_WORLD_SCHEMA, InstanceDeclarationsV1, KNOWN_WORLDS,
+    ManifestErrorV1, PROVIDER_AUTH_ARMS, PROVIDER_WORLD, PROVIDER_WORLD_SCHEMA, SPEECH_ADAPTER_WIT,
+    SPEECH_BEHAVIOR_SUITE, SPEECH_CAPABILITIES, SPEECH_OPERATION_CAPABILITIES, SPEECH_WIT_PACKAGE,
+    SPEECH_WORLD, SPEECH_WORLD_SCHEMA, TASK_ADAPTER_V2_WIT, TASK_ADAPTER_WIT, TASK_AUTH_ARMS,
+    TASK_BEHAVIOR_SUITE, TASK_CAPABILITIES, TASK_WIT_PACKAGE, TASK_WORLD, TASK_WORLD_SCHEMA,
+    TASK_WORLD_SCHEMA_V2, TASK_WORLD_V2, UsageEvidenceV1, WIT_PACKAGE, compatibility_matches,
+    known_world,
 };
 use wit_parser::{Resolve, Type, TypeDefKind};
 
@@ -224,7 +226,8 @@ fn every_known_world_resolves_to_its_own_schema_and_no_other() {
             TASK_WORLD_SCHEMA,
             TASK_WORLD_SCHEMA_V2,
             EMBEDDINGS_WORLD_SCHEMA,
-            IMAGE_WORLD_SCHEMA
+            IMAGE_WORLD_SCHEMA,
+            SPEECH_WORLD_SCHEMA
         ]
     );
     assert_eq!(known_world(PROVIDER_WORLD), Some(&PROVIDER_WORLD_SCHEMA));
@@ -236,6 +239,8 @@ fn every_known_world_resolves_to_its_own_schema_and_no_other() {
     assert_eq!(known_world("embeddings-adapter-v2"), None);
     assert_eq!(known_world(IMAGE_WORLD), Some(&IMAGE_WORLD_SCHEMA));
     assert_eq!(known_world("image-adapter-v2"), None);
+    assert_eq!(known_world(SPEECH_WORLD), Some(&SPEECH_WORLD_SCHEMA));
+    assert_eq!(known_world("speech-adapter-v2"), None);
 }
 
 #[test]
@@ -722,7 +727,7 @@ fn the_task_world_is_known_and_carries_its_own_vocabulary() {
         .collect();
     assert_eq!(schema.auth_arms, without_combined.as_slice());
     assert!(PROVIDER_AUTH_ARMS.contains(&"bearer_and_header_secret"));
-    assert_eq!(KNOWN_WORLDS.len(), 5, "provider, both task versions, embeddings and image");
+    assert_eq!(KNOWN_WORLDS.len(), 6, "provider, both task versions, embeddings, image and speech");
 }
 
 fn task_manifest() -> ComponentManifestV1 {
@@ -1293,11 +1298,22 @@ fn every_world_states_its_host_import_and_admitted_declarations() {
             schema.instance_declarations,
         )
     };
-    assert_eq!(posture(&PROVIDER_WORLD_SCHEMA), (HostImportV1::Linked, true, true, true));
-    assert_eq!(posture(&TASK_WORLD_SCHEMA), (HostImportV1::Linked, false, false, false));
-    assert_eq!(posture(&TASK_WORLD_SCHEMA_V2), (HostImportV1::Unlinked, false, false, false));
-    assert_eq!(posture(&EMBEDDINGS_WORLD_SCHEMA), (HostImportV1::Pure, true, false, false));
-    assert_eq!(posture(&IMAGE_WORLD_SCHEMA), (HostImportV1::Pure, true, false, false));
+    let (none, all) = (InstanceDeclarationsV1::None, InstanceDeclarationsV1::All);
+    assert_eq!(posture(&PROVIDER_WORLD_SCHEMA), (HostImportV1::Linked, true, true, all));
+    assert_eq!(posture(&TASK_WORLD_SCHEMA), (HostImportV1::Linked, false, false, none));
+    assert_eq!(posture(&TASK_WORLD_SCHEMA_V2), (HostImportV1::Unlinked, false, false, none));
+    assert_eq!(posture(&EMBEDDINGS_WORLD_SCHEMA), (HostImportV1::Pure, true, false, none));
+    assert_eq!(posture(&IMAGE_WORLD_SCHEMA), (HostImportV1::Pure, true, false, none));
+    // The speech world takes the value channel and, of the instance declarations,
+    // `query_parameters` alone (speech record §17.3).
+    assert_eq!(
+        posture(&SPEECH_WORLD_SCHEMA),
+        (HostImportV1::Pure, true, false, InstanceDeclarationsV1::QueryParameters)
+    );
+    assert!(InstanceDeclarationsV1::QueryParameters.admits_query_parameters());
+    assert!(!InstanceDeclarationsV1::QueryParameters.admits_quota_headers_and_user_agent());
+    assert!(all.admits_query_parameters() && all.admits_quota_headers_and_user_agent());
+    assert!(!none.admits_query_parameters() && !none.admits_quota_headers_and_user_agent());
     let linked: Vec<&str> = KNOWN_WORLDS
         .iter()
         .filter(|schema| schema.host_import.is_linked())
@@ -1516,4 +1532,368 @@ fn the_image_world_coexists_with_the_other_worlds() {
     assert_eq!(task_manifest().validate(), Ok(()));
     assert_eq!(embeddings_manifest().validate(), Ok(()));
     assert_eq!(image_manifest().validate(), Ok(()));
+}
+
+// -- The speech world (2026-09-30 speech-world record, §3, §4, §7, §17.3, §17.4) ----
+
+fn speech_manifest() -> ComponentManifestV1 {
+    let task = task_manifest();
+    ComponentManifestV1 {
+        name: "speech-elevenlabs".to_owned(),
+        api_version: SPEECH_WORLD.to_owned(),
+        providers: vec!["elevenlabs".to_owned()],
+        capabilities: ["synthesize", "transcribe", "translate", "artifact_fetch"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+        auth_arms: BTreeSet::from(["header_secret".to_owned()]),
+        emits: Vec::new(),
+        conformance: ConformanceSpecV1 {
+            required_suite: SPEECH_BEHAVIOR_SUITE.to_owned(),
+            ..task.conformance
+        },
+        compatibility: CompatibilityDeclarationV1 {
+            wit_package: SPEECH_WIT_PACKAGE.to_owned(),
+            ..task.compatibility
+        },
+        ..task
+    }
+}
+
+fn speech_words(words: &[&str]) -> BTreeSet<String> {
+    words.iter().map(|word| (*word).to_owned()).collect()
+}
+
+#[test]
+fn the_speech_world_is_known_and_carries_its_own_vocabulary() {
+    let schema = known_world(SPEECH_WORLD).expect("the speech world is admitted");
+    assert_eq!(schema, &SPEECH_WORLD_SCHEMA);
+    assert_eq!(schema.world, "speech-adapter-v1");
+    assert_eq!(schema.wit_package, "token-station:speech-adapter@1.0.0");
+    assert_eq!(schema.behavior_suite, "south.speech-component.v1");
+    assert_eq!(schema.capabilities, SPEECH_CAPABILITIES);
+    assert_eq!(schema.capabilities, ["synthesize", "transcribe", "translate", "artifact_fetch"]);
+    assert_eq!(SPEECH_OPERATION_CAPABILITIES, ["synthesize", "transcribe"]);
+    assert_eq!(schema.auth_arms, ["bearer", "header_secret"]);
+    assert_eq!(schema.host_import, HostImportV1::Pure, "no host import (§3)");
+}
+
+#[test]
+fn speech_wit_has_only_pure_exports_and_no_host_import() {
+    let mut resolve = Resolve::new();
+    resolve.push_str("speech-adapter.wit", SPEECH_ADAPTER_WIT).expect("speech WIT parses");
+    let (_, package) = resolve.packages.iter().next().expect("one package");
+    let name = &package.name;
+    let rendered = format!(
+        "{}:{}@{}",
+        name.namespace,
+        name.name,
+        name.version.as_ref().expect("package is versioned")
+    );
+    assert_eq!(rendered, SPEECH_WIT_PACKAGE);
+    assert_eq!(resolve.worlds.len(), 1, "the package holds one world");
+    let (_, world) =
+        resolve.worlds.iter().find(|(_, w)| w.name == SPEECH_WORLD).expect("speech world");
+    assert!(world.imports.is_empty(), "no host, signing or WASI import");
+    assert_eq!(world.exports.len(), 1, "exactly the speech-adapter interface");
+    let (_, interface) = resolve
+        .interfaces
+        .iter()
+        .find(|(_, i)| i.name.as_deref() == Some("speech-adapter"))
+        .expect("exports");
+    let mut functions: Vec<&str> = interface.functions.keys().map(String::as_str).collect();
+    functions.sort_unstable();
+    // The image world's set without `render` (§7).
+    assert_eq!(
+        functions,
+        ["healthcheck", "metadata", "model-capabilities", "parse-response", "prepare"]
+    );
+    let params = |name: &str| {
+        interface.functions[name].params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>()
+    };
+    assert_eq!(params("model-capabilities"), ["provider-config"]);
+    assert_eq!(params("prepare"), ["provider-config", "request", "context"]);
+    assert_eq!(params("parse-response"), ["state", "response"]);
+    for function in ["model-capabilities", "prepare", "parse-response"] {
+        let result = interface.functions[function].result.expect("returns a value");
+        let Type::Id(id) = result else { panic!("{function} returns a result type") };
+        assert!(
+            matches!(resolve.types[id].kind, TypeDefKind::Result(_)),
+            "{function} returns result<json, json>"
+        );
+    }
+}
+
+#[test]
+fn a_speech_manifest_validates_and_reports_its_own_tuple() {
+    let manifest = speech_manifest();
+    assert_eq!(manifest.validate(), Ok(()));
+    let tuple = manifest.compatibility_tuple();
+    assert_eq!(tuple.wit_package, SPEECH_WIT_PACKAGE);
+    assert_eq!(tuple.wit_world, SPEECH_WORLD);
+    assert_eq!(tuple.conformance_suite, SPEECH_BEHAVIOR_SUITE);
+
+    // Every admitted combination of the operation words, under either admitted arm, with or
+    // without the optional `artifact_fetch`.
+    for (words, arm) in [
+        (&["synthesize"][..], "bearer"),
+        (&["transcribe"][..], "header_secret"),
+        (&["transcribe", "translate"][..], "bearer"),
+        (&["synthesize", "transcribe"][..], "header_secret"),
+        (&["synthesize", "artifact_fetch"][..], "bearer"),
+        (&["synthesize", "transcribe", "translate", "artifact_fetch"][..], "bearer"),
+    ] {
+        let mut manifest = speech_manifest();
+        manifest.capabilities = speech_words(words);
+        manifest.auth_arms = BTreeSet::from([arm.to_owned()]);
+        assert_eq!(manifest.validate(), Ok(()), "{words:?} with {arm}");
+    }
+}
+
+#[test]
+fn a_speech_component_without_an_operation_word_is_refused() {
+    for words in [&[][..], &["artifact_fetch"][..]] {
+        let mut manifest = speech_manifest();
+        manifest.capabilities = speech_words(words);
+        assert_eq!(manifest.validate(), Err(ManifestErrorV1::SpeechOperationRequired), "{words:?}");
+    }
+    assert_eq!(
+        ManifestErrorV1::SpeechOperationRequired.to_string(),
+        "every speech component must support `synthesize`, `transcribe` or both"
+    );
+
+    let mut familyless = speech_manifest();
+    familyless.providers.clear();
+    assert_eq!(familyless.validate(), Err(ManifestErrorV1::ProviderFamilyRequired));
+}
+
+/// `translate` implies `transcribe` (§4 D2): a translation is a recognition request.
+#[test]
+fn translate_without_transcribe_is_refused() {
+    for words in
+        [&["synthesize", "translate"][..], &["synthesize", "translate", "artifact_fetch"][..]]
+    {
+        let mut manifest = speech_manifest();
+        manifest.capabilities = speech_words(words);
+        assert_eq!(
+            manifest.validate(),
+            Err(ManifestErrorV1::TranslateRequiresTranscribe),
+            "{words:?}"
+        );
+    }
+    // Alone, `translate` names no operation the component builds: the first rule answers.
+    let mut alone = speech_manifest();
+    alone.capabilities = speech_words(&["translate"]);
+    assert_eq!(alone.validate(), Err(ManifestErrorV1::SpeechOperationRequired));
+    assert_eq!(
+        ManifestErrorV1::TranslateRequiresTranscribe.to_string(),
+        "a speech component that declares `translate` must also declare `transcribe`"
+    );
+}
+
+#[test]
+fn speech_manifest_refuses_words_and_arms_outside_its_vocabulary() {
+    for word in
+        ["telepathy", "tts", "asr", "embed", "chat", "generate", "submit", "speech.translate"]
+    {
+        let mut manifest = speech_manifest();
+        manifest.capabilities.insert(word.to_owned());
+        assert_eq!(
+            manifest.validate(),
+            Err(ManifestErrorV1::CapabilityIsNotInTheWorldVocabulary {
+                capability: word.to_owned(),
+                world: SPEECH_WORLD.to_owned(),
+            }),
+            "{word}"
+        );
+    }
+    for arm in ["oauth", "host_signed", "bearer_and_header_secret"] {
+        let mut manifest = speech_manifest();
+        manifest.auth_arms = BTreeSet::from([arm.to_owned()]);
+        assert_eq!(
+            manifest.validate(),
+            Err(ManifestErrorV1::AuthArmIsNotInTheWorldVocabulary {
+                auth_arm: arm.to_owned(),
+                world: SPEECH_WORLD.to_owned(),
+            })
+        );
+    }
+    // The speech operation words are the speech world's alone; `artifact_fetch` is shared with
+    // the task worlds, where it means the same.
+    for word in SPEECH_OPERATION_CAPABILITIES.iter().chain(&["translate"]) {
+        for mut manifest in
+            [reference_manifest(), task_manifest(), embeddings_manifest(), image_manifest()]
+        {
+            manifest.capabilities.insert((*word).to_owned());
+            assert!(
+                matches!(
+                    manifest.validate(),
+                    Err(ManifestErrorV1::CapabilityIsNotInTheWorldVocabulary { .. })
+                ),
+                "`{word}` in {}",
+                manifest.api_version
+            );
+        }
+    }
+}
+
+/// The speech world admits the value channel and `query_parameters`, and nothing else beyond its
+/// vocabulary (§17.3).
+#[test]
+fn speech_manifest_refuses_provider_only_declarations() {
+    let mut signed = speech_manifest();
+    signed.signing = Some(south_provider_api::SigningV1 {
+        scheme: south_provider_api::SigningSchemeV1::AwsSigv4,
+        service: "bedrock".to_owned(),
+        region: south_provider_api::TemplateParamV1 { template_param: "region".to_owned() },
+        credentials: std::collections::BTreeMap::new(),
+    });
+    assert!(matches!(signed.validate(), Err(ManifestErrorV1::InvalidSigning(_))));
+
+    let mut framed = speech_manifest();
+    framed.stream_framing = south_provider_api::StreamFramingV1::AwsEventstream;
+    assert_eq!(framed.validate(), Err(ManifestErrorV1::StreamFramingIsAProviderWorldDeclaration));
+
+    let mut endpoint = speech_manifest();
+    endpoint.endpoint.insert("elevenlabs".to_owned(), "https://api.example.test".to_owned());
+    assert_eq!(endpoint.validate(), Err(ManifestErrorV1::EndpointIsAProviderWorldDeclaration));
+
+    let mut evidence = speech_manifest();
+    evidence.usage_evidence = UsageEvidenceV1::Absent;
+    assert_eq!(evidence.validate(), Err(ManifestErrorV1::UsageEvidenceIsAProviderWorldDeclaration));
+
+    let mut facts = speech_manifest();
+    facts
+        .request_facts
+        .insert("elevenlabs".to_owned(), south_provider_api::RequestFactsV1::top_level());
+    assert_eq!(facts.validate(), Err(ManifestErrorV1::RequestFactsIsAProviderWorldDeclaration));
+
+    let mut immutable = speech_manifest();
+    immutable.immutable_body_paths.insert("elevenlabs".to_owned(), vec!["model_id".to_owned()]);
+    assert_eq!(immutable.validate(), Err(ManifestErrorV1::DeliveryIsAProviderWorldDeclaration));
+
+    let mut host_values = speech_manifest();
+    host_values.host_values = vec!["attempt_id".to_owned()];
+    assert_eq!(
+        host_values.validate(),
+        Err(ManifestErrorV1::InstanceIsAProviderWorldDeclaration("host_values".to_owned()))
+    );
+
+    let mut agent = speech_manifest();
+    agent.user_agent.insert("elevenlabs".to_owned(), "acme/1.0".to_owned());
+    assert_eq!(
+        agent.validate(),
+        Err(ManifestErrorV1::InstanceIsAProviderWorldDeclaration("user_agent".to_owned()))
+    );
+
+    let mut quota = speech_manifest();
+    quota.quota_headers = vec![south_provider_api::QuotaHeaderDeclarationV1 {
+        header: "x-quota-remaining".to_owned(),
+        field: "x-ratelimit-remaining-tokens".to_owned(),
+    }];
+    assert_eq!(
+        quota.validate(),
+        Err(ManifestErrorV1::InstanceIsAProviderWorldDeclaration("quota_headers".to_owned()))
+    );
+
+    // `query_parameters` is admitted, so a query declaration beside a refused one does not hide
+    // the refusal.
+    let mut both = speech_manifest();
+    both.query_parameters = vec![output_format()];
+    both.user_agent.insert("elevenlabs".to_owned(), "acme/1.0".to_owned());
+    assert_eq!(
+        both.validate(),
+        Err(ManifestErrorV1::InstanceIsAProviderWorldDeclaration("user_agent".to_owned()))
+    );
+
+    let mut buckets = speech_manifest();
+    buckets.token_buckets = vec!["audio_output".to_owned()];
+    assert_eq!(
+        buckets.validate(),
+        Err(ManifestErrorV1::TaskResponseDeclarationsAreTaskV2Declarations)
+    );
+
+    let mut poll = speech_manifest();
+    poll.min_poll_interval_seconds = Some(5);
+    assert_eq!(poll.validate(), Err(ManifestErrorV1::MinPollIntervalIsATaskWorldDeclaration));
+}
+
+/// `ElevenLabs`'s `output_format` (§5 D3b), declared under the boundary record §10 grammar.
+fn output_format() -> south_provider_api::QueryParameterDeclarationV1 {
+    south_provider_api::QueryParameterDeclarationV1 {
+        name: "output_format".to_owned(),
+        syntax: south_provider_api::QueryValueSyntaxV1::Token,
+    }
+}
+
+/// The speech world admits `query_parameters` (§17.3) and holds each declaration to the provider
+/// world's rules.
+#[test]
+fn the_speech_world_admits_query_parameters_under_the_provider_rules() {
+    let mut manifest = speech_manifest();
+    manifest.query_parameters = vec![output_format()];
+    assert_eq!(manifest.validate(), Ok(()));
+
+    // The rules are the provider world's, not a lighter copy.
+    let refused = |name: &str| {
+        let mut manifest = speech_manifest();
+        manifest.query_parameters = vec![south_provider_api::QueryParameterDeclarationV1 {
+            name: name.to_owned(),
+            syntax: south_provider_api::QueryValueSyntaxV1::Token,
+        }];
+        manifest.validate()
+    };
+    for name in ["", "1format", "api_key", "xi-api-key", "token", "api-version", "out put"] {
+        assert!(
+            matches!(refused(name), Err(ManifestErrorV1::InvalidQueryParameter { .. })),
+            "{name:?} must be refused"
+        );
+    }
+    let mut twice = speech_manifest();
+    twice.query_parameters = vec![output_format(), output_format()];
+    assert!(matches!(twice.validate(), Err(ManifestErrorV1::InvalidQueryParameter { .. })));
+
+    // The widening is the speech world's: the image and embeddings worlds still refuse it.
+    for mut other in [image_manifest(), embeddings_manifest(), task_manifest()] {
+        other.query_parameters = vec![output_format()];
+        assert_eq!(
+            other.validate(),
+            Err(ManifestErrorV1::InstanceIsAProviderWorldDeclaration(
+                "query_parameters".to_owned()
+            )),
+            "{}",
+            other.api_version
+        );
+    }
+}
+
+/// No world accepts another world's suite or package, and adding the speech world leaves every
+/// other world's manifest admitted.
+#[test]
+fn the_speech_world_coexists_with_the_other_worlds() {
+    let mut image_suite = speech_manifest();
+    image_suite.conformance.required_suite = IMAGE_BEHAVIOR_SUITE.to_owned();
+    assert!(matches!(
+        image_suite.validate(),
+        Err(ManifestErrorV1::ConformanceSuiteIsNotTheWorldSuite { .. })
+    ));
+    let mut image_package = speech_manifest();
+    image_package.compatibility.wit_package = IMAGE_WIT_PACKAGE.to_owned();
+    assert!(matches!(
+        image_package.validate(),
+        Err(ManifestErrorV1::WitPackageIsNotTheWorldPackage { .. })
+    ));
+    let mut claims_image = speech_manifest();
+    claims_image.api_version = IMAGE_WORLD.to_owned();
+    assert!(claims_image.validate().is_err(), "speech declarations make no image world");
+
+    let mut image_claims_speech = image_manifest();
+    image_claims_speech.api_version = SPEECH_WORLD.to_owned();
+    assert!(image_claims_speech.validate().is_err(), "image declarations make no speech world");
+
+    assert_eq!(reference_manifest().validate(), Ok(()));
+    assert_eq!(task_manifest().validate(), Ok(()));
+    assert_eq!(embeddings_manifest().validate(), Ok(()));
+    assert_eq!(image_manifest().validate(), Ok(()));
+    assert_eq!(speech_manifest().validate(), Ok(()));
 }

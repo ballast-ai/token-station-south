@@ -239,21 +239,28 @@ fn is_quota_header_name(name: &str) -> bool {
 }
 
 impl ComponentManifestV1 {
-    /// Gate ① for the B7a instance declarations, which only a world with
-    /// [`WorldSchemaV1::instance_declarations`] (the provider world) admits.
+    /// Gate ① for the B7a instance declarations, each admitted by the world's
+    /// [`WorldSchemaV1::instance_declarations`]: `query_parameters` in the provider and speech
+    /// worlds, `quota_headers` and `user_agent` in the provider world. A world refuses the first
+    /// declaration it does not admit, in that order, before any declaration is checked.
     pub(crate) fn validate_instances(&self, world: &WorldSchemaV1) -> Result<(), ManifestErrorV1> {
-        if !world.instance_declarations {
-            let declared = [
-                ("query_parameters", !self.query_parameters.is_empty()),
-                ("quota_headers", !self.quota_headers.is_empty()),
-                ("user_agent", !self.user_agent.is_empty()),
-            ];
-            if let Some((field, _)) = declared.iter().find(|(_, present)| *present) {
-                return Err(ManifestErrorV1::InstanceIsAProviderWorldDeclaration(
-                    (*field).to_owned(),
-                ));
-            }
-            return Ok(());
+        let admitted = world.instance_declarations;
+        let refused = [
+            (
+                "query_parameters",
+                !admitted.admits_query_parameters() && !self.query_parameters.is_empty(),
+            ),
+            (
+                "quota_headers",
+                !admitted.admits_quota_headers_and_user_agent() && !self.quota_headers.is_empty(),
+            ),
+            (
+                "user_agent",
+                !admitted.admits_quota_headers_and_user_agent() && !self.user_agent.is_empty(),
+            ),
+        ];
+        if let Some((field, _)) = refused.iter().find(|(_, refused)| *refused) {
+            return Err(ManifestErrorV1::InstanceIsAProviderWorldDeclaration((*field).to_owned()));
         }
         self.validate_query_parameters()?;
         self.validate_quota_headers()?;

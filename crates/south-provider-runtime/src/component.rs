@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 
 use south_provider_api::{
     ComponentManifestV1, ComponentMetadataV1, EMBEDDINGS_WORLD, IMAGE_WORLD, PROVIDER_WORLD,
-    TASK_WORLD, TASK_WORLD_V2,
+    SPEECH_WORLD, TASK_WORLD, TASK_WORLD_V2,
 };
 use wasmtime::Store;
 use wasmtime::component::{Component, Linker};
@@ -106,6 +106,7 @@ enum InstanceKind {
     TaskV2(Box<crate::bindings::task_v2::TaskAdapterV2>),
     Embeddings(Box<crate::bindings::embeddings::EmbeddingsAdapterV1>),
     Image(Box<crate::bindings::image::ImageAdapterV1>),
+    Speech(Box<crate::bindings::speech::SpeechAdapterV1>),
 }
 
 impl InstanceKind {
@@ -125,6 +126,9 @@ impl InstanceKind {
             )),
             Self::Image(_) => Err(world_mismatch(
                 "this component exports `image-adapter-v1`; the provider face is not on it",
+            )),
+            Self::Speech(_) => Err(world_mismatch(
+                "this component exports `speech-adapter-v1`; the provider face is not on it",
             )),
         }
     }
@@ -146,6 +150,9 @@ impl InstanceKind {
             Self::Image(_) => Err(world_mismatch(
                 "this component exports `image-adapter-v1`; the task face is not on it",
             )),
+            Self::Speech(_) => Err(world_mismatch(
+                "this component exports `speech-adapter-v1`; the task face is not on it",
+            )),
         }
     }
 
@@ -163,6 +170,9 @@ impl InstanceKind {
             )),
             Self::Image(_) => Err(world_mismatch(
                 "this component exports `image-adapter-v1`; the task-v2 face is not on it",
+            )),
+            Self::Speech(_) => Err(world_mismatch(
+                "this component exports `speech-adapter-v1`; the task-v2 face is not on it",
             )),
         }
     }
@@ -184,6 +194,9 @@ impl InstanceKind {
             Self::Image(_) => Err(world_mismatch(
                 "this component exports `image-adapter-v1`; the embeddings face is not on it",
             )),
+            Self::Speech(_) => Err(world_mismatch(
+                "this component exports `speech-adapter-v1`; the embeddings face is not on it",
+            )),
         }
     }
 
@@ -203,6 +216,32 @@ impl InstanceKind {
             )),
             Self::Embeddings(_) => Err(world_mismatch(
                 "this component exports `embeddings-adapter-v1`; the image face is not on it",
+            )),
+            Self::Speech(_) => Err(world_mismatch(
+                "this component exports `speech-adapter-v1`; the image face is not on it",
+            )),
+        }
+    }
+
+    /// The speech world's accessor, or the ABI-mismatch error naming what was
+    /// actually loaded.
+    fn speech(&self) -> wasmtime::Result<&crate::bindings::speech::SpeechAdapterV1> {
+        match self {
+            Self::Speech(instance) => Ok(instance),
+            Self::Provider(_) => Err(world_mismatch(
+                "this component exports `provider-adapter-v2`; the speech face is not on it",
+            )),
+            Self::Task(_) => Err(world_mismatch(
+                "this component exports `task-adapter-v1`; the speech face is not on it",
+            )),
+            Self::TaskV2(_) => Err(world_mismatch(
+                "this component exports `task-adapter-v2`; the speech face is not on it",
+            )),
+            Self::Embeddings(_) => Err(world_mismatch(
+                "this component exports `embeddings-adapter-v1`; the speech face is not on it",
+            )),
+            Self::Image(_) => Err(world_mismatch(
+                "this component exports `image-adapter-v1`; the speech face is not on it",
             )),
         }
     }
@@ -273,8 +312,8 @@ impl LoadedComponentV1 {
         // `wasi:io` call, which panics on a runtime thread; see `nonblocking_io`.
         crate::nonblocking_io::add_to_linker(&mut linker).map_err(LoadErrorV1::NotAComponent)?;
         // Only a world whose schema links `host` (provider and task-v1) is
-        // offered it; task-v2, embeddings and image are pure exports, so the
-        // linker never offers them a signing capability to find.
+        // offered it; task-v2, embeddings, image and speech are pure exports,
+        // so the linker never offers them a signing capability to find.
         if crate::loader::host_import(&manifest.api_version).is_linked() {
             wit_host::add_to_linker::<Ctx, wasmtime::component::HasSelf<Ctx>>(&mut linker, |ctx| {
                 ctx
@@ -908,6 +947,81 @@ impl LoadedComponentV1 {
         })
     }
 
+    // ── The speech world's JSON face ────────────────────────────────────
+    //
+    // Three calls, the image face without `render` (speech record §7): bounded
+    // payloads, one instance, the guest's error channel left opaque. Each
+    // reaches the guest through `speech()`, so calling one on another world's
+    // component is the named ABI-mismatch error rather than a panic. Named
+    // `call_speech_*` because the provider and image worlds export
+    // `model-capabilities`, `prepare` and `parse-response` under the same WIT
+    // names.
+
+    /// `ProviderConfig` JSON → `list<SpeechModelCapabilitiesV1>` JSON, through
+    /// the speech `model-capabilities` export.
+    ///
+    /// # Errors
+    /// Returns [`CallErrorV1`] on world mismatch, resource limit or guest failure.
+    pub fn call_speech_model_capabilities(&self, config_json: &str) -> Result<String, CallErrorV1> {
+        self.bounded(&[config_json])?;
+        let config_json = config_json.to_owned();
+        self.call(|handle| {
+            handle
+                .instance
+                .speech()?
+                .token_station_speech_adapter_speech_adapter()
+                .call_model_capabilities(&mut handle.store, &config_json)
+        })
+    }
+
+    /// (`ProviderConfig`, `MediaRequestViewV1`, `SpeechCallContextV1`) JSON →
+    /// `PreparedSpeechCallV1` JSON, through the speech `prepare` export. A
+    /// guest error is a pre-dispatch refusal.
+    ///
+    /// # Errors
+    /// Returns [`CallErrorV1`] on world mismatch, resource limit or guest failure.
+    pub fn call_speech_prepare(
+        &self,
+        config_json: &str,
+        request_json: &str,
+        context_json: &str,
+    ) -> Result<String, CallErrorV1> {
+        self.bounded(&[config_json, request_json, context_json])?;
+        let config_json = config_json.to_owned();
+        let request_json = request_json.to_owned();
+        let context_json = context_json.to_owned();
+        self.call(|handle| {
+            handle.instance.speech()?.token_station_speech_adapter_speech_adapter().call_prepare(
+                &mut handle.store,
+                &config_json,
+                &request_json,
+                &context_json,
+            )
+        })
+    }
+
+    /// (prepared state, `MediaResponseViewV1`) JSON → `SpeechOutcomeV1` JSON,
+    /// through the speech `parse-response` export.
+    ///
+    /// # Errors
+    /// Returns [`CallErrorV1`] on world mismatch, resource limit or guest failure.
+    pub fn call_speech_parse_response(
+        &self,
+        state_json: &str,
+        response_json: &str,
+    ) -> Result<String, CallErrorV1> {
+        self.bounded(&[state_json, response_json])?;
+        let state_json = state_json.to_owned();
+        let response_json = response_json.to_owned();
+        self.call(|handle| {
+            handle
+                .instance
+                .speech()?
+                .token_station_speech_adapter_speech_adapter()
+                .call_parse_response(&mut handle.store, &state_json, &response_json)
+        })
+    }
+
     /// Opens one stream on its own instance.
     ///
     /// One instance per stream: `parse-stream-chunk` holds the unparsed tail
@@ -1060,6 +1174,9 @@ fn instantiate(
         IMAGE_WORLD => InstanceKind::Image(Box::new(
             crate::bindings::image::ImageAdapterV1::instantiate(&mut store, component, linker)?,
         )),
+        SPEECH_WORLD => InstanceKind::Speech(Box::new(
+            crate::bindings::speech::SpeechAdapterV1::instantiate(&mut store, component, linker)?,
+        )),
         PROVIDER_WORLD => InstanceKind::Provider(Box::new(ProviderAdapterV2::instantiate(
             &mut store, component, linker,
         )?)),
@@ -1139,6 +1256,12 @@ fn call_metadata(
         InstanceKind::Image(instance) => {
             let reported = instance
                 .token_station_image_adapter_image_adapter()
+                .call_metadata(&mut handle.store)?;
+            (reported.name, reported.version, reported.api_version)
+        }
+        InstanceKind::Speech(instance) => {
+            let reported = instance
+                .token_station_speech_adapter_speech_adapter()
                 .call_metadata(&mut handle.store)?;
             (reported.name, reported.version, reported.api_version)
         }

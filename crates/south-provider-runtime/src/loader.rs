@@ -251,7 +251,7 @@ fn gate_component(
                     .iter()
                     .any(|prefix| name.starts_with(prefix))
             }
-            // The embeddings and image worlds import nothing from any host: no
+            // The embeddings, image and speech worlds import nothing from any host: no
             // South interface at all, and no `host` interface of any package,
             // so a guest cannot reach a capability through another world's
             // namespace or a look-alike one.

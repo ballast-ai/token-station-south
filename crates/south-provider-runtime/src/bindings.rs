@@ -60,3 +60,12 @@ pub mod image {
         world: "image-adapter-v1",
     });
 }
+
+/// Pure speech exports; this world imports nothing from the host
+/// (2026-09-30 speech-world record, D1 and D5).
+pub mod speech {
+    wasmtime::component::bindgen!({
+        path: "../south-provider-api/wit/speech-adapter.wit",
+        world: "speech-adapter-v1",
+    });
+}

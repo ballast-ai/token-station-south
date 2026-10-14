@@ -19,8 +19,10 @@
 //!
 //! `declared` is built the same way in every world with [`WorldSchemaV1::value_channel`]: the
 //! embeddings world, whose `build-embeddings-request` receives a `ProviderConfig` too
-//! (`docs/design/2026-09-30-embeddings-contract.md` §16), and the image world, whose
-//! `model-capabilities` and `prepare` do (`docs/design/2026-09-30-image-world.md` §18.3).
+//! (`docs/design/2026-09-30-embeddings-contract.md` §16), the image world, whose
+//! `model-capabilities` and `prepare` do (`docs/design/2026-09-30-image-world.md` §18.3), and the
+//! speech world, whose exports of the same names do (`docs/design/2026-09-30-speech-world.md`
+//! §17.3).
 //! `host_values` stays with the worlds that admit request declarations (the provider world), and
 //! the task worlds receive an empty `declared`.
 
@@ -77,8 +79,8 @@ impl ComponentManifestV1 {
     /// Gate ① for the value channel: `host_values` from the closed vocabulary, once each, and only
     /// in a world with [`WorldSchemaV1::request_declarations`] (the provider world); credential
     /// attributes only in a world whose host builds `declared` ([`WorldSchemaV1::value_channel`]:
-    /// provider, embeddings and image); and no family whose config key and exported attribute
-    /// share a name.
+    /// provider, embeddings, image and speech); and no family whose config key and exported
+    /// attribute share a name.
     pub(crate) fn validate_component_values(
         &self,
         world: &WorldSchemaV1,
@@ -89,9 +91,10 @@ impl ComponentManifestV1 {
                 "host_values".to_owned(),
             ));
         }
-        // An embeddings or image host builds `declared` per attempt, as a provider host does
-        // (embeddings record §16, image record §18.3). No task host path builds it from a recipe;
-        // a word nothing honors would be a promise (as for the combined auth arm, §16 Q36).
+        // An embeddings, image or speech host builds `declared` per attempt, as a provider host
+        // does (embeddings record §16, image record §18.3, speech record §17.3). No task host path
+        // builds it from a recipe; a word nothing honors would be a promise (as for the combined
+        // auth arm, §16 Q36).
         if !world.value_channel {
             if self
                 .credentials
