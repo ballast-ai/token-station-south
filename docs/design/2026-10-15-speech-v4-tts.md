@@ -1,6 +1,7 @@
 # Speech world batch V4: Bailian Qwen-TTS, Vertex Gemini TTS and Azure Speech SSML TTS
 
-Status: accepted (lv reviewed it on 2026-10-15 and ruled SV-Q10 and SV-Q11 as recommended, §12). Not yet implemented.
+Status: accepted (lv reviewed it on 2026-10-15 and ruled SV-Q10 and SV-Q11 as recommended, §12); implemented on branch
+`speech-v4` (Implementation, below).
 
 Date: 2026-10-15
 
@@ -711,7 +712,183 @@ package-per-family (SV-Q1); upstream character rules (SV-Q7); configuration erro
   native shape); how a routed row's admin save check reads the SSML body rule and descriptor headers (§7 item 5, the open
   V3-1 §7 item 7).
 
+## Implementation (2026-10-15)
+
+What landed on branch `speech-v4` (on `origin/main` `33bd0e9`: V3-1 #221, V3-2 #224, V3-3 #226 and this record #225):
+
+- **`speech-qwen` 1.0.0** (new, family `bailian-qwen-speech`, `synthesize` and `artifact_fetch`) and **`speech-vertex`
+  1.0.0** (new, family `vertex-ai-speech`, `synthesize`): component crates, references `reference_qwen_speech.rs` and
+  `reference_vertex_speech.rs`, packs `fixtures-speech-qwen/` and `fixtures-speech-vertex/`, suite tests
+  `qwen_speech_suite` and `vertex_speech_suite`, sandbox parity tests `qwen_speech_sandbox_parity` and
+  `vertex_speech_sandbox_parity` (the latter also pins the four configuration refusals through the guest), build scripts,
+  `ci.yml` / `release.yml` entries, README and ARCHITECTURE entries.
+- **`speech-azure` 1.0.0** gains `synthesize` (SV-Q1 (b); unpublished, so no version move, §10): `prepare_synthesis` in
+  `reference_azure_speech.rs` with native's voice mapping, locale, escaper and SSML template as public functions
+  (`voice_id`, `xml_escape`, `ssml`), the output-format table and the declared-type `body` success; the manifest lists
+  `synthesize`; 62 `tts-` cases join the pack.
+- **SV-Q10** (`south-contracts`, inside `contracts.speech` 1): `SpeechArtifactFormV1::Url` gains `upgrade_insecure: bool`
+  (wire member written only when `true`, refused on the other forms, `false` read as the default); the pure function
+  `speech::upgrade_insecure_artifact_url_v1(&str) -> Cow<str>`; unit tests; the vector section `artifact_url_upgrade`
+  in `tests/vectors/speech-v1.json` (14 cases: `http`, `HTTP` and `hTtP` upgraded with query, fragment and an explicit
+  port 80 kept; `https` unchanged; `ftp`, a relative path, `http:` without `//` and a leading space unchanged and then
+  refused by the grammar; an upgraded loopback, `localhost`, metadata address and userinfo still refused) with
+  `speech_contract_v1::artifact_url_upgrade_vectors`; the `media_parsers` fuzz target checks that the upgrade changes
+  only the scheme and that what the grammar then admits is https. The suite's `second_hop_artifact` row applies the
+  function before `ArtifactUrlV1::parse` when the artifact asks for it.
+- **SV-Q11** (suite): `ssml_escaping` compares `input` less the characters XML 1.0 forbids with some element's text,
+  and, when the `voice` holds `<`, `&`, `'`, `"` or `>`, requires it (likewise less the forbidden characters) as a
+  substring of some attribute value; the special-characters requirement is unchanged. `ssml_check.rs` gains `is_xml_char`
+  and `without_forbidden` and refuses a forbidden character anywhere in the document and as a decimal or hexadecimal
+  reference (unit test `characters_xml_forbids_are_refused_raw_and_as_references`). The synthetic reference's pack passes
+  unchanged: no synthetic fixture changed.
+- **Shared modules** (§5 decision 2): `dashscope_error` moves from `reference_qwen_image.rs` into `bailian_image.rs`
+  unchanged; `gemini_image.rs` exposes `error_envelope`, `policy_envelope` and `POLICY_FINISH_REASONS` crate-wide;
+  `vertex_location.rs` is used unchanged; `speech_shared.rs` gains `url_outcome`, `declared_body_outcome` and
+  `non_2xx_with` (a family reader's envelope with the body-text fallback). `image-qwen`, `image-gemini` and `image-vertex`
+  keep their behaviour: their packs, suite tests and sandbox parity tests pass with no fixture changed.
+- **Tests**: `shipped_packages_v1` lists 37 official components and gains
+  `the_v4_speech_packages_declare_their_values_and_runtime`; the V3-3 test reads `speech-azure`'s two operations.
+
+| Package | Family | Operations | Auth | Pack | Suite test |
+|---|---|---|---|---|---|
+| `speech-qwen` | `bailian-qwen-speech` | `synthesize` (+ `artifact_fetch`) | `bearer` | 76 (2 capabilities, 40 prepare, 34 response) | 10 tests |
+| `speech-vertex` | `vertex-ai-speech` | `synthesize` | `bearer` (minted by `vertex_sa`) | 75 + 5 credential (2 capabilities, 48 prepare, 25 response) | 9 tests |
+| `speech-azure` | `azure-speech` | `transcribe`, `synthesize` | `header_secret` `ocp-apim-subscription-key` | 119 (62 added: 1 capabilities, 46 prepare, 15 response; 1 removed; 2 capability expectations updated) | 12 tests |
+
+**Fixtures.** Every expectation was written by hand before the first run, from §2 to §4 and the sources §7 item 11
+cites (`media_arms.rs:143-201`, `:347-411`, `:413-512`; `azure_tts_tests.rs`; `vertex_tts_tests.rs`;
+`mimo_tts_tests.rs:261-450`; the native functions of `tts.rs` and `tts_providers.rs` at `origin/dev-v2` `25824d1f`, whose
+speech files are byte-identical to the record's `98de0f64`); each pack's README names them. Non-Latin inputs are Hangul and
+Latin with diacritics. The Azure SSML strings are spelled out literally in the expectations. The 1 MiB case carries an
+input of 174,751 bytes whose escaped document is 1,048,577 bytes; the case exactly at the bound (whose expectation would
+hold a 1 MiB string) is pinned by name in `azure_speech_suite::the_ssml_is_bounded_by_the_text_body_limit` instead.
+
+**`south_runtime` choices.** All three declare 0.64.0, the first runtime with the speech world, its value channel, its
+minted-slot admission and gate ①'s `artifact_fetch` rule; none uses media 2 or 3, a declared query parameter or a
+manifest field newer than 0.64.0 (`speech-vertex`'s `config_schema` and `credentials` are admitted in the speech world
+since S-S-2). `check-declared-runtime.sh --build` loads every package under the runtime it declares, and the published
+0.64.0 runtime (a detached checkout of tag `v0.64.0`) admits all three (Gate results). As §10 says, `speech-qwen`'s
+`upgrade_insecure` member would be refused by a 0.64.0 `south-contracts` when a host parses the outcome; no host admits a
+speech package before S-S-5 records `contracts.speech` 1 with the member in it, so the declaration (what gate ① admits)
+does not move.
+
+**Versions (§10, Q47).** None move. `git diff v0.64.0 HEAD` shows V3-1 already moved `south-contracts` (0.55.0 →
+0.56.0), `south-provider-api` (0.57.0 → 0.58.0) and `south-component-conformance` (0.63.0 → 0.64.0) in this unreleased
+cycle and patched every package published with 0.64.0 (for example `image-qwen` 1.0.7 → 1.0.8, `image-vertex` 1.0.1 →
+1.0.2, `task-wan-image-v2` 0.35.22 → 0.35.23), so the contract member, the suite changes, the moved readers and the two
+references ride those versions and no package is patched again. `south-provider-api` is unchanged.
+
+### Interpretations
+
+1. **The Qwen 2xx `code` predicate** is the record's "a non-empty string `code`" (§2.2 step 2). `image-qwen`'s own
+   predicate, which is not shared, also counts a non-string `code` and ignores a blank one; it is unchanged (open
+   question 1).
+2. **A Qwen `output.audio.url` of `""`** is `unknown` "a 2xx without audio", like a missing or non-string URL: an empty
+   string names no audio, and the suite's `empty_audio_is_unknown` reads it so (`response.url-empty`). The record lists
+   only "not a string"; native would fetch `""` and fail with 500.
+3. **Qwen `instructions` elided** on an `instruct` model is forwarded as an `as_is` reference (V3-1 interpretation 4),
+   as `language_type` is; on another model it is dropped like any `instructions`.
+4. **Qwen refusal order**: the operation and metering forms, a JSON body, `input`, then `response_format`; `voice`,
+   `language_type` and `instructions` never refuse.
+5. **Vertex refusal order**: the location (a 500 naming the key) first, then the operation and metering forms, the JSON
+   body, `input` and `response_format`, as `image-vertex` reads its location before the shared `prepare`.
+6. **Vertex `""` and padded formats**: the format is lower-cased, not trimmed, as native; `""` and `" wav"` are refused
+   with the unknown-format text, naming the lower-cased value.
+7. **Vertex audio part**: native's `find_map` is reproduced exactly: the first part of `candidates[0]` that has an
+   `inlineData.data` member decides; a string or a host placeholder of at least one byte is audio, a 0-byte one or `""`
+   is "a 2xx without audio", and any other JSON type falls to step 3 (block reason, policy finish, else no audio). Every
+   candidate's `finishReason` is read for the policy table, as `gemini_image` reads it; `NO_IMAGE`, an image-only reason
+   in the shared table, can therefore mark a speech answer too (open question 2).
+8. **Azure `state`** carries `"op": "synthesize"` beside the record's `format` and `characters`, because one package
+   parses both operations and the V3-3 transcription state already has a `format` member.
+9. **Azure refusal order**: the operation and metering forms, a JSON body, `input`, `response_format`, an elided
+   `voice`, and last the 1 MiB bound on the built document.
+10. **Azure capabilities**: `asr_shared::capabilities` with the synthesis form gives every model `[synthesize,
+    transcribe]` and `[characters, seconds]`; the record writes `[transcribe, synthesize]`, the same set (a manifest's
+    capabilities and a declaration's operations are sets). The manifest lists `["transcribe", "synthesize"]` as the record
+    does.
+11. **The `x-microsoft-outputformat` header** is written lower-case, as every descriptor header is; native writes
+    `X-Microsoft-OutputFormat` (HTTP names are case-insensitive).
+12. **SV-Q11 and the voice**: the voice is compared less the forbidden characters too (the record states the removal for
+    `input`; without it a voice holding both a special and a forbidden character could never pass). The row's own text
+    now reports which comparison failed.
+13. **An explicit `"upgrade_insecure": false`** on a `url` artifact is read as the default and not written back, so the
+    member's canonical wire form is "present only when `true`".
+
+### Points that contradict the record (flagged, not silently chosen)
+
+- **§5 names `reference_integrity` for Qwen's `url` pointer** ("lands on an unelided string"). The suite's
+  `reference_integrity` row has no `url` branch; the pointer's string is judged by `second_hop_artifact`, which reads the
+  unelided body and so covers the same property. The row was not extended.
+- **§1's table puts the pure function in `south-contracts::speech`; §2.5 says "in `south-contracts`".** It is
+  `south_contracts::speech::upgrade_insecure_artifact_url_v1`, beside the member it serves (the record's §5 decision 5
+  keeps it speech-only).
+
+### Open questions
+
+1. Should `image-qwen`'s broader 2xx `code` predicate (interpretation 1) and the speech one be unified in
+   `bailian_image.rs`? Moving `image-qwen` to the record's narrower rule would change its behaviour (a non-string `code`
+   would no longer be `unknown`), so it is left for lv.
+2. `POLICY_FINISH_REASONS` is the image table and holds `NO_IMAGE` and three `IMAGE_*` words; whether Gemini TTS reports
+   an audio counterpart is unverified (§13). Shared as the record says; a speech-specific table would be a later minor.
+3. For the release (S-S-5): add `"speech": 1` to the three manifests with the other speech packages, and record the
+   `upgrade_insecure` member in `contracts.speech` 1; no runtime moves. `speech-vertex` 1.1.0 (Q7's refusal) follows the
+   host's acceptance of the Vertex TTS dual run, in a later release.
+4. The host items of §7 (and V3-1 §7, V3-2 §4, V3-3 §6) remain prerequisites of any cutover; §11's measurements are
+   listed in each pack's README.
+
+### Gate results
+
+Run on 2026-10-15 against the final tree (macOS), mirroring `.github/workflows/ci.yml`, with `set -o pipefail`:
+
+| Gate | Result |
+|---|---|
+| `cargo fmt --all -- --check` | clean |
+| `cargo clippy --workspace --all-targets --all-features -- -D warnings` | clean |
+| `PROPTEST_CASES=32 cargo nextest run --workspace --all-features` | 2,126 passed, 4 skipped, 0 failed (the sandbox parity tests included) |
+| `cargo test --workspace --doc --all-features` | 3 passed |
+| `cargo test --workspace --no-default-features` | 1,960 passed, 2 ignored, 0 failed |
+| `RUSTDOCFLAGS=-D warnings cargo doc --workspace --no-deps --all-features` | clean |
+| `cargo check --manifest-path fuzz/Cargo.toml --all-targets --locked` | passed |
+| `scripts/check-boundaries.sh --self-test`, `scripts/check-boundaries.sh` | passed |
+| `python3 -m unittest discover -s scripts -p 'test_*.py'` | 72 passed |
+| `scripts/check-language.sh` (files, and its self-test) and `--commits` | passed |
+| `cargo machete` (workspace and `fuzz/`) | no unused dependency |
+| every `scripts/build-*-component.sh` | 37 built |
+| `scripts/check-declared-runtime.sh --build` | every package loads under the runtime it declares (the nine speech packages under this tree, 0.64.0) |
+
+`speech-qwen`, `speech-vertex` and `speech-azure` were also loaded by the published 0.64.0 runtime itself (a detached
+checkout of tag `v0.64.0`, `declared_runtime_v1`): all three are admitted.
+
+**First run.** Every pack expectation was written by hand before the first compile. Clippy asked for four changes (two
+doc paragraphs, a `contains`, a simplified boolean); the Qwen, Vertex and Azure packs then passed on their first run with
+no expectation changed. Two test-side corrections, not expectation changes: the Azure `content_type` field of a response
+case does not reach the view's headers, so the cases that pin the relabelling also carry `headers` (the mutation that
+echoes the upstream's type stayed green until then); and `declared_keys` includes the exported `project_id`, which the
+`shipped_packages_v1` assertion first omitted.
+
+**Mutations** (each applied to the source, the named test binaries run, the file restored from a copy):
+
+| Mutation | Turned red |
+|---|---|
+| SV-Q10: the upgrade rewrites any `scheme://` prefix (accepting `ftp` and others) | `speech::tests::only_an_insecure_prefix_is_upgraded`, `speech_contract_v1::artifact_url_upgrade_vectors` |
+| SV-Q10: the upgrade skipped | the same two, `qwen_speech_suite::the_audio_is_an_upgradable_url_artifact`, `::the_reference_passes_its_own_pack` (`second_hop_artifact` on `response.native`) |
+| SV-Q11: `input` compared without removing the forbidden characters | `azure_speech_suite::the_reference_passes_its_own_pack` (`synthetic_speech_suite` stays green) |
+| SV-Q11: the voice required as an exact attribute value | `azure_speech_suite::the_reference_passes_its_own_pack` (`synthetic_speech_suite` stays green) |
+| Vertex Q7: `mp3` / `opus` / `aac` / `flac` no longer served as WAV | `vertex_speech_suite::q7_transcode_only_formats_degrade_to_wav`, `::the_container_follows_the_format`, `::the_reference_passes_its_own_pack` |
+| Bailian: a 2xx `code` no longer `unknown` | `qwen_speech_suite::a_2xx_carrying_a_code_is_unknown`, `::the_reference_passes_its_own_pack` |
+| Azure: the 1 MiB SSML refusal removed | `azure_speech_suite::the_ssml_is_bounded_by_the_text_body_limit`, `::the_reference_passes_its_own_pack` |
+
+The suite tests also carry wrapper mutations that must turn named cases red (`every_qwen_mutation_turns_the_pack_red`:
+no upgrade, a 2xx `code` ignored, SV-Q7 dropped; `every_vertex_mutation_turns_the_pack_red`: Q7 refused early, no
+container, a blocked prompt as `unknown`; `every_azure_synthesis_mutation_turns_the_pack_red`: no SSML bound, an
+unescaped voice, forbidden characters as references, the upstream `content-type` echoed), and the V3-1 break module
+turns its row red on all three packs.
+
 ## Revision note
 
 - 2026-10-15: first draft (proposed).
 - 2026-10-15: lv accepted the record and ruled SV-Q10 and SV-Q11 as recommended (§12); status accepted.
+- 2026-10-15: Implementation section added (what landed, thirteen interpretations, two points that contradict the record:
+  `reference_integrity` has no `url` branch and the function's module; two open questions; gate results and mutations);
+  status implemented on branch `speech-v4`. No design decision of this record changed.

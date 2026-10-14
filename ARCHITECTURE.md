@@ -212,6 +212,24 @@ misread as a boundary violation.
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
 This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.64.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.58.0 and 0.64.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**Unreleased (speech world batch V4: Bailian, Vertex and Azure SSML TTS; SV-Q10, SV-Q11)**: design record
+`docs/design/2026-10-15-speech-v4-tts.md` (accepted 2026-10-15, SV-Q10 and SV-Q11 as recommended; proposed for the next
+release, with V3-1 to V3-3). Two new synthesis packages, each 1.0.0, media 1 and `south_runtime` 0.64.0: `speech-qwen`
+(family `bailian-qwen-speech`, `bearer`, `artifact_fetch`; the audio is a `url` artifact) and `speech-vertex`
+(`vertex-ai-speech`, `image-vertex`'s configuration keys and `vertex_sa` credentials section byte for byte; an `inline`
+artifact in the `wav_pcm_s16le` container; Q7's silent downgrade of `mp3` / `opus` / `aac` / `flac` to WAV until the dual
+run is accepted). `speech-azure` gains SSML synthesis at its unpublished 1.0.0 (a `text` body over `TextPostRequestV1`,
+native's template and escaper, `x-microsoft-outputformat` from native's table, a document above 1 MiB refused before
+dispatch). Contract (inside `contracts.speech` 1, which S-S-5 records first, so no number moves): the `url` artifact
+form gains the optional `upgrade_insecure` member and `south-contracts` the pure function
+`upgrade_insecure_artifact_url_v1` (an `http://` prefix, any case, becomes `https://`; nothing else changes), which a
+host applies before the unchanged `ArtifactUrlV1` grammar and safe fetch rules (vectors `artifact_url_upgrade` in
+`speech-v1.json`). Suite: `second_hop_artifact` applies the upgrade first; `ssml_escaping` compares `input` less the
+characters XML 1.0 forbids and requires a voice holding an XML special character only as an attribute substring, and
+`ssml_check.rs` refuses those forbidden characters raw or as references (SV-Q11). Shared modules: the DashScope error
+reader moves into `bailian_image.rs` (`image-qwen` unchanged), Google's error envelope and policy table become
+crate-visible in `gemini_image.rs`, `speech_shared.rs` gains the `url` and declared-type `body` successes. No crate
+version moves: this unreleased cycle already moved the three guest-linked crates.
 **Unreleased (speech world batch V3-3: OpenAI-compatible, xAI, ElevenLabs and Azure ASR)**: design record
 `docs/design/2026-10-14-speech-v3-3-asr.md` (accepted 2026-10-15, SV-Q8 and SV-Q9 as recommended; proposed for the next
 release, with V3-1 and V3-2). Recognition arrives as a later version of each family's package (SV-Q1 (b)); the three

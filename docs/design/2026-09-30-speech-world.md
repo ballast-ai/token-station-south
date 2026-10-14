@@ -1285,3 +1285,7 @@ None of the four S-S-3 questions needed a new ruling; each is settled by precede
   Implementation): `transcribe` added at 1.0.0 to `speech-openai-compatible` (with `translate`), `speech-xai` and
   `speech-elevenlabs`, and `speech-azure` 1.0.0 (`transcribe` only); SV-Q8 and SV-Q9 as ruled. No design decision of
   this record changed.
+- 2026-10-15: batch V4 implemented on branch `speech-v4` ([V4 record](2026-10-15-speech-v4-tts.md), Implementation):
+  `speech-qwen` and `speech-vertex` 1.0.0, SSML synthesis added to `speech-azure` 1.0.0; SV-Q10 (`upgrade_insecure` on the
+  `url` form, inside `contracts.speech` 1) and SV-Q11 (`ssml_escaping` reading, `ssml_check.rs` held to XML 1.0 `Char`) as
+  ruled. No design decision of this record changed.
