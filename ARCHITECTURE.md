@@ -211,7 +211,7 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.62.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.54.0, 0.55.0 and 0.61.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.62.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.54.0, 0.55.0 and 0.62.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
 **Unreleased (image world step I3-3: `image-vertex`)**: Nano Banana on Vertex AI (design record
 `docs/design/2026-10-13-image-i3-3-vertex.md`, accepted 2026-10-14; proposed for the next release). `image-vertex` 1.0.0
 (family `vertex-ai-image`, `bearer` on the slot `provider_api_key`, which the `vertex_sa` credential recipe mints) is the
@@ -219,10 +219,10 @@ first image package with a credential recipe; its `config_schema` (`region`, opt
 are `embeddings-vertex`'s byte for byte, and the two references share the crate-private location rules
 `vertex_location`. It serves generation only, `POST v1/projects/{project}/locations/{region}/publishers/google/models/
 {model}:generateContent` with each segment percent-encoded; the body, `n` as `repeat`, the response reader, metering and
-render are `image-gemini`'s shared module. It declares `contracts` `{image: 1, media: 2}` and, until the release commit
-moves it, this tree's `south_runtime`. No contract or `south-provider-api` change: the image world has admitted
-`config_schema` and exported credential attributes since 0.52.0. `south-component-conformance` stays at the unreleased
-0.61.0 of task contract 8 (#205), so no other package changes identity.
+render are `image-gemini`'s shared module. It declares `contracts` `{image: 1, media: 2}` and `south_runtime` 0.59.0, the
+first runtime with media 2. No contract or `south-provider-api` change: the image world has admitted `config_schema` and
+exported credential attributes since 0.52.0. Under Q47 `south-component-conformance` moves to 0.62.0, so every package
+published with 0.62.0 takes a patch with unchanged behaviour and keeps its `south_runtime` and its `contracts`.
 **v0.62.0 (the Kiro step: `provider-kiro`; task contract 8 and `task-gemini-omni-v2`)**: release record
 `docs/design/2026-10-14-release-0.62.0.md`. The Kiro step: the Kiro upstream as a package (design record
 `docs/design/2026-09-30-kiro-provider-component.md`, accepted 2026-10-13 with six rulings provisional until a

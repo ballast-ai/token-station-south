@@ -278,7 +278,7 @@ implementation.
 
 ## Implementation (2026-10-14)
 
-What landed, on branch `image-vertex` (rebased on `origin/main` = `bcfcd45`, after task contract 8, #205; the latest release is 0.61.0):
+What landed, on branch `image-vertex` (rebased on `origin/main` = `3f9ac00`, release 0.62.0, #208; `image-vertex` ships in the next release, 0.63.0):
 
 - **`image-vertex` 1.0.0**: manifest (family `vertex-ai-image`, `image-adapter-v1`, capabilities `["generate"]`,
   `auth_arms` `["bearer"]`, `permissions.secrets` `["provider_api_key"]`, `contracts` `{image: 1, media: 2}`; the
@@ -303,16 +303,35 @@ shared `prepare` before building the route turns `a_configuration_error_is_a_500
 component that drops the `project` override fails the `prepare.project-override` row; one that accepts any Vertex AI base
 URL fails the `region-mismatch` and `global-prefixed-host` configuration rows.
 
-Versions (§9 is stale on numbers): since the 0.61.0 release `south-component-conformance` has already moved twice for
-unreleased work, 0.59.0 → 0.60.0 for the Kiro step (#204) and 0.60.0 → 0.61.0 for task contract 8 (#205), and every
-published package already took its patch there. The new reference and `vertex_location.rs` change the crate again, but no
-release has carried 0.61.0, so it is not bumped again and no other package is re-patched; only `image-vertex` (1.0.0,
-with its own lockfile) is added. `south-contracts` (0.54.0) and `south-provider-api` (0.55.0) are as #205 left them; no
-`compatibility.json` change. `image-vertex` declares `south_runtime` 0.59.0, the oldest runtime it needs: `contracts.media`
-2 first shipped there (as for `image-gemini`), and the image world's value channel is older (0.52.0). This replaces §9's
-"the tree's release until the release commit moves it", which was written when media 2 was assumed to be new in this
-release; the package was loaded under the v0.59.0 runtime's `declared_runtime_v1` before the change, and
-`scripts/check-declared-runtime.sh --build` judges it with the v0.59.0 tag.
+Versions (§9 is stale on numbers; Q47 against the previous release, v0.62.0): the new reference, `vertex_location.rs` and
+the suite rows change `south-component-conformance`, which every guest links, so it moves 0.61.0 (as 0.62.0 published it)
+→ 0.62.0; every component lockfile and `fuzz/Cargo.lock` follow. Every package published with 0.62.0 takes a patch with
+unchanged behaviour and keeps its `south_runtime` and its `contracts` (`embeddings-vertex` 1.0.13 → 1.0.14 only calls the
+location rules from their new module); `shipped_packages_v1::i3_3_retires_every_published_062_package_identity` pins
+each, and `task_contract_8_retires_every_kiro_step_package_identity` no longer pins the identities it left.
+`south-contracts` (0.54.0) and `south-provider-api` (0.55.0) are unchanged since v0.62.0; no `compatibility.json` change.
+
+| Item | Published in 0.62.0 | Now |
+|---|---|---|
+| `south-component-conformance` | 0.61.0 | 0.62.0 |
+| `image-vertex` | — | 1.0.0 (`contracts` `{image: 1, media: 2}`, `south_runtime` 0.59.0) |
+| `image-azure` / `image-gemini` / `image-ideogram` / `image-minimax` / `image-qwen` / `image-stability` | 1.0.10 / 1.0.4 / 1.0.2 / 1.0.5 / 1.0.5 / 1.0.3 | 1.0.11 / 1.0.5 / 1.0.3 / 1.0.6 / 1.0.6 / 1.0.4 |
+| `embeddings-openai-compatible` / `embeddings-gemini` / `embeddings-vertex` | 1.0.14 / 1.1.11 / 1.0.13 | 1.0.15 / 1.1.12 / 1.0.14 |
+| `provider-openai-compatible` | 2.6.6 | 2.6.7 |
+| `provider-anthropic`, `provider-anthropic-bedrock-invoke`, `provider-bedrock-converse`, `provider-bedrock-converse-bearer` | 1.1.6 | 1.1.7 |
+| `provider-gemini`, `provider-openai-responses` | 1.3.6 | 1.3.7 |
+| `provider-kiro` | 1.0.1 | 1.0.2 |
+| `task-kling` / `task-kling-v2` | 1.0.23 / 0.32.21 | 1.0.24 / 0.32.22 |
+| `task-minimax-v2`, `task-bailian-v2` | 0.31.20 | 0.31.21 |
+| `task-xai-v2`, `task-veo-v2`, `task-wan-image-v2`, `task-gmi-image-v2` | 0.35.20 | 0.35.21 |
+| `task-byteplus-v2` | 0.36.20 | 0.36.21 |
+| `task-gemini-omni-v2` | 0.1.0 | 0.1.1 |
+
+`image-vertex` declares `south_runtime` 0.59.0, the oldest runtime it needs: `contracts.media` 2 first shipped there (as
+for `image-gemini`), and the image world's value channel is older (0.52.0). This replaces §9's "the tree's release until
+the release commit moves it", which was written when media 2 was assumed to be new in this release; the package was
+loaded under the v0.59.0 runtime's `declared_runtime_v1` before the change, and `scripts/check-declared-runtime.sh
+--build` judges it with the v0.59.0 tag. The release commit leaves the declaration alone.
 
 Departures and interpretations:
 
@@ -358,3 +377,6 @@ Departures and interpretations:
 - 2026-10-14: lv reviewed and accepted the record, including the §8 decisions; status accepted. Implemented on branch
   `image-vertex` (Implementation section, six departures or interpretations); the corrections to the parent record are
   applied there.
+- 2026-10-14: rebased on release 0.62.0 (#208). Q47 now applies against v0.62.0: `south-component-conformance` 0.61.0 →
+  0.62.0 and every package published with 0.62.0 takes a patch (Implementation, versions table); `image-vertex` ships in
+  0.63.0 and keeps `south_runtime` 0.59.0.
