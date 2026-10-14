@@ -1,15 +1,17 @@
 //! Typed speech-v1 host seam over the shared bounded component runtime.
 //!
 //! Each call encodes its inputs as the guest's [`crate::abi_speech`] shim decodes them, and decodes
-//! the answer with the strict codecs a host uses (`parse_prepared_speech_call_v1`,
-//! `parse_speech_model_capabilities_v1`, [`crate::speech_json`]), so a frame the suite accepts from
-//! the sandbox is one a host would accept too.
+//! the answer with the strict codecs a host uses (`parse_prepared_speech_call_with_declared_v1`
+//! with the package's own declared query parameters, `parse_speech_model_capabilities_v1`,
+//! [`crate::speech_json`]), so a frame the suite accepts from the sandbox is one a host would
+//! accept too (speech world batch V3-1 record §6, host obligations 1 and 2).
 
 use serde_json::Value;
+use south_contracts::DeclaredQueryParameterV1;
 use south_contracts::media::MediaLimitsV1;
 use south_contracts::speech::{
     PreparedSpeechCallV1, SpeechCallContextV1, SpeechModelCapabilitiesV1,
-    parse_prepared_speech_call_v1, parse_speech_model_capabilities_v1,
+    parse_prepared_speech_call_with_declared_v1, parse_speech_model_capabilities_v1,
 };
 use south_provider_api::ComponentMetadataV1;
 use south_provider_runtime::{CallErrorV1, LoadedComponentV1};
@@ -34,6 +36,8 @@ fn encode<T: serde::Serialize>(value: &T) -> ComponentResultV1<String> {
 #[derive(Debug)]
 pub struct SandboxedSpeechComponentV1 {
     component: LoadedComponentV1,
+    /// The package's own declared query parameters, built once from its admitted manifest.
+    declared: Vec<DeclaredQueryParameterV1>,
 }
 impl SandboxedSpeechComponentV1 {
     /// Refuses a different world without consuming the loaded component.
@@ -42,7 +46,12 @@ impl SandboxedSpeechComponentV1 {
     /// Returns the original component when its world is not `speech-adapter-v1`.
     pub fn new(component: LoadedComponentV1) -> Result<Self, Box<LoadedComponentV1>> {
         if component.manifest().api_version == south_provider_api::SPEECH_WORLD {
-            Ok(Self { component })
+            // The load gates already admitted the manifest, so its declarations convert; a
+            // package whose declarations did not would have no descriptor a host admits.
+            let declared = crate::DeclaredInstancesV1::from_manifest(component.manifest())
+                .map(|instances| instances.query_parameters().to_vec())
+                .unwrap_or_default();
+            Ok(Self { component, declared })
         } else {
             Err(Box::new(component))
         }
@@ -75,7 +84,8 @@ impl SpeechComponentV1 for SandboxedSpeechComponentV1 {
             .component
             .call_speech_prepare(&encode(config)?, &encode(request)?, &encode(context)?)
             .map_err(seam_error)?;
-        parse_prepared_speech_call_v1(&raw, &MediaLimitsV1::V1).map_err(internal)
+        parse_prepared_speech_call_with_declared_v1(&raw, &MediaLimitsV1::V1, &self.declared)
+            .map_err(internal)
     }
     fn parse_response(
         &self,

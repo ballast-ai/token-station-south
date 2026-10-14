@@ -232,3 +232,99 @@ fn render_vectors() {
         );
     }
 }
+
+/// The `syntax` word of a vector declaration, as a manifest spells it.
+fn query_syntax(word: &str) -> south_contracts::QueryValueSyntaxV1 {
+    match word {
+        "token" => south_contracts::QueryValueSyntaxV1::Token,
+        "digits" => south_contracts::QueryValueSyntaxV1::Digits,
+        "date" => south_contracts::QueryValueSyntaxV1::Date,
+        other => panic!("a vector syntax word: {other}"),
+    }
+}
+
+/// The refusal a vector names, as the descriptor parser reports it.
+fn descriptor_error(word: &str) -> south_contracts::media::MediaDescriptorErrorV1 {
+    use south_contracts::ContractErrorV1;
+    use south_contracts::media::MediaDescriptorErrorV1;
+    match word {
+        "unsanctioned_query" => MediaDescriptorErrorV1::UnsanctionedQuery,
+        "invalid_query_value" => {
+            MediaDescriptorErrorV1::Contract(ContractErrorV1::InvalidQueryValue)
+        }
+        "duplicate_query_parameter" => {
+            MediaDescriptorErrorV1::Contract(ContractErrorV1::DuplicateQueryParameter)
+        }
+        other => panic!("a vector error word: {other}"),
+    }
+}
+
+/// `contracts.media` 3 (speech world batch V3-1 record §6): a descriptor query entry may name a
+/// parameter the package declares. Each case is parsed with and without the declarations.
+#[test]
+fn declared_query_vectors() {
+    use south_contracts::DeclaredQueryParameterV1;
+    use south_contracts::media::MediaRequestDescriptorV1;
+    let vectors = vectors();
+    let section = &vectors["descriptor_declared_query"];
+    let cases = section["cases"].as_array().expect("cases");
+    assert!(!cases.is_empty());
+    for case in cases {
+        let name = case["name"].as_str().expect("name");
+        let declared: Vec<DeclaredQueryParameterV1> = case["declarations"]
+            .as_array()
+            .expect("declarations")
+            .iter()
+            .map(|entry| {
+                DeclaredQueryParameterV1::try_new(
+                    entry["name"].as_str().expect("name"),
+                    query_syntax(entry["syntax"].as_str().expect("syntax")),
+                )
+                .expect("a valid declaration")
+            })
+            .collect();
+        let text = case["descriptor"].as_str().expect("descriptor");
+        for (key, declarations) in
+            [("with_declarations", declared.as_slice()), ("without_declarations", &[][..])]
+        {
+            let expected = &case[key];
+            let parsed = MediaRequestDescriptorV1::parse_with_declared(
+                text,
+                &MediaLimitsV1::V1,
+                declarations,
+            );
+            if let Some(error) = expected["error"].as_str() {
+                assert_eq!(parsed.map(|_| ()), Err(descriptor_error(error)), "{name}: {key}");
+            } else {
+                let descriptor = parsed.unwrap_or_else(|error| panic!("{name}: {key}: {error}"));
+                assert_eq!(
+                    descriptor.query().map(south_contracts::QueryStringV1::as_str),
+                    expected["query"].as_str(),
+                    "{name}: {key}"
+                );
+                assert_eq!(
+                    u64::from(descriptor.minimum_contract_version()),
+                    expected["minimum_contract_version"].as_u64().expect("a version"),
+                    "{name}: {key}"
+                );
+            }
+        }
+        // `parse` is the same call with no declarations.
+        assert_eq!(
+            MediaRequestDescriptorV1::parse(text, &MediaLimitsV1::V1),
+            MediaRequestDescriptorV1::parse_with_declared(text, &MediaLimitsV1::V1, &[]),
+            "{name}"
+        );
+    }
+    for refused in section["declaration_refusals"].as_array().expect("refusals") {
+        assert_eq!(
+            DeclaredQueryParameterV1::try_new(
+                refused["name"].as_str().expect("name"),
+                query_syntax(refused["syntax"].as_str().expect("syntax")),
+            )
+            .map(|_| ()),
+            Err(south_contracts::ContractErrorV1::InvalidQueryDeclaration),
+            "{refused}"
+        );
+    }
+}

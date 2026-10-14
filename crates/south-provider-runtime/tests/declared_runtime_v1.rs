@@ -71,7 +71,7 @@ fn this_runtime_only() -> HostRangeV1 {
     // The image world's two contracts, from the first runtime that knows the world (0.52.0);
     // read only where the record has them, for the reason given for embeddings. As for
     // embeddings, the record names the newest contract and a host decodes every one up to it
-    // (`media` 2 from image world step I3-2).
+    // (`media` 2 from image world step I3-2, `media` 3 from speech world batch V3-1).
     for name in ["media", "image"] {
         if let Some(number) = record["contracts"].get(name) {
             contracts.insert(name.to_owned(), (1..=as_u32(number, name)).collect());

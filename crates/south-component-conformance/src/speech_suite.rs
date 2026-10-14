@@ -24,9 +24,10 @@
 //! API has it).
 //!
 //! The suite always runs with the package's manifest: its `auth_arms` are what
-//! `DescriptorAuthWithinManifest` judges, its declared keys what `UndeclaredValuesIgnored` stays
-//! clear of, its `secret_headers` what the response view drops, and its `artifact_fetch` what
-//! `SecondHopArtifact` requires.
+//! `DescriptorAuthWithinManifest` judges, its `query_parameters` the only names besides the
+//! sanctioned ones a prepared call's query may carry (`EndpointConfinement`, `contracts.media` 3),
+//! its declared keys what `UndeclaredValuesIgnored` stays clear of, its `secret_headers` what the
+//! response view drops, and its `artifact_fetch` what `SecondHopArtifact` requires.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -39,7 +40,7 @@ use south_contracts::media::{
 use south_contracts::speech::{
     PreparedSpeechCallV1, SpeechArtifactFormV1, SpeechCallContextV1, SpeechCharacterSourceV1,
     SpeechMeteringFormV1, SpeechMeteringV1, SpeechModelCapabilitiesV1, SpeechOperationV1,
-    TranscriptDeliveryV1, check_required_metering_v1,
+    TranscriptDeliveryV1, check_required_metering_v1, parse_prepared_speech_call_with_declared_v1,
 };
 use south_provider_api::ComponentManifestV1;
 use token_station_protocol::{ErrorCode, ErrorEnvelope, ProviderConfig};
@@ -131,6 +132,8 @@ struct Suite<'a> {
     component: &'a dyn SpeechComponentV1,
     pack: &'a SpeechFixturePackV1,
     manifest: &'a ComponentManifestV1,
+    /// The manifest's declared query parameters, as a host builds them once at load.
+    declared_query: Vec<south_contracts::DeclaredQueryParameterV1>,
 }
 
 fn host_unknown(reason: &str) -> SpeechOutcomeV1 {
@@ -282,7 +285,10 @@ pub fn run_speech_component_suite_v1(
     pack: &SpeechFixturePackV1,
     manifest: &ComponentManifestV1,
 ) -> ReportV1 {
-    let suite = Suite { component, pack, manifest };
+    let declared_query = crate::DeclaredInstancesV1::from_manifest(manifest)
+        .map(|instances| instances.query_parameters().to_vec())
+        .unwrap_or_default();
+    let suite = Suite { component, pack, manifest, declared_query };
     let mut outcomes = coverage(pack);
     let mut declared_models: Vec<SpeechModelCapabilitiesV1> = Vec::new();
     let mut tally = Tally::default();
@@ -512,8 +518,25 @@ fn prepare_checks(
             format!("the descriptor references blobs the view does not hold: {dangling:?}"),
         )
     });
-    // The descriptor parsed, so its path is relative and within the grammar.
-    outcomes.push(OutcomeV1::passed(CheckV1::EndpointConfinement, &case.name));
+    // The prepared call as a host parses it: with the package's own declared query parameters
+    // and no others (`contracts.media` 3, V3-1 record §6, host obligations 1 and 2). A descriptor
+    // that names a query parameter its package does not declare is refused before admission.
+    outcomes.push(
+        match parse_prepared_speech_call_with_declared_v1(
+            &prepared.to_json(),
+            &MediaLimitsV1::V1,
+            &suite.declared_query,
+        ) {
+            Ok(_) => OutcomeV1::passed(CheckV1::EndpointConfinement, &case.name),
+            Err(error) => OutcomeV1::failed(
+                CheckV1::EndpointConfinement,
+                &case.name,
+                format!(
+                    "a host refuses the prepared call under the package's declarations: {error}"
+                ),
+            ),
+        },
+    );
     outcomes.push(
         match admit_media_descriptor_auth(
             suite.manifest,
