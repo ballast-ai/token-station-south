@@ -1265,3 +1265,7 @@ None of the four S-S-3 questions needed a new ruling; each is settled by precede
   refusal of `response_body_form: sse` before dispatch is a separate image change.
 - 2026-10-14: the S-S-4 batch V3-1 design (OpenAI-compatible, xAI, Groq and ElevenLabs TTS, and `contracts.media` 3) is
   proposed in [`2026-10-14-speech-v3-1-tts.md`](2026-10-14-speech-v3-1-tts.md). No design decision of this record changed.
+- 2026-10-14: batch V3-1 implemented on branch `speech-v3-1` ([V3-1 record](2026-10-14-speech-v3-1-tts.md),
+  Implementation): `speech-openai-compatible`, `speech-xai`, `speech-groq` and `speech-elevenlabs` 1.0.0 and
+  `contracts.media` 3. Until S-S-5 records `contracts.speech`, the packages declare `contracts` `{media: 1}` (or 3)
+  only, as the synthetic guest does (S-S-3 interpretation 16). No design decision of this record changed.
