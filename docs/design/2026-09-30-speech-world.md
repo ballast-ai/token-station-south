@@ -3,7 +3,7 @@
 Status: **accepted 2026-10-08, with Q10 and Q11 open** (neither blocks the contract, §16; reconciled with south 0.50.0 in
 §17; implementation outline in §18); proposed 2026-09-30 by the host team (token-station-server P21/P22/P23); steps S-S-1 to S-S-3
 implemented and released in 0.64.0 without `contracts.speech`; S-S-4 (batches V3-1, V3-2, V3-3 and V4) and S-S-5
-implemented; declared in `contracts.speech` 1, to be released in 0.65.0 (S-S-5 implementation, below)
+implemented; declared in `contracts.speech` 1, released in 0.65.0 (release record `2026-10-15-release-0.65.0.md`) (S-S-5 implementation, below)
 
 Date: 2026-09-30
 
