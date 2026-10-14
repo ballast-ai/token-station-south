@@ -1271,3 +1271,6 @@ None of the four S-S-3 questions needed a new ruling; each is settled by precede
   only, as the synthetic guest does (S-S-3 interpretation 16). No design decision of this record changed.
 - 2026-10-14: the S-S-4 batch V3-2 design (MiMo and MiniMax TTS) is proposed in
   [`2026-10-14-speech-v3-2-tts.md`](2026-10-14-speech-v3-2-tts.md). No design decision of this record changed.
+- 2026-10-14: the S-S-4 batch V3-3 design (OpenAI-compatible, xAI, ElevenLabs and Azure ASR; `transcribe` added to three
+  V3-1 packages per SV-Q1 (b) and a new `speech-azure`) is proposed in [`2026-10-14-speech-v3-3-asr.md`](2026-10-14-speech-v3-3-asr.md).
+  No design decision of this record changed.
