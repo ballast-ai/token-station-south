@@ -938,6 +938,23 @@ round-trip through `to_json`, and a checked transcript template fills once its b
 4. `MAX_SPEECH_SEGMENTS` = 65,536 is a guess sized to the 16 MiB payload; the OpenAI SSE delta count for a long text
    has not been measured.
 
+### Resolutions (2026-10-14)
+
+- **Question 1, capabilities:** catalog data, by the image world's precedent (image R-1, lv 2026-10-09: the catalog is
+  authoritative for per-role limits and default words). The declaration stays `{model, operations, metering_forms}`;
+  voices and formats are not carried. Settled by precedent, without a new ruling.
+- **Question 2, the `sse` view (lv, 2026-10-14):** §6 is normative. The host's decoded event list is elided as **one
+  document whose root is the array** `[{event, data}]`, and `segments` pointers address it (`/*/data/delta`). The note on
+  `media::elide_from` that calls the `sse` form "one document per event" is corrected when the view is built. It is built
+  in S-S-3, with the suite that exercises it, and must exist before the first package that declares `response_body_form:
+  sse` (the V3-1 batch).
+- **Question 3, media type parameters (lv, 2026-10-14):** keep `is_speech_media_type`. Speech media types admit
+  `;name=value` parameters, so Vertex can declare `audio/L16; rate=24000` exactly as the native arm delivers it; the image
+  and media grammar is unchanged.
+- **Question 4, `MAX_SPEECH_SEGMENTS`:** 65,536 stays, as a provisional bound. The V3-1 fixtures measure the OpenAI SSE
+  delta count of a long text and record it in the package's fixture README; the bound moves before release if the
+  measurement needs it.
+
 ### Versions (Q47)
 
 `south-contracts` 0.54.0 → 0.55.0. `south-component-conformance` 0.62.0 → 0.63.0: the reference `VERSION` constants
@@ -952,3 +969,5 @@ pins the identities it left.
 - S-S-1 implementation section added: what landed, fourteen interpretations, two points that contradict the record
   (media type parameters; the `sse` view's shape and step), four open questions for lv, and the Q47 versions. No design
   decision changed.
+- 2026-10-14: the four S-S-1 open questions resolved (Resolutions): 1 and 4 by precedent and as provisional; 2 (`sse` view
+  as one array document per §6, built in S-S-3) and 3 (speech media type parameters kept) ruled by lv as recommended.
