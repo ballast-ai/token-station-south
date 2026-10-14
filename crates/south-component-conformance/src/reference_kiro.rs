@@ -45,7 +45,7 @@ use crate::reference_bedrock_converse::exception_name;
 pub const NAME: &str = "provider-kiro";
 
 /// The package version.
-pub const VERSION: &str = "1.0.4";
+pub const VERSION: &str = "1.1.0";
 
 /// The family this package serves.
 pub const FAMILY: &str = "kiro";

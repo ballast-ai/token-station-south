@@ -2004,8 +2004,8 @@ fn provider_kiro_declares_the_runtime_of_its_newest_declaration() {
     )
     .unwrap();
     // 1.0.0 as the Kiro step shipped it; task contract 8's Q47 bump made it 1.0.1, I3-3's 1.0.2,
-    // S-S-1's 1.0.3 and V3-1's 1.0.4.
-    assert_eq!(manifest.version, "1.0.4");
+    // S-S-1's 1.0.3 and V3-1's 1.0.4; the native rewrites (KR2–KR5, KD15) made it 1.1.0.
+    assert_eq!(manifest.version, "1.1.0");
     assert_eq!(manifest.api_version, south_provider_api::PROVIDER_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["kiro"]);
     assert!(manifest.subscription_quota_families.contains("kiro"));
@@ -2326,7 +2326,8 @@ fn v3_1_retires_every_published_064_package_identity() {
         ("provider-bedrock-converse-bearer", "1.1.8", "1.1.9"),
         ("provider-bedrock-converse", "1.1.8", "1.1.9"),
         ("provider-gemini", "1.3.8", "1.3.9"),
-        ("provider-kiro", "1.0.3", "1.0.4"),
+        // The Kiro native rewrites (KR2–KR5, KD15) change behaviour: a minor version.
+        ("provider-kiro", "1.0.3", "1.1.0"),
         ("provider-openai-compatible", "2.6.8", "2.6.9"),
         ("provider-openai-responses", "1.3.8", "1.3.9"),
         ("task-bailian-v2", "0.31.22", "0.31.23"),
