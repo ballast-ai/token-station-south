@@ -1,7 +1,7 @@
 # Speech world batch V4: Bailian Qwen-TTS, Vertex Gemini TTS and Azure Speech SSML TTS
 
 Status: accepted (lv reviewed it on 2026-10-15 and ruled SV-Q10 and SV-Q11 as recommended, §12); implemented
-(Implementation, below); declared in `contracts.speech` 1 at speech step S-S-5, to be released in 0.65.0 (`speech-vertex`
+(Implementation, below); declared in `contracts.speech` 1 at speech step S-S-5, released in 0.65.0 (release record `2026-10-15-release-0.65.0.md`) (`speech-vertex`
 1.1.0 is not part of it).
 
 Date: 2026-10-15

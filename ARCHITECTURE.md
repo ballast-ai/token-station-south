@@ -211,9 +211,10 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.64.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.58.0 and 0.64.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
-**Unreleased (speech world step S-S-5: `contracts.speech` 1)**: speech record
-`docs/design/2026-09-30-speech-world.md` §14, §18 and "S-S-5 implementation" (to be released in 0.65.0 with V3-1 to V4).
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.65.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.58.0 and 0.64.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**v0.65.0 (the speech world: batches V3-1 to V4 and `contracts.speech` 1; `contracts.media` 3; Kiro native rewrites)**:
+release record `docs/design/2026-10-15-release-0.65.0.md`. Speech world step S-S-5, `contracts.speech` 1: speech record
+`docs/design/2026-09-30-speech-world.md` §14, §18 and "S-S-5 implementation" (released in 0.65.0 with V3-1 to V4).
 `compatibility.json` records `contracts.speech` 1 (the speech module of `south-contracts` as released in 0.64.0 plus the
 `url` form's optional `upgrade_insecure` member of V4, SV-Q10; no number moves), the suite fields
 `speech_component_v1_suite_id` `south.speech-component.v1` and `speech_component_v1_suite` 1, and a `speech_v1` entry in
@@ -226,9 +227,9 @@ linking 0.64.0 or older refuses every speech package; each declares this tree's 
 release commit with the workspace version. A host admits them with a range listing `speech` 1 beside `media` `{1, 2,
 3}`. No crate version moves (this cycle already moved the three guest-linked crates), and no other package changes.
 `speech-vertex` 1.1.0 (Q7's refusal) is not part of this release.
-**Unreleased (speech world batch V4: Bailian, Vertex and Azure SSML TTS; SV-Q10, SV-Q11)**: design record
-`docs/design/2026-10-15-speech-v4-tts.md` (accepted 2026-10-15, SV-Q10 and SV-Q11 as recommended; proposed for the next
-release, with V3-1 to V3-3). Two new synthesis packages, each 1.0.0, media 1 and `south_runtime` 0.64.0: `speech-qwen`
+Speech world batch V4: Bailian, Vertex and Azure SSML TTS; SV-Q10, SV-Q11: design record
+`docs/design/2026-10-15-speech-v4-tts.md` (accepted 2026-10-15, SV-Q10 and SV-Q11 as recommended; released in
+0.65.0, with V3-1 to V3-3). Two new synthesis packages, each 1.0.0, media 1 and `south_runtime` 0.64.0: `speech-qwen`
 (family `bailian-qwen-speech`, `bearer`, `artifact_fetch`; the audio is a `url` artifact) and `speech-vertex`
 (`vertex-ai-speech`, `image-vertex`'s configuration keys and `vertex_sa` credentials section byte for byte; an `inline`
 artifact in the `wav_pcm_s16le` container; Q7's silent downgrade of `mp3` / `opus` / `aac` / `flac` to WAV until the dual
@@ -244,9 +245,9 @@ characters XML 1.0 forbids and requires a voice holding an XML special character
 reader moves into `bailian_image.rs` (`image-qwen` unchanged), Google's error envelope and policy table become
 crate-visible in `gemini_image.rs`, `speech_shared.rs` gains the `url` and declared-type `body` successes. No crate
 version moves: this unreleased cycle already moved the three guest-linked crates.
-**Unreleased (speech world batch V3-3: OpenAI-compatible, xAI, ElevenLabs and Azure ASR)**: design record
-`docs/design/2026-10-14-speech-v3-3-asr.md` (accepted 2026-10-15, SV-Q8 and SV-Q9 as recommended; proposed for the next
-release, with V3-1 and V3-2). Recognition arrives as a later version of each family's package (SV-Q1 (b)); the three
+Speech world batch V3-3: OpenAI-compatible, xAI, ElevenLabs and Azure ASR: design record
+`docs/design/2026-10-14-speech-v3-3-asr.md` (accepted 2026-10-15, SV-Q8 and SV-Q9 as recommended; released in
+0.65.0, with V3-1 and V3-2). Recognition arrives as a later version of each family's package (SV-Q1 (b)); the three
 V3-1 packages are unpublished, so they gain it at 1.0.0: `speech-openai-compatible` `transcribe` and `translate` (the
 latter on a row carrying `speech.translate`), `speech-xai` and `speech-elevenlabs` `transcribe`; the new `speech-azure`
 1.0.0 (family `azure-speech`, `header_secret` `ocp-apim-subscription-key`, media 1, `south_runtime` 0.64.0) transcribes
@@ -258,8 +259,8 @@ malformed is `unknown`). A `speech.verbose_json` row asks for `verbose_json` and
 last word's end as `last_timestamp`; Azure keeps native's formats and refusals. The shared pieces are the crate-private
 `asr_shared.rs`; the suite now reads the client format trimmed (record §10 decision 3). No contract changes and no crate
 version moves: V3-1 already moved `south-component-conformance` in this unreleased cycle.
-**Unreleased (speech world batch V3-2: MiMo and MiniMax TTS)**: design record
-`docs/design/2026-10-14-speech-v3-2-tts.md` (accepted 2026-10-14, SV-Q7 as recommended; proposed for the next release,
+Speech world batch V3-2: MiMo and MiniMax TTS: design record
+`docs/design/2026-10-14-speech-v3-2-tts.md` (accepted 2026-10-14, SV-Q7 as recommended; released in 0.65.0,
 with V3-1). Two synthesis-only speech packages, each 1.0.0, media 1 and `south_runtime` 0.64.0, transcribed from the
 host's native TTS arms: `speech-mimo` (family `mimo-speech`, `bearer`; `v1/chat/completions` with the input as the
 assistant turn and an `audio` object, the base64 audio of `choices[0]` as an `inline` artifact) and `speech-minimax`
@@ -268,9 +269,9 @@ as an `inline` artifact, `base_resp` failures decided in the component, the weig
 `extra_info.usage_characters` as the upstream's count; `0` or a malformed count is `unknown`, SV-Q7). The `base_resp`
 table moves to the crate-private `minimax_shared.rs`, which `image-minimax` reads unchanged. No contract changes, and
 no crate version moves again: V3-1 already moved `south-component-conformance` to 0.64.0 in this unreleased cycle.
-**Unreleased (speech world batch V3-1: OpenAI-compatible, xAI, Groq and ElevenLabs TTS; `contracts.media` 3)**: design
-record `docs/design/2026-10-14-speech-v3-1-tts.md` (accepted 2026-10-14, SV-Q1 to SV-Q6 as recommended; proposed for
-the next release). Four synthesis-only speech packages, each 1.0.0 and transcribed from the host's native TTS arm:
+Speech world batch V3-1: OpenAI-compatible, xAI, Groq and ElevenLabs TTS; `contracts.media` 3: design
+record `docs/design/2026-10-14-speech-v3-1-tts.md` (accepted 2026-10-14, SV-Q1 to SV-Q6 as recommended; released in
+0.65.0). Four synthesis-only speech packages, each 1.0.0 and transcribed from the host's native TTS arm:
 `speech-openai-compatible` (family `openai-compatible`, `bearer`; the client's JSON to `audio/speech` under the API
 root, `binary` audio billed by request characters, or `stream_format: "sse"` with a `segments` artifact over the
 `speech.audio.delta` events and `tokens` from `speech.audio.done` when the host requires `tokens`), `speech-xai`
@@ -288,7 +289,7 @@ moves to 0.56.0, `south-provider-api` to 0.58.0 and `south-component-conformance
 with 0.64.0 takes a patch with unchanged behaviour and keeps its `south_runtime` and its `contracts`. **Breaking for
 hosts on re-pin**: `ManifestErrorV1` gains `SpeechQueryParametersRequireMedia3` (exhaustive matches), and a host's media
 range moves to `{1, 2, 3}` to admit `speech-elevenlabs`.
-**Unreleased (the Kiro native rewrites: KR2–KR5 withdrawn)**: Kiro record
+The Kiro native rewrites: KR2–KR5 withdrawn: Kiro record
 `docs/design/2026-09-30-kiro-provider-component.md` §17 and §18 (lv, 2026-10-14: the component must not refuse a
 request the native arm serves today). `provider-kiro` 1.1.0 makes the native arm's rewrite where 1.0.x refused: an
 unmodelled content part is read by its `type` as the native second hop reads the block the first hop sends verbatim
