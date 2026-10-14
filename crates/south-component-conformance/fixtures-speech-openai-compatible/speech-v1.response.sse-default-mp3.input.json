@@ -1,0 +1,11 @@
+{
+  "prepare_case": "speech-v1.prepare.tokens-default-mp3",
+  "response": {
+    "status": 200,
+    "content_type": "text/event-stream",
+    "headers": {
+      "content-type": "text/event-stream"
+    },
+    "body_text": "data: {\"type\":\"speech.audio.delta\",\"audio\":\"SUQz\"}\n\ndata: {\"type\":\"speech.audio.done\",\"usage\":{\"input_tokens\":5,\"output_tokens\":40}}\n\n"
+  }
+}

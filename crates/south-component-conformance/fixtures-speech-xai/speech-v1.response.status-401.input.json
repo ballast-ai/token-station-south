@@ -1,0 +1,10 @@
+{
+  "prepare_case": "speech-v1.prepare.native-wav",
+  "response": {
+    "status": 401,
+    "body": {
+      "code": "Client specified an invalid argument",
+      "error": "Incorrect API key provided: xa***Q."
+    }
+  }
+}

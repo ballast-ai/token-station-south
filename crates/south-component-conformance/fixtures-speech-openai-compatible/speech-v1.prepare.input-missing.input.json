@@ -1,0 +1,28 @@
+{
+  "provider_config": {
+    "provider": "openai-compatible",
+    "base_url": "https://api.openai.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "gpt-4o-mini-tts"
+      },
+      {
+        "model": "tts-1"
+      }
+    ]
+  },
+  "request": {
+    "json": {
+      "model": "media/tts",
+      "voice": "alloy"
+    }
+  },
+  "context": {
+    "upstream_model": "tts-1",
+    "operation": "synthesize",
+    "metering_required": [
+      "characters"
+    ]
+  }
+}

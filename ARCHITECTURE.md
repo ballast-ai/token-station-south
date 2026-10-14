@@ -211,7 +211,27 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.64.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.55.0, 0.57.0 and 0.63.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.64.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.58.0 and 0.64.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**Unreleased (speech world batch V3-1: OpenAI-compatible, xAI, Groq and ElevenLabs TTS; `contracts.media` 3)**: design
+record `docs/design/2026-10-14-speech-v3-1-tts.md` (accepted 2026-10-14, SV-Q1 to SV-Q6 as recommended; proposed for
+the next release). Four synthesis-only speech packages, each 1.0.0 and transcribed from the host's native TTS arm:
+`speech-openai-compatible` (family `openai-compatible`, `bearer`; the client's JSON to `audio/speech` under the API
+root, `binary` audio billed by request characters, or `stream_format: "sse"` with a `segments` artifact over the
+`speech.audio.delta` events and `tokens` from `speech.audio.done` when the host requires `tokens`), `speech-xai`
+(`xai-speech`, `v1/tts`), `speech-groq` (`groq-speech`, Orpheus personas) and `speech-elevenlabs` (`elevenlabs-speech`,
+`header_secret` `xi-api-key`, `v1/text-to-speech/{voice_id}` with a voice-id grammar refusal, SV-Q4). The artifact is
+typed by the upstream's `content-type` with `audio/mpeg` as fallback (SV-Q2); an empty 2xx, a 3xx and an invalid token
+count are `unknown`. `contracts.media` 3 (additive): a media descriptor's query may name a parameter the same package
+declares in `query_parameters` (`MediaRequestDescriptorV1::parse_with_declared`,
+`parse_prepared_speech_call_with_declared_v1`; `minimum_contract_version` 3), and gate ① refuses a speech manifest that
+declares `query_parameters` under media below 3 (`ManifestErrorV1::SpeechQueryParametersRequireMedia3`, SV-Q5). The
+suite and the sandbox seam parse prepared calls with the package's own declarations. Three packages declare media 1 and
+`south_runtime` 0.64.0; `speech-elevenlabs` declares media 3 and this tree's release, moved by the release commit.
+`contracts.speech` is still not recorded (S-S-5), so no speech package declares it yet. Under Q47 `south-contracts`
+moves to 0.56.0, `south-provider-api` to 0.58.0 and `south-component-conformance` to 0.64.0, so every package published
+with 0.64.0 takes a patch with unchanged behaviour and keeps its `south_runtime` and its `contracts`. **Breaking for
+hosts on re-pin**: `ManifestErrorV1` gains `SpeechQueryParametersRequireMedia3` (exhaustive matches), and a host's media
+range moves to `{1, 2, 3}` to admit `speech-elevenlabs`.
 **v0.64.0 (speech world steps S-S-1 to S-S-3; `task-minimax-v2` immutable body paths; image refuses an `sse` response form)**:
 release record `docs/design/2026-10-14-release-0.64.0.md`. The speech world's contract, world and suite ship without
 `contracts.speech` and without packages (S-S-4 / S-S-5), so no host behaviour changes until a host adopts them.

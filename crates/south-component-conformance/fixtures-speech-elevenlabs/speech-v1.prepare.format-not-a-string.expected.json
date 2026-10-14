@@ -1,0 +1,46 @@
+{
+  "facts": {
+    "operation": "synthesize",
+    "characters": {
+      "count": 11,
+      "upper": 11
+    },
+    "metering_forms": [
+      "characters"
+    ],
+    "output_media_type": "audio/mpeg"
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "v1/text-to-speech/9BWtsMINqrJLrRacOk9x",
+    "query": [
+      {
+        "name": "output_format",
+        "value": "mp3_44100_128"
+      }
+    ],
+    "auth": {
+      "arm": "header_secret",
+      "header": "xi-api-key",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "text": "hello world",
+          "model_id": "eleven_multilingual_v2"
+        }
+      }
+    }
+  },
+  "response_body_form": "binary",
+  "response_elision_paths": [],
+  "immutable_body_paths": [
+    "text",
+    "model_id"
+  ],
+  "state": {
+    "form": "binary",
+    "characters": 11
+  }
+}

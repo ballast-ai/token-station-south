@@ -1,0 +1,29 @@
+{
+  "provider_config": {
+    "provider": "elevenlabs-speech",
+    "base_url": "https://api.elevenlabs.io",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "eleven_multilingual_v2"
+      },
+      {
+        "model": "eleven_flash_v2_5"
+      }
+    ]
+  },
+  "request": {
+    "json": {
+      "model": "media/tts",
+      "input": "hello world",
+      "voice": "alloy"
+    }
+  },
+  "context": {
+    "upstream_model": "eleven_multilingual_v2",
+    "operation": "synthesize",
+    "metering_required": [
+      "tokens"
+    ]
+  }
+}

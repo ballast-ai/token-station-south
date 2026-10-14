@@ -1,0 +1,15 @@
+{
+  "provider_config": {
+    "provider": "openai-compatible",
+    "base_url": "https://api.groq.com/openai",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "canopylabs/orpheus-v1-english"
+      },
+      {
+        "model": "canopylabs/orpheus-arabic-saudi"
+      }
+    ]
+  }
+}

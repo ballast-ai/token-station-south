@@ -1718,6 +1718,45 @@ fn artifact_fetch_without_synthesize_is_refused() {
     );
 }
 
+/// SV-Q5 (speech world batch V3-1 record §6, §14): a speech manifest that declares
+/// `query_parameters` declares `contracts.media` 3 or later, because only a media 3 descriptor
+/// carries a declared parameter; any other is refused at load, not on every call.
+#[test]
+fn speech_query_parameters_need_media_contract_3() {
+    let with_media = |media: Option<u32>| {
+        let mut manifest = speech_manifest();
+        manifest.query_parameters = vec![south_provider_api::QueryParameterDeclarationV1 {
+            name: "output_format".to_owned(),
+            syntax: south_provider_api::QueryValueSyntaxV1::Token,
+        }];
+        manifest.compatibility.contracts.remove("media");
+        if let Some(media) = media {
+            manifest.compatibility.contracts.insert("media".to_owned(), media);
+        }
+        manifest
+    };
+    for (media, expected) in [
+        (None, Err(ManifestErrorV1::SpeechQueryParametersRequireMedia3 { declared: None })),
+        (Some(1), Err(ManifestErrorV1::SpeechQueryParametersRequireMedia3 { declared: Some(1) })),
+        (Some(2), Err(ManifestErrorV1::SpeechQueryParametersRequireMedia3 { declared: Some(2) })),
+        (Some(3), Ok(())),
+        (Some(4), Ok(())),
+    ] {
+        assert_eq!(with_media(media).validate(), expected, "{media:?}");
+    }
+    // Without `query_parameters` the rule does not apply: media 1 stays admissible.
+    let mut plain = with_media(Some(1));
+    plain.query_parameters.clear();
+    assert_eq!(plain.validate(), Ok(()));
+    assert_eq!(south_provider_api::SPEECH_QUERY_PARAMETERS_MEDIA_CONTRACT, 3);
+    assert_eq!(
+        ManifestErrorV1::SpeechQueryParametersRequireMedia3 { declared: Some(1) }.to_string(),
+        "a speech component that declares `query_parameters` needs `compatibility.contracts.media` \
+         3 or later (a media descriptor carries a declared query parameter from contract 3); the \
+         manifest declares Some(1)"
+    );
+}
+
 #[test]
 fn speech_manifest_refuses_words_and_arms_outside_its_vocabulary() {
     for word in
@@ -1825,7 +1864,7 @@ fn speech_manifest_refuses_provider_only_declarations() {
 
     // `query_parameters` is admitted, so a query declaration beside a refused one does not hide
     // the refusal.
-    let mut both = speech_manifest();
+    let mut both = speech_manifest_with_media_3();
     both.query_parameters = vec![output_format()];
     both.user_agent.insert("elevenlabs".to_owned(), "acme/1.0".to_owned());
     assert_eq!(
@@ -1853,17 +1892,25 @@ fn output_format() -> south_provider_api::QueryParameterDeclarationV1 {
     }
 }
 
+/// [`speech_manifest`] declaring `contracts.media` 3, which a speech manifest with
+/// `query_parameters` needs (V3-1 record §6, SV-Q5).
+fn speech_manifest_with_media_3() -> ComponentManifestV1 {
+    let mut manifest = speech_manifest();
+    manifest.compatibility.contracts.insert("media".to_owned(), 3);
+    manifest
+}
+
 /// The speech world admits `query_parameters` (§17.3) and holds each declaration to the provider
 /// world's rules.
 #[test]
 fn the_speech_world_admits_query_parameters_under_the_provider_rules() {
-    let mut manifest = speech_manifest();
+    let mut manifest = speech_manifest_with_media_3();
     manifest.query_parameters = vec![output_format()];
     assert_eq!(manifest.validate(), Ok(()));
 
     // The rules are the provider world's, not a lighter copy.
     let refused = |name: &str| {
-        let mut manifest = speech_manifest();
+        let mut manifest = speech_manifest_with_media_3();
         manifest.query_parameters = vec![south_provider_api::QueryParameterDeclarationV1 {
             name: name.to_owned(),
             syntax: south_provider_api::QueryValueSyntaxV1::Token,
@@ -1876,7 +1923,7 @@ fn the_speech_world_admits_query_parameters_under_the_provider_rules() {
             "{name:?} must be refused"
         );
     }
-    let mut twice = speech_manifest();
+    let mut twice = speech_manifest_with_media_3();
     twice.query_parameters = vec![output_format(), output_format()];
     assert!(matches!(twice.validate(), Err(ManifestErrorV1::InvalidQueryParameter { .. })));
 

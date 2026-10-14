@@ -1,0 +1,44 @@
+{
+  "facts": {
+    "operation": "synthesize",
+    "characters": {
+      "count": 11,
+      "upper": 11
+    },
+    "metering_forms": [
+      "characters"
+    ],
+    "output_media_type": "audio/mpeg"
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "v1/tts",
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "text": "hello world",
+          "voice_id": "eve",
+          "language": "en",
+          "output_format": {
+            "codec": "mp3",
+            "sample_rate": 44100,
+            "bit_rate": 192000
+          }
+        }
+      }
+    }
+  },
+  "response_body_form": "binary",
+  "response_elision_paths": [],
+  "immutable_body_paths": [
+    "text"
+  ],
+  "state": {
+    "form": "binary",
+    "characters": 11
+  }
+}

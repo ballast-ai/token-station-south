@@ -1,0 +1,20 @@
+[
+  {
+    "model": "canopylabs/orpheus-v1-english",
+    "operations": [
+      "synthesize"
+    ],
+    "metering_forms": [
+      "characters"
+    ]
+  },
+  {
+    "model": "canopylabs/orpheus-arabic-saudi",
+    "operations": [
+      "synthesize"
+    ],
+    "metering_forms": [
+      "characters"
+    ]
+  }
+]

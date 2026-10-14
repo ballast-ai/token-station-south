@@ -1,0 +1,11 @@
+{
+  "prepare_case": "speech-v1.prepare.chars-wav",
+  "response": {
+    "status": 500,
+    "body": {
+      "error": {
+        "message": "overloaded"
+      }
+    }
+  }
+}

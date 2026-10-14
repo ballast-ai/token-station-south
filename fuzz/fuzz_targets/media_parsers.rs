@@ -84,6 +84,26 @@ fuzz_target!(|data: &[u8]| {
                 if let Ok(descriptor) = MediaRequestDescriptorV1::parse(text, &MediaLimitsV1::V1) {
                     let _ = descriptor.referenced_blobs();
                 }
+                // `contracts.media` 3: a declared query parameter (speech world batch V3-1 §6).
+                // A descriptor parsed with the declarations re-parses to itself with them.
+                let declared = [south_contracts::DeclaredQueryParameterV1::try_new(
+                    "output_format",
+                    south_contracts::QueryValueSyntaxV1::Token,
+                )
+                .expect("a valid declaration")];
+                if let Ok(descriptor) = MediaRequestDescriptorV1::parse_with_declared(
+                    text,
+                    &MediaLimitsV1::V1,
+                    &declared,
+                ) {
+                    let _ = descriptor.minimum_contract_version();
+                    let again = MediaRequestDescriptorV1::parse_with_declared(
+                        &descriptor.to_json(),
+                        &MediaLimitsV1::V1,
+                        &declared,
+                    );
+                    assert_eq!(again.ok(), Some(descriptor), "a declared descriptor round-trips");
+                }
                 let _ = expand_json_template_v1(text, &BlobSetV1::default());
             }
         }

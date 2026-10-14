@@ -1,0 +1,9 @@
+{
+  "prepare_case": "speech-v1.prepare.native-english",
+  "response": {
+    "status": 403,
+    "body": {
+      "status": "forbidden"
+    }
+  }
+}

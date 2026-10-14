@@ -1,0 +1,12 @@
+{
+  "prepare_case": "speech-v1.prepare.native-english",
+  "response": {
+    "status": 429,
+    "body": {
+      "error": {
+        "message": "slow down",
+        "type": "tokens"
+      }
+    }
+  }
+}

@@ -6,8 +6,8 @@ use super::multipart::MediaPartV1;
 use super::transform::{MediaTransformV1, TransformErrorV1};
 use super::{BlobIdV1, BlobSetV1, MediaLimitsV1, RESERVED_KEY_PREFIX};
 use crate::{
-    ContractErrorV1, CredentialSlotV1, HeaderPolicyError, JsonBodyV1, QueryParameterV1,
-    QueryStringV1, RelativePathV1, SafeHeaders,
+    ContractErrorV1, CredentialSlotV1, DeclaredQueryParameterV1, HeaderPolicyError, JsonBodyV1,
+    QueryParameterV1, QueryStringV1, RelativePathV1, SafeHeaders,
 };
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -38,7 +38,8 @@ pub enum MediaDescriptorErrorV1 {
     /// `content-type`.
     #[error("media descriptor headers are refused: {0:?}")]
     Headers(Option<HeaderPolicyError>),
-    /// A query parameter name outside the sanctioned set.
+    /// A query parameter name outside the sanctioned set and, from contract 3, outside the
+    /// package's declared `query_parameters`.
     #[error("media descriptor query parameter is not sanctioned")]
     UnsanctionedQuery,
     /// A header-secret arm names a header outside the header-name grammar.
@@ -204,7 +205,8 @@ enum BodyWire {
 }
 
 impl MediaRequestDescriptorV1 {
-    /// Parses and validates a descriptor a component returned.
+    /// Parses and validates a descriptor a component returned, admitting sanctioned query
+    /// parameters only: [`Self::parse_with_declared`] with no declarations.
     ///
     /// Checks the shape, `POST`, the relative path grammar, sanctioned query parameters and their
     /// grammars, the safe-header policy (no `content-type` with a multipart or text body), the
@@ -212,6 +214,24 @@ impl MediaRequestDescriptorV1 {
     /// (well formed, never `concat`, no other `$south.` key). Whether the manifest admits the
     /// auth arm is the conformance crate's `admit_media_descriptor_auth`.
     pub fn parse(json_text: &str, limits: &MediaLimitsV1) -> Result<Self, MediaDescriptorErrorV1> {
+        Self::parse_with_declared(json_text, limits, &[])
+    }
+
+    /// Parses and validates a descriptor of a package that declares query parameters
+    /// (`contracts.media` 3, speech world batch V3-1 record §6).
+    ///
+    /// Everything [`Self::parse`] checks, and a query entry whose name is not sanctioned is
+    /// admitted when, and only when, it equals byte for byte the name of one of `declared` (the
+    /// same package's manifest `query_parameters`, built once at load) and its value passes that
+    /// declaration's syntax. It is carried as [`QueryParameterV1::Declared`], and the query is
+    /// serialized in the canonical order (sanctioned names first, then declared names in byte
+    /// order). A name neither sanctioned nor declared is [`MediaDescriptorErrorV1::UnsanctionedQuery`];
+    /// a declared name with a value outside its syntax is refused by the query grammar.
+    pub fn parse_with_declared(
+        json_text: &str,
+        limits: &MediaLimitsV1,
+        declared: &[DeclaredQueryParameterV1],
+    ) -> Result<Self, MediaDescriptorErrorV1> {
         let wire: DescriptorWire = serde_json::from_str(json_text)
             .map_err(|error| MediaDescriptorErrorV1::Malformed(error.to_string()))?;
         if wire.method != "POST" {
@@ -227,6 +247,13 @@ impl MediaRequestDescriptorV1 {
                     .iter()
                     .find(|candidate| candidate.wire_name() == entry.name)
                     .cloned()
+                    .or_else(|| {
+                        declared
+                            .iter()
+                            .find(|candidate| candidate.name() == entry.name)
+                            .cloned()
+                            .map(QueryParameterV1::Declared)
+                    })
                     .ok_or(MediaDescriptorErrorV1::UnsanctionedQuery)?;
                 parameters.push((parameter, entry.value.as_str()));
             }
@@ -320,8 +347,8 @@ impl MediaRequestDescriptorV1 {
 
     /// Serializes the descriptor compactly in its wire shape: `method`, `path`, `query` (canonical
     /// order) and `headers` (lower-case names, sorted) when present, `auth` when present, and the
-    /// body — a JSON template is copied as its source text. [`Self::parse`] of the result gives
-    /// back an equal descriptor.
+    /// body — a JSON template is copied as its source text. [`Self::parse_with_declared`] of the
+    /// result, with the declarations it was parsed with, gives back an equal descriptor.
     #[must_use]
     pub fn to_json(&self) -> String {
         let mut out = String::from("{\"method\":\"POST\",\"path\":");
@@ -408,11 +435,21 @@ impl MediaRequestDescriptorV1 {
         ids
     }
 
-    /// The lowest `contracts.media` version that carries every transform the descriptor names
-    /// (JSON template references and multipart file parts): 2 when it names `data_url_payload`,
-    /// else 1. A host may compare it with the `media` contract the package declares.
+    /// The lowest `contracts.media` version that carries every word the descriptor uses: 3 when
+    /// its query carries a declared parameter (V3-1 record §6), else 2 when a transform it names
+    /// (JSON template references and multipart file parts) is `data_url_payload`, else 1. A host
+    /// may compare it with the `media` contract the package declares.
     #[must_use]
     pub fn minimum_contract_version(&self) -> u16 {
+        let declared_query = self.query.as_ref().is_some_and(|query| {
+            query.as_str().split('&').any(|pair| {
+                let name = pair.split_once('=').map_or(pair, |(name, _)| name);
+                !QueryParameterV1::ALL.iter().any(|sanctioned| sanctioned.wire_name() == name)
+            })
+        });
+        if declared_query {
+            return super::MEDIA_CONTRACT_VERSION_V3;
+        }
         let mut version = super::MEDIA_CONTRACT_VERSION;
         match &self.body {
             MediaBodyV1::Json(text) => {
@@ -718,6 +755,76 @@ mod tests {
             Err(MediaDescriptorErrorV1::Malformed(_))
         ));
         assert!(parse(r#"{"method":"POST","path":"v1/x","body":{"text":{"media_type":"application/ssml+xml","text":"<speak/>"}}}"#).is_ok());
+    }
+
+    fn output_format() -> DeclaredQueryParameterV1 {
+        DeclaredQueryParameterV1::try_new("output_format", crate::QueryValueSyntaxV1::Token)
+            .expect("a valid declaration")
+    }
+
+    #[test]
+    fn a_declared_query_parameter_needs_its_declaration_and_contract_3() {
+        let text = r#"{"method":"POST","path":"v1/text-to-speech/v1","query":[{"name":"output_format","value":"mp3_44100_128"}],"body":{"json":{"template":{"text":"hi"}}}}"#;
+        assert_eq!(parse(text).map(|_| ()), Err(MediaDescriptorErrorV1::UnsanctionedQuery));
+        let declared = [output_format()];
+        let descriptor =
+            MediaRequestDescriptorV1::parse_with_declared(text, &MediaLimitsV1::V1, &declared)
+                .expect("admitted with the declaration");
+        assert_eq!(descriptor.query().expect("query").as_str(), "output_format=mp3_44100_128");
+        assert_eq!(descriptor.minimum_contract_version(), 3);
+        assert_eq!(descriptor.to_json(), text);
+        assert_eq!(
+            MediaRequestDescriptorV1::parse_with_declared(
+                &descriptor.to_json(),
+                &MediaLimitsV1::V1,
+                &declared
+            ),
+            Ok(descriptor)
+        );
+        // A sanctioned-only descriptor needs no more than before, declarations or not.
+        let sanctioned = r#"{"method":"POST","path":"v1/x","query":[{"name":"api-version","value":"v1"}],"body":"empty"}"#;
+        let plain = parse(sanctioned).expect("valid");
+        assert_eq!(plain.minimum_contract_version(), 1);
+        assert_eq!(
+            MediaRequestDescriptorV1::parse_with_declared(
+                sanctioned,
+                &MediaLimitsV1::V1,
+                &declared
+            ),
+            Ok(plain)
+        );
+    }
+
+    #[test]
+    fn declared_names_are_matched_exactly_and_their_values_by_syntax() {
+        let declared = [output_format()];
+        let with = |query: &str| {
+            MediaRequestDescriptorV1::parse_with_declared(
+                &format!(r#"{{"method":"POST","path":"v1/x","query":{query},"body":"empty"}}"#),
+                &MediaLimitsV1::V1,
+                &declared,
+            )
+        };
+        // Case included: the name is compared byte for byte.
+        assert_eq!(
+            with(r#"[{"name":"Output_Format","value":"mp3"}]"#).map(|_| ()),
+            Err(MediaDescriptorErrorV1::UnsanctionedQuery)
+        );
+        assert_eq!(
+            with(r#"[{"name":"output_format","value":"mp3&x=1"}]"#).map(|_| ()),
+            Err(MediaDescriptorErrorV1::Contract(ContractErrorV1::InvalidQueryValue))
+        );
+        assert_eq!(
+            with(r#"[{"name":"output_format","value":"a"},{"name":"output_format","value":"b"}]"#)
+                .map(|_| ()),
+            Err(MediaDescriptorErrorV1::Contract(ContractErrorV1::DuplicateQueryParameter))
+        );
+        // Canonical order: the sanctioned name first, whatever order the component wrote.
+        let ordered =
+            with(r#"[{"name":"output_format","value":"mp3"},{"name":"api-version","value":"v1"}]"#)
+                .expect("valid");
+        assert_eq!(ordered.query().expect("query").as_str(), "api-version=v1&output_format=mp3");
+        assert_eq!(ordered.minimum_contract_version(), 3);
     }
 
     #[test]

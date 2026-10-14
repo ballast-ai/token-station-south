@@ -555,11 +555,19 @@ fn the_speech_world_holds_its_values_to_the_provider_rules() {
             json!([{ "header": "x-quota-remaining", "field": "x-ratelimit-remaining-tokens" }])),
         Err(ManifestErrorV1::InstanceIsAProviderWorldDeclaration("quota_headers".to_owned()))
     );
+    // A declared query parameter needs `contracts.media` 3 (V3-1 record §6, SV-Q5).
+    assert_eq!(
+        refused(&|m| {
+            m["query_parameters"] = json!([{ "name": "output_format", "syntax": "token" }]);
+            m["compatibility"]["contracts"] = json!({ "media": 3 });
+        }),
+        Ok(())
+    );
     assert_eq!(
         refused(
             &|m| m["query_parameters"] = json!([{ "name": "output_format", "syntax": "token" }])
         ),
-        Ok(())
+        Err(ManifestErrorV1::SpeechQueryParametersRequireMedia3 { declared: None })
     );
 }
 

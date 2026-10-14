@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "ElevenLabs /v1/audio/speech supports response_format 'mp3' only (got 'opus')"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "prepare_case": "speech-v1.prepare.native-wav",
+  "response": {
+    "status": 429,
+    "body": {
+      "code": "Too many requests",
+      "error": "rate limit exceeded"
+    }
+  }
+}

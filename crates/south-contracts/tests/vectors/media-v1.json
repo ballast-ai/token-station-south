@@ -1,7 +1,7 @@
 {
   "contract": "media",
-  "version": 2,
-  "note": "Golden vectors of contracts.media (image record §6, §11); the `data_url_payload` cases are contract 2 (image world step I3-2, GI-Q1), every other case contract 1. A host that does not link south-contracts reproduces every output byte for byte (host obligation §12.3). Byte strings are given as UTF-8 text in `*_text` fields or as standard base64 in `*_base64` fields. Limits are MediaLimitsV1::V1 unless a case sets `inline_string_bytes`.",
+  "version": 3,
+  "note": "Golden vectors of contracts.media (image record §6, §11); the `data_url_payload` cases are contract 2 (image world step I3-2, GI-Q1), the `descriptor_declared_query` cases contract 3 (speech world batch V3-1, record §6), every other case contract 1. A host that does not link south-contracts reproduces every output byte for byte (host obligation §12.3). Byte strings are given as UTF-8 text in `*_text` fields or as standard base64 in `*_base64` fields. Limits are MediaLimitsV1::V1 unless a case sets `inline_string_bytes`.",
   "elide": [
     {
       "name": "declared-wildcard-paths",
@@ -374,6 +374,133 @@
         "name": "marker-with-siblings",
         "template": "[{\"$south.artifact\":{\"index\":0,\"as\":\"b64_json\"},\"x\":1}]",
         "error": "reference_integrity"
+      }
+    ]
+  },
+  "descriptor_declared_query": {
+    "note": "Each descriptor is parsed twice: with `declarations` (the package's manifest `query_parameters`) and with none. `query` is the canonical serialized query a host sends, `minimum_contract_version` what the descriptor needs; `error` names the refusal: `unsanctioned_query` (MediaDescriptorErrorV1::UnsanctionedQuery), `invalid_query_value` and `duplicate_query_parameter` (the query grammar's ContractErrorV1 variants).",
+    "cases": [
+      {
+        "name": "declared-parameter",
+        "declarations": [
+          {
+            "name": "output_format",
+            "syntax": "token"
+          }
+        ],
+        "descriptor": "{\"method\":\"POST\",\"path\":\"v1/text-to-speech/9BWtsMINqrJLrRacOk9x\",\"query\":[{\"name\":\"output_format\",\"value\":\"mp3_44100_128\"}],\"body\":{\"json\":{\"template\":{\"text\":\"hi\",\"model_id\":\"eleven_multilingual_v2\"}}}}",
+        "with_declarations": {
+          "query": "output_format=mp3_44100_128",
+          "minimum_contract_version": 3
+        },
+        "without_declarations": {
+          "error": "unsanctioned_query"
+        }
+      },
+      {
+        "name": "declared-name-is-case-sensitive",
+        "declarations": [
+          {
+            "name": "output_format",
+            "syntax": "token"
+          }
+        ],
+        "descriptor": "{\"method\":\"POST\",\"path\":\"v1/text-to-speech/9BWtsMINqrJLrRacOk9x\",\"query\":[{\"name\":\"OUTPUT_FORMAT\",\"value\":\"mp3_44100_128\"}],\"body\":{\"json\":{\"template\":{\"text\":\"hi\",\"model_id\":\"eleven_multilingual_v2\"}}}}",
+        "with_declarations": {
+          "error": "unsanctioned_query"
+        },
+        "without_declarations": {
+          "error": "unsanctioned_query"
+        }
+      },
+      {
+        "name": "value-outside-the-declared-syntax",
+        "declarations": [
+          {
+            "name": "output_format",
+            "syntax": "token"
+          }
+        ],
+        "descriptor": "{\"method\":\"POST\",\"path\":\"v1/text-to-speech/9BWtsMINqrJLrRacOk9x\",\"query\":[{\"name\":\"output_format\",\"value\":\"mp3_44100_128&voice=x\"}],\"body\":{\"json\":{\"template\":{\"text\":\"hi\",\"model_id\":\"eleven_multilingual_v2\"}}}}",
+        "with_declarations": {
+          "error": "invalid_query_value"
+        },
+        "without_declarations": {
+          "error": "unsanctioned_query"
+        }
+      },
+      {
+        "name": "declared-name-twice",
+        "declarations": [
+          {
+            "name": "output_format",
+            "syntax": "token"
+          }
+        ],
+        "descriptor": "{\"method\":\"POST\",\"path\":\"v1/text-to-speech/9BWtsMINqrJLrRacOk9x\",\"query\":[{\"name\":\"output_format\",\"value\":\"mp3_44100_128\"},{\"name\":\"output_format\",\"value\":\"pcm_24000\"}],\"body\":{\"json\":{\"template\":{\"text\":\"hi\",\"model_id\":\"eleven_multilingual_v2\"}}}}",
+        "with_declarations": {
+          "error": "duplicate_query_parameter"
+        },
+        "without_declarations": {
+          "error": "unsanctioned_query"
+        }
+      },
+      {
+        "name": "canonical-order-after-a-sanctioned-parameter",
+        "declarations": [
+          {
+            "name": "output_format",
+            "syntax": "token"
+          }
+        ],
+        "descriptor": "{\"method\":\"POST\",\"path\":\"v1/text-to-speech/9BWtsMINqrJLrRacOk9x\",\"query\":[{\"name\":\"output_format\",\"value\":\"mp3_44100_128\"},{\"name\":\"api-version\",\"value\":\"2025-04-01-preview\"}],\"body\":{\"json\":{\"template\":{\"text\":\"hi\",\"model_id\":\"eleven_multilingual_v2\"}}}}",
+        "with_declarations": {
+          "query": "api-version=2025-04-01-preview&output_format=mp3_44100_128",
+          "minimum_contract_version": 3
+        },
+        "without_declarations": {
+          "error": "unsanctioned_query"
+        }
+      },
+      {
+        "name": "sanctioned-only-needs-no-declaration",
+        "declarations": [
+          {
+            "name": "output_format",
+            "syntax": "token"
+          }
+        ],
+        "descriptor": "{\"method\":\"POST\",\"path\":\"v1/text-to-speech/9BWtsMINqrJLrRacOk9x\",\"query\":[{\"name\":\"api-version\",\"value\":\"v1\"}],\"body\":{\"json\":{\"template\":{\"text\":\"hi\",\"model_id\":\"eleven_multilingual_v2\"}}}}",
+        "with_declarations": {
+          "query": "api-version=v1",
+          "minimum_contract_version": 1
+        },
+        "without_declarations": {
+          "query": "api-version=v1",
+          "minimum_contract_version": 1
+        }
+      }
+    ],
+    "declaration_refusals": [
+      {
+        "name": "api-version",
+        "syntax": "token"
+      },
+      {
+        "name": "api_version",
+        "syntax": "token"
+      },
+      {
+        "name": "Alt",
+        "syntax": "token"
+      },
+      {
+        "name": "task-id",
+        "syntax": "digits"
+      },
+      {
+        "name": "api_key",
+        "syntax": "token"
       }
     ]
   }

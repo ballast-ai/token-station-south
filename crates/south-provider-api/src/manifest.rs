@@ -532,6 +532,14 @@ pub const SPEECH_CAPABILITIES: &[&str] =
 /// either it builds no request at all (2026-09-30 speech-world record, §4).
 pub const SPEECH_OPERATION_CAPABILITIES: &[&str] = &["synthesize", "transcribe"];
 
+/// The lowest `contracts.media` of a speech manifest that declares `query_parameters`.
+///
+/// Speech world batch V3-1 record §6, SV-Q5: a descriptor carries a declared query parameter only
+/// from media contract 3, so a package declaring one under an older contract would be refused on
+/// every call; gate ① refuses it at load instead
+/// ([`ManifestErrorV1::SpeechQueryParametersRequireMedia3`]).
+pub const SPEECH_QUERY_PARAMETERS_MEDIA_CONTRACT: u32 = 3;
+
 /// The speech world, as gate ① validates it.
 ///
 /// Its auth arms are the two descriptor credential arms: a minted credential
@@ -1227,6 +1235,36 @@ impl ComponentManifestV1 {
         Ok(())
     }
 
+    /// The speech world's role rules (2026-09-30 speech-world record, §4, §6; V3-1 record §6).
+    fn validate_speech_role(&self) -> Result<(), ManifestErrorV1> {
+        // Neither operation word means the component builds no request at all, and a
+        // translation is a recognition request (speech record §4 D2).
+        if !SPEECH_OPERATION_CAPABILITIES.iter().any(|word| self.capabilities.contains(*word)) {
+            return Err(ManifestErrorV1::SpeechOperationRequired);
+        }
+        if self.capabilities.contains("translate") && !self.capabilities.contains("transcribe") {
+            return Err(ManifestErrorV1::TranslateRequiresTranscribe);
+        }
+        // URL artifacts are synthesis output (§6): recognition delivers documents, so
+        // `artifact_fetch` without `synthesize` is a word nothing honours.
+        if self.capabilities.contains("artifact_fetch") && !self.capabilities.contains("synthesize")
+        {
+            return Err(ManifestErrorV1::ArtifactFetchRequiresSynthesize);
+        }
+        // A declared query parameter travels on a media descriptor from contract 3 only
+        // (V3-1 record §6, SV-Q5).
+        if !self.query_parameters.is_empty() {
+            let declared = self.compatibility.contracts.get("media").copied();
+            if declared.is_none_or(|contract| contract < SPEECH_QUERY_PARAMETERS_MEDIA_CONTRACT) {
+                return Err(ManifestErrorV1::SpeechQueryParametersRequireMedia3 { declared });
+            }
+        }
+        if self.providers.is_empty() {
+            return Err(ManifestErrorV1::ProviderFamilyRequired);
+        }
+        Ok(())
+    }
+
     fn validate_role(&self, world: &WorldSchemaV1) -> Result<(), ManifestErrorV1> {
         if world.world == PROVIDER_WORLD {
             if !self.capabilities.contains("chat") {
@@ -1305,25 +1343,7 @@ impl ComponentManifestV1 {
             }
         }
         if world.world == SPEECH_WORLD {
-            // Neither operation word means the component builds no request at all, and a
-            // translation is a recognition request (speech record §4 D2).
-            if !SPEECH_OPERATION_CAPABILITIES.iter().any(|word| self.capabilities.contains(*word)) {
-                return Err(ManifestErrorV1::SpeechOperationRequired);
-            }
-            if self.capabilities.contains("translate") && !self.capabilities.contains("transcribe")
-            {
-                return Err(ManifestErrorV1::TranslateRequiresTranscribe);
-            }
-            // URL artifacts are synthesis output (§6): recognition delivers documents, so
-            // `artifact_fetch` without `synthesize` is a word nothing honours.
-            if self.capabilities.contains("artifact_fetch")
-                && !self.capabilities.contains("synthesize")
-            {
-                return Err(ManifestErrorV1::ArtifactFetchRequiresSynthesize);
-            }
-            if self.providers.is_empty() {
-                return Err(ManifestErrorV1::ProviderFamilyRequired);
-            }
+            self.validate_speech_role()?;
         }
         // The value channel (embeddings record §16, image record §18.3): a family's non-secret
         // keys reach the component in `ProviderConfig.declared`, under the provider world's key
@@ -1841,6 +1861,16 @@ pub enum ManifestErrorV1 {
     /// (2026-09-30 speech-world record, §6; S-S-2 open question 2, 2026-10-14).
     #[error("a speech component that declares `artifact_fetch` must also declare `synthesize`")]
     ArtifactFetchRequiresSynthesize,
+    /// A speech-world manifest declares `query_parameters` with `contracts.media` below
+    /// [`SPEECH_QUERY_PARAMETERS_MEDIA_CONTRACT`] or absent: a descriptor carries a declared query
+    /// parameter only from media contract 3 (speech world batch V3-1 record §6, SV-Q5). Added in
+    /// `south-provider-api` 0.58.0: a host matching this enum exhaustively must add the arm.
+    #[error(
+        "a speech component that declares `query_parameters` needs `compatibility.contracts.media` \
+         {SPEECH_QUERY_PARAMETERS_MEDIA_CONTRACT} or later (a media descriptor carries a declared \
+         query parameter from contract 3); the manifest declares {declared:?}"
+    )]
+    SpeechQueryParametersRequireMedia3 { declared: Option<u32> },
     #[error(
         "usage_evidence is a provider-world declaration; other worlds meter through their own \
          contracts"

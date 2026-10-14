@@ -198,6 +198,15 @@ pub mod speech_fixture;
 pub mod speech_json;
 pub mod speech_suite;
 pub use speech_suite::{SPEECH_COMPONENT_SUITE_V1, run_speech_component_suite_v1};
+// The four text-to-speech packages of batch V3-1 (design record
+// docs/design/2026-10-14-speech-v3-1-tts.md): their references, the pieces all four share and the
+// OpenAI speech body and event-stream reader the OpenAI-compatible and Groq packages share.
+mod openai_speech;
+pub mod reference_elevenlabs_speech;
+pub mod reference_groq_speech;
+pub mod reference_openai_compatible_speech;
+pub mod reference_xai_speech;
+mod speech_shared;
 // The XML well-formedness reader the `ssml_escaping` row uses.
 mod ssml_check;
 // The location rules the two Vertex AI references share (image record I3-3 §4).

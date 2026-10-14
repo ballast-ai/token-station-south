@@ -10,7 +10,6 @@
 //! host-to-component input ([`SpeechCallContextV1`]) tolerates unknown fields; everything a
 //! component returns is decoded strictly.
 
-use crate::JsonPointerV1;
 use crate::image::member_source_text;
 use crate::media::json::{self, Member, Node};
 use crate::media::{
@@ -19,6 +18,7 @@ use crate::media::{
     PathPatternV1, RESERVED_KEY_PREFIX, ResponseBodyFormV1, expand_references, is_media_type,
     is_tchar, walk_references,
 };
+use crate::{DeclaredQueryParameterV1, JsonPointerV1};
 use crate::{MAX_IMMUTABLE_BODY_PATHS, validate_immutable_body_paths};
 use serde::{Deserialize, Deserializer, Serialize};
 use std::{collections::BTreeSet, fmt};
@@ -1004,10 +1004,26 @@ where
     T::deserialize(deserializer).map(Some)
 }
 
-/// Decodes and validates a `prepare` result.
+/// Decodes and validates a `prepare` result of a package that declares no query parameters:
+/// [`parse_prepared_speech_call_with_declared_v1`] with no declarations.
 pub fn parse_prepared_speech_call_v1(
     json_text: &str,
     limits: &MediaLimitsV1,
+) -> Result<PreparedSpeechCallV1, SpeechContractErrorV1> {
+    parse_prepared_speech_call_with_declared_v1(json_text, limits, &[])
+}
+
+/// Decodes and validates a `prepare` result, admitting the package's declared query parameters.
+///
+/// A descriptor's query may name the parameters the package declares (`contracts.media` 3, speech
+/// world batch V3-1 record §6; [`MediaRequestDescriptorV1::parse_with_declared`]).
+///
+/// `declared` are the package's own manifest `query_parameters`, built once at load: one package's
+/// declarations never admit another's names.
+pub fn parse_prepared_speech_call_with_declared_v1(
+    json_text: &str,
+    limits: &MediaLimitsV1,
+    declared: &[DeclaredQueryParameterV1],
 ) -> Result<PreparedSpeechCallV1, SpeechContractErrorV1> {
     let wire: PreparedWire = serde_json::from_str(json_text).map_err(malformed)?;
     if wire.response_elision_paths.len() > limits.elision_paths {
@@ -1015,8 +1031,9 @@ pub fn parse_prepared_speech_call_v1(
     }
     let descriptor_text = member_source_text(json_text, "descriptor")
         .ok_or_else(|| malformed("descriptor missing"))?;
-    let descriptor = MediaRequestDescriptorV1::parse(&descriptor_text, limits)
-        .map_err(SpeechContractErrorV1::Descriptor)?;
+    let descriptor =
+        MediaRequestDescriptorV1::parse_with_declared(&descriptor_text, limits, declared)
+            .map_err(SpeechContractErrorV1::Descriptor)?;
     let (immutable_body_paths, immutable_form_fields) =
         match (descriptor.body(), wire.immutable_body_paths, wire.immutable_form_fields) {
             (MediaBodyV1::Empty, ..) => return Err(SpeechContractErrorV1::Body),
@@ -1052,8 +1069,8 @@ pub fn parse_prepared_speech_call_v1(
 }
 
 impl PreparedSpeechCallV1 {
-    /// Serializes the call compactly; [`parse_prepared_speech_call_v1`] of the result gives back
-    /// an equal call. The descriptor and the state are written as their source text, and the
+    /// Serializes the call compactly; [`parse_prepared_speech_call_with_declared_v1`] of the result,
+    /// with the declarations it was parsed with, gives back an equal call. The descriptor and the state are written as their source text, and the
     /// immutability key the body kind uses is always written.
     #[must_use]
     pub fn to_json(&self) -> String {
@@ -1599,6 +1616,37 @@ mod tests {
         let again =
             parse_prepared_speech_call_v1(&prepared.to_json(), &MediaLimitsV1::V1).expect("valid");
         assert_eq!(again, prepared);
+    }
+
+    #[test]
+    fn a_prepared_call_with_a_declared_query_needs_the_package_declarations() {
+        let text = r#"{"facts":{"operation":"synthesize","characters":{"count":2,"upper":2},
+            "metering_forms":["characters"],"output_media_type":"audio/mpeg"},
+            "descriptor":{"method":"POST","path":"v1/text-to-speech/v1",
+            "query":[{"name":"output_format","value":"mp3_44100_128"}],
+            "auth":{"arm":"header_secret","header":"xi-api-key","slot":"provider_api_key"},
+            "body":{"json":{"template":{"text":"hi","model_id":"eleven_v3"}}}},
+            "response_body_form":"binary","immutable_body_paths":["text","model_id"],
+            "state":{"form":"binary"}}"#;
+        assert_eq!(
+            parse_prepared_speech_call_v1(text, &MediaLimitsV1::V1),
+            Err(SpeechContractErrorV1::Descriptor(MediaDescriptorErrorV1::UnsanctionedQuery))
+        );
+        let declared =
+            [DeclaredQueryParameterV1::try_new("output_format", crate::QueryValueSyntaxV1::Token)
+                .expect("valid")];
+        let prepared =
+            parse_prepared_speech_call_with_declared_v1(text, &MediaLimitsV1::V1, &declared)
+                .expect("admitted with the declaration");
+        assert_eq!(prepared.descriptor.minimum_contract_version(), 3);
+        assert_eq!(
+            parse_prepared_speech_call_with_declared_v1(
+                &prepared.to_json(),
+                &MediaLimitsV1::V1,
+                &declared
+            ),
+            Ok(prepared)
+        );
     }
 
     #[test]
