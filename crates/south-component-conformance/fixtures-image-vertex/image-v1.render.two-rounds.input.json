@@ -1,0 +1,9 @@
+{
+  "response_cases": [
+    "image-v1.response.usage",
+    "image-v1.response.usage"
+  ],
+  "context": {
+    "created": 1760000000
+  }
+}

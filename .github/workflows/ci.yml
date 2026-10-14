@@ -49,6 +49,7 @@ jobs:
             components/image-minimax
             components/image-qwen
             components/image-stability
+            components/image-vertex
             components/provider-anthropic
             components/provider-anthropic-bedrock-invoke
             components/provider-bedrock-converse

@@ -1,7 +1,8 @@
 # Image world step I3-3: `image-vertex` (Nano Banana on Vertex AI)
 
-Status: proposed (awaiting lv's review of the rest; VI-Q1 and VI-Q2 ruled by lv on 2026-10-13 as recommended:
-the host re-reads a minted slot from round 2 on, and answers 400 for an operation the package does not declare).
+Status: accepted (lv reviewed the record on 2026-10-14, including the §8 decisions; VI-Q1 and VI-Q2 ruled on 2026-10-13
+as recommended: the host re-reads a minted slot from round 2 on, and answers 400 for an operation the package does not
+declare); implemented on branch `image-vertex` (see Implementation), not yet merged.
 
 Date: 2026-10-13
 
@@ -275,6 +276,90 @@ implementation.
   also uses for discovery). **Recommended: (b)**, a one-line host change that keeps the native status for Vertex and
   fixes Qwen at the same time; (a) if lv prefers not to touch the executor now.
 
+## Implementation (2026-10-14)
+
+What landed, on branch `image-vertex` (rebased on `origin/main` = `3f9ac00`, release 0.62.0, #208; `image-vertex` ships in the next release, 0.63.0):
+
+- **`image-vertex` 1.0.0**: manifest (family `vertex-ai-image`, `image-adapter-v1`, capabilities `["generate"]`,
+  `auth_arms` `["bearer"]`, `permissions.secrets` `["provider_api_key"]`, `contracts` `{image: 1, media: 2}`; the
+  `config_schema` entry and the `credentials` section copied byte for byte from `embeddings-vertex`, only the family key
+  differs), the guest crate (a thin shell like `image-gemini`), the reference `reference_vertex_image.rs` (the route and
+  the auth; everything else is `gemini_image` with `edit: false`), the fixture pack `fixtures-image-vertex/` (20 image
+  cases and the five copied `credential.*` cases, with a README), the suite test `vertex_image_suite` (the pack plus
+  seven named tests, two of them mutations), the sandbox parity test `vertex_image_sandbox_parity`, the build script and
+  the enumerations (`ci.yml` rust-cache, `release.yml` build / gate ② / package lists, `shipped_packages_v1`: 28 official
+  components, the media 2 branch of the range-handshake test and a test of its own), README and ARCHITECTURE.
+- **`vertex_location.rs`** (crate-private): the region and project readers, `base_of` and `origin_of`, and
+  `publisher_model_path`, which both Vertex references call (`…:predict` and `…:generateContent`). The read order
+  (region, project, then the base URL) is the one `embeddings-vertex` had; its pack passes unchanged and none of its
+  fixtures moved.
+
+Failing first: with the reference written and only three expectations written by hand (`prepare.generate`,
+`response.usage`, `response.prompt-blocked`), the pack test failed on the 17 cases still without an expectation and passed
+the three hand-written ones and the five credential cases. The other expectations were then taken from the reference and
+reviewed row by row against §3 to §5. Mutations: the shared module called with `edit: true` turns
+`edit_is_not_served` and the pack test red (the `capabilities.models` and `prepare.multipart-refused` rows); calling the
+shared `prepare` before building the route turns `a_configuration_error_is_a_500_before_any_request_refusal` red; a
+component that drops the `project` override fails the `prepare.project-override` row; one that accepts any Vertex AI base
+URL fails the `region-mismatch` and `global-prefixed-host` configuration rows.
+
+Versions (§9 is stale on numbers; Q47 against the previous release, v0.62.0): the new reference, `vertex_location.rs` and
+the suite rows change `south-component-conformance`, which every guest links, so it moves 0.61.0 (as 0.62.0 published it)
+→ 0.62.0; every component lockfile and `fuzz/Cargo.lock` follow. Every package published with 0.62.0 takes a patch with
+unchanged behaviour and keeps its `south_runtime` and its `contracts` (`embeddings-vertex` 1.0.13 → 1.0.14 only calls the
+location rules from their new module); `shipped_packages_v1::i3_3_retires_every_published_062_package_identity` pins
+each, and `task_contract_8_retires_every_kiro_step_package_identity` no longer pins the identities it left.
+`south-contracts` (0.54.0) and `south-provider-api` (0.55.0) are unchanged since v0.62.0; no `compatibility.json` change.
+
+| Item | Published in 0.62.0 | Now |
+|---|---|---|
+| `south-component-conformance` | 0.61.0 | 0.62.0 |
+| `image-vertex` | — | 1.0.0 (`contracts` `{image: 1, media: 2}`, `south_runtime` 0.59.0) |
+| `image-azure` / `image-gemini` / `image-ideogram` / `image-minimax` / `image-qwen` / `image-stability` | 1.0.10 / 1.0.4 / 1.0.2 / 1.0.5 / 1.0.5 / 1.0.3 | 1.0.11 / 1.0.5 / 1.0.3 / 1.0.6 / 1.0.6 / 1.0.4 |
+| `embeddings-openai-compatible` / `embeddings-gemini` / `embeddings-vertex` | 1.0.14 / 1.1.11 / 1.0.13 | 1.0.15 / 1.1.12 / 1.0.14 |
+| `provider-openai-compatible` | 2.6.6 | 2.6.7 |
+| `provider-anthropic`, `provider-anthropic-bedrock-invoke`, `provider-bedrock-converse`, `provider-bedrock-converse-bearer` | 1.1.6 | 1.1.7 |
+| `provider-gemini`, `provider-openai-responses` | 1.3.6 | 1.3.7 |
+| `provider-kiro` | 1.0.1 | 1.0.2 |
+| `task-kling` / `task-kling-v2` | 1.0.23 / 0.32.21 | 1.0.24 / 0.32.22 |
+| `task-minimax-v2`, `task-bailian-v2` | 0.31.20 | 0.31.21 |
+| `task-xai-v2`, `task-veo-v2`, `task-wan-image-v2`, `task-gmi-image-v2` | 0.35.20 | 0.35.21 |
+| `task-byteplus-v2` | 0.36.20 | 0.36.21 |
+| `task-gemini-omni-v2` | 0.1.0 | 0.1.1 |
+
+`image-vertex` declares `south_runtime` 0.59.0, the oldest runtime it needs: `contracts.media` 2 first shipped there (as
+for `image-gemini`), and the image world's value channel is older (0.52.0). This replaces §9's "the tree's release until
+the release commit moves it", which was written when media 2 was assumed to be new in this release; the package was
+loaded under the v0.59.0 runtime's `declared_runtime_v1` before the change, and `scripts/check-declared-runtime.sh
+--build` judges it with the v0.59.0 tag. The release commit leaves the declaration alone.
+
+Departures and interpretations:
+
+1. **The configuration refusals are not in the gate ② pack.** §8 lists `prepare` rows for a Vertex base of another
+   region, a missing `region` and a missing project, and §4 / V3 make each a 500 naming the value, as `embeddings-vertex`
+   answers. The image suite's `pre_dispatch_refusal` row (image record §12.1) fails any `prepare` refusal that is not
+   `invalid_request` or `capability`, so those three rows cannot be pack cases without either changing their status or
+   widening a gate ② row every image package is judged by. Neither is this step's to decide: the behaviour stays as §4
+   says, and the rows (with the prefixed `global` host as a fourth) are pinned by name in `vertex_image_suite`
+   (`CONFIGURATION_REFUSALS`, including the order before a request refusal) and run through the guest in
+   `vertex_image_sandbox_parity`. If lv prefers them in the pack, the choices are `capability` 400 (diverging from
+   `embeddings-vertex`) or a suite row that admits `internal` for a configuration error.
+2. **Two rows the suite requires beyond §8's list.** The suite needs a succeeding response under each declared metering
+   form and a `missing` row for each declared token bucket, so the pack adds `prepare.images-form` / `response.images-form`
+   (a per-image call with `resolution` `2k`, the `images` sample) and `response.missing-prompt-tokens` beside §8's one
+   missing bucket (`response.missing-candidates-tokens`).
+3. **The render's two rounds are the same answer twice.** The suite requires a render case's rounds to come from one
+   prepare case, and §8's only tokens-form success is `response.usage`, so `render.two-rounds` names it twice (a call
+   with `n` 2 whose two rounds answer alike).
+4. **"With the family renamed"** (§8) had nothing to rename: the five `credential.*` cases name no family, so they are
+   byte-identical copies.
+5. **The plain generation and `exported-project` rows.** The plain generation already reads the exported `project_id`
+   (`test-project`, from the host's test); `prepare.exported-project` uses the other id the host's tests use (`proj-a`)
+   so the row shows that value reaching the path; `prepare.project-override` sends both and the override wins.
+6. **The multipart refusal text** is the shared module's ("this family does not edit images", 400), per decision 4; the
+   native arm's own text ("not supported for Vertex AI models") is not reproduced. On a host with VI-Q2 the executor
+   answers before `prepare` runs, so the text is only seen by a host that skips the operation check.
+
 ## Corrections to the parent record (to land with the implementation)
 
 - §18.3, first row, "Fact" column: gate ① no longer refuses `config_schema` and credential attributes in the image
@@ -289,3 +374,9 @@ implementation.
 - 2026-10-13: lv ruled VI-Q1 (the host re-reads a minted slot from round 2 on; a precondition for `n > 1` Vertex rows) and
   VI-Q2 (option (b): the host answers 400 for an operation the package does not declare) as recommended; the rest of
   the record awaits lv's review.
+- 2026-10-14: lv reviewed and accepted the record, including the §8 decisions; status accepted. Implemented on branch
+  `image-vertex` (Implementation section, six departures or interpretations); the corrections to the parent record are
+  applied there.
+- 2026-10-14: rebased on release 0.62.0 (#208). Q47 now applies against v0.62.0: `south-component-conformance` 0.61.0 →
+  0.62.0 and every package published with 0.62.0 takes a patch (Implementation, versions table); `image-vertex` ships in
+  0.63.0 and keeps `south_runtime` 0.59.0.

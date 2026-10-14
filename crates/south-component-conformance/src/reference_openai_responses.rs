@@ -68,7 +68,7 @@ pub const CODEX_FAMILY: &str = codex::FAMILY;
 pub const NAME: &str = "provider-openai-responses";
 
 /// The package's version.
-pub const VERSION: &str = "1.3.6";
+pub const VERSION: &str = "1.3.7";
 
 /// The reference component. Stateless; each stream gets its own parser.
 #[derive(Debug, Default, Clone, Copy)]

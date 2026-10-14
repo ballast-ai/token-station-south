@@ -1,0 +1,24 @@
+{
+  "provider_config": {
+    "provider": "vertex-ai-image",
+    "base_url": "https://us-central1-aiplatform.googleapis.com",
+    "auth": "provider_api_key",
+    "declared": {
+      "project": "override-project",
+      "project_id": "proj-a",
+      "region": "us-central1"
+    }
+  },
+  "request": {
+    "json": {
+      "prompt": "a cat",
+      "n": 1
+    }
+  },
+  "context": {
+    "upstream_model": "gemini-3.1-flash-image",
+    "metering_required": [
+      "tokens"
+    ]
+  }
+}

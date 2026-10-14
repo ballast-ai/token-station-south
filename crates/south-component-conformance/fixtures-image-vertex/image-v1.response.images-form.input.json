@@ -1,0 +1,31 @@
+{
+  "prepare_case": "image-v1.prepare.images-form",
+  "response": {
+    "status": 200,
+    "body": {
+      "candidates": [
+        {
+          "content": {
+            "role": "model",
+            "parts": [
+              {
+                "inlineData": {
+                  "mimeType": "image/png",
+                  "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg=="
+                }
+              }
+            ]
+          },
+          "finishReason": "STOP"
+        }
+      ],
+      "usageMetadata": {
+        "promptTokenCount": 4,
+        "candidatesTokenCount": 1120,
+        "totalTokenCount": 1124,
+        "trafficType": "ON_DEMAND"
+      },
+      "modelVersion": "gemini-3.1-flash-image"
+    }
+  }
+}

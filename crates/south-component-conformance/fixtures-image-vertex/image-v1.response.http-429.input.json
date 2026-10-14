@@ -1,0 +1,13 @@
+{
+  "prepare_case": "image-v1.prepare.generate",
+  "response": {
+    "status": 429,
+    "body": {
+      "error": {
+        "code": 429,
+        "message": "Resource exhausted. Please try again later.",
+        "status": "RESOURCE_EXHAUSTED"
+      }
+    }
+  }
+}

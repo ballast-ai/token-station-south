@@ -1,0 +1,15 @@
+{
+  "prepare_case": "image-v1.prepare.generate",
+  "response": {
+    "status": 200,
+    "body": {
+      "promptFeedback": {
+        "blockReason": "PROHIBITED_CONTENT"
+      },
+      "usageMetadata": {
+        "promptTokenCount": 5,
+        "totalTokenCount": 5
+      }
+    }
+  }
+}

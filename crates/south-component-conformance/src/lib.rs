@@ -180,7 +180,10 @@ pub mod reference_gemini_embeddings;
 pub mod reference_gemini_image;
 pub mod reference_openai_compatible_embeddings;
 pub mod reference_vertex_embeddings;
+pub mod reference_vertex_image;
 #[cfg(feature = "sandbox")]
 pub mod sandbox_embeddings;
 #[cfg(feature = "sandbox")]
 pub mod sandbox_image;
+// The location rules the two Vertex AI references share (image record I3-3 §4).
+mod vertex_location;
