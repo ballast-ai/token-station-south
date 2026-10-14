@@ -1196,11 +1196,11 @@ changes; a change is a later package release with its own fixtures.
 
 The status line's "provisional items" are the six rows marked **Yes**.
 
-**KR2–KR5 aligned with the native arm (lv 2026-10-14, standing rule).** Under the standing rule above ("符合 DP0 即按
-推荐"), lv took the recommendation that the component must not refuse a request the native arm serves today. The four
-refusals of D3 that differed from the native arm (an unmodelled content part, a JSON response format, a forced or
-named tool choice, a final assistant turn) are withdrawn: the component makes the native arm's rewrite, and the
-request rows pin the native body (§18).
+**KR2–KR5 aligned with the native arm (lv 2026-10-14, standing rule).** Under the standing rule above (a question
+consistent with DP0 takes the recommendation), lv took the recommendation that the component must not refuse a request
+the native arm serves today. The four refusals of D3 that differed from the native arm (an unmodelled content part, a
+JSON response format, a forced or named tool choice, a final assistant turn) are withdrawn: the component makes the
+native arm's rewrite, and the request rows pin the native body (§18).
 
 ## 18. Implementation (2026-10-14)
 
