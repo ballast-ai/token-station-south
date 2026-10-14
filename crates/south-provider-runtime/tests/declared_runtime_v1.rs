@@ -39,10 +39,10 @@ fn as_u32(value: &Value, what: &str) -> u32 {
 }
 
 /// The range of a host linking exactly this tree's runtime and accepting nothing older: the
-/// kernel contracts and the task, embeddings, media and image contracts it decodes come from this tree's
-/// `compatibility.json`. A runtime older than the embeddings world records no embeddings contract,
-/// and this file also runs in checkouts of those runtimes, so that contract is read only where
-/// the record has it.
+/// kernel contracts and the task, embeddings, media, image and speech contracts it decodes come
+/// from this tree's `compatibility.json`. A runtime older than the embeddings world records no
+/// embeddings contract, and this file also runs in checkouts of those runtimes, so that contract is
+/// read only where the record has it.
 fn this_runtime_only() -> HostRangeV1 {
     let record: Value = serde_json::from_str(
         &std::fs::read_to_string(repo_root().join("compatibility.json"))
@@ -71,8 +71,10 @@ fn this_runtime_only() -> HostRangeV1 {
     // The image world's two contracts, from the first runtime that knows the world (0.52.0);
     // read only where the record has them, for the reason given for embeddings. As for
     // embeddings, the record names the newest contract and a host decodes every one up to it
-    // (`media` 2 from image world step I3-2, `media` 3 from speech world batch V3-1).
-    for name in ["media", "image"] {
+    // (`media` 2 from image world step I3-2, `media` 3 from speech world batch V3-1). The speech
+    // world's contract is read the same way, from the first release that records it (speech step
+    // S-S-5).
+    for name in ["media", "image", "speech"] {
         if let Some(number) = record["contracts"].get(name) {
             contracts.insert(name.to_owned(), (1..=as_u32(number, name)).collect());
         }

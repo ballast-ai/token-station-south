@@ -68,8 +68,9 @@ fn as_u32(value: &Value, what: &str) -> u32 {
 ///
 /// `runtime_abi` and `kernel_contracts` are read from `compatibility.json`, the record this release
 /// publishes, so the test host and the published record cannot drift apart. `contracts` holds the
-/// task contracts (7 and 8) and the embeddings contracts (1 and 2) this release's codecs decode, and
-/// `south_runtime` is the release itself.
+/// task contracts (7 and 8), the embeddings contracts (1 and 2), the media contracts (1 to 3) and the
+/// image and speech contracts this release's codecs decode, and `south_runtime` is the release
+/// itself.
 pub fn host_range() -> HostRangeV1 {
     let source = std::fs::read_to_string(repo_root().join("compatibility.json"))
         .expect("compatibility.json reads");
@@ -116,6 +117,12 @@ pub fn host_range() -> HostRangeV1 {
             (
                 "image".to_owned(),
                 BTreeSet::from([u32::from(south_contracts::image::IMAGE_CONTRACT_VERSION)]),
+            ),
+            // The speech world's own contract (speech record §14), recorded in
+            // `compatibility.json` at step S-S-5; speech packages declare it beside `media`.
+            (
+                "speech".to_owned(),
+                BTreeSet::from([u32::from(south_contracts::speech::SPEECH_CONTRACT_VERSION)]),
             ),
         ]),
     }

@@ -71,6 +71,11 @@ pub fn host_range() -> HostRangeV1 {
                 "image".to_owned(),
                 BTreeSet::from([as_u32(&record["contracts"]["image"], "contracts.image")]),
             ),
+            // The speech world's own contract (speech record §14), recorded at step S-S-5.
+            (
+                "speech".to_owned(),
+                BTreeSet::from([as_u32(&record["contracts"]["speech"], "contracts.speech")]),
+            ),
         ]),
     }
 }

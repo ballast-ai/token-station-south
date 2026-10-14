@@ -659,58 +659,63 @@ fn every_shipped_package_declares_the_range_handshake() {
             manifest.name
         );
         assert_eq!(declared.kernel_contracts, kernel_contracts, "{}", manifest.name);
-        let expected_contracts: std::collections::BTreeMap<String, u32> =
-            if manifest.name == "task-gemini-omni-v2" {
-                // The one task package on contract 8: inline artifacts are named by pointers into
-                // a view elided with the media vocabulary (the Omni record §13).
-                [
-                    ("task".to_owned(), u32::from(south_contracts::TASK_CONTRACT_VERSION)),
-                    ("media".to_owned(), u32::from(south_contracts::media::MEDIA_CONTRACT_VERSION)),
-                ]
-                .into()
-            } else if manifest.api_version.starts_with("task") {
-                // Contract 8 is additive, so every other task package stays at the contract 7 it
-                // was published with.
-                [("task".to_owned(), u32::from(south_contracts::TASK_CONTRACT_VERSION_V7))].into()
-            } else if manifest.api_version == south_provider_api::EMBEDDINGS_WORLD {
-                // Only a package that accepts media speaks contract 2 (embeddings record §17.4);
-                // the others stay at the contract 1 they were published with.
-                let contract = if manifest.capabilities.contains("media") {
-                    south_contracts::EMBEDDINGS_CONTRACT_VERSION_V2
-                } else {
-                    south_contracts::EMBEDDINGS_CONTRACT_VERSION
-                };
-                [("embeddings".to_owned(), u32::from(contract))].into()
-            } else if manifest.api_version == south_provider_api::IMAGE_WORLD {
-                // The image world speaks the shared media vocabulary and its own contract
-                // (image record §15). Only the two packages over the shared Gemini image module,
-                // `image-gemini` and `image-vertex`, name a contract 2 transform word
-                // (`data_url_payload`, I3-2 GI-Q1); the others stay at the media 1 they were
-                // published with.
-                let media = if matches!(manifest.name.as_str(), "image-gemini" | "image-vertex") {
-                    south_contracts::media::MEDIA_CONTRACT_VERSION_V2
-                } else {
-                    south_contracts::media::MEDIA_CONTRACT_VERSION
-                };
-                [
-                    ("media".to_owned(), u32::from(media)),
-                    ("image".to_owned(), u32::from(south_contracts::image::IMAGE_CONTRACT_VERSION)),
-                ]
-                .into()
-            } else if manifest.api_version == south_provider_api::SPEECH_WORLD {
-                // The speech world's packages declare the shared media vocabulary only:
-                // `compatibility.json` records `contracts.speech` at S-S-5, so no host range has
-                // a `speech` key to admit yet (V3-1 record, Implementation). `speech-elevenlabs`
-                // carries a declared query parameter, which needs media 3 (record §6, SV-Q5).
-                let media = if manifest.name == "speech-elevenlabs" {
-                    south_contracts::media::MEDIA_CONTRACT_VERSION_V3
-                } else {
-                    south_contracts::media::MEDIA_CONTRACT_VERSION
-                };
-                [("media".to_owned(), u32::from(media))].into()
+        let expected_contracts: std::collections::BTreeMap<String, u32> = if manifest.name
+            == "task-gemini-omni-v2"
+        {
+            // The one task package on contract 8: inline artifacts are named by pointers into
+            // a view elided with the media vocabulary (the Omni record §13).
+            [
+                ("task".to_owned(), u32::from(south_contracts::TASK_CONTRACT_VERSION)),
+                ("media".to_owned(), u32::from(south_contracts::media::MEDIA_CONTRACT_VERSION)),
+            ]
+            .into()
+        } else if manifest.api_version.starts_with("task") {
+            // Contract 8 is additive, so every other task package stays at the contract 7 it
+            // was published with.
+            [("task".to_owned(), u32::from(south_contracts::TASK_CONTRACT_VERSION_V7))].into()
+        } else if manifest.api_version == south_provider_api::EMBEDDINGS_WORLD {
+            // Only a package that accepts media speaks contract 2 (embeddings record §17.4);
+            // the others stay at the contract 1 they were published with.
+            let contract = if manifest.capabilities.contains("media") {
+                south_contracts::EMBEDDINGS_CONTRACT_VERSION_V2
             } else {
-                std::collections::BTreeMap::new()
+                south_contracts::EMBEDDINGS_CONTRACT_VERSION
             };
+            [("embeddings".to_owned(), u32::from(contract))].into()
+        } else if manifest.api_version == south_provider_api::IMAGE_WORLD {
+            // The image world speaks the shared media vocabulary and its own contract
+            // (image record §15). Only the two packages over the shared Gemini image module,
+            // `image-gemini` and `image-vertex`, name a contract 2 transform word
+            // (`data_url_payload`, I3-2 GI-Q1); the others stay at the media 1 they were
+            // published with.
+            let media = if matches!(manifest.name.as_str(), "image-gemini" | "image-vertex") {
+                south_contracts::media::MEDIA_CONTRACT_VERSION_V2
+            } else {
+                south_contracts::media::MEDIA_CONTRACT_VERSION
+            };
+            [
+                ("media".to_owned(), u32::from(media)),
+                ("image".to_owned(), u32::from(south_contracts::image::IMAGE_CONTRACT_VERSION)),
+            ]
+            .into()
+        } else if manifest.api_version == south_provider_api::SPEECH_WORLD {
+            // The speech world speaks the shared media vocabulary and its own contract, which
+            // `compatibility.json` records from step S-S-5 (speech record §14, §18).
+            // `speech-elevenlabs` carries a declared query parameter, which needs media 3
+            // (V3-1 record §6, SV-Q5); the others declare media 1.
+            let media = if manifest.name == "speech-elevenlabs" {
+                south_contracts::media::MEDIA_CONTRACT_VERSION_V3
+            } else {
+                south_contracts::media::MEDIA_CONTRACT_VERSION
+            };
+            [
+                ("media".to_owned(), u32::from(media)),
+                ("speech".to_owned(), u32::from(south_contracts::speech::SPEECH_CONTRACT_VERSION)),
+            ]
+            .into()
+        } else {
+            std::collections::BTreeMap::new()
+        };
         assert_eq!(declared.contracts, expected_contracts, "{}", manifest.name);
         seen += 1;
     }
@@ -2248,11 +2253,11 @@ fn s_s_1_retires_every_published_063_package_identity() {
 
 /// Speech world batch V3-1 (record `2026-10-14-speech-v3-1-tts.md` §1, §6): four packages start at
 /// 1.0.0 in the speech world, `synthesize` only, the secret slot `provider_api_key`, no config keys.
-/// Three declare `contracts.media` 1 and the first runtime with the speech world, 0.64.0, and a media
-/// 1 host admits them. `speech-elevenlabs` declares the query parameter `output_format` and so
-/// `contracts.media` 3, which a media 2 host refuses; media 3 is new in this tree, so it declares this
-/// tree's release (the workspace version), which the release commit moves with the workspace
-/// version (the I3-2 / `task-gemini-omni-v2` precedent).
+/// Three declare `contracts.media` 1, and a media 1 host admits them. `speech-elevenlabs` declares the
+/// query parameter `output_format` and so `contracts.media` 3, which a media 2 host refuses. Since
+/// step S-S-5 all four also declare `contracts.speech` 1, new in this tree, and so this tree's release
+/// (the workspace version), which the release commit moves with the workspace version (the I3-2 /
+/// `task-gemini-omni-v2` precedent).
 #[test]
 fn the_v3_1_speech_packages_declare_their_media_contract_and_runtime() {
     let read = |name: &str| -> ComponentManifestV1 {
@@ -2290,20 +2295,20 @@ fn the_v3_1_speech_packages_declare_their_media_contract_and_runtime() {
         assert!(manifest.declared_keys(family).is_empty(), "{name}");
         assert_eq!(
             manifest.compatibility.contracts,
-            std::collections::BTreeMap::from([("media".to_owned(), media)]),
+            std::collections::BTreeMap::from([
+                ("media".to_owned(), media),
+                ("speech".to_owned(), 1)
+            ]),
             "{name}"
         );
         assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()), "{name}");
+        // `contracts.speech` is new in this tree (S-S-5), so every speech package declares this
+        // tree's release (`the_speech_packages_declare_contracts_speech_1_and_this_release`).
+        assert_eq!(manifest.compatibility.south_runtime, host_range::south_release(), "{name}");
         if media == 1 {
-            assert_eq!(manifest.compatibility.south_runtime, "0.64.0", "{name}");
             assert!(manifest.query_parameters.is_empty(), "{name}");
             assert_eq!(compatibility_admits(&manifest, &media_1_only), Ok(()), "{name}");
         } else {
-            assert_eq!(
-                manifest.compatibility.south_runtime,
-                host_range::south_release(),
-                "{name}: declares this tree's release until the release commit moves it"
-            );
             assert_eq!(manifest.query_parameters.len(), 1, "{name}");
             assert_eq!(manifest.query_parameters[0].name, "output_format", "{name}");
             assert!(matches!(
@@ -2316,8 +2321,8 @@ fn the_v3_1_speech_packages_declare_their_media_contract_and_runtime() {
 
 /// Speech world batch V3-2 (record `2026-10-14-speech-v3-2-tts.md` §1, §3): `speech-mimo` and
 /// `speech-minimax` start at 1.0.0 in the speech world, `synthesize` only, `bearer` on the secret
-/// slot `provider_api_key`, `contracts` `{media: 1}` (until S-S-5 adds `speech`) and the first
-/// runtime with the speech world, 0.64.0, which a media 1 host admits. Neither declares a query
+/// slot `provider_api_key`, `contracts` `{media: 1, speech: 1}` (`speech` from step S-S-5) and so
+/// this tree's release; a media 1 host admits them. Neither declares a query
 /// parameter: `GroupId` is a sanctioned name. `speech-minimax` declares one non-secret config key,
 /// `group_id`, with `image-minimax`'s `digits` syntax and description (IM-Q3); `speech-mimo` none.
 #[test]
@@ -2346,10 +2351,10 @@ fn the_v3_2_speech_packages_declare_their_runtime_and_values() {
         assert!(manifest.query_parameters.is_empty(), "{name}");
         assert_eq!(
             manifest.compatibility.contracts,
-            std::collections::BTreeMap::from([("media".to_owned(), 1)]),
+            std::collections::BTreeMap::from([("media".to_owned(), 1), ("speech".to_owned(), 1)]),
             "{name}"
         );
-        assert_eq!(manifest.compatibility.south_runtime, "0.64.0", "{name}");
+        assert_eq!(manifest.compatibility.south_runtime, host_range::south_release(), "{name}");
         assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()), "{name}");
         assert_eq!(compatibility_admits(&manifest, &media_1_only), Ok(()), "{name}");
         let declared: Vec<String> =
@@ -2377,8 +2382,9 @@ fn the_v3_2_speech_packages_declare_their_runtime_and_values() {
 /// unpublished, so they gain `transcribe` (and `speech-openai-compatible` `translate`) at 1.0.0 with
 /// no version move and keep their runtime and contracts; `speech-azure` starts at 1.0.0,
 /// `transcribe` only, `header_secret`, no config keys and no query parameter (`api-version` is a
-/// sanctioned name), `contracts.media` 1 and the first runtime with the speech world, 0.64.0, which
-/// a media 1 host admits. No other speech package changes. Speech batch V4 then gives
+/// sanctioned name), `contracts.media` 1, which a media 1 host admits. No other speech package
+/// changes. Step S-S-5 adds `contracts.speech` 1 and with it this tree's release as the runtime of
+/// every speech package. Speech batch V4 then gives
 /// `speech-azure` `synthesize` at the same unpublished 1.0.0
 /// (`the_v4_speech_packages_declare_their_values_and_runtime`).
 #[test]
@@ -2395,13 +2401,17 @@ fn the_v3_3_speech_packages_declare_their_operations_and_runtime() {
     let mut media_1_only = host_range::host_range();
     media_1_only.contracts.insert("media".to_owned(), BTreeSet::from([1]));
     for (name, capabilities, runtime) in [
-        ("speech-openai-compatible", vec!["synthesize", "transcribe", "translate"], "0.64.0"),
-        ("speech-xai", vec!["synthesize", "transcribe"], "0.64.0"),
+        (
+            "speech-openai-compatible",
+            vec!["synthesize", "transcribe", "translate"],
+            host_range::south_release(),
+        ),
+        ("speech-xai", vec!["synthesize", "transcribe"], host_range::south_release()),
         ("speech-elevenlabs", vec!["synthesize", "transcribe"], host_range::south_release()),
-        ("speech-azure", vec!["synthesize", "transcribe"], "0.64.0"),
-        ("speech-groq", vec!["synthesize"], "0.64.0"),
-        ("speech-mimo", vec!["synthesize"], "0.64.0"),
-        ("speech-minimax", vec!["synthesize"], "0.64.0"),
+        ("speech-azure", vec!["synthesize", "transcribe"], host_range::south_release()),
+        ("speech-groq", vec!["synthesize"], host_range::south_release()),
+        ("speech-mimo", vec!["synthesize"], host_range::south_release()),
+        ("speech-minimax", vec!["synthesize"], host_range::south_release()),
     ] {
         let manifest = read(name);
         assert_eq!(manifest.version, "1.0.0", "{name}: unpublished, no version move");
@@ -2417,16 +2427,16 @@ fn the_v3_3_speech_packages_declare_their_operations_and_runtime() {
     assert!(azure.query_parameters.is_empty());
     assert_eq!(
         azure.compatibility.contracts,
-        std::collections::BTreeMap::from([("media".to_owned(), 1)])
+        std::collections::BTreeMap::from([("media".to_owned(), 1), ("speech".to_owned(), 1)])
     );
     assert_eq!(compatibility_admits(&azure, &media_1_only), Ok(()));
 }
 
 /// Speech world batch V4 (record `2026-10-15-speech-v4-tts.md` §1, §2.6, §3.1, §4.1, §10):
 /// `speech-qwen` and `speech-vertex` start at 1.0.0 in the speech world, `synthesize` only (Qwen also
-/// `artifact_fetch`), `bearer` on the secret slot `provider_api_key`, `contracts` `{media: 1}` (until
-/// S-S-5 adds `speech`) and the first runtime with the speech world, 0.64.0, which a media 1 host
-/// admits. Neither declares a query parameter. `speech-vertex` declares `image-vertex`'s
+/// `artifact_fetch`), `bearer` on the secret slot `provider_api_key`, `contracts` `{media: 1,
+/// speech: 1}` (`speech` from step S-S-5) and so this tree's release; a media 1 host admits them.
+/// Neither declares a query parameter. `speech-vertex` declares `image-vertex`'s
 /// configuration keys and credentials section byte for byte, so one row and one credential serve
 /// the three Vertex packages; `speech-qwen` declares neither. `speech-azure` gains `synthesize` at
 /// its unpublished 1.0.0 and keeps everything else.
@@ -2469,10 +2479,10 @@ fn the_v4_speech_packages_declare_their_values_and_runtime() {
         assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer"], "{name}");
         assert_eq!(manifest.declared_keys(family), keys.into_iter().collect(), "{name}");
         assert!(manifest.query_parameters.is_empty(), "{name}");
-        assert_eq!(manifest.compatibility.south_runtime, "0.64.0", "{name}");
+        assert_eq!(manifest.compatibility.south_runtime, host_range::south_release(), "{name}");
         assert_eq!(
             manifest.compatibility.contracts,
-            std::collections::BTreeMap::from([("media".to_owned(), 1)]),
+            std::collections::BTreeMap::from([("media".to_owned(), 1), ("speech".to_owned(), 1)]),
             "{name}"
         );
         assert_eq!(compatibility_admits(&manifest, &media_1_only), Ok(()), "{name}");
@@ -2576,4 +2586,64 @@ fn minimax_immutable_paths_retire_the_published_task_minimax_v2_identity() {
     assert_eq!(manifest.version, "0.33.1");
     assert_eq!(manifest.compatibility.south_runtime, declared_runtime_now("task-minimax-v2"));
     assert_eq!(manifest.compatibility.contracts.get("task"), Some(&7));
+}
+
+/// Speech world step S-S-5 (speech record §14, §18): `compatibility.json` records `contracts.speech`
+/// 1, which includes the `url` artifact form's optional `upgrade_insecure` member (V4, SV-Q10), and
+/// every speech package declares it beside `media`. No published runtime (0.64.0 and older) records
+/// the key, so a host linking one refuses every speech package; each therefore declares this tree's
+/// release, which the release commit moves with the workspace version (the I3-2 /
+/// `task-gemini-omni-v2` precedent). The packages are unpublished, so they stay 1.0.0 and declaring
+/// the contract re-identifies no other package. A host range without `speech`, or one listing only
+/// another number, refuses each package by the `speech` contract; one listing `speech` 1 admits it.
+#[test]
+fn the_speech_packages_declare_contracts_speech_1_and_this_release() {
+    let speech = u32::from(south_contracts::speech::SPEECH_CONTRACT_VERSION);
+    assert_eq!(speech, 1);
+    let mut without_speech = host_range::host_range();
+    assert_eq!(without_speech.contracts.remove("speech"), Some(BTreeSet::from([speech])));
+    let mut speech_2_only = host_range::host_range();
+    speech_2_only.contracts.insert("speech".to_owned(), BTreeSet::from([2]));
+    let mut seen = Vec::new();
+    for package in shipped_packages() {
+        let manifest: ComponentManifestV1 =
+            serde_json::from_str(&std::fs::read_to_string(package.join("manifest.json")).unwrap())
+                .unwrap();
+        if manifest.api_version != south_provider_api::SPEECH_WORLD {
+            assert_eq!(manifest.compatibility.contracts.get("speech"), None, "{}", manifest.name);
+            continue;
+        }
+        let name = manifest.name.clone();
+        assert_eq!(manifest.version, "1.0.0", "{name}: unpublished, no version move");
+        assert_eq!(manifest.compatibility.contracts.get("speech"), Some(&speech), "{name}");
+        assert_eq!(
+            manifest.compatibility.south_runtime,
+            host_range::south_release(),
+            "{name}: declares this tree's release until the release commit moves it"
+        );
+        assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()), "{name}");
+        for refusing in [&without_speech, &speech_2_only] {
+            match compatibility_admits(&manifest, refusing) {
+                Err(CompatibilityMismatchV2::Contract { name: contract, declared, .. }) => {
+                    assert_eq!((contract.as_str(), declared), ("speech", speech), "{name}");
+                }
+                other => panic!("{name}: a host without speech 1 admitted it: {other:?}"),
+            }
+        }
+        seen.push(name);
+    }
+    assert_eq!(
+        seen,
+        [
+            "speech-azure",
+            "speech-elevenlabs",
+            "speech-groq",
+            "speech-mimo",
+            "speech-minimax",
+            "speech-openai-compatible",
+            "speech-qwen",
+            "speech-vertex",
+            "speech-xai",
+        ]
+    );
 }
