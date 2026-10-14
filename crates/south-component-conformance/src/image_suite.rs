@@ -34,8 +34,6 @@ pub const IMAGE_COMPONENT_SUITE_V1: &str = south_provider_api::IMAGE_BEHAVIOR_SU
 
 /// The key injected to prove a component tolerates a newer host's field.
 const UNKNOWN_FIELD: &str = "__conformance_unknown_field";
-/// The prefix of the key injected to prove a component ignores an undeclared `declared` key.
-const UNDECLARED_VALUE: &str = "conformance_undeclared_";
 /// The placeholder namespace no output may carry (image record §6.2, §12.1).
 const RESERVED_PREFIX: &str = "$south.";
 
@@ -419,36 +417,16 @@ fn unknown_field_tolerance(
     }
 }
 
+/// `UndeclaredValuesIgnored` on a prepare case: the image world's value channel (§18.3), judged
+/// by the row the embeddings and speech worlds share.
 fn undeclared_values_ignored(suite: &Suite<'_>, case: &ImageCaseV1, first: &Invoked) -> OutcomeV1 {
-    let check = CheckV1::UndeclaredValuesIgnored;
-    let family = case.input.pointer("/provider_config/provider").and_then(Value::as_str);
-    let declared = family.map(|family| suite.manifest.declared_keys(family)).unwrap_or_default();
-    let key = (0..=declared.len())
-        .map(|index| format!("{UNDECLARED_VALUE}{index}"))
-        .find(|key| !declared.contains(key.as_str()))
-        .unwrap_or_default();
-    let mut mutated = case.input.clone();
-    let Some(Value::Object(config)) = mutated.pointer_mut("/provider_config") else {
-        return OutcomeV1::failed(check, &case.name, "fixture has no object at `/provider_config`");
-    };
-    let entry = config.entry("declared").or_insert_with(|| Value::Object(serde_json::Map::new()));
-    let Value::Object(values) = entry else {
-        return OutcomeV1::failed(
-            check,
-            &case.name,
-            "`/provider_config/declared` is not an object",
-        );
-    };
-    values.insert(key.clone(), Value::String("undeclared".to_owned()));
-    if suite.invoke(case, &mutated) == *first {
-        OutcomeV1::passed(check, &case.name)
-    } else {
-        OutcomeV1::failed(
-            check,
-            &case.name,
-            format!("the undeclared key `declared.{key}` changed the answer"),
-        )
-    }
+    crate::undeclared_values::undeclared_values_ignored(
+        &case.name,
+        &case.input,
+        first,
+        suite.manifest,
+        &|mutated| suite.invoke(case, mutated),
+    )
 }
 
 /// Every blob id a request view holds: `$south.blob` placeholders and multipart blobs.

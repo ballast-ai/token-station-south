@@ -67,10 +67,6 @@ fn required_rows(manifest: &ComponentManifestV1) -> Vec<&'static str> {
 /// The key injected to prove a component tolerates a newer peer's field.
 const UNKNOWN_FIELD: &str = "__conformance_unknown_field";
 
-/// The prefix of the key injected to prove a component ignores a `declared` key its package does
-/// not declare; a numeric suffix keeps it clear of any key the package declares.
-const UNDECLARED_VALUE: &str = "conformance_undeclared_";
-
 /// What one case produced as JSON; `Err` is a fixture or boundary failure, never the component's
 /// own refusal, which is a value (`{"error": ...}`).
 type Invoked = Result<Value, String>;
@@ -417,52 +413,20 @@ fn media_follows_declaration(
     }
 }
 
-/// Adds a key the manifest does not declare to `ProviderConfig.declared` and requires the same
-/// answer, a refusal included (the provider suite's check, embeddings record §16). The key is valid
-/// under the kernel's `ComponentValues` grammar, so only the declaration tells it apart from one
-/// the component may read. The embeddings world has no `host_values`.
+/// `UndeclaredValuesIgnored` on a request case (the provider suite's check, embeddings record §16),
+/// judged by the row the image and speech worlds share. The embeddings world has no `host_values`.
 fn undeclared_values_ignored(
     suite: &Suite<'_>,
     case: &EmbeddingsCaseV1,
     first: &Invoked,
 ) -> OutcomeV1 {
-    let check = CheckV1::UndeclaredValuesIgnored;
-    let family = case.input.pointer("/provider_config/provider").and_then(Value::as_str);
-    let declared = family.map(|family| suite.manifest.declared_keys(family)).unwrap_or_default();
-    // One more candidate than there are declared keys, so one is always free.
-    let key = (0..=declared.len())
-        .map(|index| format!("{UNDECLARED_VALUE}{index}"))
-        .find(|key| !declared.contains(key.as_str()))
-        .unwrap_or_default();
-    let mut mutated = case.input.clone();
-    let Some(Value::Object(config)) = mutated.pointer_mut("/provider_config") else {
-        return OutcomeV1::failed(
-            check,
-            &case.name,
-            "fixture has no object at `/provider_config` to carry `declared`",
-        );
-    };
-    let entry = config.entry("declared").or_insert_with(|| Value::Object(serde_json::Map::new()));
-    let Value::Object(values) = entry else {
-        return OutcomeV1::failed(
-            check,
-            &case.name,
-            "`/provider_config/declared` is not an object",
-        );
-    };
-    values.insert(key.clone(), Value::String("undeclared".to_owned()));
-    if suite.invoke(case, &mutated) == *first {
-        OutcomeV1::passed(check, &case.name)
-    } else {
-        OutcomeV1::failed(
-            check,
-            &case.name,
-            format!(
-                "adding the undeclared key `declared.{key}` changed the answer; a component reads \
-                 only the keys its package declares"
-            ),
-        )
-    }
+    crate::undeclared_values::undeclared_values_ignored(
+        &case.name,
+        &case.input,
+        first,
+        suite.manifest,
+        &|mutated| suite.invoke(case, mutated),
+    )
 }
 
 /// `LocatorResolves` on a response case the fixture calls valid, and `UsageNeverDefaulted` on a

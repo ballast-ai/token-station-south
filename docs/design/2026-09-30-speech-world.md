@@ -964,6 +964,113 @@ patch with unchanged behaviour and keeps its `south_runtime` and its `contracts`
 (`s_s_1_retires_every_published_063_package_identity`); `i3_3_retires_every_published_062_package_identity` no longer
 pins the identities it left.
 
+## S-S-2 implementation (2026-10-14)
+
+Built on branch `speech-s-s-2` from `origin/main` `f1d6ecb` (S-S-1), for review. The image world's S-I-3 and S-I-4
+(0.52.0, image record "Implementation note: S-I-3 and S-I-4") are the model throughout; where this record is silent the
+image convention is followed and the choice is listed below.
+
+### What landed
+
+| Piece | Where | Record |
+|---|---|---|
+| `wit/speech-adapter.wit`: package `token-station:speech-adapter@1.0.0`, world `speech-adapter-v1`, exports `metadata`, `healthcheck`, `model-capabilities`, `prepare`, `parse-response`, no import; `SPEECH_ADAPTER_WIT` embeds it | `crates/south-provider-api/` | §3, §7 |
+| `SPEECH_WIT_PACKAGE`, `SPEECH_WORLD`, `SPEECH_BEHAVIOR_SUITE`, `SPEECH_CAPABILITIES` (`synthesize`, `transcribe`, `translate`, `artifact_fetch`), `SPEECH_OPERATION_CAPABILITIES`, `SPEECH_WORLD_SCHEMA` (auth arms `bearer`, `header_secret`; `HostImportV1::Pure`; value channel) and its `KNOWN_WORLDS` row | `manifest.rs` | §3, §4, §17.4 |
+| The `validate_role` branch: at least one of `synthesize` / `transcribe` (`ManifestErrorV1::SpeechOperationRequired`), `translate` only with `transcribe` (`ManifestErrorV1::TranslateRequiresTranscribe`), a provider family required | `manifest.rs` | §4, §17.4 |
+| Gate ① admits `config_schema` and exported credential attributes (the value channel, under the provider world's key rules) and `query_parameters` (under the boundary record §10 rules, through `InstanceDeclarationsV1::QueryParameters`); `quota_headers`, `user_agent`, `host_values`, `endpoint` and every other provider-world declaration stay refused | `manifest.rs`, `instances.rs`, `values.rs` | §17.3 |
+| Runtime: `bindings::speech` (`bindgen!`), `InstanceKind::Speech` with its accessor and the named world-mismatch errors in every other accessor, `call_speech_model_capabilities`, `call_speech_prepare`, `call_speech_parse_response`, the identity probe; the linker offers no `host` and the import scan is the pure worlds' | `crates/south-provider-runtime/src/` | §3, §17.4 |
+| Gate ②'s `UndeclaredValuesIgnored` row for the worlds whose only value source is `ProviderConfig.declared` | `crates/south-component-conformance/src/undeclared_values.rs` | §17.3, §18 |
+| Test guest `tests/guests/test-speech` and `tests/speech_world_v1.rs` | `crates/south-provider-runtime/` | §18 acceptance |
+
+Tests. Gate ① (`provider_api_v2.rs`, `component_values_v1.rs`): every admitted combination of the operation words under
+either arm; refusal of no operation word, of `artifact_fetch` alone, of `translate` without `transcribe`; unknown words
+(including `tts`, `asr`, another world's words and the dialect word `speech.translate`); the arms `oauth`, `host_signed`
+and `bearer_and_header_secret`; `host_values`, `endpoint`, `signing`, `stream_framing`, `usage_evidence`,
+`request_facts`, `immutable_body_paths`, `quota_headers`, `user_agent`, the task-v2 bucket declarations and
+`min_poll_interval_seconds`; `query_parameters` admitted and held to the provider world's name and syntax rules, and
+still refused in the image, embeddings and task worlds; the value channel admitted and held to the provider key rules;
+the WIT's package, world, function set, parameter names and `result` returns; every world's posture. Runtime
+(`speech_world_v1.rs`, the embeddings and image cases ported): the package loads and answers its three calls; every
+`token-station:` import and every `host` interface is refused before instantiation; the other worlds' faces, the image
+face included, are refused by name on a speech component and the speech face on theirs; speech bytes cannot claim
+another world or identity, and provider and image bytes cannot claim the speech world; both handshakes and gate ① run
+before the bytes are opened; input, output and guest-error bounds; the default 16 MiB payload bound in every argument
+position; a panic, an allocation past the limit and a hang are clean errors the component survives; determinism across
+calls and instances; coexistence with the image, embeddings and provider worlds in one runtime.
+
+### Interpretations where the record is silent or ambiguous
+
+1. **A world property, not a world name check.** §17.3 admits `query_parameters` and keeps `quota_headers` and
+   `user_agent` refused, but `WorldSchemaV1::instance_declarations` was one flag for all three. It becomes a
+   three-valued `InstanceDeclarationsV1` (`None`: task, embeddings, image; `QueryParameters`: speech; `All`: provider)
+   rather than a second flag: a fourth `bool` in the struct is refused by the workspace lints
+   (`clippy::struct_excessive_bools`), and no world admits `quota_headers` or `user_agent` without `query_parameters`.
+   Every existing world's behaviour is unchanged, its refusal order included (`query_parameters`, `quota_headers`,
+   `user_agent`). A world refuses the first declaration it does not admit before any declaration is checked, so a
+   valid query declaration never hides a refused `user_agent`. Changing the field's type breaks a host that reads it
+   or builds a `WorldSchemaV1` literal, as the image world's four new fields did; none in this repository does.
+2. **Two error variants, in this order.** "At least one of `synthesize` / `transcribe`" is checked before "`translate`
+   implies `transcribe`", so `["translate"]` alone is `SpeechOperationRequired` and `["synthesize", "translate"]` is
+   `TranslateRequiresTranscribe`. Both are new `ManifestErrorV1` variants, breaking for a host that matches the enum
+   exhaustively, as 0.52.0's `ImageOperationRequired` was; the release record (S-S-5) lists them.
+3. **`artifact_fetch` needs `synthesize`** (resolved 2026-10-14, open question 2 below): first drafted with no rule of
+   its own; gate ① now refuses it without `synthesize` (`ArtifactFetchRequiresSynthesize`).
+4. **`SPEECH_OPERATION_CAPABILITIES`** is a public constant (the two words of which one is required), the counterpart
+   of `TASK_REQUIRED_CAPABILITIES`; the image world needs none because both its words are operations.
+5. **The WIT comment on `model-capabilities`** names the operations and the metering forms only: §7's "voices/formats"
+   is dropped, per the S-S-1 resolution of question 1. The function set, parameter names and the `prepare` refusal
+   comment are §7's.
+6. **Runtime names and limits.** The calls are `call_speech_*` because the provider and image worlds export the same
+   WIT names (the image world's convention). The limits are the defaults (payload 16 MiB, memory 64 MiB, 2 s), not the
+   embeddings media memory (192 MiB): §6 keeps audio out of the sandbox. Calls go through the single shared instance
+   as for every other world.
+7. **The `UndeclaredValuesIgnored` row without a speech suite.** The suite is S-S-3, yet the §18 row puts this check
+   in S-S-2. The embeddings and image suites each carried a copy of the same check; S-S-2 moves it into one crate
+   function that takes a fixture input, its first answer, the manifest and the call, injects an undeclared key into
+   `/provider_config/declared` and requires the same answer. The embeddings and image suites now call it (the image
+   row's failure detail gains the embeddings row's wording; nothing else changes), and S-S-3's speech suite calls it on
+   its `prepare` cases. Its unit tests run a speech-shaped `prepare` input against a Vertex-style speech manifest.
+8. **The test guest** `tests/guests/test-speech` is built by `scripts/prebuild-components.sh`, cached by CI, and
+   `speech_world_v1` is in the nextest setup-script filter, as for `test-image`. Its manifest declares no south contract:
+   `compatibility.json` records `contracts.speech` only at S-S-5, and no package is published before then.
+9. **The provider world's `immutable_body_paths` stays refused** in this world: speech's immutability is declared per
+   call in `PreparedSpeechCallV1` (§7, S-S-1), not per family in the manifest.
+
+### Points that contradict the record (flagged, not silently chosen)
+
+- **A declared query parameter cannot yet travel on a media descriptor.** §17.3 says that, once gate ① admits
+  `query_parameters`, "everything else it needs exists" (`QueryParameterV1::Declared` and the `token` syntax). That is
+  true of the provider world, but `MediaRequestDescriptorV1::parse` (`south-contracts/src/media/descriptor.rs`) admits
+  only the fixed `QueryParameterV1::ALL` and refuses any other name as `UnsanctionedQuery`, and it is not given the
+  package's declarations. So an `ElevenLabs` speech package may now declare `output_format`, but a descriptor carrying
+  `?output_format=mp3_44100_128` would still be refused. S-S-2 lands the gate ① half as §18 specifies and does not
+  change the media descriptor; the other half is open question 1.
+
+### Open questions for lv
+
+1. **The media descriptor's declared query parameters.** Which step adds them (a parse that takes the package's
+   `query_parameters` and builds `QueryParameterV1::Declared`, the host passing the same declarations), and does it move
+   a contract number? The wire shape (`query: [{name, value}]`) is unchanged; what widens is what a host must accept,
+   which suggests `contracts.media` 3 (the 0.59.0 precedent for `media` 2) rather than no bump. It must land before the
+   `ElevenLabs` package, the last of the V3-1 batch (S-S-4); §18 assigns it to no step. Recommendation: S-S-3, with the
+   other contract work this world still needs (the `sse` view), as `contracts.media` 3.
+2. **`artifact_fetch` without `synthesize`.** URL artifacts are synthesis output (§6); recognition delivers documents.
+   S-S-2 admits `artifact_fetch` with `transcribe` alone, since §4 states no rule. Should gate ① refuse it there, as it
+   refuses `translate` without `transcribe`? Recommendation: refuse it, as a third rule with its own variant, since a
+   word nothing honours is a promise (the reason the task worlds refuse credential attributes).
+
+### Resolutions (2026-10-14)
+
+- **Question 1, declared query parameters on a media descriptor (lv, 2026-10-14, as recommended but in another step):**
+  the media descriptor accepts a query parameter the package declares (`QueryParameterV1::Declared`, values under the
+  existing grammar) as `contracts.media` 3, additive. It lands with the ElevenLabs package in S-S-4 (V3-1), the first
+  package that needs it, not in S-S-3; the earlier V3-1 packages do not depend on it.
+- **Question 2, `artifact_fetch` without `synthesize`:** refused, as recommended. It follows the repo's rule that a
+  declaration nothing honours is refused (the task worlds refuse credential attributes for that reason): URL artifacts
+  are synthesis output (§6). Gate ① returns `ManifestErrorV1::ArtifactFetchRequiresSynthesize` (a third variant; a host
+  matching the enum exhaustively adds the arm); `artifact_fetch_without_synthesize_is_refused` pins it, and removing the
+  rule turns that test red.
+
 ## Revision note (2026-10-14)
 
 - S-S-1 implementation section added: what landed, fourteen interpretations, two points that contradict the record
@@ -971,3 +1078,10 @@ pins the identities it left.
   decision changed.
 - 2026-10-14: the four S-S-1 open questions resolved (Resolutions): 1 and 4 by precedent and as provisional; 2 (`sse` view
   as one array document per §6, built in S-S-3) and 3 (speech media type parameters kept) ruled by lv as recommended.
+- S-S-2 implementation section added: what landed (the WIT, the `SPEECH_*` constants and schema row, the `validate_role`
+  branch, gate ① admitting the value channel and `query_parameters`, the runtime world, the shared
+  `UndeclaredValuesIgnored` row), nine interpretations, one point that contradicts §17.3 (a declared query parameter
+  cannot yet travel on a media descriptor) and two open questions for lv. Under Q47 `south-provider-api` moves 0.56.0 →
+  0.57.0; the packages already took this release's patch in S-S-1. No design decision changed.
+- 2026-10-14: the two S-S-2 open questions resolved (Resolutions): declared query parameters on a media descriptor as
+  `contracts.media` 3 with the ElevenLabs package (S-S-4); `artifact_fetch` without `synthesize` refused.

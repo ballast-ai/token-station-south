@@ -87,6 +87,7 @@ mod task_fixture;
 pub mod task_json;
 mod task_suite;
 mod typed_request;
+mod undeclared_values;
 
 pub use component::{
     ComponentResultV1, ProviderComponentV1, StreamParserV1, SubmitOutcomeV1, TaskComponentV1,

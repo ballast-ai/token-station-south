@@ -66,17 +66,19 @@ pub use manifest::{
     EMBEDDINGS_MEDIA_CAPABILITY, EMBEDDINGS_MEDIA_CONTRACT, EMBEDDINGS_WIT_PACKAGE,
     EMBEDDINGS_WORLD, EMBEDDINGS_WORLD_SCHEMA, GENERATE_CONTENT_OUTPUT_CAP, HostExpectationsV1,
     HostImportV1, HostRangeV1, IMAGE_BEHAVIOR_SUITE, IMAGE_CAPABILITIES, IMAGE_WIT_PACKAGE,
-    IMAGE_WORLD, IMAGE_WORLD_SCHEMA, KNOWN_WORLDS, MAX_IMMUTABLE_BODY_PATH_BYTES,
-    MAX_IMMUTABLE_BODY_PATHS, MAX_OUTPUT_CAP_LOCATIONS, MAX_TASK_POLL_INTERVAL_SECONDS,
-    MIN_TASK_POLL_INTERVAL_SECONDS, ManifestErrorV1, ModelLocationV1, NorthProtocolV1,
-    PROVIDER_AUTH_ARMS, PROVIDER_CAPABILITIES, PROVIDER_WORLD, PROVIDER_WORLD_SCHEMA, RUNTIME_ABI,
-    RequestFactsV1, SIGNED_HEADER_NAMES, SigningSchemeV1, SigningV1, StreamFramingV1,
-    StreamLocationV1, TASK_AUTH_ARMS, TASK_BEHAVIOR_SUITE, TASK_BEHAVIOR_SUITE_V2,
-    TASK_CAPABILITIES, TASK_INLINE_CONTRACT, TASK_REQUIRED_CAPABILITIES, TASK_TOKEN_BUCKETS,
-    TASK_WIT_PACKAGE, TASK_WIT_PACKAGE_V2, TASK_WORLD, TASK_WORLD_SCHEMA, TASK_WORLD_SCHEMA_V2,
-    TASK_WORLD_V2, TemplateParamV1, UsageEvidenceV1, WIT_PACKAGE, WorldSchemaV1,
-    are_immutable_body_paths, compatibility_admits, compatibility_matches, known_world,
-    validate_component_name, validate_package_relative_path,
+    IMAGE_WORLD, IMAGE_WORLD_SCHEMA, InstanceDeclarationsV1, KNOWN_WORLDS,
+    MAX_IMMUTABLE_BODY_PATH_BYTES, MAX_IMMUTABLE_BODY_PATHS, MAX_OUTPUT_CAP_LOCATIONS,
+    MAX_TASK_POLL_INTERVAL_SECONDS, MIN_TASK_POLL_INTERVAL_SECONDS, ManifestErrorV1,
+    ModelLocationV1, NorthProtocolV1, PROVIDER_AUTH_ARMS, PROVIDER_CAPABILITIES, PROVIDER_WORLD,
+    PROVIDER_WORLD_SCHEMA, RUNTIME_ABI, RequestFactsV1, SIGNED_HEADER_NAMES, SPEECH_BEHAVIOR_SUITE,
+    SPEECH_CAPABILITIES, SPEECH_OPERATION_CAPABILITIES, SPEECH_WIT_PACKAGE, SPEECH_WORLD,
+    SPEECH_WORLD_SCHEMA, SigningSchemeV1, SigningV1, StreamFramingV1, StreamLocationV1,
+    TASK_AUTH_ARMS, TASK_BEHAVIOR_SUITE, TASK_BEHAVIOR_SUITE_V2, TASK_CAPABILITIES,
+    TASK_INLINE_CONTRACT, TASK_REQUIRED_CAPABILITIES, TASK_TOKEN_BUCKETS, TASK_WIT_PACKAGE,
+    TASK_WIT_PACKAGE_V2, TASK_WORLD, TASK_WORLD_SCHEMA, TASK_WORLD_SCHEMA_V2, TASK_WORLD_V2,
+    TemplateParamV1, UsageEvidenceV1, WIT_PACKAGE, WorldSchemaV1, are_immutable_body_paths,
+    compatibility_admits, compatibility_matches, known_world, validate_component_name,
+    validate_package_relative_path,
 };
 
 // The component value channel (Q14, host-zero-vendor-boundary §13.8).
@@ -119,3 +121,8 @@ pub const EMBEDDINGS_ADAPTER_WIT: &str = include_str!("../wit/embeddings-adapter
 /// in its own package so it versions independently of the other worlds
 /// (2026-09-30 image-world record, D2).
 pub const IMAGE_ADAPTER_WIT: &str = include_str!("../wit/image-adapter.wit");
+
+/// The speech component ABI, as WIT source: pure exports and no host import,
+/// in its own package so it versions independently of the other worlds
+/// (2026-09-30 speech-world record, D1 and D5).
+pub const SPEECH_ADAPTER_WIT: &str = include_str!("../wit/speech-adapter.wit");

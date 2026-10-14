@@ -473,6 +473,96 @@ fn the_image_world_holds_its_values_to_the_provider_rules() {
     );
 }
 
+/// [`image_with_values`] moved to the speech world: what a Vertex TTS family declares (speech
+/// record §17.3, which reuses the `embeddings-vertex` recipe and keys).
+fn speech_with_values() -> Value {
+    let mut manifest = image_with_values();
+    manifest["name"] = json!("speech-vertex");
+    manifest["api_version"] = json!("speech-adapter-v1");
+    manifest["capabilities"] = json!(["synthesize"]);
+    manifest["conformance"]["required_suite"] = json!("south.speech-component.v1");
+    manifest["compatibility"]["wit_package"] = json!("token-station:speech-adapter@1.0.0");
+    manifest["compatibility"]["contracts"] = json!({});
+    manifest
+}
+
+/// A speech host builds `declared` per attempt as an image host does (speech record §17.3), so the
+/// world admits a family's config keys and exported attributes, and both reach `declared_keys` /
+/// `declared_values`.
+#[test]
+fn the_speech_world_admits_config_keys_and_exported_attributes() {
+    let manifest = parse(speech_with_values());
+    assert_eq!(manifest.validate(), Ok(()));
+    assert_eq!(manifest.declared_keys("gemini"), BTreeSet::from(["project_id", "region"]));
+    assert_eq!(
+        manifest.declared_values(
+            "gemini",
+            &values(&[("region", "us-central1")]),
+            &values(&[("project_id", "fake-project")])
+        ),
+        Ok(values(&[("project_id", "fake-project"), ("region", "us-central1")]))
+    );
+
+    let mut keys_only = speech_with_values();
+    keys_only.as_object_mut().unwrap().remove("credentials");
+    assert_eq!(parse(keys_only).validate(), Ok(()));
+    let mut attributes_only = speech_with_values();
+    attributes_only.as_object_mut().unwrap().remove("config_schema");
+    assert_eq!(parse(attributes_only).validate(), Ok(()));
+}
+
+/// What the speech world admits is held to the provider world's key rules, and of the provider
+/// declarations only `query_parameters` is widened with it: `endpoint`, `host_values`,
+/// `quota_headers` and `user_agent` stay provider-only (speech record §17.3).
+#[test]
+fn the_speech_world_holds_its_values_to_the_provider_rules() {
+    let refused = |edit: &dyn Fn(&mut Value)| {
+        let mut manifest = speech_with_values();
+        edit(&mut manifest);
+        parse(manifest).validate()
+    };
+    assert!(matches!(
+        refused(&|m| m["config_schema"]["gemini"]["Region"] =
+            json!({ "syntax": "token", "description": "x" })),
+        Err(ManifestErrorV1::InvalidEndpoint { .. })
+    ));
+    assert!(matches!(
+        refused(&|m| m["config_schema"]["vertex"] = json!({})),
+        Err(ManifestErrorV1::InvalidEndpoint { .. })
+    ));
+    assert_eq!(
+        refused(&|m| m["config_schema"]["gemini"]["project_id"] =
+            json!({ "syntax": "gcp_project_id", "description": "x" })),
+        Err(ManifestErrorV1::DeclaredValueNameCollision {
+            family: "gemini".to_owned(),
+            name: "project_id".to_owned(),
+        })
+    );
+    assert_eq!(
+        refused(&|m| m["endpoint"] = json!({ "gemini": "https://{region}-api.example.test" })),
+        Err(ManifestErrorV1::EndpointIsAProviderWorldDeclaration)
+    );
+    assert_eq!(
+        refused(&|m| m["host_values"] = json!(["attempt_id"])),
+        Err(ManifestErrorV1::InstanceIsAProviderWorldDeclaration("host_values".to_owned()))
+    );
+    assert_eq!(
+        refused(&|m| m["user_agent"] = json!({ "gemini": "acme/1.0" })),
+        Err(ManifestErrorV1::InstanceIsAProviderWorldDeclaration("user_agent".to_owned()))
+    );
+    assert_eq!(
+        refused(&|m| m["quota_headers"] =
+            json!([{ "header": "x-quota-remaining", "field": "x-ratelimit-remaining-tokens" }])),
+        Err(ManifestErrorV1::InstanceIsAProviderWorldDeclaration("quota_headers".to_owned()))
+    );
+    assert_eq!(
+        refused(
+            &|m| m["query_parameters"] = json!([{ "name": "output_format", "syntax": "token" }])
+        ),
+        Ok(())
+    );
+}
+
 /// KC1 record §5 (owner ruling K3): the host rewrites the caller's end-user id to a per-tenant
 /// pseudonym and passes it as `end_user_hash`; gate ① admits the word, and the value syntax every
 /// component checks is published here so a host can check the same before it sends.

@@ -68,6 +68,17 @@ pub const IMAGE_WORLD: &str = "image-adapter-v1";
 /// The image component behavior suite (compatibility tuple 6).
 pub const IMAGE_BEHAVIOR_SUITE: &str = "south.image-component.v1";
 
+/// The speech world's WIT package (compatibility tuple field 3).
+///
+/// A package of its own for the same reason as [`IMAGE_WIT_PACKAGE`]
+/// (2026-09-30 speech-world record, D1).
+pub const SPEECH_WIT_PACKAGE: &str = "token-station:speech-adapter@1.0.0";
+/// The speech world name, doubling as the manifest `api_version`
+/// (compatibility tuple field 4).
+pub const SPEECH_WORLD: &str = "speech-adapter-v1";
+/// The speech component behavior suite (compatibility tuple 6).
+pub const SPEECH_BEHAVIOR_SUITE: &str = "south.speech-component.v1";
+
 /// Whether a world's components reach the host's `host` interface, and what
 /// the runtime's import scan refuses for that world.
 ///
@@ -86,8 +97,8 @@ pub enum HostImportV1 {
     Unlinked,
     /// The runtime does not link `host`, and the import scan refuses every
     /// `token-station:` import and every interface named `host` in any
-    /// package: the world imports nothing from a host. The embeddings and
-    /// image worlds.
+    /// package: the world imports nothing from a host. The embeddings, image
+    /// and speech worlds.
     Pure,
 }
 
@@ -139,10 +150,43 @@ pub struct WorldSchemaV1 {
     /// `north_passthrough`. Without it gate ① refuses each as a provider-world
     /// declaration.
     pub request_declarations: bool,
-    /// Whether the world admits the B7a instance declarations
-    /// (`query_parameters`, `quota_headers`, `user_agent`; §10). Without it
-    /// gate ① refuses each as a provider-world declaration.
-    pub instance_declarations: bool,
+    /// Which of the B7a instance declarations (`query_parameters`,
+    /// `quota_headers`, `user_agent`; §10) the world admits. Gate ① refuses
+    /// each one it does not as a provider-world declaration.
+    pub instance_declarations: InstanceDeclarationsV1,
+}
+
+/// Which B7a instance declarations (host-zero-vendor-boundary §10) a world
+/// admits.
+///
+/// Three values rather than one flag per declaration because the declarations
+/// are not independent in practice: every world that admits `quota_headers` or
+/// `user_agent` (whose only consumers are chat transports) also admits
+/// `query_parameters`, and the speech world admits `query_parameters` alone,
+/// for `ElevenLabs`'s `output_format` (2026-09-30 speech-world record, §5 D3b
+/// and §17.3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InstanceDeclarationsV1 {
+    /// None of the three. The task, embeddings and image worlds.
+    None,
+    /// `query_parameters` only. The speech world.
+    QueryParameters,
+    /// All three. The provider world.
+    All,
+}
+
+impl InstanceDeclarationsV1 {
+    /// Whether the world admits `query_parameters`.
+    #[must_use]
+    pub const fn admits_query_parameters(self) -> bool {
+        matches!(self, Self::QueryParameters | Self::All)
+    }
+
+    /// Whether the world admits `quota_headers` and `user_agent`.
+    #[must_use]
+    pub const fn admits_quota_headers_and_user_agent(self) -> bool {
+        matches!(self, Self::All)
+    }
 }
 
 /// The provider world's capability vocabulary.
@@ -294,7 +338,7 @@ pub const PROVIDER_WORLD_SCHEMA: WorldSchemaV1 = WorldSchemaV1 {
     host_import: HostImportV1::Linked,
     value_channel: true,
     request_declarations: true,
-    instance_declarations: true,
+    instance_declarations: InstanceDeclarationsV1::All,
 };
 
 /// The task world's capability vocabulary.
@@ -373,7 +417,7 @@ pub const TASK_WORLD_SCHEMA: WorldSchemaV1 = WorldSchemaV1 {
     host_import: HostImportV1::Linked,
     value_channel: false,
     request_declarations: false,
-    instance_declarations: false,
+    instance_declarations: InstanceDeclarationsV1::None,
 };
 
 /// Task-v2 currently admits the two validated descriptor credential arms.
@@ -386,7 +430,7 @@ pub const TASK_WORLD_SCHEMA_V2: WorldSchemaV1 = WorldSchemaV1 {
     host_import: HostImportV1::Unlinked,
     value_channel: false,
     request_declarations: false,
-    instance_declarations: false,
+    instance_declarations: InstanceDeclarationsV1::None,
 };
 
 /// The embeddings world's capability vocabulary, for contracts 1 and 2.
@@ -429,7 +473,7 @@ pub const EMBEDDINGS_WORLD_SCHEMA: WorldSchemaV1 = WorldSchemaV1 {
     host_import: HostImportV1::Pure,
     value_channel: true,
     request_declarations: false,
-    instance_declarations: false,
+    instance_declarations: InstanceDeclarationsV1::None,
 };
 
 /// The image world's capability vocabulary: one word per operation, closed.
@@ -461,7 +505,50 @@ pub const IMAGE_WORLD_SCHEMA: WorldSchemaV1 = WorldSchemaV1 {
     host_import: HostImportV1::Pure,
     value_channel: true,
     request_declarations: false,
-    instance_declarations: false,
+    instance_declarations: InstanceDeclarationsV1::None,
+};
+
+/// The speech world's capability vocabulary, closed.
+///
+/// - `synthesize`: the component builds text-to-speech requests.
+/// - `transcribe`: the component builds speech recognition requests.
+/// - `translate`: the component builds recognition requests whose transcript
+///   is translated to English; it implies `transcribe`.
+/// - `artifact_fetch`: the component may produce URL artifacts the host
+///   fetches, so the host knows at load time whether to wire the second hop
+///   (the task world's word, with the same meaning).
+///
+/// A component declares at least one of [`SPEECH_OPERATION_CAPABILITIES`]
+/// ([`ManifestErrorV1::SpeechOperationRequired`]), `translate` only with
+/// `transcribe` ([`ManifestErrorV1::TranslateRequiresTranscribe`]), and
+/// `artifact_fetch` only with `synthesize`
+/// ([`ManifestErrorV1::ArtifactFetchRequiresSynthesize`]). Which
+/// models can serve an operation is per model, from the speech dialect words
+/// `model-capabilities` reads (2026-09-30 speech-world record, §4 D2).
+pub const SPEECH_CAPABILITIES: &[&str] =
+    &["synthesize", "transcribe", "translate", "artifact_fetch"];
+
+/// The speech words of which a component declares at least one: without
+/// either it builds no request at all (2026-09-30 speech-world record, §4).
+pub const SPEECH_OPERATION_CAPABILITIES: &[&str] = &["synthesize", "transcribe"];
+
+/// The speech world, as gate ① validates it.
+///
+/// Its auth arms are the two descriptor credential arms: a minted credential
+/// (Vertex) arrives through a `minted` slot and is presented as `bearer`, so
+/// `oauth` is not an arm here, and nothing in this world signs (§3). It admits
+/// the value channel, as the image world does, and of the instance
+/// declarations `query_parameters` alone (§17.3).
+pub const SPEECH_WORLD_SCHEMA: WorldSchemaV1 = WorldSchemaV1 {
+    world: SPEECH_WORLD,
+    wit_package: SPEECH_WIT_PACKAGE,
+    behavior_suite: SPEECH_BEHAVIOR_SUITE,
+    capabilities: SPEECH_CAPABILITIES,
+    auth_arms: &["bearer", "header_secret"],
+    host_import: HostImportV1::Pure,
+    value_channel: true,
+    request_declarations: false,
+    instance_declarations: InstanceDeclarationsV1::QueryParameters,
 };
 
 /// Every world this South can admit.
@@ -471,6 +558,7 @@ pub const KNOWN_WORLDS: &[WorldSchemaV1] = &[
     TASK_WORLD_SCHEMA_V2,
     EMBEDDINGS_WORLD_SCHEMA,
     IMAGE_WORLD_SCHEMA,
+    SPEECH_WORLD_SCHEMA,
 ];
 
 /// Resolves a manifest's declared `api_version` to a world this South knows.
@@ -617,11 +705,12 @@ pub struct ComponentManifestV1 {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub endpoint: BTreeMap<String, String>,
     /// Each family's non-secret configuration keys (§7.3). Every world with
-    /// [`WorldSchemaV1::value_channel`] (provider, embeddings and image; the embeddings record
-    /// §16): every key reaches the component in `ProviderConfig.declared`.
+    /// [`WorldSchemaV1::value_channel`] (provider, embeddings, image and speech; the embeddings
+    /// record §16): every key reaches the component in `ProviderConfig.declared`.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub config_schema: BTreeMap<String, BTreeMap<String, crate::ConfigKeyV1>>,
-    // B7a (query, quota, user-agent): provider instances, §10. Provider world only.
+    // B7a (query, quota, user-agent): provider instances, §10. Provider world only, except that
+    // the speech world also admits `query_parameters` ([`InstanceDeclarationsV1::QueryParameters`]).
     /// Query parameters the package's requests may carry beyond the fixed sanctioned ones, each a
     /// name and a value syntax. A `Vec`, so a repeated name is refused rather than collapsed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -1215,6 +1304,27 @@ impl ComponentManifestV1 {
                 return Err(ManifestErrorV1::ProviderFamilyRequired);
             }
         }
+        if world.world == SPEECH_WORLD {
+            // Neither operation word means the component builds no request at all, and a
+            // translation is a recognition request (speech record §4 D2).
+            if !SPEECH_OPERATION_CAPABILITIES.iter().any(|word| self.capabilities.contains(*word)) {
+                return Err(ManifestErrorV1::SpeechOperationRequired);
+            }
+            if self.capabilities.contains("translate") && !self.capabilities.contains("transcribe")
+            {
+                return Err(ManifestErrorV1::TranslateRequiresTranscribe);
+            }
+            // URL artifacts are synthesis output (§6): recognition delivers documents, so
+            // `artifact_fetch` without `synthesize` is a word nothing honours.
+            if self.capabilities.contains("artifact_fetch")
+                && !self.capabilities.contains("synthesize")
+            {
+                return Err(ManifestErrorV1::ArtifactFetchRequiresSynthesize);
+            }
+            if self.providers.is_empty() {
+                return Err(ManifestErrorV1::ProviderFamilyRequired);
+            }
+        }
         // The value channel (embeddings record §16, image record §18.3): a family's non-secret
         // keys reach the component in `ProviderConfig.declared`, under the provider world's key
         // rules. A world with request declarations checked them with its endpoints above; with no
@@ -1716,6 +1826,21 @@ pub enum ManifestErrorV1 {
     /// host that matches this enum exhaustively must add the arm on re-pin.
     #[error("every image component must support `generate`, `edit` or both")]
     ImageOperationRequired,
+    /// A speech-world manifest declares neither `synthesize` nor `transcribe`
+    /// (2026-09-30 speech-world record, §4 D2). Added with the speech world: a
+    /// host matching this enum exhaustively must add the arm.
+    #[error("every speech component must support `synthesize`, `transcribe` or both")]
+    SpeechOperationRequired,
+    /// A speech-world manifest declares `translate` without `transcribe`: a
+    /// translation is a recognition request whose transcript is in English
+    /// (2026-09-30 speech-world record, §4 D2).
+    #[error("a speech component that declares `translate` must also declare `transcribe`")]
+    TranslateRequiresTranscribe,
+    /// A speech-world manifest declares `artifact_fetch` without `synthesize`:
+    /// URL artifacts are synthesis output, recognition delivers documents
+    /// (2026-09-30 speech-world record, §6; S-S-2 open question 2, 2026-10-14).
+    #[error("a speech component that declares `artifact_fetch` must also declare `synthesize`")]
+    ArtifactFetchRequiresSynthesize,
     #[error(
         "usage_evidence is a provider-world declaration; other worlds meter through their own \
          contracts"
