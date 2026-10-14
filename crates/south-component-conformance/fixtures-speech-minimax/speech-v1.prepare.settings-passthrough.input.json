@@ -1,0 +1,38 @@
+{
+  "provider_config": {
+    "provider": "minimax-speech",
+    "base_url": "https://api.minimax.io",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "speech-2.6-hd"
+      },
+      {
+        "model": "speech-02-hd"
+      }
+    ]
+  },
+  "request": {
+    "json": {
+      "input": "hi",
+      "voice": "English_Graceful_Lady",
+      "response_format": "wav",
+      "speed": 1.2,
+      "voice_setting": {
+        "emotion": "happy",
+        "voice_id": "ignored"
+      },
+      "audio_setting": {
+        "sample_rate": 24000,
+        "format": "ignored"
+      }
+    }
+  },
+  "context": {
+    "upstream_model": "speech-2.6-hd",
+    "operation": "synthesize",
+    "metering_required": [
+      "characters"
+    ]
+  }
+}

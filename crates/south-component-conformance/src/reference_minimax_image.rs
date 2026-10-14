@@ -22,7 +22,8 @@
 //!   1002 → 429, 1008 / 2153 → 503, else 502; the token-station host answers 502 while the funds
 //!   are parked, IM-Q6 as re-ruled); the codes that mean "refused before output"
 //!   are `rejected`, and 1026 (an output violation, possibly charged; IM-Q4) and any code the table
-//!   does not name are `unknown`. A missing `base_resp` is success. Each non-empty
+//!   does not name are `unknown` (the table lives in `minimax_shared.rs`, shared with
+//!   `speech-minimax`). A missing `base_resp` is success. Each non-empty
 //!   `data.image_urls[i]` is a `url` artifact and each non-empty `data.image_base64[i]` an inline
 //!   base64 `image/png` artifact (IM-Q5), URLs first; none is `unknown`. `images_reported` is
 //!   `metadata.success_count` (evidence: the host settles it under Q9's rule, IM-Q1).
@@ -43,13 +44,14 @@ use south_contracts::media::{
     MediaLimitsV1, MediaRequestDescriptorV1, PathPatternV1, ResponseBodyFormV1,
 };
 use south_provider_api::ComponentMetadataV1;
-use token_station_protocol::{ErrorCode, ErrorEnvelope, ProviderConfig};
+use token_station_protocol::{ErrorEnvelope, ProviderConfig};
 
 use crate::image_shared::{
     bearer, capped, code_message, images_only, internal, invalid, is_blob, non_2xx,
     non_empty_inline, reported_count, requested, serves, status_code, url_entry, view_status,
     with_refs,
 };
+use crate::minimax_shared::{BaseRespV1, MALFORMED_STATUS_CODE, base_resp, failure_reason};
 use crate::{ComponentResultV1, ImageComponentV1, ImageOutcomeV1, ImageRenderedV1};
 
 /// The package name this reference is published as.
@@ -75,8 +77,6 @@ const MAX_IMAGES: u64 = 9;
 /// Request-side elision: the reference images, which are usually data URLs.
 const REQUEST_ELISION_PATHS: [&str; 3] =
     ["/subject_reference/*/image_file", "/image_url", "/image_url/*"];
-/// The `base_resp` codes that mean the upstream refused before producing anything.
-const REFUSED_BEFORE_OUTPUT: [i64; 6] = [1004, 2049, 2013, 1002, 1008, 2153];
 
 /// The reference component. Stateless.
 #[derive(Debug, Default, Clone, Copy)]
@@ -129,21 +129,6 @@ fn image_urls(body: &Map<String, Value>) -> ComponentResultV1<Option<Vec<Value>>
             invalid(format!("image_url must be a string or an array of strings (got {other})"))
         }),
     }
-}
-
-/// The host's status for a `base_resp` code (`minimax_status.rs`), as an envelope.
-fn body_failure(code: i64, base_resp: &Value) -> ErrorEnvelope {
-    let (error_code, status) = match code {
-        1004 | 2049 => (ErrorCode::Auth, 401),
-        1026 => (ErrorCode::ContentPolicy, 400),
-        2013 => (ErrorCode::InvalidRequest, 400),
-        1002 => (ErrorCode::RateLimit, 429),
-        1008 | 2153 => (ErrorCode::UpstreamUnavailable, 503),
-        _ => (ErrorCode::ProviderProtocolError, 502),
-    };
-    let mut envelope = ErrorEnvelope::new(error_code, status, code_message(error_code));
-    envelope.provider_message = base_resp["status_msg"].as_str().and_then(capped);
-    envelope
 }
 
 fn pointer(text: &str) -> ComponentResultV1<JsonPointerV1> {
@@ -306,29 +291,21 @@ impl ImageComponentV1 for MiniMaxImageReferenceV1 {
                 error: None,
             });
         }
-        let base_resp = &body["base_resp"];
-        let code = match &base_resp["status_code"] {
-            Value::Null => 0,
-            value => match value.as_i64() {
-                Some(code) => code,
-                None => {
-                    return Ok(ImageOutcomeV1::Unknown {
-                        reason: "a malformed base_resp.status_code".to_owned(),
-                        error: None,
-                    });
-                }
-            },
-        };
-        if code != 0 {
-            let error = body_failure(code, base_resp);
-            return Ok(if REFUSED_BEFORE_OUTPUT.contains(&code) {
-                ImageOutcomeV1::Rejected { error }
-            } else {
-                ImageOutcomeV1::Unknown {
-                    reason: format!("MiniMax base_resp status code {code}"),
+        match base_resp(&body) {
+            BaseRespV1::Success => {}
+            BaseRespV1::Malformed => {
+                return Ok(ImageOutcomeV1::Unknown {
+                    reason: MALFORMED_STATUS_CODE.to_owned(),
+                    error: None,
+                });
+            }
+            BaseRespV1::Refused(error) => return Ok(ImageOutcomeV1::Rejected { error }),
+            BaseRespV1::Failed { code, error } => {
+                return Ok(ImageOutcomeV1::Unknown {
+                    reason: failure_reason(code),
                     error: Some(error),
-                }
-            });
+                });
+            }
         }
         let mut artifacts = Vec::new();
         if let Some(urls) = body.pointer("/data/image_urls").and_then(Value::as_array) {

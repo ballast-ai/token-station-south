@@ -1,0 +1,10 @@
+{
+  "outcome": "unknown",
+  "reason": "MiniMax base_resp status code 1026",
+  "error": {
+    "code": "content_policy",
+    "http_status": 400,
+    "message": "the upstream refused on content-policy grounds",
+    "provider_message": "input new_sensitive"
+  }
+}

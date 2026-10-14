@@ -207,6 +207,12 @@ pub mod reference_groq_speech;
 pub mod reference_openai_compatible_speech;
 pub mod reference_xai_speech;
 mod speech_shared;
+// The two text-to-speech packages of batch V3-2 (design record
+// docs/design/2026-10-14-speech-v3-2-tts.md) and the `MiniMax` `base_resp` table the speech and
+// image `MiniMax` references share.
+mod minimax_shared;
+pub mod reference_mimo_speech;
+pub mod reference_minimax_speech;
 // The XML well-formedness reader the `ssml_escaping` row uses.
 mod ssml_check;
 // The location rules the two Vertex AI references share (image record I3-3 §4).

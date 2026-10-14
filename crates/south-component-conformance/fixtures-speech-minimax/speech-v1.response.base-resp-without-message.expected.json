@@ -1,0 +1,9 @@
+{
+  "outcome": "unknown",
+  "reason": "MiniMax base_resp status code 1000",
+  "error": {
+    "code": "provider_protocol_error",
+    "http_status": 502,
+    "message": "the upstream reported a failure in a 2xx answer"
+  }
+}

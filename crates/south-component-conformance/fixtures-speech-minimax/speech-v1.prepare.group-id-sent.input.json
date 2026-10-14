@@ -1,0 +1,33 @@
+{
+  "provider_config": {
+    "provider": "minimax-speech",
+    "base_url": "https://api.minimaxi.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "speech-2.6-hd"
+      },
+      {
+        "model": "speech-02-hd"
+      }
+    ],
+    "declared": {
+      "group_id": "1900001234"
+    }
+  },
+  "request": {
+    "json": {
+      "model": "media/tts",
+      "input": "hello world",
+      "voice": "alloy",
+      "response_format": "mp3"
+    }
+  },
+  "context": {
+    "upstream_model": "speech-2.6-hd",
+    "operation": "synthesize",
+    "metering_required": [
+      "characters"
+    ]
+  }
+}

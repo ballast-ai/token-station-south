@@ -1,0 +1,31 @@
+{
+  "provider_config": {
+    "provider": "mimo-speech",
+    "base_url": "https://api.xiaomimimo.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "mimo-v2.5-tts"
+      },
+      {
+        "model": "mimo-v2.5-tts-voiceclone"
+      },
+      {
+        "model": "mimo-v2.5-tts-voicedesign"
+      }
+    ]
+  },
+  "request": {
+    "json": {
+      "input": "hi",
+      "voice": "Nova"
+    }
+  },
+  "context": {
+    "upstream_model": "mimo-v2.5-tts-voiceclone",
+    "operation": "synthesize",
+    "metering_required": [
+      "characters"
+    ]
+  }
+}

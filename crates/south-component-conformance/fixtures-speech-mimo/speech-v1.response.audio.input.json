@@ -1,0 +1,29 @@
+{
+  "prepare_case": "speech-v1.prepare.native-mp3",
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "id": "chatcmpl-mimo",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "",
+            "audio": {
+              "id": "a1",
+              "data": "TUlNT1dBVg=="
+            }
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 12,
+        "completion_tokens": 30,
+        "total_tokens": 42
+      }
+    }
+  }
+}

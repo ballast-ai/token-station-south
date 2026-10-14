@@ -1,6 +1,7 @@
-//! What the suite tests of the four text-to-speech packages of speech world batch V3-1 share
-//! (design record `docs/design/2026-10-14-speech-v3-1-tts.md` §12): the shipped manifest and pack,
-//! the rows each run must show, and the component mutations every pack must turn red.
+//! What the suite tests of the text-to-speech packages of speech world batches V3-1 and V3-2 share
+//! (design records `docs/design/2026-10-14-speech-v3-1-tts.md` §12 and
+//! `docs/design/2026-10-14-speech-v3-2-tts.md` §8): the shipped manifest and pack, the rows each run
+//! must show, and the component mutations every pack must turn red.
 
 #![allow(dead_code, reason = "each test binary mounting this module uses a different subset")]
 

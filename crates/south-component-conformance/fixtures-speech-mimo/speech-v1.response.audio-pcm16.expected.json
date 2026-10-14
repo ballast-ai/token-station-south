@@ -1,0 +1,17 @@
+{
+  "outcome": "succeeded",
+  "artifact": {
+    "form": "inline",
+    "pointer": "/choices/0/message/audio/data",
+    "encoding": "base64",
+    "media_type": "audio/pcm"
+  },
+  "metering": {
+    "characters": {
+      "value": 11,
+      "source": "request"
+    },
+    "seconds": null,
+    "tokens": null
+  }
+}

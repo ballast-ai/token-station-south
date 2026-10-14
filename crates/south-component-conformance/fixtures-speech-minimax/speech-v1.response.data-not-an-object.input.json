@@ -1,0 +1,20 @@
+{
+  "prepare_case": "speech-v1.prepare.native-mp3",
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "data": [
+        "415544494f"
+      ],
+      "extra_info": {
+        "usage_characters": 9,
+        "audio_format": "mp3"
+      },
+      "base_resp": {
+        "status_code": 0,
+        "status_msg": "success"
+      }
+    }
+  }
+}

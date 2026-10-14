@@ -1,0 +1,5 @@
+{
+  "outcome": "unknown",
+  "reason": "host: response body cannot be elided: document is not valid JSON",
+  "error": null
+}

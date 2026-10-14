@@ -175,6 +175,14 @@ name = "elevenlabs_speech_sandbox_parity"
 required-features = ["sandbox"]
 
 [[test]]
+name = "mimo_speech_sandbox_parity"
+required-features = ["sandbox"]
+
+[[test]]
+name = "minimax_speech_sandbox_parity"
+required-features = ["sandbox"]
+
+[[test]]
 name = "embeddings_payload_measurement"
 required-features = ["sandbox"]
 

@@ -1,0 +1,15 @@
+{
+  "provider_config": {
+    "provider": "minimax-speech",
+    "base_url": "https://api.minimax.io",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "speech-2.6-hd"
+      },
+      {
+        "model": "speech-02-hd"
+      }
+    ]
+  }
+}

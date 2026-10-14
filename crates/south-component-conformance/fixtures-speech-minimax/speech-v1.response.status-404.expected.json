@@ -1,0 +1,9 @@
+{
+  "outcome": "rejected",
+  "error": {
+    "code": "invalid_request",
+    "http_status": 404,
+    "message": "the upstream refused the request as malformed",
+    "provider_message": "{\"error\":\"not found\"}"
+  }
+}

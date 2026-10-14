@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "MiniMax T2A cannot emit response_format='opus'. Supported: mp3, wav, flac, pcm."
+  }
+}

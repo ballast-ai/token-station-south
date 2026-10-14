@@ -15,7 +15,7 @@ mod host_range;
 
 /// The official components this repository ships. Named, so that an empty or
 /// mistyped scan below cannot pass over nothing.
-const OFFICIAL_COMPONENTS: [&str; 32] = [
+const OFFICIAL_COMPONENTS: [&str; 34] = [
     "embeddings-gemini",
     "embeddings-openai-compatible",
     "embeddings-vertex",
@@ -36,6 +36,8 @@ const OFFICIAL_COMPONENTS: [&str; 32] = [
     "provider-openai-responses",
     "speech-elevenlabs",
     "speech-groq",
+    "speech-mimo",
+    "speech-minimax",
     "speech-openai-compatible",
     "speech-xai",
     "task-kling",
@@ -2300,6 +2302,64 @@ fn the_v3_1_speech_packages_declare_their_media_contract_and_runtime() {
             ));
         }
     }
+}
+
+/// Speech world batch V3-2 (record `2026-10-14-speech-v3-2-tts.md` §1, §3): `speech-mimo` and
+/// `speech-minimax` start at 1.0.0 in the speech world, `synthesize` only, `bearer` on the secret
+/// slot `provider_api_key`, `contracts` `{media: 1}` (until S-S-5 adds `speech`) and the first
+/// runtime with the speech world, 0.64.0, which a media 1 host admits. Neither declares a query
+/// parameter: `GroupId` is a sanctioned name. `speech-minimax` declares one non-secret config key,
+/// `group_id`, with `image-minimax`'s `digits` syntax and description (IM-Q3); `speech-mimo` none.
+#[test]
+fn the_v3_2_speech_packages_declare_their_runtime_and_values() {
+    let read = |name: &str| -> ComponentManifestV1 {
+        serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap()
+    };
+    let mut media_1_only = host_range::host_range();
+    media_1_only.contracts.insert("media".to_owned(), BTreeSet::from([1]));
+    for (name, family, keys) in [
+        ("speech-mimo", "mimo-speech", vec![]),
+        ("speech-minimax", "minimax-speech", vec!["group_id"]),
+    ] {
+        let manifest = read(name);
+        assert_eq!(manifest.version, "1.0.0", "{name}");
+        assert_eq!(manifest.api_version, south_provider_api::SPEECH_WORLD, "{name}");
+        assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), [family], "{name}");
+        assert_eq!(manifest.capabilities.iter().collect::<Vec<_>>(), ["synthesize"], "{name}");
+        assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer"], "{name}");
+        assert!(manifest.query_parameters.is_empty(), "{name}");
+        assert_eq!(
+            manifest.compatibility.contracts,
+            std::collections::BTreeMap::from([("media".to_owned(), 1)]),
+            "{name}"
+        );
+        assert_eq!(manifest.compatibility.south_runtime, "0.64.0", "{name}");
+        assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()), "{name}");
+        assert_eq!(compatibility_admits(&manifest, &media_1_only), Ok(()), "{name}");
+        let declared: Vec<String> =
+            manifest.declared_keys(family).into_iter().map(str::to_owned).collect();
+        assert_eq!(declared, keys, "{name}");
+    }
+    // The same key, syntax and description as `image-minimax`'s: one account, two families.
+    let schema = |name: &str, family: &str| -> serde_json::Value {
+        let manifest: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        manifest["config_schema"][family]["group_id"].clone()
+    };
+    let speech = schema("speech-minimax", "minimax-speech");
+    assert_eq!(speech["syntax"], "digits");
+    assert_eq!(speech, schema("image-minimax", "minimax-image"));
 }
 
 /// Speech world batch V3-1 (record `2026-10-14-speech-v3-1-tts.md` §13) changes `south-contracts`
