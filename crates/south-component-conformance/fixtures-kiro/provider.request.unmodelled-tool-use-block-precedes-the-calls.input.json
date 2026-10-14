@@ -1,0 +1,78 @@
+{
+  "provider_config": {
+    "provider": "kiro",
+    "base_url": "https://q.us-east-1.amazonaws.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "claude-sonnet-4.5",
+        "tool": true,
+        "vision": false,
+        "json_schema": false,
+        "context_window": 200000,
+        "supported_parameters": []
+      }
+    ],
+    "declared": {
+      "profile_arn": "arn:aws:codewhisperer:us-east-1:123456789012:profile/FAKEPROFILE"
+    }
+  },
+  "chat_request": {
+    "model": "claude-sonnet-4.5",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Weather in Paris and Rome?"
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "Checking."
+          },
+          {
+            "type": "tool_use",
+            "id": "toolu_x",
+            "name": "get_weather"
+          },
+          {
+            "type": "tool_use",
+            "input": {
+              "city": "Oslo"
+            }
+          }
+        ],
+        "tool_calls": [
+          {
+            "id": "call_a",
+            "name": "get_weather",
+            "arguments": "{\"city\":\"Paris\"}"
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_a",
+        "content": "sunny"
+      }
+    ],
+    "tools": [
+      {
+        "name": "get_weather",
+        "description": "w",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "city": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    ],
+    "host_values": {
+      "attempt_id": "3f2c8a9e-6b1d-4c7a-9e0f-5a4b3c2d1e0f"
+    }
+  }
+}

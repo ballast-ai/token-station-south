@@ -105,6 +105,8 @@ the right column says where the boundary record supplies each:
   intermediate disappears, and with it the dependency of this provider's behavior on another package's version.
 - **D3 Faithful or refused, never silently different** — for anything that changes what the model is asked to do.
   Fields the wire has no slot for and that only tune sampling are dropped and documented (§4.3).
+  *Revised 2026-10-14:* lv ruled that the component must not refuse a request the native arm serves today (§17), so
+  KR2–KR5 now make the native arm's silent rewrite instead of refusing; D3 holds for every other case.
 - **D4 The model id is operator data.** The component writes `ChatRequest.model` verbatim; the host's id-rewriting
   heuristic is not carried over (§4.4).
 - **D5 `usage_evidence: absent`.** The component never emits `Usage`, and its non-streaming response carries an
@@ -297,11 +299,11 @@ captures to settle it.
 | Input | Component | Native today |
 |---|---|---|
 | Image part (`ContentPart::ImageUrl`) | **Refused**: capability error, 400 before admission | Refused, but late: inside prepare, after the token refresh (server:translate_kiro.rs:80-84, 163-167; Appendix D N-3) |
-| `ContentPart::Unknown` | **Refused**: capability error | Passed to the intermediate body verbatim (reference_anthropic.rs:118-120), then dropped unless it is a `text` block (server:translate_kiro.rs:210-221) or refused if it is an `image` block |
+| `ContentPart::Unknown` | ~~Refused~~ *Revised 2026-10-14 (§17, §18):* read as the native second hop reads the block the first hop sends verbatim — a `text` block's text is kept, a `tool_use` block is an assistant's `toolUses` entry (before the calls), a `tool_result` block is a user entry's `toolResults` entry, an `image` block is refused (KR1), anything else is dropped; dropped in a system message or a tool result | Passed to the intermediate body verbatim (reference_anthropic.rs:118-120), then dropped unless it is a `text` block (server:translate_kiro.rs:210-221) or refused if it is an `image` block |
 | `Thinking` / `RedactedThinking` parts in earlier turns | **Dropped** — the wire has no block for them; the same rule as the Converse reference for parts a dialect cannot carry out (reference_bedrock_converse.rs:109-114) | Dropped by the second hop |
-| `response_format` other than text | **Refused**: capability error; the package does not declare `json_schema` | Never reaches the upstream (the second hop reads only `messages`, `system`, `tools`) |
-| `tool_choice: required` or a named tool (`ToolChoice::Other`) | **Refused**: capability error — the wire cannot force a call | Silently dropped |
-| Final message is an assistant turn (prefill) | **Refused**: capability error | Sent as the current **user** message (server:translate_kiro.rs:77-86 reads the last message without checking its role) |
+| `response_format` other than text | ~~Refused~~ *Revised 2026-10-14:* not read; the body is the one sent without it, as natively. The package still does not declare `json_schema` | Never reaches the upstream (the second hop reads only `messages`, `system`, `tools`) |
+| `tool_choice: required` or a named tool (`ToolChoice::Other`) | ~~Refused~~ *Revised 2026-10-14:* the tools are sent as for `auto`, as natively; the wire cannot force a call. A model row declaring `anthropic.tool_choice.auto_only` is refused by the host before either arm | Silently dropped |
+| Final message is an assistant turn (prefill) | ~~Refused~~ *Revised 2026-10-14:* sent as the current user message, as natively: its text, and the `toolResults` of any `tool_result` block among its parts; its tool calls are checked as the first hop checks them (KR7) and then dropped | Sent as the current **user** message (server:translate_kiro.rs:77-86 reads the last message without checking its role) |
 | `ToolCall.arguments` that is not a JSON object | ~~Refused~~ *Revised 2026-10-14 (§18):* sent exactly as natively — any JSON value as is, unparseable text (empty and whitespace-only included) as a JSON string | Sent: a non-object JSON value as is, unparseable text as a JSON string (reference_anthropic.rs:191-192) |
 | A tool call with an empty `id` or `name`; a `Tool` message with no `tool_call_id` | **Refused**: capability error | Refused by the first hop (reference_anthropic.rs:177-186, 249-254) |
 | Empty `messages` | **Refused**: invalid request | Refused (server:translate_kiro.rs:62-68) |
@@ -894,7 +896,7 @@ Stream and response inputs are written in the canonical re-encoding, as boundary
 | `request.profile-arn-from-exported-attribute` / `request.no-profile-arn` | Present and omitted |
 | `request.sampling-has-no-slot` | `temperature`, `top_p`, `stop`, `max_output_tokens` leave no trace in the body |
 | `request.model-is-verbatim` | A dashed id is **not** rewritten |
-| `request.refused-*` | One row each: image, unknown part, `required` tool choice, assistant-final turn, non-object arguments, empty tool-call id, tool result without `tool_call_id`, missing attempt id → the stated error code |
+| `request.refused-*` | One row each: image, unknown part, `required` tool choice, assistant-final turn, non-object arguments, empty tool-call id, tool result without `tool_call_id`, missing attempt id → the stated error code (*revised 2026-10-14:* the unknown-part, tool-choice and assistant-final rows now pin the native rewrite, §18) |
 | `response.text` / `response.tool-use` | The fold of §5.4; `usage` all zeros; `id` and `model` empty |
 | `response.no-frames` / `response.open-tool-call` / `response.exception-frame` / `response.error-frame` | An error, not a response (*revised 2026-10-14:* no frames is an empty answer and an open call completes, as natively) |
 | `stream.text` / `stream.tool-use` / `stream.text-then-tool` | The events of §5.2 and the EOF flush of §5.3 |
@@ -993,7 +995,8 @@ item:
 **Intentional differences** (on record, not reconciliation failures):
 
 - The refusals of §4.3 marked as differing from native, unless K0 has already corrected the native arm: `Unknown`
-  parts, `required` or named tool choice, an assistant-final turn, non-object tool arguments.
+  parts, `required` or named tool choice, an assistant-final turn, non-object tool arguments. *Revised 2026-10-14:*
+  none of these remains; KR2–KR5 send what the native arm sends (§18), and KR6 was withdrawn earlier.
 - A 2xx with no frames: on the streaming path the component emits no `Done`; the native arm answers an empty success
   (server:translate_kiro.rs:632-634, 641 on the non-streaming path; `finish()` at :545-565 on the streaming path).
   *Revised 2026-10-14:* the buffered path now answers an empty success too (KR20, §18).
@@ -1193,6 +1196,12 @@ changes; a change is a later package release with its own fixtures.
 
 The status line's "provisional items" are the six rows marked **Yes**.
 
+**KR2–KR5 aligned with the native arm (lv 2026-10-14, standing rule).** Under the standing rule above ("符合 DP0 即按
+推荐"), lv took the recommendation that the component must not refuse a request the native arm serves today. The four
+refusals of D3 that differed from the native arm (an unmodelled content part, a JSON response format, a forced or
+named tool choice, a final assistant turn) are withdrawn: the component makes the native arm's rewrite, and the
+request rows pin the native body (§18).
+
 ## 18. Implementation (2026-10-14)
 
 Implemented in #204 (and #207, below); released in 0.62.0 ([release record](2026-10-14-release-0.62.0.md)) as 1.0.1:
@@ -1249,11 +1258,11 @@ native arm succeeds each carry the reason in the last column.
 
 | # | Input | Package | Native | Why it differs |
 |---|---|---|---|---|
-| KR1 | An image part, in any message | Capability error (400) before admission | Refused too, in the shape check before the token refresh (host K0-a) | — |
-| KR2 | A content part this crate does not model (`ContentPart::Unknown`) | Capability error | Dropped unless it is a `text` block | D3 (§4.3): dropping it silently changes what the model is asked. Matching is possible; this is the record's choice, for lv |
-| KR3 | `response_format` other than text | Capability error | Ignored | D3, as KR2 |
-| KR4 | `tool_choice` `required` or a named tool | Capability error | Dropped | D3, as KR2 |
-| KR5 | The last non-system message is an assistant turn | Capability error | Sent as the current user message | D3, as KR2 |
+| KR1 | An image part, in any message | Capability error (400) before admission | Refused too, in the shape check before the token refresh (host K0-a); *corrected 2026-10-14:* only in a user or assistant message — in a system message or a tool result the first hop keeps text only, so the image is dropped and the request is sent (KD15) | KD15 |
+| ~~KR2~~ | A content part this crate does not model (`ContentPart::Unknown`) | Withdrawn 2026-10-14 (§17): read by its `type` as natively — `text` kept, `tool_use` a `toolUses` entry, `tool_result` a `toolResults` entry, `image` refused (KR1), anything else dropped; dropped in system and tool messages | The same | — |
+| ~~KR3~~ | `response_format` other than text | Withdrawn 2026-10-14: not read, as natively | Ignored | — |
+| ~~KR4~~ | `tool_choice` `required` or a named tool | Withdrawn 2026-10-14: the tools are sent as for `auto`, as natively | Dropped | — |
+| ~~KR5~~ | The last non-system message is an assistant turn | Withdrawn 2026-10-14: sent as the current user message, as natively (its tool calls checked, then dropped) | Sent as the current user message | — |
 | ~~KR6~~ | Tool-call `arguments` that are not a JSON object | Withdrawn: sent exactly as natively, `""` as the JSON string `""` | Sent as parsed, unparseable text as a string | — |
 | KR7 | A tool call with an empty `id` or `name`; a tool message without `tool_call_id` | Capability error | Refused by the first hop | — |
 | KR8 | No non-system message | Invalid request | Refused | — |
@@ -1278,7 +1287,8 @@ native arm succeeds each carry the reason in the last column.
 **Intentional differences from the native arm** (for the dual run, §12.2):
 
 - KD1 The model id is written verbatim (§4.4); the host rewrites dashed ids on the model rows first (K0-c).
-- KD2 The refusals KR2–KR5 and KR9 (above), where the native arm silently changed the request or minted its own id.
+- KD2 The refusal KR9 (above), where the native arm mints its own id. *Revised 2026-10-14:* KR2–KR5 are withdrawn
+  (§17), so they are no longer differences.
 - KD3 One hop: operator body extras reach the real upstream body (Appendix D N-10).
 - KD4 A 2xx with no frames emits no `Done` on the streaming path (KR20); the buffered path matches native.
 - KD5 Withdrawn 2026-10-14: a tool call without `stop` is completed, as natively.
@@ -1298,6 +1308,11 @@ native arm succeeds each carry the reason in the last column.
   that id's call. The native streaming path instead opens a new block on every start, and attaches a fragment to
   whichever block is open; keying by id is the reading both native paths agree on when ids are consistent, and the IR
   has one index per call.
+
+- KD15 An image in a system message or in a tool result is refused (KR1); the native first hop keeps only text there,
+  so the native arm drops the image and sends the request. Found while aligning KR2–KR5 (2026-10-14) and not covered
+  by that ruling, which named KR2–KR5 only; matching is possible (drop it, as natively), and the choice is lv's. A
+  host that refuses image input for a model without `vision` before either arm makes the two arms agree.
 
 **What needs the real account** (§12.2 item 7): K-Q5 (is `meteringEvent` on every completed answer?), K-Q6 (the
 exception names and statuses, and what an exhausted allowance looks like), K-Q10 (`content-type`), K-Q11 (is
@@ -1539,7 +1554,7 @@ They matter here because a dual run pins whatever the native arm does as "correc
   server:sender.rs:4864-4933): a body that ends inside a frame, if the transport reports a clean end, is folded as
   a complete answer.
 - **N-9 A final assistant turn is sent as the current user message** (§4.3); `tool_choice` is dropped for every
-  value; unparseable tool input becomes `{}` on the non-streaming path (server:translate_kiro.rs:627-631).
+  value (*2026-10-14:* both are now what the component does too, §17); unparseable tool input becomes `{}` on the non-streaming path (server:translate_kiro.rs:627-631).
 - **N-10 Operator body extras target the intermediate body** (server:text_admission.rs:350-370, 410); only changes
   to `messages`, `system` or `tools` survive the last hop.
 - **N-11 Stale comments**: the pricing arm says the upstream meter "is retained for cost observability"
@@ -1612,3 +1627,9 @@ They matter here because a dual run pins whatever the native arm does as "correc
 - Second review of the same day: the interim rule that sent empty or whitespace-only tool-call arguments as `{}`
   (KD14) rested on a misreading of KD7 (a response-side fold, not the request) and is removed; the request now sends
   every argument string exactly as the native first hop does, `""` as the JSON string `""`.
+- Third review of the same day (lv's ruling, §17): KR2–KR5 are withdrawn. The component reads an unmodelled content
+  part as the native second hop reads the block the first hop sends verbatim, does not read `response_format`, sends
+  the tools for `required` and a named tool choice, and sends a final assistant turn as the current user message;
+  every request row was checked against the native composition (the Anthropic reference, then the host's
+  `anthropic_messages_to_kiro`), and the only request rows that differ are KD1 and KR9. The review also found KD15
+  (images in system messages and tool results), recorded for lv. The package moves to 1.0.4.

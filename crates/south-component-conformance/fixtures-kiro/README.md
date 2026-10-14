@@ -1,6 +1,6 @@
 # Frozen samples: the Kiro upstream (`provider-kiro`, family `kiro`)
 
-Gate ② samples for `provider-kiro` 1.0.0, judged by `south.provider-component.v1`
+Gate ② samples for `provider-kiro` 1.0.4, judged by `south.provider-component.v1`
 (`docs/design/2026-09-30-kiro-provider-component.md` §11.2). **No row is a capture of live traffic made for this
 record**: the real-account capture is pending (lv, 2026-10-13: implement now, test with an account later), and the
 rows marked provisional in the record's rulings (K-Q5, K-Q6, K-Q10, K-Q11, K-Q18) may change when it lands. Every
@@ -32,10 +32,24 @@ Each row's source:
 - **Tool-call arguments**, read as the native arm reads them (the Anthropic first hop parses them, keeps any JSON value
   and sends unparseable text as a JSON string): `non-object-arguments-pass-through` (`Paris`, `[1,2]`, `42`, `null`)
   and `empty-arguments-pass-through` (`""` and whitespace-only text are sent as JSON strings, as natively).
-- **Refused request rows**, one per numbered refusal of the record (KR1 to KR5, KR7 to KR9): `refused-image`,
-  `refused-image-in-history`, `refused-unknown-part`, `refused-json-response-format`, `refused-required-tool-choice`,
-  `refused-named-tool-choice`, `refused-assistant-final-turn`, `refused-empty-tool-call-id`,
-  `refused-tool-result-without-id`, `refused-no-message`, `refused-missing-attempt-id`, `refused-malformed-attempt-id`.
+- **The native rewrites of KR2 to KR5** (withdrawn as refusals by lv's ruling of 2026-10-14, record §17), each body
+  checked against the native composition (the Anthropic reference's body, then the host's
+  `anthropic_messages_to_kiro`, `conversationId` aside): KR2, an unmodelled content part read by its `type` as the
+  native second hop reads the block the first hop sends verbatim — `unmodelled-part-is-dropped`,
+  `unmodelled-parts-beside-text-are-dropped`, `unmodelled-tool-use-block-precedes-the-calls` (fields defaulted to `""`
+  and `{}`), `unmodelled-tool-result-block-is-a-tool-result` (`is_error` sets `status: "error"`, array content
+  concatenated, other content empty), `unmodelled-parts-in-system-and-tool-messages-are-dropped`, and the refusals
+  `refused-unmodelled-image-block` and `refused-unmodelled-image-block-in-an-assistant-turn` (an `image` block is
+  refused, KR1); KR3, `json-response-format-has-no-slot` and `json-schema-response-format-has-no-slot`; KR4,
+  `required-tool-choice-sends-the-tools`, `named-tool-choice-sends-the-tools` and
+  `required-tool-choice-without-tools-sends-none`; KR5, `assistant-final-turn-is-the-current-message`,
+  `assistant-final-turn-drops-its-tool-calls` (reasoning dropped, text parts joined),
+  `assistant-final-turn-after-a-tool-result` (a `tool_result` block among its parts is carried, as natively),
+  `assistant-only-conversation-takes-the-system-text`, and `refused-assistant-final-turn-with-an-unnamed-tool-call`
+  (the first hop checks the dropped calls, KR7).
+- **Refused request rows**, one per numbered refusal of the record (KR1, KR7 to KR9): `refused-image`,
+  `refused-image-in-history`, `refused-empty-tool-call-id`, `refused-tool-result-without-id`, `refused-no-message`,
+  `refused-missing-attempt-id`, `refused-malformed-attempt-id`.
 - **Stream and response rows taken from the host's bytes**: `text` is server `gateway/tests/kiro_eventstream.rs`
   `normal()`; `metering-is-never-usage` is `translate_kiro.rs` `kiro_accumulate_builds_text_message_and_sums_credits`
   (with `contextUsageEvent` and a `modelId`); `tool-use` is

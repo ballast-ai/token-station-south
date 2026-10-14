@@ -1,7 +1,0 @@
-{
-  "error": {
-    "code": "capability",
-    "http_status": 400,
-    "message": "this upstream cannot be made to call a tool; tool_choice required or a named tool is refused"
-  }
-}

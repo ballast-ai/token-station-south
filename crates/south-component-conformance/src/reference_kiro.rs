@@ -32,7 +32,7 @@ use south_provider_api::{ComponentMetadataV1, HOST_VALUE_ATTEMPT_ID, PROVIDER_WO
 use token_station_protocol::{
     Auth, ChatRequest, ChatResponse, Choice, Content, ContentPart, ErrorCode, ErrorEnvelope,
     FinishReason, HttpMethod, HttpRequestDescriptor, HttpResponseParts, Message, ProviderConfig,
-    ResponseFormat, Role, SafeHeaders, StreamEvent, ToolCall, ToolChoice, Usage,
+    Role, SafeHeaders, StreamEvent, ToolCall, ToolChoice, Usage,
 };
 
 use crate::component::{ComponentResultV1, ProviderComponentV1, StreamParserV1};
@@ -119,10 +119,93 @@ fn attempt_id(request: &ChatRequest) -> ComponentResultV1<&str> {
     }
 }
 
-/// The text a message carries for the wire: its text content, or its text parts concatenated with
-/// no separator. Reasoning parts have no slot on this wire and are dropped (KR12); an image or a
-/// part this crate does not model is refused (KR1, KR2).
-fn text_of(content: Option<&Content>) -> ComponentResultV1<String> {
+/// The refusal of an image, wherever the native arm refuses one (KR1).
+fn image_refused() -> ErrorEnvelope {
+    capability("this upstream takes text and tools only; image input is refused")
+}
+
+/// What the native arm reads from a user or assistant message.
+///
+/// The native first hop (the Anthropic reference) turns each part into a Messages block and sends a
+/// part this crate does not model verbatim; the second hop (server `translate_kiro.rs`) then reads
+/// the blocks by their `type`: `text` blocks are the text, concatenated with no separator; `tool_use`
+/// blocks are an assistant entry's `toolUses`; `tool_result` blocks are a user entry's
+/// `toolResults`; an `image` block refuses the request; any other block is dropped. Reasoning
+/// parts have no slot on this wire and are dropped (KR12). A part this crate does not model is read
+/// the same way, so the component sends what the native arm sends (KR2, aligned 2026-10-14).
+#[derive(Default)]
+struct Read {
+    text: String,
+    tool_uses: Vec<Value>,
+    tool_results: Vec<Value>,
+}
+
+fn read_parts(content: Option<&Content>) -> ComponentResultV1<Read> {
+    let mut read = Read::default();
+    match content {
+        None => {}
+        Some(Content::Text(text)) => read.text.push_str(text),
+        Some(Content::Parts(parts)) => {
+            for part in parts {
+                match part {
+                    ContentPart::Text { text, .. } => read.text.push_str(text),
+                    ContentPart::Thinking { .. } | ContentPart::RedactedThinking { .. } => {}
+                    ContentPart::ImageUrl { .. } => return Err(image_refused()),
+                    ContentPart::Unknown(block) => read_unmodelled(block, &mut read)?,
+                }
+            }
+        }
+    }
+    Ok(read)
+}
+
+/// A part this crate does not model, read as the native second hop reads the block the first hop
+/// sent verbatim: by its `type`, each field defaulted as the native arm defaults it.
+fn read_unmodelled(block: &Value, read: &mut Read) -> ComponentResultV1<()> {
+    let text_of = |key: &str| block.get(key).and_then(Value::as_str);
+    match text_of("type") {
+        Some("text") => read.text.push_str(text_of("text").unwrap_or_default()),
+        Some("image") => return Err(image_refused()),
+        Some("tool_use") => read.tool_uses.push(json!({
+            "toolUseId": text_of("id").unwrap_or_default(),
+            "name": text_of("name").unwrap_or_default(),
+            "input": block.get("input").cloned().unwrap_or_else(|| json!({})),
+        })),
+        Some("tool_result") => {
+            let status = if block.get("is_error").and_then(Value::as_bool) == Some(true) {
+                "error"
+            } else {
+                "success"
+            };
+            read.tool_results.push(json!({
+                "toolUseId": text_of("tool_use_id").unwrap_or_default(),
+                "content": [{"text": unmodelled_result_text(block.get("content"))}],
+                "status": status,
+            }));
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+/// The text of an unmodelled `tool_result` block's `content`: a string as it is, or the `text` of
+/// every element of an array, concatenated, as the native second hop reads it.
+fn unmodelled_result_text(content: Option<&Value>) -> String {
+    match content {
+        Some(Value::String(text)) => text.clone(),
+        Some(Value::Array(blocks)) => blocks
+            .iter()
+            .filter_map(|block| block.get("text").and_then(Value::as_str))
+            .collect::<Vec<_>>()
+            .concat(),
+        _ => String::new(),
+    }
+}
+
+/// The text of a tool message, as the native first hop's `tool_result` block carries it: its text
+/// parts concatenated. Every other part is dropped there, a part this crate does not model
+/// included; an image is refused (KR1).
+fn tool_text(content: Option<&Content>) -> ComponentResultV1<String> {
     match content {
         None => Ok(String::new()),
         Some(Content::Text(text)) => Ok(text.clone()),
@@ -131,18 +214,10 @@ fn text_of(content: Option<&Content>) -> ComponentResultV1<String> {
             for part in parts {
                 match part {
                     ContentPart::Text { text: part, .. } => text.push_str(part),
-                    ContentPart::Thinking { .. } | ContentPart::RedactedThinking { .. } => {}
-                    ContentPart::ImageUrl { .. } => {
-                        return Err(capability(
-                            "this upstream takes text and tools only; image input is refused",
-                        ));
-                    }
-                    ContentPart::Unknown(_) => {
-                        return Err(capability(
-                            "a content part of a kind this component does not model has no slot \
-                             on this upstream",
-                        ));
-                    }
+                    ContentPart::ImageUrl { .. } => return Err(image_refused()),
+                    ContentPart::Thinking { .. }
+                    | ContentPart::RedactedThinking { .. }
+                    | ContentPart::Unknown(_) => {}
                 }
             }
             Ok(text)
@@ -151,14 +226,15 @@ fn text_of(content: Option<&Content>) -> ComponentResultV1<String> {
 }
 
 /// The system text: the non-empty text of every system message, joined by `\n`, in order. `None`
-/// when there is none.
+/// when there is none. Only text survives, as in the native first hop; an image is refused (KR1).
 fn system_text(request: &ChatRequest) -> ComponentResultV1<Option<String>> {
     let mut pieces: Vec<String> = Vec::new();
     for message in request.messages.iter().filter(|message| message.role == Role::System) {
         match message.content.as_ref() {
             Some(Content::Parts(parts)) => {
-                // Checked first, so an image in a system message is refused as anywhere else.
-                text_of(message.content.as_ref())?;
+                if parts.iter().any(|part| matches!(part, ContentPart::ImageUrl { .. })) {
+                    return Err(image_refused());
+                }
                 pieces.extend(parts.iter().filter_map(|part| match part {
                     ContentPart::Text { text, .. } if !text.is_empty() => Some(text.clone()),
                     _ => None,
@@ -172,12 +248,12 @@ fn system_text(request: &ChatRequest) -> ComponentResultV1<Option<String>> {
 }
 
 /// One user-side entry: a user turn or a tool result.
-fn user_input(content: &str, tool_result: Option<Value>) -> Map<String, Value> {
+fn user_input(content: &str, tool_results: Vec<Value>) -> Map<String, Value> {
     let mut entry = Map::new();
     entry.insert("content".to_owned(), json!(content));
     entry.insert("origin".to_owned(), json!(ORIGIN));
-    if let Some(result) = tool_result {
-        entry.insert("userInputMessageContext".to_owned(), json!({"toolResults": [result]}));
+    if !tool_results.is_empty() {
+        entry.insert("userInputMessageContext".to_owned(), json!({"toolResults": tool_results}));
     }
     entry
 }
@@ -192,7 +268,7 @@ fn tool_result(message: &Message) -> ComponentResultV1<Value> {
     };
     Ok(json!({
         "toolUseId": id,
-        "content": [{"text": text_of(message.content.as_ref())?}],
+        "content": [{"text": tool_text(message.content.as_ref())?}],
         "status": "success",
     }))
 }
@@ -228,20 +304,46 @@ enum Entry {
 
 fn entry_of(message: &Message) -> ComponentResultV1<Entry> {
     match message.role {
-        Role::User => Ok(Entry::User(user_input(&text_of(message.content.as_ref())?, None))),
-        Role::Tool => Ok(Entry::User(user_input("", Some(tool_result(message)?)))),
+        Role::User => {
+            let read = read_parts(message.content.as_ref())?;
+            Ok(Entry::User(user_input(&read.text, read.tool_results)))
+        }
+        Role::Tool => Ok(Entry::User(user_input("", vec![tool_result(message)?]))),
         Role::Assistant => {
+            let read = read_parts(message.content.as_ref())?;
             let mut entry = Map::new();
-            entry.insert("content".to_owned(), json!(text_of(message.content.as_ref())?));
-            if !message.tool_calls.is_empty() {
-                let uses = message
-                    .tool_calls
-                    .iter()
-                    .map(tool_use)
-                    .collect::<ComponentResultV1<Vec<_>>>()?;
+            entry.insert("content".to_owned(), json!(read.text));
+            // Unmodelled `tool_use` blocks sit among the parts, before the calls the first hop
+            // appends, so their uses come first.
+            let mut uses = read.tool_uses;
+            for call in &message.tool_calls {
+                uses.push(tool_use(call)?);
+            }
+            if !uses.is_empty() {
                 entry.insert("toolUses".to_owned(), Value::Array(uses));
             }
             Ok(Entry::Assistant(Value::Object(entry)))
+        }
+        Role::System => Err(internal("a system message reached the entry mapping")),
+    }
+}
+
+/// The current message: the last non-system message, whatever its role, read as the native second
+/// hop reads it — its text and its tool results; an assistant turn's tool calls are checked as the
+/// first hop checks them and then have no slot (KR5, aligned 2026-10-14: the native arm sends a
+/// final assistant turn as the current user message).
+fn current_of(message: &Message) -> ComponentResultV1<Map<String, Value>> {
+    match message.role {
+        Role::User | Role::Tool => match entry_of(message)? {
+            Entry::User(entry) => Ok(entry),
+            Entry::Assistant(_) => Err(internal("a user-side message became an assistant entry")),
+        },
+        Role::Assistant => {
+            let read = read_parts(message.content.as_ref())?;
+            for call in &message.tool_calls {
+                tool_use(call)?;
+            }
+            Ok(user_input(&read.text, read.tool_results))
         }
         Role::System => Err(internal("a system message reached the entry mapping")),
     }
@@ -256,21 +358,17 @@ fn with_system(system: &str, content: &Value) -> Value {
 }
 
 /// The tool declarations the current message carries, unless the choice withholds them.
-fn tools_of(request: &ChatRequest) -> ComponentResultV1<Option<Value>> {
-    match request.tool_choice.as_ref() {
-        None | Some(ToolChoice::Auto) => {}
-        Some(ToolChoice::None) => return Ok(None),
-        Some(ToolChoice::Required | ToolChoice::Other(_)) => {
-            return Err(capability(
-                "this upstream cannot be made to call a tool; tool_choice required or a named \
-                 tool is refused",
-            ));
-        }
+///
+/// `none` withholds them, as the native first hop does. `required` and a named tool have no slot on
+/// this wire: the native first hop writes them into its intermediate body and the second hop never
+/// reads them, so the declarations are sent as for `auto` (KR4, aligned 2026-10-14). A model row
+/// declaring `anthropic.tool_choice.auto_only` is refused by the host before any component, for
+/// either arm.
+fn tools_of(request: &ChatRequest) -> Option<Value> {
+    if request.tool_choice == Some(ToolChoice::None) || request.tools.is_empty() {
+        return None;
     }
-    if request.tools.is_empty() {
-        return Ok(None);
-    }
-    Ok(Some(Value::Array(
+    Some(Value::Array(
         request
             .tools
             .iter()
@@ -284,39 +382,27 @@ fn tools_of(request: &ChatRequest) -> ComponentResultV1<Option<Value>> {
                 json!({"toolSpecification": spec})
             })
             .collect(),
-    )))
+    ))
 }
 
+/// The `generateAssistantResponse` body. `response_format` has no slot on this wire and is not
+/// read: the native first hop never writes it, so a JSON format reaches the upstream as nothing
+/// (KR3, aligned 2026-10-14).
 fn body_of(request: &ChatRequest, config: &ProviderConfig) -> ComponentResultV1<Value> {
-    if let Some(format) = &request.response_format
-        && !matches!(format, ResponseFormat::Text)
-    {
-        return Err(capability(
-            "this upstream has no structured-output slot; a JSON response format is refused",
-        ));
-    }
-    let tools = tools_of(request)?;
+    let tools = tools_of(request);
     let system = system_text(request)?;
     let conversation: Vec<&Message> =
         request.messages.iter().filter(|message| message.role != Role::System).collect();
     let Some((last, earlier)) = conversation.split_last() else {
         return Err(invalid_request("the request has no message to send"));
     };
-    if last.role == Role::Assistant {
-        return Err(capability(
-            "the last message is an assistant turn; this upstream continues from a user turn and \
-             has no prefill",
-        ));
-    }
     let conversation_id = attempt_id(request)?;
 
     let mut history = Vec::with_capacity(earlier.len());
     for message in earlier {
         history.push(entry_of(message)?);
     }
-    let Entry::User(mut current) = entry_of(last)? else {
-        return Err(internal("the current message is not a user entry"));
-    };
+    let mut current = current_of(last)?;
 
     if let Some(system) = system {
         let first_user = history.iter_mut().find_map(|entry| match entry {
