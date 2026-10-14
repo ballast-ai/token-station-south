@@ -1263,3 +1263,5 @@ None of the four S-S-3 questions needed a new ruling; each is settled by precede
   No design decision changed.
 - 2026-10-14: the four S-S-3 open questions settled without a new ruling (Resolutions, S-S-3); the image world's
   refusal of `response_body_form: sse` before dispatch is a separate image change.
+- 2026-10-14: the S-S-4 batch V3-1 design (OpenAI-compatible, xAI, Groq and ElevenLabs TTS, and `contracts.media` 3) is
+  proposed in [`2026-10-14-speech-v3-1-tts.md`](2026-10-14-speech-v3-1-tts.md). No design decision of this record changed.
