@@ -1013,7 +1013,8 @@ calls and instances; coexistence with the image, embeddings and provider worlds 
    implies `transcribe`", so `["translate"]` alone is `SpeechOperationRequired` and `["synthesize", "translate"]` is
    `TranslateRequiresTranscribe`. Both are new `ManifestErrorV1` variants, breaking for a host that matches the enum
    exhaustively, as 0.52.0's `ImageOperationRequired` was; the release record (S-S-5) lists them.
-3. **`artifact_fetch` has no rule of its own**: it is optional (§4) and admitted with any operation word.
+3. **`artifact_fetch` needs `synthesize`** (resolved 2026-10-14, open question 2 below): first drafted with no rule of
+   its own; gate ① now refuses it without `synthesize` (`ArtifactFetchRequiresSynthesize`).
 4. **`SPEECH_OPERATION_CAPABILITIES`** is a public constant (the two words of which one is required), the counterpart
    of `TASK_REQUIRED_CAPABILITIES`; the image world needs none because both its words are operations.
 5. **The WIT comment on `model-capabilities`** names the operations and the metering forms only: §7's "voices/formats"
@@ -1058,6 +1059,18 @@ calls and instances; coexistence with the image, embeddings and provider worlds 
    refuses `translate` without `transcribe`? Recommendation: refuse it, as a third rule with its own variant, since a
    word nothing honours is a promise (the reason the task worlds refuse credential attributes).
 
+### Resolutions (2026-10-14)
+
+- **Question 1, declared query parameters on a media descriptor (lv, 2026-10-14, as recommended but in another step):**
+  the media descriptor accepts a query parameter the package declares (`QueryParameterV1::Declared`, values under the
+  existing grammar) as `contracts.media` 3, additive. It lands with the ElevenLabs package in S-S-4 (V3-1), the first
+  package that needs it, not in S-S-3; the earlier V3-1 packages do not depend on it.
+- **Question 2, `artifact_fetch` without `synthesize`:** refused, as recommended. It follows the repo's rule that a
+  declaration nothing honours is refused (the task worlds refuse credential attributes for that reason): URL artifacts
+  are synthesis output (§6). Gate ① returns `ManifestErrorV1::ArtifactFetchRequiresSynthesize` (a third variant; a host
+  matching the enum exhaustively adds the arm); `artifact_fetch_without_synthesize_is_refused` pins it, and removing the
+  rule turns that test red.
+
 ## Revision note (2026-10-14)
 
 - S-S-1 implementation section added: what landed, fourteen interpretations, two points that contradict the record
@@ -1070,3 +1083,5 @@ calls and instances; coexistence with the image, embeddings and provider worlds 
   `UndeclaredValuesIgnored` row), nine interpretations, one point that contradicts §17.3 (a declared query parameter
   cannot yet travel on a media descriptor) and two open questions for lv. Under Q47 `south-provider-api` moves 0.56.0 →
   0.57.0; the packages already took this release's patch in S-S-1. No design decision changed.
+- 2026-10-14: the two S-S-2 open questions resolved (Resolutions): declared query parameters on a media descriptor as
+  `contracts.media` 3 with the ElevenLabs package (S-S-4); `artifact_fetch` without `synthesize` refused.

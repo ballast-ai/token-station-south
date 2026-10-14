@@ -519,8 +519,10 @@ pub const IMAGE_WORLD_SCHEMA: WorldSchemaV1 = WorldSchemaV1 {
 ///   (the task world's word, with the same meaning).
 ///
 /// A component declares at least one of [`SPEECH_OPERATION_CAPABILITIES`]
-/// ([`ManifestErrorV1::SpeechOperationRequired`]), and `translate` only with
-/// `transcribe` ([`ManifestErrorV1::TranslateRequiresTranscribe`]). Which
+/// ([`ManifestErrorV1::SpeechOperationRequired`]), `translate` only with
+/// `transcribe` ([`ManifestErrorV1::TranslateRequiresTranscribe`]), and
+/// `artifact_fetch` only with `synthesize`
+/// ([`ManifestErrorV1::ArtifactFetchRequiresSynthesize`]). Which
 /// models can serve an operation is per model, from the speech dialect words
 /// `model-capabilities` reads (2026-09-30 speech-world record, §4 D2).
 pub const SPEECH_CAPABILITIES: &[&str] =
@@ -1312,6 +1314,13 @@ impl ComponentManifestV1 {
             {
                 return Err(ManifestErrorV1::TranslateRequiresTranscribe);
             }
+            // URL artifacts are synthesis output (§6): recognition delivers documents, so
+            // `artifact_fetch` without `synthesize` is a word nothing honours.
+            if self.capabilities.contains("artifact_fetch")
+                && !self.capabilities.contains("synthesize")
+            {
+                return Err(ManifestErrorV1::ArtifactFetchRequiresSynthesize);
+            }
             if self.providers.is_empty() {
                 return Err(ManifestErrorV1::ProviderFamilyRequired);
             }
@@ -1827,6 +1836,11 @@ pub enum ManifestErrorV1 {
     /// (2026-09-30 speech-world record, §4 D2).
     #[error("a speech component that declares `translate` must also declare `transcribe`")]
     TranslateRequiresTranscribe,
+    /// A speech-world manifest declares `artifact_fetch` without `synthesize`:
+    /// URL artifacts are synthesis output, recognition delivers documents
+    /// (2026-09-30 speech-world record, §6; S-S-2 open question 2, 2026-10-14).
+    #[error("a speech component that declares `artifact_fetch` must also declare `synthesize`")]
+    ArtifactFetchRequiresSynthesize,
     #[error(
         "usage_evidence is a provider-world declaration; other worlds meter through their own \
          contracts"

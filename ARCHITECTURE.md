@@ -226,8 +226,9 @@ behaviour and keeps its `south_runtime` and its `contracts`.
 section. `wit/speech-adapter.wit` (`token-station:speech-adapter@1.0.0`, world `speech-adapter-v1`: `metadata`,
 `healthcheck`, `model-capabilities`, `prepare`, `parse-response`; no `host` import), the `SPEECH_*` constants and
 `SPEECH_WORLD_SCHEMA` (capabilities `synthesize`, `transcribe`, `translate`, `artifact_fetch`; auth arms `bearer`,
-`header_secret`). Gate ① requires `synthesize` or `transcribe` (`SpeechOperationRequired`) and refuses `translate`
-without `transcribe` (`TranslateRequiresTranscribe`), both new `ManifestErrorV1` variants; it admits `config_schema` and
+`header_secret`). Gate ① requires `synthesize` or `transcribe` (`SpeechOperationRequired`), refuses `translate`
+without `transcribe` (`TranslateRequiresTranscribe`) and `artifact_fetch` without `synthesize`
+(`ArtifactFetchRequiresSynthesize`), three new `ManifestErrorV1` variants; it admits `config_schema` and
 exported credential attributes in this world, and `query_parameters` alone: `WorldSchemaV1::instance_declarations` is
 now the three-valued `InstanceDeclarationsV1` (`quota_headers` and `user_agent` stay provider-only). The runtime gains `InstanceKind::Speech` and
 `call_speech_model_capabilities`, `call_speech_prepare`, `call_speech_parse_response`, with the import scan of a pure

@@ -1691,6 +1691,33 @@ fn translate_without_transcribe_is_refused() {
     );
 }
 
+/// `artifact_fetch` needs `synthesize` (§6): URL artifacts are synthesis output.
+#[test]
+fn artifact_fetch_without_synthesize_is_refused() {
+    for words in
+        [&["transcribe", "artifact_fetch"][..], &["transcribe", "translate", "artifact_fetch"][..]]
+    {
+        let mut manifest = speech_manifest();
+        manifest.capabilities = speech_words(words);
+        assert_eq!(
+            manifest.validate(),
+            Err(ManifestErrorV1::ArtifactFetchRequiresSynthesize),
+            "{words:?}"
+        );
+    }
+    for words in
+        [&["synthesize", "artifact_fetch"][..], &["synthesize", "transcribe", "artifact_fetch"][..]]
+    {
+        let mut manifest = speech_manifest();
+        manifest.capabilities = speech_words(words);
+        assert_eq!(manifest.validate(), Ok(()), "{words:?}");
+    }
+    assert_eq!(
+        ManifestErrorV1::ArtifactFetchRequiresSynthesize.to_string(),
+        "a speech component that declares `artifact_fetch` must also declare `synthesize`"
+    );
+}
+
 #[test]
 fn speech_manifest_refuses_words_and_arms_outside_its_vocabulary() {
     for word in
