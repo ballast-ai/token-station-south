@@ -1,10 +1,35 @@
 //! The native reference implementation of the `speech-azure` component.
 //!
 //! Azure Speech fast transcription (speech world batch V3-3, design record
-//! `docs/design/2026-10-14-speech-v3-3-asr.md` §5; speech record §12 ASR row 4). Transcribed from
-//! token-station-server's native arm `AsrUpstream::AzureSpeech` (`handler/audio.rs:96-97`, `:281-283`,
-//! `:534-551`; `handler/audio/multipart.rs:291-446`). `transcribe` only: Azure SSML synthesis
-//! arrives as a later version of this package (SV-Q1 (b)).
+//! `docs/design/2026-10-14-speech-v3-3-asr.md` §5; speech record §12 ASR row 4) and, from speech
+//! world batch V4 (`docs/design/2026-10-15-speech-v4-tts.md` §4; speech record §12 row 9), SSML
+//! synthesis (SV-Q1 (b): the same package, still at the unpublished 1.0.0). Transcribed from
+//! token-station-server's native arms `AsrUpstream::AzureSpeech` (`handler/audio.rs:96-97`,
+//! `:281-283`, `:534-551`; `handler/audio/multipart.rs:291-446`) and `TtsUpstream::AzureSpeech`
+//! (`handler/audio/tts.rs:586-614`, `:1148-1173`; `tts_providers.rs:82-257`).
+//!
+//! **Synthesis** (record §4):
+//!
+//! - **Request**: `POST cognitiveservices/v1` under the row endpoint, the secret in
+//!   `ocp-apim-subscription-key`, a `text` body of media type `application/ssml+xml` (the host's
+//!   text executor renders the one `content-type`), and `x-microsoft-outputformat` from the format
+//!   table: `mp3` (or absent) `audio-24khz-48kbitrate-mono-mp3` / `audio/mpeg`, `opus`
+//!   `ogg-24khz-16bit-mono-opus` / `audio/ogg`, `wav` `riff-24khz-16bit-mono-pcm` / `audio/wav`,
+//!   `pcm` `raw-24khz-16bit-mono-pcm` / `audio/pcm`, matched exactly (native, record §8 item 9);
+//!   anything else refused with native's text.
+//! - **Voice** (`map_openai_voice_to_mai`): the client's string trimmed, else `alloy`; a value with
+//!   `:` is a full voice id; else the case-sensitive roster table, then `{name}:{upstream id}` when
+//!   the name has a `lang-REGION-` prefix, else `en-US-{name}:{upstream id}`. An elided voice is
+//!   refused.
+//! - **SSML** (`build_mai_ssml`): `<speak version='1.0' xml:lang='{lang}'><voice
+//!   name='{voice}'>{text}</voice></speak>`, the three values escaped by native's `xml_escape`,
+//!   which drops the characters XML 1.0 forbids; no declaration, no `xmlns` (record §8 item 8). A
+//!   document above the 1 MiB text body bound is refused before dispatch. No body path is
+//!   immutable: request extras never touch SSML (`immutable_body_paths` `null`).
+//! - **Response**: `binary`; an empty 2xx is `unknown`; otherwise the body, typed by the format
+//!   table rather than the upstream's `content-type`, billed by the request's characters.
+//!
+//! **Transcription** (V3-3):
 //!
 //! - **Family and auth**: `azure-speech`, the secret in `ocp-apim-subscription-key`
 //!   (`header_secret`).
@@ -34,9 +59,12 @@
 )]
 
 use serde_json::{Map, Value, json};
-use south_contracts::media::{MediaLimitsV1, ResponseBodyFormV1};
+use south_contracts::media::{
+    MAX_MEDIA_TEXT_BODY_BYTES, MediaLimitsV1, MediaRequestDescriptorV1, ResponseBodyFormV1,
+};
 use south_contracts::speech::{
-    PreparedSpeechCallV1, SpeechCallContextV1, SpeechModelCapabilitiesV1, SpeechSecondsBasisV1,
+    PreparedSpeechCallV1, SpeechCallContextV1, SpeechCharactersV1, SpeechFactsV1,
+    SpeechMeteringFormV1, SpeechModelCapabilitiesV1, SpeechOperationV1, SpeechSecondsBasisV1,
     TranscriptDeliveryV1,
 };
 use south_provider_api::ComponentMetadataV1;
@@ -48,7 +76,8 @@ use crate::asr_shared::{
     request_parts, rewrite_parts, succeeded, text_delivery, unreported_duration,
 };
 use crate::speech_shared::{
-    BLOB_KEY, invalid, json_object, non_2xx, openai_error_message, serves, unknown, view_status,
+    BLOB_KEY, declared_body_outcome, input, internal, invalid, is_blob, json_body, json_object,
+    non_2xx, openai_error_message, required_forms, scalar_count, serves, unknown, view_status,
 };
 use crate::{ComponentResultV1, SpeechComponentV1, SpeechOutcomeV1};
 
@@ -80,6 +109,150 @@ const DROPPED_PARTS: [&str; 7] = [
 ];
 /// The form fields the gateway writes (native `audio.rs:79`).
 const IMMUTABLE_FORM_FIELDS: [&str; 3] = ["audio", "file", "definition"];
+/// The synthesis path (native `tts.rs:613`).
+const SYNTHESIZE_PATH: &str = "cognitiveservices/v1";
+/// The header the output format travels in (native `tts.rs:608-611`, lower-cased).
+pub const OUTPUT_FORMAT_HEADER: &str = "x-microsoft-outputformat";
+/// The SSML media type the text body declares.
+const SSML: &str = "application/ssml+xml";
+/// Synthesis reports characters (record §4.1).
+const SYNTHESIS_FORMS: [SpeechMeteringFormV1; 1] = [SpeechMeteringFormV1::Characters];
+/// The voice an absent, non-string or blank `voice` resolves to (native `tts.rs:592-597`).
+const DEFAULT_VOICE: &str = "alloy";
+
+/// Native `azure_tts_output_format`, matched exactly: the `X-Microsoft-OutputFormat` token and the
+/// delivered media type of a format word.
+fn output_format(word: &str) -> Option<(&'static str, &'static str)> {
+    Some(match word {
+        "mp3" => ("audio-24khz-48kbitrate-mono-mp3", "audio/mpeg"),
+        "opus" => ("ogg-24khz-16bit-mono-opus", "audio/ogg"),
+        "wav" => ("riff-24khz-16bit-mono-pcm", "audio/wav"),
+        "pcm" => ("raw-24khz-16bit-mono-pcm", "audio/pcm"),
+        _ => return None,
+    })
+}
+
+/// The client's `response_format` as a table word: absent or not a string is `mp3`.
+fn synthesis_format(body: &Map<String, Value>) -> ComponentResultV1<&'static str> {
+    match body.get("response_format") {
+        Some(value) if is_blob(value) => {
+            Err(invalid("'response_format' is longer than the gateway accepts"))
+        }
+        Some(Value::String(format)) => match format.as_str() {
+            "mp3" => Ok("mp3"),
+            "opus" => Ok("opus"),
+            "wav" => Ok("wav"),
+            "pcm" => Ok("pcm"),
+            other => Err(invalid(format!(
+                "response_format '{other}' is not supported for MAI-Voice-2 (Azure Speech); use \
+                 mp3, opus, wav, or pcm"
+            ))),
+        },
+        _ => Ok("mp3"),
+    }
+}
+
+/// The client's voice (native `tts.rs:592-597`): a string, trimmed, else `alloy`; an elided voice
+/// cannot be a roster name and is refused.
+fn client_voice(body: &Map<String, Value>) -> ComponentResultV1<&str> {
+    match body.get("voice") {
+        Some(value) if is_blob(value) => Err(invalid("'voice' is longer than the gateway accepts")),
+        Some(Value::String(voice)) if !voice.trim().is_empty() => Ok(voice.trim()),
+        _ => Ok(DEFAULT_VOICE),
+    }
+}
+
+/// Native `has_locale_prefix`: a 2-3 letter lower-case language, a non-empty region of upper-case
+/// letters and digits, and a non-empty rest, separated by `-`.
+fn has_locale_prefix(name: &str) -> bool {
+    let mut segments = name.split('-');
+    matches!(
+        (segments.next(), segments.next(), segments.next()),
+        (Some(lang), Some(region), Some(rest))
+            if (2..=3).contains(&lang.len())
+                && lang.chars().all(|c| c.is_ascii_lowercase())
+                && !region.is_empty()
+                && region.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
+                && !rest.is_empty()
+    )
+}
+
+/// Native `map_openai_voice_to_mai`: the full SSML voice id.
+#[must_use]
+pub fn voice_id(voice: &str, upstream_model: &str) -> String {
+    if voice.contains(':') {
+        return voice.to_owned();
+    }
+    let name = match voice {
+        "alloy" | "sage" => "June",
+        "echo" | "ash" => "Grant",
+        "fable" | "ballad" => "Jasper",
+        "onyx" | "verse" => "Reed",
+        "nova" | "coral" => "Iris",
+        "shimmer" => "Joy",
+        other => other,
+    };
+    if has_locale_prefix(name) {
+        format!("{name}:{upstream_model}")
+    } else {
+        format!("en-US-{name}:{upstream_model}")
+    }
+}
+
+/// Native `voice_locale`: the voice id's leading `lang-REGION` pair, else `en-US`.
+fn voice_locale(voice_id: &str) -> String {
+    let name = voice_id.split(':').next().unwrap_or(voice_id);
+    let mut segments = name.split('-');
+    match (segments.next(), segments.next()) {
+        (Some(lang), Some(region))
+            if !lang.is_empty()
+                && lang.chars().all(|c| c.is_ascii_alphabetic())
+                && !region.is_empty()
+                && region.chars().all(|c| c.is_ascii_alphanumeric()) =>
+        {
+            format!("{lang}-{region}")
+        }
+        _ => "en-US".to_owned(),
+    }
+}
+
+/// Native `xml_escape`, for text and attribute values alike.
+///
+/// The five XML metacharacters become entities, and the characters XML 1.0's `Char` production
+/// forbids (U+0000 to U+0008, U+000B, U+000C, U+000E to U+001F, U+FFFE, U+FFFF)
+/// dropped; tab, line feed and carriage return kept.
+#[must_use]
+pub fn xml_escape(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for character in text.chars() {
+        match character {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&apos;"),
+            '\u{0000}'..='\u{0008}'
+            | '\u{000B}'
+            | '\u{000C}'
+            | '\u{000E}'..='\u{001F}'
+            | '\u{FFFE}'
+            | '\u{FFFF}' => {}
+            _ => out.push(character),
+        }
+    }
+    out
+}
+
+/// Native `build_mai_ssml`, exactly.
+#[must_use]
+pub fn ssml(text: &str, voice_id: &str) -> String {
+    format!(
+        "<speak version='1.0' xml:lang='{}'><voice name='{}'>{}</voice></speak>",
+        xml_escape(&voice_locale(voice_id)),
+        xml_escape(voice_id),
+        xml_escape(text)
+    )
+}
 
 /// The reference component. Stateless.
 #[derive(Debug, Default, Clone, Copy)]
@@ -175,6 +348,56 @@ fn render(
     }
 }
 
+/// `prepare` for `synthesize` (record §4.2): the input, the format, the voice, then the bound.
+fn prepare_synthesis(
+    config: &ProviderConfig,
+    request: &Value,
+    context: &SpeechCallContextV1,
+) -> ComponentResultV1<PreparedSpeechCallV1> {
+    let forms = required_forms(context, &SYNTHESIS_FORMS)?;
+    let body = json_body(request)?;
+    let text = input(body)?;
+    let format = synthesis_format(body)?;
+    let voice = client_voice(body)?;
+    let document = ssml(text, &voice_id(voice, &context.upstream_model));
+    if document.len() > MAX_MEDIA_TEXT_BODY_BYTES {
+        return Err(invalid("'input' is longer than the gateway accepts"));
+    }
+    let (token, media_type) =
+        output_format(format).ok_or_else(|| internal("a format word without a table row"))?;
+    let mut wire = Map::new();
+    wire.insert("method".to_owned(), json!("POST"));
+    wire.insert("path".to_owned(), json!(SYNTHESIZE_PATH));
+    wire.insert("headers".to_owned(), json!([{ "name": OUTPUT_FORMAT_HEADER, "value": token }]));
+    if let Some(slot) = &config.auth {
+        wire.insert(
+            "auth".to_owned(),
+            json!({ "arm": "header_secret", "header": SECRET_HEADER, "slot": slot.as_str() }),
+        );
+    }
+    wire.insert("body".to_owned(), json!({ "text": { "media_type": SSML, "text": document } }));
+    let descriptor =
+        MediaRequestDescriptorV1::parse(&Value::Object(wire).to_string(), &MediaLimitsV1::V1)
+            .map_err(|error| internal(format!("built an invalid descriptor: {error}")))?;
+    let count = scalar_count(text);
+    Ok(PreparedSpeechCallV1 {
+        facts: SpeechFactsV1 {
+            operation: SpeechOperationV1::Synthesize,
+            characters: Some(SpeechCharactersV1 { count, upper: Some(count) }),
+            metering_forms: forms,
+            reservation: None,
+            output_media_type: Some(media_type.to_owned()),
+        },
+        descriptor,
+        response_body_form: ResponseBodyFormV1::Binary,
+        response_elision_paths: Vec::new(),
+        // Record §7: the host must not inject body extras into SSML.
+        immutable_body_paths: None,
+        immutable_form_fields: None,
+        state: json!({ "op": "synthesize", "format": format, "characters": count }).to_string(),
+    })
+}
+
 impl SpeechComponentV1 for AzureSpeechReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
@@ -188,7 +411,7 @@ impl SpeechComponentV1 for AzureSpeechReferenceV1 {
         &self,
         config: &ProviderConfig,
     ) -> ComponentResultV1<Vec<SpeechModelCapabilitiesV1>> {
-        crate::asr_shared::capabilities(config, AZURE_SPEECH, &[], false)
+        crate::asr_shared::capabilities(config, AZURE_SPEECH, &SYNTHESIS_FORMS, false)
     }
 
     fn prepare(
@@ -198,6 +421,9 @@ impl SpeechComponentV1 for AzureSpeechReferenceV1 {
         context: &SpeechCallContextV1,
     ) -> ComponentResultV1<PreparedSpeechCallV1> {
         serves(config, AZURE_SPEECH)?;
+        if context.operation == SpeechOperationV1::Synthesize {
+            return prepare_synthesis(config, request, context);
+        }
         let forms = recognition_forms(config, context, false)?;
         let parts = request_parts(request)?;
         let format = client_format(parts)?;
@@ -235,6 +461,12 @@ impl SpeechComponentV1 for AzureSpeechReferenceV1 {
         let status = view_status(response);
         if !(200..300).contains(&status) {
             return Ok(non_2xx(status, response, openai_error_message));
+        }
+        if state["op"] == "synthesize" {
+            let format = state["format"].as_str().unwrap_or_default();
+            let (_, media_type) =
+                output_format(format).ok_or_else(|| internal("the state has no audio format"))?;
+            return declared_body_outcome(state, response, media_type);
         }
         let Some(body) = json_object(response) else { return Ok(not_an_object()) };
         let seconds = match reported_duration(body) {

@@ -1,0 +1,23 @@
+{
+  "prepare_case": "speech-v1.prepare.native",
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "output": {
+        "audio": {
+          "url": "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/1d/ab/20261015/out.wav?Expires=1760600000&OSSAccessKeyId=LTAIexample&Signature=s%2Babc%3D",
+          "id": "audio_1",
+          "expires_at": 1800000000
+        },
+        "finish_reason": "stop"
+      },
+      "request_id": "req-qwen",
+      "usage": {
+        "characters": {
+          "n": 7
+        }
+      }
+    }
+  }
+}

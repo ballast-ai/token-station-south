@@ -1,0 +1,10 @@
+{
+  "outcome": "unknown",
+  "reason": "a 2xx carrying a DashScope error code",
+  "error": {
+    "code": "content_policy",
+    "http_status": 502,
+    "message": "the upstream refused on content-policy grounds",
+    "provider_message": "DataInspectionFailed: Output data may contain inappropriate content."
+  }
+}

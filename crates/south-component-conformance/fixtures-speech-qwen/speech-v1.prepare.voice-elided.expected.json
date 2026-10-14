@@ -1,0 +1,46 @@
+{
+  "facts": {
+    "operation": "synthesize",
+    "characters": {
+      "count": 11,
+      "upper": 11
+    },
+    "metering_forms": [
+      "characters"
+    ],
+    "output_media_type": "audio/wav"
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "api/v1/services/aigc/multimodal-generation/generation",
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "model": "qwen3-tts-flash",
+          "input": {
+            "text": "hello world",
+            "voice": {
+              "$south.ref": {
+                "blob": "b0",
+                "transform": "as_is"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "response_body_form": "json",
+  "response_elision_paths": [],
+  "immutable_body_paths": [
+    "input.text",
+    "model"
+  ],
+  "state": {
+    "characters": 11
+  }
+}

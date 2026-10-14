@@ -1,0 +1,13 @@
+{
+  "prepare_case": "speech-v1.prepare.voice-coral-sent",
+  "response": {
+    "status": 400,
+    "body": {
+      "error": {
+        "code": 400,
+        "message": "Voice name coral is not supported.",
+        "status": "INVALID_ARGUMENT"
+      }
+    }
+  }
+}

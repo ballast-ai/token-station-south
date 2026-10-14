@@ -12,10 +12,11 @@
 use base64::Engine as _;
 use serde_json::Value;
 use south_contracts::media::{
-    ElisionErrorV1, MediaLimitsV1, MediaResponseErrorV1, PathPatternV1, SseEventFieldsV1,
-    UpstreamRoundV1, build_media_sse_response_view_v1, wav_pcm_s16le_v1,
+    ArtifactUrlErrorV1, ArtifactUrlV1, ElisionErrorV1, MediaLimitsV1, MediaResponseErrorV1,
+    PathPatternV1, SseEventFieldsV1, UpstreamRoundV1, build_media_sse_response_view_v1,
+    wav_pcm_s16le_v1,
 };
-use south_contracts::speech::SpeechContainerV1;
+use south_contracts::speech::{SpeechContainerV1, upgrade_insecure_artifact_url_v1};
 
 fn vectors() -> Value {
     serde_json::from_str(include_str!("vectors/speech-v1.json")).expect("the vector file is JSON")
@@ -143,5 +144,28 @@ fn sse_view_refusal_vectors() {
             Err(MediaResponseErrorV1::Elision(error)),
             "{name}"
         );
+    }
+}
+
+/// SV-Q10 (speech world batch V4 §2.5): the upgrade a host applies to a `url` artifact that asks for
+/// it, then the unchanged artifact URL grammar.
+#[test]
+fn artifact_url_upgrade_vectors() {
+    let cases = vectors()["artifact_url_upgrade"].as_array().expect("cases").clone();
+    assert!(cases.len() >= 10, "the section holds every case the record lists");
+    for case in cases {
+        let name = case["name"].as_str().expect("name");
+        let url = case["url"].as_str().expect("url");
+        let upgraded = upgrade_insecure_artifact_url_v1(url);
+        assert_eq!(upgraded, case["upgraded"].as_str().expect("upgraded"), "{name}");
+        let verdict = ArtifactUrlV1::parse(&upgraded).err().map(|error| match error {
+            ArtifactUrlErrorV1::TooLong => "too_long",
+            ArtifactUrlErrorV1::Invalid => "invalid",
+            ArtifactUrlErrorV1::NotHttps => "not_https",
+            ArtifactUrlErrorV1::Userinfo => "userinfo",
+            ArtifactUrlErrorV1::ForbiddenHost => "forbidden_host",
+            ArtifactUrlErrorV1::ForbiddenAddress => "forbidden_address",
+        });
+        assert_eq!(verdict, case["error"].as_str(), "{name}");
     }
 }

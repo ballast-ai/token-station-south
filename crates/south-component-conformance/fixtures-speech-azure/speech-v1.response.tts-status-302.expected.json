@@ -1,0 +1,9 @@
+{
+  "outcome": "unknown",
+  "reason": "upstream status 302",
+  "error": {
+    "code": "invalid_request",
+    "http_status": 302,
+    "message": "the upstream refused the request as malformed"
+  }
+}

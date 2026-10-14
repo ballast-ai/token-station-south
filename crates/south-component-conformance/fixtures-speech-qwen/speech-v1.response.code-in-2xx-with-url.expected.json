@@ -1,0 +1,10 @@
+{
+  "outcome": "unknown",
+  "reason": "a 2xx carrying a DashScope error code",
+  "error": {
+    "code": "provider_protocol_error",
+    "http_status": 502,
+    "message": "the upstream reported a failure in a 2xx answer",
+    "provider_message": "Throttling: slow down"
+  }
+}

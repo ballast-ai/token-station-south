@@ -555,15 +555,38 @@ pub enum SpeechArtifactFormV1 {
     Url {
         /// Where the URL is.
         pointer: JsonPointerV1,
+        /// Whether the host upgrades an `http://` string to `https://` with
+        /// [`upgrade_insecure_artifact_url_v1`] before the artifact URL grammar judges it (speech
+        /// world batch V4, SV-Q10). On the wire only when `true`; every safe fetch rule still
+        /// applies to the upgraded URL.
+        upgrade_insecure: bool,
     },
+}
+
+/// The one rewrite a host applies to a `url` artifact's string when the artifact asks for it
+/// (`upgrade_insecure`, speech world batch V4 §2.5, SV-Q10).
+///
+/// A string that starts with `http://`, the scheme compared ASCII case-insensitively, has that
+/// prefix replaced by `https://`; anything else is returned unchanged. Nothing else is rewritten — host, port, path, query and fragment
+/// stay byte for byte — and the result is then judged by [`crate::media::ArtifactUrlV1::parse`]
+/// with every rule unchanged, so an upgraded loopback, userinfo or port-80 URL is still refused.
+#[must_use]
+pub fn upgrade_insecure_artifact_url_v1(url: &str) -> std::borrow::Cow<'_, str> {
+    const INSECURE: &str = "http://";
+    match url.get(..INSECURE.len()) {
+        Some(prefix) if prefix.eq_ignore_ascii_case(INSECURE) => {
+            std::borrow::Cow::Owned(format!("https://{}", &url[INSECURE.len()..]))
+        }
+        _ => std::borrow::Cow::Borrowed(url),
+    }
 }
 
 /// The audio a synthesis call delivers (§6): a form, the delivered media type, and an optional
 /// container the host adds after decoding.
 ///
 /// Wire: `{"form": "body" | "inline" | "segments" | "url", …, "media_type", "container"?}` with
-/// `pointer` and `encoding` for `inline`, `items` for `segments` and `pointer` for `url`; a member
-/// another form has is refused.
+/// `pointer` and `encoding` for `inline`, `items` for `segments` and `pointer` (and
+/// `upgrade_insecure`, written only when `true`) for `url`; a member another form has is refused.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "ArtifactWire", into = "ArtifactWire")]
 pub struct SpeechArtifactV1 {
@@ -594,6 +617,8 @@ struct ArtifactWire {
     encoding: Option<SpeechEncodingV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     items: Option<Vec<SpeechSegmentV1>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    upgrade_insecure: Option<bool>,
     media_type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     container: Option<SpeechContainerV1>,
@@ -605,6 +630,9 @@ impl TryFrom<ArtifactWire> for SpeechArtifactV1 {
     fn try_from(wire: ArtifactWire) -> Result<Self, Self::Error> {
         let shape =
             || SpeechContractErrorV1::Malformed("artifact members do not fit its form".into());
+        if wire.upgrade_insecure.is_some() && !matches!(wire.form, FormWord::Url) {
+            return Err(shape());
+        }
         let form = match (wire.form, wire.pointer, wire.encoding, wire.items) {
             (FormWord::Body, None, None, None) => SpeechArtifactFormV1::Body,
             (FormWord::Inline, Some(pointer), Some(encoding), None) => {
@@ -617,7 +645,10 @@ impl TryFrom<ArtifactWire> for SpeechArtifactV1 {
                 }
                 SpeechArtifactFormV1::Segments { items }
             }
-            (FormWord::Url, Some(pointer), None, None) => SpeechArtifactFormV1::Url { pointer },
+            (FormWord::Url, Some(pointer), None, None) => SpeechArtifactFormV1::Url {
+                pointer,
+                upgrade_insecure: wire.upgrade_insecure.unwrap_or(false),
+            },
             _ => return Err(shape()),
         };
         Ok(Self { form, media_type: media_type(wire.media_type)?, container: wire.container })
@@ -626,6 +657,7 @@ impl TryFrom<ArtifactWire> for SpeechArtifactV1 {
 
 impl From<SpeechArtifactV1> for ArtifactWire {
     fn from(artifact: SpeechArtifactV1) -> Self {
+        let mut upgrade = None;
         let (form, pointer, encoding, items) = match artifact.form {
             SpeechArtifactFormV1::Body => (FormWord::Body, None, None, None),
             SpeechArtifactFormV1::Inline { pointer, encoding } => {
@@ -634,13 +666,17 @@ impl From<SpeechArtifactV1> for ArtifactWire {
             SpeechArtifactFormV1::Segments { items } => {
                 (FormWord::Segments, None, None, Some(items))
             }
-            SpeechArtifactFormV1::Url { pointer } => (FormWord::Url, Some(pointer), None, None),
+            SpeechArtifactFormV1::Url { pointer, upgrade_insecure } => {
+                upgrade = upgrade_insecure.then_some(true);
+                (FormWord::Url, Some(pointer), None, None)
+            }
         };
         Self {
             form,
             pointer,
             encoding,
             items,
+            upgrade_insecure: upgrade,
             media_type: artifact.media_type,
             container: artifact.container,
         }
@@ -1294,6 +1330,7 @@ mod tests {
             r#"{"form":"inline","pointer":"/candidates/0/content/parts/0/inlineData/data","encoding":"base64","media_type":"audio/wav","container":{"wav_pcm_s16le":{"sample_rate":24000,"channels":1}}}"#,
             r#"{"form":"segments","items":[{"pointer":"/0/data/audio","encoding":"base64"},{"pointer":"/1/data/audio","encoding":"base64"}],"media_type":"audio/mpeg"}"#,
             r#"{"form":"url","pointer":"/output/audio/url","media_type":"audio/wav"}"#,
+            r#"{"form":"url","pointer":"/output/audio/url","upgrade_insecure":true,"media_type":"audio/wav"}"#,
             r#"{"form":"inline","pointer":"/a","encoding":"base64","media_type":"audio/L16; rate=24000"}"#,
         ] {
             let artifact: SpeechArtifactV1 = serde_json::from_str(text).expect(text);
@@ -1327,6 +1364,11 @@ mod tests {
             r#"{"form":"body","media_type":"audio mpeg"}"#,
             r#"{"form":"body","media_type":"audio/mpeg","extra":1}"#,
             r#"{"form":"url","pointer":"a","media_type":"audio/mpeg"}"#,
+            r#"{"form":"body","upgrade_insecure":true,"media_type":"audio/mpeg"}"#,
+            r#"{"form":"inline","pointer":"/a","encoding":"base64","upgrade_insecure":false,"media_type":"audio/mpeg"}"#,
+            r#"{"form":"segments","items":[{"pointer":"/0/d","encoding":"base64"}],"upgrade_insecure":true,"media_type":"audio/mpeg"}"#,
+            r#"{"form":"url","pointer":"/a","upgrade_insecure":"true","media_type":"audio/mpeg"}"#,
+            r#"{"form":"url","pointer":"/a","upgrade_insecure":1,"media_type":"audio/mpeg"}"#,
             r#"{"form":"body","media_type":"audio/wav","container":{"wav_pcm_s16le":{"sample_rate":0,"channels":1}}}"#,
             r#"{"form":"body","media_type":"audio/wav","container":{"wav_pcm_s16le":{"sample_rate":24000,"channels":9}}}"#,
             r#"{"form":"body","media_type":"audio/wav","container":{"wav_pcm_s16le":{"sample_rate":24000}}}"#,
@@ -1345,6 +1387,61 @@ mod tests {
                 .join(",")
         );
         assert!(serde_json::from_str::<SpeechArtifactV1>(&too_many).is_err());
+    }
+
+    /// SV-Q10 (speech world batch V4 §2.5): the member is written only when `true`; an explicit
+    /// `false` reads as the default and is not written back.
+    #[test]
+    fn the_url_form_reads_its_upgrade_member() {
+        let read = |text: &str| serde_json::from_str::<SpeechArtifactV1>(text).expect(text);
+        let upgraded = read(
+            r#"{"form":"url","pointer":"/output/audio/url","upgrade_insecure":true,"media_type":"audio/wav"}"#,
+        );
+        assert!(matches!(upgraded.form, SpeechArtifactFormV1::Url { upgrade_insecure: true, .. }));
+        let plain = read(r#"{"form":"url","pointer":"/a","media_type":"audio/wav"}"#);
+        let explicit = read(
+            r#"{"form":"url","pointer":"/a","upgrade_insecure":false,"media_type":"audio/wav"}"#,
+        );
+        assert_eq!(plain, explicit);
+        assert!(matches!(plain.form, SpeechArtifactFormV1::Url { upgrade_insecure: false, .. }));
+        assert_eq!(
+            serde_json::to_string(&explicit).expect("serializable"),
+            r#"{"form":"url","pointer":"/a","media_type":"audio/wav"}"#
+        );
+    }
+
+    /// SV-Q10: only an `http://` prefix (any ASCII case) becomes `https://`; every other byte is
+    /// kept, and anything else is returned as given.
+    #[test]
+    fn only_an_insecure_prefix_is_upgraded() {
+        for (given, upgraded) in [
+            ("http://a.example/x.wav?Signature=s%2B#f", "https://a.example/x.wav?Signature=s%2B#f"),
+            ("HTTP://a.example/x", "https://a.example/x"),
+            ("hTtP://a.example:80/x", "https://a.example:80/x"),
+            ("http://", "https://"),
+        ] {
+            assert_eq!(upgrade_insecure_artifact_url_v1(given), upgraded, "{given}");
+        }
+        for unchanged in [
+            "https://a.example/x",
+            "ftp://a.example/x",
+            "http:a.example/x",
+            "http:/a.example/x",
+            "/relative/x.wav",
+            " http://a.example/x",
+            "httpx://a.example/x",
+            "",
+            "http\u{e9}://x",
+            "\u{e9}ttp://x",
+        ] {
+            assert!(
+                matches!(
+                    upgrade_insecure_artifact_url_v1(unchanged),
+                    std::borrow::Cow::Borrowed(_)
+                ),
+                "{unchanged}"
+            );
+        }
     }
 
     #[test]

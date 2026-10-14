@@ -1,0 +1,27 @@
+{
+  "provider_config": {
+    "provider": "bailian-qwen-speech",
+    "base_url": "https://dashscope.aliyuncs.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "qwen3-tts-flash"
+      },
+      {
+        "model": "qwen3-tts-instruct-flash"
+      }
+    ]
+  },
+  "request": {
+    "json": {
+      "input": "hello world"
+    }
+  },
+  "context": {
+    "upstream_model": "qwen3-tts-flash",
+    "operation": "synthesize",
+    "metering_required": [
+      "tokens"
+    ]
+  }
+}

@@ -9,6 +9,12 @@
 //! after the root — is not well-formed, which is the point: an SSML body a component failed to
 //! escape fails here instead of at the upstream. Hand-written because the conformance crate is
 //! linked into every component, and an XML dependency would enter every lockfile (§16 Q47).
+//!
+//! It holds every character to XML 1.0's `Char` production (speech world batch V4 §4.4, SV-Q11):
+//! a character the production forbids — U+0000 to U+0008, U+000B, U+000C, U+000E to U+001F,
+//! U+FFFE, U+FFFF; surrogates cannot occur in a Rust string — is refused anywhere in the document,
+//! raw or as a numeric character reference, so a component that embeds one instead of dropping it
+//! fails.
 
 /// What a well-formed document carries that the row compares.
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -18,6 +24,21 @@ pub struct XmlDocumentV1 {
     pub texts: Vec<String>,
     /// Every attribute value, references decoded, in document order.
     pub attributes: Vec<String>,
+}
+
+/// Whether XML 1.0's `Char` production admits `character`: tab, line feed, carriage return and
+/// everything from U+0020 except U+FFFE and U+FFFF (a Rust `char` is never a surrogate).
+#[must_use]
+pub const fn is_xml_char(character: char) -> bool {
+    matches!(character, '\t' | '\n' | '\r')
+        || (character >= ' ' && character != '\u{FFFE}' && character != '\u{FFFF}')
+}
+
+/// `text` without the characters [`is_xml_char`] refuses: what a well-formed SSML document can
+/// carry of a client string.
+#[must_use]
+pub fn without_forbidden(text: &str) -> String {
+    text.chars().filter(|character| is_xml_char(*character)).collect()
 }
 
 struct Reader<'a> {
@@ -86,7 +107,11 @@ impl Reader<'_> {
                     || body.strip_prefix('#').and_then(|decimal| decimal.parse::<u32>().ok()),
                     |hex| u32::from_str_radix(hex, 16).ok(),
                 );
-                code.and_then(char::from_u32).ok_or("an undefined reference")?
+                let character = code.and_then(char::from_u32).ok_or("an undefined reference")?;
+                if !is_xml_char(character) {
+                    return Err("a reference to a character XML 1.0 forbids".into());
+                }
+                character
             }
         };
         self.at += end + 1;
@@ -218,6 +243,9 @@ impl Reader<'_> {
 /// # Errors
 /// Returns why the document is not well-formed (or uses a construct this reader does not admit).
 pub fn parse_xml(text: &str) -> Result<XmlDocumentV1, String> {
+    if let Some(at) = text.find(|character: char| !is_xml_char(character)) {
+        return Err(format!("a character XML 1.0 forbids at byte {at}"));
+    }
     let mut reader = Reader { text, at: 0 };
     if reader.eat("<?xml") {
         let end = reader.rest().find("?>").ok_or("an unterminated XML declaration")?;
@@ -267,5 +295,34 @@ mod tests {
         ] {
             assert!(parse_xml(bad).is_err(), "{bad}");
         }
+    }
+
+    /// SV-Q11: a character the `Char` production forbids is refused raw (in text, an attribute or
+    /// a comment) and as a decimal or hexadecimal reference; tab, line feed and carriage return
+    /// are admitted both ways.
+    #[test]
+    fn characters_xml_forbids_are_refused_raw_and_as_references() {
+        for bad in [
+            "<speak>a\u{7}b</speak>",
+            "<speak>\u{0}</speak>",
+            "<speak a='\u{1f}'/>",
+            "<speak>\u{fffe}</speak>",
+            "<speak>\u{ffff}</speak>",
+            "<speak><!-- \u{b} --></speak>",
+            "<speak>&#7;</speak>",
+            "<speak>&#x0;</speak>",
+            "<speak a='&#x1F;'/>",
+            "<speak>&#xC;</speak>",
+            "<speak>&#65534;</speak>",
+            "<speak>&#xFFFF;</speak>",
+        ] {
+            assert!(parse_xml(bad).is_err(), "{bad:?}");
+        }
+        let document =
+            parse_xml("<speak a='&#9;&#xA;&#13;'>x\ty\nz\r&#x9;\u{fffd}\u{10000}</speak>")
+                .expect("every character here is a Char");
+        assert_eq!(document.attributes, ["\t\n\r"]);
+        assert_eq!(document.texts, ["x\ty\nz\r\t\u{fffd}\u{10000}"]);
+        assert_eq!(without_forbidden("a\u{7}b\u{0}\tc\u{fffe}\u{ffff}d\u{c}"), "ab\tcd");
     }
 }

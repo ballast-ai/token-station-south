@@ -1,0 +1,28 @@
+{
+  "provider_config": {
+    "provider": "azure-speech",
+    "base_url": "https://eastus.cognitiveservices.azure.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "MAI-Voice-2"
+      },
+      {
+        "model": "mai-transcribe-1.5"
+      }
+    ]
+  },
+  "request": {
+    "json": {
+      "input": "hello world",
+      "voice": "onyx"
+    }
+  },
+  "context": {
+    "upstream_model": "MAI-Voice-2",
+    "operation": "synthesize",
+    "metering_required": [
+      "characters"
+    ]
+  }
+}

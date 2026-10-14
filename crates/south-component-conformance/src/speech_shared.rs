@@ -1,7 +1,9 @@
 //! Pieces the text-to-speech references of speech world batches V3-1 and V3-2 share (design records
 //! `docs/design/2026-10-14-speech-v3-1-tts.md` §1 and `docs/design/2026-10-14-speech-v3-2-tts.md`
 //! §1): the northbound `input`, the operation and metering checks, the facts, the descriptor, the
-//! delivered media type, the `binary` and `inline` successes and the non-2xx table. The non-2xx
+//! delivered media type, the `binary` and `inline` successes and the non-2xx table; batch V4
+//! (`docs/design/2026-10-15-speech-v4-tts.md` §5 decision 2) adds the `url` success and a `body`
+//! success typed by the requested format. The non-2xx
 //! table, the family check and the JSON object reader also serve the recognition references of
 //! batch V3-3, whose own pieces are in `asr_shared` (`docs/design/2026-10-14-speech-v3-3-asr.md`).
 //!
@@ -24,7 +26,7 @@ use south_contracts::{DeclaredQueryParameterV1, JsonPointerV1};
 use token_station_protocol::{ErrorEnvelope, ProviderConfig};
 
 pub use crate::image_shared::{bearer, capability, internal, invalid, is_blob, with_refs};
-use crate::image_shared::{capped, code_message, status_code};
+pub use crate::image_shared::{capped, code_message, status_code};
 use crate::{ComponentResultV1, SpeechDeliveryV1, SpeechOutcomeV1};
 
 /// The placeholder key a host writes for an elided string.
@@ -294,11 +296,71 @@ pub fn non_2xx(
     let mut error = ErrorEnvelope::new(code, status, code_message(code));
     let message = body.get("json").and_then(message_of).or_else(|| body_text(body));
     error.provider_message = message.as_deref().and_then(capped);
+    non_2xx_outcome(status, error)
+}
+
+/// A non-2xx round whose envelope the family's own reader built (speech world batch V4: the
+/// `DashScope` and Google readers), its `provider_message` falling back to the body text when the
+/// reader found none; the outcome by status as [`non_2xx`].
+pub fn non_2xx_with(status: u16, response: &Value, mut error: ErrorEnvelope) -> SpeechOutcomeV1 {
+    if error.provider_message.is_none() {
+        error.provider_message = body_text(&response["body"]).as_deref().and_then(capped);
+    }
+    non_2xx_outcome(status, error)
+}
+
+fn non_2xx_outcome(status: u16, error: ErrorEnvelope) -> SpeechOutcomeV1 {
     if (400..500).contains(&status) && status != 408 {
         SpeechOutcomeV1::Rejected { error }
     } else {
         SpeechOutcomeV1::Unknown { reason: format!("upstream status {status}"), error: Some(error) }
     }
+}
+
+/// A 2xx of the `json` form whose audio sits behind a URL the upstream wrote (speech world batch V4
+/// §2.2): a `url` artifact at `pointer`, fetched by the host's safe fetch executor and delivered as
+/// `media_type`, with SV-Q10's `upgrade_insecure` when the upstream writes `http://` links; billed
+/// by `characters`.
+pub fn url_outcome(
+    pointer: &str,
+    media_type: &str,
+    upgrade_insecure: bool,
+    characters: SpeechCharacterMeterV1,
+) -> ComponentResultV1<SpeechOutcomeV1> {
+    let pointer =
+        JsonPointerV1::parse(pointer).map_err(|_| internal("invalid artifact pointer"))?;
+    Ok(SpeechOutcomeV1::Succeeded {
+        delivery: SpeechDeliveryV1::Audio(SpeechArtifactV1 {
+            form: SpeechArtifactFormV1::Url { pointer, upgrade_insecure },
+            media_type: media_type.to_owned(),
+            container: None,
+        }),
+        metering: SpeechMeteringV1 { characters: Some(characters), ..SpeechMeteringV1::default() },
+    })
+}
+
+/// A 2xx of the `binary` form typed by the format the package asked for rather than the upstream's
+/// `content-type` (speech world batch V4 §4.3: Azure relabels by its format table): no bytes is
+/// `unknown`; otherwise the body as `media_type`, billed by the request's characters.
+pub fn declared_body_outcome(
+    state: &Value,
+    response: &Value,
+    media_type: &str,
+) -> ComponentResultV1<SpeechOutcomeV1> {
+    if response["body"]["opaque"]["bytes"].as_u64().unwrap_or(0) == 0 {
+        return Ok(unknown("a 2xx without audio"));
+    }
+    Ok(SpeechOutcomeV1::Succeeded {
+        delivery: SpeechDeliveryV1::Audio(SpeechArtifactV1 {
+            form: SpeechArtifactFormV1::Body,
+            media_type: media_type.to_owned(),
+            container: None,
+        }),
+        metering: SpeechMeteringV1 {
+            characters: Some(state_characters(state)?),
+            ..SpeechMeteringV1::default()
+        },
+    })
 }
 
 /// The `OpenAI` error shape `{"error": {"message", …}}` (§2; Groq's, §4).

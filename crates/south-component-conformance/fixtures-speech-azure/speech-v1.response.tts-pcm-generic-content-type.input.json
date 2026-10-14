@@ -1,0 +1,11 @@
+{
+  "prepare_case": "speech-v1.prepare.tts-format-pcm",
+  "response": {
+    "status": 200,
+    "content_type": "application/octet-stream",
+    "headers": {
+      "content-type": "application/octet-stream"
+    },
+    "body_base64": "AQACAA=="
+  }
+}

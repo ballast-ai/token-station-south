@@ -6,7 +6,8 @@
     "azure-speech"
   ],
   "capabilities": [
-    "transcribe"
+    "transcribe",
+    "synthesize"
   ],
   "auth_arms": [
     "header_secret"

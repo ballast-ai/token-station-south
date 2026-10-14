@@ -20,7 +20,7 @@ use south_contracts::media::{
 use south_contracts::speech::{
     SpeechArtifactV1, SpeechFactsV1, SpeechMeteringV1, fill_transcript_template_v1,
     parse_prepared_speech_call_v1, parse_speech_model_capabilities_v1,
-    parse_transcript_delivery_v1,
+    parse_transcript_delivery_v1, upgrade_insecure_artifact_url_v1,
 };
 
 const PATTERNS: [&str; 4] = ["/*", "/data/*/b64_json", "/a/*/*", "/x~1y"];
@@ -115,6 +115,16 @@ fuzz_target!(|data: &[u8]| {
                 let _ = decode_hex(text);
                 let _ = parse_data_url_v1(text);
                 let _ = ArtifactUrlV1::parse(text);
+                // SV-Q10 (speech world batch V4 §2.5): the upgrade rewrites only an `http://`
+                // prefix, and whatever it admits is still an https artifact URL.
+                let upgraded = upgrade_insecure_artifact_url_v1(text);
+                if upgraded != text {
+                    assert!(text.get(..7).is_some_and(|p| p.eq_ignore_ascii_case("http://")));
+                    assert_eq!(&upgraded[8..], &text[7..], "only the scheme changes");
+                }
+                if let Ok(url) = ArtifactUrlV1::parse(&upgraded) {
+                    assert!(url.as_str().starts_with("https://"));
+                }
                 let _ = PathPatternV1::parse(text);
             }
         }

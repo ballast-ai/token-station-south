@@ -41,6 +41,7 @@ use south_contracts::speech::{
     PreparedSpeechCallV1, SpeechArtifactFormV1, SpeechCallContextV1, SpeechCharacterSourceV1,
     SpeechMeteringFormV1, SpeechMeteringV1, SpeechModelCapabilitiesV1, SpeechOperationV1,
     TranscriptDeliveryV1, check_required_metering_v1, parse_prepared_speech_call_with_declared_v1,
+    upgrade_insecure_artifact_url_v1,
 };
 use south_provider_api::ComponentManifestV1;
 use token_station_protocol::{ErrorCode, ErrorEnvelope, ProviderConfig};
@@ -60,8 +61,10 @@ pub const SPEECH_COMPONENT_SUITE_V1: &str = south_provider_api::SPEECH_BEHAVIOR_
 const UNKNOWN_FIELD: &str = "__conformance_unknown_field";
 /// The placeholder namespace no output may carry outside a transcript reference.
 const RESERVED_PREFIX: &str = "$south.";
-/// The characters `ssml_escaping` requires in the input and in the voice (§5).
-const XML_SPECIALS: [char; 4] = ['<', '&', '\'', '"'];
+/// The XML special characters: a northbound `voice` holding one must reach an attribute value
+/// escaped (speech world batch V4 §4.4, SV-Q11); `ssml_escaping` requires the first four in both
+/// the input and the voice of one case (record §5).
+const XML_SPECIALS: [char; 5] = ['<', '&', '\'', '"', '>'];
 /// The client formats `client_format_rendering` judges (§9).
 const CLIENT_FORMATS: [&str; 5] = ["json", "text", "verbose_json", "srt", "vtt"];
 /// The operations a model may declare (§4).
@@ -637,9 +640,13 @@ fn undeclared_operations(
     outcomes
 }
 
-/// `SsmlEscaping` on a prepare case whose descriptor carries an SSML body: the document is
-/// well-formed, the northbound `input` is some element's whole text unchanged, and the northbound
-/// `voice` is some attribute's value unchanged.
+/// `SsmlEscaping` on a prepare case whose descriptor carries an SSML body, as speech world batch
+/// V4 reads it (SV-Q11, ruled 2026-10-15): the document is well-formed XML 1.0 (no character the
+/// `Char` production forbids, raw or as a reference); the northbound `input`, with those forbidden
+/// characters removed, is some element's whole text; and a northbound `voice` that holds an XML
+/// special character (`<`, `&`, `'`, `"`, `>`) appears, with the forbidden characters likewise
+/// removed, as a substring of some attribute value. A voice without one is not checked: its
+/// escaping is the identity, and mapping it to an upstream voice id is the component's business.
 fn ssml_check(case: &SpeechCaseV1, request: &Value, ssml: &str, tally: &mut Tally) -> OutcomeV1 {
     let check = CheckV1::SsmlEscaping;
     tally.ssml = true;
@@ -657,18 +664,25 @@ fn ssml_check(case: &SpeechCaseV1, request: &Value, ssml: &str, tally: &mut Tall
             );
         }
     };
-    if !document.texts.iter().any(|content| content == text) {
-        return OutcomeV1::failed(check, &case.name, "the SSML does not carry `input` unchanged");
+    let carried = crate::ssml_check::without_forbidden(text);
+    if !document.texts.contains(&carried) {
+        return OutcomeV1::failed(
+            check,
+            &case.name,
+            "the SSML does not carry `input` (less the characters XML forbids) as an element's text",
+        );
     }
-    if let Some(voice) = voice {
-        if !document.attributes.iter().any(|value| value == voice) {
+    if let Some(voice) = voice.filter(|voice| XML_SPECIALS.iter().any(|c| voice.contains(*c))) {
+        let carried = crate::ssml_check::without_forbidden(voice);
+        if !document.attributes.iter().any(|value| value.contains(carried.as_str())) {
             return OutcomeV1::failed(
                 check,
                 &case.name,
-                "the SSML does not carry `voice` unchanged as an attribute value",
+                "the SSML does not carry `voice`, which holds an XML special character, inside an \
+                 attribute value",
             );
         }
-        if XML_SPECIALS.iter().all(|special| text.contains(*special) && voice.contains(*special)) {
+        if ['<', '&', '\'', '"'].iter().all(|c| text.contains(*c) && voice.contains(*c)) {
             tally.ssml_specials = true;
         }
     }
@@ -744,10 +758,19 @@ fn audio_checks(
                     .push(integrity("a `segments` pointer lands on a string that is not elided"));
             }
         }
-        SpeechArtifactFormV1::Url { pointer } => {
+        SpeechArtifactFormV1::Url { pointer, upgrade_insecure } => {
             let check = CheckV1::SecondHopArtifact;
             let url = answered.raw_body.pointer(pointer.as_str()).and_then(Value::as_str);
-            outcomes.push(match url.map(ArtifactUrlV1::parse) {
+            // SV-Q10 (speech world batch V4 §2.5): the host's one rewrite, then the unchanged
+            // grammar.
+            let url = url.map(|url| {
+                if *upgrade_insecure {
+                    upgrade_insecure_artifact_url_v1(url)
+                } else {
+                    std::borrow::Cow::Borrowed(url)
+                }
+            });
+            outcomes.push(match url.as_deref().map(ArtifactUrlV1::parse) {
                 None => OutcomeV1::failed(check, &case.name, "a `url` pointer lands on no string"),
                 Some(Err(error)) => OutcomeV1::failed(
                     check,

@@ -1,7 +1,0 @@
-{
-  "error": {
-    "code": "capability",
-    "http_status": 400,
-    "message": "the model 'fast-transcription' does not declare the operation synthesize"
-  }
-}

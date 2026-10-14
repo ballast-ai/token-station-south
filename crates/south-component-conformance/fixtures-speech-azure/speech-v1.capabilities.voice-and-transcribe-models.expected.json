@@ -1,0 +1,24 @@
+[
+  {
+    "model": "MAI-Voice-2",
+    "operations": [
+      "synthesize",
+      "transcribe"
+    ],
+    "metering_forms": [
+      "characters",
+      "seconds"
+    ]
+  },
+  {
+    "model": "mai-transcribe-1.5",
+    "operations": [
+      "synthesize",
+      "transcribe"
+    ],
+    "metering_forms": [
+      "characters",
+      "seconds"
+    ]
+  }
+]

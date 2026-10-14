@@ -1,0 +1,32 @@
+{
+  "provider_config": {
+    "provider": "vertex-ai-speech",
+    "base_url": "https://us-central1-aiplatform.googleapis.com",
+    "auth": "provider_api_key",
+    "declared": {
+      "project_id": "test-project",
+      "region": "us-central1"
+    },
+    "models": [
+      {
+        "model": "gemini-2.5-flash-preview-tts"
+      },
+      {
+        "model": "gemini-2.5-pro-preview-tts"
+      }
+    ]
+  },
+  "request": {
+    "json": {
+      "input": "hello world",
+      "response_format": "MP3"
+    }
+  },
+  "context": {
+    "upstream_model": "gemini-2.5-flash-preview-tts",
+    "operation": "synthesize",
+    "metering_required": [
+      "characters"
+    ]
+  }
+}

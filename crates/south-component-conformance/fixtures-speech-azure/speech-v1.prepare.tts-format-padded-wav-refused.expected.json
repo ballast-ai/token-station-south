@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "response_format ' wav' is not supported for MAI-Voice-2 (Azure Speech); use mp3, opus, wav, or pcm"
+  }
+}

@@ -5,7 +5,7 @@
     "auth": "provider_api_key",
     "models": [
       {
-        "model": "fast-transcription"
+        "model": "MAI-Voice-2"
       },
       {
         "model": "mai-transcribe-1.5"
@@ -14,14 +14,12 @@
   },
   "request": {
     "json": {
-      "input": "hello"
+      "input": "hello world"
     }
   },
   "context": {
-    "upstream_model": "fast-transcription",
+    "upstream_model": "MAI-Voice-2",
     "operation": "synthesize",
-    "metering_required": [
-      "characters"
-    ]
+    "metering_required": []
   }
 }

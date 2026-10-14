@@ -1,0 +1,12 @@
+{
+  "prepare_case": "speech-v1.prepare.tts-native",
+  "response": {
+    "status": 429,
+    "body": {
+      "error": {
+        "code": "429",
+        "message": "Too many requests."
+      }
+    }
+  }
+}
