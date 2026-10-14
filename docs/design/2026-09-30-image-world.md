@@ -1571,3 +1571,7 @@ rest of S-I-5 because it depends only on S-I-1a's pure halves. Fixtures are in
   has admitted `config_schema` and exported credential attributes in the image world since 0.52.0, through
   `WorldSchemaV1::value_channel`), §18.4's first row (nothing remains on the south side for Vertex images) and §18.4's
   second row (`fixtures-embeddings-vertex/` holds five `credential.*` cases, ten files).
+- 2026-10-14: `parse_prepared_image_call_v1` refuses `response_body_form: sse` before dispatch (`Malformed`). The image
+  world has no `sse` response view (only the speech world builds one, from the events a host decoded, speech S-S-3), so
+  such a call used to be dispatched and every 2xx judged `unknown` with the funds parked. No published image package
+  declares `sse`; no version moves (`south-contracts` already moved in this unreleased cycle).
