@@ -18,11 +18,13 @@ mod multipart;
 mod response;
 mod transform;
 
+// The speech module checks and expands its transcript templates with the descriptor's own walk.
 pub use descriptor::{
     BLOB_KEY, MAX_MEDIA_TEXT_BODY_BYTES, MEDIA_TEXT_BODY_MEDIA_TYPES, MediaAuthV1, MediaBodyV1,
     MediaDescriptorErrorV1, MediaReferenceV1, MediaRequestDescriptorV1, MediaTextBodyV1,
     REFERENCE_KEY, expand_json_template_v1,
 };
+pub(crate) use descriptor::{expand as expand_references, walk_references};
 pub use egress::{ArtifactUrlErrorV1, ArtifactUrlV1, is_forbidden_egress_address};
 pub use elide::{
     ElidedViewV1, ElisionErrorV1, InvalidPathPatternV1, PathPatternV1, elide_from, elide_v1,
@@ -36,6 +38,7 @@ pub use response::{
     MediaRequestViewV1, MediaResponseBodyV1, MediaResponseErrorV1, MediaResponseViewV1,
     ResponseBodyFormV1, UpstreamRoundV1, build_media_response_view_v1,
 };
+pub(crate) use transform::is_tchar;
 pub use transform::{
     MAX_MEDIA_TYPE_BYTES, MAX_WAV_CHANNELS, MAX_WAV_SAMPLE_RATE, MediaTransformV1,
     TransformErrorV1, concat_v1, data_url_payload_v1, decode_base64, decode_hex, encode_base64,

@@ -2,7 +2,8 @@
 
 //! Fuzz targets for the grammars of `contracts.media` v1 (image record §6, §11): the elider, the
 //! multipart parser and encoder, the descriptor and its template expansion, the transforms and
-//! the artifact URL grammar. Besides "never panics", each checks an invariant a host relies on.
+//! the artifact URL grammar, and the speech contract's codecs (speech record §6–§8). Besides
+//! "never panics", each checks an invariant a host relies on.
 
 use libfuzzer_sys::fuzz_target;
 use south_contracts::MultipartBoundaryV1;
@@ -14,6 +15,11 @@ use south_contracts::media::{
     ArtifactUrlV1, BlobSetV1, MediaLimitsV1, MediaPartV1, MediaPartViewV1, MediaRequestDescriptorV1,
     MediaTransformV1, PathPatternV1, decode_base64, decode_hex, elide_v1, encode_base64,
     encode_multipart_v1, expand_json_template_v1, parse_data_url_v1, parse_multipart_parts_v1,
+};
+use south_contracts::speech::{
+    SpeechArtifactV1, SpeechFactsV1, SpeechMeteringV1, fill_transcript_template_v1,
+    parse_prepared_speech_call_v1, parse_speech_model_capabilities_v1,
+    parse_transcript_delivery_v1,
 };
 
 const PATTERNS: [&str; 4] = ["/*", "/data/*/b64_json", "/a/*/*", "/x~1y"];
@@ -113,6 +119,39 @@ fuzz_target!(|data: &[u8]| {
                 let _ = serde_json::from_str::<ImageMeteringV1>(text);
                 let _ = parse_image_model_capabilities_v1(text);
                 let _ = parse_prepared_image_call_v1(text, &MediaLimitsV1::V1);
+                let _ = serde_json::from_str::<SpeechFactsV1>(text);
+                let _ = serde_json::from_str::<SpeechMeteringV1>(text);
+                let _ = parse_speech_model_capabilities_v1(text);
+                if let Ok(artifact) = serde_json::from_str::<SpeechArtifactV1>(text) {
+                    // A decoded artifact re-encodes to a document that decodes to it again.
+                    let again = serde_json::to_string(&artifact).expect("an artifact serializes");
+                    assert_eq!(
+                        serde_json::from_str::<SpeechArtifactV1>(&again).ok(),
+                        Some(artifact)
+                    );
+                }
+                if let Ok(prepared) = parse_prepared_speech_call_v1(text, &MediaLimitsV1::V1) {
+                    let again =
+                        parse_prepared_speech_call_v1(&prepared.to_json(), &MediaLimitsV1::V1);
+                    assert_eq!(again.ok(), Some(prepared), "a prepared speech call round-trips");
+                }
+                if let Ok(delivery) = parse_transcript_delivery_v1(text, &small) {
+                    let again = parse_transcript_delivery_v1(&delivery.to_json(), &small);
+                    assert_eq!(again.as_ref().ok(), Some(&delivery), "a delivery round-trips");
+                    if let south_contracts::speech::TranscriptDeliveryV1::Json { template } =
+                        &delivery
+                    {
+                        // A checked template fills without a structural error once its blobs exist.
+                        let blobs =
+                            BlobSetV1::new(delivery.referenced_blobs().into_iter().map(|id| {
+                                south_contracts::media::BlobV1::text(id, "x".to_owned())
+                            }));
+                        if let Ok(blobs) = blobs {
+                            fill_transcript_template_v1(template, &blobs)
+                                .expect("a checked template fills");
+                        }
+                    }
+                }
                 let artifacts = [ImageArtifactV1::Body { media_type: "image/png".to_owned() }];
                 if check_render_template_v1(text, &artifacts, &small).is_ok() {
                     // A template that passes the check fills without a structural error.

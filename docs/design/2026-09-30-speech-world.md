@@ -820,3 +820,135 @@ stays a host test (§4).
 - 2026-10-10, lv ruling (boundary record §13.13): `decode_sse_v1` lives in the host-only crate `south-host-grammars` and
   ships in 0.53.0, early and alone (Q-B6-6). §6, §14, §17, §18 S-S-0 and the Q13 ruling gain notes; the `sse` view
   needs a `south-contracts` entry point taking already-decoded events, added with the speech minor.
+
+## S-S-1 implementation (2026-10-14)
+
+Built on branch `speech-s-s-1` from `origin/main` `479f380` (v0.63.0), for review. The image world's `image.rs` is the
+model throughout (naming, strict decoding of what a component returns, tolerant decoding of what the host sends, one
+error enum, compact source-text codecs); where this record says nothing, the image convention is followed and the
+choice is listed below.
+
+### What landed
+
+`crates/south-contracts/src/speech.rs`, public as `south_contracts::speech`, with unit tests in the module:
+
+| Type or function | Record |
+|---|---|
+| `SPEECH_CONTRACT_VERSION` (1) | §14 |
+| `SpeechOperationV1` (`synthesize`, `transcribe`, `translate`) | §4, §8 `operation` |
+| `SpeechDialectWordV1`, `SPEECH_DIALECT_WORDS`, `speech_dialect_words_v1` | §4, Q14 |
+| `SpeechMeteringFormV1` (`characters`, `seconds`, `tokens`) | §8 `metering_forms`, §9 |
+| `SpeechFactsV1`, with `SpeechCharactersV1 {count, upper?}` and `SpeechReservationV1 {max_output_tokens?, max_seconds?}` | §8 |
+| `SpeechMeteringV1`, with `SpeechCharacterMeterV1 {value, source}`, `SpeechSecondsMeterV1 {value, basis}`, `SpeechTokensV1 {input, output, input_text?, input_audio?}` | §9 |
+| `check_required_metering_v1` | §9 "Handling missing evidence" |
+| `SpeechArtifactV1` (`body`, `inline`, `segments`, `url`, `container`), `SpeechEncodingV1`, `SpeechContainerV1`, `SpeechSegmentV1`, `fits` | §6, §10 |
+| `TranscriptDeliveryV1` (`json`, `text`, `passthrough`), `parse_transcript_delivery_v1`, `fill_transcript_template_v1` | §6 "ASR delivery" |
+| `validate_immutable_form_fields_v1`, `form_field_is_immutable` | §7 |
+| `SpeechModelCapabilitiesV1`, `parse_speech_model_capabilities_v1` | §7 `model-capabilities` |
+| `SpeechCallContextV1` | §7 `prepare`, §8 "Pricing form" |
+| `PreparedSpeechCallV1`, `parse_prepared_speech_call_v1`, `to_json` | §7 |
+| `is_speech_media_type` | §6 `media_type` |
+
+Reused from `contracts.media` without change: `MediaRequestDescriptorV1` (the `json`, `text` and `multipart` bodies),
+`ResponseBodyFormV1` (including `sse`), `PathPatternV1`, `MediaLimitsV1` (`state_bytes`, `elision_paths`,
+`inline_string_bytes`), the transforms `from_base64`, `from_hex` and `wav_pcm_s16le` with their bounds, `BlobSetV1`, and
+the template walk and expansion of the descriptor (now re-exported inside the crate, `pub(crate)`, so the transcript
+template is checked and filled by the same code; no behaviour change). `JsonPointerV1` and
+`validate_immutable_body_paths` are the existing crate-root items. The fuzz target `media_parsers` decodes every new
+codec and checks three invariants: an artifact re-encodes to itself, a prepared call and a transcript delivery
+round-trip through `to_json`, and a checked transcript template fills once its blobs exist.
+
+### Interpretations where the record is silent or ambiguous
+
+1. **Outcomes.** §18 lists outcomes in S-S-1. `SpeechOutcomeV1`'s failure arms carry an `ErrorEnvelope`, which
+   `south-contracts` does not depend on; the image world's outcome is in the conformance crate for that reason
+   (`component_image.rs`, although image §19 also listed it in S-I-1). S-S-1 lands every type the outcome carries
+   (artifact, transcript delivery, metering) and the required-metering rule; the enum itself (`succeeded`, `rejected`,
+   `charged_failure`, `unknown`, §7) lands with the component trait in S-S-3. **This departs from the §18 row wording.**
+2. **Facts per operation.** Synthesis must carry `characters` and `output_media_type` and may tighten
+   `max_output_tokens`; recognition carries neither and may tighten `max_seconds`. `metering_forms` is non-empty, has
+   no repeats, and names only forms the operation can report: `characters` for synthesis, `seconds` for recognition,
+   `tokens` for both (gpt-4o-transcribe style ASR is token-priced). Anything else is refused.
+3. **`reservation`.** Both bounds are integers of at least 1; `max_seconds` is whole seconds, as the host's
+   `asr_max_billable_seconds` is. `characters.upper` is not required to be at least `count`: an upstream that bills
+   fewer characters than the scalar count may say so, and the reservation is `min(bytes(input), upper ?? count)` either
+   way (§8).
+4. **Required metering** (`check_required_metering_v1`). `characters` must be present when declared (an upstream that
+   reports no number is `source = request`, §9); `tokens` must carry both `input` and `output` (§9: a missing count is
+   `unknown`, never 0); `seconds` may be `null` (the host's 60-second estimate, §9). The host's own "not both zero" rule
+   for token-priced TTS (`a82c852b`) and the §9 host checks stay in the host. `seconds.value` is a finite non-negative
+   number, as `TaskUsageFactsV2.seconds` is.
+5. **Artifact wire.** `{"form": "body" | "inline" | "segments" | "url", …, "media_type", "container"?}`, the image
+   world's `form` tag. `media_type` is required on every form, `url` included (§6 writes `url {pointer, media_type}`;
+   the image world's is optional). A member that belongs to another form is refused. `container` is
+   `{"wav_pcm_s16le": {"sample_rate", "channels"}}`, the same bounds as the transform. `segments` holds 1 to 65,536
+   items (`MAX_SPEECH_SEGMENTS`) and no pointer twice.
+6. **`fits`.** `body` needs the `binary` body form; `inline`, `segments` and `url` point into a JSON tree, so they need
+   `json` or `sse`; a `text` response carries no audio. The record names `binary` for `body` and `sse` for OpenAI's
+   `segments`; allowing `inline` / `url` on `sse` and `segments` on `json` is my reading. Whether `output_media_type`
+   must equal the artifact's `media_type` is left to the host (no check here).
+7. **Transcript delivery wire, read literally from §6**: `{"json": <template>}`, `{"text": "…", "media_type": "…"}` (two
+   keys) and `{"passthrough": {"media_type": "…"}}`. A template may hold `$south.ref` nodes with transform `as_is` and
+   no `media_type`; any other reserved key or transform is refused. As in the image world's render check, no string or
+   key outside a reference, and no `text` document, may exceed the fallback threshold (1 MiB), so bytes cannot leave
+   the sandbox through a transcript. `fill_transcript_template_v1` is not bounded by the 32 MiB JSON request bound
+   (§5: a transcript between 32 and 64 MiB is delivered).
+8. **Immutability.** The key the body kind uses must be present and may be `null` (task contract 6 §4 makes the key
+   required); the other key must be absent. A JSON body uses `immutable_body_paths`; a text (SSML) body uses
+   `immutable_body_paths` and it must be `null`; a multipart body uses `immutable_form_fields`. Form-field names are
+   `[A-Za-z0-9_-]{1,256}`, at most 64, no repeats, and a name also covers its array form (`model` covers `model[]`), as
+   a multipart immutable path does in the image world. The image world's `immutable_body_paths` defaults to `[]` when
+   absent; speech follows contract 6 instead, because §7 cites its `null` semantics.
+9. **Body kinds.** A descriptor with an `empty` body is refused (§5 lists three kinds). The body kind is not tied to
+   the operation, so a future JSON-bodied recognition upstream needs no contract change.
+10. **Dialect words.** Entries without the `speech.` prefix are other vocabularies and are skipped; an entry under the
+    prefix that is not one of the two words is refused, so a misspelt catalog word is reported rather than silently
+    turning a capability off.
+11. **`model-capabilities`.** `{model, operations, metering_forms}` only: each form must be admitted by some declared
+    operation. "Voices/formats" in the §7 WIT comment are not carried (open question 1). `translate` without
+    `transcribe` is not refused per model; §4's rule is a manifest rule (S-S-2).
+12. **`SpeechCallContextV1`** is `{upstream_model, operation, metering_required}`, tolerant of unknown fields like
+    `ImageCallContextV1`. `operation` is new: the host knows it from the route (`/v1/audio/transcriptions` vs
+    `/translations`), and the component needs it for the `undeclared_operation_refused` row.
+13. **No `SPEECH_CONTRACT_VERSIONS`.** The image module has only `IMAGE_CONTRACT_VERSION`; a list is added when a
+    second speech contract exists.
+14. **`compatibility.json`**: no entry. The image world recorded `contracts.image` only at its release step S-I-8 (image
+    record, S-I-3 and S-I-4 implementation note); `contracts.speech` follows at S-S-5.
+
+### Points that contradict the record (flagged, not silently chosen)
+
+- **Media types with parameters.** §6 has Vertex deliver `audio/L16; rate=24000`, but `contracts.media`'s
+  `is_media_type` admits no parameters. `is_speech_media_type` admits `;name=value` parameters of `tchar`s (one optional
+  space after each `;`, no quoted values, 128 bytes in all) for every speech media type; the image grammar is
+  unchanged. This keeps the record's example expressible; if lv prefers the parameterless grammar, raw PCM must be
+  delivered wrapped (`audio/wav`) or as `audio/L16` without a rate.
+- **The `sse` response view is not built in S-S-1.** §14 (amended 2026-10-10) says the speech minor adds a
+  `south-contracts` entry point taking the events the host decoded; §18 assigns it to no step. Two texts disagree on its
+  shape: §6 elides the event list **as one document whose root is the array** (pointers `/*/data/delta`), while
+  `media::elide_from` documents itself as "one document per event" for the `sse` form. The pointer form of `segments`
+  depends on the choice, so it is left for lv (open question 2); `build_media_response_view_v1` still refuses `sse`.
+
+### Open questions for lv
+
+1. Should `SpeechModelCapabilitiesV1` carry voices and formats (§7's WIT comment), or are they catalog data like the
+   image world's ranges and defaults (image R-1), so that the declaration stays `{model, operations, metering_forms}`?
+2. The `sse` view: one elided array (§6) or one elided document per event (`elide_from`'s note), and in which step (S-S-1
+   follow-up or S-S-3)?
+3. Media type parameters for speech (above): keep `is_speech_media_type`, or the parameterless media grammar?
+4. `MAX_SPEECH_SEGMENTS` = 65,536 is a guess sized to the 16 MiB payload; the OpenAI SSE delta count for a long text
+   has not been measured.
+
+### Versions (Q47)
+
+`south-contracts` 0.54.0 → 0.55.0. `south-component-conformance` 0.62.0 → 0.63.0: the reference `VERSION` constants
+in its `src/` move with the package patches, and `scripts/check_crate_versions.py` requires a guest-linked crate whose
+sources changed to move. `south-provider-api` (0.56.0) does not change. Every package published with 0.63.0 takes a
+patch with unchanged behaviour and keeps its `south_runtime` and its `contracts`
+(`s_s_1_retires_every_published_063_package_identity`); `i3_3_retires_every_published_062_package_identity` no longer
+pins the identities it left.
+
+## Revision note (2026-10-14)
+
+- S-S-1 implementation section added: what landed, fourteen interpretations, two points that contradict the record
+  (media type parameters; the `sse` view's shape and step), four open questions for lv, and the Q47 versions. No design
+  decision changed.

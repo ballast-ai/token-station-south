@@ -479,7 +479,7 @@ fn template_text(descriptor: &str) -> Result<String, MediaDescriptorErrorV1> {
 
 /// Visits every `$south.ref` node; refuses `$south.blob`, any other `$south.` key, and a
 /// malformed reference.
-fn walk_references(
+pub fn walk_references(
     node: &Node,
     visit: &mut dyn FnMut(&MediaReferenceV1) -> Result<(), MediaDescriptorErrorV1>,
 ) -> Result<(), MediaDescriptorErrorV1> {
@@ -543,7 +543,8 @@ pub fn expand_json_template_v1(
     JsonBodyV1::parse(&out).map_err(MediaDescriptorErrorV1::Contract)
 }
 
-fn expand(node: &mut Node, blobs: &BlobSetV1) -> Result<(), MediaDescriptorErrorV1> {
+/// Replaces every `$south.ref` node under `node` with the JSON string its transform produces.
+pub fn expand(node: &mut Node, blobs: &BlobSetV1) -> Result<(), MediaDescriptorErrorV1> {
     match node {
         Node::Scalar(_) | Node::String(_) => Ok(()),
         Node::Array(items) => items.iter_mut().try_for_each(|item| expand(item, blobs)),
