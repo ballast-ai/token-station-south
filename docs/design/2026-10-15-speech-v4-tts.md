@@ -1,6 +1,6 @@
 # Speech world batch V4: Bailian Qwen-TTS, Vertex Gemini TTS and Azure Speech SSML TTS
 
-Status: proposed (design review; not implemented).
+Status: accepted (lv reviewed it on 2026-10-15 and ruled SV-Q10 and SV-Q11 as recommended, §12). Not yet implemented.
 
 Date: 2026-10-15
 
@@ -667,6 +667,12 @@ packages ship without waiting for them; a measurement that contradicts a package
 
 ## 12. Open questions for lv
 
+**Ruled by lv on 2026-10-15: SV-Q10 and SV-Q11 as recommended** (an optional `upgrade_insecure` member on speech's
+`url` form with the pure function `upgrade_insecure_artifact_url_v1`, inside `contracts.speech` 1 before S-S-5; the
+`ssml_escaping` row compares `input` after removing XML-forbidden characters, requires the voice only as a substring and
+only when it holds an XML special character, and `ssml_check.rs` refuses forbidden characters raw or as numeric
+references). The items below keep their text; each recommendation is the ruling.
+
 - **SV-Q10 The Bailian audio URL is `http://`.** The `url` artifact points at the upstream's own string, which
   `ArtifactUrlV1` refuses, so every Bailian call would be `delivery_unknown` (§2.5). Options: (a) an optional
   `upgrade_insecure` member on speech's `url` form, executed by the host with a south pure function before the unchanged
@@ -708,3 +714,4 @@ package-per-family (SV-Q1); upstream character rules (SV-Q7); configuration erro
 ## Revision note
 
 - 2026-10-15: first draft (proposed).
+- 2026-10-15: lv accepted the record and ruled SV-Q10 and SV-Q11 as recommended (§12); status accepted.
