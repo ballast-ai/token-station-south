@@ -2,10 +2,12 @@
   {
     "model": "grok-tts",
     "operations": [
-      "synthesize"
+      "synthesize",
+      "transcribe"
     ],
     "metering_forms": [
-      "characters"
+      "characters",
+      "seconds"
     ]
   }
 ]

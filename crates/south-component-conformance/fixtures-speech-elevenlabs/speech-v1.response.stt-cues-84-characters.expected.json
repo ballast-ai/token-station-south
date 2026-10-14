@@ -1,0 +1,15 @@
+{
+  "outcome": "succeeded",
+  "transcript": {
+    "text": "1\n00:00:00,000 --> 00:00:01,500\nwordnum01 wordnum02 wordnum03 wordnum04 wordnum05 wordnum06 wordnum07 wordnum08\n\n2\n00:00:01,600 --> 00:00:01,900\nwordnum09 wordnum10\n\n",
+    "media_type": "application/x-subrip"
+  },
+  "metering": {
+    "characters": null,
+    "seconds": {
+      "value": 1.9,
+      "basis": "last_timestamp"
+    },
+    "tokens": null
+  }
+}

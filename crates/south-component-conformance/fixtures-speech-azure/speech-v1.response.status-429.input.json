@@ -1,0 +1,12 @@
+{
+  "prepare_case": "speech-v1.prepare.format-text",
+  "response": {
+    "status": 429,
+    "body": {
+      "error": {
+        "code": "429",
+        "message": "Rate limit is exceeded."
+      }
+    }
+  }
+}

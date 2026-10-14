@@ -1,0 +1,12 @@
+{
+  "prepare_case": "speech-v1.prepare.asr-translate",
+  "response": {
+    "status": 429,
+    "body": {
+      "error": {
+        "message": "Rate limit reached.",
+        "type": "requests"
+      }
+    }
+  }
+}

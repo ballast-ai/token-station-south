@@ -1,0 +1,126 @@
+{
+  "prepare_case": "speech-v1.prepare.stt-srt",
+  "response": {
+    "status": 200,
+    "body": {
+      "language_code": "en",
+      "text": "wordnum01 wordnum02 wordnum03 wordnum04 wordnum05 wordnum06 wordnum07 wordnum08 wordnum09 wordnum10",
+      "words": [
+        {
+          "text": "wordnum01",
+          "start": 0.0,
+          "end": 0.1,
+          "type": "word"
+        },
+        {
+          "text": " ",
+          "start": 0.1,
+          "end": 0.2,
+          "type": "spacing"
+        },
+        {
+          "text": "wordnum02",
+          "start": 0.2,
+          "end": 0.3,
+          "type": "word"
+        },
+        {
+          "text": " ",
+          "start": 0.3,
+          "end": 0.4,
+          "type": "spacing"
+        },
+        {
+          "text": "wordnum03",
+          "start": 0.4,
+          "end": 0.5,
+          "type": "word"
+        },
+        {
+          "text": " ",
+          "start": 0.5,
+          "end": 0.6,
+          "type": "spacing"
+        },
+        {
+          "text": "wordnum04",
+          "start": 0.6,
+          "end": 0.7,
+          "type": "word"
+        },
+        {
+          "text": " ",
+          "start": 0.7,
+          "end": 0.8,
+          "type": "spacing"
+        },
+        {
+          "text": "wordnum05",
+          "start": 0.8,
+          "end": 0.9,
+          "type": "word"
+        },
+        {
+          "text": " ",
+          "start": 0.9,
+          "end": 1.0,
+          "type": "spacing"
+        },
+        {
+          "text": "wordnum06",
+          "start": 1.0,
+          "end": 1.1,
+          "type": "word"
+        },
+        {
+          "text": " ",
+          "start": 1.1,
+          "end": 1.2,
+          "type": "spacing"
+        },
+        {
+          "text": "wordnum07",
+          "start": 1.2,
+          "end": 1.3,
+          "type": "word"
+        },
+        {
+          "text": " ",
+          "start": 1.3,
+          "end": 1.4,
+          "type": "spacing"
+        },
+        {
+          "text": "wordnum08",
+          "start": 1.4,
+          "end": 1.5,
+          "type": "word"
+        },
+        {
+          "text": " ",
+          "start": 1.5,
+          "end": 1.6,
+          "type": "spacing"
+        },
+        {
+          "text": "wordnum09",
+          "start": 1.6,
+          "end": 1.7,
+          "type": "word"
+        },
+        {
+          "text": " ",
+          "start": 1.7,
+          "end": 1.8,
+          "type": "spacing"
+        },
+        {
+          "text": "wordnum10",
+          "start": 1.8,
+          "end": 1.9,
+          "type": "word"
+        }
+      ]
+    }
+  }
+}

@@ -24,19 +24,51 @@
 //! - **Response**: `binary`, typed by the upstream's `content-type`; an empty body is `unknown`. A
 //!   non-2xx carries `detail.message`, a string `detail`, or a validation list's first `msg` as the
 //!   provider message, else the body text.
+//!
+//! **Recognition** (speech world batch V3-3, design record `docs/design/2026-10-14-speech-v3-3-asr.md`
+//! §4, SV-Q8, SV-Q9; speech record §12 ASR row 3), transcribed from the native arm
+//! `AsrUpstream::ElevenLabs` (`handler/audio.rs:92-93`, `:277`; `handler/audio/multipart.rs:13-22`,
+//! `:456-476`):
+//!
+//! - **Operations**: `transcribe` for every configured model, no `translate`; `seconds` exactly.
+//! - **Request**: `POST v1/speech-to-text` under the row endpoint, the secret in `xi-api-key`, no
+//!   query. Every text part named `model` becomes `model_id` with the upstream id (appended when
+//!   absent), every text part named `language` becomes `language_code`, `timestamps_granularity` is
+//!   set to `word` (replaced or appended), everything else is forwarded. The common refusals and the
+//!   `OpenAI` format set; `json` response.
+//! - **Duration**: the last `words` entry's `end`, `basis = last_timestamp` (labelled estimated by
+//!   the host, Q12); `words` absent, not an array or empty, or the last `end` absent or `null`, is
+//!   `seconds: null`; a malformed `end` is `unknown`.
+//! - **Deliveries**: `json` `{"text"}`; `text`; `srt` / `vtt` rendered from the words grouped into
+//!   cues (SV-Q8, `asr_shared::word_cues`); `verbose_json` in the `OpenAI` verbose shape
+//!   `{"task", "language", "duration", "text", "words"}` (SV-Q9).
+//! - **Immutable form fields** `model_id`, `file`, `timestamps_granularity` (native `audio.rs:78`).
+
+#![allow(
+    clippy::result_large_err,
+    reason = "a rendering step fails with the outcome the call ends with, built once per round"
+)]
 
 use serde_json::{Map, Value, json};
 use south_contracts::media::ResponseBodyFormV1;
 use south_contracts::speech::{
     PreparedSpeechCallV1, SpeechCallContextV1, SpeechMeteringFormV1, SpeechModelCapabilitiesV1,
+    SpeechSecondsBasisV1, TranscriptDeliveryV1,
 };
 use south_contracts::{DeclaredQueryParameterV1, QueryValueSyntaxV1};
 use south_provider_api::ComponentMetadataV1;
 use token_station_protocol::ProviderConfig;
 
+use crate::asr_shared::{
+    Duration, PartPlan, Transcript, duration, elevenlabs_words, json_delivery, malformed_duration,
+    multipart_descriptor, no_transcript, not_an_object, openai_format, ordered_object, plain_text,
+    recognition_forms, request_parts, rewrite_parts, subtitle_delivery, succeeded, text_only_json,
+    transcript, transcript_value, word_cues,
+};
 use crate::speech_shared::{
-    FALLBACK_MEDIA_TYPE, binary_outcome, capabilities, descriptor, facts, input, internal, invalid,
-    is_blob, json_body, non_2xx, prepared, required_forms, scalar_count, serves, view_status,
+    FALLBACK_MEDIA_TYPE, binary_outcome, descriptor, facts, input, internal, invalid, is_blob,
+    json_body, json_object, non_2xx, operation_word, prepared, required_forms, scalar_count,
+    serves, unknown, view_status,
 };
 use crate::{ComponentResultV1, SpeechComponentV1, SpeechOutcomeV1};
 
@@ -62,6 +94,10 @@ const MAX_VOICE_ID_BYTES: usize = 128;
 
 const FORMS: [SpeechMeteringFormV1; 1] = [SpeechMeteringFormV1::Characters];
 const IMMUTABLE_BODY_PATHS: [&str; 2] = ["text", "model_id"];
+/// The recognition path (native `audio.rs:277`).
+const STT_PATH: &str = "v1/speech-to-text";
+/// The form fields the gateway writes on the recognition path (native `audio.rs:78`).
+const ASR_IMMUTABLE_FORM_FIELDS: [&str; 3] = ["model_id", "file", "timestamps_granularity"];
 
 /// The reference component. Stateless.
 #[derive(Debug, Default, Clone, Copy)]
@@ -166,6 +202,123 @@ fn error_message(body: &Value) -> Option<String> {
         .map(str::to_owned)
 }
 
+/// The `header_secret` arm on the configured slot.
+fn secret_auth(config: &ProviderConfig) -> Option<Value> {
+    config.auth.as_ref().map(
+        |slot| json!({ "arm": "header_secret", "header": SECRET_HEADER, "slot": slot.as_str() }),
+    )
+}
+
+/// `prepare` of a transcription (§4).
+fn prepare_recognition(
+    config: &ProviderConfig,
+    request: &Value,
+    context: &SpeechCallContextV1,
+) -> ComponentResultV1<PreparedSpeechCallV1> {
+    let forms = recognition_forms(config, context, false)?;
+    let parts = request_parts(request)?;
+    let format = openai_format(parts)?;
+    let plan = PartPlan {
+        written: vec![
+            ("model", "model_id", context.upstream_model.clone()),
+            ("timestamps_granularity", "timestamps_granularity", "word".to_owned()),
+        ],
+        renamed_text: &[("language", "language_code")],
+        ..PartPlan::default()
+    };
+    let upstream_parts = rewrite_parts(parts, &plan)?;
+    Ok(crate::asr_shared::prepared(
+        context.operation,
+        forms,
+        multipart_descriptor(
+            STT_PATH,
+            None,
+            secret_auth(config),
+            &upstream_parts,
+            &declared_query_parameters()?,
+        )?,
+        ResponseBodyFormV1::Json,
+        &ASR_IMMUTABLE_FORM_FIELDS,
+        &json!({ "op": operation_word(context.operation), "format": format }),
+    ))
+}
+
+/// The `words` list as JSON for the `verbose_json` rendering (SV-Q9): one `{"word", "start",
+/// "end"}` per word entry; `[]` when the answer has no list.
+fn verbose_words(words: Option<&Value>) -> Result<String, SpeechOutcomeV1> {
+    let entries = match words {
+        None | Some(Value::Null) => return Ok("[]".to_owned()),
+        Some(Value::Array(entries)) => entries,
+        Some(_) => return Err(unknown("a 2xx whose words are not a list")),
+    };
+    let words = elevenlabs_words(entries).ok_or_else(|| unknown("a word without usable timing"))?;
+    let rendered: Vec<String> = words
+        .iter()
+        .map(|word| {
+            ordered_object(&[
+                ("word", Value::String(word.text.to_owned()).to_string()),
+                ("start", json!(word.start).to_string()),
+                ("end", json!(word.end).to_string()),
+            ])
+        })
+        .collect();
+    Ok(format!("[{}]", rendered.join(",")))
+}
+
+/// SV-Q9: the `OpenAI` verbose shape rendered from the answer; `language` when the answer names
+/// one, `duration` when the seconds are not `null`.
+fn verbose_json(
+    body: &Map<String, Value>,
+    text: &Transcript<'_>,
+    seconds: Option<f64>,
+) -> Result<TranscriptDeliveryV1, SpeechOutcomeV1> {
+    let text = transcript_value(text).ok_or_else(no_transcript)?;
+    let mut members = vec![("task", "\"transcribe\"".to_owned())];
+    if let Some(language) = body.get("language_code").and_then(Value::as_str) {
+        members.push(("language", Value::String(language.to_owned()).to_string()));
+    }
+    if let Some(seconds) = seconds {
+        members.push(("duration", json!(seconds).to_string()));
+    }
+    members.push(("text", text));
+    members.push(("words", verbose_words(body.get("words"))?));
+    json_delivery(ordered_object(&members))
+}
+
+/// The 2xx of a transcription (§4).
+fn recognition_outcome(state: &Value, response: &Value) -> SpeechOutcomeV1 {
+    let format = state["format"].as_str().unwrap_or("json");
+    let Some(body) = json_object(response) else { return not_an_object() };
+    let words = body.get("words");
+    let last = words.and_then(Value::as_array).and_then(|entries| entries.last());
+    let seconds = match last.map(|last| duration(last.get("end"))) {
+        None | Some(Duration::Absent) => None,
+        Some(Duration::Reported(seconds)) => Some(seconds),
+        Some(Duration::Malformed) => return malformed_duration(),
+    };
+    let text = transcript(body);
+    let delivery = match format {
+        "text" => plain_text(&text),
+        "srt" | "vtt" => match words {
+            None | Some(Value::Null) => subtitle_delivery(&[], format),
+            Some(Value::Array(entries)) => elevenlabs_words(entries).map_or_else(
+                || Err(unknown("a word without usable timing")),
+                |words| subtitle_delivery(&word_cues(&words), format),
+            ),
+            Some(_) => Err(unknown("a 2xx whose words are not a list")),
+        },
+        "verbose_json" => verbose_json(body, &text, seconds),
+        _ => text_only_json(&text),
+    };
+    match delivery {
+        Ok(delivery) => succeeded(
+            delivery,
+            seconds.map(|seconds| (seconds, SpeechSecondsBasisV1::LastTimestamp)),
+        ),
+        Err(outcome) => outcome,
+    }
+}
+
 impl SpeechComponentV1 for ElevenLabsSpeechReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
@@ -179,7 +332,7 @@ impl SpeechComponentV1 for ElevenLabsSpeechReferenceV1 {
         &self,
         config: &ProviderConfig,
     ) -> ComponentResultV1<Vec<SpeechModelCapabilitiesV1>> {
-        capabilities(config, ELEVENLABS_SPEECH, &FORMS)
+        crate::asr_shared::capabilities(config, ELEVENLABS_SPEECH, &FORMS, false)
     }
 
     fn prepare(
@@ -189,15 +342,16 @@ impl SpeechComponentV1 for ElevenLabsSpeechReferenceV1 {
         context: &SpeechCallContextV1,
     ) -> ComponentResultV1<PreparedSpeechCallV1> {
         serves(config, ELEVENLABS_SPEECH)?;
+        if context.operation.is_recognition() {
+            return prepare_recognition(config, request, context);
+        }
         let forms = required_forms(context, &FORMS)?;
         let body = json_body(request)?;
         let text = input(body)?;
         // Native order: the format is judged before the voice (which native never refused).
         check_response_format(body)?;
         let voice_id = voice_id(body)?;
-        let auth = config.auth.as_ref().map(|slot| {
-            json!({ "arm": "header_secret", "header": SECRET_HEADER, "slot": slot.as_str() })
-        });
+        let auth = secret_auth(config);
         let template = json!({ "text": text, "model_id": context.upstream_model });
         let count = scalar_count(text);
         prepared(
@@ -222,10 +376,12 @@ impl SpeechComponentV1 for ElevenLabsSpeechReferenceV1 {
         response: &Value,
     ) -> ComponentResultV1<SpeechOutcomeV1> {
         let status = view_status(response);
-        if (200..300).contains(&status) {
-            binary_outcome(state, response)
-        } else {
+        if !(200..300).contains(&status) {
             Ok(non_2xx(status, response, error_message))
+        } else if state.get("op").is_some() {
+            Ok(recognition_outcome(state, response))
+        } else {
+            binary_outcome(state, response)
         }
     }
 }

@@ -1,0 +1,12 @@
+{
+  "prepare_case": "speech-v1.prepare.asr-verbose-vtt",
+  "response": {
+    "status": 200,
+    "body": {
+      "task": "transcribe",
+      "duration": 0.75,
+      "text": "",
+      "segments": []
+    }
+  }
+}

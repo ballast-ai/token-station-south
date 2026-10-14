@@ -1,0 +1,22 @@
+{
+  "provider_config": {
+    "provider": "openai-compatible",
+    "base_url": "https://api.openai.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "gpt-4o-mini-tts"
+      },
+      {
+        "model": "whisper-1",
+        "supported_parameters": [
+          "speech.translate",
+          "speech.verbose_json"
+        ]
+      },
+      {
+        "model": "gpt-4o-transcribe"
+      }
+    ]
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "facts": {
+    "operation": "transcribe",
+    "metering_forms": [
+      "seconds"
+    ]
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "v1/speech-to-text",
+    "auth": {
+      "arm": "header_secret",
+      "header": "xi-api-key",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "multipart": {
+        "parts": [
+          {
+            "name": "model_id",
+            "value": "scribe_v1"
+          },
+          {
+            "name": "response_format",
+            "value": "vtt"
+          },
+          {
+            "name": "file",
+            "blob": "b0",
+            "transform": "as_is",
+            "filename": "a.mp3",
+            "media_type": "audio/mpeg"
+          },
+          {
+            "name": "timestamps_granularity",
+            "value": "word"
+          }
+        ]
+      }
+    }
+  },
+  "response_body_form": "json",
+  "response_elision_paths": [],
+  "immutable_form_fields": [
+    "model_id",
+    "file",
+    "timestamps_granularity"
+  ],
+  "state": {
+    "op": "transcribe",
+    "format": "vtt"
+  }
+}

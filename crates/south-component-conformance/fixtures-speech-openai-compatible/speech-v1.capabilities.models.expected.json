@@ -2,21 +2,25 @@
   {
     "model": "gpt-4o-mini-tts",
     "operations": [
-      "synthesize"
+      "synthesize",
+      "transcribe"
     ],
     "metering_forms": [
       "characters",
-      "tokens"
+      "tokens",
+      "seconds"
     ]
   },
   {
     "model": "tts-1",
     "operations": [
-      "synthesize"
+      "synthesize",
+      "transcribe"
     ],
     "metering_forms": [
       "characters",
-      "tokens"
+      "tokens",
+      "seconds"
     ]
   }
 ]

@@ -1281,3 +1281,7 @@ None of the four S-S-3 questions needed a new ruling; each is settled by precede
   `speech-vertex`, Azure SSML TTS added to `speech-azure` per SV-Q1 (b); Q7 restated as two package versions; SV-Q10 on the
   `http://` audio URL and SV-Q11 on `ssml_escaping`) is proposed in [`2026-10-15-speech-v4-tts.md`](2026-10-15-speech-v4-tts.md).
   No design decision of this record changed.
+- 2026-10-15: batch V3-3 implemented on branch `speech-v3-3` ([V3-3 record](2026-10-14-speech-v3-3-asr.md),
+  Implementation): `transcribe` added at 1.0.0 to `speech-openai-compatible` (with `translate`), `speech-xai` and
+  `speech-elevenlabs`, and `speech-azure` 1.0.0 (`transcribe` only); SV-Q8 and SV-Q9 as ruled. No design decision of
+  this record changed.

@@ -1,0 +1,13 @@
+{
+  "outcome": "succeeded",
+  "transcript": {
+    "json": {
+      "text": ""
+    }
+  },
+  "metering": {
+    "characters": null,
+    "seconds": null,
+    "tokens": null
+  }
+}

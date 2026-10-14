@@ -1,0 +1,18 @@
+{
+  "prepare_case": "speech-v1.prepare.asr-verbose-srt",
+  "response": {
+    "status": 200,
+    "body": {
+      "task": "transcribe",
+      "duration": 3662,
+      "text": "Late.",
+      "segments": [
+        {
+          "start": 3661.001,
+          "end": 3662,
+          "text": "  Late.  "
+        }
+      ]
+    }
+  }
+}

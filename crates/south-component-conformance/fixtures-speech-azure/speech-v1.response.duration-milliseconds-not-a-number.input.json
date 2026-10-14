@@ -1,0 +1,15 @@
+{
+  "prepare_case": "speech-v1.prepare.native",
+  "response": {
+    "status": 200,
+    "body": {
+      "durationMilliseconds": "3500",
+      "duration": 3,
+      "combinedPhrases": [
+        {
+          "text": "hi"
+        }
+      ]
+    }
+  }
+}

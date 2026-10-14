@@ -1,0 +1,18 @@
+{
+  "prepare_case": "speech-v1.prepare.stt-native",
+  "response": {
+    "status": 404,
+    "body": {
+      "detail": [
+        {
+          "loc": [
+            "body",
+            "model_id"
+          ],
+          "msg": "Model not found",
+          "type": "value_error"
+        }
+      ]
+    }
+  }
+}

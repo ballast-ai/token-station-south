@@ -1,0 +1,75 @@
+{
+  "provider_config": {
+    "provider": "openai-compatible",
+    "base_url": "https://api.openai.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "gpt-4o-mini-tts"
+      },
+      {
+        "model": "whisper-1",
+        "supported_parameters": [
+          "speech.translate",
+          "speech.verbose_json"
+        ]
+      },
+      {
+        "model": "gpt-4o-transcribe"
+      }
+    ]
+  },
+  "request": {
+    "multipart": {
+      "parts": [
+        {
+          "kind": "text",
+          "name": "prompt",
+          "value": "media/asr is the gateway name"
+        },
+        {
+          "kind": "text",
+          "name": "model",
+          "value": "media/asr"
+        },
+        {
+          "kind": "text",
+          "name": "language",
+          "value": "de"
+        },
+        {
+          "kind": "text",
+          "name": "temperature",
+          "value": "0.2"
+        },
+        {
+          "kind": "text",
+          "name": "timestamp_granularities[]",
+          "value": "word"
+        },
+        {
+          "kind": "file",
+          "name": "file",
+          "blob": "b0",
+          "filename": "clip.wav",
+          "media_type": "audio/wav",
+          "bytes": 44
+        },
+        {
+          "kind": "file",
+          "name": "extra",
+          "blob": "b1",
+          "filename": "notes.txt",
+          "bytes": 3
+        }
+      ]
+    }
+  },
+  "context": {
+    "upstream_model": "gpt-4o-transcribe",
+    "operation": "transcribe",
+    "metering_required": [
+      "seconds"
+    ]
+  }
+}

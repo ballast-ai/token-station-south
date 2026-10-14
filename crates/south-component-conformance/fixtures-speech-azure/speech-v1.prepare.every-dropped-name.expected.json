@@ -1,0 +1,59 @@
+{
+  "facts": {
+    "operation": "transcribe",
+    "metering_forms": [
+      "seconds"
+    ]
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "speechtotext/transcriptions:transcribe",
+    "query": [
+      {
+        "name": "api-version",
+        "value": "2025-10-15"
+      }
+    ],
+    "auth": {
+      "arm": "header_secret",
+      "header": "ocp-apim-subscription-key",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "multipart": {
+        "parts": [
+          {
+            "name": "audio",
+            "blob": "b0",
+            "transform": "as_is",
+            "filename": "a.mp3",
+            "media_type": "audio/mpeg"
+          },
+          {
+            "name": "diarization",
+            "value": "on"
+          },
+          {
+            "name": "stream",
+            "value": "false"
+          },
+          {
+            "name": "definition",
+            "value": "{\"enhancedMode\":{\"enabled\":true,\"model\":\"mai-transcribe-1.5\"}}"
+          }
+        ]
+      }
+    }
+  },
+  "response_body_form": "json",
+  "response_elision_paths": [],
+  "immutable_form_fields": [
+    "audio",
+    "file",
+    "definition"
+  ],
+  "state": {
+    "op": "transcribe",
+    "format": "json"
+  }
+}

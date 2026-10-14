@@ -6,7 +6,8 @@
     "elevenlabs-speech"
   ],
   "capabilities": [
-    "synthesize"
+    "synthesize",
+    "transcribe"
   ],
   "auth_arms": [
     "header_secret"

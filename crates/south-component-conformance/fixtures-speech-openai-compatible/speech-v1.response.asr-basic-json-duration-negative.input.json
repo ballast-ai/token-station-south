@@ -1,0 +1,10 @@
+{
+  "prepare_case": "speech-v1.prepare.asr-basic-json",
+  "response": {
+    "status": 200,
+    "body": {
+      "text": "hi there",
+      "duration": -1
+    }
+  }
+}

@@ -25,21 +25,41 @@
 //!   `speech.audio.delta` event typed by the client's format, and `tokens` from the last valid
 //!   `speech.audio.done` usage (the crate-private `openai_speech` reader).
 //! - **Errors**: the `OpenAI` shape's `message`, else the body text, as the provider message.
+//!
+//! **Recognition** (speech world batch V3-3, design record `docs/design/2026-10-14-speech-v3-3-asr.md`
+//! §2; speech record §12 ASR row 1), transcribed from the native fallback arm
+//! `AsrUpstream::OpenaiCompat` (`handler/audio.rs:91-101`, `:226-235`, `:284-287`, `:559-564`):
+//!
+//! - **Operations**: `transcribe` for every configured model, `translate` on a row carrying
+//!   `speech.translate`; `seconds` exactly. **Path**: the same API-root rule, `audio/transcriptions`
+//!   or `audio/translations`.
+//! - **Parts**: every client part forwarded in order; every text part named `model` set to the
+//!   upstream id (appended when absent). Refused before dispatch: a body that is not multipart, an
+//!   elided text part, no file part `file`, `stream=true` / `1`, a format outside the `OpenAI` set.
+//! - **Verbose rows** (`speech.verbose_json`): `response_format` set to `verbose_json`, `json`
+//!   response; every client format rendered from that answer, the reported `duration` billed and
+//!   its absence `unknown`.
+//! - **Other rows**: the client's format forwarded; a `json` answer passed through, billed by
+//!   `duration`, else `usage.seconds` when `usage.type` is `"duration"`, else `seconds: null`; a
+//!   text answer passed through with `seconds: null`.
+//! - **Immutable form fields** `model`, `file`, `response_format`, `stream` (native `audio.rs:76`).
 
 use serde_json::{Value, json};
 use south_contracts::media::ResponseBodyFormV1;
 use south_contracts::speech::{
     PreparedSpeechCallV1, SpeechCallContextV1, SpeechMeteringFormV1, SpeechModelCapabilitiesV1,
+    SpeechOperationV1,
 };
 use south_provider_api::ComponentMetadataV1;
 use token_station_protocol::ProviderConfig;
 
+use crate::asr_shared::{OpenAiAsr, openai_outcome, prepare_openai};
 use crate::openai_speech::{
     AUDIO_ELISION_PATH, client_format, forwarded_body, media_type_of, sse_outcome,
 };
 use crate::speech_shared::{
-    bearer, binary_outcome, capabilities, descriptor, facts, input, json_body, non_2xx,
-    openai_error_message, prepared, required_forms, scalar_count, serves, view_status,
+    bearer, binary_outcome, descriptor, facts, input, json_body, non_2xx, openai_error_message,
+    prepared, required_forms, scalar_count, serves, view_status,
 };
 use crate::{ComponentResultV1, SpeechComponentV1, SpeechOutcomeV1};
 
@@ -60,12 +80,12 @@ const IMMUTABLE_BODY_PATHS: [&str; 4] = ["input", "model", "stream_format", "res
 #[derive(Debug, Default, Clone, Copy)]
 pub struct OpenAiCompatibleSpeechReferenceV1;
 
-/// The path below the binding's `base_url`: its API root is its own path, or `v1` when it is an
-/// origin (`reference_openai_compatible_embeddings`'s rule).
-fn speech_path(config: &ProviderConfig) -> &'static str {
+/// The path of `endpoint` below the binding's `base_url`: its API root is its own path, or `v1`
+/// when it is an origin (`reference_openai_compatible_embeddings`'s rule).
+fn api_path(config: &ProviderConfig, endpoint: &str) -> String {
     let base = config.base_url.as_str();
     let rest = base.split_once("://").map_or(base.as_str(), |(_, rest)| rest);
-    if rest.contains('/') { "audio/speech" } else { "v1/audio/speech" }
+    if rest.contains('/') { endpoint.to_owned() } else { format!("v1/{endpoint}") }
 }
 
 impl SpeechComponentV1 for OpenAiCompatibleSpeechReferenceV1 {
@@ -81,7 +101,7 @@ impl SpeechComponentV1 for OpenAiCompatibleSpeechReferenceV1 {
         &self,
         config: &ProviderConfig,
     ) -> ComponentResultV1<Vec<SpeechModelCapabilitiesV1>> {
-        capabilities(config, OPENAI_COMPATIBLE, &FORMS)
+        crate::asr_shared::capabilities(config, OPENAI_COMPATIBLE, &FORMS, true)
     }
 
     fn prepare(
@@ -91,6 +111,21 @@ impl SpeechComponentV1 for OpenAiCompatibleSpeechReferenceV1 {
         context: &SpeechCallContextV1,
     ) -> ComponentResultV1<PreparedSpeechCallV1> {
         serves(config, OPENAI_COMPATIBLE)?;
+        if context.operation.is_recognition() {
+            let endpoint = if context.operation == SpeechOperationV1::Translate {
+                "audio/translations"
+            } else {
+                "audio/transcriptions"
+            };
+            let protocol = OpenAiAsr {
+                path: api_path(config, endpoint),
+                drops_model: false,
+                translates: true,
+                auth: bearer(config),
+                upstream_model: &context.upstream_model,
+            };
+            return prepare_openai(config, request, context, &protocol);
+        }
         let forms = required_forms(context, &FORMS)?;
         let body = json_body(request)?;
         let count = scalar_count(input(body)?);
@@ -111,7 +146,13 @@ impl SpeechComponentV1 for OpenAiCompatibleSpeechReferenceV1 {
         }
         prepared(
             facts(count, &forms, media_type),
-            descriptor(speech_path(config), None, bearer(config), &Value::Object(template), &[])?,
+            descriptor(
+                &api_path(config, "audio/speech"),
+                None,
+                bearer(config),
+                &Value::Object(template),
+                &[],
+            )?,
             form,
             elision,
             &IMMUTABLE_BODY_PATHS,
@@ -128,7 +169,9 @@ impl SpeechComponentV1 for OpenAiCompatibleSpeechReferenceV1 {
         if !(200..300).contains(&status) {
             return Ok(non_2xx(status, response, openai_error_message));
         }
-        if state["form"] == "sse" {
+        if state.get("op").is_some() {
+            Ok(openai_outcome(state, response, true))
+        } else if state["form"] == "sse" {
             sse_outcome(state, response)
         } else {
             binary_outcome(state, response)

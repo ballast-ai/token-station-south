@@ -6,7 +6,8 @@
     "xai-speech"
   ],
   "capabilities": [
-    "synthesize"
+    "synthesize",
+    "transcribe"
   ],
   "auth_arms": [
     "bearer"

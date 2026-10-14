@@ -1,0 +1,22 @@
+{
+  "prepare_case": "speech-v1.prepare.stt-srt",
+  "response": {
+    "status": 200,
+    "body": {
+      "text": "hi there",
+      "words": [
+        {
+          "text": "hi",
+          "end": 0.4,
+          "type": "word"
+        },
+        {
+          "text": "there",
+          "start": 0.5,
+          "end": 0.9,
+          "type": "word"
+        }
+      ]
+    }
+  }
+}

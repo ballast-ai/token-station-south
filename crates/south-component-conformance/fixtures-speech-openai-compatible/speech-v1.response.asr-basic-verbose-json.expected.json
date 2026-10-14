@@ -1,0 +1,16 @@
+{
+  "outcome": "succeeded",
+  "transcript": {
+    "passthrough": {
+      "media_type": "application/json"
+    }
+  },
+  "metering": {
+    "characters": null,
+    "seconds": {
+      "value": 3.52,
+      "basis": "reported"
+    },
+    "tokens": null
+  }
+}

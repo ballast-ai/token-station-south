@@ -1,0 +1,38 @@
+{
+  "provider_config": {
+    "provider": "openai-compatible",
+    "base_url": "https://api.groq.com/openai/v1",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "whisper-large-v3"
+      }
+    ]
+  },
+  "request": {
+    "multipart": {
+      "parts": [
+        {
+          "kind": "text",
+          "name": "model",
+          "value": "media/asr"
+        },
+        {
+          "kind": "file",
+          "name": "file",
+          "blob": "b0",
+          "filename": "a.mp3",
+          "media_type": "audio/mpeg",
+          "bytes": 9
+        }
+      ]
+    }
+  },
+  "context": {
+    "upstream_model": "whisper-large-v3",
+    "operation": "translate",
+    "metering_required": [
+      "seconds"
+    ]
+  }
+}

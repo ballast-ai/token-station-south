@@ -1,0 +1,12 @@
+{
+  "outcome": "succeeded",
+  "transcript": {
+    "text": "hi there",
+    "media_type": "text/plain; charset=utf-8"
+  },
+  "metering": {
+    "characters": null,
+    "seconds": null,
+    "tokens": null
+  }
+}

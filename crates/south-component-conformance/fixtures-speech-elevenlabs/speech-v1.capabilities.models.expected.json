@@ -2,19 +2,23 @@
   {
     "model": "eleven_multilingual_v2",
     "operations": [
-      "synthesize"
+      "synthesize",
+      "transcribe"
     ],
     "metering_forms": [
-      "characters"
+      "characters",
+      "seconds"
     ]
   },
   {
     "model": "eleven_flash_v2_5",
     "operations": [
-      "synthesize"
+      "synthesize",
+      "transcribe"
     ],
     "metering_forms": [
-      "characters"
+      "characters",
+      "seconds"
     ]
   }
 ]

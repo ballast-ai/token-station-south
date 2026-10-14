@@ -1,0 +1,50 @@
+{
+  "facts": {
+    "operation": "transcribe",
+    "metering_forms": [
+      "seconds"
+    ]
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "v1/audio/transcriptions",
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "multipart": {
+        "parts": [
+          {
+            "name": "model",
+            "value": "gpt-4o-transcribe"
+          },
+          {
+            "name": "file",
+            "blob": "b0",
+            "transform": "as_is",
+            "filename": "a.mp3",
+            "media_type": "audio/mpeg"
+          },
+          {
+            "name": "response_format",
+            "value": "text"
+          }
+        ]
+      }
+    }
+  },
+  "response_body_form": "text",
+  "response_elision_paths": [],
+  "immutable_form_fields": [
+    "model",
+    "file",
+    "response_format",
+    "stream"
+  ],
+  "state": {
+    "op": "transcribe",
+    "format": "text",
+    "verbose": false
+  }
+}

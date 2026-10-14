@@ -1,0 +1,7 @@
+{
+  "prepare_case": "speech-v1.prepare.asr-basic-vtt",
+  "response": {
+    "status": 200,
+    "body_text": "WEBVTT\n\n"
+  }
+}

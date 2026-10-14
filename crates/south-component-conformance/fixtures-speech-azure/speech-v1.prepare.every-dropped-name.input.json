@@ -1,0 +1,94 @@
+{
+  "provider_config": {
+    "provider": "azure-speech",
+    "base_url": "https://eastus.cognitiveservices.azure.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "fast-transcription"
+      },
+      {
+        "model": "mai-transcribe-1.5"
+      }
+    ]
+  },
+  "request": {
+    "multipart": {
+      "parts": [
+        {
+          "kind": "text",
+          "name": "model",
+          "value": "media/asr"
+        },
+        {
+          "kind": "text",
+          "name": "language",
+          "value": "en-US"
+        },
+        {
+          "kind": "text",
+          "name": "prompt",
+          "value": "names: Contoso"
+        },
+        {
+          "kind": "text",
+          "name": "temperature",
+          "value": "0"
+        },
+        {
+          "kind": "text",
+          "name": "response_format",
+          "value": "json"
+        },
+        {
+          "kind": "text",
+          "name": "timestamp_granularities[]",
+          "value": "word"
+        },
+        {
+          "kind": "text",
+          "name": "timestamp_granularities[]",
+          "value": "segment"
+        },
+        {
+          "kind": "text",
+          "name": "definition",
+          "value": "{\"locales\":[\"en-US\"]}"
+        },
+        {
+          "kind": "file",
+          "name": "file",
+          "blob": "b0",
+          "filename": "a.mp3",
+          "media_type": "audio/mpeg",
+          "bytes": 9
+        },
+        {
+          "kind": "text",
+          "name": "diarization",
+          "value": "on"
+        },
+        {
+          "kind": "text",
+          "name": "stream",
+          "value": "false"
+        },
+        {
+          "kind": "file",
+          "name": "model",
+          "blob": "b1",
+          "filename": "model.bin",
+          "media_type": "application/octet-stream",
+          "bytes": 4
+        }
+      ]
+    }
+  },
+  "context": {
+    "upstream_model": "mai-transcribe-1.5",
+    "operation": "transcribe",
+    "metering_required": [
+      "seconds"
+    ]
+  }
+}

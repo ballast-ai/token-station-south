@@ -1,0 +1,48 @@
+{
+  "provider_config": {
+    "provider": "azure-speech",
+    "base_url": "https://eastus.cognitiveservices.azure.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "fast-transcription"
+      },
+      {
+        "model": "mai-transcribe-1.5"
+      }
+    ]
+  },
+  "request": {
+    "multipart": {
+      "parts": [
+        {
+          "kind": "text",
+          "name": "model",
+          "value": "media/asr"
+        },
+        {
+          "kind": "text",
+          "name": "prompt",
+          "blob": "b0",
+          "bytes": 1048577,
+          "head": "aaaa"
+        },
+        {
+          "kind": "file",
+          "name": "file",
+          "blob": "b1",
+          "filename": "a.mp3",
+          "media_type": "audio/mpeg",
+          "bytes": 9
+        }
+      ]
+    }
+  },
+  "context": {
+    "upstream_model": "fast-transcription",
+    "operation": "transcribe",
+    "metering_required": [
+      "seconds"
+    ]
+  }
+}

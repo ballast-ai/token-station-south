@@ -1,0 +1,11 @@
+{
+  "prepare_case": "speech-v1.prepare.native",
+  "response": {
+    "status": 200,
+    "body": [
+      {
+        "durationMilliseconds": 1000
+      }
+    ]
+  }
+}

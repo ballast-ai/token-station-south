@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "response_format 'vtt' is not supported for Azure MAI transcription: the upstream reports no per-segment timestamps to build subtitle cues from. Supported: json (default), verbose_json, text."
+  }
+}

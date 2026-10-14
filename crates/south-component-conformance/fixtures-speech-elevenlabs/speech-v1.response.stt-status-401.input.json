@@ -1,0 +1,12 @@
+{
+  "prepare_case": "speech-v1.prepare.stt-native",
+  "response": {
+    "status": 401,
+    "body": {
+      "detail": {
+        "status": "invalid_api_key",
+        "message": "Invalid API key"
+      }
+    }
+  }
+}

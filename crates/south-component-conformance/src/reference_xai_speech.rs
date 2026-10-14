@@ -18,6 +18,18 @@
 //! - **Immutable paths** `text` (native `body_rules`, `tts.rs:64`). Characters from the request.
 //! - **Response**: `binary`; an empty body is `unknown`; the artifact is typed by the upstream's
 //!   `content-type` (§1). A non-2xx carries `{"code", "error"}`'s `error` as the provider message.
+//!
+//! **Recognition** (speech world batch V3-3, design record `docs/design/2026-10-14-speech-v3-3-asr.md`
+//! §3; speech record §12 ASR row 2), transcribed from the native arm `AsrUpstream::Xai`
+//! (`handler/audio.rs:94-95`, `:203-208`, `:278`, `:559-564`):
+//!
+//! - **Operations**: `transcribe` for every configured model, no `translate`; `seconds` exactly.
+//! - **Request**: `POST v1/stt` under the row endpoint, `bearer`; every client part forwarded in
+//!   order except every text part named `model`, which is removed (native strips it). The common
+//!   refusals and the `OpenAI` format set as `speech-openai-compatible`.
+//! - **Verbose rows** and **other rows** as `speech-openai-compatible`, except that only
+//!   `duration` is read (xAI's usage shape is unknown).
+//! - **Immutable form fields** `model`, `file`, `response_format`, `stream` (native `audio.rs:77`).
 
 use serde_json::{Map, Value, json};
 use south_contracts::media::ResponseBodyFormV1;
@@ -27,10 +39,10 @@ use south_contracts::speech::{
 use south_provider_api::ComponentMetadataV1;
 use token_station_protocol::ProviderConfig;
 
+use crate::asr_shared::{OpenAiAsr, openai_outcome, prepare_openai};
 use crate::speech_shared::{
-    FALLBACK_MEDIA_TYPE, bearer, binary_outcome, capabilities, descriptor, facts, input, invalid,
-    is_blob, json_body, non_2xx, prepared, required_forms, scalar_count, serves, view_status,
-    with_refs,
+    FALLBACK_MEDIA_TYPE, bearer, binary_outcome, descriptor, facts, input, invalid, is_blob,
+    json_body, non_2xx, prepared, required_forms, scalar_count, serves, view_status, with_refs,
 };
 use crate::{ComponentResultV1, SpeechComponentV1, SpeechOutcomeV1};
 
@@ -118,7 +130,7 @@ impl SpeechComponentV1 for XaiSpeechReferenceV1 {
         &self,
         config: &ProviderConfig,
     ) -> ComponentResultV1<Vec<SpeechModelCapabilitiesV1>> {
-        capabilities(config, XAI_SPEECH, &FORMS)
+        crate::asr_shared::capabilities(config, XAI_SPEECH, &FORMS, false)
     }
 
     fn prepare(
@@ -128,6 +140,16 @@ impl SpeechComponentV1 for XaiSpeechReferenceV1 {
         context: &SpeechCallContextV1,
     ) -> ComponentResultV1<PreparedSpeechCallV1> {
         serves(config, XAI_SPEECH)?;
+        if context.operation.is_recognition() {
+            let protocol = OpenAiAsr {
+                path: "v1/stt".to_owned(),
+                drops_model: true,
+                translates: false,
+                auth: bearer(config),
+                upstream_model: &context.upstream_model,
+            };
+            return prepare_openai(config, request, context, &protocol);
+        }
         let forms = required_forms(context, &FORMS)?;
         let body = json_body(request)?;
         let text = input(body)?;
@@ -166,10 +188,12 @@ impl SpeechComponentV1 for XaiSpeechReferenceV1 {
         response: &Value,
     ) -> ComponentResultV1<SpeechOutcomeV1> {
         let status = view_status(response);
-        if (200..300).contains(&status) {
-            binary_outcome(state, response)
-        } else {
+        if !(200..300).contains(&status) {
             Ok(non_2xx(status, response, error_message))
+        } else if state.get("op").is_some() {
+            Ok(openai_outcome(state, response, false))
+        } else {
+            binary_outcome(state, response)
         }
     }
 }

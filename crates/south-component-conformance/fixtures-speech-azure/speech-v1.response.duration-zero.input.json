@@ -1,0 +1,15 @@
+{
+  "prepare_case": "speech-v1.prepare.native",
+  "response": {
+    "status": 200,
+    "body": {
+      "durationMilliseconds": 0,
+      "combinedPhrases": [
+        {
+          "channel": 0,
+          "text": "hello"
+        }
+      ]
+    }
+  }
+}

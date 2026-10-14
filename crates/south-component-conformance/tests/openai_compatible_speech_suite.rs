@@ -1,6 +1,8 @@
 //! `south.speech-component.v1` against the `speech-openai-compatible` native reference and its
 //! shipped pack, and the behaviours of design record `2026-10-14-speech-v3-1-tts.md` §2 and §8
 //! pinned by name: the generated 4,096-event stream and the `MAX_SPEECH_SEGMENTS` bound (SV-Q6).
+//! Recognition (design record `2026-10-14-speech-v3-3-asr.md` §2, §10): the recognition rows, the
+//! generated elided-transcript cases and the recognition breaks.
 
 use std::fmt::Write as _;
 
@@ -16,14 +18,17 @@ use south_component_conformance::{
     CheckV1, SpeechComponentV1, SpeechDeliveryV1, SpeechOutcomeV1, run_speech_component_suite_v1,
 };
 use south_contracts::media::{
-    BlobV1, MediaLimitsV1, PathPatternV1, SseEventFieldsV1, UpstreamRoundV1,
-    build_media_sse_response_view_v1, decode_base64, encode_base64,
+    BlobSetV1, BlobV1, MediaLimitsV1, PathPatternV1, SseEventFieldsV1, UpstreamRoundV1,
+    build_media_response_view_v1, build_media_sse_response_view_v1, decode_base64, encode_base64,
 };
 use south_contracts::speech::{
     MAX_SPEECH_SEGMENTS, SpeechArtifactFormV1, SpeechArtifactV1, SpeechCallContextV1,
+    TranscriptDeliveryV1, fill_transcript_template_v1,
 };
 use token_station_protocol::ProviderConfig;
 
+#[path = "support/speech_v3_3.rs"]
+mod asr;
 #[path = "support/speech_v3_1.rs"]
 mod support;
 
@@ -79,7 +84,16 @@ fn the_reference_passes_its_own_pack() {
     assert!(failures.is_empty(), "{failures:#?}");
     let mut rows = support::APPLICABLE_ROWS.to_vec();
     rows.push(CheckV1::MissingMeterIsNotZero);
+    rows.extend(asr::RECOGNITION_ROWS);
     support::assert_rows_ran(&report, &rows);
+    for (check, row) in [
+        (CheckV1::ClientFormatRendering, "speech-v1.client-formats"),
+        (CheckV1::MeteringSample, "speech-v1.metering.seconds"),
+        (CheckV1::AbsentDurationIsNullOrUnknown, "speech-v1.absent.seconds"),
+        (CheckV1::UndeclaredOperationRefused, "speech-v1.undeclared-operation"),
+    ] {
+        assert!(asr::passed_row(&report, check, row), "{row} did not pass");
+    }
 }
 
 /// Record §8 plan item 3: a generated 4,096-event answer (built here, not hand-written) passes the
@@ -239,4 +253,138 @@ fn max_speech_segments_fits_the_view_and_the_outcome() {
 fn every_break_turns_its_row_red() {
     let manifest = support::manifest(PACKAGE);
     support::assert_every_break_bites(&REFERENCE, &support::pack(&manifest), &manifest);
+}
+
+#[test]
+fn every_recognition_break_turns_its_row_red() {
+    let manifest = support::manifest(PACKAGE);
+    let pack = support::pack(&manifest);
+    asr::assert_every_asr_break_bites(&REFERENCE, &pack, &manifest);
+    let failing = asr::failing_checks(&REFERENCE, asr::AsrBreak::SecondsByFormat, &pack, &manifest);
+    assert!(failing.contains(&CheckV1::ClientFormatRendering), "{failing:?}");
+}
+
+/// A verbose answer whose `text` is above the 1 MiB fallback threshold (record §10: the elided
+/// transcript cases), built here rather than stored: `json` delivers a `$south.ref` the host fills
+/// with the original text, `verbose_json` passes the body through, and `text` is `unknown`, since a
+/// `text` delivery holds no reference.
+fn elided_cases() -> (String, Vec<SpeechCaseV1>) {
+    let long = "a".repeat(MediaLimitsV1::V1.inline_string_bytes + 1);
+    let body = json!({
+        "task": "transcribe",
+        "duration": 3.52,
+        "text": long,
+        "segments": [{ "start": 0.0, "end": 3.52, "text": "a" }],
+    });
+    let seconds = json!({ "value": 3.52, "basis": "reported" });
+    let case = |format: &str, expected: Value| SpeechCaseV1 {
+        name: format!("speech-v1.response.generated-elided-text-{format}"),
+        family: SpeechFamilyV1::Response,
+        input: json!({
+            "prepare_case": format!("speech-v1.prepare.asr-verbose-{format}"),
+            "response": { "status": 200, "content_type": "application/json", "body": body },
+        }),
+        expected,
+        missing: None,
+    };
+    let succeeded = |transcript: Value| {
+        json!({
+            "outcome": "succeeded",
+            "transcript": transcript,
+            "metering": { "characters": null, "seconds": seconds, "tokens": null },
+        })
+    };
+    (
+        long,
+        vec![
+            case(
+                "json",
+                succeeded(json!({
+                    "json": { "text": { "$south.ref": { "blob": "b0", "transform": "as_is" } } }
+                })),
+            ),
+            case(
+                "verbose-json",
+                succeeded(json!({ "passthrough": { "media_type": "application/json" } })),
+            ),
+            case(
+                "text",
+                json!({
+                    "outcome": "unknown",
+                    "reason": "the transcript is longer than a text delivery holds",
+                    "error": null,
+                }),
+            ),
+        ],
+    )
+}
+
+#[test]
+fn an_elided_transcript_is_a_reference_for_json_and_unknown_for_text() {
+    let manifest = support::manifest(PACKAGE);
+    let full = support::pack(&manifest);
+    let (_, generated) = elided_cases();
+    let names: Vec<String> = generated.iter().map(|case| case.name.clone()).collect();
+    let mut cases: Vec<SpeechCaseV1> = full.cases().to_vec();
+    cases.extend(generated);
+    let report = run_speech_component_suite_v1(
+        &REFERENCE,
+        &SpeechFixturePackV1::from_cases(cases),
+        &manifest,
+    );
+    let failures = support::failures(&report);
+    assert!(failures.is_empty(), "{failures:#?}");
+    for name in names {
+        assert!(
+            report
+                .outcomes()
+                .iter()
+                .any(|outcome| outcome.case == name && outcome.check == CheckV1::FixtureMatch),
+            "{name} ran"
+        );
+    }
+}
+
+/// Record §6 item 9 (verify then settle), as a host does it: the `json` template of an elided
+/// transcript fills from the view's blobs to the upstream's text.
+#[test]
+fn the_host_fills_an_elided_transcript_from_the_view() {
+    let (long, _) = elided_cases();
+    let config: ProviderConfig = serde_json::from_value(json!({
+        "provider": "openai-compatible",
+        "base_url": "https://api.openai.com",
+        "auth": "provider_api_key",
+        "models": [{ "model": "whisper-1", "supported_parameters": ["speech.verbose_json"] }],
+    }))
+    .unwrap();
+    let context: SpeechCallContextV1 = serde_json::from_value(json!({
+        "upstream_model": "whisper-1",
+        "operation": "transcribe",
+        "metering_required": ["seconds"],
+    }))
+    .unwrap();
+    let request = json!({ "multipart": { "parts": [
+        { "kind": "file", "name": "file", "blob": "b0", "filename": "a.mp3", "bytes": 9 },
+    ] } });
+    let prepared = REFERENCE.prepare(&config, &request, &context).unwrap();
+    let body = serde_json::to_vec(&json!({ "duration": 1.5, "text": long })).unwrap();
+    let (view, blobs) = build_media_response_view_v1(
+        UpstreamRoundV1 { status: 200, headers: &[], body: &body, content_type: None },
+        &[],
+        prepared.response_body_form,
+        &prepared.response_elision_paths,
+        &MediaLimitsV1::V1,
+    )
+    .unwrap();
+    let view: Value = serde_json::from_str(&view.to_json()).unwrap();
+    let state: Value = serde_json::from_str(&prepared.state).unwrap();
+    let SpeechOutcomeV1::Succeeded { delivery: SpeechDeliveryV1::Transcript(delivery), .. } =
+        REFERENCE.parse_response(&state, &view).unwrap()
+    else {
+        panic!("a succeeded transcript");
+    };
+    let TranscriptDeliveryV1::Json { template } = delivery else { panic!("a json delivery") };
+    let filled = fill_transcript_template_v1(&template, &BlobSetV1::new(blobs).unwrap()).unwrap();
+    let filled: Value = serde_json::from_str(&filled).unwrap();
+    assert_eq!(filled, json!({ "text": long }));
 }

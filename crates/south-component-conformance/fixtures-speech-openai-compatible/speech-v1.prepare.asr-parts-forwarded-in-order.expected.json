@@ -1,0 +1,68 @@
+{
+  "facts": {
+    "operation": "transcribe",
+    "metering_forms": [
+      "seconds"
+    ]
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "v1/audio/transcriptions",
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "multipart": {
+        "parts": [
+          {
+            "name": "prompt",
+            "value": "media/asr is the gateway name"
+          },
+          {
+            "name": "model",
+            "value": "gpt-4o-transcribe"
+          },
+          {
+            "name": "language",
+            "value": "de"
+          },
+          {
+            "name": "temperature",
+            "value": "0.2"
+          },
+          {
+            "name": "timestamp_granularities[]",
+            "value": "word"
+          },
+          {
+            "name": "file",
+            "blob": "b0",
+            "transform": "as_is",
+            "filename": "clip.wav",
+            "media_type": "audio/wav"
+          },
+          {
+            "name": "extra",
+            "blob": "b1",
+            "transform": "as_is",
+            "filename": "notes.txt"
+          }
+        ]
+      }
+    }
+  },
+  "response_body_form": "json",
+  "response_elision_paths": [],
+  "immutable_form_fields": [
+    "model",
+    "file",
+    "response_format",
+    "stream"
+  ],
+  "state": {
+    "op": "transcribe",
+    "format": "json",
+    "verbose": false
+  }
+}

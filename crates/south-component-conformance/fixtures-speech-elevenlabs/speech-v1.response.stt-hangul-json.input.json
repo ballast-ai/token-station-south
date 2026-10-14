@@ -1,0 +1,30 @@
+{
+  "prepare_case": "speech-v1.prepare.stt-json",
+  "response": {
+    "status": 200,
+    "body": {
+      "language_code": "ko",
+      "text": "\uc548\ub155\ud558\uc138\uc694\u3002 \uac10\uc0ac\ud569\ub2c8\ub2e4",
+      "words": [
+        {
+          "text": "\uc548\ub155\ud558\uc138\uc694\u3002",
+          "start": 0.0,
+          "end": 0.8,
+          "type": "word"
+        },
+        {
+          "text": " ",
+          "start": 0.8,
+          "end": 0.9,
+          "type": "spacing"
+        },
+        {
+          "text": "\uac10\uc0ac\ud569\ub2c8\ub2e4",
+          "start": 0.9,
+          "end": 1.6,
+          "type": "word"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "prepare_case": "speech-v1.prepare.asr-basic-text",
+  "response": {
+    "status": 500,
+    "body_text": "internal error"
+  }
+}

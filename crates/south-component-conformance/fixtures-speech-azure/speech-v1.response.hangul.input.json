@@ -1,0 +1,17 @@
+{
+  "prepare_case": "speech-v1.prepare.format-text",
+  "response": {
+    "status": 200,
+    "body": {
+      "durationMilliseconds": 2000,
+      "combinedPhrases": [
+        {
+          "text": "\uc548\ub155\ud558\uc138\uc694"
+        },
+        {
+          "text": "\uc138\uacc4"
+        }
+      ]
+    }
+  }
+}

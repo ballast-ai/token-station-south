@@ -15,7 +15,7 @@ mod host_range;
 
 /// The official components this repository ships. Named, so that an empty or
 /// mistyped scan below cannot pass over nothing.
-const OFFICIAL_COMPONENTS: [&str; 34] = [
+const OFFICIAL_COMPONENTS: [&str; 35] = [
     "embeddings-gemini",
     "embeddings-openai-compatible",
     "embeddings-vertex",
@@ -34,6 +34,7 @@ const OFFICIAL_COMPONENTS: [&str; 34] = [
     "provider-kiro",
     "provider-openai-compatible",
     "provider-openai-responses",
+    "speech-azure",
     "speech-elevenlabs",
     "speech-groq",
     "speech-mimo",
@@ -2275,7 +2276,14 @@ fn the_v3_1_speech_packages_declare_their_media_contract_and_runtime() {
         assert_eq!(manifest.version, "1.0.0", "{name}");
         assert_eq!(manifest.api_version, south_provider_api::SPEECH_WORLD, "{name}");
         assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), [family], "{name}");
-        assert_eq!(manifest.capabilities.iter().collect::<Vec<_>>(), ["synthesize"], "{name}");
+        // Speech batch V3-3 adds recognition to three of the four at the same unpublished 1.0.0
+        // (`the_v3_3_speech_packages_declare_their_operations_and_runtime`).
+        let capabilities: &[&str] = match name {
+            "speech-openai-compatible" => &["synthesize", "transcribe", "translate"],
+            "speech-xai" | "speech-elevenlabs" => &["synthesize", "transcribe"],
+            _ => &["synthesize"],
+        };
+        assert_eq!(manifest.capabilities.iter().collect::<Vec<_>>(), capabilities, "{name}");
         assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), [arm], "{name}");
         assert!(manifest.declared_keys(family).is_empty(), "{name}");
         assert_eq!(
@@ -2360,6 +2368,54 @@ fn the_v3_2_speech_packages_declare_their_runtime_and_values() {
     let speech = schema("speech-minimax", "minimax-speech");
     assert_eq!(speech["syntax"], "digits");
     assert_eq!(speech, schema("image-minimax", "minimax-image"));
+}
+
+/// Speech world batch V3-3 (record `2026-10-14-speech-v3-3-asr.md` §1, §10, SV-Q1 (b)): recognition
+/// arrives as a later version of the family's package. The three V3-1 packages it extends are
+/// unpublished, so they gain `transcribe` (and `speech-openai-compatible` `translate`) at 1.0.0 with
+/// no version move and keep their runtime and contracts; `speech-azure` starts at 1.0.0,
+/// `transcribe` only, `header_secret`, no config keys and no query parameter (`api-version` is a
+/// sanctioned name), `contracts.media` 1 and the first runtime with the speech world, 0.64.0, which
+/// a media 1 host admits. No other speech package changes.
+#[test]
+fn the_v3_3_speech_packages_declare_their_operations_and_runtime() {
+    let read = |name: &str| -> ComponentManifestV1 {
+        serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap()
+    };
+    let mut media_1_only = host_range::host_range();
+    media_1_only.contracts.insert("media".to_owned(), BTreeSet::from([1]));
+    for (name, capabilities, runtime) in [
+        ("speech-openai-compatible", vec!["synthesize", "transcribe", "translate"], "0.64.0"),
+        ("speech-xai", vec!["synthesize", "transcribe"], "0.64.0"),
+        ("speech-elevenlabs", vec!["synthesize", "transcribe"], host_range::south_release()),
+        ("speech-azure", vec!["transcribe"], "0.64.0"),
+        ("speech-groq", vec!["synthesize"], "0.64.0"),
+        ("speech-mimo", vec!["synthesize"], "0.64.0"),
+        ("speech-minimax", vec!["synthesize"], "0.64.0"),
+    ] {
+        let manifest = read(name);
+        assert_eq!(manifest.version, "1.0.0", "{name}: unpublished, no version move");
+        assert_eq!(manifest.api_version, south_provider_api::SPEECH_WORLD, "{name}");
+        assert_eq!(manifest.capabilities.iter().collect::<Vec<_>>(), capabilities, "{name}");
+        assert_eq!(manifest.compatibility.south_runtime, runtime, "{name}");
+        assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()), "{name}");
+    }
+    let azure = read("speech-azure");
+    assert_eq!(azure.providers.iter().collect::<Vec<_>>(), ["azure-speech"]);
+    assert_eq!(azure.auth_arms.iter().collect::<Vec<_>>(), ["header_secret"]);
+    assert!(azure.declared_keys("azure-speech").is_empty());
+    assert!(azure.query_parameters.is_empty());
+    assert_eq!(
+        azure.compatibility.contracts,
+        std::collections::BTreeMap::from([("media".to_owned(), 1)])
+    );
+    assert_eq!(compatibility_admits(&azure, &media_1_only), Ok(()));
 }
 
 /// Speech world batch V3-1 (record `2026-10-14-speech-v3-1-tts.md` §13) changes `south-contracts`
