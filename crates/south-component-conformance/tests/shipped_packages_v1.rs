@@ -1853,11 +1853,10 @@ fn image_ideogram_declares_media_1_and_the_runtime_of_the_record() {
 /// `data_url_payload`: it declares `contracts.media` 2, which a media 1 host refuses through the
 /// contract number. It is the first image package with a credential recipe; its config keys and
 /// `credentials` section are `embeddings-vertex`'s (record §4), which the image world has admitted
-/// since 0.52.0 (record §2). Until the release that ships it bumps the workspace version, it
-/// declares this tree's release as its `south_runtime` (record §9, following `image-gemini`'s I3-2
-/// precedent), and the release commit moves both together.
+/// since 0.52.0 (record §2). Its `south_runtime` is 0.59.0, the oldest runtime it needs: that
+/// release shipped `contracts.media` 2 (record, Implementation; `image-gemini` declares the same).
 #[test]
-fn image_vertex_declares_media_2_the_vertex_recipe_and_this_trees_runtime() {
+fn image_vertex_declares_media_2_the_vertex_recipe_and_the_media_2_runtime() {
     let read = |name: &str| -> ComponentManifestV1 {
         serde_json::from_str(
             &std::fs::read_to_string(
@@ -1880,7 +1879,9 @@ fn image_vertex_declares_media_2_the_vertex_recipe_and_this_trees_runtime() {
     assert_eq!(manifest.config_schema["vertex-ai-image"], embeddings.config_schema["vertex-ai"]);
     assert_eq!(manifest.compatibility.contracts.get("media"), Some(&2));
     assert_eq!(manifest.compatibility.contracts.get("image"), Some(&1));
-    assert_eq!(manifest.compatibility.south_runtime, host_range::south_release());
+    // The oldest runtime it needs: `contracts.media` 2 first shipped in 0.59.0 (as `image-gemini`),
+    // and nothing else it declares is newer (the image world's value channel is 0.52.0).
+    assert_eq!(manifest.compatibility.south_runtime, "0.59.0");
     assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
     let mut media_1_only = host_range::host_range();
     media_1_only.contracts.insert("media".to_owned(), BTreeSet::from([1]));

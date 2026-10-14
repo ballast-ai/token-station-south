@@ -308,9 +308,11 @@ unreleased work, 0.59.0 → 0.60.0 for the Kiro step (#204) and 0.60.0 → 0.61.
 published package already took its patch there. The new reference and `vertex_location.rs` change the crate again, but no
 release has carried 0.61.0, so it is not bumped again and no other package is re-patched; only `image-vertex` (1.0.0,
 with its own lockfile) is added. `south-contracts` (0.54.0) and `south-provider-api` (0.55.0) are as #205 left them; no
-`compatibility.json` change. `image-vertex` declares this tree's release, 0.61.0, as its `south_runtime` (§9, the I3-2
-precedent); `scripts/check-declared-runtime.sh --build` judges it with this tree, and the release commit moves the
-declaration with the workspace version.
+`compatibility.json` change. `image-vertex` declares `south_runtime` 0.59.0, the oldest runtime it needs: `contracts.media`
+2 first shipped there (as for `image-gemini`), and the image world's value channel is older (0.52.0). This replaces §9's
+"the tree's release until the release commit moves it", which was written when media 2 was assumed to be new in this
+release; the package was loaded under the v0.59.0 runtime's `declared_runtime_v1` before the change, and
+`scripts/check-declared-runtime.sh --build` judges it with the v0.59.0 tag.
 
 Departures and interpretations:
 
