@@ -1432,8 +1432,9 @@ fn declared_runtime_now(name: &str) -> &'static str {
         | "provider-openai-responses" => "0.60.0",
         "image-gemini" => "0.59.0",
         // V-Q8 (design record `2026-10-14-task-min-poll-interval.md`): the first package to declare
-        // `min_poll_interval_seconds`; the release that ships it moves this to its own runtime.
-        "task-minimax-v2" => "0.62.0",
+        // `min_poll_interval_seconds`, which no runtime before 0.63.0 parses (`ComponentManifestV1`
+        // refuses unknown fields); 0.63.0 shipped it, so the literal.
+        "task-minimax-v2" => "0.63.0",
         _ => "0.57.0",
     }
 }
