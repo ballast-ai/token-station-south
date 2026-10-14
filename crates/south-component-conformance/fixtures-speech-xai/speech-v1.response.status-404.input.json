@@ -1,0 +1,10 @@
+{
+  "prepare_case": "speech-v1.prepare.native-wav",
+  "response": {
+    "status": 404,
+    "body": {
+      "code": "Some requested entity was not found",
+      "error": "The model grok-tts-9 does not exist or your team does not have access to it."
+    }
+  }
+}

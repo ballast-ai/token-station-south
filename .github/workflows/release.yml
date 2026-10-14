@@ -106,6 +106,10 @@ jobs:
           scripts/build-image-qwen-component.sh
           scripts/build-image-stability-component.sh
           scripts/build-image-vertex-component.sh
+          scripts/build-speech-openai-compatible-component.sh
+          scripts/build-speech-xai-component.sh
+          scripts/build-speech-groq-component.sh
+          scripts/build-speech-elevenlabs-component.sh
 
       # Gate ② over the bytes just built: each sandbox parity test runs the
       # package's required suite against its component.wasm and, with
@@ -147,6 +151,10 @@ jobs:
             --test qwen_image_sandbox_parity \
             --test stability_image_sandbox_parity \
             --test vertex_image_sandbox_parity \
+            --test openai_compatible_speech_sandbox_parity \
+            --test xai_speech_sandbox_parity \
+            --test groq_speech_sandbox_parity \
+            --test elevenlabs_speech_sandbox_parity \
             -- --exact the_sandboxed_component_passes_gate_two_byte_for_byte
           ls -l "${SOUTH_GATE2_REPORT_DIR}"
 
@@ -197,6 +205,10 @@ jobs:
           package image-qwen image_qwen.wasm
           package image-stability image_stability.wasm
           package image-vertex image_vertex.wasm
+          package speech-openai-compatible speech_openai_compatible.wasm
+          package speech-xai speech_xai.wasm
+          package speech-groq speech_groq.wasm
+          package speech-elevenlabs speech_elevenlabs.wasm
           # Catalog data (boundary record §7.5, §13.11): each catalogs/<name>.json is
           # published verbatim as <name>-<tag>.json; the index step below refuses a
           # published catalog whose bytes differ from the source file.

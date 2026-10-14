@@ -1,0 +1,23 @@
+{
+  "outcome": "succeeded",
+  "artifact": {
+    "form": "segments",
+    "items": [
+      {
+        "pointer": "/0/data/audio",
+        "encoding": "base64"
+      }
+    ],
+    "media_type": "audio/wav"
+  },
+  "metering": {
+    "characters": null,
+    "seconds": null,
+    "tokens": {
+      "input": 11,
+      "output": 40,
+      "input_text": 11,
+      "input_audio": 0
+    }
+  }
+}

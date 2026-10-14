@@ -1,0 +1,20 @@
+[
+  {
+    "model": "eleven_multilingual_v2",
+    "operations": [
+      "synthesize"
+    ],
+    "metering_forms": [
+      "characters"
+    ]
+  },
+  {
+    "model": "eleven_flash_v2_5",
+    "operations": [
+      "synthesize"
+    ],
+    "metering_forms": [
+      "characters"
+    ]
+  }
+]

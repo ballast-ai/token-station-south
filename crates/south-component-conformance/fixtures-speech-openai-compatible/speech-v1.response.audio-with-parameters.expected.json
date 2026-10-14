@@ -1,0 +1,15 @@
+{
+  "outcome": "succeeded",
+  "artifact": {
+    "form": "body",
+    "media_type": "audio/L16; rate=24000"
+  },
+  "metering": {
+    "characters": {
+      "value": 11,
+      "source": "request"
+    },
+    "seconds": null,
+    "tokens": null
+  }
+}

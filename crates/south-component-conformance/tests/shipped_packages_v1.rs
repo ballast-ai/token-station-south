@@ -15,7 +15,7 @@ mod host_range;
 
 /// The official components this repository ships. Named, so that an empty or
 /// mistyped scan below cannot pass over nothing.
-const OFFICIAL_COMPONENTS: [&str; 28] = [
+const OFFICIAL_COMPONENTS: [&str; 32] = [
     "embeddings-gemini",
     "embeddings-openai-compatible",
     "embeddings-vertex",
@@ -34,6 +34,10 @@ const OFFICIAL_COMPONENTS: [&str; 28] = [
     "provider-kiro",
     "provider-openai-compatible",
     "provider-openai-responses",
+    "speech-elevenlabs",
+    "speech-groq",
+    "speech-openai-compatible",
+    "speech-xai",
     "task-kling",
     "task-kling-v2",
     "task-minimax-v2",
@@ -688,6 +692,17 @@ fn every_shipped_package_declares_the_range_handshake() {
                     ("image".to_owned(), u32::from(south_contracts::image::IMAGE_CONTRACT_VERSION)),
                 ]
                 .into()
+            } else if manifest.api_version == south_provider_api::SPEECH_WORLD {
+                // The speech world's packages declare the shared media vocabulary only:
+                // `compatibility.json` records `contracts.speech` at S-S-5, so no host range has
+                // a `speech` key to admit yet (V3-1 record, Implementation). `speech-elevenlabs`
+                // carries a declared query parameter, which needs media 3 (record §6, SV-Q5).
+                let media = if manifest.name == "speech-elevenlabs" {
+                    south_contracts::media::MEDIA_CONTRACT_VERSION_V3
+                } else {
+                    south_contracts::media::MEDIA_CONTRACT_VERSION
+                };
+                [("media".to_owned(), u32::from(media))].into()
             } else {
                 std::collections::BTreeMap::new()
             };
@@ -2220,6 +2235,67 @@ fn s_s_1_retires_every_published_063_package_identity() {
         if manifest.api_version == south_provider_api::IMAGE_WORLD {
             let media = if matches!(name, "image-gemini" | "image-vertex") { 2 } else { 1 };
             assert_eq!(manifest.compatibility.contracts.get("media"), Some(&media), "{name}");
+        }
+    }
+}
+
+/// Speech world batch V3-1 (record `2026-10-14-speech-v3-1-tts.md` §1, §6): four packages start at
+/// 1.0.0 in the speech world, `synthesize` only, the secret slot `provider_api_key`, no config keys.
+/// Three declare `contracts.media` 1 and the first runtime with the speech world, 0.64.0, and a media
+/// 1 host admits them. `speech-elevenlabs` declares the query parameter `output_format` and so
+/// `contracts.media` 3, which a media 2 host refuses; media 3 is new in this tree, so it declares this
+/// tree's release (the workspace version), which the release commit moves with the workspace
+/// version (the I3-2 / `task-gemini-omni-v2` precedent).
+#[test]
+fn the_v3_1_speech_packages_declare_their_media_contract_and_runtime() {
+    let read = |name: &str| -> ComponentManifestV1 {
+        serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap()
+    };
+    let mut media_1_only = host_range::host_range();
+    media_1_only.contracts.insert("media".to_owned(), BTreeSet::from([1]));
+    let mut media_2 = host_range::host_range();
+    media_2.contracts.insert("media".to_owned(), BTreeSet::from([1, 2]));
+    for (name, family, arm, media) in [
+        ("speech-openai-compatible", "openai-compatible", "bearer", 1),
+        ("speech-xai", "xai-speech", "bearer", 1),
+        ("speech-groq", "groq-speech", "bearer", 1),
+        ("speech-elevenlabs", "elevenlabs-speech", "header_secret", 3),
+    ] {
+        let manifest = read(name);
+        assert_eq!(manifest.version, "1.0.0", "{name}");
+        assert_eq!(manifest.api_version, south_provider_api::SPEECH_WORLD, "{name}");
+        assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), [family], "{name}");
+        assert_eq!(manifest.capabilities.iter().collect::<Vec<_>>(), ["synthesize"], "{name}");
+        assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), [arm], "{name}");
+        assert!(manifest.declared_keys(family).is_empty(), "{name}");
+        assert_eq!(
+            manifest.compatibility.contracts,
+            std::collections::BTreeMap::from([("media".to_owned(), media)]),
+            "{name}"
+        );
+        assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()), "{name}");
+        if media == 1 {
+            assert_eq!(manifest.compatibility.south_runtime, "0.64.0", "{name}");
+            assert!(manifest.query_parameters.is_empty(), "{name}");
+            assert_eq!(compatibility_admits(&manifest, &media_1_only), Ok(()), "{name}");
+        } else {
+            assert_eq!(
+                manifest.compatibility.south_runtime,
+                host_range::south_release(),
+                "{name}: declares this tree's release until the release commit moves it"
+            );
+            assert_eq!(manifest.query_parameters.len(), 1, "{name}");
+            assert_eq!(manifest.query_parameters[0].name, "output_format", "{name}");
+            assert!(matches!(
+                compatibility_admits(&manifest, &media_2),
+                Err(CompatibilityMismatchV2::Contract { declared: 3, .. })
+            ));
         }
     }
 }

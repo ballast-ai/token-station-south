@@ -1,0 +1,32 @@
+{
+  "provider_config": {
+    "provider": "xai-speech",
+    "base_url": "https://api.x.ai",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "grok-tts"
+      }
+    ]
+  },
+  "request": {
+    "json": {
+      "model": "media/tts",
+      "voice": "alloy",
+      "input": {
+        "$south.blob": {
+          "id": "b0",
+          "bytes": 1048577,
+          "head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    }
+  },
+  "context": {
+    "upstream_model": "grok-tts",
+    "operation": "synthesize",
+    "metering_required": [
+      "characters"
+    ]
+  }
+}

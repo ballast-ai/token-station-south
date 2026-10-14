@@ -58,6 +58,10 @@ jobs:
             components/provider-kiro
             components/provider-openai-compatible
             components/provider-openai-responses
+            components/speech-elevenlabs
+            components/speech-groq
+            components/speech-openai-compatible
+            components/speech-xai
             components/task-bailian-v2
             components/task-byteplus-v2
             components/task-gemini-omni-v2

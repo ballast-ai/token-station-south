@@ -1,0 +1,7 @@
+{
+  "prepare_case": "speech-v1.prepare.native-wav",
+  "response": {
+    "status": 200,
+    "body_base64": "WEFJV0FW"
+  }
+}

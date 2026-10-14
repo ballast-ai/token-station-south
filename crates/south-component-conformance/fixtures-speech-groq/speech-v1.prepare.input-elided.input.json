@@ -1,0 +1,35 @@
+{
+  "provider_config": {
+    "provider": "groq-speech",
+    "base_url": "https://api.groq.com/openai",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "canopylabs/orpheus-v1-english"
+      },
+      {
+        "model": "canopylabs/orpheus-arabic-saudi"
+      }
+    ]
+  },
+  "request": {
+    "json": {
+      "model": "media/tts",
+      "voice": "alloy",
+      "input": {
+        "$south.blob": {
+          "id": "b0",
+          "bytes": 1048577,
+          "head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    }
+  },
+  "context": {
+    "upstream_model": "canopylabs/orpheus-v1-english",
+    "operation": "synthesize",
+    "metering_required": [
+      "characters"
+    ]
+  }
+}

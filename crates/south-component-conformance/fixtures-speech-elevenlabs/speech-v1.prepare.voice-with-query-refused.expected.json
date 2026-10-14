@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "the ElevenLabs voice_id must be 1 to 128 characters of A-Z, a-z, 0-9, '.', '_', '~' or '-' and not '.' or '..'"
+  }
+}

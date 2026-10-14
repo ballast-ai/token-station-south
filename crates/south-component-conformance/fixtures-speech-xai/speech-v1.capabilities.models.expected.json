@@ -1,0 +1,11 @@
+[
+  {
+    "model": "grok-tts",
+    "operations": [
+      "synthesize"
+    ],
+    "metering_forms": [
+      "characters"
+    ]
+  }
+]

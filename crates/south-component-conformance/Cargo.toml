@@ -159,6 +159,22 @@ name = "synthetic_speech_sandbox_parity"
 required-features = ["sandbox"]
 
 [[test]]
+name = "openai_compatible_speech_sandbox_parity"
+required-features = ["sandbox"]
+
+[[test]]
+name = "xai_speech_sandbox_parity"
+required-features = ["sandbox"]
+
+[[test]]
+name = "groq_speech_sandbox_parity"
+required-features = ["sandbox"]
+
+[[test]]
+name = "elevenlabs_speech_sandbox_parity"
+required-features = ["sandbox"]
+
+[[test]]
 name = "embeddings_payload_measurement"
 required-features = ["sandbox"]
 

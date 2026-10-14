@@ -1,0 +1,7 @@
+{
+  "prepare_case": "speech-v1.prepare.native-wav",
+  "response": {
+    "status": 500,
+    "body_text": "internal error"
+  }
+}

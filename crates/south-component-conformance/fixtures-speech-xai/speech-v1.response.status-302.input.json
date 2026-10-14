@@ -1,0 +1,9 @@
+{
+  "prepare_case": "speech-v1.prepare.native-wav",
+  "response": {
+    "status": 302,
+    "headers": {
+      "location": "https://elsewhere.example/v1/tts"
+    }
+  }
+}

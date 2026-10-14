@@ -1,0 +1,22 @@
+[
+  {
+    "model": "gpt-4o-mini-tts",
+    "operations": [
+      "synthesize"
+    ],
+    "metering_forms": [
+      "characters",
+      "tokens"
+    ]
+  },
+  {
+    "model": "tts-1",
+    "operations": [
+      "synthesize"
+    ],
+    "metering_forms": [
+      "characters",
+      "tokens"
+    ]
+  }
+]

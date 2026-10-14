@@ -1,0 +1,15 @@
+{
+  "provider_config": {
+    "provider": "xai-speech",
+    "base_url": "https://api.elevenlabs.io",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "eleven_multilingual_v2"
+      },
+      {
+        "model": "eleven_flash_v2_5"
+      }
+    ]
+  }
+}

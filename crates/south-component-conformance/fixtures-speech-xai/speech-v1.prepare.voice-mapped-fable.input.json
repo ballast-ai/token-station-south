@@ -1,0 +1,26 @@
+{
+  "provider_config": {
+    "provider": "xai-speech",
+    "base_url": "https://api.x.ai",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "grok-tts"
+      }
+    ]
+  },
+  "request": {
+    "json": {
+      "model": "media/tts",
+      "input": "hello world",
+      "voice": "fable"
+    }
+  },
+  "context": {
+    "upstream_model": "grok-tts",
+    "operation": "synthesize",
+    "metering_required": [
+      "characters"
+    ]
+  }
+}
