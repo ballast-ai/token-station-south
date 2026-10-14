@@ -809,6 +809,13 @@ pub fn parse_prepared_image_call_v1(
     limits: &MediaLimitsV1,
 ) -> Result<PreparedImageCallV1, ImageContractErrorV1> {
     let wire: PreparedWire = serde_json::from_str(json_text).map_err(malformed)?;
+    // The image world has no `sse` response view (only the speech world builds one, from the
+    // events a host decoded): a call declaring it would be dispatched and then every 2xx judged
+    // `unknown` with the funds parked, so it is refused before dispatch (speech record, S-S-3
+    // resolutions, question 2).
+    if wire.response_body_form == ResponseBodyFormV1::Sse {
+        return Err(malformed("the image world has no sse response view"));
+    }
     if !(1..=limits.repeat).contains(&wire.repeat)
         || wire.response_elision_paths.len() > limits.elision_paths
     {
@@ -1141,6 +1148,11 @@ mod tests {
             parse_prepared_image_call_v1(&big_state, &MediaLimitsV1::V1),
             Err(ImageContractErrorV1::PreparedBounds)
         );
+        let sse = text.replace(r#""response_body_form":"json""#, r#""response_body_form":"sse""#);
+        assert!(matches!(
+            parse_prepared_image_call_v1(&sse, &MediaLimitsV1::V1),
+            Err(ImageContractErrorV1::Malformed(reason)) if reason.contains("sse")
+        ));
     }
 
     fn artifacts() -> Vec<ImageArtifactV1> {
