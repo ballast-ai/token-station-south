@@ -1,8 +1,9 @@
 # The Gemini Omni video task component and task contract 8 (inline artifacts, token buckets)
 
 Status: accepted 2026-10-13 (provisional items pending a real-account test). Rulings in §16; what landed, the numbered
-refusals and the intended differences from the host's native arm in §17. Drafted 2026-10-01 for review by the host
-team (token-station-server P21 / P26).
+refusals and the intended differences from the host's native arm in §17. Implemented in #205; released in 0.62.0
+([release record](2026-10-14-release-0.62.0.md)), which moved the package's `south_runtime` to 0.62.0. Drafted
+2026-10-01 for review by the host team (token-station-server P21 / P26).
 
 Date: 2026-10-01
 
@@ -898,7 +899,8 @@ and §4.5 show, and it is re-checked by the real-account test.
   `response_blob_paths` `/steps/*/content/*/data` and `/output_video/data`, `token_buckets` `text_input`,
   `image_input`, `cached_input`, `video_output`, `reasoning_output`, `total_input`, `total_output` (the last four
   required), `contracts` `{task: 8, media: 1}`, `south_runtime` this tree's 0.61.0 — **the release that ships contract 8
-  must move it to itself**, as 0.59.0 did for `image-gemini`, or `check-declared-runtime.sh` refuses it.
+  must move it to itself**, as 0.59.0 did for `image-gemini`, or `check-declared-runtime.sh` refuses it. *(Done: the
+  0.62.0 release commit moved it to 0.62.0.)*
 - **Compatibility**: `compatibility.json` records `contracts.task` 8; the test hosts admit task 7 and 8. Every
   published task package keeps `task: 7`. Q47: `south-contracts` 0.53.0 → 0.54.0, `south-provider-api` 0.54.0 →
   0.55.0, `south-component-conformance` 0.60.0 (the Kiro step, #204) → 0.61.0, so every package takes one patch past

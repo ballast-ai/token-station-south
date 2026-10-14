@@ -1953,8 +1953,9 @@ fn provider_kiro_declares_the_runtime_of_its_newest_declaration() {
 /// `task-gemini-omni-v2` 0.1.0 (the Omni record): the first task package on contract 8, with the
 /// media vocabulary its inline artifacts are named in. A host whose range lists task 7 only refuses
 /// it by the contract number, while every contract 7 package stays admitted next to it. Its
-/// `south_runtime` is this tree's release until the release that ships contract 8 moves it to
-/// itself, as 0.59.0 did for `image-gemini`.
+/// `south_runtime` must be the first runtime that decodes task contract 8, the release that ships
+/// it: 0.62.0 (the release commit moved the declaration with the workspace version, as 0.59.0 did
+/// for `image-gemini`).
 #[test]
 fn task_gemini_omni_v2_declares_task_8_which_a_task_7_host_refuses() {
     let manifest: ComponentManifestV1 = serde_json::from_str(
@@ -1966,7 +1967,8 @@ fn task_gemini_omni_v2_declares_task_8_which_a_task_7_host_refuses() {
     assert_eq!(manifest.api_version, south_provider_api::TASK_WORLD_V2);
     assert_eq!(manifest.compatibility.contracts.get("task"), Some(&8));
     assert_eq!(manifest.compatibility.contracts.get("media"), Some(&1));
-    assert_eq!(manifest.compatibility.south_runtime, host_range::south_release());
+    // Published with 0.62.0, so the literal: a later release bump must not move it.
+    assert_eq!(manifest.compatibility.south_runtime, "0.62.0");
     assert_eq!(manifest.response_blob_paths, ["/steps/*/content/*/data", "/output_video/data"]);
     let this_release = host_range::host_range();
     assert_eq!(compatibility_admits(&manifest, &this_release), Ok(()));
