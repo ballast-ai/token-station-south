@@ -1,7 +1,9 @@
 //! Pieces the text-to-speech references of speech world batches V3-1 and V3-2 share (design records
 //! `docs/design/2026-10-14-speech-v3-1-tts.md` §1 and `docs/design/2026-10-14-speech-v3-2-tts.md`
 //! §1): the northbound `input`, the operation and metering checks, the facts, the descriptor, the
-//! delivered media type, the `binary` and `inline` successes and the non-2xx table.
+//! delivered media type, the `binary` and `inline` successes and the non-2xx table. The non-2xx
+//! table, the family check and the JSON object reader also serve the recognition references of
+//! batch V3-3, whose own pieces are in `asr_shared` (`docs/design/2026-10-14-speech-v3-3-asr.md`).
 //!
 //! Every package reads the northbound speech request `{input, voice?, response_format?, …}` from the
 //! request view's `json` member. A string above the 1 MiB fallback threshold arrives as a
@@ -37,7 +39,7 @@ pub fn serves(config: &ProviderConfig, family: &str) -> ComponentResultV1<()> {
 }
 
 /// The metering form as the contract spells it.
-const fn form_word(form: SpeechMeteringFormV1) -> &'static str {
+pub const fn form_word(form: SpeechMeteringFormV1) -> &'static str {
     match form {
         SpeechMeteringFormV1::Characters => "characters",
         SpeechMeteringFormV1::Seconds => "seconds",
@@ -46,7 +48,7 @@ const fn form_word(form: SpeechMeteringFormV1) -> &'static str {
 }
 
 /// The operation as the contract spells it.
-const fn operation_word(operation: SpeechOperationV1) -> &'static str {
+pub const fn operation_word(operation: SpeechOperationV1) -> &'static str {
     match operation {
         SpeechOperationV1::Synthesize => "synthesize",
         SpeechOperationV1::Transcribe => "transcribe",

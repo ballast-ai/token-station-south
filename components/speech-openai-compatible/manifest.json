@@ -6,7 +6,9 @@
     "openai-compatible"
   ],
   "capabilities": [
-    "synthesize"
+    "synthesize",
+    "transcribe",
+    "translate"
   ],
   "auth_arms": [
     "bearer"

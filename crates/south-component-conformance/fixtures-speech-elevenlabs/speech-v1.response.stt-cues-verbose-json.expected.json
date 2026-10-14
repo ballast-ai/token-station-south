@@ -1,0 +1,56 @@
+{
+  "outcome": "succeeded",
+  "transcript": {
+    "json": {
+      "task": "transcribe",
+      "language": "en",
+      "duration": 4.4,
+      "text": "Hello world. How are you Fine thanks",
+      "words": [
+        {
+          "word": "Hello",
+          "start": 0.0,
+          "end": 0.4
+        },
+        {
+          "word": "world.",
+          "start": 0.5,
+          "end": 0.9
+        },
+        {
+          "word": "How",
+          "start": 1.6,
+          "end": 1.8
+        },
+        {
+          "word": "are",
+          "start": 1.9,
+          "end": 2.0
+        },
+        {
+          "word": "you",
+          "start": 2.1,
+          "end": 2.3
+        },
+        {
+          "word": "Fine",
+          "start": 3.5,
+          "end": 3.9
+        },
+        {
+          "word": "thanks",
+          "start": 4.0,
+          "end": 4.4
+        }
+      ]
+    }
+  },
+  "metering": {
+    "characters": null,
+    "seconds": {
+      "value": 4.4,
+      "basis": "last_timestamp"
+    },
+    "tokens": null
+  }
+}

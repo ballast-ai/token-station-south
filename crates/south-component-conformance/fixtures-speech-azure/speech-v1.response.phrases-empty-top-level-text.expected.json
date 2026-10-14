@@ -1,0 +1,18 @@
+{
+  "outcome": "succeeded",
+  "transcript": {
+    "json": {
+      "task": "transcribe",
+      "duration": 1.0,
+      "text": "fallback text"
+    }
+  },
+  "metering": {
+    "characters": null,
+    "seconds": {
+      "value": 1.0,
+      "basis": "reported"
+    },
+    "tokens": null
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "capability",
+    "http_status": 400,
+    "message": "the model 'grok-stt' does not declare the operation translate"
+  }
+}

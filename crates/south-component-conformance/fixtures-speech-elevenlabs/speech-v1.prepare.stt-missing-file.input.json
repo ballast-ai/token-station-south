@@ -1,0 +1,38 @@
+{
+  "provider_config": {
+    "provider": "elevenlabs-speech",
+    "base_url": "https://api.elevenlabs.io",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "eleven_multilingual_v2"
+      },
+      {
+        "model": "scribe_v1"
+      }
+    ]
+  },
+  "request": {
+    "multipart": {
+      "parts": [
+        {
+          "kind": "text",
+          "name": "model",
+          "value": "media/asr"
+        },
+        {
+          "kind": "text",
+          "name": "language",
+          "value": "en"
+        }
+      ]
+    }
+  },
+  "context": {
+    "upstream_model": "scribe_v1",
+    "operation": "transcribe",
+    "metering_required": [
+      "seconds"
+    ]
+  }
+}

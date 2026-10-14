@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "streaming transcription is not supported; re-submit without `stream` or with `stream=false`"
+  }
+}

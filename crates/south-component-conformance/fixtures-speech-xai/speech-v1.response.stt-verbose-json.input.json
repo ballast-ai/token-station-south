@@ -1,0 +1,23 @@
+{
+  "prepare_case": "speech-v1.prepare.stt-verbose-json",
+  "response": {
+    "status": 200,
+    "body": {
+      "text": "Hi there. Bye.",
+      "language": "en",
+      "duration": 2.0,
+      "segments": [
+        {
+          "start": 0.0,
+          "end": 1.25,
+          "text": "Hi there."
+        },
+        {
+          "start": 1.25,
+          "end": 2.0,
+          "text": "Bye."
+        }
+      ]
+    }
+  }
+}

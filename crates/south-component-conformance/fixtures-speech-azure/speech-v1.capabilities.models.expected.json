@@ -1,0 +1,20 @@
+[
+  {
+    "model": "fast-transcription",
+    "operations": [
+      "transcribe"
+    ],
+    "metering_forms": [
+      "seconds"
+    ]
+  },
+  {
+    "model": "mai-transcribe-1.5",
+    "operations": [
+      "transcribe"
+    ],
+    "metering_forms": [
+      "seconds"
+    ]
+  }
+]

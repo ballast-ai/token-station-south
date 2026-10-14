@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "capability",
+    "http_status": 400,
+    "message": "the model 'whisper-2' does not declare the operation translate"
+  }
+}

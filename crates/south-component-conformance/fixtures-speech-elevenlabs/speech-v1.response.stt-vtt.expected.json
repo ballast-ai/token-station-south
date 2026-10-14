@@ -1,0 +1,15 @@
+{
+  "outcome": "succeeded",
+  "transcript": {
+    "text": "WEBVTT\n\n00:00:00.000 --> 00:00:00.400\nhi\n\n00:00:00.500 --> 00:00:07.500\nthere\n\n",
+    "media_type": "text/vtt"
+  },
+  "metering": {
+    "characters": null,
+    "seconds": {
+      "value": 7.5,
+      "basis": "last_timestamp"
+    },
+    "tokens": null
+  }
+}

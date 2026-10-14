@@ -1,0 +1,16 @@
+{
+  "provider_config": {
+    "provider": "azure-speech",
+    "base_url": "https://eastus.cognitiveservices.azure.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "mai-transcribe-1.5",
+        "supported_parameters": [
+          "speech.translate",
+          "speech.verbose_json"
+        ]
+      }
+    ]
+  }
+}

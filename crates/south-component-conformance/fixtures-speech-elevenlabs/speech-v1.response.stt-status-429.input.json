@@ -1,0 +1,12 @@
+{
+  "prepare_case": "speech-v1.prepare.stt-srt",
+  "response": {
+    "status": 429,
+    "body": {
+      "detail": {
+        "status": "too_many_concurrent_requests",
+        "message": "Too many concurrent requests"
+      }
+    }
+  }
+}

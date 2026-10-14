@@ -1,0 +1,39 @@
+[
+  {
+    "model": "gpt-4o-mini-tts",
+    "operations": [
+      "synthesize",
+      "transcribe"
+    ],
+    "metering_forms": [
+      "characters",
+      "tokens",
+      "seconds"
+    ]
+  },
+  {
+    "model": "whisper-1",
+    "operations": [
+      "synthesize",
+      "transcribe",
+      "translate"
+    ],
+    "metering_forms": [
+      "characters",
+      "tokens",
+      "seconds"
+    ]
+  },
+  {
+    "model": "gpt-4o-transcribe",
+    "operations": [
+      "synthesize",
+      "transcribe"
+    ],
+    "metering_forms": [
+      "characters",
+      "tokens",
+      "seconds"
+    ]
+  }
+]

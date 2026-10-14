@@ -1,0 +1,17 @@
+{
+  "outcome": "succeeded",
+  "transcript": {
+    "json": {
+      "text": "hello world",
+      "duration": 2.5
+    }
+  },
+  "metering": {
+    "characters": null,
+    "seconds": {
+      "value": 2.5,
+      "basis": "reported"
+    },
+    "tokens": null
+  }
+}

@@ -213,6 +213,11 @@ mod speech_shared;
 mod minimax_shared;
 pub mod reference_mimo_speech;
 pub mod reference_minimax_speech;
+// The speech recognition of batch V3-3 (design record docs/design/2026-10-14-speech-v3-3-asr.md):
+// the pieces the four recognition references share and the new `speech-azure` reference; the
+// OpenAI-compatible, xAI and ElevenLabs references above gain `transcribe` in place.
+mod asr_shared;
+pub mod reference_azure_speech;
 // The XML well-formedness reader the `ssml_escaping` row uses.
 mod ssml_check;
 // The location rules the two Vertex AI references share (image record I3-3 §4).

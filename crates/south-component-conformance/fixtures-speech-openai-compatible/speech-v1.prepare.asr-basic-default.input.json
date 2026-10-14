@@ -1,0 +1,48 @@
+{
+  "provider_config": {
+    "provider": "openai-compatible",
+    "base_url": "https://api.openai.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "gpt-4o-mini-tts"
+      },
+      {
+        "model": "whisper-1",
+        "supported_parameters": [
+          "speech.translate",
+          "speech.verbose_json"
+        ]
+      },
+      {
+        "model": "gpt-4o-transcribe"
+      }
+    ]
+  },
+  "request": {
+    "multipart": {
+      "parts": [
+        {
+          "kind": "text",
+          "name": "model",
+          "value": "media/asr"
+        },
+        {
+          "kind": "file",
+          "name": "file",
+          "blob": "b0",
+          "filename": "a.mp3",
+          "media_type": "audio/mpeg",
+          "bytes": 9
+        }
+      ]
+    }
+  },
+  "context": {
+    "upstream_model": "gpt-4o-transcribe",
+    "operation": "transcribe",
+    "metering_required": [
+      "seconds"
+    ]
+  }
+}

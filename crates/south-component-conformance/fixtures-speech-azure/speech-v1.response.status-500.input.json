@@ -1,0 +1,9 @@
+{
+  "prepare_case": "speech-v1.prepare.native",
+  "response": {
+    "status": 500,
+    "body": {
+      "code": "InternalServerError"
+    }
+  }
+}

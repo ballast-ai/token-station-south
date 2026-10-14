@@ -1,0 +1,12 @@
+{
+  "prepare_case": "speech-v1.prepare.asr-verbose-json",
+  "response": {
+    "status": 403,
+    "body": {
+      "error": {
+        "message": "Country not supported.",
+        "type": "request_forbidden"
+      }
+    }
+  }
+}

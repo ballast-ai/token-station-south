@@ -1,0 +1,16 @@
+{
+  "outcome": "succeeded",
+  "transcript": {
+    "json": {
+      "text": "\uc548\ub155\ud558\uc138\uc694\u3002 \uac10\uc0ac\ud569\ub2c8\ub2e4"
+    }
+  },
+  "metering": {
+    "characters": null,
+    "seconds": {
+      "value": 1.6,
+      "basis": "last_timestamp"
+    },
+    "tokens": null
+  }
+}

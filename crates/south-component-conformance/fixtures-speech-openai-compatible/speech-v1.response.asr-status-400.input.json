@@ -1,0 +1,14 @@
+{
+  "prepare_case": "speech-v1.prepare.asr-basic-json",
+  "response": {
+    "status": 400,
+    "body": {
+      "error": {
+        "message": "Invalid file format.",
+        "type": "invalid_request_error",
+        "param": null,
+        "code": null
+      }
+    }
+  }
+}

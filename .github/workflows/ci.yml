@@ -58,6 +58,7 @@ jobs:
             components/provider-kiro
             components/provider-openai-compatible
             components/provider-openai-responses
+            components/speech-azure
             components/speech-elevenlabs
             components/speech-groq
             components/speech-mimo

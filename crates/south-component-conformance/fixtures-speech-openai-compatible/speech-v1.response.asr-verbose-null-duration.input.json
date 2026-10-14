@@ -1,0 +1,12 @@
+{
+  "prepare_case": "speech-v1.prepare.asr-verbose-srt",
+  "response": {
+    "status": 200,
+    "body": {
+      "task": "transcribe",
+      "duration": null,
+      "text": "Hello there.",
+      "segments": []
+    }
+  }
+}

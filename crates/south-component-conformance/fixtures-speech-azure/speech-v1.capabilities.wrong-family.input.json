@@ -1,0 +1,12 @@
+{
+  "provider_config": {
+    "provider": "azure-openai",
+    "base_url": "https://eastus.cognitiveservices.azure.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "mai-transcribe-1.5"
+      }
+    ]
+  }
+}

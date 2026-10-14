@@ -1,0 +1,15 @@
+{
+  "outcome": "succeeded",
+  "transcript": {
+    "text": "\uc548\ub155\ud558\uc138\uc694 \uc138\uacc4",
+    "media_type": "text/plain; charset=utf-8"
+  },
+  "metering": {
+    "characters": null,
+    "seconds": {
+      "value": 2.0,
+      "basis": "reported"
+    },
+    "tokens": null
+  }
+}

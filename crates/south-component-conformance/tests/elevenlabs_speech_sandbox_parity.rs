@@ -2,8 +2,9 @@
 //! and manifest that judged its native reference, and agrees with that reference byte for byte
 //! across the ABI.
 //!
-//! Design records: `docs/design/2026-09-30-speech-world.md` (§7, §11) and
-//! `docs/design/2026-10-14-speech-v3-1-tts.md` (§5, §6, §12).
+//! Design records: `docs/design/2026-09-30-speech-world.md` (§7, §11),
+//! `docs/design/2026-10-14-speech-v3-1-tts.md` (§5, §6, §12) and
+//! `docs/design/2026-10-14-speech-v3-3-asr.md` (§4, §10; recognition).
 //!
 //! The raw ABI comparison replays what the suite itself sent: the native reference runs the suite
 //! behind a recorder, so every argument a function is compared on is one the suite built the way a

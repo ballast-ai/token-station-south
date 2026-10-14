@@ -453,18 +453,19 @@ fn is_refusal_code(error: &Value) -> bool {
         .is_ok_and(|error| matches!(error.code, ErrorCode::InvalidRequest | ErrorCode::Capability))
 }
 
-/// The client format a recognition request view asks for: its `response_format` text part, or
-/// `json` when it has none (the `OpenAI` audio API's default).
+/// The client format a recognition request view asks for: its first `response_format` text part
+/// trimmed of ASCII whitespace, or `json` when it has none or it is empty after trimming (the
+/// `OpenAI` audio API's default). A package that compares the value exactly refuses a padded one
+/// before dispatch, so the trim only matters to one that trims as its native arm does (V3-3 record
+/// §10 decision 3, `speech-azure`).
 fn client_format(request: &Value) -> Option<String> {
     let parts = request.pointer("/multipart/parts")?.as_array()?;
-    Some(
-        parts
-            .iter()
-            .find(|part| part["kind"] == "text" && part["name"] == "response_format")
-            .and_then(|part| part["value"].as_str())
-            .unwrap_or("json")
-            .to_owned(),
-    )
+    let format = parts
+        .iter()
+        .find(|part| part["kind"] == "text" && part["name"] == "response_format")
+        .and_then(|part| part["value"].as_str())
+        .map_or("", |value| value.trim_matches(|c: char| c.is_ascii_whitespace()));
+    Some(if format.is_empty() { "json" } else { format }.to_owned())
 }
 
 /// Whether the model row the context routes to carries the dialect word `speech.verbose_json`.

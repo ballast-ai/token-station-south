@@ -23,3 +23,22 @@ reference first ran:
   parameters kept; a quoted parameter falls back to the essence), an empty 2xx (`unknown`, sidecar `audio`), and 401,
   403, 404, 408, 429, 500 and 302. xAI's error body `{"code", "error"}` gives `error` as the provider message
   (**unverified** against a capture); a JSON body of another shape gives its compact text.
+
+## Recognition (speech world batch V3-3)
+
+`docs/design/2026-10-14-speech-v3-3-asr.md` §3, §10. The `stt-*` cases and the updated `capabilities.models` (every
+configured model now also declares `transcribe` and `seconds`; `speech.translate` on a row adds nothing, xAI does not
+translate) were written by hand from the record and from the native arm `AsrUpstream::Xai` (`handler/audio.rs:94-95`,
+`:203-208`, `:278`, `:559-564`) before the reference first ran:
+
+- `prepare.stt-native` and `response.stt-json-duration` transcribe the host test
+  `xai_stt_strips_the_model_field_posts_v1_stt_and_bills_the_reported_duration` (`media_arms.rs:871`): the `model`
+  part removed, `v1/stt`, the answer passed through and 15 s billed; `response.stt-json-no-duration` transcribes
+  `:1401` (`seconds: null`). Both answers are the host's hand-written ones, not captures (**unverified**). Every
+  `model` part is removed, a value containing `name="model"` is not touched (§7 D1).
+- `usage.seconds` is not read (`stt-json-usage-seconds-not-read`).
+- Verbose rows use a configuration whose `grok-stt` row carries `speech.verbose_json`; whether `/v1/stt` accepts
+  `response_format` and returns `segments` is **unverified** (record §9 item 3), and the capture decides whether any
+  real row carries the word. `stt-verbose-*` render one answer in every client format.
+- Translation is refused before dispatch (`capability`). The common refusals and the non-2xx table with the
+  `{"code", "error"}` reader as for synthesis.

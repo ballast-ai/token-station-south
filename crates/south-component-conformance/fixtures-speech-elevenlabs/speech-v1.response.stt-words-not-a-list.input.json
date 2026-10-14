@@ -1,0 +1,12 @@
+{
+  "prepare_case": "speech-v1.prepare.stt-native",
+  "response": {
+    "status": 200,
+    "body": {
+      "text": "hi there",
+      "words": {
+        "text": "hi"
+      }
+    }
+  }
+}

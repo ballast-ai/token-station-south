@@ -183,6 +183,10 @@ name = "minimax_speech_sandbox_parity"
 required-features = ["sandbox"]
 
 [[test]]
+name = "azure_speech_sandbox_parity"
+required-features = ["sandbox"]
+
+[[test]]
 name = "embeddings_payload_measurement"
 required-features = ["sandbox"]
 

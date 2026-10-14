@@ -1,0 +1,12 @@
+{
+  "prepare_case": "speech-v1.prepare.native",
+  "response": {
+    "status": 403,
+    "body": {
+      "error": {
+        "code": "403",
+        "message": "Out of call volume quota."
+      }
+    }
+  }
+}

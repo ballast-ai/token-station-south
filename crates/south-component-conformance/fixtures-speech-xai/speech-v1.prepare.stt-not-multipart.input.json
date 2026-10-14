@@ -1,0 +1,27 @@
+{
+  "provider_config": {
+    "provider": "xai-speech",
+    "base_url": "https://api.x.ai",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "grok-tts"
+      },
+      {
+        "model": "grok-stt"
+      }
+    ]
+  },
+  "request": {
+    "json": {
+      "input": "hi"
+    }
+  },
+  "context": {
+    "upstream_model": "grok-stt",
+    "operation": "transcribe",
+    "metering_required": [
+      "seconds"
+    ]
+  }
+}
