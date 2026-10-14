@@ -8,7 +8,8 @@
 //! ([`expand_json_template_v1`], [`encode_multipart_v1`]) with the closed transforms
 //! ([`MediaTransformV1`]). Every function here is pure: no I/O, no clock, no randomness (a
 //! multipart boundary is the caller's). The SSE decoder the speech world needs ships separately
-//! (host plan B6, Q-B6-6).
+//! (host plan B6, Q-B6-6), in the host-only crate `south-host-grammars`; the `sse` response view
+//! is built here from the events it decoded ([`build_media_sse_response_view_v1`]).
 
 mod descriptor;
 mod egress;
@@ -36,7 +37,8 @@ pub use multipart::{
 };
 pub use response::{
     MediaRequestViewV1, MediaResponseBodyV1, MediaResponseErrorV1, MediaResponseViewV1,
-    ResponseBodyFormV1, UpstreamRoundV1, build_media_response_view_v1,
+    ResponseBodyFormV1, SseEventFieldsV1, UpstreamRoundV1, build_media_response_view_v1,
+    build_media_sse_response_view_v1,
 };
 pub(crate) use transform::is_tchar;
 pub use transform::{
