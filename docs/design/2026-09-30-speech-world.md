@@ -1269,3 +1269,5 @@ None of the four S-S-3 questions needed a new ruling; each is settled by precede
   Implementation): `speech-openai-compatible`, `speech-xai`, `speech-groq` and `speech-elevenlabs` 1.0.0 and
   `contracts.media` 3. Until S-S-5 records `contracts.speech`, the packages declare `contracts` `{media: 1}` (or 3)
   only, as the synthetic guest does (S-S-3 interpretation 16). No design decision of this record changed.
+- 2026-10-14: the S-S-4 batch V3-2 design (MiMo and MiniMax TTS) is proposed in
+  [`2026-10-14-speech-v3-2-tts.md`](2026-10-14-speech-v3-2-tts.md). No design decision of this record changed.
