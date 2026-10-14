@@ -1224,6 +1224,22 @@ unreleased cycle (S-S-1: 0.55.0 and 0.63.0; `git diff v0.63.0 HEAD` shows the mo
 since, so neither moves again. `south-provider-api` and `south-host-grammars` do not change. The packages took this
 release's patch in S-S-1 and take no second one. No `compatibility.json` entry (S-S-5).
 
+### Resolutions (2026-10-14, S-S-3)
+
+None of the four S-S-3 questions needed a new ruling; each is settled by precedent or by the fail-closed discipline:
+
+- **Question 1, the `sse` body key:** `{"sse": [...]}` with `MediaResponseBodyV1::Sse` stays. It is an implementation
+  choice the record left open; a separate variant keeps a component from reading an event list as a JSON body.
+- **Question 2, image `response_body_form: sse`:** the image world will refuse it in `parse_prepared_image_call_v1`,
+  before dispatch, in a separate image change. Today a host would dispatch such a call and then judge every 2xx
+  `unknown`, parking the funds: a defect, even though no image package declares `sse`. It is fixed outside this speech
+  step so that the speech change stays speech-only.
+- **Question 3, `metering_sample` and the two character sources:** kept as implemented, following §11's "counted
+  separately for each of its two sources". The rule is provisional and is re-checked against the real packages of
+  S-S-4.
+- **Question 4, a synthetic reference:** accepted. The `t21-unseen-*` guests are the precedent for a test double that
+  no host routes to. Choosing the shape by model-id prefix is confined to it and documented as test-double-only.
+
 ## Revision note (2026-10-14)
 
 - S-S-1 implementation section added: what landed, fourteen interpretations, two points that contradict the record
@@ -1244,3 +1260,5 @@ release's patch in S-S-1 and take no second one. No `compatibility.json` entry (
   reference with its pack, guest and mutation tests), sixteen interpretations, two points that contradict the §18 row's
   wording and four open questions for lv. No crate version moves (Q47: both changed crates already moved in this cycle).
   No design decision changed.
+- 2026-10-14: the four S-S-3 open questions settled without a new ruling (Resolutions, S-S-3); the image world's
+  refusal of `response_body_form: sse` before dispatch is a separate image change.
