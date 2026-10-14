@@ -2161,7 +2161,9 @@ fn i3_3_retires_every_published_062_package_identity() {
 /// Speech world step S-S-1 (speech record §18) adds the `speech` contract module to
 /// `south-contracts` (0.54.0 → 0.55.0), which every guest links, so every `component.wasm` changes:
 /// each identity published with 0.63.0 retires. No published package changes behaviour: each takes
-/// a patch and keeps its `south_runtime` and its `contracts`.
+/// a patch and keeps its `south_runtime` and its `contracts`. Step S-S-2 moves `south-provider-api`
+/// (0.56.0 → 0.57.0) in the same unreleased release; identities are compared with the release, so
+/// the patch taken here covers it and no package takes a second one.
 #[test]
 fn s_s_1_retires_every_published_063_package_identity() {
     for (name, published, now) in [

@@ -15,7 +15,7 @@ version = "0.63.0"
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 south-contracts = { path = "../south-contracts", version = "0.55.0" }
-south-provider-api = { path = "../south-provider-api", version = "0.56.0" }
+south-provider-api = { path = "../south-provider-api", version = "0.57.0" }
 # A lower bound, not the exact release: the runtime keeps the workspace version, and an exact
 # requirement would have to be edited in this manifest at every release (§16 Q47). Only the
 # `sandbox` feature, which no component enables, links it.

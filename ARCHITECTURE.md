@@ -211,7 +211,7 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.63.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.55.0, 0.56.0 and 0.63.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.63.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.55.0, 0.57.0 and 0.63.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
 **Unreleased (speech world step S-S-1: the `speech` contract module)**: speech record
 `docs/design/2026-09-30-speech-world.md` §18 and its S-S-1 implementation section. `south_contracts::speech` carries
 `contracts.speech` v1's types and codecs: the pre-dispatch facts (`characters {count, upper?}`, `metering_forms`,
@@ -222,6 +222,19 @@ component trait in the conformance crate (S-S-3), as the image world's did. No W
 no `compatibility.json` entry yet. Under Q47 `south-contracts` moves to 0.55.0 and `south-component-conformance` (whose
 reference version constants move) to 0.63.0, so every package published with 0.63.0 takes a patch with unchanged
 behaviour and keeps its `south_runtime` and its `contracts`.
+**Unreleased (speech world step S-S-2: the `speech-adapter-v1` world)**: speech record §18 and its S-S-2 implementation
+section. `wit/speech-adapter.wit` (`token-station:speech-adapter@1.0.0`, world `speech-adapter-v1`: `metadata`,
+`healthcheck`, `model-capabilities`, `prepare`, `parse-response`; no `host` import), the `SPEECH_*` constants and
+`SPEECH_WORLD_SCHEMA` (capabilities `synthesize`, `transcribe`, `translate`, `artifact_fetch`; auth arms `bearer`,
+`header_secret`). Gate ① requires `synthesize` or `transcribe` (`SpeechOperationRequired`) and refuses `translate`
+without `transcribe` (`TranslateRequiresTranscribe`), both new `ManifestErrorV1` variants; it admits `config_schema` and
+exported credential attributes in this world, and `query_parameters` alone: `WorldSchemaV1::instance_declarations` is
+now the three-valued `InstanceDeclarationsV1` (`quota_headers` and `user_agent` stay provider-only). The runtime gains `InstanceKind::Speech` and
+`call_speech_model_capabilities`, `call_speech_prepare`, `call_speech_parse_response`, with the import scan of a pure
+world and unchanged limits. Gate ②'s `UndeclaredValuesIgnored` row for the `declared`-only worlds is one shared function
+(`undeclared_values.rs`) that the embeddings and image suites now call and the speech suite (S-S-3) will. No
+`compatibility.json` entry yet. Under Q47 `south-provider-api` moves to 0.57.0; the packages already took this release's
+patch in S-S-1 and take no second one.
 **v0.63.0 (image world step I3-3: `image-vertex`; the task poll interval)**: release record
 `docs/design/2026-10-14-release-0.63.0.md`. Image world step I3-3: Nano Banana on Vertex AI (design record
 `docs/design/2026-10-13-image-i3-3-vertex.md`, accepted 2026-10-14). `image-vertex` 1.0.0
