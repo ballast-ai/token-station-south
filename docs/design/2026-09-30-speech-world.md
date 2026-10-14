@@ -2,7 +2,8 @@
 
 Status: **accepted 2026-10-08, with Q10 and Q11 open** (neither blocks the contract, §16; reconciled with south 0.50.0 in
 §17; implementation outline in §18); proposed 2026-09-30 by the host team (token-station-server P21/P22/P23); steps S-S-1 to S-S-3
-implemented and released in 0.64.0 without `contracts.speech` (S-S-4 packages and S-S-5 still to come)
+implemented and released in 0.64.0 without `contracts.speech`; S-S-4 (batches V3-1, V3-2, V3-3 and V4) and S-S-5
+implemented; declared in `contracts.speech` 1, to be released in 0.65.0 (S-S-5 implementation, below)
 
 Date: 2026-09-30
 
@@ -1241,6 +1242,73 @@ None of the four S-S-3 questions needed a new ruling; each is settled by precede
 - **Question 4, a synthetic reference:** accepted. The `t21-unseen-*` guests are the precedent for a test double that
   no host routes to. Choosing the shape by model-id prefix is confined to it and documented as test-double-only.
 
+## S-S-5 implementation (2026-10-15)
+
+The pre-release half of S-S-5 (§18): the speech world's contract is recorded and the speech packages declare it. The
+release commit (workspace version 0.65.0, release record, replay, tag) is separate and follows on top of this change.
+
+### What landed
+
+- **`compatibility.json`**: `contracts.speech` 1; `conformance.speech_component_v1_suite_id`
+  `south.speech-component.v1` and `conformance.speech_component_v1_suite` 1; a `speech_v1` entry beside `image_v1` in
+  `media_component_capabilities` (the table the image record's Q5 ruling named for one entry per world), `not_verified`
+  for both `token-station` and `token-station-server`. `schema_version` stays 7: the image release fixed the table's
+  shape and this change adds keys of kinds the schema already has. Contract 1 is the `speech` module released in 0.64.0
+  plus the optional `upgrade_insecure` member of the `url` artifact form and `upgrade_insecure_artifact_url_v1` (V4,
+  SV-Q10), which landed before any host could admit a speech package, so no number moves.
+- **Host ranges**: both test hosts (`south-component-conformance/tests/support/host_range.rs`,
+  `south-provider-runtime/tests/support/host_range.rs`) list `speech` `{1}`, the first from
+  `south_contracts::speech::SPEECH_CONTRACT_VERSION`, the second from `compatibility.json`, as each reads `image`; the
+  declared-runtime test's own range reads `speech` where the record has it, as it reads `media` and `image`, so the file
+  still runs in checkouts of older runtimes. `compatibility_admits` needs no change: it already refuses a declared
+  contract whose name the range does not list.
+- **Manifests**: all nine speech packages declare `contracts` `{"media": 1, "speech": 1}`, `speech-elevenlabs`
+  `{"media": 3, "speech": 1}`. They are unpublished, so each stays 1.0.0.
+- **Tests**: `compatibility_manifest` pins the contract, the suite fields and both `media_component_capabilities`
+  entries; `shipped_packages_v1` expects `speech` in every speech package's contracts, and the new
+  `the_speech_packages_declare_contracts_speech_1_and_this_release` holds every speech package to version 1.0.0,
+  `speech` 1 and this tree's release, admitted by this tree's range and refused, by the `speech` contract, by a range
+  without the key and by one listing only `speech` 2; `speech_world_v1::speech_admission_keeps_both_handshakes` loads a
+  `{media: 1, speech: 1}` guest under this tree's range and has a range without `speech` refuse it.
+
+### `south_runtime`
+
+A manifest declaring `contracts.speech` needs a runtime whose host range lists the key. No published runtime (0.64.0 and
+older) records it, so a host linking one refuses every speech package; each speech package therefore declares this tree's
+release, as `image-gemini` did for media 2 (I3-2) and `task-gemini-omni-v2` for task contract 8. Today that is 0.64.0,
+the value the nine manifests already carried, so no manifest's `south_runtime` changes in this step; what changes is what
+the value means. The batch tests that pinned the literal `0.64.0` (`the_v3_1_…`, `the_v3_2_…`, `the_v3_3_…`,
+`the_v4_…`) now pin `host_range::south_release()`, so the release commit's move of all nine to 0.65.0 keeps them green.
+
+### Q9: the community host
+
+As ruled for Q9 (§16, the same ruling as the image world's Q5 and the embeddings record's E-Q5), South states in
+writing: **a synchronous speech implementation in the community host is recommended** (P21 §7). Until a host lands it,
+`compatibility.json` records `media_component_capabilities` `speech_v1` as `not_verified` for both `token-station` and
+`token-station-server`; a gate ② pass of the packages is not host adoption. ARCHITECTURE.md's "second consumer in sight"
+rule is thereby met by written commitment, not by a consumer. The release record of 0.65.0 carries this paragraph.
+
+### Versions (Q47)
+
+None move. `git diff v0.64.0 HEAD` shows that this unreleased cycle already moved `south-contracts` (0.55.0 → 0.56.0),
+`south-provider-api` (0.57.0 → 0.58.0) and `south-component-conformance` (0.63.0 → 0.64.0) in V3-1 and patched every
+package published with 0.64.0. This step changes no crate source, only tests, `compatibility.json`, the nine speech
+manifests and documents; a manifest is not part of `component.wasm`, so no other package is re-patched.
+`scripts/check_crate_versions.py --unreleased` agrees.
+
+### Left for the release commit
+
+- Workspace version 0.65.0, `compatibility.json` `release.version`, and the nine speech manifests' `south_runtime` to
+  0.65.0 (the tests above require it to equal the workspace version).
+- The release record, carrying the Q9 paragraph above, SV-Q6's capture as a host cutover prerequisite for token-priced
+  rows (V3-1 Open questions), and the host items of each batch record; the README release row; the ARCHITECTURE
+  release paragraph in place of the Unreleased ones; the replay, `release_index.py`, the declared-runtime check against
+  the archives, and the status lines of this record and the four batch records flipped to "released".
+- `speech-vertex` 1.1.0 (Q7's refusal) is not in this release; it follows the host's acceptance of the Vertex TTS dual
+  run.
+
+GATE_RESULTS_PLACEHOLDER
+
 ## Revision note (2026-10-14)
 
 - S-S-1 implementation section added: what landed, fourteen interpretations, two points that contradict the record
@@ -1289,3 +1357,6 @@ None of the four S-S-3 questions needed a new ruling; each is settled by precede
   `speech-qwen` and `speech-vertex` 1.0.0, SSML synthesis added to `speech-azure` 1.0.0; SV-Q10 (`upgrade_insecure` on the
   `url` form, inside `contracts.speech` 1) and SV-Q11 (`ssml_escaping` reading, `ssml_check.rs` held to XML 1.0 `Char`) as
   ruled. No design decision of this record changed.
+- 2026-10-15: S-S-5 (pre-release half) implemented (S-S-5 implementation): `compatibility.json` records
+  `contracts.speech` 1, the suite fields and `speech_v1` `not_verified` for both hosts; the nine speech packages declare
+  `speech` 1 and this tree's release; the Q9 commitment is written. No design decision of this record changed.
