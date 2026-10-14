@@ -1071,6 +1071,159 @@ calls and instances; coexistence with the image, embeddings and provider worlds 
   matching the enum exhaustively adds the arm); `artifact_fetch_without_synthesize_is_refused` pins it, and removing the
   rule turns that test red.
 
+## S-S-3 implementation (2026-10-14)
+
+Built on branch `speech-s-s-3` from `origin/main` `33eb77b` (S-S-2), for review. The image world's suite step (S-I-5 and
+S-I-6, released in 0.52.0) is the model throughout: the trait and outcome beside it in the conformance crate, the ABI
+shim, the sandbox seam, the fixture loader, the suite, a native reference with its pack, a mutation test per row and a
+sandbox parity test. Where this record is silent the image convention is followed and the choice is listed below.
+
+### What landed
+
+| Piece | Where | Record |
+|---|---|---|
+| The `sse` response view: `build_media_sse_response_view_v1(round, events, …)` over the events the host decoded (`SseEventFieldsV1 {event, data}`), the body variant `MediaResponseBodyV1::Sse` (`{"sse": [...]}`), the event list elided as **one** document whose root is the array; the notes on `ResponseBodyFormV1::Sse` and `media::elide_from` corrected | `south-contracts/src/media/response.rs`, `elide.rs`, `mod.rs` | §6; S-S-1 resolution of question 2 |
+| Host-obligation vectors: the WAV container (five outputs, one of them the header-only output a host never settles, and six refusals) and the `sse` view (four bodies with their `decode_sse_v1` events and views, two refusals) | `south-contracts/tests/vectors/speech-v1.json`, `tests/speech_contract_v1.rs`; the `decode_sse_v1` step in `south-component-conformance/tests/speech_host_obligations_v1.rs` | §11 host obligations |
+| `SpeechComponentV1` (`metadata`, `model_capabilities`, `prepare`, `parse_response`), `SpeechOutcomeV1` (`succeeded`, `rejected`, `charged_failure`, `unknown`) and `SpeechDeliveryV1` (`Audio(SpeechArtifactV1)`, `Transcript(TranscriptDeliveryV1)`) | `component_speech.rs` | §7; S-S-1 interpretation 1 |
+| The strict outcome codec (`parse_speech_outcome_json`, `speech_outcome_json`) | `speech_json.rs` | §6, §7, §9 |
+| The guest shim (`abi_speech`) and the host seam over the runtime (`SandboxedSpeechComponentV1`, feature `sandbox`) | `abi_speech.rs`, `sandbox_speech.rs` | §7 |
+| `speech-v1.<family>.<case>` packs (`capabilities`, `prepare`, `response`) with the response sidecar `{"missing": …}` | `speech_fixture.rs` | §11 |
+| `south.speech-component.v1`: `run_speech_component_suite_v1` | `speech_suite.rs` | §11 |
+| Six additive `CheckV1` variants: `AbsentDurationIsNullOrUnknown`, `ClientFormatRendering`, `UndeclaredOperationRefused`, `SsmlEscaping`, `SecondHopArtifact`, `EmptyAudioIsUnknown` | `report.rs` | §11 |
+| A strict, minimal XML well-formedness reader for `ssml_escaping` | `ssml_check.rs` (crate-private) | §5, §11 |
+| The native reference `SyntheticSpeechReferenceV1` (family `synthetic-speech`) and its pack | `reference_synthetic_speech.rs`, `fixtures-speech-synthetic/` | §18 S-S-3 acceptance |
+| The reference as a sandbox guest, its manifest, and its parity test | `tests/guests/synthetic-speech/`, `tests/synthetic_speech_sandbox_parity.rs` | §18 S-S-3 |
+| The suite run, the row-by-row mutations and the required-case checks | `tests/synthetic_speech_suite.rs` | §18 S-S-3 acceptance |
+| The `sse` view in the `media_parsers` fuzz target | `fuzz/fuzz_targets/media_parsers.rs` | §6 (fuzz obligation) |
+
+Rows of `south.speech-component.v1`. Carried over from the image world (image record §12.1), unchanged in meaning:
+coverage, fixture match, determinism, unknown-field tolerance (context and request view), undeclared values ignored (the
+shared S-S-2 row), descriptor auth within the manifest (`admit_media_descriptor_auth`), endpoint confinement, terminal
+only from the wire, auth errors not retriable, pre-dispatch refusal, reference integrity, `metering_sample` and
+`missing_meter_is_not_zero`. New: the six variants above. Every row is listed below with its test and its mutation.
+
+| Row (`CheckV1`) | Requirement as implemented | Mutation that fails it (`synthetic_speech_suite.rs`) |
+|---|---|---|
+| `SsmlEscaping` | every SSML body is well-formed XML, carries `input` as some element's whole text and `voice` as some attribute's value, unchanged; the pack has an SSML case with `<`, `&`, `'`, `"` in both (`speech-v1.ssml.special-characters`) | `UnescapedSsml`; dropping `prepare.ssml-escaping` fails the pack row |
+| `ClientFormatRendering` | for a model whose row carries `speech.verbose_json`: one upstream response rendered in every client format the pack's prepare cases accept, all with the same non-null `seconds`; no upstream response settled with different `seconds` in two formats; each delivery is the kind of document its format names | `SubtitlesWithoutDuration`; dropping `response.verbose-vtt` fails the pack row |
+| `AbsentDurationIsNullOrUnknown` | a package declaring `seconds` has a `{"missing": "seconds"}` case (`speech-v1.absent.seconds`), and every such case ends `seconds: null` or `unknown` | `FallbackDuration`; dropping both duration cases fails the pack row |
+| `UndeclaredOperationRefused` | each prepared call names the operation it was asked for; each successful prepare case, asked for every operation its model does not declare, is refused with `invalid_request` or `capability`; at least one such attempt (`speech-v1.undeclared-operation`) | `TranscribeForTranslate`; a pack of capabilities only fails the pack row |
+| `SecondHopArtifact` | every `url` artifact's pointer lands on a string of the unelided upstream response that passes `ArtifactUrlV1`, and only a package declaring `artifact_fetch` delivers one; a package declaring it has a `url` success (`speech-v1.second-hop`) | `UrlAtTheWrongPointer`; dropping `response.url` fails the pack row |
+| `EmptyAudioIsUnknown` | every `{"missing": "audio"}` case ends `unknown`, and for every response body form a successful synthesis uses there is such a case (`speech-v1.empty-audio.<form>`) | `SucceedWithoutAudio`; dropping `response.sse-no-deltas` fails `…empty-audio.sse` |
+| `MeteringSample` | for each declared form a success with an exact value (`characters`, `seconds`, `tokens`); a package that reports upstream characters also shows the `request` fallback (`…characters.request`); the facts echo the required forms | `AlwaysUpstreamCharacters`; dropping the request-count successes fails `…characters.request` |
+| `MissingMeterIsNotZero` | a package declaring `tokens` has cases missing the whole `usage`, `input` and `output` (`speech-v1.missing.tokens*`), each `unknown`; every success carries every required fact (`check_required_metering_v1`) | `ZeroForMissingTokens`; dropping `response.sse-missing-input-tokens` fails `…missing.tokens.input` |
+| `ReferenceIntegrity` | no `$south.` key in any output but a transcript's `$south.ref`, which names a blob of the view; no output string over the threshold; descriptor references name view blobs; an artifact fits the declared body form; `inline` lands on a string, `body` on an opaque body, every `segments` pointer on an **elided** string (§6) | `UnelidedSegments`, `BlobInTranscript` |
+| `PreDispatchRefusal` | every `prepare` refusal is `invalid_request` or `capability`; the pack has one | `InternalRefusal` |
+| `AuthErrorsAreNotRetriable` | a 401 or 403 maps to a non-retriable error; the pack has one | `RetriableAuth` |
+| `TerminalOnlyFromTheWire` | a non-2xx is never `succeeded`; the pack has one | `SucceedOnError` |
+| coverage, fixture match, determinism, unknown-field tolerance, undeclared values ignored, descriptor auth, endpoint confinement | as in the image suite | carried over unchanged; their image and embeddings mutations stand |
+
+### The reference
+
+The acceptance asks for "a native reference" that passes every row. Image S-I-5 and S-I-6 used a real family's reference
+(`image-azure`, transcribed from the server's native arm). No single real speech family exercises every conditional row:
+SSML is Azure's, `verbose_json` rendering OpenAI-compatible's and xAI's, the second hop Bailian's, the token-priced event
+stream OpenAI's, hex audio MiniMax's; and the real packages, transcribed from the native arms, are S-S-4. So the
+reference is **synthetic**, in the manner of the `t21-unseen-*` guests: one family, `synthetic-speech`, with a made-up API
+whose models each take one of the record's shapes, chosen by the model id's prefix (`tts-stream`, `tts-inline`,
+`tts-url`, `tts-ssml`, `asr`). Picking behaviour from a model id is what a real package must not do (§4); it is confined
+to this test double, documented in its module and in the pack README, and no host routes to the family. One reference
+covers every row, so no second reference was needed. The same code runs natively and as the guest
+`tests/guests/synthetic-speech` (built by `prebuild-components.sh`, listed in the CI cache, its parity test in the
+nextest setup filter through `~sandbox_parity`); the guest is not an official component, is not counted by
+`shipped_packages_v1`, and records no gate ② report.
+
+### Interpretations where the record is silent or ambiguous
+
+1. **The `sse` entry point.** `south-contracts` cannot decode SSE (§14 as amended), so the view is built by a new
+   function that takes the decoded events, `build_media_sse_response_view_v1`; `build_media_response_view_v1` keeps its
+   signature and still refuses the `sse` form (`SseUnavailable`, its message now naming the events), since it has no
+   events to build from. Each event is `{"event", "data"}`; `data` is the event's data as a JSON value when it is one
+   JSON document and as a string otherwise (§6); the list is elided once, so a declared `/*/data/delta` matches every
+   event and blob ids run across the list. A non-2xx body ignores the events and follows the existing non-2xx rule. A
+   `$south.` key or a repeated key in any event's data makes the round `unknown`, as in a JSON body; a data nested past
+   the parser's depth bound does too (it is JSON, so it is not carried as a string).
+2. **The body key.** The record names the list but not its key in the view. It is `{"sse": [...]}`, the form's own
+   word, as `json`, `text` and `opaque` are; `inline` and `segments` pointers are relative to that list. This adds
+   `MediaResponseBodyV1::Sse`, a breaking change for a host that matches the enum exhaustively (no code in this repository
+   does).
+3. **Image keeps refusing `sse`.** The image suite and an image host call `build_media_response_view_v1`, which still
+   refuses the form, so nothing in the image world changes. `PreparedImageCallV1` still admits `response_body_form: sse`
+   at parse, so a host would dispatch such a call and judge its 2xx `unknown`, as before this step (open question 2).
+4. **The outcome's delivery.** `succeeded` carries one `SpeechDeliveryV1`: synthesis delivers one artifact (§6), so
+   there is no list; recognition delivers a transcript document. Wire: `"artifact": …` or `"transcript": …`, exactly one.
+   The frame is bounded at 4 MiB (the image world's rendered-frame bound: a transcript template's strings are each at
+   most 1 MiB) and an `unknown` reason at 1 KiB, as in the image world.
+5. **The metering rows** of the §18 row (`metering_sample`, `missing_meter_is_not_zero`) already exist as `CheckV1`
+   variants since the image world; the speech suite reuses them with the speech requirements, rather than adding twins.
+   The six new variants are the speech-only rows.
+6. **`metering_sample`.** "`characters` counted separately for each of its two sources": a package that reports
+   `source = upstream` must also show the `request` fallback (§9: an upstream that reports no number is `request`); a
+   package that only counts the request needs only that. "`seconds` for each basis the component uses": every basis
+   seen in a success is by construction sampled, so the row asks for one success with a value. Exactness is
+   `fixture_match`'s.
+7. **`missing_meter_is_not_zero`** requires the whole `usage`, `input` and `output`. `input_text` and `input_audio` are
+   side information (§9) and nullable, so a missing one is not `unknown`.
+8. **`client_format_rendering`** applies when a prepare case routes to a model whose row carries `speech.verbose_json`.
+   The accepted formats are those of such recognition cases that `prepare` did not refuse; "one duration-bearing upstream
+   response" is response cases whose fixture `response` is identical. The suite reads the northbound `response_format`
+   part (absent is `json`), a field of the `OpenAI` audio protocol the host serves, never a provider's. A delivery's kind
+   is also checked: `json` and `verbose_json` are a template or a JSON pass-through, `text`, `srt` and `vtt` text.
+9. **`undeclared_operation_refused`** is run as a suite mutation on every successful prepare case, for every operation
+   the routed model does not declare in `model_capabilities` (synthesis models are asked to transcribe and translate,
+   recognition models without `speech.translate` to synthesize and translate), and the prepared facts must name the
+   operation asked for. It needs the prepare cases' provider configs to list their models.
+10. **`ssml_escaping`** checks every SSML body, not only the special-character case. Well-formedness is judged by a
+    hand-written reader in the conformance crate (an XML dependency would enter every component lockfile under Q47): it
+    admits an XML declaration, elements, quoted attributes, character data, comments, the five predefined entities and
+    numeric references, and refuses everything else (DOCTYPE, CDATA, undefined entities, raw `<` or `&`, repeated
+    attributes). The `xml:lang` derived from the voice is not compared (it is the component's derivation), only escaped.
+11. **`second_hop_artifact`** is checked on every `url` artifact of any package, against the unelided upstream body the
+    fixture gives; a `url` artifact from a package without `artifact_fetch` fails it, the gate ③ counterpart of S-S-2's
+    gate ① rule.
+12. **`empty_audio_is_unknown`** is required per response body form, because §11's examples are one per form (an empty
+    `binary` body, an empty inline string, no deltas); a form is required when a successful synthesis in the pack uses
+    it.
+13. **Fixture bodies.** A response case gives `body` (JSON), `body_text` (how an `sse` body is written) or
+    `body_base64`. The conformance crate is linked into every component and may not link `south-host-grammars`, so the
+    suite splits an `sse` body with this crate's `sse_split`, which `openai_responses_vocabulary_v1` holds equal to
+    `decode_sse_v1` by property test; `speech_host_obligations_v1` checks the two agree on the speech vectors too.
+14. **The sidecar** is `{"missing": "<fact>"}` only, the fact one of `tokens`, `tokens.input`, `tokens.output`,
+    `seconds`, `audio`; the image world's `absent` (evidence facts) has no speech counterpart.
+15. **The host-obligation vectors** live in `south-contracts` (`speech-v1.json`, beside `media-v1.json`), and the step
+    that needs `decode_sse_v1` is checked where that crate is a dev-dependency, so `south-host-grammars` does not change
+    and its versioning rule (boundary record §13.13) is not engaged. The WAV vectors mark the header-only output of
+    empty PCM `deliverable: false`: the transform produces it, and §10 forbids settling it.
+16. **The guest's manifest** declares `contracts: {"media": 1}`, as the test guests declare none for speech:
+    `compatibility.json` records `contracts.speech` at S-S-5, so a host range today has no `speech` key to admit.
+
+### Points that contradict the record (flagged, not silently chosen)
+
+- **"The required rows … as additive `CheckV1` variants"** (§18 S-S-3) includes "the metering rows", which are not new
+  variants: they exist since the image world and are reused (interpretation 5).
+- **"A native reference"** (§18 acceptance) is read as the image world's real-family reference; the reference here is
+  synthetic (above), because the real packages are S-S-4 and none of them alone would exercise every row.
+
+### Open questions for lv
+
+1. **The `sse` view's body key and enum variant**: `{"sse": [...]}` with a new `MediaResponseBodyV1::Sse` (breaking for
+   an exhaustive match), or the list under the existing `{"json": …}` key (no new variant, but a component could not tell
+   the forms apart from the view alone)? Recommendation: keep `sse`.
+2. **Image and `sse`**: should `parse_prepared_image_call_v1` refuse `response_body_form: sse` before dispatch, rather
+   than the host judging every 2xx `unknown` afterwards? Not changed here (least invasive; no image package declares it).
+   Recommendation: refuse it at parse in the next image change.
+3. **`metering_sample` for characters** (interpretation 6): confirm that a package reporting upstream characters must
+   also show the request fallback.
+4. **A synthetic reference chosen by model prefix** (above): acceptable for the suite's own reference, with S-S-4's
+   packages each passing the suite on transcribed samples?
+
+### Versions (Q47)
+
+`south-contracts` (the `sse` view) and `south-component-conformance` (the suite) both change; both already moved in this
+unreleased cycle (S-S-1: 0.55.0 and 0.63.0; `git diff v0.63.0 HEAD` shows the moves) and no release has carried them
+since, so neither moves again. `south-provider-api` and `south-host-grammars` do not change. The packages took this
+release's patch in S-S-1 and take no second one. No `compatibility.json` entry (S-S-5).
+
 ## Revision note (2026-10-14)
 
 - S-S-1 implementation section added: what landed, fourteen interpretations, two points that contradict the record
@@ -1085,3 +1238,9 @@ calls and instances; coexistence with the image, embeddings and provider worlds 
   0.57.0; the packages already took this release's patch in S-S-1. No design decision changed.
 - 2026-10-14: the two S-S-2 open questions resolved (Resolutions): declared query parameters on a media descriptor as
   `contracts.media` 3 with the ElevenLabs package (S-S-4); `artifact_fetch` without `synthesize` refused.
+- S-S-3 implementation section added: what landed (the `sse` response view as one elided array document, the
+  host-obligation vectors for the WAV container and the `sse` view, the speech trait, outcome, codec, ABI and sandbox
+  seams, the fixture loader, `south.speech-component.v1` with six additive `CheckV1` variants, and the synthetic native
+  reference with its pack, guest and mutation tests), sixteen interpretations, two points that contradict the §18 row's
+  wording and four open questions for lv. No crate version moves (Q47: both changed crates already moved in this cycle).
+  No design decision changed.

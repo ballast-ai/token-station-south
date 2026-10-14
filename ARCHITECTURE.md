@@ -233,9 +233,23 @@ exported credential attributes in this world, and `query_parameters` alone: `Wor
 now the three-valued `InstanceDeclarationsV1` (`quota_headers` and `user_agent` stay provider-only). The runtime gains `InstanceKind::Speech` and
 `call_speech_model_capabilities`, `call_speech_prepare`, `call_speech_parse_response`, with the import scan of a pure
 world and unchanged limits. Gate ②'s `UndeclaredValuesIgnored` row for the `declared`-only worlds is one shared function
-(`undeclared_values.rs`) that the embeddings and image suites now call and the speech suite (S-S-3) will. No
+(`undeclared_values.rs`) that the embeddings, image and speech suites call. No
 `compatibility.json` entry yet. Under Q47 `south-provider-api` moves to 0.57.0; the packages already took this release's
 patch in S-S-1 and take no second one.
+**Unreleased (speech world step S-S-3: the suite `south.speech-component.v1` and the `sse` view)**: speech record §11,
+§18 and its S-S-3 implementation section. `south-contracts` builds the `sse` response view from the events a host
+decoded with `decode_sse_v1` (`build_media_sse_response_view_v1`, `SseEventFieldsV1`): the list `[{event, data}]` is
+elided as one document whose root is the array (`{"sse": [...]}`, the new `MediaResponseBodyV1::Sse`, breaking for an
+exhaustive match), so declared paths read `/*/data/delta`; `build_media_response_view_v1` still refuses the form, so the
+image world is unchanged. Host-obligation vectors for the WAV container and the `sse` view are in
+`tests/vectors/speech-v1.json`. The conformance crate gains `SpeechComponentV1`, `SpeechOutcomeV1` (with
+`SpeechDeliveryV1`: audio or transcript), the outcome codec, the ABI shim, the sandbox seam, `speech-v1.*` fixture packs
+and `run_speech_component_suite_v1`, with six additive `CheckV1` variants (`AbsentDurationIsNullOrUnknown`,
+`ClientFormatRendering`, `UndeclaredOperationRefused`, `SsmlEscaping`, `SecondHopArtifact`, `EmptyAudioIsUnknown`)
+beside the image world's rows, the metering rows included. Its native reference is synthetic (family
+`synthetic-speech`, a test double that no host routes to; the real packages are S-S-4), runs as the test guest
+`tests/guests/synthetic-speech` with byte-identical ABI answers, and every row fails on a mutated reference. No
+`compatibility.json` entry yet and no version moves: both changed crates already moved in this unreleased cycle.
 **Unreleased (`task-minimax-v2` immutable body paths)**: design record
 `docs/design/2026-10-14-task-minimax-immutable-paths.md` (ruled by lv on 2026-10-14, host step H5-5c). `task-minimax-v2`
 prepared `immutable_body_paths: null`, so a host injected no request extras for it. It now declares the host-native
