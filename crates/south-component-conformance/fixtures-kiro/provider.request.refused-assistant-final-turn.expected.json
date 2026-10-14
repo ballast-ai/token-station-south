@@ -1,7 +1,0 @@
-{
-  "error": {
-    "code": "capability",
-    "http_status": 400,
-    "message": "the last message is an assistant turn; this upstream continues from a user turn and has no prefill"
-  }
-}

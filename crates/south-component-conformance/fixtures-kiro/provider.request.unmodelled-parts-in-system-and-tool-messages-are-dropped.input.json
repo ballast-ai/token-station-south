@@ -1,0 +1,82 @@
+{
+  "provider_config": {
+    "provider": "kiro",
+    "base_url": "https://q.us-east-1.amazonaws.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "claude-sonnet-4.5",
+        "tool": true,
+        "vision": false,
+        "json_schema": false,
+        "context_window": 200000,
+        "supported_parameters": []
+      }
+    ],
+    "declared": {
+      "profile_arn": "arn:aws:codewhisperer:us-east-1:123456789012:profile/FAKEPROFILE"
+    }
+  },
+  "chat_request": {
+    "model": "claude-sonnet-4.5",
+    "messages": [
+      {
+        "role": "system",
+        "content": [
+          {
+            "type": "text",
+            "text": "Be terse."
+          },
+          {
+            "type": "document",
+            "source": {
+              "type": "text",
+              "media_type": "text/plain",
+              "data": "x"
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": "Weather?"
+      },
+      {
+        "role": "assistant",
+        "tool_calls": [
+          {
+            "id": "call_a",
+            "name": "get_weather",
+            "arguments": "{\"city\":\"Paris\"}"
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_a",
+        "content": [
+          {
+            "type": "text",
+            "text": "sunny"
+          },
+          {
+            "type": "tool_result",
+            "tool_use_id": "nested",
+            "content": "ignored"
+          },
+          {
+            "type": "image",
+            "source": {
+              "type": "base64",
+              "media_type": "image/png",
+              "data": "AAAA"
+            }
+          }
+        ]
+      }
+    ],
+    "host_values": {
+      "attempt_id": "3f2c8a9e-6b1d-4c7a-9e0f-5a4b3c2d1e0f"
+    }
+  }
+}
