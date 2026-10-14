@@ -211,9 +211,10 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.62.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.54.0, 0.56.0 and 0.62.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
-**Unreleased (image world step I3-3: `image-vertex`)**: Nano Banana on Vertex AI (design record
-`docs/design/2026-10-13-image-i3-3-vertex.md`, accepted 2026-10-14; proposed for the next release). `image-vertex` 1.0.0
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.63.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.54.0, 0.56.0 and 0.62.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**v0.63.0 (image world step I3-3: `image-vertex`; the task poll interval)**: release record
+`docs/design/2026-10-14-release-0.63.0.md`. Image world step I3-3: Nano Banana on Vertex AI (design record
+`docs/design/2026-10-13-image-i3-3-vertex.md`, accepted 2026-10-14). `image-vertex` 1.0.0
 (family `vertex-ai-image`, `bearer` on the slot `provider_api_key`, which the `vertex_sa` credential recipe mints) is the
 first image package with a credential recipe; its `config_schema` (`region`, optional `project`) and `credentials` section
 are `embeddings-vertex`'s byte for byte, and the two references share the crate-private location rules
@@ -222,7 +223,16 @@ are `embeddings-vertex`'s byte for byte, and the two references share the crate-
 render are `image-gemini`'s shared module. It declares `contracts` `{image: 1, media: 2}` and `south_runtime` 0.59.0, the
 first runtime with media 2. No contract or `south-provider-api` change: the image world has admitted `config_schema` and
 exported credential attributes since 0.52.0. Under Q47 `south-component-conformance` moves to 0.62.0, so every package
-published with 0.62.0 takes a patch with unchanged behaviour and keeps its `south_runtime` and its `contracts`.
+published with 0.62.0 takes a patch with unchanged behaviour and keeps its `south_runtime` and its `contracts` (except
+`task-minimax-v2`, below).
+The task poll interval (V-Q8): design record `docs/design/2026-10-14-task-min-poll-interval.md` (ruled V-Q8
+(a) by lv on 2026-10-14). A task package (`task-adapter-v1` or `task-adapter-v2`) may
+declare `min_poll_interval_seconds`, the shortest interval in whole seconds between two observation requests a host
+sends for one of its tasks, `1..=600` inclusive (`MIN_TASK_POLL_INTERVAL_SECONDS`, `MAX_TASK_POLL_INTERVAL_SECONDS`);
+absent means the host's own default. Gate ① refuses it in any other world and outside the bounds. It moves no contract
+number; a package declaring it needs the runtime that parses it. `task-minimax-v2` declares 12 s for both MiniMax
+generations; no other task package declares one. `task-minimax-v2` 0.32.0 declares
+`south_runtime` 0.63.0. Under Q47 `south-provider-api` moves to 0.56.0.
 **v0.62.0 (the Kiro step: `provider-kiro`; task contract 8 and `task-gemini-omni-v2`)**: release record
 `docs/design/2026-10-14-release-0.62.0.md`. The Kiro step: the Kiro upstream as a package (design record
 `docs/design/2026-09-30-kiro-provider-component.md`, accepted 2026-10-13 with six rulings provisional until a
@@ -253,14 +263,6 @@ unchanged. `task-gemini-omni-v2` 0.1.0 serves Gemini Omni video over the Interac
 `x-goog-api-key`, text-to-video only). It declares `contracts` `{task: 8, media: 1}` and `south_runtime` 0.62.0, the
 first runtime that decodes contract 8. Under Q47 the three guest-linked crates move to 0.54.0, 0.55.0 and 0.61.0 (one step past the
 Kiro step's 0.60.0), so every package takes a patch with unchanged behaviour and keeps its `south_runtime` and its `contracts`.
-**Unreleased (the task poll interval)**: design record `docs/design/2026-10-14-task-min-poll-interval.md` (ruled V-Q8
-(a) by lv on 2026-10-14; proposed for the next release). A task package (`task-adapter-v1` or `task-adapter-v2`) may
-declare `min_poll_interval_seconds`, the shortest interval in whole seconds between two observation requests a host
-sends for one of its tasks, `1..=600` inclusive (`MIN_TASK_POLL_INTERVAL_SECONDS`, `MAX_TASK_POLL_INTERVAL_SECONDS`);
-absent means the host's own default. Gate ① refuses it in any other world and outside the bounds. It moves no contract
-number; a package declaring it needs the runtime that parses it. `task-minimax-v2` declares 12 s for both MiniMax
-generations; no other task package declares one. The release gives `task-minimax-v2` a new version and raises its
-`south_runtime` to that release.
 **v0.61.0 (image world step I3-5: `image-ideogram`; north codec G1)**: release record
 `docs/design/2026-10-13-release-0.61.0.md`. North codec G1 (`docs/design/2026-09-30-north-codec-render-gaps.md`, G1
 accepted 2026-10-14): `OpenAiChatStream` renders complete OpenAI chat stream chunks from a host-supplied context (chunk

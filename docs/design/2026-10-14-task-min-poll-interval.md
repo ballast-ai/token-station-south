@@ -1,8 +1,8 @@
 # A task package's minimum poll interval (`min_poll_interval_seconds`)
 
-Status: proposed (south side of the host's H5-5 MiniMax video step, ruled by lv on 2026-10-14: V-Q8 (a) as
+Status: accepted and released in 0.63.0 (south side of the host's H5-5 MiniMax video step, ruled by lv on 2026-10-14: V-Q8 (a) as
 recommended in the host's tier price table plan, `server:docs/product-review-v2/plans/2026-10-13-H5-*.md` §9.2, §9.9).
-Not released; proposed for 0.63.0 (§6).
+Released in 0.63.0 (§6; release record `2026-10-14-release-0.63.0.md`).
 
 Date: 2026-10-14
 

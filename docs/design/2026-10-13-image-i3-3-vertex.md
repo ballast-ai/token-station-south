@@ -2,7 +2,7 @@
 
 Status: accepted (lv reviewed the record on 2026-10-14, including the §8 decisions; VI-Q1 and VI-Q2 ruled on 2026-10-13
 as recommended: the host re-reads a minted slot from round 2 on, and answers 400 for an operation the package does not
-declare); implemented on branch `image-vertex` (see Implementation), not yet merged.
+declare); implemented (#209, see Implementation) and released in 0.63.0 (release record `2026-10-14-release-0.63.0.md`).
 
 Date: 2026-10-13
 
