@@ -1,0 +1,35 @@
+{
+  "provider_config": {
+    "provider": "bailian-qwen-speech",
+    "base_url": "https://dashscope.aliyuncs.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "qwen3-tts-flash"
+      },
+      {
+        "model": "qwen3-tts-instruct-flash"
+      }
+    ]
+  },
+  "request": {
+    "multipart": {
+      "parts": [
+        {
+          "kind": "file",
+          "name": "file",
+          "blob": "b0",
+          "filename": "a.wav",
+          "bytes": 9
+        }
+      ]
+    }
+  },
+  "context": {
+    "upstream_model": "qwen3-tts-flash",
+    "operation": "transcribe",
+    "metering_required": [
+      "seconds"
+    ]
+  }
+}

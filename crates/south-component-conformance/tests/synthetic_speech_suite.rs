@@ -322,6 +322,7 @@ mod mutations {
                         delivery: SpeechDeliveryV1::Audio(SpeechArtifactV1 {
                             form: SpeechArtifactFormV1::Url {
                                 pointer: JsonPointerV1::parse("/usage/characters").unwrap(),
+                                upgrade_insecure: false,
                             },
                             ..artifact
                         }),

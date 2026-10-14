@@ -1,0 +1,10 @@
+{
+  "prepare_case": "speech-v1.prepare.native",
+  "response": {
+    "status": 400,
+    "body": {
+      "code": "DataInspectionFailed",
+      "message": "Input data may contain inappropriate content."
+    }
+  }
+}

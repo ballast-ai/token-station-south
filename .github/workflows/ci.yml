@@ -64,6 +64,8 @@ jobs:
             components/speech-mimo
             components/speech-minimax
             components/speech-openai-compatible
+            components/speech-qwen
+            components/speech-vertex
             components/speech-xai
             components/task-bailian-v2
             components/task-byteplus-v2

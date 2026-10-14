@@ -1,0 +1,30 @@
+{
+  "provider_config": {
+    "provider": "bailian-qwen-speech",
+    "base_url": "https://dashscope.aliyuncs.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "qwen3-tts-flash"
+      },
+      {
+        "model": "qwen3-tts-instruct-flash"
+      }
+    ]
+  },
+  "request": {
+    "json": {
+      "input": "안녕하세요",
+      "voice": "Ethan",
+      "language_type": "Korean",
+      "instructions": "speak slowly"
+    }
+  },
+  "context": {
+    "upstream_model": "qwen3-tts-instruct-flash",
+    "operation": "synthesize",
+    "metering_required": [
+      "characters"
+    ]
+  }
+}

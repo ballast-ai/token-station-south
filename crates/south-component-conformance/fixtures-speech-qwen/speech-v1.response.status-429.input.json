@@ -1,0 +1,10 @@
+{
+  "prepare_case": "speech-v1.prepare.native",
+  "response": {
+    "status": 429,
+    "body": {
+      "code": "Throttling.RateQuota",
+      "message": "Requests rate limit exceeded, please try again later."
+    }
+  }
+}

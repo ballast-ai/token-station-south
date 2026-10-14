@@ -142,7 +142,8 @@ pub mod reference_gemini_omni_task_v2;
 pub mod reference_gmi_image_task_v2;
 pub mod reference_veo_task_v2;
 pub mod reference_wan_image_task_v2;
-// The DashScope pieces the Wan task package and the Qwen-Image package share (image record I3-1 §3).
+// The DashScope pieces the Wan task package and the Qwen-Image package share (image record I3-1 §3),
+// and the DashScope error reader `speech-qwen` shares with `image-qwen` (speech batch V4 §2.2).
 mod bailian_image;
 pub mod reference_xai_task_v2;
 
@@ -218,7 +219,12 @@ pub mod reference_minimax_speech;
 // OpenAI-compatible, xAI and ElevenLabs references above gain `transcribe` in place.
 mod asr_shared;
 pub mod reference_azure_speech;
+// The text-to-speech packages of batch V4 (design record docs/design/2026-10-15-speech-v4-tts.md):
+// Bailian Qwen-TTS and Vertex Gemini TTS; `speech-azure` above gains SSML synthesis in place.
+pub mod reference_qwen_speech;
+pub mod reference_vertex_speech;
 // The XML well-formedness reader the `ssml_escaping` row uses.
 mod ssml_check;
-// The location rules the two Vertex AI references share (image record I3-3 §4).
+// The location rules the three Vertex AI references share (image record I3-3 §4; speech batch V4
+// §3.1).
 mod vertex_location;

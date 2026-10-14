@@ -1,0 +1,36 @@
+{
+  "provider_config": {
+    "provider": "bailian-qwen-speech",
+    "base_url": "https://dashscope.aliyuncs.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "qwen3-tts-flash"
+      },
+      {
+        "model": "qwen3-tts-instruct-flash"
+      }
+    ]
+  },
+  "request": {
+    "json": {
+      "model": "media/tts",
+      "input": "hello world",
+      "voice": "Ethan",
+      "speed": 1.2,
+      "stream": true,
+      "stream_format": "sse",
+      "sample_rate": 16000,
+      "voice_setting": {
+        "voice_id": "x"
+      }
+    }
+  },
+  "context": {
+    "upstream_model": "qwen3-tts-flash",
+    "operation": "synthesize",
+    "metering_required": [
+      "characters"
+    ]
+  }
+}

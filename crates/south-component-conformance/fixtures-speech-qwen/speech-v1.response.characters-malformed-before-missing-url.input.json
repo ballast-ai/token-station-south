@@ -1,0 +1,15 @@
+{
+  "prepare_case": "speech-v1.prepare.native",
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "output": {
+        "audio": {}
+      },
+      "usage": {
+        "characters": "x"
+      }
+    }
+  }
+}

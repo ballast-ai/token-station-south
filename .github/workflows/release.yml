@@ -113,6 +113,8 @@ jobs:
           scripts/build-speech-mimo-component.sh
           scripts/build-speech-minimax-component.sh
           scripts/build-speech-azure-component.sh
+          scripts/build-speech-qwen-component.sh
+          scripts/build-speech-vertex-component.sh
 
       # Gate ② over the bytes just built: each sandbox parity test runs the
       # package's required suite against its component.wasm and, with
@@ -161,6 +163,8 @@ jobs:
             --test mimo_speech_sandbox_parity \
             --test minimax_speech_sandbox_parity \
             --test azure_speech_sandbox_parity \
+            --test qwen_speech_sandbox_parity \
+            --test vertex_speech_sandbox_parity \
             -- --exact the_sandboxed_component_passes_gate_two_byte_for_byte
           ls -l "${SOUTH_GATE2_REPORT_DIR}"
 
@@ -218,6 +222,8 @@ jobs:
           package speech-mimo speech_mimo.wasm
           package speech-minimax speech_minimax.wasm
           package speech-azure speech_azure.wasm
+          package speech-qwen speech_qwen.wasm
+          package speech-vertex speech_vertex.wasm
           # Catalog data (boundary record §7.5, §13.11): each catalogs/<name>.json is
           # published verbatim as <name>-<tag>.json; the index step below refuses a
           # published catalog whose bytes differ from the source file.

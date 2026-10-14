@@ -1,0 +1,17 @@
+{
+  "outcome": "succeeded",
+  "artifact": {
+    "form": "inline",
+    "pointer": "/candidates/0/content/parts/0/inlineData/data",
+    "encoding": "base64",
+    "media_type": "audio/L16; rate=24000"
+  },
+  "metering": {
+    "characters": {
+      "value": 11,
+      "source": "request"
+    },
+    "seconds": null,
+    "tokens": null
+  }
+}

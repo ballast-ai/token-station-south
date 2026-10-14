@@ -6,10 +6,14 @@
 //! Moved here from `reference_wan_image_task_v2.rs` rather than copied, so the two packages cannot
 //! drift on the wire they share: the `image_url` parts placed before the prompt, the `WxH → W*H`
 //! size translation, the parameters forwarded only when sent, and where the result's images sit.
-//! The Wan package's behaviour is unchanged (its frozen pack pins it).
+//! The Wan package's behaviour is unchanged (its frozen pack pins it). The `DashScope` error reader
+//! joined in speech world batch V4 (design record `docs/design/2026-10-15-speech-v4-tts.md` §2.2,
+//! §5 decision 2), when `speech-qwen` started reading the same answers as `image-qwen`.
 
 use serde_json::{Value, json};
 use token_station_protocol::{ErrorCode, ErrorEnvelope};
+
+use crate::image_shared::{capped, code_message};
 
 /// The `parameters` fields both packages forward verbatim, and only when the client sent them.
 pub const PASSTHROUGH: [&str; 5] =
@@ -99,4 +103,25 @@ pub fn result_images(body: &Value) -> Vec<(String, &str)> {
         }
     }
     images
+}
+
+/// A `DashScope` error answer as an envelope: content moderation is a policy refusal, anything else
+/// follows the status. `provider_message` is `code: message` (either alone when the other is empty),
+/// capped. Moved here from `reference_qwen_image.rs` unchanged so `image-qwen` (I3-1 decision 8) and
+/// `speech-qwen` (speech world batch V4 §2.2) read one copy.
+pub fn dashscope_error(status: u16, default: ErrorCode, body: &Value) -> ErrorEnvelope {
+    let provider_code = body["code"].as_str().unwrap_or_default();
+    let code = if provider_code.to_ascii_lowercase().contains("datainspection") {
+        ErrorCode::ContentPolicy
+    } else {
+        default
+    };
+    let mut envelope = ErrorEnvelope::new(code, status, code_message(code));
+    let message = body["message"].as_str().unwrap_or_default();
+    envelope.provider_message = capped(&match (provider_code.is_empty(), message.is_empty()) {
+        (false, false) => format!("{provider_code}: {message}"),
+        (false, true) => provider_code.to_owned(),
+        _ => message.to_owned(),
+    });
+    envelope
 }

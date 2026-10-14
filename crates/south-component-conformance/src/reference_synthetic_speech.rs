@@ -788,7 +788,10 @@ impl SyntheticSpeechReferenceV1 {
         };
         Ok(audio(
             SpeechArtifactV1 {
-                form: SpeechArtifactFormV1::Url { pointer: pointer("/output/audio/url")? },
+                form: SpeechArtifactFormV1::Url {
+                    pointer: pointer("/output/audio/url")?,
+                    upgrade_insecure: false,
+                },
                 media_type: "audio/wav".to_owned(),
                 container: None,
             },

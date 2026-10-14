@@ -1,0 +1,9 @@
+{
+  "prepare_case": "speech-v1.prepare.native",
+  "response": {
+    "status": 302,
+    "headers": {
+      "location": "https://dashscope.aliyuncs.com/elsewhere"
+    }
+  }
+}

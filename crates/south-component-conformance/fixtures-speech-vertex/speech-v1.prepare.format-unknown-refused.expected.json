@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "Unknown response_format='ogg-but-not-really'. Gemini TTS on Vertex emits 24kHz mono PCM; supported: wav, pcm (mp3/opus/aac/flac degrade to wav)."
+  }
+}

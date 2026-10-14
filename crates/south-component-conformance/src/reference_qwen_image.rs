@@ -6,7 +6,8 @@
 //!
 //! Transcribed from token-station-server's native synchronous Bailian arm as the record summarises
 //! it (`handler/images/bailian.rs`, `BAILIAN_IMAGE_OWNED` in `images/execute.rs`), on the request
-//! pieces the Wan task package already carries (the crate-private module `bailian_image`, shared rather than copied):
+//! pieces the Wan task package already carries (the crate-private module `bailian_image`, shared rather than copied,
+//! which also holds the `DashScope` error reader `speech-qwen` reads too):
 //!
 //! - **Request**: `POST {base_url}/api/v1/services/aigc/multimodal-generation/generation`, JSON, no
 //!   `X-DashScope-Async`: `{"model", "input": {"messages": [{"role": "user", "content": [{"image"}…,
@@ -44,12 +45,14 @@ use south_contracts::media::{
     MediaLimitsV1, MediaRequestDescriptorV1, PathPatternV1, ResponseBodyFormV1,
 };
 use south_provider_api::ComponentMetadataV1;
-use token_station_protocol::{ErrorCode, ErrorEnvelope, ProviderConfig};
+use token_station_protocol::{ErrorCode, ProviderConfig};
 
-use crate::bailian_image::{PASSTHROUGH, image_url_parts, result_images, wan_size, whole_count};
+use crate::bailian_image::{
+    PASSTHROUGH, dashscope_error, image_url_parts, result_images, wan_size, whole_count,
+};
 use crate::image_shared::{
-    bearer, capped, code_message, images_only, internal, invalid, is_blob, non_2xx, requested,
-    serves, status_code, url_entry, view_status, with_refs,
+    bearer, images_only, internal, invalid, is_blob, non_2xx, requested, serves, status_code,
+    url_entry, view_status, with_refs,
 };
 use crate::{ComponentResultV1, ImageComponentV1, ImageOutcomeV1, ImageRenderedV1};
 
@@ -85,25 +88,6 @@ fn size_fact(size: &str) -> Option<ImageSizeV1> {
             .filter(|edge| (1..=MAX_IMAGE_EDGE).contains(edge))
     };
     Some(ImageSizeV1 { width: edge(width)?, height: edge(height)? })
-}
-
-/// A `DashScope` error answer as an envelope: content moderation is a policy refusal, anything else
-/// follows the status.
-fn dashscope_error(status: u16, default: ErrorCode, body: &Value) -> ErrorEnvelope {
-    let provider_code = body["code"].as_str().unwrap_or_default();
-    let code = if provider_code.to_ascii_lowercase().contains("datainspection") {
-        ErrorCode::ContentPolicy
-    } else {
-        default
-    };
-    let mut envelope = ErrorEnvelope::new(code, status, code_message(code));
-    let message = body["message"].as_str().unwrap_or_default();
-    envelope.provider_message = capped(&match (provider_code.is_empty(), message.is_empty()) {
-        (false, false) => format!("{provider_code}: {message}"),
-        (false, true) => provider_code.to_owned(),
-        _ => message.to_owned(),
-    });
-    envelope
 }
 
 /// Whether a 2xx body names a `DashScope` error code.

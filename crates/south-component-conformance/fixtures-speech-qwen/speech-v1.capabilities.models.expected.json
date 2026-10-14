@@ -1,0 +1,20 @@
+[
+  {
+    "model": "qwen3-tts-flash",
+    "operations": [
+      "synthesize"
+    ],
+    "metering_forms": [
+      "characters"
+    ]
+  },
+  {
+    "model": "qwen3-tts-instruct-flash",
+    "operations": [
+      "synthesize"
+    ],
+    "metering_forms": [
+      "characters"
+    ]
+  }
+]

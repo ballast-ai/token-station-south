@@ -1,0 +1,42 @@
+{
+  "facts": {
+    "operation": "synthesize",
+    "characters": {
+      "count": 11,
+      "upper": 11
+    },
+    "metering_forms": [
+      "characters"
+    ],
+    "output_media_type": "audio/mpeg"
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "cognitiveservices/v1",
+    "headers": [
+      {
+        "name": "x-microsoft-outputformat",
+        "value": "audio-24khz-48kbitrate-mono-mp3"
+      }
+    ],
+    "auth": {
+      "arm": "header_secret",
+      "header": "ocp-apim-subscription-key",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "text": {
+        "media_type": "application/ssml+xml",
+        "text": "<speak version='1.0' xml:lang='en-US'><voice name='en-US-Alloy:MAI-Voice-2'>hello world</voice></speak>"
+      }
+    }
+  },
+  "response_body_form": "binary",
+  "response_elision_paths": [],
+  "immutable_body_paths": null,
+  "state": {
+    "op": "synthesize",
+    "format": "mp3",
+    "characters": 11
+  }
+}

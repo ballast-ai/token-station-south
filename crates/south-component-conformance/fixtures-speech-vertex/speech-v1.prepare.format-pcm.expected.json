@@ -1,0 +1,61 @@
+{
+  "facts": {
+    "operation": "synthesize",
+    "characters": {
+      "count": 11,
+      "upper": 11
+    },
+    "metering_forms": [
+      "characters"
+    ],
+    "output_media_type": "audio/L16; rate=24000"
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "v1/projects/test-project/locations/us-central1/publishers/google/models/gemini-2.5-flash-preview-tts:generateContent",
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "hello world"
+                }
+              ]
+            }
+          ],
+          "generationConfig": {
+            "responseModalities": [
+              "AUDIO"
+            ],
+            "speechConfig": {
+              "voiceConfig": {
+                "prebuiltVoiceConfig": {
+                  "voiceName": "Kore"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "response_body_form": "json",
+  "response_elision_paths": [
+    "/candidates/*/content/parts/*/inlineData/data"
+  ],
+  "immutable_body_paths": [
+    "contents",
+    "generationConfig.responseModalities"
+  ],
+  "state": {
+    "format": "pcm",
+    "characters": 11
+  }
+}

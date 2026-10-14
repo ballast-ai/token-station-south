@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "capability",
+    "http_status": 400,
+    "message": "the model 'gemini-2.5-flash-preview-tts' does not declare the operation transcribe"
+  }
+}

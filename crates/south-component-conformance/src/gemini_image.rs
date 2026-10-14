@@ -6,7 +6,9 @@
 //! families (record §7), so the body builders, the response reader (artifacts, finish reasons,
 //! usage), the render and the refusal texts live here, and a family's reference passes in only
 //! its path, its auth arm and whether it edits. The texts are the native arm's ("Gemini Nano
-//! Banana …"), which names both families the same way.
+//! Banana …"), which names both families the same way. Google's error envelope reader, the
+//! policy finish reasons and the policy envelope are also read by `speech-vertex` (speech world
+//! batch V4, `docs/design/2026-10-15-speech-v4-tts.md` §3.3, §5 decision 2).
 
 use serde_json::{Map, Value, json};
 use south_contracts::JsonPointerV1;
@@ -44,8 +46,9 @@ const REQUEST_ELISION_PATHS: [&str; 1] = ["/image_url"];
 const RESPONSE_ELISION_PATH: &str = "/candidates/*/content/parts/*/inlineData/data";
 /// The finish reasons that mean a policy or safety stop (GI-Q5). Unverified against a capture;
 /// a candidate ending for any of them without an image is `unknown` with a `content_policy`
-/// envelope, any other image-less 2xx is `unknown` without one.
-const POLICY_FINISH_REASONS: [&str; 9] = [
+/// envelope, any other image-less 2xx is `unknown` without one. `speech-vertex` reads the same table
+/// for an audio-less 2xx (speech world batch V4 §3.3).
+pub const POLICY_FINISH_REASONS: [&str; 9] = [
     "SAFETY",
     "RECITATION",
     "BLOCKLIST",
@@ -518,15 +521,18 @@ fn token_usage(usage: &Value) -> Result<ImageTokenUsageV1, ()> {
     })
 }
 
-/// Google's `{"error": {"code", "message", "status"}}` on a non-2xx, by HTTP status.
-fn error_envelope(status: u16, body: &Value) -> ErrorEnvelope {
+/// Google's `{"error": {"code", "message", "status"}}` on a non-2xx, by HTTP status (shared with
+/// `speech-vertex`, speech world batch V4 §3.3).
+pub fn error_envelope(status: u16, body: &Value) -> ErrorEnvelope {
     let code = status_code(status);
     let mut envelope = ErrorEnvelope::new(code, status, code_message(code));
     envelope.provider_message = body["error"]["message"].as_str().and_then(capped);
     envelope
 }
 
-fn policy_envelope(detail: Option<&str>) -> ErrorEnvelope {
+/// The `content_policy` envelope of a blocked prompt or a policy stop, the reason as the provider
+/// message (shared with `speech-vertex`).
+pub fn policy_envelope(detail: Option<&str>) -> ErrorEnvelope {
     let mut envelope =
         ErrorEnvelope::new(ErrorCode::ContentPolicy, 400, code_message(ErrorCode::ContentPolicy));
     envelope.provider_message = detail.and_then(capped);

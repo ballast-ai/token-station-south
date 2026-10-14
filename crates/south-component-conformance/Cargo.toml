@@ -187,6 +187,14 @@ name = "azure_speech_sandbox_parity"
 required-features = ["sandbox"]
 
 [[test]]
+name = "qwen_speech_sandbox_parity"
+required-features = ["sandbox"]
+
+[[test]]
+name = "vertex_speech_sandbox_parity"
+required-features = ["sandbox"]
+
+[[test]]
 name = "embeddings_payload_measurement"
 required-features = ["sandbox"]
 
