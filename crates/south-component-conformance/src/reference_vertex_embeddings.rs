@@ -20,7 +20,8 @@
 //!   stays below it (`EndpointConfinement`). When `base_url` is a Vertex AI API origin it must be
 //!   the one the region selects: `https://{region}-aiplatform.googleapis.com`, except
 //!   `https://aiplatform.googleapis.com` for `global`, whose prefixed host answers 404. Any other
-//!   base URL (a proxy, a test server) is used as given.
+//!   base URL (a proxy, a test server) is used as given. These location rules live in the
+//!   crate-private module `vertex_location`, which `image-vertex` shares.
 //! - Auth is `bearer` on the configured slot, which the package's credential recipe mints from the
 //!   service account (the host executes it).
 //! - Usage is `Reported`: each prediction's `embeddings.statistics.token_count` (the native arm
@@ -56,17 +57,6 @@ pub const VERSION: &str = "1.0.13";
 
 /// The family, as the host's task bindings name it.
 const VERTEX_AI: &str = "vertex-ai";
-
-/// The `declared` keys this component reads: the `region` and `project` config keys and the
-/// `project_id` the credential exports.
-const REGION: &str = "region";
-const PROJECT_OVERRIDE: &str = "project";
-const PROJECT_ID: &str = "project_id";
-
-/// The location whose API host carries no region prefix.
-const GLOBAL: &str = "global";
-/// The suffix every Vertex AI API host shares.
-const API_DOMAIN: &str = "aiplatform.googleapis.com";
 
 /// Request-body fields the host must not rewrite: the billed input (the native arm's
 /// `VERTEX_EMBEDDINGS_OWNED_FIELDS`; `parameters.*` is not priced, so request extras may set it).
@@ -125,40 +115,6 @@ fn single_text(request: &EmbeddingsRequestV1) -> ComponentResultV1<&str> {
     Ok(text)
 }
 
-/// The API origin a location selects.
-fn origin_of(region: &str) -> String {
-    if region == GLOBAL {
-        format!("https://{API_DOMAIN}")
-    } else {
-        format!("https://{region}-{API_DOMAIN}")
-    }
-}
-
-/// The base URL the request goes under: `base_url`, which must be the region's origin when it is a
-/// Vertex AI API origin at all.
-fn base_of(config: &ProviderConfig, region: &str) -> ComponentResultV1<String> {
-    let base = config.base_url.as_str();
-    let base = base.trim_end_matches('/');
-    let authority = base.split_once("://").map_or(base, |(_, rest)| rest);
-    let host = authority.split(['/', ':']).next().unwrap_or_default();
-    let is_vertex_host = host == API_DOMAIN || host.ends_with(&format!("-{API_DOMAIN}"));
-    let expected = origin_of(region);
-    if is_vertex_host && base != expected {
-        return Err(internal(format!(
-            "the base URL {base} is not the Vertex AI endpoint of location `{region}`, which is \
-             {expected}"
-        )));
-    }
-    Ok(base.to_owned())
-}
-
-/// A `declared` value the host must pass.
-fn declared<'c>(config: &'c ProviderConfig, key: &str) -> ComponentResultV1<&'c str> {
-    config.declared.get(key).ok_or_else(|| {
-        internal(format!("the provider configuration carries no `{key}` for Vertex AI"))
-    })
-}
-
 /// The largest count taken: below 2^53 every integral `f64` is exact.
 const MAX_TOKEN_COUNT: f64 = 9_007_199_254_740_992.0;
 
@@ -193,18 +149,9 @@ impl EmbeddingsComponentV1 for VertexEmbeddingsReferenceV1 {
             return Err(capability(format!("unsupported provider family `{}`", config.provider)));
         }
         let text = single_text(request)?;
-        let region = declared(config, REGION)?;
-        let project = match config.declared.get(PROJECT_OVERRIDE) {
-            Some(project) => project,
-            None => declared(config, PROJECT_ID)?,
-        };
-        let url = format!(
-            "{}/v1/projects/{}/locations/{}/publishers/google/models/{}:predict",
-            base_of(config, region)?,
-            crate::url_segment::encode(project),
-            crate::url_segment::encode(region),
-            crate::url_segment::encode(request.model())
-        );
+        let (base, path) =
+            crate::vertex_location::publisher_model_path(config, request.model(), "predict")?;
+        let url = format!("{base}/{path}");
         let mut body = json!({"instances": [{"content": text}]});
         if let Some(dimensions) = request.dimensions() {
             body["parameters"] = json!({"outputDimensionality": dimensions});

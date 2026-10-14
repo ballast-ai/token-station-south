@@ -1,0 +1,13 @@
+{
+  "prepare_case": "image-v1.prepare.generate",
+  "response": {
+    "status": 401,
+    "body": {
+      "error": {
+        "code": 401,
+        "message": "Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential.",
+        "status": "UNAUTHENTICATED"
+      }
+    }
+  }
+}

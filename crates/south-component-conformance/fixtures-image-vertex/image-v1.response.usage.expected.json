@@ -1,0 +1,28 @@
+{
+  "outcome": "succeeded",
+  "artifacts": [
+    {
+      "form": "inline",
+      "pointer": "/candidates/0/content/parts/0/inlineData/data",
+      "encoding": "base64",
+      "media_type": "image/png"
+    }
+  ],
+  "metering": {
+    "tokens": {
+      "text_input": null,
+      "image_input": null,
+      "cached_input": null,
+      "cached_text_input": null,
+      "cached_image_input": null,
+      "text_output": null,
+      "image_output": null,
+      "total_input": 1,
+      "total_output": 1
+    },
+    "images_reported": null,
+    "credits": null,
+    "upstream_cost": null
+  },
+  "extras": null
+}

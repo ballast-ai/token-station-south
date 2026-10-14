@@ -1,0 +1,71 @@
+{
+  "descriptor": {
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "inlineData": {
+                    "data": {
+                      "$south.ref": {
+                        "blob": "b0",
+                        "transform": "data_url_payload"
+                      }
+                    },
+                    "mimeType": "image/png"
+                  }
+                },
+                {
+                  "text": "the same cat at night"
+                }
+              ],
+              "role": "user"
+            }
+          ],
+          "generationConfig": {
+            "responseModalities": [
+              "IMAGE"
+            ]
+          }
+        }
+      }
+    },
+    "method": "POST",
+    "path": "v1/projects/test-project/locations/us-central1/publishers/google/models/gemini-3.1-flash-image:generateContent"
+  },
+  "facts": {
+    "inputs": {
+      "input_image": 0,
+      "mask": 0,
+      "reference_image": 1
+    },
+    "metering_forms": [
+      "tokens"
+    ],
+    "operation": "generate",
+    "requested_outputs": 1,
+    "tier": {}
+  },
+  "immutable_body_paths": [
+    "contents",
+    "generationConfig.imageConfig",
+    "generationConfig.candidateCount",
+    "generationConfig.responseModalities"
+  ],
+  "repeat": 1,
+  "response_body_form": "json",
+  "response_elision_paths": [
+    "/candidates/*/content/parts/*/inlineData/data"
+  ],
+  "state": {
+    "metering_required": [
+      "tokens"
+    ]
+  }
+}

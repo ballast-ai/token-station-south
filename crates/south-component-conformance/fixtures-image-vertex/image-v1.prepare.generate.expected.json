@@ -1,0 +1,60 @@
+{
+  "facts": {
+    "operation": "generate",
+    "inputs": {
+      "input_image": 0,
+      "reference_image": 0,
+      "mask": 0
+    },
+    "requested_outputs": 1,
+    "tier": {},
+    "metering_forms": [
+      "tokens"
+    ]
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "v1/projects/test-project/locations/us-central1/publishers/google/models/gemini-3.1-flash-image:generateContent",
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "a cat"
+                }
+              ]
+            }
+          ],
+          "generationConfig": {
+            "responseModalities": [
+              "IMAGE"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "repeat": 1,
+  "response_body_form": "json",
+  "response_elision_paths": [
+    "/candidates/*/content/parts/*/inlineData/data"
+  ],
+  "immutable_body_paths": [
+    "contents",
+    "generationConfig.imageConfig",
+    "generationConfig.candidateCount",
+    "generationConfig.responseModalities"
+  ],
+  "state": {
+    "metering_required": [
+      "tokens"
+    ]
+  }
+}

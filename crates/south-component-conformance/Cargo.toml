@@ -143,6 +143,10 @@ name = "gemini_image_sandbox_parity"
 required-features = ["sandbox"]
 
 [[test]]
+name = "vertex_image_sandbox_parity"
+required-features = ["sandbox"]
+
+[[test]]
 name = "stability_image_sandbox_parity"
 required-features = ["sandbox"]
 

@@ -15,7 +15,7 @@ mod host_range;
 
 /// The official components this repository ships. Named, so that an empty or
 /// mistyped scan below cannot pass over nothing.
-const OFFICIAL_COMPONENTS: [&str; 27] = [
+const OFFICIAL_COMPONENTS: [&str; 28] = [
     "embeddings-gemini",
     "embeddings-openai-compatible",
     "embeddings-vertex",
@@ -25,6 +25,7 @@ const OFFICIAL_COMPONENTS: [&str; 27] = [
     "image-minimax",
     "image-qwen",
     "image-stability",
+    "image-vertex",
     "provider-anthropic",
     "provider-anthropic-bedrock-invoke",
     "provider-bedrock-converse",
@@ -673,10 +674,11 @@ fn every_shipped_package_declares_the_range_handshake() {
                 [("embeddings".to_owned(), u32::from(contract))].into()
             } else if manifest.api_version == south_provider_api::IMAGE_WORLD {
                 // The image world speaks the shared media vocabulary and its own contract
-                // (image record §15). Only `image-gemini` names a contract 2 transform word
+                // (image record §15). Only the two packages over the shared Gemini image module,
+                // `image-gemini` and `image-vertex`, name a contract 2 transform word
                 // (`data_url_payload`, I3-2 GI-Q1); the others stay at the media 1 they were
                 // published with.
-                let media = if manifest.name == "image-gemini" {
+                let media = if matches!(manifest.name.as_str(), "image-gemini" | "image-vertex") {
                     south_contracts::media::MEDIA_CONTRACT_VERSION_V2
                 } else {
                     south_contracts::media::MEDIA_CONTRACT_VERSION
@@ -1844,6 +1846,48 @@ fn image_ideogram_declares_media_1_and_the_runtime_of_the_record() {
     let mut media_1_only = host_range::host_range();
     media_1_only.contracts.insert("media".to_owned(), BTreeSet::from([1]));
     assert_eq!(compatibility_admits(&manifest, &media_1_only), Ok(()));
+}
+
+/// `image-vertex` (I3-3, record §1) starts at 1.0.0 in the image world, family `vertex-ai-image`,
+/// `bearer` only, `generate` only. It shares `image-gemini`'s module and so names the transform word
+/// `data_url_payload`: it declares `contracts.media` 2, which a media 1 host refuses through the
+/// contract number. It is the first image package with a credential recipe; its config keys and
+/// `credentials` section are `embeddings-vertex`'s (record §4), which the image world has admitted
+/// since 0.52.0 (record §2). Until the release that ships it bumps the workspace version, it
+/// declares this tree's release as its `south_runtime` (record §9, following `image-gemini`'s I3-2
+/// precedent), and the release commit moves both together.
+#[test]
+fn image_vertex_declares_media_2_the_vertex_recipe_and_this_trees_runtime() {
+    let read = |name: &str| -> ComponentManifestV1 {
+        serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap()
+    };
+    let (manifest, embeddings) = (read("image-vertex"), read("embeddings-vertex"));
+    assert_eq!(manifest.version, "1.0.0");
+    assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
+    assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["vertex-ai-image"]);
+    assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer"]);
+    assert_eq!(
+        manifest.declared_keys("vertex-ai-image"),
+        BTreeSet::from(["project", "project_id", "region"])
+    );
+    assert_eq!(manifest.credentials, embeddings.credentials);
+    assert_eq!(manifest.config_schema["vertex-ai-image"], embeddings.config_schema["vertex-ai"]);
+    assert_eq!(manifest.compatibility.contracts.get("media"), Some(&2));
+    assert_eq!(manifest.compatibility.contracts.get("image"), Some(&1));
+    assert_eq!(manifest.compatibility.south_runtime, host_range::south_release());
+    assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
+    let mut media_1_only = host_range::host_range();
+    media_1_only.contracts.insert("media".to_owned(), BTreeSet::from([1]));
+    assert!(matches!(
+        compatibility_admits(&manifest, &media_1_only),
+        Err(CompatibilityMismatchV2::Contract { declared: 2, .. })
+    ));
 }
 
 /// KC1 record §5: the two Anthropic-family packages read the host's per-tenant end-user hash
