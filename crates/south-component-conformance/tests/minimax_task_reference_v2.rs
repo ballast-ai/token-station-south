@@ -355,3 +355,42 @@ proptest::proptest! {
   proptest::prop_assert_eq!(south_component_conformance::task_v2_json::parse_submit_outcome_json(&wire.to_string()).unwrap(),outcome);
  }
 }
+
+/// The host-native `MiniMax` arm's protected request-body fields, applied to both generations
+/// (server `MINIMAX_VIDEO_OWNED`; design record `2026-10-14-task-minimax-immutable-paths.md`).
+const NATIVE_PROTECTED: [&str; 6] =
+    ["model", "duration", "resolution", "content", "first_frame_image", "last_frame_image"];
+
+/// Task contract 6: both generations declare the native arm's six protected fields, so request
+/// extras land identically on both arms. A declared path the body does not carry (`content` on
+/// Hailuo v1, the two frame fields on H3) is legal and keeps an extra from adding it. Fields the
+/// native arm leaves open (`prompt`, `prompt_optimizer`, `fast_pretreatment`, H3 `ratio`) stay
+/// outside the list.
+#[test]
+fn both_generations_declare_the_native_protected_fields() {
+    let full = |model: &str| {
+        let mut input = json!({"model":model,"prompt":"scene","image":"https://cdn/first",
+            "last_frame":"https://cdn/last","duration":6,"resolution":"768P"});
+        if model == "MiniMax-Hailuo-02" {
+            input["prompt_optimizer"] = json!(false);
+            input["fast_pretreatment"] = json!(true);
+        }
+        prepare(input).unwrap()
+    };
+    for (model, open) in [
+        ("MiniMax-Hailuo-02", &["prompt", "prompt_optimizer", "fast_pretreatment"][..]),
+        ("MiniMax-H3", &["ratio"][..]),
+    ] {
+        let p = full(model);
+        let paths = p.immutable_body_paths.clone().expect("the package declares its paths");
+        assert_eq!(paths, NATIVE_PROTECTED, "{model}: the declared list is the native arm's");
+        assert_eq!(south_contracts::validate_immutable_body_paths(&paths), Ok(()), "{model}");
+        let body = p.descriptor.body.as_ref().unwrap().as_object().unwrap();
+        for key in open {
+            assert!(body.contains_key(*key) && !paths.iter().any(|d| d == key), "{model}: {key}");
+        }
+    }
+    // The list does not depend on the generation or on which optional fields a request carries.
+    let bare = prepare(json!({"model":"MiniMax-Hailuo-2.3","prompt":"scene"})).unwrap();
+    assert_eq!(bare.immutable_body_paths.unwrap(), NATIVE_PROTECTED);
+}

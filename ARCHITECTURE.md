@@ -236,6 +236,13 @@ world and unchanged limits. Gate ②'s `UndeclaredValuesIgnored` row for the `de
 (`undeclared_values.rs`) that the embeddings and image suites now call and the speech suite (S-S-3) will. No
 `compatibility.json` entry yet. Under Q47 `south-provider-api` moves to 0.57.0; the packages already took this release's
 patch in S-S-1 and take no second one.
+**Unreleased (`task-minimax-v2` immutable body paths)**: design record
+`docs/design/2026-10-14-task-minimax-immutable-paths.md` (ruled by lv on 2026-10-14, host step H5-5c). `task-minimax-v2`
+prepared `immutable_body_paths: null`, so a host injected no request extras for it. It now declares the host-native
+MiniMax arm's protected list for both generations: `model`, `duration`, `resolution`, `content`, `first_frame_image`,
+`last_frame_image` (a path a body does not carry is legal under contract 6 and keeps an extra from adding it).
+The package takes a minor version, 0.33.0 (0.32.0 and the S-S-1 patch 0.32.1 retire), and keeps `south_runtime` 0.63.0 and
+`contracts.task` 7. No crate version moves: `south-component-conformance` already moved to 0.63.0 since v0.63.0.
 **v0.63.0 (image world step I3-3: `image-vertex`; the task poll interval)**: release record
 `docs/design/2026-10-14-release-0.63.0.md`. Image world step I3-3: Nano Banana on Vertex AI (design record
 `docs/design/2026-10-13-image-i3-3-vertex.md`, accepted 2026-10-14). `image-vertex` 1.0.0

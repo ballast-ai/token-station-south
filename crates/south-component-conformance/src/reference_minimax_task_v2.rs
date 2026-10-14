@@ -14,6 +14,16 @@ use token_station_protocol::{
 };
 const QUERY: &str = "v1/query/video_generation";
 const QUERY_V2: &str = "v2/query/video_generation";
+/// Request-body fields the host must not rewrite (task contract 6): the upstream model, the fields
+/// the request estimate is read from (`duration`, `resolution`) and every input image (`content` on
+/// H3; `first_frame_image` / `last_frame_image` on Hailuo v1), which sets the estimate's input image
+/// count. The same six fields the host-native `MiniMax` arm protects, declared for both generations so
+/// request extras land identically on both arms; a path the body does not carry is legal under
+/// contract 6 and keeps an extra from adding that field (design record
+/// `2026-10-14-task-minimax-immutable-paths.md`). `prompt`, `prompt_optimizer`,
+/// `fast_pretreatment` and H3 `ratio` stay open, as on the native arm.
+const IMMUTABLE_BODY_PATHS: [&str; 6] =
+    ["model", "duration", "resolution", "content", "first_frame_image", "last_frame_image"];
 /// Pure Hailuo and H3 reference; the saved locator selects the recovery API family.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct MiniMaxTaskReferenceV2;
@@ -252,9 +262,7 @@ fn prepare_h3(
         locator: TaskLocatorV2::new(1, QUERY_V2)
             .map_err(|_| protocol("invalid MiniMax locator"))?,
         request_estimate: request_estimate(duration, resolution, images)?,
-        // Contract 6 (D6): this family declares no immutable body paths yet, so a
-        // host must not inject extra request-body fields — same as contract 5.
-        immutable_body_paths: None,
+        immutable_body_paths: Some(IMMUTABLE_BODY_PATHS.map(str::to_owned).to_vec()),
     })
 }
 fn observe_h3(task: &Value) -> TaskObservationV2 {
@@ -328,7 +336,7 @@ impl TaskComponentV2 for MiniMaxTaskReferenceV2 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "task-minimax-v2".into(),
-            version: "0.32.1".into(),
+            version: "0.33.0".into(),
             api_version: "task-adapter-v2".into(),
         }
     }
@@ -409,9 +417,7 @@ impl TaskComponentV2 for MiniMaxTaskReferenceV2 {
                 resolution,
                 u32::from(image.is_some()) + u32::from(last.is_some()),
             )?,
-            // Contract 6 (D6): this family declares no immutable body paths yet, so a
-            // host must not inject extra request-body fields — same as contract 5.
-            immutable_body_paths: None,
+            immutable_body_paths: Some(IMMUTABLE_BODY_PATHS.map(str::to_owned).to_vec()),
         })
     }
     fn parse_submit_response(

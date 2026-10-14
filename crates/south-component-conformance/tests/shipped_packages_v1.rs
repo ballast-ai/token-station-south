@@ -2161,9 +2161,11 @@ fn i3_3_retires_every_published_062_package_identity() {
 /// Speech world step S-S-1 (speech record §18) adds the `speech` contract module to
 /// `south-contracts` (0.54.0 → 0.55.0), which every guest links, so every `component.wasm` changes:
 /// each identity published with 0.63.0 retires. No published package changes behaviour: each takes
-/// a patch and keeps its `south_runtime` and its `contracts`. Step S-S-2 moves `south-provider-api`
-/// (0.56.0 → 0.57.0) in the same unreleased release; identities are compared with the release, so
-/// the patch taken here covers it and no package takes a second one.
+/// a patch and keeps its `south_runtime` and its `contracts`, except `task-minimax-v2`, which then
+/// took a minor version for its immutable body paths
+/// (`minimax_immutable_paths_retire_the_published_task_minimax_v2_identity`). Step S-S-2 moves
+/// `south-provider-api` (0.56.0 → 0.57.0) in the same unreleased release; identities are compared
+/// with the release, so the patch taken here covers it and no package takes a second one.
 #[test]
 fn s_s_1_retires_every_published_063_package_identity() {
     for (name, published, now) in [
@@ -2191,7 +2193,7 @@ fn s_s_1_retires_every_published_063_package_identity() {
         ("task-gmi-image-v2", "0.35.21", "0.35.22"),
         ("task-kling-v2", "0.32.22", "0.32.23"),
         ("task-kling", "1.0.24", "1.0.25"),
-        ("task-minimax-v2", "0.32.0", "0.32.1"),
+        ("task-minimax-v2", "0.32.0", "0.33.0"),
         ("task-veo-v2", "0.35.21", "0.35.22"),
         ("task-wan-image-v2", "0.35.21", "0.35.22"),
         ("task-xai-v2", "0.35.21", "0.35.22"),
@@ -2220,4 +2222,27 @@ fn s_s_1_retires_every_published_063_package_identity() {
             assert_eq!(manifest.compatibility.contracts.get("media"), Some(&media), "{name}");
         }
     }
+}
+
+/// Declaring immutable body paths changes what `task-minimax-v2` prepares (task contract 6: the
+/// host may now inject request extras outside those paths, design record
+/// `2026-10-14-task-minimax-immutable-paths.md`), so the package takes a minor version: the
+/// published 0.32.0 identity and the unpublished S-S-1 patch 0.32.1 both retire. The runtime and
+/// the contracts stay: every task-v2 runtime since contract 6 reads the field, and the poll
+/// interval still needs 0.63.0.
+#[test]
+fn minimax_immutable_paths_retire_the_published_task_minimax_v2_identity() {
+    let manifest: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(
+            repo_root().join("components").join("task-minimax-v2").join("manifest.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    for retired in ["0.32.0", "0.32.1"] {
+        assert_ne!(manifest.version, retired, "a changed package cannot reuse an identity");
+    }
+    assert_eq!(manifest.version, "0.33.0");
+    assert_eq!(manifest.compatibility.south_runtime, declared_runtime_now("task-minimax-v2"));
+    assert_eq!(manifest.compatibility.contracts.get("task"), Some(&7));
 }

@@ -214,7 +214,7 @@ directory shape the runtime loads — `manifest.json` beside `component.wasm`.
 | Component | Family | Build | Status |
 |---|---|---|---|
 | `task-kling-v2` | kling | `bash scripts/build-kling-task-v2-component.sh` | released |
-| `task-minimax-v2` | minimax | `bash scripts/build-minimax-task-v2-component.sh` | released; declares `min_poll_interval_seconds` 12 from 0.63.0 (0.32.0, `south_runtime` 0.63.0) |
+| `task-minimax-v2` | minimax | `bash scripts/build-minimax-task-v2-component.sh` | released; declares `min_poll_interval_seconds` 12 from 0.63.0 (0.32.0, `south_runtime` 0.63.0); declares the native arm's six immutable body paths for both generations, unreleased (0.33.0, [record](docs/design/2026-10-14-task-minimax-immutable-paths.md)) |
 | `task-bailian-v2` | bailian | `bash scripts/build-bailian-task-v2-component.sh` | released |
 | `task-xai-v2` | `xai-video` | `bash scripts/build-xai-task-v2-component.sh` | released |
 | `task-byteplus-v2` | `byteplus-video` | `bash scripts/build-byteplus-task-v2-component.sh` | released |
