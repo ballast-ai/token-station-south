@@ -211,8 +211,11 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.63.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.55.0, 0.57.0 and 0.63.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
-**Unreleased (speech world step S-S-1: the `speech` contract module)**: speech record
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.64.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.55.0, 0.57.0 and 0.63.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**v0.64.0 (speech world steps S-S-1 to S-S-3; `task-minimax-v2` immutable body paths; image refuses an `sse` response form)**:
+release record `docs/design/2026-10-14-release-0.64.0.md`. The speech world's contract, world and suite ship without
+`contracts.speech` and without packages (S-S-4 / S-S-5), so no host behaviour changes until a host adopts them.
+Speech world step S-S-1, the `speech` contract module: speech record
 `docs/design/2026-09-30-speech-world.md` §18 and its S-S-1 implementation section. `south_contracts::speech` carries
 `contracts.speech` v1's types and codecs: the pre-dispatch facts (`characters {count, upper?}`, `metering_forms`,
 `reservation`, `output_media_type`), `SpeechMeteringV1` (characters with `source`, seconds with `basis`, tokens),
@@ -222,7 +225,7 @@ component trait in the conformance crate (S-S-3), as the image world's did. No W
 no `compatibility.json` entry yet. Under Q47 `south-contracts` moves to 0.55.0 and `south-component-conformance` (whose
 reference version constants move) to 0.63.0, so every package published with 0.63.0 takes a patch with unchanged
 behaviour and keeps its `south_runtime` and its `contracts`.
-**Unreleased (speech world step S-S-2: the `speech-adapter-v1` world)**: speech record §18 and its S-S-2 implementation
+Speech world step S-S-2, the `speech-adapter-v1` world: speech record §18 and its S-S-2 implementation
 section. `wit/speech-adapter.wit` (`token-station:speech-adapter@1.0.0`, world `speech-adapter-v1`: `metadata`,
 `healthcheck`, `model-capabilities`, `prepare`, `parse-response`; no `host` import), the `SPEECH_*` constants and
 `SPEECH_WORLD_SCHEMA` (capabilities `synthesize`, `transcribe`, `translate`, `artifact_fetch`; auth arms `bearer`,
@@ -236,7 +239,7 @@ world and unchanged limits. Gate ②'s `UndeclaredValuesIgnored` row for the `de
 (`undeclared_values.rs`) that the embeddings, image and speech suites call. No
 `compatibility.json` entry yet. Under Q47 `south-provider-api` moves to 0.57.0; the packages already took this release's
 patch in S-S-1 and take no second one.
-**Unreleased (speech world step S-S-3: the suite `south.speech-component.v1` and the `sse` view)**: speech record §11,
+Speech world step S-S-3, the suite `south.speech-component.v1` and the `sse` view: speech record §11,
 §18 and its S-S-3 implementation section. `south-contracts` builds the `sse` response view from the events a host
 decoded with `decode_sse_v1` (`build_media_sse_response_view_v1`, `SseEventFieldsV1`): the list `[{event, data}]` is
 elided as one document whose root is the array (`{"sse": [...]}`, the new `MediaResponseBodyV1::Sse`, breaking for an
@@ -250,7 +253,7 @@ beside the image world's rows, the metering rows included. Its native reference 
 `synthetic-speech`, a test double that no host routes to; the real packages are S-S-4), runs as the test guest
 `tests/guests/synthetic-speech` with byte-identical ABI answers, and every row fails on a mutated reference. No
 `compatibility.json` entry yet and no version moves: both changed crates already moved in this unreleased cycle.
-**Unreleased (`task-minimax-v2` immutable body paths)**: design record
+`task-minimax-v2` immutable body paths: design record
 `docs/design/2026-10-14-task-minimax-immutable-paths.md` (ruled by lv on 2026-10-14, host step H5-5c). `task-minimax-v2`
 prepared `immutable_body_paths: null`, so a host injected no request extras for it. It now declares the host-native
 MiniMax arm's protected list for both generations: `model`, `duration`, `resolution`, `content`, `first_frame_image`,

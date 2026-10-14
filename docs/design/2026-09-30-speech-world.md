@@ -1,7 +1,8 @@
 # Speech World: TTS and ASR (speech-adapter-v1)
 
 Status: **accepted 2026-10-08, with Q10 and Q11 open** (neither blocks the contract, §16; reconciled with south 0.50.0 in
-§17; implementation outline in §18); proposed 2026-09-30 by the host team (token-station-server P21/P22/P23)
+§17; implementation outline in §18); proposed 2026-09-30 by the host team (token-station-server P21/P22/P23); steps S-S-1 to S-S-3
+implemented and released in 0.64.0 without `contracts.speech` (S-S-4 packages and S-S-5 still to come)
 
 Date: 2026-09-30
 

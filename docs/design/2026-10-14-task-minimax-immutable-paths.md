@@ -1,6 +1,6 @@
 # `task-minimax-v2` declares immutable body paths
 
-Status: accepted (ruled by lv on 2026-10-14, host plan H5-5c); unreleased. The package moves to 0.33.0.
+Status: accepted (ruled by lv on 2026-10-14, host plan H5-5c); released in 0.64.0 (`task-minimax-v2` 0.33.0).
 
 Date: 2026-10-14
 
