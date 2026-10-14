@@ -203,38 +203,31 @@ fn unmodelled_result_text(content: Option<&Value>) -> String {
 }
 
 /// The text of a tool message, as the native first hop's `tool_result` block carries it: its text
-/// parts concatenated. Every other part is dropped there, a part this crate does not model
-/// included; an image is refused (KR1).
-fn tool_text(content: Option<&Content>) -> ComponentResultV1<String> {
+/// parts concatenated. Every other part is dropped there, an image and a part this crate does not
+/// model included, so the native arm sends the rest (KR1's scope, aligned 2026-10-14).
+fn tool_text(content: Option<&Content>) -> String {
     match content {
-        None => Ok(String::new()),
-        Some(Content::Text(text)) => Ok(text.clone()),
-        Some(Content::Parts(parts)) => {
-            let mut text = String::new();
-            for part in parts {
-                match part {
-                    ContentPart::Text { text: part, .. } => text.push_str(part),
-                    ContentPart::ImageUrl { .. } => return Err(image_refused()),
-                    ContentPart::Thinking { .. }
-                    | ContentPart::RedactedThinking { .. }
-                    | ContentPart::Unknown(_) => {}
-                }
-            }
-            Ok(text)
-        }
+        None => String::new(),
+        Some(Content::Text(text)) => text.clone(),
+        Some(Content::Parts(parts)) => parts
+            .iter()
+            .filter_map(|part| match part {
+                ContentPart::Text { text, .. } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .concat(),
     }
 }
 
 /// The system text: the non-empty text of every system message, joined by `\n`, in order. `None`
-/// when there is none. Only text survives, as in the native first hop; an image is refused (KR1).
-fn system_text(request: &ChatRequest) -> ComponentResultV1<Option<String>> {
+/// when there is none. Only text survives, as in the native first hop: an image or any other part
+/// is dropped and the rest is sent (KR1's scope, aligned 2026-10-14).
+fn system_text(request: &ChatRequest) -> Option<String> {
     let mut pieces: Vec<String> = Vec::new();
     for message in request.messages.iter().filter(|message| message.role == Role::System) {
         match message.content.as_ref() {
             Some(Content::Parts(parts)) => {
-                if parts.iter().any(|part| matches!(part, ContentPart::ImageUrl { .. })) {
-                    return Err(image_refused());
-                }
                 pieces.extend(parts.iter().filter_map(|part| match part {
                     ContentPart::Text { text, .. } if !text.is_empty() => Some(text.clone()),
                     _ => None,
@@ -244,7 +237,7 @@ fn system_text(request: &ChatRequest) -> ComponentResultV1<Option<String>> {
             _ => {}
         }
     }
-    Ok((!pieces.is_empty()).then(|| pieces.join("\n")))
+    (!pieces.is_empty()).then(|| pieces.join("\n"))
 }
 
 /// One user-side entry: a user turn or a tool result.
@@ -271,7 +264,7 @@ fn tool_result(message: &Message) -> ComponentResultV1<Value> {
     };
     Ok(json!({
         "toolUseId": id,
-        "content": [{"text": tool_text(message.content.as_ref())?}],
+        "content": [{"text": tool_text(message.content.as_ref())}],
         "status": "success",
     }))
 }
@@ -393,7 +386,7 @@ fn tools_of(request: &ChatRequest) -> Option<Value> {
 /// (KR3, aligned 2026-10-14).
 fn body_of(request: &ChatRequest, config: &ProviderConfig) -> ComponentResultV1<Value> {
     let tools = tools_of(request);
-    let system = system_text(request)?;
+    let system = system_text(request);
     let conversation: Vec<&Message> =
         request.messages.iter().filter(|message| message.role != Role::System).collect();
     let Some((last, earlier)) = conversation.split_last() else {

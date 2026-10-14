@@ -298,7 +298,7 @@ captures to settle it.
 
 | Input | Component | Native today |
 |---|---|---|
-| Image part (`ContentPart::ImageUrl`) | **Refused**: capability error, 400 before admission | Refused, but late: inside prepare, after the token refresh (server:translate_kiro.rs:80-84, 163-167; Appendix D N-3) |
+| Image part (`ContentPart::ImageUrl`) | **Refused**: capability error, 400 before admission (*revised 2026-10-14:* in a user or assistant message; in a system message or a tool result it is dropped and the rest sent, as natively, since the first hop keeps only text there) | Refused, but late: inside prepare, after the token refresh (server:translate_kiro.rs:80-84, 163-167; Appendix D N-3) |
 | `ContentPart::Unknown` | ~~Refused~~ *Revised 2026-10-14 (§17, §18):* read as the native second hop reads the block the first hop sends verbatim — a `text` block's text is kept, a `tool_use` block is an assistant's `toolUses` entry (before the calls), a `tool_result` block is a user entry's `toolResults` entry, an `image` block is refused (KR1), anything else is dropped; dropped in a system message or a tool result | Passed to the intermediate body verbatim (reference_anthropic.rs:118-120), then dropped unless it is a `text` block (server:translate_kiro.rs:210-221) or refused if it is an `image` block |
 | `Thinking` / `RedactedThinking` parts in earlier turns | **Dropped** — the wire has no block for them; the same rule as the Converse reference for parts a dialect cannot carry out (reference_bedrock_converse.rs:109-114) | Dropped by the second hop |
 | `response_format` other than text | ~~Refused~~ *Revised 2026-10-14:* not read; the body is the one sent without it, as natively. The package still does not declare `json_schema` | Never reaches the upstream (the second hop reads only `messages`, `system`, `tools`) |
@@ -1200,7 +1200,8 @@ The status line's "provisional items" are the six rows marked **Yes**.
 consistent with DP0 takes the recommendation), lv took the recommendation that the component must not refuse a request
 the native arm serves today. The four refusals of D3 that differed from the native arm (an unmodelled content part, a
 JSON response format, a forced or named tool choice, a final assistant turn) are withdrawn: the component makes the
-native arm's rewrite, and the request rows pin the native body (§18).
+native arm's rewrite, and the request rows pin the native body (§18). The same ruling covers KD15 (an image in a
+system message or a tool result), found in that review: it is dropped as natively, and KR1 names its native scope.
 
 ## 18. Implementation (2026-10-14)
 
@@ -1258,7 +1259,7 @@ native arm succeeds each carry the reason in the last column.
 
 | # | Input | Package | Native | Why it differs |
 |---|---|---|---|---|
-| KR1 | An image part, in any message | Capability error (400) before admission | Refused too, in the shape check before the token refresh (host K0-a); *corrected 2026-10-14:* only in a user or assistant message — in a system message or a tool result the first hop keeps text only, so the image is dropped and the request is sent (KD15) | KD15 |
+| KR1 | An image part (`ImageUrl`, or an unmodelled `image` block) in a user or assistant message | Capability error (400) before admission | Refused too, in the shape check before the token refresh (host K0-a) | — (*revised 2026-10-14:* an image in a system message or a tool result is dropped and the rest sent, as natively: the native first hop keeps only text there; KD15 withdrawn) |
 | ~~KR2~~ | A content part this crate does not model (`ContentPart::Unknown`) | Withdrawn 2026-10-14 (§17): read by its `type` as natively — `text` kept, `tool_use` a `toolUses` entry, `tool_result` a `toolResults` entry, `image` refused (KR1), anything else dropped; dropped in system and tool messages | The same | — |
 | ~~KR3~~ | `response_format` other than text | Withdrawn 2026-10-14: not read, as natively | Ignored | — |
 | ~~KR4~~ | `tool_choice` `required` or a named tool | Withdrawn 2026-10-14: the tools are sent as for `auto`, as natively | Dropped | — |
@@ -1309,10 +1310,9 @@ native arm succeeds each carry the reason in the last column.
   whichever block is open; keying by id is the reading both native paths agree on when ids are consistent, and the IR
   has one index per call.
 
-- KD15 An image in a system message or in a tool result is refused (KR1); the native first hop keeps only text there,
-  so the native arm drops the image and sends the request. Found while aligning KR2–KR5 (2026-10-14) and not covered
-  by that ruling, which named KR2–KR5 only; matching is possible (drop it, as natively), and the choice is lv's. A
-  host that refuses image input for a model without `vision` before either arm makes the two arms agree.
+- ~~KD15~~ Withdrawn 2026-10-14 under the same ruling (§17): an image in a system message or in a tool result is
+  dropped and the remaining text sent, as the native first hop does; KR1 now names its native scope (user and
+  assistant messages).
 
 **What needs the real account** (§12.2 item 7): K-Q5 (is `meteringEvent` on every completed answer?), K-Q6 (the
 exception names and statuses, and what an exhausted allowance looks like), K-Q10 (`content-type`), K-Q11 (is
@@ -1631,5 +1631,6 @@ They matter here because a dual run pins whatever the native arm does as "correc
   part as the native second hop reads the block the first hop sends verbatim, does not read `response_format`, sends
   the tools for `required` and a named tool choice, and sends a final assistant turn as the current user message;
   every request row was checked against the native composition (the Anthropic reference, then the host's
-  `anthropic_messages_to_kiro`), and the only request rows that differ are KD1 and KR9. The review also found KD15
-  (images in system messages and tool results), recorded for lv. The package moves to 1.0.4.
+  `anthropic_messages_to_kiro`), and the only request rows that differ are KD1 and KR9. The review also found
+  KD15 (images in system messages and tool results), which the same ruling then withdrew: such an image is dropped as
+  natively, and KR1 is reworded to its native scope (user and assistant messages). The package takes a minor version, 1.1.0.

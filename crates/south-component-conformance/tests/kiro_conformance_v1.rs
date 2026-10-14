@@ -141,6 +141,8 @@ fn the_shipped_pack_carries_every_decided_row() {
         "provider.request.prompt-cache-markers-are-dropped",
         "provider.request.refused-image",
         "provider.request.refused-unmodelled-image-block",
+        "provider.request.image-in-a-system-message-is-dropped",
+        "provider.request.image-in-a-tool-result-is-dropped",
         "provider.request.refused-unmodelled-image-block-in-an-assistant-turn",
         "provider.request.unmodelled-part-is-dropped",
         "provider.request.unmodelled-parts-beside-text-are-dropped",

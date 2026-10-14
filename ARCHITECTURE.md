@@ -232,6 +232,17 @@ moves to 0.56.0, `south-provider-api` to 0.58.0 and `south-component-conformance
 with 0.64.0 takes a patch with unchanged behaviour and keeps its `south_runtime` and its `contracts`. **Breaking for
 hosts on re-pin**: `ManifestErrorV1` gains `SpeechQueryParametersRequireMedia3` (exhaustive matches), and a host's media
 range moves to `{1, 2, 3}` to admit `speech-elevenlabs`.
+**Unreleased (the Kiro native rewrites: KR2–KR5 withdrawn)**: Kiro record
+`docs/design/2026-09-30-kiro-provider-component.md` §17 and §18 (lv, 2026-10-14: the component must not refuse a
+request the native arm serves today). `provider-kiro` 1.1.0 makes the native arm's rewrite where 1.0.x refused: an
+unmodelled content part is read by its `type` as the native second hop reads the block the first hop sends verbatim
+(text kept, `tool_use` an assistant `toolUses` entry, `tool_result` a user `toolResults` entry, `image` refused,
+anything else dropped), `response_format` is not read, `required` and a named tool choice send the tools as `auto`
+does, and a final assistant turn is sent as the current user message. Every request row was checked against the
+native composition. Under the same ruling an image in a system message or a tool result is dropped as natively (KD15
+withdrawn); KR1 refuses images in user and assistant messages only. No WIT, manifest
+vocabulary, runtime, suite or `compatibility.json` change. No version moves beyond the package's own: speech V3-1 already
+moved the guest-linked crates and patched every package published with 0.64.0 for this cycle.
 **v0.64.0 (speech world steps S-S-1 to S-S-3; `task-minimax-v2` immutable body paths; image refuses an `sse` response form)**:
 release record `docs/design/2026-10-14-release-0.64.0.md`. The speech world's contract, world and suite ship without
 `contracts.speech` and without packages (S-S-4 / S-S-5), so no host behaviour changes until a host adopts them.

@@ -47,7 +47,14 @@ Each row's source:
   `assistant-final-turn-after-a-tool-result` (a `tool_result` block among its parts is carried, as natively),
   `assistant-only-conversation-takes-the-system-text`, and `refused-assistant-final-turn-with-an-unnamed-tool-call`
   (the first hop checks the dropped calls, KR7).
-- **Refused request rows**, one per numbered refusal of the record (KR1, KR7 to KR9): `refused-image`,
+- **KR1's native scope** (KD15 withdrawn on 2026-10-14 under the same ruling): the native first hop keeps only
+  text in a system message and in a tool result, so an image there is dropped and the rest is sent —
+  `image-in-a-system-message-is-dropped` (text parts around the image joined, an image-only system message contributes
+  nothing) and `image-in-a-tool-result-is-dropped` (text parts around the image concatenated, also with prompt-cache
+  markers on the parts, and an image-only remainder after a marked text part). Checked against the native composition
+  like the rows above.
+- **Refused request rows**, one per numbered refusal of the record (KR1 in user and assistant messages, KR7 to
+  KR9): `refused-image`,
   `refused-image-in-history`, `refused-empty-tool-call-id`, `refused-tool-result-without-id`, `refused-no-message`,
   `refused-missing-attempt-id`, `refused-malformed-attempt-id`.
 - **Stream and response rows taken from the host's bytes**: `text` is server `gateway/tests/kiro_eventstream.rs`
