@@ -1,6 +1,6 @@
 # Task world: Veo on Vertex AI (`task-veo-vertex-v2`)
 
-Status: proposed (2026-10-15), for lv's review. Not implemented.
+Status: accepted (lv reviewed it on 2026-10-15 and ruled VV-Q1 to VV-Q3 as recommended, §5). Not implemented.
 
 Date: 2026-10-15
 
@@ -61,6 +61,10 @@ documentation is wrong for this model line. Only a real-account capture settles 
 
 ## 5. Open questions for lv
 
+**Ruled by lv on 2026-10-15: VV-Q1 (a) a new package `task-veo-vertex-v2`, VV-Q2 (a) the documented Vertex wire with
+a real-account capture before cutover, VV-Q3 refuse `storageUri`.** The items below keep their text; each recommendation
+is the ruling.
+
 - **VV-Q1 Packaging.** (a) A new package `task-veo-vertex-v2`, or (b) a second family in `task-veo-v2`. A package
   declares one `contracts.task`; the Vertex clip needs contract 8 (inline bytes), while `task-veo-v2` is published at
   task 7, so (b) would make a task-7-only host refuse the Gemini Veo line too. **Recommended: (a)**, which also keeps
@@ -92,3 +96,4 @@ the latest release takes a patch. The new package declares the oldest runtime th
 ## Revision note
 
 - 2026-10-15: first draft (proposed).
+- 2026-10-15: lv accepted the record and ruled VV-Q1 to VV-Q3 as recommended (§5); status accepted.
