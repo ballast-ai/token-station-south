@@ -1,0 +1,32 @@
+{
+  "provider_config": {
+    "provider": "vertex-veo-video",
+    "base_url": "https://us-central1-aiplatform.example/v1/projects/sample-project/locations/us-central1",
+    "auth": "provider_api_key"
+  },
+  "locator": {
+    "schema_version": 1,
+    "route": "v1beta"
+  },
+  "observation": {
+    "state": "succeeded",
+    "artifacts": {
+      "kind": "urls",
+      "items": [
+        {
+          "url": "https://us-central1-aiplatform.example/v1/projects/sample-project/locations/us-central1/files/veo-sample-a:download?alt=media",
+          "id": null,
+          "duration": null,
+          "fetch_with_credential": true,
+          "role": null
+        }
+      ]
+    },
+    "usage": {
+      "seconds": null,
+      "milliunits": null,
+      "tokens": null,
+      "outputs": 1
+    }
+  }
+}

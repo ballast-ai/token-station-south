@@ -1,3 +1,4 @@
 {
-  "outcome": "unknown"
+  "outcome": "accepted",
+  "upstream_task_id": "projects/p/locations/us/publishers/google/models/veo/operations/x"
 }

@@ -1,0 +1,13 @@
+{
+  "provider_config": {
+    "provider": "vertex-veo-video",
+    "base_url": "https://us-central1-aiplatform.example/v1/projects/sample-project/locations/us-central1",
+    "auth": "provider_api_key"
+  },
+  "upstream_model": "veo-3.1-generate-001",
+  "upstream_task_id": "projects/sample-project/locations/us-central1/publishers/google/models/veo-3.1-generate-001/operations/0b1c2d3e-4f50-4617-8899-aabbccddeeff",
+  "locator": {
+    "schema_version": 1,
+    "route": "v1beta"
+  }
+}

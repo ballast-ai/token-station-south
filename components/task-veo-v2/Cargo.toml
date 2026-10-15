@@ -1,10 +1,10 @@
-# The official Google Veo video (Gemini API) task component, compiled to a `wasm32-wasip2`
-# component. Standalone (not a workspace member): the main workspace must stay
+# The official Google Veo video (Gemini API and Vertex AI) task component, compiled to a
+# `wasm32-wasip2` component. Standalone (not a workspace member): the main workspace must stay
 # buildable without a wasm toolchain, and this crate must stay buildable
 # without wasmtime (the conformance dependency's `sandbox` feature stays off).
 [package]
 name = "task-veo-v2"
-version = "0.35.24"
+version = "0.36.0"
 edition = "2021"
 publish = false
 

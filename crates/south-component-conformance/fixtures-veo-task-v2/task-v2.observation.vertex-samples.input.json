@@ -1,0 +1,4 @@
+{
+  "status": 200,
+  "body": "{\"name\": \"projects/sample-project/locations/us-central1/publishers/google/models/veo-3.1-generate-001/operations/0b1c2d3e-4f50-4617-8899-aabbccddeeff\", \"done\": true, \"response\": {\"@type\": \"type.googleapis.com/google.cloud.aiplatform.v1.PredictLongRunningResponse\", \"generateVideoResponse\": {\"generatedSamples\": [{\"video\": {\"uri\": \"https://us-central1-aiplatform.example/v1/projects/sample-project/locations/us-central1/files/veo-sample-a:download?alt=media\"}}]}}}"
+}

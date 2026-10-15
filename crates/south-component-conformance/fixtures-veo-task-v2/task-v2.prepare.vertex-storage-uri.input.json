@@ -1,0 +1,16 @@
+{
+  "provider_config": {
+    "provider": "vertex-veo-video",
+    "base_url": "https://us-central1-aiplatform.example/v1/projects/sample-project/locations/us-central1",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "model": "veo-3.1-generate-001",
+    "prompt": "p",
+    "storageUri": "gs://sample-bucket/veo/",
+    "storage_uri": "gs://sample-bucket/veo/"
+  },
+  "minted": {
+    "task_id": "host-1"
+  }
+}

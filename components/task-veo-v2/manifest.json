@@ -1,9 +1,10 @@
 {
   "name": "task-veo-v2",
-  "version": "0.35.24",
+  "version": "0.36.0",
   "api_version": "task-adapter-v2",
   "providers": [
-    "veo-video"
+    "veo-video",
+    "vertex-veo-video"
   ],
   "capabilities": [
     "submit",
@@ -11,6 +12,7 @@
     "render"
   ],
   "auth_arms": [
+    "bearer",
     "header_secret"
   ],
   "permissions": {
