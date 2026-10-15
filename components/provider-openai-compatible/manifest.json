@@ -1,12 +1,14 @@
 {
   "name": "provider-openai-compatible",
-  "version": "2.6.10",
+  "version": "2.7.0",
   "api_version": "provider-adapter-v2",
   "providers": [
     "openai-compatible",
     "azure-openai-v1",
     "github-copilot",
-    "gemini-openai-compatible"
+    "gemini-openai-compatible",
+    "azure-openai-dated",
+    "glm-coding"
   ],
   "capabilities": [
     "chat",
@@ -142,6 +144,13 @@
     "github-copilot": "https://api.{plan}.githubcopilot.com"
   },
   "config_schema": {
+    "azure-openai-dated": {
+      "api_version": {
+        "syntax": "api_version_date",
+        "default": "2024-10-21",
+        "description": "The Azure OpenAI API version sent as ?api-version=, a date with an optional -preview suffix such as 2025-04-01-preview. Defaults to 2024-10-21. A row on Azure's unversioned v1 surface uses the azure-openai-v1 family instead."
+      }
+    },
     "github-copilot": {
       "plan": {
         "syntax": {
@@ -157,10 +166,12 @@
     }
   },
   "user_agent": {
-    "github-copilot": "GitHubCopilotChat/0.43.0"
+    "github-copilot": "GitHubCopilotChat/0.43.0",
+    "glm-coding": "opencode/1.15.6"
   },
   "subscription_quota_families": [
-    "github-copilot"
+    "github-copilot",
+    "glm-coding"
   ],
   "permissions": {
     "network": false,

@@ -237,9 +237,17 @@ fn the_family_endpoint_fills_without_parameters_and_authorizes_the_descriptor() 
 fn the_shipped_manifest_declares_the_family_the_arm_and_the_endpoint() {
     let manifest = shipped_manifest();
     assert_eq!(manifest.validate(), Ok(()));
+    // The T9 families follow it (`openai_compatible_t9_v1`).
     assert_eq!(
         manifest.providers,
-        ["openai-compatible", "azure-openai-v1", "github-copilot", FAMILY]
+        [
+            "openai-compatible",
+            "azure-openai-v1",
+            "github-copilot",
+            FAMILY,
+            "azure-openai-dated",
+            "glm-coding"
+        ]
     );
     assert_eq!(
         manifest.auth_arms,

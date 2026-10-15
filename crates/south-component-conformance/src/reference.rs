@@ -67,6 +67,82 @@ const COPILOT_HEADERS: [(&str, &str); 6] = [
 /// `Authorization: Bearer` and in `x-goog-api-key` (boundary §13.7 item 6).
 const GEMINI_OPENAI_COMPATIBLE: &str = "gemini-openai-compatible";
 
+// -- the glm-coding and azure-openai-dated families --------------------------
+
+/// The Z.ai GLM Coding Plan family.
+///
+/// Design record `docs/design/2026-10-15-openai-compatible-t9.md` §3.1, transcribed from the
+/// host's native `glm_coding` arm.
+pub mod glm_coding {
+    /// The family, as a host's provider rows name it.
+    pub const FAMILY: &str = "glm-coding";
+    /// The Chat Completions path below the operator's endpoint (an origin such as
+    /// `https://api.z.ai`): native `build_upstream_url`'s `GlmCoding` arm, the path that is not
+    /// `/v1/messages`.
+    pub const CHAT_PATH: &str = "/api/coding/paas/v4/chat/completions";
+    /// The user-agent the package declares for [`FAMILY`] (manifest `user_agent`): native
+    /// `GLM_CODING_IMPERSONATION_UA`, an `OpenCode` release that Z.ai's Coding Plan whitelists.
+    ///
+    /// The component cannot send it: `user-agent` is reserved, and the host fills the controlled
+    /// slot from the manifest. Here so a test can pin the manifest to the host's value.
+    pub const USER_AGENT: &str = "opencode/1.15.6";
+}
+
+/// Azure `OpenAI`'s dated, deployment-addressed surface.
+///
+/// Design record `docs/design/2026-10-15-openai-compatible-t9.md` §3.2, transcribed from the
+/// host's native `azure_openai` arm for any effective API version other than `v1` (which is
+/// `azure-openai-v1`).
+pub mod azure_openai_dated {
+    /// The family, as a host's provider rows name it.
+    pub const FAMILY: &str = "azure-openai-dated";
+    /// The configuration key that carries the API version (`ProviderConfig.declared`).
+    pub const API_VERSION_KEY: &str = "api_version";
+    /// The API version when the operator sets none: native `AZURE_OPENAI_DEFAULT_API_VERSION`.
+    /// The manifest declares the same value as the key's `default`.
+    pub const DEFAULT_API_VERSION: &str = "2024-10-21";
+}
+
+/// Whether `value` is a dated API version, `YYYY-MM-DD` with an optional `-preview`: the
+/// `api_version_date` syntax the manifest declares for [`azure_openai_dated::API_VERSION_KEY`].
+/// A host validates the value before it reaches the component; this keeps a host that skips the
+/// check from putting anything else in the query.
+fn is_dated_api_version(value: &str) -> bool {
+    let date = value.strip_suffix("-preview").unwrap_or(value);
+    date.len() == 10
+        && date.bytes().enumerate().all(|(index, byte)| match index {
+            4 | 7 => byte == b'-',
+            _ => byte.is_ascii_digit(),
+        })
+}
+
+/// The dated Azure `OpenAI` URL: `{base}/openai/deployments/{deployment}/chat/completions
+/// ?api-version={version}`, as native `build_upstream_url` builds it, with the request's model
+/// (the host's upstream model, the deployment name) as the deployment segment.
+fn azure_dated_url(request: &ChatRequest, config: &ProviderConfig) -> ComponentResultV1<String> {
+    let version = config
+        .declared
+        .get(azure_openai_dated::API_VERSION_KEY)
+        .unwrap_or(azure_openai_dated::DEFAULT_API_VERSION);
+    if !is_dated_api_version(version) {
+        return Err(internal(format!(
+            "the `{}` configuration value is not a dated API version",
+            azure_openai_dated::API_VERSION_KEY
+        )));
+    }
+    if request.model.is_empty() {
+        return Err(capability(
+            "Azure OpenAI addresses the deployment in the URL path, so a request without a model \
+             has no deployment to send to",
+        ));
+    }
+    Ok(format!(
+        "{}/openai/deployments/{}/chat/completions?api-version={version}",
+        config.base_url.as_str().trim_end_matches('/'),
+        crate::url_segment::encode(&request.model)
+    ))
+}
+
 // -- translation -------------------------------------------------------------
 
 fn finish_reason(raw: Option<&str>) -> Option<FinishReason> {
@@ -725,7 +801,7 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-openai-compatible".to_owned(),
-            version: "2.6.10".to_owned(),
+            version: "2.7.0".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
@@ -760,12 +836,18 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
             ));
         }
         let copilot = config.provider == GITHUB_COPILOT;
-        // Copilot serves Chat Completions straight off its root: the kernel's `resolve` would add
-        // `/v1` to an origin-only endpoint.
-        let url = if copilot {
-            format!("{}/chat/completions", config.base_url.as_str())
-        } else {
-            config.base_url.resolve(ProviderApi::ChatCompletions)
+        let url = match config.provider.as_str() {
+            // Copilot serves Chat Completions straight off its root: the kernel's `resolve` would
+            // add `/v1` to an origin-only endpoint.
+            GITHUB_COPILOT => format!("{}/chat/completions", config.base_url.as_str()),
+            // The Coding Plan path sits below the operator's origin, as native appends it.
+            glm_coding::FAMILY => format!(
+                "{}{}",
+                config.base_url.as_str().trim_end_matches('/'),
+                glm_coding::CHAT_PATH
+            ),
+            azure_openai_dated::FAMILY => azure_dated_url(request, config)?,
+            _ => config.base_url.resolve(ProviderApi::ChatCompletions),
         };
         let mut descriptor = HttpRequestDescriptor::new(HttpMethod::Post, url);
         let identification: &[(&str, &str)] = if copilot { &COPILOT_HEADERS } else { &[] };
@@ -786,14 +868,18 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
         // The host holds the value; this names the slot and the fixed
         // presentation selected by the trusted provider dialect.
         descriptor.auth = match (config.provider.as_str(), config.auth.clone()) {
-            ("openai-compatible" | GITHUB_COPILOT, secret) => secret.map(Auth::bearer),
-            ("azure-openai-v1", Some(secret)) => {
+            ("openai-compatible" | GITHUB_COPILOT | glm_coding::FAMILY, secret) => {
+                secret.map(Auth::bearer)
+            }
+            ("azure-openai-v1" | azure_openai_dated::FAMILY, Some(secret)) => {
                 Some(Auth::header("api-key", secret).map_err(internal)?)
             }
             (GEMINI_OPENAI_COMPATIBLE, Some(secret)) => {
                 Some(Auth::bearer_and_header("x-goog-api-key", secret).map_err(internal)?)
             }
-            ("azure-openai-v1" | GEMINI_OPENAI_COMPATIBLE, None) => None,
+            ("azure-openai-v1" | azure_openai_dated::FAMILY | GEMINI_OPENAI_COMPATIBLE, None) => {
+                None
+            }
             (dialect, _) => {
                 return Err(capability(format!("unsupported provider dialect `{dialect}`")));
             }

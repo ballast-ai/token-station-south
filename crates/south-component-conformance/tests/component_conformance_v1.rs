@@ -88,13 +88,15 @@ fn the_manifest_secret_header_rules_are_the_host_halfs() {
 fn reference_manifest() -> ComponentManifestV1 {
     ComponentManifestV1 {
         name: "provider-openai-compatible".to_owned(),
-        version: "2.6.10".to_owned(),
+        version: "2.7.0".to_owned(),
         api_version: PROVIDER_WORLD.to_owned(),
         providers: vec![
             "openai-compatible".to_owned(),
             "azure-openai-v1".to_owned(),
             "github-copilot".to_owned(),
             "gemini-openai-compatible".to_owned(),
+            "azure-openai-dated".to_owned(),
+            "glm-coding".to_owned(),
         ],
         capabilities: BTreeSet::from([
             "chat".to_owned(),
@@ -218,9 +220,10 @@ fn the_reference_implementation_passes_the_component_behavior_suite() {
     assert_eq!(credential_cases.len(), 8, "{credential_cases:?}");
 }
 
-/// The Copilot recipe and user-agent apply to their own family only: the
-/// package's other three families keep their static slot, the operator's key and
-/// no user-agent (§13.5 D2, D7; `gemini-openai-compatible` is §13.7 item 6).
+/// The Copilot recipe applies to its own family only, and each user-agent to its own family: the
+/// package's other families keep their static slot and the operator's key, and send no
+/// user-agent except `glm-coding`'s (§13.5 D2, D7; `gemini-openai-compatible` is §13.7 item 6;
+/// `glm-coding` and `azure-openai-dated` are the T9 record's).
 #[test]
 fn the_copilot_declarations_apply_to_the_github_copilot_family_only() {
     let manifest = shipped_manifest();
@@ -228,6 +231,8 @@ fn the_copilot_declarations_apply_to_the_github_copilot_family_only() {
     assert_eq!(manifest.credentials_for("openai-compatible"), None);
     assert_eq!(manifest.credentials_for("azure-openai-v1"), None);
     assert_eq!(manifest.credentials_for("gemini-openai-compatible"), None);
+    assert_eq!(manifest.credentials_for("azure-openai-dated"), None);
+    assert_eq!(manifest.credentials_for("glm-coding"), None);
 
     let instances = south_component_conformance::DeclaredInstancesV1::from_manifest(&manifest)
         .expect("the shipped manifest passes gate ①");
@@ -238,6 +243,11 @@ fn the_copilot_declarations_apply_to_the_github_copilot_family_only() {
     assert_eq!(instances.user_agent("openai-compatible"), None);
     assert_eq!(instances.user_agent("azure-openai-v1"), None);
     assert_eq!(instances.user_agent("gemini-openai-compatible"), None);
+    assert_eq!(instances.user_agent("azure-openai-dated"), None);
+    assert_eq!(
+        instances.user_agent("glm-coding").map(south_contracts::DeclaredUserAgentV1::as_str),
+        Some("opencode/1.15.6")
+    );
 }
 
 /// The pack covers every family, so `Coverage` is a real gate, and the suite
