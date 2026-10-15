@@ -1,0 +1,12 @@
+{
+  "provider_config": {
+    "provider": "ideogram-image",
+    "base_url": "https://api.reve.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "latest"
+      }
+    ]
+  }
+}

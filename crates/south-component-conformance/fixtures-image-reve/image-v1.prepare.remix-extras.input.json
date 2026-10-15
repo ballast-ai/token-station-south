@@ -1,0 +1,52 @@
+{
+  "provider_config": {
+    "provider": "reve-image",
+    "base_url": "https://api.reve.com",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "multipart": {
+      "parts": [
+        {
+          "kind": "text",
+          "name": "endpoint",
+          "value": "remix"
+        },
+        {
+          "kind": "text",
+          "name": "prompt",
+          "value": "p"
+        },
+        {
+          "kind": "file",
+          "name": "image",
+          "blob": "b0",
+          "filename": "in.png",
+          "bytes": 4096,
+          "media_type": "image/png"
+        },
+        {
+          "kind": "text",
+          "name": "test_time_scaling",
+          "value": "15"
+        },
+        {
+          "kind": "text",
+          "name": "breadcrumb",
+          "value": "job-9"
+        },
+        {
+          "kind": "text",
+          "name": "postprocessing",
+          "value": "[{\"process\": \"upscale\", \"upscale_factor\": 2}]"
+        }
+      ]
+    }
+  },
+  "context": {
+    "upstream_model": "latest",
+    "metering_required": [
+      "credits"
+    ]
+  }
+}

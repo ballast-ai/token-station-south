@@ -1,0 +1,34 @@
+{
+  "provider_config": {
+    "provider": "reve-image",
+    "base_url": "https://api.reve.com",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "multipart": {
+      "parts": [
+        {
+          "kind": "text",
+          "name": "endpoint",
+          "value": "edit"
+        },
+        {
+          "kind": "text",
+          "name": "stream",
+          "value": "true"
+        },
+        {
+          "kind": "text",
+          "name": "output_format",
+          "value": "webp"
+        }
+      ]
+    }
+  },
+  "context": {
+    "upstream_model": "latest",
+    "metering_required": [
+      "credits"
+    ]
+  }
+}

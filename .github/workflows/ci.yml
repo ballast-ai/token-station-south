@@ -48,6 +48,7 @@ jobs:
             components/image-ideogram
             components/image-minimax
             components/image-qwen
+            components/image-reve
             components/image-stability
             components/image-vertex
             components/image-xai

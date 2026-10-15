@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "streaming is not supported for Reve image generation; re-submit without `stream`"
+  }
+}

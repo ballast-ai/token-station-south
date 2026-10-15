@@ -1,0 +1,55 @@
+{
+  "descriptor": {
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "edit_instruction": "p",
+          "reference_image": {
+            "$south.ref": {
+              "blob": "b0",
+              "transform": "base64"
+            }
+          },
+          "test_time_scaling": null,
+          "version": "latest"
+        }
+      }
+    },
+    "headers": [
+      {
+        "name": "accept",
+        "value": "application/json"
+      }
+    ],
+    "method": "POST",
+    "path": "v1/image/edit"
+  },
+  "facts": {
+    "inputs": {
+      "input_image": 1,
+      "mask": 0,
+      "reference_image": 0
+    },
+    "metering_forms": [
+      "credits"
+    ],
+    "operation": "edit",
+    "requested_outputs": 1,
+    "tier": {}
+  },
+  "immutable_body_paths": [
+    "version",
+    "test_time_scaling",
+    "postprocessing"
+  ],
+  "repeat": 1,
+  "response_body_form": "json",
+  "response_elision_paths": [
+    "/image"
+  ],
+  "state": {}
+}

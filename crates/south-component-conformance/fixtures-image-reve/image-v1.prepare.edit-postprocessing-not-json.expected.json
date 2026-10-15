@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "multipart `postprocessing` field must be a JSON array (e.g. [{\"process\": \"upscale\", \"upscale_factor\": 2}])"
+  }
+}

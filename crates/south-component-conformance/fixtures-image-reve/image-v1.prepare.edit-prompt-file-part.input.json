@@ -1,0 +1,40 @@
+{
+  "provider_config": {
+    "provider": "reve-image",
+    "base_url": "https://api.reve.com",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "multipart": {
+      "parts": [
+        {
+          "kind": "text",
+          "name": "endpoint",
+          "value": "edit"
+        },
+        {
+          "kind": "file",
+          "name": "prompt",
+          "blob": "b0",
+          "filename": "p.txt",
+          "bytes": 4096,
+          "media_type": "text/plain"
+        },
+        {
+          "kind": "file",
+          "name": "image",
+          "blob": "b1",
+          "filename": "in.png",
+          "bytes": 4096,
+          "media_type": "image/png"
+        }
+      ]
+    }
+  },
+  "context": {
+    "upstream_model": "latest",
+    "metering_required": [
+      "credits"
+    ]
+  }
+}

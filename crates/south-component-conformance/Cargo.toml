@@ -163,6 +163,10 @@ name = "xai_image_sandbox_parity"
 required-features = ["sandbox"]
 
 [[test]]
+name = "reve_image_sandbox_parity"
+required-features = ["sandbox"]
+
+[[test]]
 name = "synthetic_speech_sandbox_parity"
 required-features = ["sandbox"]
 

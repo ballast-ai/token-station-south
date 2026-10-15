@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "Reve generates exactly one image per request; multipart `n` must be 1 or absent (got '01')"
+  }
+}

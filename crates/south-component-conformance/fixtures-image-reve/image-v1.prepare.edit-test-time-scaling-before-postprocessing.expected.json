@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "multipart `test_time_scaling` field value 'x' must be a number"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "invalid size 'huge', expected WxH (e.g. 1024x1024) or 'auto'"
+  }
+}

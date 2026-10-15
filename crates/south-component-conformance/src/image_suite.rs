@@ -599,10 +599,40 @@ fn response_checks(
             }
         }
         // §9.4 item 1: every required fact of every required form.
-        let model = declared_models
-            .iter()
-            .find(|model| model.model == answered.input.context.upstream_model);
-        for form in &answered.input.context.metering_required {
+        outcomes.extend(required_facts(case, answered, declared_models, metering, "succeeded"));
+    }
+    // §9.1's last column (I3-6 record §7.3): a charge without a deliverable artifact is settled
+    // from its facts alone, so every required fact must be there, `images_reported` included.
+    if let Ok(ImageOutcomeV1::ChargedFailure { metering, .. }) = &answered.outcome {
+        outcomes.extend(required_facts(
+            case,
+            answered,
+            declared_models,
+            metering,
+            "charged_failure",
+        ));
+    }
+    outcomes
+}
+
+/// `missing_meter_is_not_zero` on one outcome that settles: a failure row for each required form
+/// whose required facts (§9.1, the column of `outcome`) are not all present.
+fn required_facts(
+    case: &ImageCaseV1,
+    answered: &Answered,
+    declared_models: &[ImageModelCapabilitiesV1],
+    metering: &south_contracts::image::ImageMeteringV1,
+    outcome: &str,
+) -> Vec<OutcomeV1> {
+    let model =
+        declared_models.iter().find(|model| model.model == answered.input.context.upstream_model);
+    let charged = outcome == "charged_failure";
+    answered
+        .input
+        .context
+        .metering_required
+        .iter()
+        .filter(|form| {
             let present = match form {
                 MeteringFormV1::Tokens => model.is_some_and(|model| {
                     metering.tokens.is_some_and(|tokens| {
@@ -610,18 +640,20 @@ fn response_checks(
                     })
                 }),
                 MeteringFormV1::Credits => metering.credits.is_some(),
-                MeteringFormV1::Images | MeteringFormV1::Requests => true,
+                // Nothing was delivered, so the reported count is the only count (§9.1).
+                MeteringFormV1::Images => !charged || metering.images_reported.is_some(),
+                MeteringFormV1::Requests => true,
             };
-            if !present {
-                outcomes.push(OutcomeV1::failed(
-                    CheckV1::MissingMeterIsNotZero,
-                    &case.name,
-                    format!("`succeeded` without every required fact of the `{form:?}` form"),
-                ));
-            }
-        }
-    }
-    outcomes
+            !present
+        })
+        .map(|form| {
+            OutcomeV1::failed(
+                CheckV1::MissingMeterIsNotZero,
+                &case.name,
+                format!("`{outcome}` without every required fact of the `{form:?}` form"),
+            )
+        })
+        .collect()
 }
 
 fn evidence_is_null(metering: &south_contracts::image::ImageMeteringV1, fact: &str) -> bool {

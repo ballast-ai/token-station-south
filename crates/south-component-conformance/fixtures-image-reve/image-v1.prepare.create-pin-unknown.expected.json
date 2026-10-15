@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "capability",
+    "http_status": 400,
+    "message": "the route pins an unknown Reve endpoint; 'endpoint' must be 'create', 'edit' or 'remix'"
+  }
+}

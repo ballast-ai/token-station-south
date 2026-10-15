@@ -1,0 +1,57 @@
+{
+  "descriptor": {
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "aspect_ratio": "3:2",
+          "breadcrumb": "job-42",
+          "postprocessing": [
+            {
+              "process": "upscale",
+              "upscale_factor": 2
+            }
+          ],
+          "prompt": "a red fox",
+          "test_time_scaling": 3,
+          "version": "latest"
+        }
+      }
+    },
+    "headers": [
+      {
+        "name": "accept",
+        "value": "application/json"
+      }
+    ],
+    "method": "POST",
+    "path": "v1/image/create"
+  },
+  "facts": {
+    "inputs": {
+      "input_image": 0,
+      "mask": 0,
+      "reference_image": 0
+    },
+    "metering_forms": [
+      "credits"
+    ],
+    "operation": "generate",
+    "requested_outputs": 1,
+    "tier": {}
+  },
+  "immutable_body_paths": [
+    "version",
+    "test_time_scaling",
+    "postprocessing"
+  ],
+  "repeat": 1,
+  "response_body_form": "json",
+  "response_elision_paths": [
+    "/image"
+  ],
+  "state": {}
+}

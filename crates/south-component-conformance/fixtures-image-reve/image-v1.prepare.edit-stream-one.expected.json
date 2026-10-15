@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "streaming /v1/images/edits (stream=true) is not supported for Reve"
+  }
+}

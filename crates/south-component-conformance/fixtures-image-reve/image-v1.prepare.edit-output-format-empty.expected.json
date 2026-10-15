@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "output_format '' is not supported on the OpenAI surface for Reve (JSON mode always returns PNG b64_json); use the native /v1/image/* endpoints with an `Accept: image/` header for binary formats"
+  }
+}

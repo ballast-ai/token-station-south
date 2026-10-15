@@ -1,0 +1,8 @@
+{
+  "prepare_case": "image-v1.prepare.create-basic",
+  "response": {
+    "status": 200,
+    "body_base64": "PGh0bWw+dXBzdHJlYW0gcHJveHkgZXJyb3I8L2h0bWw+",
+    "content_type": "text/html"
+  }
+}

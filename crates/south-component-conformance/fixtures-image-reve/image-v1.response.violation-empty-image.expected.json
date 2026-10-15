@@ -1,0 +1,14 @@
+{
+  "error": {
+    "code": "content_policy",
+    "http_status": 400,
+    "message": "Reve flagged this request as a content policy violation; the upstream still metered credits for the attempt and the gateway billed them."
+  },
+  "metering": {
+    "credits": "30",
+    "images_reported": null,
+    "tokens": null,
+    "upstream_cost": null
+  },
+  "outcome": "charged_failure"
+}
