@@ -1,0 +1,26 @@
+{
+  "method": "POST",
+  "url": "https://aiplatform.googleapis.com/v1/projects/test-project/locations/global/publishers/google/models/gemini-3.8-flash:generateContent",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "auth": {
+    "scheme": "bearer",
+    "secret": "provider_api_key"
+  },
+  "body": {
+    "contents": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "text": "hi"
+          }
+        ]
+      }
+    ],
+    "generationConfig": {
+      "maxOutputTokens": 16
+    }
+  }
+}

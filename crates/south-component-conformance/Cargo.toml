@@ -55,6 +55,10 @@ name = "gemini_sandbox_parity_v1"
 required-features = ["sandbox"]
 
 [[test]]
+name = "vertex_sandbox_parity_v1"
+required-features = ["sandbox"]
+
+[[test]]
 name = "bedrock_converse_sandbox_parity_v1"
 required-features = ["sandbox"]
 

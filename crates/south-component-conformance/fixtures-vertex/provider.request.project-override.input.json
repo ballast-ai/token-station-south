@@ -1,0 +1,38 @@
+{
+  "provider_config": {
+    "provider": "vertex-ai",
+    "base_url": "https://us-central1-aiplatform.googleapis.com",
+    "auth": "provider_api_key",
+    "declared": {
+      "project": "override-project",
+      "project_id": "proj-a",
+      "region": "us-central1"
+    },
+    "models": [
+      {
+        "model": "gemini-2.5-flash",
+        "tool": true,
+        "vision": true,
+        "json_schema": true,
+        "context_window": 1048576,
+        "supported_parameters": [
+          "stop",
+          "temperature",
+          "top_p"
+        ]
+      }
+    ]
+  },
+  "chat_request": {
+    "model": "gemini-2.5-flash",
+    "messages": [
+      {
+        "role": "user",
+        "content": "hi"
+      }
+    ],
+    "sampling": {
+      "max_output_tokens": 16
+    }
+  }
+}

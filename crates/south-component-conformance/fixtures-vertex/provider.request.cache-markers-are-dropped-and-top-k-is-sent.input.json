@@ -1,0 +1,123 @@
+{
+  "provider_config": {
+    "provider": "vertex-ai",
+    "base_url": "https://us-central1-aiplatform.googleapis.com",
+    "auth": "provider_api_key",
+    "declared": {
+      "project_id": "test-project",
+      "region": "us-central1"
+    },
+    "models": [
+      {
+        "model": "gemini-2.5-pro",
+        "tool": true,
+        "vision": true,
+        "json_schema": true,
+        "context_window": 1000000,
+        "supported_parameters": [
+          "stop",
+          "temperature",
+          "top_p"
+        ]
+      }
+    ]
+  },
+  "chat_request": {
+    "model": "gemini-2.5-pro",
+    "messages": [
+      {
+        "role": "system",
+        "content": [
+          {
+            "type": "text",
+            "text": "Rules.",
+            "cache_control": {
+              "type": "ephemeral"
+            }
+          },
+          {
+            "type": "text",
+            "text": "More rules."
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "a",
+            "cache_control": {
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "https://x.test/i.png"
+            },
+            "cache_control": {
+              "type": "ephemeral"
+            }
+          },
+          {
+            "type": "text",
+            "text": "b"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "tool_calls": [
+          {
+            "id": "c1",
+            "name": "get_weather",
+            "arguments": "{\"city\":\"Beijing\"}"
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "c1",
+        "content": [
+          {
+            "type": "text",
+            "text": "18C"
+          },
+          {
+            "type": "text",
+            "text": "sunny",
+            "cache_control": {
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          }
+        ]
+      }
+    ],
+    "tools": [
+      {
+        "name": "get_weather",
+        "description": "Look up weather",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "city": {
+              "type": "string"
+            }
+          }
+        },
+        "cache_control": {
+          "type": "ephemeral",
+          "ttl": "1h"
+        }
+      }
+    ],
+    "sampling": {
+      "temperature": 0.2,
+      "max_output_tokens": 512,
+      "top_k": 40
+    }
+  }
+}

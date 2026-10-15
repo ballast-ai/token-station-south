@@ -15,7 +15,7 @@ mod host_range;
 
 /// The official components this repository ships. Named, so that an empty or
 /// mistyped scan below cannot pass over nothing.
-const OFFICIAL_COMPONENTS: [&str; 37] = [
+const OFFICIAL_COMPONENTS: [&str; 38] = [
     "embeddings-gemini",
     "embeddings-openai-compatible",
     "embeddings-vertex",
@@ -34,6 +34,7 @@ const OFFICIAL_COMPONENTS: [&str; 37] = [
     "provider-kiro",
     "provider-openai-compatible",
     "provider-openai-responses",
+    "provider-vertex",
     "speech-azure",
     "speech-elevenlabs",
     "speech-groq",
@@ -1922,6 +1923,47 @@ fn image_vertex_declares_media_2_the_vertex_recipe_and_the_media_2_runtime() {
     assert!(matches!(
         compatibility_admits(&manifest, &media_1_only),
         Err(CompatibilityMismatchV2::Contract { declared: 2, .. })
+    ));
+}
+
+/// `provider-vertex` (design record `2026-10-15-provider-vertex.md` §3) starts at 1.0.0 in the
+/// provider world, family `vertex-ai` (VX-Q2), `bearer` only, `provider-gemini`'s capabilities. Its
+/// config keys and `credentials` section are `image-vertex`'s, so one provider row and one
+/// credential serve every Vertex package. It declares the oldest runtime that admits its
+/// declarations (record §7): `north_request_passthrough` is a 0.60.0 manifest field, which an older
+/// runtime refuses as unknown, so 0.60.0; the minted slot and the `vertex_sa` recipe are older.
+#[test]
+fn provider_vertex_declares_the_vertex_recipe_and_the_runtime_of_its_newest_declaration() {
+    let read = |name: &str| -> ComponentManifestV1 {
+        serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap()
+    };
+    let (manifest, image) = (read("provider-vertex"), read("image-vertex"));
+    assert_eq!(manifest.version, "1.0.0", "unpublished, no version move");
+    assert_eq!(manifest.api_version, south_provider_api::PROVIDER_WORLD);
+    assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["vertex-ai"]);
+    assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer"]);
+    assert_eq!(manifest.capabilities, read("provider-gemini").capabilities);
+    assert_eq!(
+        manifest.declared_keys("vertex-ai"),
+        BTreeSet::from(["project", "project_id", "region"])
+    );
+    assert_eq!(manifest.credentials, image.credentials);
+    assert_eq!(manifest.config_schema["vertex-ai"], image.config_schema["vertex-ai-image"]);
+    assert!(manifest.north_request_passthrough.contains_key("vertex-ai"));
+    assert_eq!(manifest.compatibility.south_runtime, "0.60.0");
+    assert!(manifest.compatibility.contracts.is_empty());
+    assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
+    let mut on_059 = host_range::host_range();
+    "0.59.0".clone_into(&mut on_059.south_runtime);
+    assert!(matches!(
+        compatibility_admits(&manifest, &on_059),
+        Err(CompatibilityMismatchV2::SouthRuntimeAboveHost { .. })
     ));
 }
 
