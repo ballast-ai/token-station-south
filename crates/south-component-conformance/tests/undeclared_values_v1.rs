@@ -77,9 +77,17 @@ impl ProviderComponentV1 for Reader {
     ) -> ComponentResultV1<HttpRequestDescriptor> {
         let mut built = OpenAiCompatibleReferenceV1.build_http_request(request, config)?;
         let read = match self.0 {
-            Reads::AnyDeclaredKey => config.declared.iter().next().map(|(_, value)| value),
-            Reads::AnyHostValue => request.host_values.iter().next().map(|(_, value)| value),
-            Reads::OnlyTheDeclaredTenant => config.declared.get("tenant"),
+            // Every value, not the first: a case whose own declared keys sort before the
+            // injected one (`azure-openai-dated`'s `api_version`) must still show the read.
+            Reads::AnyDeclaredKey => {
+                let values: Vec<String> =
+                    config.declared.iter().map(|(_, value)| value.to_string()).collect();
+                (!values.is_empty()).then(|| values.join(","))
+            }
+            Reads::AnyHostValue => {
+                request.host_values.iter().next().map(|(_, value)| value.to_string())
+            }
+            Reads::OnlyTheDeclaredTenant => config.declared.get("tenant").map(str::to_owned),
         };
         if let Some(value) = read {
             built.body.get_or_insert_with(Default::default)["tenant"] = value.into();
