@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "Gemini TTS on Vertex cannot emit response_format='mp3'. Supported: wav, pcm."
+  }
+}

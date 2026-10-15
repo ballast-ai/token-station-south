@@ -20,10 +20,11 @@
 //! - **Voice**: the client's string (else `""`), trimmed and lower-cased, is matched: `""` and the
 //!   eight names `alloy`, `echo`, `fable`, `onyx`, `nova`, `shimmer`, `ash`, `sage` fold to `Kore`;
 //!   anything else is sent as the client wrote it (native folds only eight, record §8 item 2).
-//! - **Format** (Q7, 1.0.0): lower-cased; absent or `wav` is WAV, `pcm` raw PCM, and `mp3`, `opus`,
-//!   `aac` and `flac` are **silently served as WAV**, as native does for the dual run (a later
-//!   minor refuses them, record §3.4); any other string is refused with native's text. The upstream
-//!   always returns 24 kHz mono 16-bit PCM, so nothing is sent for the format.
+//! - **Format** (Q7, 1.1.0): lower-cased; absent or `wav` is WAV, `pcm` raw PCM; `mp3`, `opus`,
+//!   `aac` and `flac`, which native silently serves as WAV (and 1.0.x did for the dual run), are
+//!   refused before dispatch (record §3.4; lv moved 1.1.0 into 0.66.0 on 2026-10-15); any other
+//!   string is refused with native's text without its parenthesis. The upstream always returns
+//!   24 kHz mono 16-bit PCM, so nothing is sent for the format.
 //! - **Immutable paths** `contents`, `generationConfig.responseModalities` (native `body_rules`).
 //! - **Response**: `json` with every `inlineData.data` elided. On a 2xx: a body that is not a JSON
 //!   object is `unknown`; the first part of `candidates[0].content.parts` that has an
@@ -54,7 +55,7 @@ use crate::{ComponentResultV1, SpeechComponentV1, SpeechDeliveryV1, SpeechOutcom
 /// The package name this reference is published as.
 pub const NAME: &str = "speech-vertex";
 /// The package version.
-pub const VERSION: &str = "1.0.1";
+pub const VERSION: &str = "1.1.0";
 /// The world this reference exports.
 pub const WORLD: &str = "speech-adapter-v1";
 /// The family, as a host's speech bindings name it.
@@ -84,12 +85,15 @@ fn format_word(body: &Map<String, Value>) -> ComponentResultV1<&'static str> {
             Err(invalid("'response_format' is longer than the gateway accepts"))
         }
         Some(Value::String(format)) => match format.to_lowercase().as_str() {
-            // Q7 (lv 2026-09-30): served as WAV until the dual run is accepted (record §3.4).
-            "wav" | "mp3" | "opus" | "aac" | "flac" => Ok("wav"),
+            "wav" => Ok("wav"),
             "pcm" => Ok("pcm"),
+            // Q7 (lv 2026-09-30): refused in 1.1.0, where native serves them as WAV (record §3.4).
+            transcoded @ ("mp3" | "opus" | "aac" | "flac") => Err(invalid(format!(
+                "Gemini TTS on Vertex cannot emit response_format='{transcoded}'. Supported: wav, pcm."
+            ))),
             other => Err(invalid(format!(
                 "Unknown response_format='{other}'. Gemini TTS on Vertex emits 24kHz mono PCM; \
-                 supported: wav, pcm (mp3/opus/aac/flac degrade to wav)."
+                 supported: wav, pcm."
             ))),
         },
         _ => Ok("wav"),

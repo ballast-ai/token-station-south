@@ -1,7 +1,7 @@
 //! `south.speech-component.v1` against the `speech-vertex` native reference and its shipped pack,
 //! and the behaviours of design record `2026-10-15-speech-v4-tts.md` §3 pinned by name: the
 //! configuration refusals (500s, outside the pack), the configuration and credentials copied from
-//! `image-vertex`, the Q7 downgrade, the WAV container and the audio-less answers.
+//! `image-vertex`, the Q7 refusal, the WAV container and the audio-less answers.
 
 use serde_json::{Value, json};
 use south_component_conformance::reference_vertex_speech::VertexSpeechReferenceV1;
@@ -173,27 +173,46 @@ fn a_configuration_error_is_a_500_before_any_request_refusal() {
     assert_eq!(error["http_status"], 400, "{error}");
 }
 
-/// Record §3.4 (Q7, 1.0.0): mp3, opus, aac and flac are served as WAV, any case; an unknown value
-/// is refused with native's text.
+/// Record §3.4 (Q7, 1.1.0): mp3, opus, aac and flac, which native serves as WAV, are refused before
+/// dispatch in any case, naming the lower-cased value; an absent format is still WAV, and an
+/// unknown value is refused with native's text without its parenthesis.
 #[test]
-fn q7_transcode_only_formats_degrade_to_wav() {
-    for format in ["mp3", "MP3", "opus", "aac", "flac", "wav", "Wav"] {
-        let prepared = prepare(&located(), &json!({ "input": "x", "response_format": format }))
-            .unwrap_or_else(|error| panic!("{format}: {error}"));
-        assert_eq!(prepared["facts"]["output_media_type"], "audio/wav", "{format}");
-        assert_eq!(prepared["state"]["format"], "wav", "{format}");
-    }
-    let prepared = prepare(&located(), &json!({ "input": "x", "response_format": "pcm" })).unwrap();
-    assert_eq!(prepared["facts"]["output_media_type"], "audio/L16; rate=24000");
-    for format in ["ogg", "pcm16", "", " wav"] {
+fn q7_transcode_only_formats_are_refused() {
+    for format in ["mp3", "MP3", "opus", "Aac", "flac"] {
         let error = prepare(&located(), &json!({ "input": "x", "response_format": format }))
             .expect_err(format);
-        assert!(
-            error["message"]
-                .as_str()
-                .unwrap()
-                .ends_with("supported: wav, pcm (mp3/opus/aac/flac degrade to wav)."),
-            "{format}: {error}"
+        assert_eq!(error["code"], "invalid_request", "{format}");
+        assert_eq!(error["http_status"], 400, "{format}");
+        assert_eq!(
+            error["message"],
+            format!(
+                "Gemini TTS on Vertex cannot emit response_format='{}'. Supported: wav, pcm.",
+                format.to_lowercase()
+            ),
+            "{format}"
+        );
+    }
+    for request in [json!({ "input": "x" }), json!({ "input": "x", "response_format": "wav" })] {
+        let prepared =
+            prepare(&located(), &request).unwrap_or_else(|error| panic!("{request}: {error}"));
+        assert_eq!(prepared["facts"]["output_media_type"], "audio/wav", "{request}");
+        assert_eq!(prepared["state"]["format"], "wav", "{request}");
+    }
+    let prepared = prepare(&located(), &json!({ "input": "x", "response_format": "Wav" })).unwrap();
+    assert_eq!(prepared["state"]["format"], "wav");
+    let prepared = prepare(&located(), &json!({ "input": "x", "response_format": "pcm" })).unwrap();
+    assert_eq!(prepared["facts"]["output_media_type"], "audio/L16; rate=24000");
+    for format in ["ogg", "pcm16", "", " wav", " mp3"] {
+        let error = prepare(&located(), &json!({ "input": "x", "response_format": format }))
+            .expect_err(format);
+        assert_eq!(
+            error["message"],
+            format!(
+                "Unknown response_format='{}'. Gemini TTS on Vertex emits 24kHz mono PCM; \
+                 supported: wav, pcm.",
+                format.to_lowercase()
+            ),
+            "{format}"
         );
     }
 }
@@ -205,11 +224,6 @@ fn the_container_follows_the_format() {
     for (format, media_type, container) in [
         (
             "wav",
-            "audio/wav",
-            Some(SpeechContainerV1::WavPcmS16le { sample_rate: 24_000, channels: 1 }),
-        ),
-        (
-            "mp3",
             "audio/wav",
             Some(SpeechContainerV1::WavPcmS16le { sample_rate: 24_000, channels: 1 }),
         ),
@@ -255,8 +269,8 @@ fn audio_less_answers_follow_gi_q5() {
 /// A Vertex-specific way to break the reference.
 #[derive(Clone, Copy, Debug)]
 enum Mutation {
-    /// Q7 dropped early: mp3, opus, aac and flac refused in 1.0.0.
-    RefuseTranscodeFormats,
+    /// Q7 undone: mp3, opus, aac and flac served as WAV again, as 1.0.x did.
+    ServeTranscodeFormats,
     /// The container left off a WAV delivery.
     NoContainer,
     /// A blocked prompt answered `unknown` rather than `rejected`.
@@ -282,17 +296,13 @@ impl SpeechComponentV1 for Mutant {
         context: &SpeechCallContextV1,
     ) -> ComponentResultV1<PreparedSpeechCallV1> {
         let format = request.pointer("/json/response_format").and_then(Value::as_str);
-        if matches!(self.0, Mutation::RefuseTranscodeFormats)
+        if matches!(self.0, Mutation::ServeTranscodeFormats)
             && let Some(format) = format.map(str::to_lowercase)
             && ["mp3", "opus", "aac", "flac"].contains(&format.as_str())
         {
-            return Err(token_station_protocol::ErrorEnvelope::new(
-                ErrorCode::InvalidRequest,
-                400,
-                format!(
-                    "Gemini TTS on Vertex cannot emit response_format='{format}'. Supported: wav, pcm."
-                ),
-            ));
+            let mut request = request.clone();
+            request["json"]["response_format"] = json!("wav");
+            return REFERENCE.prepare(config, &request, context);
         }
         REFERENCE.prepare(config, request, context)
     }
@@ -329,18 +339,18 @@ fn every_vertex_mutation_turns_the_pack_red() {
     let pack = support::pack(&manifest);
     for (mutation, cases) in [
         (
-            Mutation::RefuseTranscodeFormats,
+            Mutation::ServeTranscodeFormats,
             &[
-                "speech-v1.prepare.format-mp3-degrades-to-wav",
-                "speech-v1.prepare.format-mp3-upper-degrades-to-wav",
-                "speech-v1.prepare.format-opus-degrades-to-wav",
-                "speech-v1.prepare.format-aac-degrades-to-wav",
-                "speech-v1.prepare.format-flac-degrades-to-wav",
+                "speech-v1.prepare.format-mp3-refused",
+                "speech-v1.prepare.format-mp3-upper-refused",
+                "speech-v1.prepare.format-opus-refused",
+                "speech-v1.prepare.format-aac-refused",
+                "speech-v1.prepare.format-flac-refused",
             ][..],
         ),
         (
             Mutation::NoContainer,
-            &["speech-v1.response.native", "speech-v1.response.mp3-served-as-wav"][..],
+            &["speech-v1.response.native", "speech-v1.response.audio-in-second-part"][..],
         ),
         (Mutation::BlockedAsUnknown, &["speech-v1.response.prompt-blocked"][..]),
     ] {
