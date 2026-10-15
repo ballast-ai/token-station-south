@@ -1,0 +1,21 @@
+{
+  "provider_config": {
+    "provider": "reve-image",
+    "base_url": "https://api.reve.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "latest"
+      },
+      {
+        "model": "latest-fast"
+      },
+      {
+        "model": "reve-create@20250915"
+      },
+      {
+        "model": "reve-remix@20250915"
+      }
+    ]
+  }
+}

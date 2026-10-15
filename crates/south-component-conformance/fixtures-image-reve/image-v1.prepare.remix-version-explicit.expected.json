@@ -1,0 +1,56 @@
+{
+  "descriptor": {
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "prompt": "p",
+          "reference_images": [
+            {
+              "$south.ref": {
+                "blob": "b0",
+                "transform": "base64"
+              }
+            }
+          ],
+          "version": "reve-remix@20250915"
+        }
+      }
+    },
+    "headers": [
+      {
+        "name": "accept",
+        "value": "application/json"
+      }
+    ],
+    "method": "POST",
+    "path": "v1/image/remix"
+  },
+  "facts": {
+    "inputs": {
+      "input_image": 0,
+      "mask": 0,
+      "reference_image": 1
+    },
+    "metering_forms": [
+      "credits"
+    ],
+    "operation": "edit",
+    "requested_outputs": 1,
+    "tier": {}
+  },
+  "immutable_body_paths": [
+    "version",
+    "test_time_scaling",
+    "postprocessing"
+  ],
+  "repeat": 1,
+  "response_body_form": "json",
+  "response_elision_paths": [
+    "/image"
+  ],
+  "state": {}
+}

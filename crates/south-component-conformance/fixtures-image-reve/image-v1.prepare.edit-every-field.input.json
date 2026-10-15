@@ -1,0 +1,97 @@
+{
+  "provider_config": {
+    "provider": "reve-image",
+    "base_url": "https://api.reve.com",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "multipart": {
+      "parts": [
+        {
+          "kind": "text",
+          "name": "endpoint",
+          "value": "edit"
+        },
+        {
+          "kind": "text",
+          "name": "prompt",
+          "value": " add a scarf "
+        },
+        {
+          "kind": "file",
+          "name": "image",
+          "blob": "b0",
+          "filename": "in.png",
+          "bytes": 4096,
+          "media_type": "image/png"
+        },
+        {
+          "kind": "text",
+          "name": "n",
+          "value": "1"
+        },
+        {
+          "kind": "text",
+          "name": "stream",
+          "value": "false"
+        },
+        {
+          "kind": "text",
+          "name": "output_format",
+          "value": "png"
+        },
+        {
+          "kind": "text",
+          "name": "size",
+          "value": "auto"
+        },
+        {
+          "kind": "text",
+          "name": "version",
+          "value": "reve-edit@20250915"
+        },
+        {
+          "kind": "text",
+          "name": "test_time_scaling",
+          "value": "3"
+        },
+        {
+          "kind": "text",
+          "name": "postprocessing",
+          "value": "[{\"process\":\"upscale\"}]"
+        },
+        {
+          "kind": "text",
+          "name": "breadcrumb",
+          "value": " job-7 "
+        },
+        {
+          "kind": "text",
+          "name": "aspect_ratio",
+          "value": "16:9"
+        },
+        {
+          "kind": "text",
+          "name": "response_format",
+          "value": "url"
+        },
+        {
+          "kind": "text",
+          "name": "model",
+          "value": "reve/reve-edit"
+        },
+        {
+          "kind": "text",
+          "name": "user",
+          "value": "u-1"
+        }
+      ]
+    }
+  },
+  "context": {
+    "upstream_model": "latest",
+    "metering_required": [
+      "credits"
+    ]
+  }
+}

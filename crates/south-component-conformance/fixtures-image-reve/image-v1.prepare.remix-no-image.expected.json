@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "Reve remix takes between 1 and 6 `image` parts (got 0)"
+  }
+}

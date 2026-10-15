@@ -1,0 +1,14 @@
+{
+  "prepare_case": "image-v1.prepare.create-basic",
+  "response": {
+    "status": 200,
+    "body": {
+      "image": "",
+      "version": "reve-remix@20250915",
+      "content_violation": true,
+      "request_id": "rsid-v",
+      "credits_used": 30,
+      "credits_remaining": 970
+    }
+  }
+}

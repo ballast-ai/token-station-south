@@ -1,0 +1,17 @@
+{
+  "provider_config": {
+    "provider": "reve-image",
+    "base_url": "https://api.reve.com"
+  },
+  "request": {
+    "json": {
+      "prompt": "p"
+    }
+  },
+  "context": {
+    "upstream_model": "latest",
+    "metering_required": [
+      "credits"
+    ]
+  }
+}

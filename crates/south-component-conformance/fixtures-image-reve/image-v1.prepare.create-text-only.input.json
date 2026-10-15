@@ -1,0 +1,18 @@
+{
+  "provider_config": {
+    "provider": "reve-image",
+    "base_url": "https://api.reve.com",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "json": {
+      "prompt": "a lighthouse at dusk"
+    }
+  },
+  "context": {
+    "upstream_model": "latest-fast",
+    "metering_required": [
+      "credits"
+    ]
+  }
+}

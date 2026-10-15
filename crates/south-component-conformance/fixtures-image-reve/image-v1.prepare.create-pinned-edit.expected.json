@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "this model is a Reve edit/remix model; /v1/images/generations only accepts Reve create models. Use /v1/images/edits or the native /v1/image/edit | /v1/image/remix endpoints."
+  }
+}

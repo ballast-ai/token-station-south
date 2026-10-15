@@ -15,7 +15,7 @@ mod host_range;
 
 /// The official components this repository ships. Named, so that an empty or
 /// mistyped scan below cannot pass over nothing.
-const OFFICIAL_COMPONENTS: [&str; 39] = [
+const OFFICIAL_COMPONENTS: [&str; 40] = [
     "embeddings-gemini",
     "embeddings-openai-compatible",
     "embeddings-vertex",
@@ -24,6 +24,7 @@ const OFFICIAL_COMPONENTS: [&str; 39] = [
     "image-ideogram",
     "image-minimax",
     "image-qwen",
+    "image-reve",
     "image-stability",
     "image-vertex",
     "image-xai",
@@ -2000,6 +2001,32 @@ fn provider_vertex_declares_the_vertex_recipe_and_the_runtime_of_its_newest_decl
         compatibility_admits(&manifest, &on_059),
         Err(CompatibilityMismatchV2::SouthRuntimeAboveHost { .. })
     ));
+}
+
+/// `image-reve` (I3-6, design record `2026-10-13-image-i3-6-reve.md` §1) starts at 1.0.0 in the
+/// image world, family `reve-image` (RV-Q6), no config keys, `bearer` only (the native arm sends
+/// `Authorization: Bearer`), `generate` and `edit` (RV-Q1), and `contracts` `{image: 1, media: 1}`:
+/// the `credits` form and `charged_failure` exist since the world shipped (0.52.0) and it names no
+/// media word past 1, so it declares the oldest runtime that admits its declarations, 0.57.0
+/// (`canonical_ir` 4), as `image-azure` and `image-ideogram` do, and a media 1 host admits it.
+#[test]
+fn image_reve_declares_media_1_and_the_runtime_of_the_record() {
+    let manifest: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(repo_root().join("components/image-reve/manifest.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(manifest.version, "1.0.0", "unpublished, no version move");
+    assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
+    assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["reve-image"]);
+    assert!(manifest.declared_keys("reve-image").is_empty());
+    assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer"]);
+    assert_eq!(manifest.compatibility.contracts.get("media"), Some(&1));
+    assert_eq!(manifest.compatibility.contracts.get("image"), Some(&1));
+    assert_eq!(manifest.compatibility.south_runtime, "0.57.0");
+    assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
+    let mut media_1_only = host_range::host_range();
+    media_1_only.contracts.insert("media".to_owned(), BTreeSet::from([1]));
+    assert_eq!(compatibility_admits(&manifest, &media_1_only), Ok(()));
 }
 
 /// KC1 record §5: the two Anthropic-family packages read the host's per-tenant end-user hash

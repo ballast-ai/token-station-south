@@ -1,0 +1,23 @@
+{
+  "provider_config": {
+    "provider": "reve-image",
+    "base_url": "https://api.reve.com",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "json": {
+      "prompt": "p",
+      "test_time_scaling": 2.5,
+      "postprocessing": "upscale",
+      "breadcrumb": {
+        "job": 7
+      }
+    }
+  },
+  "context": {
+    "upstream_model": "latest",
+    "metering_required": [
+      "credits"
+    ]
+  }
+}

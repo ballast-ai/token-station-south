@@ -1,0 +1,9 @@
+{
+  "prepare_case": "image-v1.prepare.create-basic",
+  "response": {
+    "status": 500,
+    "body": {
+      "error": "internal"
+    }
+  }
+}

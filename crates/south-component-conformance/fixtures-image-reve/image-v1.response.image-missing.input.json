@@ -1,0 +1,13 @@
+{
+  "prepare_case": "image-v1.prepare.create-basic",
+  "response": {
+    "status": 200,
+    "body": {
+      "version": "reve-create@20250915",
+      "content_violation": false,
+      "request_id": "rsid-abc123",
+      "credits_used": 18,
+      "credits_remaining": 982
+    }
+  }
+}

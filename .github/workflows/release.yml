@@ -105,6 +105,7 @@ jobs:
           scripts/build-image-ideogram-component.sh
           scripts/build-image-minimax-component.sh
           scripts/build-image-qwen-component.sh
+          scripts/build-image-reve-component.sh
           scripts/build-image-stability-component.sh
           scripts/build-image-vertex-component.sh
           scripts/build-image-xai-component.sh
@@ -157,6 +158,7 @@ jobs:
             --test ideogram_image_sandbox_parity \
             --test minimax_image_sandbox_parity \
             --test qwen_image_sandbox_parity \
+            --test reve_image_sandbox_parity \
             --test stability_image_sandbox_parity \
             --test vertex_image_sandbox_parity \
             --test xai_image_sandbox_parity \
@@ -218,6 +220,7 @@ jobs:
           package image-ideogram image_ideogram.wasm
           package image-minimax image_minimax.wasm
           package image-qwen image_qwen.wasm
+          package image-reve image_reve.wasm
           package image-stability image_stability.wasm
           package image-vertex image_vertex.wasm
           package image-xai image_xai.wasm

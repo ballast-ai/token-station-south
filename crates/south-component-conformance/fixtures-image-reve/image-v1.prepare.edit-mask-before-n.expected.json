@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "`mask` is not supported for Reve edits — Reve conditions on the edit instruction rather than a separate mask"
+  }
+}

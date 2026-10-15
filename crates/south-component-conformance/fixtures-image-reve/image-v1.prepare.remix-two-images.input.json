@@ -1,0 +1,50 @@
+{
+  "provider_config": {
+    "provider": "reve-image",
+    "base_url": "https://api.reve.com",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "multipart": {
+      "parts": [
+        {
+          "kind": "text",
+          "name": "endpoint",
+          "value": "remix"
+        },
+        {
+          "kind": "text",
+          "name": "prompt",
+          "value": "the cat from <img>0</img> on the chair from <img>1</img>"
+        },
+        {
+          "kind": "file",
+          "name": "image[]",
+          "blob": "b0",
+          "filename": "in.png",
+          "bytes": 4096,
+          "media_type": "image/png"
+        },
+        {
+          "kind": "file",
+          "name": "image[]",
+          "blob": "b1",
+          "filename": "b.webp",
+          "bytes": 4096,
+          "media_type": "image/webp"
+        },
+        {
+          "kind": "text",
+          "name": "version",
+          "value": "latest-fast"
+        }
+      ]
+    }
+  },
+  "context": {
+    "upstream_model": "latest",
+    "metering_required": [
+      "credits"
+    ]
+  }
+}

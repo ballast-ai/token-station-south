@@ -1,0 +1,28 @@
+{
+  "provider_config": {
+    "provider": "reve-image",
+    "base_url": "https://api.reve.com",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "json": {
+      "model": "reve/reve-create",
+      "prompt": "a red fox",
+      "size": "1536x1024",
+      "test_time_scaling": 3,
+      "postprocessing": [
+        {
+          "process": "upscale",
+          "upscale_factor": 2
+        }
+      ],
+      "breadcrumb": "job-42"
+    }
+  },
+  "context": {
+    "upstream_model": "latest",
+    "metering_required": [
+      "credits"
+    ]
+  }
+}

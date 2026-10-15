@@ -1,0 +1,28 @@
+{
+  "provider_config": {
+    "provider": "reve-image",
+    "base_url": "https://api.reve.com",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "json": {
+      "model": "reve/reve-create",
+      "prompt": "p",
+      "n": 1,
+      "response_format": "url",
+      "quality": "hd",
+      "style": "vivid",
+      "user": "u-1",
+      "stream": false,
+      "output_format": "png",
+      "seed": 7,
+      "image": "x"
+    }
+  },
+  "context": {
+    "upstream_model": "latest",
+    "metering_required": [
+      "credits"
+    ]
+  }
+}

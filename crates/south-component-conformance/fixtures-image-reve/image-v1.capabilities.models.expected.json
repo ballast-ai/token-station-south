@@ -1,0 +1,74 @@
+[
+  {
+    "input_roles": [],
+    "metering_forms": [
+      "credits"
+    ],
+    "model": "latest",
+    "operations": [
+      "generate",
+      "edit"
+    ],
+    "repeat": false,
+    "request_elision_paths": [],
+    "response_formats": [
+      "b64_json"
+    ],
+    "tier_dimensions": [],
+    "token_buckets": []
+  },
+  {
+    "input_roles": [],
+    "metering_forms": [
+      "credits"
+    ],
+    "model": "latest-fast",
+    "operations": [
+      "generate",
+      "edit"
+    ],
+    "repeat": false,
+    "request_elision_paths": [],
+    "response_formats": [
+      "b64_json"
+    ],
+    "tier_dimensions": [],
+    "token_buckets": []
+  },
+  {
+    "input_roles": [],
+    "metering_forms": [
+      "credits"
+    ],
+    "model": "reve-create@20250915",
+    "operations": [
+      "generate",
+      "edit"
+    ],
+    "repeat": false,
+    "request_elision_paths": [],
+    "response_formats": [
+      "b64_json"
+    ],
+    "tier_dimensions": [],
+    "token_buckets": []
+  },
+  {
+    "input_roles": [],
+    "metering_forms": [
+      "credits"
+    ],
+    "model": "reve-remix@20250915",
+    "operations": [
+      "generate",
+      "edit"
+    ],
+    "repeat": false,
+    "request_elision_paths": [],
+    "response_formats": [
+      "b64_json"
+    ],
+    "tier_dimensions": [],
+    "token_buckets": []
+  }
+]

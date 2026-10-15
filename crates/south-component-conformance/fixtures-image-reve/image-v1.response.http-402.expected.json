@@ -1,0 +1,9 @@
+{
+  "error": {
+    "code": "payment_required",
+    "http_status": 402,
+    "message": "the upstream requires payment or the account is out of funds",
+    "provider_message": "insufficient credits"
+  },
+  "outcome": "rejected"
+}

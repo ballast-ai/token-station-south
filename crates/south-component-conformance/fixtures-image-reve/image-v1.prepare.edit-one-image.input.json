@@ -1,0 +1,42 @@
+{
+  "provider_config": {
+    "provider": "reve-image",
+    "base_url": "https://api.reve.com",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "multipart": {
+      "parts": [
+        {
+          "kind": "text",
+          "name": "prompt",
+          "value": "remove the people"
+        },
+        {
+          "kind": "file",
+          "name": "image",
+          "blob": "b0",
+          "filename": "in.png",
+          "bytes": 4096,
+          "media_type": "image/png"
+        },
+        {
+          "kind": "text",
+          "name": "size",
+          "value": "1536x1024"
+        },
+        {
+          "kind": "text",
+          "name": "endpoint",
+          "value": "edit"
+        }
+      ]
+    }
+  },
+  "context": {
+    "upstream_model": "latest",
+    "metering_required": [
+      "credits"
+    ]
+  }
+}

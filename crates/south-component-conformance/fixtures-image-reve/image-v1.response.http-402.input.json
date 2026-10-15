@@ -1,0 +1,11 @@
+{
+  "prepare_case": "image-v1.prepare.create-basic",
+  "response": {
+    "status": 402,
+    "body": {
+      "error": {
+        "message": "insufficient credits"
+      }
+    }
+  }
+}

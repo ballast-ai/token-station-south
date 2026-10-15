@@ -1,0 +1,23 @@
+{
+  "artifacts": [
+    {
+      "encoding": "base64",
+      "form": "inline",
+      "media_type": "image/png",
+      "pointer": "/image"
+    }
+  ],
+  "extras": {
+    "content_violation": false,
+    "credits_used": 1e-06,
+    "request_id": "rsid-abc123",
+    "version": "reve-create@20250915"
+  },
+  "metering": {
+    "credits": "0.000001",
+    "images_reported": null,
+    "tokens": null,
+    "upstream_cost": null
+  },
+  "outcome": "succeeded"
+}

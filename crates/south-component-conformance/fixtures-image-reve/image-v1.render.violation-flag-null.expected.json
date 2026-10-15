@@ -1,0 +1,19 @@
+{
+  "template": {
+    "content_violation": null,
+    "created": 1760000000,
+    "credits_used": 18,
+    "data": [
+      {
+        "b64_json": {
+          "$south.artifact": {
+            "as": "b64_json",
+            "index": 0
+          }
+        }
+      }
+    ],
+    "request_id": "rsid-abc123",
+    "version": "reve-create@20250915"
+  }
+}

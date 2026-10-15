@@ -1,0 +1,62 @@
+{
+  "descriptor": {
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "prompt": "the cat from <img>0</img> on the chair from <img>1</img>",
+          "reference_images": [
+            {
+              "$south.ref": {
+                "blob": "b0",
+                "transform": "base64"
+              }
+            },
+            {
+              "$south.ref": {
+                "blob": "b1",
+                "transform": "base64"
+              }
+            }
+          ],
+          "version": "latest-fast"
+        }
+      }
+    },
+    "headers": [
+      {
+        "name": "accept",
+        "value": "application/json"
+      }
+    ],
+    "method": "POST",
+    "path": "v1/image/remix"
+  },
+  "facts": {
+    "inputs": {
+      "input_image": 0,
+      "mask": 0,
+      "reference_image": 2
+    },
+    "metering_forms": [
+      "credits"
+    ],
+    "operation": "edit",
+    "requested_outputs": 1,
+    "tier": {}
+  },
+  "immutable_body_paths": [
+    "version",
+    "test_time_scaling",
+    "postprocessing"
+  ],
+  "repeat": 1,
+  "response_body_form": "json",
+  "response_elision_paths": [
+    "/image"
+  ],
+  "state": {}
+}

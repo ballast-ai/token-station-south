@@ -1,0 +1,77 @@
+{
+  "provider_config": {
+    "provider": "reve-image",
+    "base_url": "https://api.reve.com",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "multipart": {
+      "parts": [
+        {
+          "kind": "text",
+          "name": "endpoint",
+          "value": "remix"
+        },
+        {
+          "kind": "text",
+          "name": "prompt",
+          "value": "p"
+        },
+        {
+          "kind": "file",
+          "name": "image",
+          "blob": "b0",
+          "filename": "in.png",
+          "bytes": 6291456,
+          "media_type": "image/png"
+        },
+        {
+          "kind": "file",
+          "name": "image",
+          "blob": "b1",
+          "filename": "in.png",
+          "bytes": 6291456,
+          "media_type": "image/png"
+        },
+        {
+          "kind": "file",
+          "name": "image",
+          "blob": "b2",
+          "filename": "in.png",
+          "bytes": 6291456,
+          "media_type": "image/png"
+        },
+        {
+          "kind": "file",
+          "name": "image",
+          "blob": "b3",
+          "filename": "in.png",
+          "bytes": 6291456,
+          "media_type": "image/png"
+        },
+        {
+          "kind": "file",
+          "name": "image",
+          "blob": "b4",
+          "filename": "in.png",
+          "bytes": 6291456,
+          "media_type": "image/png"
+        },
+        {
+          "kind": "file",
+          "name": "image",
+          "blob": "b5",
+          "filename": "in.png",
+          "bytes": 6291456,
+          "media_type": "image/png"
+        }
+      ]
+    }
+  },
+  "context": {
+    "upstream_model": "latest",
+    "metering_required": [
+      "credits"
+    ]
+  }
+}
