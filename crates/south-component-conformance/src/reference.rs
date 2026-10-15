@@ -109,7 +109,7 @@ pub mod azure_openai_dated {
 /// The host's native arm for every type these families serve (`glm`, `glm_coding`, Bailian,
 /// `byteplus`, `kimi_code`, `deepinfra`, `github_copilot`, `azure_openai`, `azure_foundry`) sends the
 /// client's Chat body itself, so a client's `thinking` (Z.ai) or `enable_thinking` (Bailian) reaches
-/// the upstream unchanged. The OpenAI Chat north codec keeps such keys verbatim in
+/// the upstream unchanged. The Chat north codec keeps such keys verbatim in
 /// `ChatRequest.extensions`; the package writes them back, only when the client sent them, as
 /// `provider-openai-responses` writes its client fields (R3). Native builds the Gemini body through
 /// the IR instead, so `gemini-openai-compatible` forwards nothing.
