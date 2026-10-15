@@ -225,6 +225,15 @@ manifest gains the provider and the `bearer` arm, keeps task contract 7 and its 
 minor version (0.36.0, past `provider-vertex`'s patch 0.35.24 in this cycle, so no further Q47 round). No contract
 changes. Per L-Q2 (lv 2026-10-14) the family re-launches Vertex Veo after the native line goes offline; the gated clip
 fetch has no native baseline.
+**Unreleased (`provider-openai-responses` 1.4.0: the `bedrock-mantle` family)**: design record
+`docs/design/2026-10-15-bedrock-mantle.md` (accepted under lv's 2026-10-15 directive; BM-Q1 to BM-Q5 at their defaults).
+AWS Bedrock's OpenAI-compatible host becomes a third family of `provider-openai-responses`, whose behaviour is
+`openai-responses`'s unchanged; it adds the endpoint template `https://bedrock-mantle.{region}.api.aws` with one required
+`aws_region` key, the native arm's derivation of the host. Pack `fixtures-bedrock-mantle/`, transcribed from the host's
+native Mantle tests rather than captured; a trailing `data: [DONE]` on the Responses stream is refused, as native
+refuses it. The chat surface stays servable by `openai-compatible` with the origin as row endpoint (two rows in
+`fixtures/`). No further Q47 step: `south-component-conformance` is already 0.65.0 in this cycle; `south_runtime` stays
+0.60.0.
 **Unreleased (`provider-vertex` 1.0.0: Gemini models on Vertex AI for text)**: design record
 `docs/design/2026-10-15-provider-vertex.md` (accepted 2026-10-15; VX-Q1 (a), `generateContent` on every surface; VX-Q2,
 family `vertex-ai`). The Gemini reference's request body, response reader, stream parser (with SF27) and refusals move
