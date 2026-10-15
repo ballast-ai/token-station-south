@@ -114,11 +114,14 @@ fn prepared(config: &ProviderConfig, upstream_model: &str, operation: &str) -> V
 
 /// The URL a host joins from the binding's base, the descriptor's path and its query.
 fn url(base_url: &str, descriptor: &Value) -> String {
-    let mut url = format!("{}/{}", base_url.trim_end_matches('/'), descriptor["path"].as_str().unwrap());
+    let mut url =
+        format!("{}/{}", base_url.trim_end_matches('/'), descriptor["path"].as_str().unwrap());
     if let Some(query) = descriptor["query"].as_array() {
         let pairs: Vec<String> = query
             .iter()
-            .map(|pair| format!("{}={}", pair["name"].as_str().unwrap(), pair["value"].as_str().unwrap()))
+            .map(|pair| {
+                format!("{}={}", pair["name"].as_str().unwrap(), pair["value"].as_str().unwrap())
+            })
             .collect();
         url.push('?');
         url.push_str(&pairs.join("&"));
@@ -375,9 +378,10 @@ fn the_azure_families_declare_what_openai_compatible_declares() {
     let plain = REFERENCE
         .model_capabilities(&config(OPENAI_COMPATIBLE, "https://api.openai.com", None))
         .unwrap();
-    for (provider, base) in
-        [(AZURE_OPENAI_V1, format!("{CLASSIC}/openai/v1")), (AZURE_OPENAI_DATED, CLASSIC.to_owned())]
-    {
+    for (provider, base) in [
+        (AZURE_OPENAI_V1, format!("{CLASSIC}/openai/v1")),
+        (AZURE_OPENAI_DATED, CLASSIC.to_owned()),
+    ] {
         assert_eq!(
             REFERENCE.model_capabilities(&config(provider, &base, None)).unwrap(),
             plain,

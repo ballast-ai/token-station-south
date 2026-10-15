@@ -244,8 +244,7 @@ impl SpeechComponentV1 for OpenAiCompatibleSpeechReferenceV1 {
         context: &SpeechCallContextV1,
     ) -> ComponentResultV1<PreparedSpeechCallV1> {
         let family = Family::of(config)?;
-        let route =
-            route(config, family, endpoint_of(context.operation), &context.upstream_model)?;
+        let route = route(config, family, endpoint_of(context.operation), &context.upstream_model)?;
         if context.operation.is_recognition() {
             let protocol = OpenAiAsr {
                 path: route.path,

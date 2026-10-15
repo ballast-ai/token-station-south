@@ -2418,10 +2418,9 @@ fn the_v3_1_speech_packages_declare_their_media_contract_and_runtime() {
         // `speech-openai-compatible` 1.1.0 adds the two Azure `OpenAI` families after its first
         // (`speech_openai_compatible_1_1_adds_the_azure_openai_families`).
         let (families, arms): (Vec<&str>, Vec<&str>) = match name {
-            "speech-openai-compatible" => (
-                vec![family, "azure-openai-v1", "azure-openai-dated"],
-                vec![arm, "header_secret"],
-            ),
+            "speech-openai-compatible" => {
+                (vec![family, "azure-openai-v1", "azure-openai-dated"], vec![arm, "header_secret"])
+            }
             _ => (vec![family], vec![arm]),
         };
         assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), families, "{name}");
@@ -3000,7 +2999,11 @@ fn speech_azure_openai_retires_every_published_066_package_identity() {
         ("task-xai-v2", "0.35.24", "0.35.25", "0.57.0", &[("task", 7)]),
     ];
     let shipped: BTreeSet<&str> = rows.iter().map(|row| row.0).collect();
-    assert_eq!(shipped, BTreeSet::from(OFFICIAL_COMPONENTS), "every official package takes the round");
+    assert_eq!(
+        shipped,
+        BTreeSet::from(OFFICIAL_COMPONENTS),
+        "every official package takes the round"
+    );
     for (name, published, now, runtime, contracts) in rows {
         let manifest: ComponentManifestV1 = serde_json::from_str(
             &std::fs::read_to_string(
@@ -3011,7 +3014,10 @@ fn speech_azure_openai_retires_every_published_066_package_identity() {
         .unwrap();
         assert_ne!(manifest.version, published, "{name} reused its published identity");
         assert_eq!(manifest.version, now, "{name}");
-        assert_eq!(manifest.compatibility.south_runtime, runtime, "{name}: the round moves no runtime");
+        assert_eq!(
+            manifest.compatibility.south_runtime, runtime,
+            "{name}: the round moves no runtime"
+        );
         let contracts: std::collections::BTreeMap<String, u32> =
             contracts.iter().map(|(world, version)| ((*world).to_owned(), *version)).collect();
         assert_eq!(manifest.compatibility.contracts, contracts, "{name}");
