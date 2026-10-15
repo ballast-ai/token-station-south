@@ -1049,7 +1049,9 @@ fn the_invoke_package_declares_the_runtime_converse_declares() {
     // step's 1.1.5, task contract 8's 1.1.6, I3-3's 1.1.7, speech step S-S-1's 1.1.8, speech batch
     // V3-1's 1.1.9, provider-vertex's 1.1.10 and the speech Azure OpenAI families' Q47 bump 1.1.11
     // (`speech_azure_openai_retires_every_published_066_package_identity`).
-    assert_eq!(invoke.version, "1.1.11");
+    // Published as 1.1.11 with 0.67.0; the T9 cap field's Q47 bump made it 1.1.12
+    // (`t9_cap_field_retires_every_published_067_package_identity`).
+    assert_eq!(invoke.version, "1.1.12");
     assert_eq!(invoke.compatibility.south_runtime, "0.57.0");
     assert_eq!(invoke.compatibility, read("provider-bedrock-converse").compatibility);
 }
@@ -1349,7 +1351,9 @@ fn the_responses_package_declares_the_runtime_that_first_admits_its_declarations
     // 1.0.0 shipped in 0.54.0; NC-1 made 1.1.0, R3 1.2.0, KC1 1.3.0, I3-1's Q47 bump 1.3.1,
     // I3-2's 1.3.2, I3-4's 1.3.3, I3-5's 1.3.4, the Kiro step's 1.3.5, task contract 8's 1.3.6, I3-3's 1.3.7, S-S-1's 1.3.8, V3-1's 1.3.9, provider-vertex's 1.3.10 (below) and the `bedrock-mantle` family's 1.4.0 (record `2026-10-15-bedrock-mantle.md` §11, a new family in the same cycle), and the speech Azure OpenAI families' Q47 bump 1.4.1. The Codex `credentials` section uses only forms the
     // 0.54.0 gate ① admits; `subscription_quota_families` (D7, 0.60.0) needs the 0.60.0 runtime.
-    assert_eq!(manifest.version, "1.4.1");
+    // Published as 1.4.1 with 0.67.0; the T9 cap field's Q47 bump made it 1.4.2
+    // (`t9_cap_field_retires_every_published_067_package_identity`).
+    assert_eq!(manifest.version, "1.4.2");
     assert_eq!(manifest.compatibility.south_runtime, "0.60.0");
     assert!(!manifest.immutable_body_paths.is_empty() && !manifest.north_passthrough.is_empty());
     assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
@@ -1786,7 +1790,9 @@ fn image_gemini_declares_media_2_which_a_media_1_host_refuses() {
     .unwrap();
     // 1.0.3 after the Kiro step; task contract 8's Q47 bump made it 1.0.4, I3-3's 1.0.5, S-S-1's
     // 1.0.6, V3-1's 1.0.7, provider-vertex's 1.0.8 and the speech Azure OpenAI families' Q47 bump 1.0.9.
-    assert_eq!(manifest.version, "1.0.9");
+    // Published as 1.0.9 with 0.67.0; the T9 cap field's Q47 bump made it 1.0.10
+    // (`t9_cap_field_retires_every_published_067_package_identity`).
+    assert_eq!(manifest.version, "1.0.10");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["gemini-image"]);
     assert!(manifest.declared_keys("gemini-image").is_empty());
@@ -1828,7 +1834,9 @@ fn the_i3_1_image_packages_declare_the_runtime_and_values_of_the_record() {
         .unwrap();
         // 1.0.4 after the Kiro step; task contract 8's Q47 bump made it 1.0.5, I3-3's 1.0.6,
         // S-S-1's 1.0.7, V3-1's 1.0.8, provider-vertex's 1.0.9 and the speech Azure OpenAI families' Q47 bump 1.0.10.
-        assert_eq!(manifest.version, "1.0.10", "{name}");
+        // Published as 1.0.10 with 0.67.0; the T9 cap field's Q47 bump made it 1.0.11
+        // (`t9_cap_field_retires_every_published_067_package_identity`).
+        assert_eq!(manifest.version, "1.0.11", "{name}");
         assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD, "{name}");
         assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), [family], "{name}");
         assert_eq!(manifest.compatibility.south_runtime, "0.57.0", "{name}");
@@ -1853,7 +1861,9 @@ fn image_stability_declares_media_1_and_the_runtime_of_the_record() {
     .unwrap();
     // 1.0.2 after the Kiro step; task contract 8's Q47 bump made it 1.0.3, I3-3's 1.0.4, S-S-1's
     // 1.0.5, V3-1's 1.0.6, provider-vertex's 1.0.7 and the speech Azure OpenAI families' Q47 bump 1.0.8.
-    assert_eq!(manifest.version, "1.0.8");
+    // Published as 1.0.8 with 0.67.0; the T9 cap field's Q47 bump made it 1.0.9
+    // (`t9_cap_field_retires_every_published_067_package_identity`).
+    assert_eq!(manifest.version, "1.0.9");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["stability-image"]);
     assert!(manifest.declared_keys("stability-image").is_empty());
@@ -1881,7 +1891,9 @@ fn image_ideogram_declares_media_1_and_the_runtime_of_the_record() {
     .unwrap();
     // 1.0.1 after the Kiro step; task contract 8's Q47 bump made it 1.0.2, I3-3's 1.0.3, S-S-1's
     // 1.0.4, V3-1's 1.0.5, provider-vertex's 1.0.6 and the speech Azure OpenAI families' Q47 bump 1.0.7.
-    assert_eq!(manifest.version, "1.0.7");
+    // Published as 1.0.7 with 0.67.0; the T9 cap field's Q47 bump made it 1.0.8
+    // (`t9_cap_field_retires_every_published_067_package_identity`).
+    assert_eq!(manifest.version, "1.0.8");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["ideogram-image"]);
     assert!(manifest.declared_keys("ideogram-image").is_empty());
@@ -1909,7 +1921,9 @@ fn image_xai_declares_media_1_bearer_and_the_runtime_of_the_record() {
     .unwrap();
     assert_eq!(manifest.name, "image-xai");
     // Published as 1.0.0 with 0.66.0; the speech Azure OpenAI families' Q47 bump made it 1.0.1.
-    assert_eq!(manifest.version, "1.0.1");
+    // Published as 1.0.1 with 0.67.0; the T9 cap field's Q47 bump made it 1.0.2
+    // (`t9_cap_field_retires_every_published_067_package_identity`).
+    assert_eq!(manifest.version, "1.0.2");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["xai-image"]);
     assert_eq!(manifest.capabilities.iter().collect::<Vec<_>>(), ["edit", "generate"]);
@@ -1945,7 +1959,9 @@ fn image_vertex_declares_media_2_the_vertex_recipe_and_the_media_2_runtime() {
     let (manifest, embeddings) = (read("image-vertex"), read("embeddings-vertex"));
     // Published as 1.0.0 with 0.63.0; S-S-1's Q47 bump made it 1.0.1, V3-1's 1.0.2,
     // provider-vertex's 1.0.3 and the speech Azure OpenAI families' Q47 bump 1.0.4.
-    assert_eq!(manifest.version, "1.0.4");
+    // Published as 1.0.4 with 0.67.0; the T9 cap field's Q47 bump made it 1.0.5
+    // (`t9_cap_field_retires_every_published_067_package_identity`).
+    assert_eq!(manifest.version, "1.0.5");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["vertex-ai-image"]);
     assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer"]);
@@ -1988,7 +2004,9 @@ fn provider_vertex_declares_the_vertex_recipe_and_the_runtime_of_its_newest_decl
     };
     let (manifest, image) = (read("provider-vertex"), read("image-vertex"));
     // Published as 1.0.0 with 0.66.0; the speech Azure OpenAI families' Q47 bump made it 1.0.1.
-    assert_eq!(manifest.version, "1.0.1");
+    // Published as 1.0.1 with 0.67.0; the T9 cap field's Q47 bump made it 1.0.2
+    // (`t9_cap_field_retires_every_published_067_package_identity`).
+    assert_eq!(manifest.version, "1.0.2");
     assert_eq!(manifest.api_version, south_provider_api::PROVIDER_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["vertex-ai"]);
     assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer"]);
@@ -2024,7 +2042,9 @@ fn image_reve_declares_media_1_and_the_runtime_of_the_record() {
     )
     .unwrap();
     // Published as 1.0.0 with 0.66.0; the speech Azure OpenAI families' Q47 bump made it 1.0.1.
-    assert_eq!(manifest.version, "1.0.1");
+    // Published as 1.0.1 with 0.67.0; the T9 cap field's Q47 bump made it 1.0.2
+    // (`t9_cap_field_retires_every_published_067_package_identity`).
+    assert_eq!(manifest.version, "1.0.2");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["reve-image"]);
     assert!(manifest.declared_keys("reve-image").is_empty());
@@ -2129,7 +2149,9 @@ fn provider_kiro_declares_the_runtime_of_its_newest_declaration() {
     // 1.0.0 as the Kiro step shipped it; task contract 8's Q47 bump made it 1.0.1, I3-3's 1.0.2,
     // S-S-1's 1.0.3 and V3-1's 1.0.4; the native rewrites (KR2–KR5, KD15) made it 1.1.0 and
     // provider-vertex's Q47 bump 1.1.1, then the speech Azure OpenAI families' Q47 bump 1.1.2.
-    assert_eq!(manifest.version, "1.1.2");
+    // Published as 1.1.2 with 0.67.0; the T9 cap field's Q47 bump made it 1.1.3
+    // (`t9_cap_field_retires_every_published_067_package_identity`).
+    assert_eq!(manifest.version, "1.1.3");
     assert_eq!(manifest.api_version, south_provider_api::PROVIDER_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["kiro"]);
     assert!(manifest.subscription_quota_families.contains("kiro"));
@@ -2159,7 +2181,9 @@ fn task_gemini_omni_v2_declares_task_8_which_a_task_7_host_refuses() {
     .unwrap();
     // Published as 0.1.0 with 0.62.0; I3-3's Q47 bump made it 0.1.1, S-S-1's 0.1.2, V3-1's
     // 0.1.3, provider-vertex's 0.1.4 and the speech Azure OpenAI families' Q47 bump 0.1.5.
-    assert_eq!(manifest.version, "0.1.5");
+    // Published as 0.1.5 with 0.67.0; the T9 cap field's Q47 bump made it 0.1.6
+    // (`t9_cap_field_retires_every_published_067_package_identity`).
+    assert_eq!(manifest.version, "0.1.6");
     assert_eq!(manifest.api_version, south_provider_api::TASK_WORLD_V2);
     assert_eq!(manifest.compatibility.contracts.get("task"), Some(&8));
     assert_eq!(manifest.compatibility.contracts.get("media"), Some(&1));
@@ -2367,20 +2391,22 @@ fn s_s_1_retires_every_published_063_package_identity() {
 
 /// The version every speech package carries: each was published as 1.0.0 with 0.65.0,
 /// provider-vertex's Q47 bump made it 1.0.1 (published with 0.66.0) and the speech `azure-openai`
-/// families' Q47 bump 1.0.2 (`speech_azure_openai_retires_every_published_066_package_identity`).
+/// families' Q47 bump 1.0.2 (`speech_azure_openai_retires_every_published_066_package_identity`,
+/// published with 0.67.0), then the T9 cap field's Q47 bump 1.0.3
+/// (`t9_cap_field_retires_every_published_067_package_identity`).
 /// The tests below describe the batches that defined the packages, before those releases.
 /// `speech-vertex` and `speech-openai-compatible` moved on to minors ([`speech_version`]).
-const SPEECH_VERSION: &str = "1.0.2";
+const SPEECH_VERSION: &str = "1.0.3";
 
 /// The version a speech package carries: [`SPEECH_VERSION`], except `speech-vertex`, which Q7's
-/// refusal made 1.1.0 and the 0.67.0 cycle's Q47 bump 1.1.1
+/// refusal made 1.1.0, the 0.67.0 cycle's Q47 bump 1.1.1 and the T9 cap field's 1.1.2
 /// (`speech_vertex_1_1_refuses_q7_and_retires_its_published_identity`), and
-/// `speech-openai-compatible`, which the `azure-openai` families made 1.1.0
-/// (`speech_openai_compatible_1_1_adds_the_azure_openai_families`).
+/// `speech-openai-compatible`, which the `azure-openai` families made 1.1.0 and the T9 cap field's
+/// Q47 bump 1.1.1 (`speech_openai_compatible_1_1_adds_the_azure_openai_families`).
 fn speech_version(name: &str) -> &'static str {
     match name {
-        "speech-vertex" => "1.1.1",
-        "speech-openai-compatible" => "1.1.0",
+        "speech-vertex" => "1.1.2",
+        "speech-openai-compatible" => "1.1.1",
         _ => SPEECH_VERSION,
     }
 }
@@ -2819,7 +2845,9 @@ fn minimax_immutable_paths_retire_the_published_task_minimax_v2_identity() {
     // Published as 0.33.0 with 0.64.0; speech batch V3-1's Q47 bump made it 0.33.1 and
     // provider-vertex's 0.33.2 (`provider_vertex_retires_every_published_065_package_identity`),
     // then the speech Azure OpenAI families' Q47 bump 0.33.3.
-    assert_eq!(manifest.version, "0.33.3");
+    // Published as 0.33.3 with 0.67.0; the T9 cap field's Q47 bump made it 0.33.4
+    // (`t9_cap_field_retires_every_published_067_package_identity`).
+    assert_eq!(manifest.version, "0.33.4");
     assert_eq!(manifest.compatibility.south_runtime, declared_runtime_now("task-minimax-v2"));
     assert_eq!(manifest.compatibility.contracts.get("task"), Some(&7));
 }
@@ -2901,7 +2929,9 @@ fn speech_vertex_1_1_refuses_q7_and_retires_its_published_identity() {
         assert_ne!(manifest.version, retired, "a changed package cannot reuse an identity");
     }
     // Published as 1.1.0 with 0.66.0; the speech Azure OpenAI families' Q47 bump made it 1.1.1.
-    assert_eq!(manifest.version, "1.1.1");
+    // Published as 1.1.1 with 0.67.0; the T9 cap field's Q47 bump made it 1.1.2
+    // (`t9_cap_field_retires_every_published_067_package_identity`).
+    assert_eq!(manifest.version, "1.1.2");
     assert_eq!(
         manifest.version,
         south_component_conformance::reference_vertex_speech::VERSION,
@@ -2938,7 +2968,9 @@ fn task_veo_v2_gains_the_vertex_family_and_bearer() {
     for retired in ["0.35.23", "0.35.24", "0.36.0"] {
         assert_ne!(manifest.version, retired, "a changed package cannot reuse an identity");
     }
-    assert_eq!(manifest.version, "0.36.1");
+    // Published as 0.36.1 with 0.67.0; the T9 cap field's Q47 bump made it 0.36.2
+    // (`t9_cap_field_retires_every_published_067_package_identity`).
+    assert_eq!(manifest.version, "0.36.2");
     assert_eq!(manifest.providers, ["veo-video", "vertex-veo-video"]);
     assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer", "header_secret"]);
     assert_eq!(manifest.compatibility.contracts.get("task"), Some(&7));
@@ -2954,8 +2986,10 @@ fn task_veo_v2_gains_the_vertex_family_and_bearer() {
 /// `south-component-conformance` (0.65.0 → 0.66.0) after release 0.66.0, which every guest links,
 /// so every `component.wasm` changes: each identity published with 0.66.0 retires. Only
 /// `speech-openai-compatible` changes behaviour, a minor (1.0.1 → 1.1.0); every other package takes
-/// a patch. No package moves its `south_runtime` or its `contracts`.
-/// A package, its identity published with 0.66.0, its identity now, its `south_runtime` and its
+/// a patch. No package moves its `south_runtime` or its `contracts`. The identity each package took
+/// here was published with 0.67.0 and retires in turn: the T9 cap field gave every package one more
+/// (`t9_cap_field_retires_every_published_067_package_identity`).
+/// A package, an identity it published, the identity the round gave it, its `south_runtime` and its
 /// `contracts`.
 type RetiredIdentity<'a> = (&'a str, &'a str, &'a str, &'a str, &'a [(&'a str, u32)]);
 
@@ -3018,7 +3052,7 @@ fn speech_azure_openai_retires_every_published_066_package_identity() {
         )
         .unwrap();
         assert_ne!(manifest.version, published, "{name} reused its published identity");
-        assert_eq!(manifest.version, now, "{name}");
+        assert_ne!(manifest.version, now, "{name} reused its identity published with 0.67.0");
         assert_eq!(
             manifest.compatibility.south_runtime, runtime,
             "{name}: the round moves no runtime"
@@ -3047,10 +3081,12 @@ fn speech_openai_compatible_1_1_adds_the_azure_openai_families() {
     };
     let manifest: ComponentManifestV1 =
         serde_json::from_value(read("speech-openai-compatible")).unwrap();
-    for retired in ["1.0.0", "1.0.1", "1.0.2"] {
+    for retired in ["1.0.0", "1.0.1", "1.0.2", "1.1.0"] {
         assert_ne!(manifest.version, retired, "a changed package cannot reuse an identity");
     }
-    assert_eq!(manifest.version, "1.1.0");
+    // Published as 1.1.0 with 0.67.0; the T9 cap field's Q47 bump made it 1.1.1
+    // (`t9_cap_field_retires_every_published_067_package_identity`).
+    assert_eq!(manifest.version, "1.1.1");
     assert_eq!(
         manifest.version,
         south_component_conformance::reference_openai_compatible_speech::VERSION,
@@ -3064,11 +3100,90 @@ fn speech_openai_compatible_1_1_adds_the_azure_openai_families() {
     assert!(manifest.declared_keys("openai-compatible").is_empty());
     assert!(manifest.declared_keys("azure-openai-v1").is_empty());
     assert_eq!(manifest.declared_keys("azure-openai-dated"), BTreeSet::from(["api_version"]));
+    // The provider world's family also declares `max_tokens_field` (T9 record §4 D6), which speech
+    // has no use for: the shared key is the same byte for byte.
     assert_eq!(
-        read("speech-openai-compatible")["config_schema"]["azure-openai-dated"],
-        read("provider-openai-compatible")["config_schema"]["azure-openai-dated"]
+        read("speech-openai-compatible")["config_schema"]["azure-openai-dated"]["api_version"],
+        read("provider-openai-compatible")["config_schema"]["azure-openai-dated"]["api_version"]
     );
     assert!(manifest.query_parameters.is_empty());
     assert_eq!(manifest.compatibility.south_runtime, "0.65.0");
     assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
+}
+
+/// The T9 cap field (design record `2026-10-15-openai-compatible-t9.md` §4 D6, revision of
+/// 2026-10-15) changes `south-component-conformance` (0.66.0 → 0.67.0) after release 0.67.0, which
+/// every guest links, so every `component.wasm` changes: each identity published with 0.67.0
+/// retires. Only `provider-openai-compatible` changes behaviour (the two Azure `OpenAI` families
+/// write the cap as `max_completion_tokens` unless the row's `max_tokens_field` says otherwise), a
+/// minor (2.7.1 → 2.8.0); every other package takes a patch. No package moves its `south_runtime`
+/// or its `contracts`: an `enum` config key with a `default` predates 0.60.0.
+#[test]
+fn t9_cap_field_retires_every_published_067_package_identity() {
+    let rows: [RetiredIdentity<'_>; 40] = [
+        ("embeddings-gemini", "1.1.16", "1.1.17", "0.57.0", &[("embeddings", 2)]),
+        ("embeddings-openai-compatible", "1.0.19", "1.0.20", "0.57.0", &[("embeddings", 1)]),
+        ("embeddings-vertex", "1.0.18", "1.0.19", "0.57.0", &[("embeddings", 1)]),
+        ("image-azure", "1.0.15", "1.0.16", "0.57.0", &[("image", 1), ("media", 1)]),
+        ("image-gemini", "1.0.9", "1.0.10", "0.59.0", &[("image", 1), ("media", 2)]),
+        ("image-ideogram", "1.0.7", "1.0.8", "0.57.0", &[("image", 1), ("media", 1)]),
+        ("image-minimax", "1.0.10", "1.0.11", "0.57.0", &[("image", 1), ("media", 1)]),
+        ("image-qwen", "1.0.10", "1.0.11", "0.57.0", &[("image", 1), ("media", 1)]),
+        ("image-reve", "1.0.1", "1.0.2", "0.57.0", &[("image", 1), ("media", 1)]),
+        ("image-stability", "1.0.8", "1.0.9", "0.57.0", &[("image", 1), ("media", 1)]),
+        ("image-vertex", "1.0.4", "1.0.5", "0.59.0", &[("image", 1), ("media", 2)]),
+        ("image-xai", "1.0.1", "1.0.2", "0.57.0", &[("image", 1), ("media", 1)]),
+        ("provider-anthropic", "1.2.1", "1.2.2", "0.67.0", &[]),
+        ("provider-anthropic-bedrock-invoke", "1.1.11", "1.1.12", "0.57.0", &[]),
+        ("provider-bedrock-converse", "1.1.11", "1.1.12", "0.57.0", &[]),
+        ("provider-bedrock-converse-bearer", "1.1.11", "1.1.12", "0.57.0", &[]),
+        ("provider-gemini", "1.3.11", "1.3.12", "0.60.0", &[]),
+        ("provider-kiro", "1.1.2", "1.1.3", "0.60.0", &[]),
+        ("provider-openai-compatible", "2.7.1", "2.8.0", "0.60.0", &[]),
+        ("provider-openai-responses", "1.4.1", "1.4.2", "0.60.0", &[]),
+        ("provider-vertex", "1.0.1", "1.0.2", "0.60.0", &[]),
+        ("speech-azure", "1.0.2", "1.0.3", "0.65.0", &[("media", 1), ("speech", 1)]),
+        ("speech-elevenlabs", "1.0.2", "1.0.3", "0.65.0", &[("media", 3), ("speech", 1)]),
+        ("speech-groq", "1.0.2", "1.0.3", "0.65.0", &[("media", 1), ("speech", 1)]),
+        ("speech-mimo", "1.0.2", "1.0.3", "0.65.0", &[("media", 1), ("speech", 1)]),
+        ("speech-minimax", "1.0.2", "1.0.3", "0.65.0", &[("media", 1), ("speech", 1)]),
+        ("speech-openai-compatible", "1.1.0", "1.1.1", "0.65.0", &[("media", 1), ("speech", 1)]),
+        ("speech-qwen", "1.0.2", "1.0.3", "0.65.0", &[("media", 1), ("speech", 1)]),
+        ("speech-vertex", "1.1.1", "1.1.2", "0.65.0", &[("media", 1), ("speech", 1)]),
+        ("speech-xai", "1.0.2", "1.0.3", "0.65.0", &[("media", 1), ("speech", 1)]),
+        ("task-bailian-v2", "0.31.25", "0.31.26", "0.57.0", &[("task", 7)]),
+        ("task-byteplus-v2", "0.36.25", "0.36.26", "0.57.0", &[("task", 7)]),
+        ("task-gemini-omni-v2", "0.1.5", "0.1.6", "0.62.0", &[("media", 1), ("task", 8)]),
+        ("task-gmi-image-v2", "0.35.25", "0.35.26", "0.57.0", &[("task", 7)]),
+        ("task-kling", "1.0.28", "1.0.29", "0.57.0", &[("task", 7)]),
+        ("task-kling-v2", "0.32.26", "0.32.27", "0.57.0", &[("task", 7)]),
+        ("task-minimax-v2", "0.33.3", "0.33.4", "0.63.0", &[("task", 7)]),
+        ("task-veo-v2", "0.36.1", "0.36.2", "0.57.0", &[("task", 7)]),
+        ("task-wan-image-v2", "0.35.25", "0.35.26", "0.57.0", &[("task", 7)]),
+        ("task-xai-v2", "0.35.25", "0.35.26", "0.57.0", &[("task", 7)]),
+    ];
+    let shipped: BTreeSet<&str> = rows.iter().map(|row| row.0).collect();
+    assert_eq!(
+        shipped,
+        BTreeSet::from(OFFICIAL_COMPONENTS),
+        "every official package takes the round"
+    );
+    for (name, published, now, runtime, contracts) in rows {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_ne!(manifest.version, published, "{name} reused its identity published with 0.67.0");
+        assert_eq!(manifest.version, now, "{name}");
+        assert_eq!(
+            manifest.compatibility.south_runtime, runtime,
+            "{name}: the round moves no runtime"
+        );
+        let contracts: std::collections::BTreeMap<String, u32> =
+            contracts.iter().map(|(world, version)| ((*world).to_owned(), *version)).collect();
+        assert_eq!(manifest.compatibility.contracts, contracts, "{name}");
+    }
 }

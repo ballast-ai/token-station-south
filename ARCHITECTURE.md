@@ -211,7 +211,21 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.67.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.59.0 and 0.66.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.67.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.59.0 and 0.67.0, the last unreleased) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**Unreleased (`provider-openai-compatible` 2.8.0: the T9 cap field)**: design record
+`docs/design/2026-10-15-openai-compatible-t9.md` §4 D6 (revision of 2026-10-15, under lv's directive of the same day).
+Native sends an `azure_openai` row's output cap as `max_completion_tokens` unless the row opts out, so the two Azure
+OpenAI families, `azure-openai-v1` and `azure-openai-dated`, now write the cap under the config key `max_tokens_field`
+(`enum` of `max_completion_tokens` and `max_tokens`, default `max_completion_tokens`, native's); a host migrating a row
+copies the row's `max_tokens_field`, else `max_tokens` when the row cleared `accepts_max_completion_tokens`. A value
+outside the two is a configuration error (500) before any request is built. Every other family keeps `max_tokens`.
+Gate ② gains three request rows and the dated row now expects `max_completion_tokens`. The record also corrects §2.1
+(native `glm_coding` serves Responses through the Chat fallback rather than refusing it). T9-Q9 (a): a client's
+`thinking` or `enable_thinking` is forwarded verbatim, only when sent, on `openai-compatible`, `azure-openai-v1`,
+`github-copilot`, `azure-openai-dated` and `glm-coding`, whose native types send the client body (not on
+`gemini-openai-compatible`); gate ② gains four more rows. Q47 against v0.67.0: `south-component-conformance` 0.67.0; `provider-openai-compatible`
+takes the minor 2.8.0 and every other package a patch with unchanged behaviour, each keeping its `south_runtime` and
+contracts. No contract number changes; the kernel pin is unchanged.
 **v0.67.0 (speech on Azure OpenAI, the Veo on Vertex poll prefix, `immutable_request_headers`)**: release record
 `docs/design/2026-10-15-release-0.67.0.md`.
 `speech-openai-compatible` 1.1.0: the Azure OpenAI families: design record

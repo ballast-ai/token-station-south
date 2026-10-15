@@ -4,7 +4,7 @@
 # `sandbox` feature stays off).
 [package]
 name = "speech-groq"
-version = "1.0.2"
+version = "1.0.3"
 edition = "2021"
 publish = false
 
