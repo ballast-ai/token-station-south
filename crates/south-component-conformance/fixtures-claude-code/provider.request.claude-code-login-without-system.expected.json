@@ -1,0 +1,33 @@
+{
+  "method": "POST",
+  "url": "https://api.anthropic.com/v1/messages",
+  "headers": {
+    "accept": "application/json",
+    "anthropic-beta": "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14,prompt-caching-scope-2026-01-05",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "anthropic-version": "2023-06-01",
+    "content-type": "application/json",
+    "x-app": "cli"
+  },
+  "auth": {
+    "scheme": "header",
+    "name": "x-api-key",
+    "secret": "provider_api_key"
+  },
+  "body": {
+    "model": "claude-sonnet-4-5",
+    "system": [
+      {
+        "type": "text",
+        "text": "You are Claude Code, Anthropic's official CLI for Claude."
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "content": "hello"
+      }
+    ],
+    "max_tokens": 321
+  }
+}

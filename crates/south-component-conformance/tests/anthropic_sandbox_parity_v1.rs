@@ -23,6 +23,8 @@ use south_provider_runtime::{ComponentRuntimeV1, NoSecretsV1, RuntimeLimitsV1};
 mod gate2_report;
 #[path = "support/host_range.rs"]
 mod host_range;
+#[path = "support/anthropic_packs.rs"]
+mod packs;
 
 fn repo_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().and_then(Path::parent).expect("repo root")
@@ -71,9 +73,10 @@ fn sandboxed() -> SandboxedComponentV1 {
     SandboxedComponentV1::new(loaded)
 }
 
+/// Both directories the package is judged by (`support/anthropic_packs.rs`): the `anthropic`
+/// pack the manifest names and the Claude Code families' pack.
 fn shipped_pack() -> FixturePackV1 {
-    FixturePackV1::load(&Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures-anthropic"))
-        .expect("the shipped fixture pack loads")
+    packs::package_pack()
 }
 
 /// The run that proves "the sandboxed output equals the native output": the

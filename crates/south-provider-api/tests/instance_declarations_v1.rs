@@ -80,13 +80,14 @@ fn every_declaration_parses_from_its_manifest_shape_and_round_trips() {
 #[test]
 fn an_absent_declaration_changes_nothing() {
     // R5: a manifest that declares none of the three serializes without them and validates.
-    // `provider-anthropic` declares none; `provider-openai-compatible` declares only the
-    // `github-copilot` user-agent (host-zero-vendor-boundary §13.5 D7).
+    // `provider-gemini` declares none (`provider-anthropic` has declared the `claude-code`
+    // user-agent since 1.2.0); `provider-openai-compatible` declares only the `github-copilot`
+    // user-agent (host-zero-vendor-boundary §13.5 D7).
     let openai = provider();
     assert!(openai.query_parameters.is_empty());
     assert!(openai.quota_headers.is_empty());
     assert_eq!(openai.user_agent.keys().collect::<Vec<_>>(), ["github-copilot"]);
-    let manifest = manifest("provider-anthropic");
+    let manifest = manifest("provider-gemini");
     assert!(manifest.query_parameters.is_empty());
     assert!(manifest.quota_headers.is_empty());
     assert!(manifest.user_agent.is_empty());
