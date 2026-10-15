@@ -9,12 +9,4 @@
 #
 # Requires the target: `rustup target add wasm32-wasip2`.
 set -euo pipefail
-# `scripts/prebuild-components.sh` (the nextest setup script) has already built every component.
-if [ -n "${SOUTH_COMPONENTS_PREBUILT:-}" ]; then
-  exit 0
-fi
-cd "$(dirname "$0")/.."
-cargo build \
-  --manifest-path components/provider-anthropic-bedrock-invoke/Cargo.toml \
-  --target wasm32-wasip2 \
-  --release
+exec bash "$(dirname "$0")/component-build.sh" provider-anthropic-bedrock-invoke
