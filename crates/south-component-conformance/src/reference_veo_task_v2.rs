@@ -1,15 +1,20 @@
-//! Pure Google Veo (Gemini API line) video translation.
+//! Pure Google Veo video translation: the Gemini API line (`veo-video`) and the Vertex AI line
+//! (`vertex-veo-video`).
 //!
 //! Transcribed from the host's native Veo arm (token-station-server `handler/video/gemini.rs`
 //! `build_veo_submit_body` / `build_veo_instance`, `durable.rs::parse_veo_create` / `veo_run`,
-//! `observe.rs::normalize_veo` and the Veo failure wording). Credentials, pricing, persistence,
-//! time and remote-image fetching remain host responsibilities.
+//! `observe.rs::normalize_veo` / `build_video_query_url` and the Veo failure wording). The native
+//! arm is one implementation for both rows and branches only on the address and the credential;
+//! this component branches at exactly those places. Credentials, pricing, persistence, time and
+//! remote-image fetching remain host responsibilities.
 //!
-//! What this family needs from task contract 6, and why it could not move before:
-//! - **Header credential**: the Gemini API authenticates with `x-goog-api-key`, so every
-//!   descriptor asks for the credential in that header, never as a bearer token.
+//! What this dialect needs from task contract 6, and why it could not move before:
+//! - **Credential**: the Gemini API authenticates with `x-goog-api-key`, so every `veo-video`
+//!   descriptor asks for the credential in that header. The Vertex line presents the
+//!   service-account token the host mints as a bearer (native `durable.rs` `apply_vertex_auth`).
 //! - **Credential-gated artifacts**: a generated sample's `video.uri` downloads only with the
-//!   same key, so every artifact is `fetch_with_credential`. The rendered body keeps the native
+//!   same credential, so every artifact is `fetch_with_credential`, which the host fetches with the
+//!   submission's authentication (the family's header or bearer). The rendered body keeps the native
 //!   minimal shape `{created, data: [{url}]}`; a host must replace those URLs with its own proxy
 //!   paths before a client sees them (contract 6, D5) — the component cannot know the host's
 //!   routes, and the upstream URI is useless to a client anyway.
@@ -19,6 +24,17 @@
 //! - **Finish at submit**: a create response that is already a terminal operation (no `name`) is
 //!   `accepted-terminal`.
 //!
+//! The Vertex family (design record `docs/design/2026-10-15-veo-vertex-task-component.md` §4, lv
+//! 2026-10-15: VV-Q1 (b), VV-Q2 (b), VV-Q3) reproduces the native arm, not Google's documented
+//! Vertex wire, which the record registers as an **unverified** doubt:
+//! - **Base**: the host passes the location prefix `{origin}/v1/projects/{p}/locations/{r}` as the
+//!   binding's endpoint (native `component_task_endpoint` / `vertex_task_endpoint`).
+//! - **Submit**: `POST {base}/publishers/google/models/{model}:predictLongRunning` with the same
+//!   body as the Gemini line (native `veo_run` / `build_vertex_media_url`).
+//! - **Observe**: `GET {origin}/v1/{operation name}`, the name carrying `projects/…`, as native
+//!   `build_video_query_url` does for a `projects/` name; the body is read as the Gemini LRO shape
+//!   (`generateVideoResponse.generatedSamples[].video.uri`), as native `normalize_veo` reads it.
+//!
 //! Differences from the host-native arm, deliberate:
 //! - Input images must already be `data:` URIs (the host's pre-fetch inlines remote images);
 //!   Veo only accepts inline bytes, and a component has no network. A plain URL is refused with
@@ -27,8 +43,16 @@
 //!   it and lets the upstream default apply, which reserves for a length the caller never asked for.
 //! - A request without a duration reports no requested seconds (the upstream default applies);
 //!   the host's default-duration policy decides the reservation.
-//! - Vertex operation names (`projects/…`) are refused: that line needs a minted service-account
-//!   token and a region-derived endpoint, neither of which this component can express.
+//! - Each family polls only its own operation names: the Gemini line `models/…` and
+//!   `operations/…` under `v1beta/`, the Vertex line `projects/…` under `v1/`. The native query
+//!   builder branches on the name alone, whatever the row. A Gemini-shaped name on the Vertex line
+//!   would be polled outside the binding's endpoint, which a host refuses to send; a `projects/…`
+//!   name on the Gemini line keeps the refusal this component has always made.
+//! - A submission is accepted with either line's operation name (the create response does not say
+//!   which line answered); a `projects/…` name is bounded by the wire's upstream-id limit rather
+//!   than the 128-byte task-id limit the Gemini names keep, since a Vertex name with a UUID
+//!   operation id is longer than 128 bytes.
+//! - A provider family other than these two is refused.
 use crate::{ComponentResultV1, PreparedTaskV2, SubmitOutcomeV2, TaskComponentV2};
 use serde_json::{Value, json};
 use south_contracts::{
@@ -41,7 +65,13 @@ use token_station_protocol::{
     ProviderConfig, SafeHeaders,
 };
 
-const QUERY: &str = "v1beta";
+/// The Gemini API family.
+pub const GEMINI_FAMILY: &str = "veo-video";
+/// The Vertex AI family (the native arm's logic, record §4).
+pub const VERTEX_FAMILY: &str = "vertex-veo-video";
+const GEMINI_ROUTE: &str = "v1beta";
+/// The API version under which native polls a Vertex (`projects/…`) operation name.
+const VERTEX_ROUTE: &str = "v1";
 const KEY_HEADER: &str = "x-goog-api-key";
 /// Veo 3.1 accepts at most three asset references.
 const MAX_REFERENCE_IMAGES: usize = 3;
@@ -55,9 +85,46 @@ const IMMUTABLE_BODY_PATHS: [&str; 5] = [
     "webhookConfig",
 ];
 
-/// Managed Veo video dialect on the Gemini API; no credentials, clock, price or persistence.
+/// Managed Veo video dialect on the Gemini API and Vertex AI; no credentials, clock, price or
+/// persistence.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct VeoTaskComponentV2;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Family {
+    Gemini,
+    Vertex,
+}
+impl Family {
+    fn of(config: &ProviderConfig) -> ComponentResultV1<Self> {
+        match config.provider.as_str() {
+            GEMINI_FAMILY => Ok(Self::Gemini),
+            VERTEX_FAMILY => Ok(Self::Vertex),
+            _ => Err(invalid("unsupported Veo family")),
+        }
+    }
+    const fn route(self) -> &'static str {
+        match self {
+            Self::Gemini => GEMINI_ROUTE,
+            Self::Vertex => VERTEX_ROUTE,
+        }
+    }
+    /// Whether `name` is an operation this family polls.
+    fn polls(self, name: &str) -> bool {
+        match self {
+            Self::Gemini => gemini_operation_name(name),
+            Self::Vertex => vertex_operation_name(name),
+        }
+    }
+    /// The credential as this family presents it: the Gemini API key in its header, the
+    /// host-minted Vertex token as a bearer (native `apply_vertex_auth`).
+    fn auth(self, config: &ProviderConfig) -> Option<Auth> {
+        config.auth.clone().map(|secret| match self {
+            Self::Gemini => Auth::Header { name: KEY_HEADER.into(), secret },
+            Self::Vertex => Auth::Bearer { secret },
+        })
+    }
+}
 
 fn invalid(message: &str) -> ErrorEnvelope {
     ErrorEnvelope::new(ErrorCode::InvalidRequest, 400, message)
@@ -71,30 +138,54 @@ fn field<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
 fn bounded(text: Option<String>) -> Option<String> {
     text.filter(|t| t.len() <= south_contracts::MAX_ARTIFACT_REF_BYTES)
 }
-/// An operation name the Gemini API polls under `v1beta/`: `models/<m>/operations/<id>` or
-/// `operations/<id>`. Every segment is a plain identifier, so it is used as a path verbatim.
-fn operation_name(name: &str) -> bool {
-    let segment = |s: &str| {
+/// Every segment of an operation name is a plain identifier, so the name is used as a path
+/// verbatim.
+fn plain_segments(name: &str) -> bool {
+    name.split('/').all(|s| {
         !s.is_empty()
             && !matches!(s, "." | "..")
             && s.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
-    };
+    })
+}
+/// An operation name the Gemini API polls under `v1beta/`: `models/<m>/operations/<id>` or
+/// `operations/<id>`.
+fn gemini_operation_name(name: &str) -> bool {
     name.len() <= south_contracts::MAX_TASK_ID_BYTES
         && !name.starts_with("projects/")
         && (name.starts_with("models/") || name.starts_with("operations/"))
-        && name.split('/').all(segment)
+        && plain_segments(name)
 }
-fn request(config: &ProviderConfig, method: HttpMethod, path: &str) -> HttpRequestDescriptor {
-    let mut descriptor = HttpRequestDescriptor::new(
-        method,
-        format!("{}/{path}", config.base_url.as_str().trim_end_matches('/')),
-    );
-    descriptor.auth =
-        config.auth.clone().map(|secret| Auth::Header { name: KEY_HEADER.into(), secret });
+/// A Vertex operation name, which native polls under `v1/`:
+/// `projects/<p>/locations/<r>/publishers/google/models/<m>/operations/<id>`. Bounded by the
+/// wire's upstream-id limit, since such a name with a UUID id exceeds the 128-byte task-id limit.
+fn vertex_operation_name(name: &str) -> bool {
+    name.len() <= south_contracts::MAX_ARTIFACT_REF_BYTES
+        && name.starts_with("projects/")
+        && plain_segments(name)
+}
+/// The scheme and authority of the binding's endpoint: native polls a Vertex operation at
+/// `{vertex_api_base}/v1/{name}`, and the location prefix the host binds is
+/// `{vertex_api_base}/v1/projects/{p}/locations/{r}`.
+fn origin(base: &str) -> &str {
+    let authority = base.find("://").map_or(0, |scheme| scheme + 3);
+    base[authority..].find('/').map_or(base, |path| &base[..authority + path])
+}
+fn request(
+    config: &ProviderConfig,
+    family: Family,
+    method: HttpMethod,
+    url: String,
+) -> HttpRequestDescriptor {
+    let mut descriptor = HttpRequestDescriptor::new(method, url);
+    descriptor.auth = family.auth(config);
     descriptor
 }
-fn checked_locator(locator: &TaskLocatorV2) -> ComponentResultV1<()> {
-    if locator.route() == QUERY { Ok(()) } else { Err(invalid("unsupported Veo locator")) }
+/// `{base}/{path}`, under the binding's endpoint.
+fn under_base(config: &ProviderConfig, path: &str) -> String {
+    format!("{}/{path}", config.base_url.as_str().trim_end_matches('/'))
+}
+fn checked_locator(family: Family, locator: &TaskLocatorV2) -> ComponentResultV1<()> {
+    if locator.route() == family.route() { Ok(()) } else { Err(invalid("unsupported Veo locator")) }
 }
 fn unknown(reason: &str) -> TaskObservationV2 {
     TaskObservationV2::Unknown { reason: reason.into() }
@@ -172,7 +263,7 @@ impl TaskComponentV2 for VeoTaskComponentV2 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "task-veo-v2".into(),
-            version: "0.35.24".into(),
+            version: "0.36.0".into(),
             api_version: "task-adapter-v2".into(),
         }
     }
@@ -182,6 +273,7 @@ impl TaskComponentV2 for VeoTaskComponentV2 {
         body: &Value,
         _: &HostMintedValuesV1,
     ) -> ComponentResultV1<PreparedTaskV2> {
+        let family = Family::of(config)?;
         let model = field(body, "model")
             .filter(|m| {
                 !m.is_empty() && m.bytes().all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
@@ -259,14 +351,20 @@ impl TaskComponentV2 for VeoTaskComponentV2 {
             .and_then(|e| e.with_input_facts(resolution_fact.as_deref(), Some(image_count)))
             .and_then(|e| e.with_output_facts(None, i64::try_from(samples).ok()))
             .map_err(|_| invalid("invalid Veo request estimate"))?;
-        let mut descriptor =
-            request(config, HttpMethod::Post, &format!("v1beta/models/{model}:predictLongRunning"));
+        // Native `veo_run`: the Gemini API's `v1beta/models/…`, or for a Vertex row
+        // `build_vertex_media_url`'s `…/publishers/google/models/…` under the location prefix.
+        let path = match family {
+            Family::Gemini => format!("v1beta/models/{model}:predictLongRunning"),
+            Family::Vertex => format!("publishers/google/models/{model}:predictLongRunning"),
+        };
+        let mut descriptor = request(config, family, HttpMethod::Post, under_base(config, &path));
         descriptor.headers = SafeHeaders::try_new([("content-type", "application/json")])
             .map_err(|_| protocol("invalid Veo headers"))?;
         descriptor.body = Some(json!({"instances": [instance], "parameters": parameters}));
         Ok(PreparedTaskV2 {
             descriptor,
-            locator: TaskLocatorV2::new(1, QUERY).map_err(|_| protocol("invalid Veo locator"))?,
+            locator: TaskLocatorV2::new(1, family.route())
+                .map_err(|_| protocol("invalid Veo locator"))?,
             request_estimate,
             immutable_body_paths: Some(IMMUTABLE_BODY_PATHS.map(str::to_owned).to_vec()),
         })
@@ -295,7 +393,8 @@ impl TaskComponentV2 for VeoTaskComponentV2 {
             return Ok(SubmitOutcomeV2::Unknown);
         };
         if let Some(name) = field(&body, "name") {
-            return Ok(if operation_name(name) {
+            // Either line's name: the response does not say which line answered.
+            return Ok(if gemini_operation_name(name) || vertex_operation_name(name) {
                 SubmitOutcomeV2::Accepted(name.into())
             } else {
                 SubmitOutcomeV2::Unknown
@@ -316,11 +415,20 @@ impl TaskComponentV2 for VeoTaskComponentV2 {
         id: &str,
         locator: &TaskLocatorV2,
     ) -> ComponentResultV1<HttpRequestDescriptor> {
-        checked_locator(locator)?;
-        if !operation_name(id) {
+        let family = Family::of(config)?;
+        checked_locator(family, locator)?;
+        if !family.polls(id) {
             return Err(invalid("invalid Veo operation name"));
         }
-        Ok(request(config, HttpMethod::Get, &format!("{QUERY}/{id}")))
+        // Native `build_video_query_url`: `{base}/v1beta/{name}` on the Gemini API; a `projects/…`
+        // name at `{vertex_api_base}/v1/{name}`, the origin of the bound location prefix.
+        let url = match family {
+            Family::Gemini => under_base(config, &format!("{GEMINI_ROUTE}/{id}")),
+            Family::Vertex => {
+                format!("{}/{VERTEX_ROUTE}/{id}", origin(&config.base_url.as_str()))
+            }
+        };
+        Ok(request(config, family, HttpMethod::Get, url))
     }
     fn parse_observation(&self, parts: &HttpResponseParts) -> ComponentResultV1<TaskObservationV2> {
         if !(200..300).contains(&parts.status) {
@@ -333,11 +441,11 @@ impl TaskComponentV2 for VeoTaskComponentV2 {
     }
     fn build_artifact_request(
         &self,
-        _: &ProviderConfig,
+        config: &ProviderConfig,
         locator: &TaskLocatorV2,
         observation: &TaskObservationV2,
     ) -> ComponentResultV1<Option<HttpRequestDescriptor>> {
-        checked_locator(locator)?;
+        checked_locator(Family::of(config)?, locator)?;
         observation.validate().map_err(|_| protocol("invalid Veo observation"))?;
         Ok(None)
     }

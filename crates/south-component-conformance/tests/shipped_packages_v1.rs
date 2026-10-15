@@ -2670,7 +2670,11 @@ fn provider_vertex_retires_every_published_065_package_identity() {
         )
         .unwrap();
         assert_ne!(manifest.version, published, "{name} reused its published identity");
-        assert_eq!(manifest.version, now, "{name}");
+        // `task-veo-v2` moved on from this patch to a minor version with the Vertex family, in
+        // the same unreleased cycle (`task_veo_v2_gains_the_vertex_family_and_bearer`).
+        if name != "task-veo-v2" {
+            assert_eq!(manifest.version, now, "{name}");
+        }
         let runtime = match name {
             "task-gemini-omni-v2" => "0.62.0",
             "image-vertex" => "0.59.0",
@@ -2787,4 +2791,32 @@ fn the_speech_packages_declare_contracts_speech_1_and_this_release() {
             "speech-xai",
         ]
     );
+}
+
+/// `task-veo-v2` gains the `vertex-veo-video` family (design record
+/// `docs/design/2026-10-15-veo-vertex-task-component.md` §4, §7; lv 2026-10-15, VV-Q1 (b)): the
+/// native arm's Vertex logic in the same package, with the host-minted token presented as `bearer`
+/// beside the Gemini API's `header_secret`. A new family and auth arm change behaviour, so the
+/// package takes a minor version past the unpublished `provider-vertex` patch 0.35.24 (the same
+/// unreleased cycle, so no further Q47 round); the clip stays an upstream URI, so the task contract stays 7 and
+/// a task-7-only host still admits it, and the runtime stays the oldest that admits the manifest.
+#[test]
+fn task_veo_v2_gains_the_vertex_family_and_bearer() {
+    let manifest: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(repo_root().join("components/task-veo-v2/manifest.json")).unwrap(),
+    )
+    .unwrap();
+    for retired in ["0.35.23", "0.35.24"] {
+        assert_ne!(manifest.version, retired, "a changed package cannot reuse an identity");
+    }
+    assert_eq!(manifest.version, "0.36.0");
+    assert_eq!(manifest.providers, ["veo-video", "vertex-veo-video"]);
+    assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer", "header_secret"]);
+    assert_eq!(manifest.compatibility.contracts.get("task"), Some(&7));
+    assert_eq!(manifest.compatibility.south_runtime, declared_runtime_now("task-veo-v2"));
+    assert!(manifest.credentials.is_none(), "the host mints the Vertex token (record §2)");
+    assert!(manifest.declared_keys("vertex-veo-video").is_empty(), "no config_schema (record §2)");
+    let mut task_7_only = host_range::host_range();
+    task_7_only.contracts.insert("task".to_owned(), [7].into());
+    assert_eq!(compatibility_admits(&manifest, &task_7_only), Ok(()));
 }

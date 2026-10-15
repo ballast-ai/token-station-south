@@ -1,0 +1,18 @@
+{
+  "provider_config": {
+    "provider": "vertex-veo-video",
+    "base_url": "https://us-central1-aiplatform.example/v1/projects/sample-project/locations/us-central1",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "model": "veo-3.1-generate-001",
+    "prompt": "a cat",
+    "aspect_ratio": "9:16",
+    "duration": 8,
+    "resolution": "1080p",
+    "n": 2
+  },
+  "minted": {
+    "task_id": "host-1"
+  }
+}

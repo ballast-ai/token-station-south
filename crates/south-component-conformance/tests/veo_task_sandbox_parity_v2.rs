@@ -31,7 +31,7 @@ fn component_wasm() -> &'static Path {
             .expect("bash is on PATH");
         assert!(
             status.success(),
-            "the Google Veo video (Gemini API) component must build; run `rustup target add wasm32-wasip2` if the \
+            "the Google Veo video component must build; run `rustup target add wasm32-wasip2` if the \
              target is missing"
         );
         repo_root().join("components/task-veo-v2/target/wasm32-wasip2/release/task_veo_v2.wasm")
@@ -177,6 +177,60 @@ fn the_packaged_component_uses_header_auth_and_marks_credential_gated_artifacts(
         &std::fs::read_to_string(repo_root().join("components/task-veo-v2/manifest.json")).unwrap(),
     )
     .unwrap();
-    assert!(m.auth_arms.contains("header_secret") && !m.auth_arms.contains("bearer"));
-    assert!(m.providers.iter().any(|p| p == "veo-video"));
+    assert_eq!(m.auth_arms.iter().collect::<Vec<_>>(), ["bearer", "header_secret"]);
+    assert_eq!(m.providers, ["veo-video", "vertex-veo-video"]);
+}
+
+/// The Vertex family in the built component (design record
+/// `docs/design/2026-10-15-veo-vertex-task-component.md` §4): the host-minted token as a bearer,
+/// the submit under the bound location prefix, the poll at the origin's `/v1/{name}`, both
+/// sendable under the binding, and the gated clip fetched with the same credential.
+#[test]
+fn the_packaged_vertex_family_uses_bearer_auth_under_the_location_prefix() {
+    use serde_json::json;
+    use south_component_conformance::{SubmitOutcomeV2, TaskComponentV2};
+    use south_contracts::{HostMintedValuesV1, TaskArtifactRefV2, TaskObservationV2};
+    use token_station_protocol::{Auth, HttpResponseParts, ProviderConfig};
+    const BASE: &str =
+        "https://us-central1-aiplatform.example/v1/projects/sample-project/locations/us-central1";
+    const OPERATION: &str = "projects/sample-project/locations/us-central1/publishers/google/\
+                             models/veo-3.1-generate-001/operations/op7";
+    let c = sandboxed();
+    let cfg: ProviderConfig = serde_json::from_value(
+        json!({"provider":"vertex-veo-video","base_url":BASE,"auth":"provider_api_key"}),
+    )
+    .unwrap();
+    let p = c
+        .build_submit_request(
+            &cfg,
+            &json!({"model":"veo-3.1-generate-001","prompt":"scene","duration":8}),
+            &HostMintedValuesV1::new("host-1", None).unwrap(),
+        )
+        .unwrap();
+    cfg.authorize(&p.descriptor).unwrap();
+    assert!(matches!(p.descriptor.auth, Some(Auth::Bearer { .. })));
+    assert_eq!(
+        p.descriptor.url,
+        format!("{BASE}/publishers/google/models/veo-3.1-generate-001:predictLongRunning")
+    );
+    let parts: HttpResponseParts =
+        serde_json::from_value(json!({"status":200,"body":json!({"name": OPERATION}).to_string()}))
+            .unwrap();
+    let SubmitOutcomeV2::Accepted(id) = c.parse_submit_response(&parts).unwrap() else {
+        panic!("a Vertex operation name is accepted")
+    };
+    let q = c.build_observe_request(&cfg, "veo", &id, &p.locator).unwrap();
+    cfg.authorize(&q).unwrap();
+    assert!(matches!(q.auth, Some(Auth::Bearer { .. })));
+    assert_eq!(q.url, format!("https://us-central1-aiplatform.example/v1/{OPERATION}"));
+    let done = json!({"name": OPERATION, "done": true, "response": {"generateVideoResponse":
+        {"generatedSamples": [{"video": {"uri": format!("{BASE}/files/a:download")}}]}}});
+    let parts: HttpResponseParts =
+        serde_json::from_value(json!({"status":200,"body":done.to_string()})).unwrap();
+    let TaskObservationV2::Succeeded { artifacts: TaskArtifactRefV2::Urls(items), .. } =
+        c.parse_observation(&parts).unwrap()
+    else {
+        panic!("a done operation with samples succeeds")
+    };
+    assert!(items.iter().all(south_contracts::TaskArtifactV2::fetch_with_credential));
 }

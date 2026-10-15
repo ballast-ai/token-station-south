@@ -1,4 +1,5 @@
-//! The task-v2 Google Veo video (Gemini API) guest is a thin shell over the shared native dialect.
+//! The task-v2 Google Veo video (Gemini API and Vertex AI) guest is a thin shell over the shared
+//! native dialect.
 
 wit_bindgen::generate!({
     path: "../../crates/south-provider-api/wit/task-adapter-v2.wit",

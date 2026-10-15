@@ -1,7 +1,7 @@
 # Task world: Veo on Vertex AI (a `vertex-veo-video` family in `task-veo-v2`)
 
 Status: accepted, revised the same day (lv 2026-10-15: migrate by the existing code's logic, prioritising speed; §5).
-Not implemented.
+Implemented, unreleased ("Implementation").
 
 Date: 2026-10-15
 
@@ -13,13 +13,14 @@ documentation, not from running anything or capturing traffic.
 Related: `task-veo-v2` (the Gemini API Veo line; its reference header says Vertex operation names are refused because
 "that line needs a minted service-account token and a region-derived endpoint, neither of which this component can
 express"), [Omni record](2026-10-01-omni-task-component.md) (task contract 8, inline artifacts, and its
-`vertex-interactions-video` family, the precedent for a Vertex task family), the host's deletion list D10 (Veo's native
-arm is not deleted until south ships the Vertex task package).
+`vertex-interactions-video` family, the precedent for a Vertex task family), lv's L-Q2 ruling of 2026-10-14 (the
+native Vertex Veo line goes offline with V1; this family re-launches it as a component family, §6).
 
 ## 1. Why
 
-Veo is served natively on two rows: `gemini` (moved to `task-veo-v2`) and `vertex_ai`. D10 = B keeps the whole native
-Veo arm until a Vertex task package exists. This record designs it.
+Veo was served natively on two rows: `gemini` (moved to `task-veo-v2`) and `vertex_ai`. lv's L-Q2 ruling
+(2026-10-14) takes the native Vertex Veo line offline with V1, so Vertex Veo returns only as a component family. This
+record designs it.
 
 ## 2. What the host already provides (read, not run)
 
@@ -45,6 +46,11 @@ either `bytesBase64Encoded` (inline) or `gcsUri` (when the request names `storag
 If the documentation is right, the native Vertex Veo arm has never completed a task; if the native shape is right, the
 documentation is wrong for this model line. Only a real-account capture settles it (VV-Q2).
 
+The native arm also never fetched a Vertex clip (**unverified** doubt). Its artifact fetch refuses a Vertex row
+fail-closed (`server:…/handler/video/transfer.rs:107-128`, host plan 59, step P2: no guessing before a real response sample), and its
+only Vertex test pins a failure terminal, not a success. So no native baseline exists for the success shape or for the
+fetch of `video.uri`.
+
 ## 4. The family (as ruled: the native arm's logic)
 
 lv ruled on 2026-10-15 to migrate by the existing code's implementation and prioritise speed. The package therefore
@@ -60,7 +66,12 @@ doubt, registered here and not blocking a cutover.
 - **Observe**: `GET {base-origin}/v1/{operation name}` (the operation name carries `projects/…/locations/…`), as native
   `observe.rs:200-220`; the response is read as the Gemini LRO shape (`observe.rs:385-400`).
 - **Artifacts**: `generateVideoResponse.generatedSamples[].video.uri`, `fetch_with_credential` with the family's
-  `bearer`, as the Gemini family fetches with its key header.
+  `bearer`, as the Gemini family fetches with its key header. Submit and poll reproduce native; this fetch is **new**,
+  since native refuses it (§3), so it and the result shape it reads have no native baseline (**unverified**).
+- **Shared create parse**: a create response does not say which line answered, so the package accepts either line's
+  operation name there, as native `parse_veo_create` accepts any name. In consequence the Gemini line's frozen case
+  `created.vertex-name` changes from `unknown` to `accepted`; the Gemini family still refuses to poll a `projects/…`
+  name.
 - **Metering**: requested seconds × delivered clips, as the Gemini family (P13 S11).
 - **Client parameters**: as native; `storageUri` is not refused (native passes the body through its builder).
 
@@ -86,15 +97,15 @@ package, since an upstream URI needs no task contract 8 and the native arm is on
 - **VV-Q3 `storageUri` / `gcsUri`.** Refuse a client `storageUri` before submit (400), so the clip always comes inline;
   or accept it and add a `gs://` second hop to the host (new host capability). **Recommended: refuse.**
 
-## 6. What the host must do before a cutover
+## 6. What the host must do before a re-launch
 
 1. Re-pin to the release that ships the `task-veo-v2` with the new family.
 2. Credential-gated artifact fetch with the family's `bearer` (the Gemini family already uses the gated fetch with its
    key header).
 3. A binding for `vertex-veo-video` and `component_task` routes on Vertex Veo models.
-4. A dual run against the native arm, which the family reproduces (VV-Q2 (b)), on submit, observe and the gated
-   fetch; then the native drain preflight `native_task_drain_preflight.py` gains a `veo` Vertex row before deletion
-   (D10). No production query (lv, 2026-10-15).
+4. Re-launch after the native line is offline (L-Q2, lv 2026-10-14, which overturns the earlier plan to keep the native
+   arm until this package ships). The family's frozen fixtures are the baseline: there is no dual run against native
+   and no drain-preflight deletion step. No production query (lv, 2026-10-15).
 
 ## 7. Versioning (Q47)
 
@@ -103,6 +114,69 @@ reference gains the family) and moves one step, so every other package published
 `task-veo-v2` keeps task contract 7; its `south_runtime` stays the oldest runtime that admits the manifest, confirmed by
 `check-declared-runtime`.
 
+## Implementation
+
+`task-veo-v2` 0.36.0 carries the family: `crates/south-component-conformance/src/reference_veo_task_v2.rs` (a `Family`
+switch at the submit path, the observe URL, the credential and the locator route, as native branches only there), the
+manifest (`providers` gains `vertex-veo-video`, `auth_arms` gains `bearer`, task contract 7 and `south_runtime`
+unchanged), and Vertex rows in `fixtures-veo-task-v2/` hand-transcribed from `durable.rs::veo_run` /
+`build_vertex_media_url`, `observe.rs::build_video_query_url` / `normalize_veo` and the host test
+`durable_vertex_veo_submits_with_the_sa_bearer_at_the_region_host`.
+
+**Interpretations.**
+
+- *Observe origin.* Native polls `{vertex_api_base}/v1/{name}`, where `vertex_api_base` is scheme and host. The
+  component takes the scheme and authority of the bound location prefix, which the host derives from the same
+  `vertex_api_base`, so the URL is native's byte for byte, including the host's test override.
+- *Locator route.* The Vertex family's locator route is `v1`, the Gemini family's stays `v1beta`; each family refuses
+  the other's locator on observe and artifact.
+- *Operation names.* A create response does not say which line answered, so `parse_submit_response` accepts either
+  line's name, as native `parse_veo_create` accepts any name. On observe each family polls only its own shape: the
+  Vertex family refuses a `models/…` name (native would poll it at `{origin}/v1beta/…`, outside the bound endpoint, which
+  a host refuses to send); the Gemini family keeps its refusal of `projects/…`.
+- *Name length.* A `projects/…` name is bounded by the wire's upstream-id limit (`MAX_ARTIFACT_REF_BYTES`), not by the
+  128-byte task-id limit the Gemini names keep: a Vertex name with a UUID operation id is about 145 bytes. Native has no
+  bound.
+- *Project and location.* The component does not compare the name's project and location with the binding's; native
+  does not either. A name outside the bound location yields a descriptor a host's `authorize` refuses (tested), so the
+  credential never leaves the location.
+- *`storageUri` (VV-Q3).* Native `build_veo_submit_body` copies only the fields it knows, so a client `storageUri` is
+  neither refused nor sent. An operator's request extra may still set `parameters.storageUri` (not an immutable path,
+  as in native `VEO_VIDEO_OWNED`); the answer would then carry no `generatedSamples` and observe as `unknown`, as native.
+- *Artifacts.* The clip is a `fetch_with_credential` URL artifact; the host fetches it with the submission's
+  authentication, here the bearer. `build_artifact_request` returns none, as for the Gemini line.
+- *Undeclared family.* A provider other than `veo-video` and `vertex-veo-video` is refused (the Omni package's rule);
+  before, any provider was treated as the Gemini line.
+
+**Contradictions (flagged).**
+
+- *Native never fetched a Vertex clip.* `server:…/handler/video/transfer.rs:107-128` refuses the Vertex Veo artifact fetch
+  ("not wired yet": the response shape was never verified). §4's "fetch with the family's bearer" is therefore not a
+  transcription of native; it is the contract 6 rule the host has to implement (§6 item 2). Native's own tests pin only
+  the failure terminal on Vertex, not a success.
+- *One Gemini-line fixture changed.* `task-v2.created.vertex-name` expected `unknown` and now expects `accepted`: the
+  create parser has no family to branch on, and accepting `projects/…` names there is what the Vertex family needs and
+  what native does. Every other Gemini-line fixture is unchanged.
+
+**Open questions.**
+
+- *Project number or id.* If Vertex returns operation names with the project **number** while the binding carries the
+  project id, the poll URL leaves the bound endpoint, the host refuses it and the task cannot be polled; native polls it
+  regardless. Only a capture (with VV-Q2) settles it; a host could also bind the location prefix by number.
+- *The clip URI.* Whether `video.uri` (if the native shape is right at all) lies under the bound location prefix, which
+  a host's gated fetch may require, is unknown; the fixtures use a placeholder under it.
+
+**Gate results** (local, on `origin/main` 0f80b91 plus this change, mirroring `ci.yml` with `set -o pipefail`): fmt,
+clippy (workspace, all targets, all features, `-D warnings`), nextest with `PROPTEST_CASES=32` (2152 run, 2152 passed, 4
+skipped), doc tests, `--no-default-features`, rustdoc `-D warnings`, fuzz `check --locked`, `check-boundaries` with its
+self-test, the Python script tests, `check-language` (self-test, files, commits), `machete` (workspace and fuzz), every
+`build-*-component.sh`, and `check-declared-runtime.sh --build` (`task-veo-v2` loads under its declared 0.57.0): all
+pass. `cargo deny`, `cargo audit` and MSRV were not run locally. Mutations, each caught by the frozen pack and by
+`veo_task_suite_v2`: the Vertex submit path without `publishers/google/` (four `prepare.vertex-*` cases), the Vertex
+credential as the Gemini header instead of a bearer (the four `prepare.vertex-*` cases and `observe.vertex-operation`),
+and the Vertex poll under the location prefix instead of the origin's `/v1/` (`observe.vertex-operation` and the
+authorize tests).
+
 ## Revision note
 
 - 2026-10-15: first draft (proposed).
@@ -110,3 +184,8 @@ reference gains the family) and moves one step, so every other package published
 - 2026-10-15: revised: lv ruled to migrate by the existing code's logic and prioritise speed. VV-Q2 (b), and from it
   VV-Q1 (b) (a family in `task-veo-v2`) and VV-Q3 (native behaviour); §4 rewritten. The decision whether the native
   Vertex arm gets a dual run or a deletion is derived from the code, not from production data.
+- 2026-10-15: implemented in `task-veo-v2` 0.36.0 ("Implementation"); unreleased.
+- 2026-10-15: L-Q2 (lv 2026-10-14) applied: the native Vertex Veo line goes offline with V1, so §6 is a re-launch with
+  the frozen fixtures as baseline (no dual run, no drain-preflight deletion); the reliance on the deletion list is struck.
+  §3 and §4 register the gated clip fetch as new and unverified, and §4 the shared create parse's consequence for
+  `created.vertex-name`.

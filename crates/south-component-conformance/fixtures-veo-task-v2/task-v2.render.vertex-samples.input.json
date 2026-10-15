@@ -1,0 +1,30 @@
+{
+  "observation": {
+    "state": "succeeded",
+    "artifacts": {
+      "kind": "urls",
+      "items": [
+        {
+          "url": "https://us-central1-aiplatform.example/v1/projects/sample-project/locations/us-central1/files/veo-sample-a:download?alt=media",
+          "id": null,
+          "duration": null,
+          "fetch_with_credential": true,
+          "role": null
+        }
+      ]
+    },
+    "usage": {
+      "seconds": null,
+      "milliunits": null,
+      "tokens": null,
+      "outputs": 1
+    }
+  },
+  "context": {
+    "task_id": "host-1",
+    "created": 123,
+    "provider": "vertex-ai",
+    "model": "vertex_ai/veo-31",
+    "upstream_task_id": "projects/sample-project/locations/us-central1/publishers/google/models/veo-3.1-generate-001/operations/0b1c2d3e-4f50-4617-8899-aabbccddeeff"
+  }
+}

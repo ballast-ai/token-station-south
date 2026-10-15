@@ -212,6 +212,19 @@ misread as a boundary violation.
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
 This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.65.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.58.0 and 0.65.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**Unreleased (`task-veo-v2`: the `vertex-veo-video` family)**: design record
+`docs/design/2026-10-15-veo-vertex-task-component.md` (accepted and revised 2026-10-15: VV-Q1 (b), VV-Q2 (b), VV-Q3;
+"Implementation"). `task-veo-v2` gains a second family that reproduces the host's native Vertex Veo arm, not Google's
+documented Vertex wire (an **unverified** doubt the record registers):
+`POST {base}/publishers/google/models/{model}:predictLongRunning` under the location prefix the host binds, with the
+Gemini line's body; `GET {origin}/v1/{operation name}` for a `projects/…` name; the Gemini LRO shape
+(`generateVideoResponse.generatedSamples[].video.uri`) as a credential-gated URL artifact; the host-minted token as `bearer` (the Gemini family keeps `x-goog-api-key`). A create response is accepted
+with either line's operation name, a `projects/…` name up to the wire's upstream-id bound; each family polls only its
+own names and locator route; a client `storageUri` is neither refused nor sent; an undeclared family is refused. The
+manifest gains the provider and the `bearer` arm, keeps task contract 7 and its `south_runtime`, and the package takes a
+minor version (0.36.0, past `provider-vertex`'s patch 0.35.24 in this cycle, so no further Q47 round). No contract
+changes. Per L-Q2 (lv 2026-10-14) the family re-launches Vertex Veo after the native line goes offline; the gated clip
+fetch has no native baseline.
 **Unreleased (`provider-vertex` 1.0.0: Gemini models on Vertex AI for text)**: design record
 `docs/design/2026-10-15-provider-vertex.md` (accepted 2026-10-15; VX-Q1 (a), `generateContent` on every surface; VX-Q2,
 family `vertex-ai`). The Gemini reference's request body, response reader, stream parser (with SF27) and refusals move

@@ -1,0 +1,8 @@
+{
+  "created": 123,
+  "data": [
+    {
+      "url": "https://us-central1-aiplatform.example/v1/projects/sample-project/locations/us-central1/files/veo-sample-a:download?alt=media"
+    }
+  ]
+}
