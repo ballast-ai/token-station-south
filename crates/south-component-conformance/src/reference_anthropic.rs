@@ -14,6 +14,24 @@
 //! content is always typed blocks; tool calls and tool results are blocks
 //! rather than sibling fields; and reasoning arrives as `thinking` blocks
 //! carrying a replay `signature` that a later turn must return untouched.
+//!
+//! **The Claude Code families (1.2.0).** Two further families send the same
+//! Messages body to the same `{base_url}/v1/messages` with a Claude Code
+//! subscription credential instead of an API key
+//! (`docs/design/2026-10-15-claude-code-family.md`):
+//!
+//! - [`claude_code::FAMILY`] (`claude-code`), the login-token form: the
+//!   minted OAuth access token in `x-api-key`, the CLI's beta set, `x-app:
+//!   cli`, `anthropic-dangerous-direct-browser-access: true`, and the identity
+//!   system prompt as the first system block. The package declares the CLI's
+//!   user-agent and the refresh recipe for this family.
+//! - [`claude_code::SETUP_TOKEN_FAMILY`] (`claude-code-setup-token`), the
+//!   setup-token form: the operator's token as `Authorization: Bearer` with
+//!   the single OAuth beta flag, and nothing else.
+//!
+//! Both send `accept` for the mode the request is in. Everything else — the
+//! body, the dialect words, the response, the stream and the usage — is the
+//! `anthropic` family's: the response-side functions take no configuration.
 
 use serde_json::{Map, Value, json};
 use south_provider_api::{
@@ -42,6 +60,95 @@ const DEFAULT_MAX_TOKENS: u64 = 4096;
 /// The reference component. Stateless; each stream gets its own parser.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct AnthropicReferenceV1;
+
+/// The `anthropic` family, an Anthropic API key in `x-api-key`.
+pub const FAMILY: &str = "anthropic";
+
+/// The Claude Code subscription families.
+///
+/// Design record `docs/design/2026-10-15-claude-code-family.md`. Every value is transcribed from
+/// the host's native `claude_code` arm, which the record cites line by line; none was captured
+/// from the upstream.
+pub mod claude_code {
+    /// The login-token form (a token with a refresh token, from the CLI's `/login`).
+    pub const FAMILY: &str = "claude-code";
+    /// The setup-token form (a long-lived token from `claude setup-token`, no refresh token).
+    pub const SETUP_TOKEN_FAMILY: &str = "claude-code-setup-token";
+    /// `anthropic-beta` for the login-token form: the CLI's own set. The first flag is the one
+    /// that lets a login token reach models other than Haiku.
+    pub const LOGIN_ANTHROPIC_BETA: &str = "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14,prompt-caching-scope-2026-01-05";
+    /// `anthropic-beta` for the setup-token form: the documented OAuth flag alone.
+    pub const SETUP_TOKEN_ANTHROPIC_BETA: &str = "oauth-2025-04-20";
+    /// The system text a login-token request carries first.
+    pub const SYSTEM_IDENTITY: &str = "You are Claude Code, Anthropic's official CLI for Claude.";
+    /// The two constant headers the login-token form adds.
+    pub const LOGIN_HEADERS: [(&str, &str); 2] =
+        [("x-app", "cli"), ("anthropic-dangerous-direct-browser-access", "true")];
+    /// The user-agent the package declares for [`FAMILY`] (manifest `user_agent`).
+    ///
+    /// The component cannot send it: `user-agent` is reserved, and the host fills the controlled
+    /// slot from the manifest. Here so a test can pin the manifest to the host's value.
+    pub const USER_AGENT: &str = "claude-cli/2.1.114 (external, cli)";
+}
+
+/// Which family a request is built for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Family {
+    Anthropic,
+    ClaudeCodeLogin,
+    ClaudeCodeSetupToken,
+}
+
+impl Family {
+    fn of(config: &ProviderConfig) -> ComponentResultV1<Self> {
+        match config.provider.as_str() {
+            FAMILY => Ok(Self::Anthropic),
+            claude_code::FAMILY => Ok(Self::ClaudeCodeLogin),
+            claude_code::SETUP_TOKEN_FAMILY => Ok(Self::ClaudeCodeSetupToken),
+            other => Err(capability(format!("unsupported provider dialect `{other}`"))),
+        }
+    }
+}
+
+/// Puts the Claude Code identity first in `system`.
+///
+/// As the host's native arm does for a login token (server `claude_code.rs` `inject_identity`):
+/// absent, it becomes the only block; a string
+/// becomes two blocks, the identity and then the string; a block array gains the identity as its
+/// first block. A string that already starts with the identity, or an array whose first block's
+/// text does, is left as it is.
+pub fn inject_claude_code_identity(body: &mut Value) {
+    let Some(object) = body.as_object_mut() else {
+        return;
+    };
+    let identity = json!({"type": "text", "text": claude_code::SYSTEM_IDENTITY});
+    if !object.contains_key("system") {
+        object.insert("system".to_owned(), Value::Array(vec![identity]));
+        return;
+    }
+    match object.get_mut("system") {
+        Some(system @ Value::String(_)) => {
+            let text = system.as_str().unwrap_or_default();
+            if !text.starts_with(claude_code::SYSTEM_IDENTITY) {
+                let client = json!({"type": "text", "text": text});
+                *system = Value::Array(vec![identity, client]);
+            }
+        }
+        Some(Value::Array(blocks)) => {
+            let present = blocks
+                .first()
+                .and_then(|block| block.get("text"))
+                .and_then(Value::as_str)
+                .is_some_and(|text| text.starts_with(claude_code::SYSTEM_IDENTITY));
+            if !present {
+                blocks.insert(0, identity);
+            }
+        }
+        // The body builder writes `system` only as a string or a block array; the native arm
+        // leaves any other shape alone too.
+        Some(_) | None => {}
+    }
+}
 
 // -- error plumbing ----------------------------------------------------------
 
@@ -1026,26 +1133,44 @@ impl ProviderComponentV1 for AnthropicReferenceV1 {
             validated_layout(message)
                 .map_err(|()| capability("invalid reasoning replay markers or layout"))?;
         }
-        if config.provider != "anthropic" {
-            return Err(capability(format!("unsupported provider dialect `{}`", config.provider)));
+        let family = Family::of(config)?;
+        let mut body = checked_body_of(request, config)?;
+        if family == Family::ClaudeCodeLogin {
+            inject_claude_code_identity(&mut body);
         }
-        let body = checked_body_of(request, config)?;
         let mut descriptor = HttpRequestDescriptor::new(
             HttpMethod::Post,
             config.base_url.resolve(ProviderApi::Messages),
         );
-        descriptor.headers = SafeHeaders::try_new([
+        let mut headers = vec![
             ("content-type", "application/json"),
             // D5: a wire-protocol constant of the dialect.
             ("anthropic-version", ANTHROPIC_VERSION),
-        ])
-        .map_err(internal)?;
+        ];
+        let accept = if request.stream { "text/event-stream" } else { "application/json" };
+        match family {
+            Family::Anthropic => {}
+            Family::ClaudeCodeLogin => {
+                headers.push(("accept", accept));
+                headers.push(("anthropic-beta", claude_code::LOGIN_ANTHROPIC_BETA));
+                headers.extend(claude_code::LOGIN_HEADERS);
+            }
+            Family::ClaudeCodeSetupToken => {
+                headers.push(("accept", accept));
+                headers.push(("anthropic-beta", claude_code::SETUP_TOKEN_ANTHROPIC_BETA));
+            }
+        }
+        descriptor.headers = SafeHeaders::try_new(headers).map_err(internal)?;
         descriptor.body = Some(body);
         // The host holds the value; this names the slot and the presentation
-        // the dialect fixes.
-        descriptor.auth = match config.auth.clone() {
-            Some(secret) => Some(Auth::header("x-api-key", secret).map_err(internal)?),
-            None => None,
+        // the family fixes: the setup token as a Bearer token, an API key or a
+        // login token's minted access token in `x-api-key`.
+        descriptor.auth = match (config.auth.clone(), family) {
+            (None, _) => None,
+            (Some(secret), Family::ClaudeCodeSetupToken) => Some(Auth::bearer(secret)),
+            (Some(secret), Family::Anthropic | Family::ClaudeCodeLogin) => {
+                Some(Auth::header("x-api-key", secret).map_err(internal)?)
+            }
         };
         Ok(descriptor)
     }

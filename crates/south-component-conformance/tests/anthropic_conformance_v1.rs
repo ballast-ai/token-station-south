@@ -24,6 +24,8 @@ use south_provider_api::{
 
 #[path = "support/host_range.rs"]
 mod host_range;
+#[path = "support/anthropic_packs.rs"]
+mod packs;
 
 fn repo_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().and_then(Path::parent).expect("repo root")
@@ -38,9 +40,9 @@ fn shipped_manifest() -> ComponentManifestV1 {
     serde_json::from_str(&source).expect("the shipped component manifest parses")
 }
 
+/// The `anthropic` family's own directory, the one the manifest names.
 fn shipped_pack() -> FixturePackV1 {
-    let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures-anthropic");
-    FixturePackV1::load(&directory).expect("the shipped fixture pack loads")
+    packs::load(packs::ANTHROPIC_PACK)
 }
 
 fn frame(event: &str, data: &Value) -> Vec<u8> {
@@ -131,13 +133,24 @@ fn gate_one_admits_the_shipped_package_and_its_reported_identity() {
 }
 
 /// Gate ①: the manifest declares exactly the arms and capabilities this
-/// dialect uses. `x-api-key` is a header secret; there is no bearer arm and
-/// no OAuth arm, so declaring one would over-claim.
+/// dialect uses. `x-api-key` is a header secret (the `anthropic` family and
+/// the Claude Code login-token form); the Claude Code setup-token form is the
+/// only Bearer user (Claude Code record §3). There is no combined arm.
 #[test]
 fn the_manifest_declares_exactly_what_the_dialect_uses() {
     let manifest = shipped_manifest();
-    assert_eq!(manifest.providers, vec!["anthropic".to_owned()]);
-    assert_eq!(manifest.auth_arms, BTreeSet::from(["header_secret".to_owned()]));
+    assert_eq!(
+        manifest.providers,
+        vec![
+            "anthropic".to_owned(),
+            "claude-code".to_owned(),
+            "claude-code-setup-token".to_owned()
+        ]
+    );
+    assert_eq!(
+        manifest.auth_arms,
+        BTreeSet::from(["bearer".to_owned(), "header_secret".to_owned()])
+    );
     assert_eq!(
         manifest.capabilities,
         BTreeSet::from(["chat".to_owned(), "stream".to_owned(), "tool_call".to_owned(),]),
@@ -181,12 +194,13 @@ fn the_manifest_declares_exactly_what_the_dialect_uses() {
     );
 }
 
-/// Gate ②: the reference passes its own frozen pack.
+/// Gate ②: the reference passes its own frozen pack, the two directories judged as one
+/// (`support/anthropic_packs.rs`).
 #[test]
 fn gate_two_passes_over_the_shipped_pack() {
     let report = run_provider_component_suite_v1_for_manifest(
         &AnthropicReferenceV1,
-        &shipped_pack(),
+        &packs::package_pack(),
         &shipped_manifest(),
     );
     for failure in report.failures() {

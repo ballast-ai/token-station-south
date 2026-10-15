@@ -3,7 +3,9 @@
   "version": "1.1.10",
   "api_version": "provider-adapter-v2",
   "providers": [
-    "anthropic"
+    "anthropic",
+    "claude-code",
+    "claude-code-setup-token"
   ],
   "capabilities": [
     "chat",
@@ -11,11 +13,112 @@
     "tool_call"
   ],
   "auth_arms": [
+    "bearer",
     "header_secret"
   ],
-  "endpoint": {
-    "anthropic": "https://api.anthropic.com"
+  "immutable_body_paths": {
+    "claude-code": [
+      "system"
+    ]
   },
+  "credentials": {
+    "schema": "south.credential-recipe.v1",
+    "families": [
+      "claude-code"
+    ],
+    "fields": {
+      "refresh_token": {
+        "secret": true,
+        "required": true,
+        "description": "The Claude Code refresh token, claudeAiOauth.refreshToken in the CLI's .credentials.json. Rotated on every refresh and written back. A token without one is a setup token: use the claude-code-setup-token family."
+      }
+    },
+    "import": {
+      "refresh_token": {
+        "file": "claude-code-credentials-json",
+        "pointers": [
+          "/claudeAiOauth/refreshToken"
+        ]
+      }
+    },
+    "seed": {
+      "file": "claude-code-credentials-json",
+      "slot": "provider_api_key",
+      "present": "/claudeAiOauth/accessToken",
+      "expires_at": {
+        "epoch_millis": "/claudeAiOauth/expiresAt"
+      }
+    },
+    "slots": {
+      "provider_api_key": {
+        "minted": "claude_code"
+      }
+    },
+    "recipes": {
+      "claude_code": {
+        "steps": [
+          {
+            "id": "refresh",
+            "kind": "oauth2_token",
+            "encoding": "json",
+            "endpoint": "https://console.anthropic.com/v1/oauth/token",
+            "requires": [
+              "refresh_token"
+            ],
+            "params": {
+              "client_id": {
+                "const": "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+              },
+              "grant_type": {
+                "const": "refresh_token"
+              },
+              "refresh_token": {
+                "field": "refresh_token"
+              }
+            },
+            "on_status": {
+              "400": "reauth_required",
+              "401": "reauth_required",
+              "4xx": "transient"
+            },
+            "extract": {
+              "access_token": {
+                "pointer": "/access_token",
+                "secret": true
+              },
+              "expires_at": {
+                "relative_seconds": "/expires_in"
+              },
+              "refresh_token": {
+                "pointer": "/refresh_token",
+                "secret": true,
+                "optional": true
+              }
+            }
+          }
+        ],
+        "present": "refresh.access_token",
+        "rotates_refresh_material": true,
+        "write_back": {
+          "refresh_token": "refresh.refresh_token"
+        },
+        "without_refresh_material": "fail",
+        "default_seconds": 60
+      }
+    }
+  },
+  "endpoint": {
+    "anthropic": "https://api.anthropic.com",
+    "claude-code": "https://api.anthropic.com",
+    "claude-code-setup-token": "https://api.anthropic.com"
+  },
+  "user_agent": {
+    "claude-code": "claude-cli/2.1.114 (external, cli)"
+  },
+  "subscription_quota_families": [
+    "claude-code",
+    "claude-code-setup-token"
+  ],
   "permissions": {
     "network": false,
     "filesystem": false,
