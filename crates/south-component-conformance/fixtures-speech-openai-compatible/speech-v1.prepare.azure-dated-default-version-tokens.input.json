@@ -1,0 +1,26 @@
+{
+  "provider_config": {
+    "provider": "azure-openai-dated",
+    "base_url": "https://my-resource.services.ai.azure.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "gpt-4o-mini-tts"
+      }
+    ]
+  },
+  "request": {
+    "json": {
+      "model": "media/tts",
+      "input": "hello world",
+      "voice": "alloy"
+    }
+  },
+  "context": {
+    "upstream_model": "gpt-4o-mini-tts",
+    "operation": "synthesize",
+    "metering_required": [
+      "tokens"
+    ]
+  }
+}

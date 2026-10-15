@@ -211,7 +211,19 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.66.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.58.0 and 0.65.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.66.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.58.0 and 0.66.0, the last unreleased) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**Unreleased (`speech-openai-compatible` 1.1.0: the Azure OpenAI families)**: design record
+`docs/design/2026-10-15-speech-azure-openai.md` (accepted under lv's 2026-10-15 ruling; AO-Q1 to AO-Q7 at their
+defaults). Speech on Azure OpenAI and Azure Foundry rows, which native serves through the same OpenAI-compatible TTS and
+ASR arms with an Azure URL and the `api-key` header, becomes two families of `speech-openai-compatible`, named as the
+provider world names them: `azure-openai-v1` (`audio/speech`, `audio/transcriptions`, `audio/translations` below
+`{endpoint}/openai/v1`) and `azure-openai-dated` (`openai/deployments/{deployment}/audio/…?api-version=`, the
+deployment one escaped segment, the config key `api_version` with `provider-openai-compatible`'s declaration byte for
+byte, default `2024-10-21`; an undated value is a 500, an empty deployment a 400). Both present the key as
+`header_secret` `api-key`; bodies, parts, metering and readers are `openai-compatible`'s. Not to be confused with
+`speech-azure` (the Azure Speech service). Q47 against v0.66.0: `south-component-conformance` 0.66.0;
+`speech-openai-compatible` takes the minor 1.1.0 and every other package a patch with unchanged behaviour, each keeping
+its `south_runtime` and contracts. No contract number changes.
 **v0.66.0 (`provider-vertex`, Veo on Vertex, `image-xai`, `image-reve`, the Claude Code families, Bedrock Mantle, T9,
 `speech-vertex` 1.1.0)**: release record `docs/design/2026-10-15-release-0.66.0.md`; every change below was written
 under lv's 2026-10-15 directive (migrate by the native code, doubts registered as unverified).

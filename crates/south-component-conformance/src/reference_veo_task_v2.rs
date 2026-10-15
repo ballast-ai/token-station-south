@@ -263,7 +263,7 @@ impl TaskComponentV2 for VeoTaskComponentV2 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "task-veo-v2".into(),
-            version: "0.36.0".into(),
+            version: "0.36.1".into(),
             api_version: "task-adapter-v2".into(),
         }
     }

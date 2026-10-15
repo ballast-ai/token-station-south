@@ -106,8 +106,9 @@ pub mod azure_openai_dated {
 /// Whether `value` is a dated API version, `YYYY-MM-DD` with an optional `-preview`: the
 /// `api_version_date` syntax the manifest declares for [`azure_openai_dated::API_VERSION_KEY`].
 /// A host validates the value before it reaches the component; this keeps a host that skips the
-/// check from putting anything else in the query.
-fn is_dated_api_version(value: &str) -> bool {
+/// check from putting anything else in the query. `speech-openai-compatible`'s
+/// `azure-openai-dated` family applies the same check (`reference_openai_compatible_speech`).
+pub(crate) fn is_dated_api_version(value: &str) -> bool {
     let date = value.strip_suffix("-preview").unwrap_or(value);
     date.len() == 10
         && date.bytes().enumerate().all(|(index, byte)| match index {
@@ -801,7 +802,7 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-openai-compatible".to_owned(),
-            version: "2.7.0".to_owned(),
+            version: "2.7.1".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }

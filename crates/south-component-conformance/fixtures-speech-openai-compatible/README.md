@@ -1,6 +1,7 @@
 # `fixtures-speech-openai-compatible`
 
-Gate ② pack (`south.speech-component.v1`) of `speech-openai-compatible` (family `openai-compatible`), speech world
+Gate ② pack (`south.speech-component.v1`) of `speech-openai-compatible` (families `openai-compatible`,
+`azure-openai-v1` and `azure-openai-dated`), speech world
 batch V3-1 (`docs/design/2026-10-14-speech-v3-1-tts.md` §2, §8, §12, SV-Q1, SV-Q3). The manifest that names this pack
 is `components/speech-openai-compatible/manifest.json`.
 
@@ -74,3 +75,24 @@ first ran:
 
 Measurements still to make (record §9 items 1-2): per model, the accepted formats and endpoints, whether a `json`
 answer carries `usage` with `type: "duration"`, and whether `verbose_json` carries `duration` and `segments`.
+
+## Azure OpenAI (`azure-openai-v1`, `azure-openai-dated`)
+
+`docs/design/2026-10-15-speech-azure-openai.md` §6. The `azure-*` and `asr-azure-*` cases and
+`capabilities.azure-dated-models` were written by hand from the record and from the native arms reached on an
+`azure_openai` or `azure_foundry` row (`build_upstream_url`, `engine/upstream.rs:537-581`; `api-key`, `:190-196`) before
+the reference first ran:
+
+- Dated: `openai/deployments/{deployment}/audio/{speech,transcriptions,translations}` below the row endpoint (the
+  classic `openai.azure.com` and the `services.ai.azure.com` hosts), `api-version` the config value or `2024-10-21`.
+- v1: the same audio paths below the base `{endpoint}/openai/v1`.
+- Both: `header_secret` `api-key`; bodies, parts, metering and readers as `openai-compatible`'s, since native runs the
+  same arms. The deployment names (`tts-prod`, `whisper-prod`) are the operator's, as native sends the row's upstream
+  model.
+- `response.azure-dated-status-401` uses Azure's documented error shape `{"error": {"code": "401", "message"}}`, not a
+  capture (record §5.2 U4).
+- `capabilities.wrong-family` names `azure_openai`, the native provider type's word, now that `azure-openai-v1` is
+  served.
+
+The configuration errors (an undated `api_version`, a 500) and the empty deployment are pinned by
+`tests/speech_azure_openai_v1.rs`, not stored here.

@@ -353,7 +353,8 @@ fn the_t9_families_retire_the_patch_identity() {
     for retired in ["2.6.9", "2.6.10"] {
         assert_ne!(manifest.version, retired);
     }
-    assert_eq!(manifest.version, "2.7.0");
+    // Published as 2.7.0 with 0.66.0; the speech Azure OpenAI families' Q47 bump made it 2.7.1.
+    assert_eq!(manifest.version, "2.7.1");
     assert_eq!(OpenAiCompatibleReferenceV1.metadata().version, manifest.version);
     assert_eq!(manifest.compatibility.south_runtime, "0.60.0");
 }

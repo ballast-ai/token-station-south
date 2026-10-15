@@ -212,7 +212,8 @@ fn the_manifest_declares_the_two_families_with_the_native_values() {
         manifest.immutable_body_paths,
         BTreeMap::from([(claude_code::FAMILY.to_owned(), vec!["system".to_owned()])])
     );
-    assert_eq!(manifest.version, "1.2.0");
+    // Published as 1.2.0 with 0.66.0; the speech Azure OpenAI families' Q47 bump made it 1.2.1.
+    assert_eq!(manifest.version, "1.2.1");
     assert_eq!(manifest.compatibility.south_runtime, "0.60.0");
 }
 
