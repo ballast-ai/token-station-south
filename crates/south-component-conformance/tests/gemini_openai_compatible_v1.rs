@@ -156,7 +156,11 @@ fn gate_two_refuses_the_family_when_the_manifest_does_not_declare_the_combined_a
         &manifest,
     );
     let failed: BTreeSet<&str> = report.failures().map(|outcome| outcome.case.as_str()).collect();
-    assert_eq!(failed, BTreeSet::from(FIXTURES), "{report}");
+    // Every row of the family needs the arm, the T9-Q9 row that pins the dropped client thinking
+    // fields included.
+    let mut family_rows = BTreeSet::from(FIXTURES);
+    family_rows.insert("provider.request.gemini-openai-compatible-drops-client-thinking");
+    assert_eq!(failed, family_rows, "{report}");
     for failure in report.failures() {
         assert_eq!(failure.check, CheckV1::DescriptorAuthWithinManifest, "{failure}");
         assert!(

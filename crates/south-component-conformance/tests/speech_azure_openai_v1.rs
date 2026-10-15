@@ -144,10 +144,12 @@ fn the_families_and_the_version_key_are_the_provider_worlds() {
     );
     assert_eq!(speech["auth_arms"], json!(["bearer", "header_secret"]));
     // One host row serves text and speech: the key, its syntax and its default are the provider
-    // world's, byte for byte.
+    // world's, byte for byte. The provider world also declares `max_tokens_field` (T9 D4), which
+    // speech has no use for.
+    let key = azure_openai_dated::API_VERSION_KEY;
     assert_eq!(
-        speech["config_schema"][AZURE_OPENAI_DATED],
-        text["config_schema"][AZURE_OPENAI_DATED]
+        speech["config_schema"][AZURE_OPENAI_DATED][key],
+        text["config_schema"][AZURE_OPENAI_DATED][key]
     );
     assert_eq!(
         speech["config_schema"][AZURE_OPENAI_DATED][azure_openai_dated::API_VERSION_KEY]["default"],
