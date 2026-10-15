@@ -21,6 +21,30 @@
       "system"
     ]
   },
+  "immutable_request_headers": {
+    "claude-code": [
+      "accept",
+      "anthropic-beta",
+      "anthropic-dangerous-direct-browser-access",
+      "anthropic-version",
+      "authorization",
+      "content-type",
+      "user-agent",
+      "x-api-key",
+      "x-app"
+    ],
+    "claude-code-setup-token": [
+      "accept",
+      "anthropic-beta",
+      "anthropic-dangerous-direct-browser-access",
+      "anthropic-version",
+      "authorization",
+      "content-type",
+      "user-agent",
+      "x-api-key",
+      "x-app"
+    ]
+  },
   "credentials": {
     "schema": "south.credential-recipe.v1",
     "families": [

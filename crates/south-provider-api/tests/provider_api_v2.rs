@@ -123,6 +123,7 @@ fn reference_manifest() -> ComponentManifestV1 {
         user_agent: std::collections::BTreeMap::new(),
         host_values: Vec::new(),
         immutable_body_paths: std::collections::BTreeMap::new(),
+        immutable_request_headers: std::collections::BTreeMap::new(),
         north_passthrough: std::collections::BTreeMap::new(),
         north_request_passthrough: std::collections::BTreeMap::new(),
         subscription_quota_families: std::collections::BTreeSet::new(),
@@ -756,6 +757,7 @@ fn task_manifest() -> ComponentManifestV1 {
         user_agent: std::collections::BTreeMap::new(),
         host_values: Vec::new(),
         immutable_body_paths: std::collections::BTreeMap::new(),
+        immutable_request_headers: std::collections::BTreeMap::new(),
         north_passthrough: std::collections::BTreeMap::new(),
         north_request_passthrough: std::collections::BTreeMap::new(),
         subscription_quota_families: std::collections::BTreeSet::new(),
@@ -1837,6 +1839,15 @@ fn speech_manifest_refuses_provider_only_declarations() {
     let mut immutable = speech_manifest();
     immutable.immutable_body_paths.insert("elevenlabs".to_owned(), vec!["model_id".to_owned()]);
     assert_eq!(immutable.validate(), Err(ManifestErrorV1::DeliveryIsAProviderWorldDeclaration));
+
+    let mut immutable_headers = speech_manifest();
+    immutable_headers
+        .immutable_request_headers
+        .insert("elevenlabs".to_owned(), vec!["xi-api-key".to_owned()]);
+    assert_eq!(
+        immutable_headers.validate(),
+        Err(ManifestErrorV1::DeliveryIsAProviderWorldDeclaration)
+    );
 
     let mut host_values = speech_manifest();
     host_values.host_values = vec!["attempt_id".to_owned()];
