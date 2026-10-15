@@ -1,5 +1,5 @@
 //! The native reference implementation of the `OpenAI` Responses upstream component
-//! (`provider-openai-responses`, families `openai-responses` and `openai-codex`).
+//! (`provider-openai-responses`, families `openai-responses`, `openai-codex` and `bedrock-mantle`).
 //!
 //! Design record: `docs/design/2026-09-30-openai-responses-upstream-component.md` (accepted
 //! 2026-10-10). Step R1 built the `openai-responses` family; step R3
@@ -20,6 +20,11 @@
 //!   credential's exported `account_id` attribute only when the host passes one (§10.3). The
 //!   response, stream and usage rules are the family-neutral ones below: the response-side
 //!   functions receive no configuration.
+//! - **Family `bedrock-mantle` (design record `docs/design/2026-10-15-bedrock-mantle.md`).** AWS
+//!   Bedrock's OpenAI-compatible host. The host fills the family's endpoint template
+//!   `https://bedrock-mantle.{region}.api.aws` and passes the result as the base URL; everything
+//!   this component does — URL, auth, body, response, stream and usage — is the `openai-responses`
+//!   family's, unchanged.
 //! - **Reasoning replay (NC-1, 1.1.0).** For a model declaring `reasoning_replay.openai.v1`, an
 //!   assistant turn the north codec marked `openai-encrypted-reasoning` is replayed in its layout
 //!   order (reasoning items verbatim, texts, calls), and every request asks for
@@ -55,7 +60,9 @@ use crate::component::{ComponentResultV1, ProviderComponentV1, StreamParserV1};
 use crate::reasoning_replay::{OpenAiReplayRef, is_openai_family, openai_layout};
 use crate::reference::OpenAiCompatibleReferenceV1;
 use crate::reference_anthropic::{message_of, provider_protocol_error};
-use crate::responses_vocabulary::{codex, event, extension, incomplete_reason, item, part, replay};
+use crate::responses_vocabulary::{
+    codex, event, extension, incomplete_reason, item, mantle, part, replay,
+};
 use crate::sse_split::{SseFrameV1, SseSplitErrorV1, SseSplitterV1};
 
 /// The family this package was first built for (step R1).
@@ -64,11 +71,15 @@ pub const FAMILY: &str = "openai-responses";
 /// The Codex subscription family (step R3).
 pub const CODEX_FAMILY: &str = codex::FAMILY;
 
+/// AWS Bedrock's OpenAI-compatible `bedrock-mantle` host (design record
+/// `2026-10-15-bedrock-mantle.md`). It builds exactly what [`FAMILY`] builds.
+pub const MANTLE_FAMILY: &str = mantle::FAMILY;
+
 /// The package's name.
 pub const NAME: &str = "provider-openai-responses";
 
 /// The package's version.
-pub const VERSION: &str = "1.3.10";
+pub const VERSION: &str = "1.4.0";
 
 /// The reference component. Stateless; each stream gets its own parser.
 #[derive(Debug, Default, Clone, Copy)]
@@ -1319,8 +1330,10 @@ impl ProviderComponentV1 for OpenAiResponsesReferenceV1 {
         request: &ChatRequest,
         config: &ProviderConfig,
     ) -> ComponentResultV1<HttpRequestDescriptor> {
+        // `bedrock-mantle` differs from `openai-responses` only in the endpoint template the host
+        // fills (record 2026-10-15-bedrock-mantle §3), so it takes every `openai-responses` rule.
         let codex = match config.provider.as_str() {
-            FAMILY => false,
+            FAMILY | MANTLE_FAMILY => false,
             CODEX_FAMILY => true,
             other => return Err(capability(format!("unsupported provider dialect `{other}`"))),
         };

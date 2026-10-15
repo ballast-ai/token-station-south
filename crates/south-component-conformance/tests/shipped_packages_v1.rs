@@ -1346,9 +1346,9 @@ fn the_responses_package_declares_the_runtime_that_first_admits_its_declarations
     )
     .unwrap();
     // 1.0.0 shipped in 0.54.0; NC-1 made 1.1.0, R3 1.2.0, KC1 1.3.0, I3-1's Q47 bump 1.3.1,
-    // I3-2's 1.3.2, I3-4's 1.3.3, I3-5's 1.3.4, the Kiro step's 1.3.5, task contract 8's 1.3.6, I3-3's 1.3.7, S-S-1's 1.3.8, V3-1's 1.3.9 and provider-vertex's 1.3.10 (below). The Codex `credentials` section uses only forms the
+    // I3-2's 1.3.2, I3-4's 1.3.3, I3-5's 1.3.4, the Kiro step's 1.3.5, task contract 8's 1.3.6, I3-3's 1.3.7, S-S-1's 1.3.8, V3-1's 1.3.9, provider-vertex's 1.3.10 (below) and the `bedrock-mantle` family's 1.4.0 (record `2026-10-15-bedrock-mantle.md` §11, a new family in the same cycle). The Codex `credentials` section uses only forms the
     // 0.54.0 gate ① admits; `subscription_quota_families` (D7, 0.60.0) needs the 0.60.0 runtime.
-    assert_eq!(manifest.version, "1.3.10");
+    assert_eq!(manifest.version, "1.4.0");
     assert_eq!(manifest.compatibility.south_runtime, "0.60.0");
     assert!(!manifest.immutable_body_paths.is_empty() && !manifest.north_passthrough.is_empty());
     assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
@@ -2676,7 +2676,9 @@ fn provider_vertex_retires_every_published_065_package_identity() {
         ("provider-gemini", "1.3.9", "1.3.10"),
         ("provider-kiro", "1.1.0", "1.1.1"),
         ("provider-openai-compatible", "2.6.9", "2.6.10"),
-        ("provider-openai-responses", "1.3.9", "1.3.10"),
+        // The `bedrock-mantle` family (record `2026-10-15-bedrock-mantle.md` §11) adds behaviour in
+        // the same unreleased cycle: a minor version.
+        ("provider-openai-responses", "1.3.9", "1.4.0"),
         ("speech-azure", "1.0.0", "1.0.1"),
         ("speech-elevenlabs", "1.0.0", "1.0.1"),
         ("speech-groq", "1.0.0", "1.0.1"),

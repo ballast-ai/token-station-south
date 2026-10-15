@@ -1,0 +1,33 @@
+{
+  "auth": {
+    "scheme": "bearer",
+    "secret": "provider_api_key"
+  },
+  "body": {
+    "input": [
+      {
+        "content": [
+          {
+            "text": "Summarize our last meeting.",
+            "type": "input_text"
+          }
+        ],
+        "role": "user"
+      }
+    ],
+    "metadata": {
+      "tenant": "acme",
+      "trace": "t-1"
+    },
+    "model": "openai.gpt-oss-120b",
+    "prompt_cache_key": "meetings-acme",
+    "store": false,
+    "truncation": "auto",
+    "user": "user-42"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "method": "POST",
+  "url": "https://bedrock-mantle.us-east-1.api.aws/v1/responses"
+}

@@ -1,0 +1,9 @@
+{
+  "chunks": [
+    "data: {\"response\":{\"id\":\"resp-1\",\"model\":\"openai.gpt-oss-120b-1:0\",\"object\":\"response\",\"output\":[],\"status\":\"in_progress\"},\"sequence_number\":0,\"type\":\"response.created\"}\n\n",
+    "data: {\"content_index\":0,\"delta\":\"hel\",\"item_id\":\"msg-1\",\"output_index\":0,\"sequence_number\":1,\"type\":\"response.output_text.delta\"}\n\n",
+    "data: {\"content_index\":0,\"delta\":\"lo\",\"item_id\":\"msg-1\",\"output_index\":0,\"sequence_number\":2,\"type\":\"response.output_text.delta\"}\n\n",
+    "data: {\"response\":{\"id\":\"resp-1\",\"model\":\"openai.gpt-oss-120b-1:0\",\"object\":\"response\",\"output\":[{\"content\":[{\"annotations\":[],\"text\":\"hello\",\"type\":\"output_text\"}],\"id\":\"msg-1\",\"role\":\"assistant\",\"status\":\"completed\",\"type\":\"message\"}],\"status\":\"completed\",\"usage\":{\"input_tokens\":1000,\"output_tokens\":500,\"total_tokens\":1500}},\"sequence_number\":3,\"type\":\"response.completed\"}\n\n",
+    "data: [DONE]\n\n"
+  ]
+}
