@@ -1,6 +1,7 @@
-# Task world: Veo on Vertex AI (`task-veo-vertex-v2`)
+# Task world: Veo on Vertex AI (a `vertex-veo-video` family in `task-veo-v2`)
 
-Status: accepted (lv reviewed it on 2026-10-15 and ruled VV-Q1 to VV-Q3 as recommended, §5). Not implemented.
+Status: accepted, revised the same day (lv 2026-10-15: migrate by the existing code's logic, prioritising speed; §5).
+Not implemented.
 
 Date: 2026-10-15
 
@@ -44,26 +45,33 @@ either `bytesBase64Encoded` (inline) or `gcsUri` (when the request names `storag
 If the documentation is right, the native Vertex Veo arm has never completed a task; if the native shape is right, the
 documentation is wrong for this model line. Only a real-account capture settles it (VV-Q2).
 
-## 4. The package (as proposed; the wire per VV-Q2)
+## 4. The family (as ruled: the native arm's logic)
 
-- **Family** `vertex-veo-video`, world `task-adapter-v2`, `bearer` (host-minted), capabilities `submit`, `observe`,
-  `render` (no `artifact_fetch` if the clip is inline).
-- **Submit**: `POST {base}/publishers/google/models/{model}:predictLongRunning`, body built by `task-veo-v2`'s shared
-  body builder (the native arm uses one body for both rows, `durable.rs:2761-2775`: `instances` / `parameters`). Remote
-  first-frame images keep `task-veo-v2`'s rule (the host pre-fetches them to `data:` URIs).
-- **Observe**: per VV-Q2 (a), `POST {base}/publishers/google/models/{model}:fetchPredictOperation` with
-  `{"operationName": <the operation name>}`; done / error / pending as the LRO fields say.
-- **Artifacts**: `bytesBase64Encoded` → task contract 8 `Inline` artifacts named by pointer into the host-elided view
-  (`response_blob_paths` `/response/videos/*/bytesBase64Encoded`), as Omni's Vertex clip. `gcsUri` cannot be fetched by
-  the host (no `gs://` second hop), so `storageUri` in the client body is refused before submit (VV-Q3).
-- **Metering**: as `task-veo-v2`: requested seconds × delivered clips (Veo reports no duration; P13 S11 rule).
-- **Contracts**: `{task: 8, media: 1}`.
+lv ruled on 2026-10-15 to migrate by the existing code's implementation and prioritise speed. The package therefore
+reproduces the native arm (§3) rather than Google's documented wire; the documented shape stays an **unverified**
+doubt, registered here and not blocking a cutover.
+
+- **Where**: a second family `vertex-veo-video` in `task-veo-v2`, as `task-gemini-omni-v2` carries a Gemini and a
+  Vertex family in one package. The native arm is one implementation for both rows, the clip is an upstream URI (no
+  inline bytes, so task contract 7 suffices), and the Gemini family's request, observe, render and metering code is
+  reused as is. The package's `auth_arms` gain `bearer`.
+- **Submit**: `POST {base}/publishers/google/models/{model}:predictLongRunning`, the shared Veo body (native
+  `durable.rs:2761-2775`), auth `bearer` (host-minted).
+- **Observe**: `GET {base-origin}/v1/{operation name}` (the operation name carries `projects/…/locations/…`), as native
+  `observe.rs:200-220`; the response is read as the Gemini LRO shape (`observe.rs:385-400`).
+- **Artifacts**: `generateVideoResponse.generatedSamples[].video.uri`, `fetch_with_credential` with the family's
+  `bearer`, as the Gemini family fetches with its key header.
+- **Metering**: requested seconds × delivered clips, as the Gemini family (P13 S11).
+- **Client parameters**: as native; `storageUri` is not refused (native passes the body through its builder).
 
 ## 5. Open questions for lv
 
-**Ruled by lv on 2026-10-15: VV-Q1 (a) a new package `task-veo-vertex-v2`, VV-Q2 (a) the documented Vertex wire with
-a real-account capture before cutover, VV-Q3 refuse `storageUri`.** The items below keep their text; each recommendation
-is the ruling.
+**Ruled by lv on 2026-10-15, then revised the same day.** The first ruling took each recommendation. lv then ruled to
+migrate by the existing code's logic, prioritising speed, without querying production. So: **VV-Q2 (b)**, the native
+arm's Gemini-shaped wire (§4), its divergence from Google's documentation registered as unverified; and, derived from
+that ruling (from the code, not from production data): **VV-Q1 (b)**, a family in `task-veo-v2` rather than a new
+package, since an upstream URI needs no task contract 8 and the native arm is one implementation for both rows; and
+**VV-Q3**, native behaviour (no refusal). The items below keep their original text for the record.
 
 - **VV-Q1 Packaging.** (a) A new package `task-veo-vertex-v2`, or (b) a second family in `task-veo-v2`. A package
   declares one `contracts.task`; the Vertex clip needs contract 8 (inline bytes), while `task-veo-v2` is published at
@@ -80,20 +88,25 @@ is the ruling.
 
 ## 6. What the host must do before a cutover
 
-1. Re-pin to the release that ships the package; the host range already lists task 8 (since 0.62.0 / 0.64.0 repins).
-2. Inline artifacts for task contract 8 on this family (the host adopted them for Omni; R52 removed, `server:dcfaf26d`).
+1. Re-pin to the release that ships the `task-veo-v2` with the new family.
+2. Credential-gated artifact fetch with the family's `bearer` (the Gemini family already uses the gated fetch with its
+   key header).
 3. A binding for `vertex-veo-video` and `component_task` routes on Vertex Veo models.
-4. The VV-Q2 capture (or the production query) before any route is written; the native drain preflight
-   `native_task_drain_preflight.py` gains a `veo` Vertex row before deletion (D10).
+4. A dual run against the native arm, which the family reproduces (VV-Q2 (b)), on submit, observe and the gated
+   fetch; then the native drain preflight `native_task_drain_preflight.py` gains a `veo` Vertex row before deletion
+   (D10). No production query (lv, 2026-10-15).
 
 ## 7. Versioning (Q47)
 
-A new reference in `south-component-conformance` and, if the Veo body builder is shared, a refactor of
-`reference_veo_task_v2.rs` (behaviour unchanged): the conformance crate moves one step and every package published with
-the latest release takes a patch. The new package declares the oldest runtime that admits task contract 8 and
-`response_blob_paths` (0.62.0), confirmed by `check-declared-runtime`.
+`task-veo-v2` gains a family and `bearer`, so it takes a minor version; `south-component-conformance` changes (the
+reference gains the family) and moves one step, so every other package published with the latest release takes a patch.
+`task-veo-v2` keeps task contract 7; its `south_runtime` stays the oldest runtime that admits the manifest, confirmed by
+`check-declared-runtime`.
 
 ## Revision note
 
 - 2026-10-15: first draft (proposed).
 - 2026-10-15: lv accepted the record and ruled VV-Q1 to VV-Q3 as recommended (§5); status accepted.
+- 2026-10-15: revised: lv ruled to migrate by the existing code's logic and prioritise speed. VV-Q2 (b), and from it
+  VV-Q1 (b) (a family in `task-veo-v2`) and VV-Q3 (native behaviour); §4 rewritten. The decision whether the native
+  Vertex arm gets a dual run or a deletion is derived from the code, not from production data.
