@@ -213,8 +213,10 @@ fn the_manifest_declares_the_two_families_with_the_native_values() {
         BTreeMap::from([(claude_code::FAMILY.to_owned(), vec!["system".to_owned()])])
     );
     // Published as 1.2.0 with 0.66.0; 1.2.1 carries both the 0.67.0 Q47 round and the
-    // immutable request headers (record `2026-10-15-immutable-request-headers.md`).
-    assert_eq!(manifest.version, "1.2.1");
+    // immutable request headers (record `2026-10-15-immutable-request-headers.md`); published as
+    // 1.2.1 with 0.67.0, the T9 cap field's Q47 bump made it 1.2.2
+    // (`shipped_packages_v1::t9_cap_field_retires_every_published_067_package_identity`).
+    assert_eq!(manifest.version, "1.2.2");
     // `immutable_request_headers`, which no runtime before 0.67.0 parses (`ComponentManifestV1`
     // refuses unknown fields); 0.67.0 shipped it.
     assert_eq!(manifest.compatibility.south_runtime, "0.67.0");
@@ -282,7 +284,9 @@ fn the_immutable_request_headers_cover_every_header_each_family_fixes() {
 fn immutable_request_headers_retire_the_published_1_2_0_identity() {
     let manifest = shipped_manifest();
     assert_ne!(manifest.version, "1.2.0");
-    assert_eq!(manifest.version, "1.2.1");
+    // 1.2.1 was published with 0.67.0; the T9 cap field's Q47 bump made it 1.2.2.
+    assert_ne!(manifest.version, "1.2.1");
+    assert_eq!(manifest.version, "1.2.2");
     assert_eq!(AnthropicReferenceV1.metadata().version, manifest.version);
 }
 

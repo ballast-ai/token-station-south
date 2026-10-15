@@ -10,7 +10,8 @@ use std::path::Path;
 
 use serde_json::{Value, json};
 use south_component_conformance::reference::{
-    OpenAiCompatibleReferenceV1, azure_openai_dated, glm_coding,
+    OpenAiCompatibleReferenceV1, azure_openai_cap_field, azure_openai_dated, client_passthrough,
+    glm_coding,
 };
 use south_component_conformance::{
     AdmittedAuthV1, CheckV1, FixturePackV1, ProviderComponentV1, admit_descriptor_auth,
@@ -26,14 +27,21 @@ use token_station_protocol::{
 const NATIVE_GLM_CODING_UA: &str = "opencode/1.15.6";
 /// Native `AZURE_OPENAI_DEFAULT_API_VERSION` (server `upstream.rs`), written out.
 const NATIVE_AZURE_DEFAULT_API_VERSION: &str = "2024-10-21";
+/// The key native sends the cap under on an `azure_openai` row by default: the Chat canonical body
+/// writes `max_completion_tokens` and `needs_max_tokens_rewrite` keeps it while the row's
+/// `accepts_max_completion_tokens` is on (server `providers.rs`, column default 1 / `true`).
+const NATIVE_AZURE_DEFAULT_CAP_FIELD: &str = "max_completion_tokens";
 
 const GLM_FIXTURES: [&str; 2] =
     ["provider.request.glm-coding", "provider.request.glm-coding-stream"];
-const AZURE_FIXTURES: [&str; 4] = [
+const AZURE_FIXTURES: [&str; 7] = [
     "provider.request.azure-openai-dated",
     "provider.request.azure-openai-dated-default-version",
     "provider.request.azure-openai-dated-refuses-an-undated-version",
     "provider.request.azure-openai-dated-refuses-a-request-without-a-model",
+    "provider.request.azure-openai-dated-max-tokens-field",
+    "provider.request.azure-openai-v1-max-completion-tokens",
+    "provider.request.azure-openai-dated-refuses-an-unknown-cap-field",
 ];
 
 fn root() -> &'static Path {
@@ -262,7 +270,8 @@ fn azure_openai_dated_declares_the_native_default_version() {
     assert_eq!(key.syntax, ValueSyntaxV1::ApiVersionDate);
     assert!(!key.required);
     assert_eq!(key.default.as_deref(), Some(NATIVE_AZURE_DEFAULT_API_VERSION));
-    assert_eq!(manifest.config_schema[azure_openai_dated::FAMILY].len(), 1);
+    // `api_version` and the cap field (§4 D6, `azure_families_send_the_cap_as_native_does`).
+    assert_eq!(manifest.config_schema[azure_openai_dated::FAMILY].len(), 2);
     assert!(!manifest.endpoint.contains_key(azure_openai_dated::FAMILY));
     assert_eq!(manifest.credentials_for(azure_openai_dated::FAMILY), None);
     assert!(!manifest.subscription_quota_families.contains(azure_openai_dated::FAMILY));
@@ -301,6 +310,183 @@ fn azure_openai_dated_puts_the_deployment_in_one_segment() {
         "https://x.openai.azure.com/openai/deployments/team%2Fgpt%3Fx/chat/completions?api-version=2024-10-21"
     );
     assert_eq!(config.authorize(&descriptor), Ok(()));
+}
+
+// -- the cap field (record §4 D6) ---------------------------------------------------------------
+
+/// The body key a family writes the cap under, `None` when the request carries no cap.
+fn cap_key(descriptor: &HttpRequestDescriptor) -> Option<&'static str> {
+    let body = descriptor.body.as_ref().expect("a chat request has a body");
+    ["max_completion_tokens", "max_tokens"].into_iter().find(|key| body.get(key).is_some())
+}
+
+/// Record §4 D6: native sends the cap of an `azure_openai` row as `max_completion_tokens` unless
+/// the row opts out, so both Azure families default to it and take the row's `max_tokens_field`;
+/// every other family keeps `max_tokens`, as native does for `glm_coding` and the types served by
+/// `openai-compatible`.
+#[test]
+fn azure_families_send_the_cap_as_native_does() {
+    assert_eq!(azure_openai_cap_field::DEFAULT, NATIVE_AZURE_DEFAULT_CAP_FIELD);
+    assert_eq!(azure_openai_cap_field::KEY, "max_tokens_field");
+    assert_eq!(azure_openai_cap_field::FAMILIES, ["azure-openai-v1", azure_openai_dated::FAMILY]);
+    let (dated, request) = parts(AZURE_FIXTURES[0]);
+    assert_eq!(request.sampling.max_output_tokens, Some(321));
+    let mut v1 = dated.clone();
+    v1.provider = "azure-openai-v1".to_owned();
+    v1.declared = token_station_protocol::ComponentValues::new();
+    v1.base_url =
+        serde_json::from_value(json!("https://my-resource.openai.azure.com/openai/v1")).unwrap();
+    for config in [&dated, &v1] {
+        let family = config.provider.clone();
+        assert_eq!(cap_key(&build(config, &request)), Some("max_completion_tokens"), "{family}");
+        for (value, key) in
+            [("max_completion_tokens", "max_completion_tokens"), ("max_tokens", "max_tokens")]
+        {
+            let mut chosen = config.clone();
+            chosen
+                .declared
+                .insert(azure_openai_cap_field::KEY, value)
+                .expect("a well-formed value");
+            let descriptor = build(&chosen, &request);
+            assert_eq!(cap_key(&descriptor), Some(key), "{family} {value}");
+            assert_eq!(descriptor.body.as_ref().unwrap()[key], json!(321), "{family} {value}");
+        }
+        let mut uncapped = request.clone();
+        uncapped.sampling.max_output_tokens = None;
+        assert_eq!(cap_key(&build(config, &uncapped)), None, "{family}");
+    }
+    let (glm, glm_request) = parts(GLM_FIXTURES[0]);
+    assert!(glm_request.sampling.max_output_tokens.is_some());
+    for family in ["openai-compatible", glm_coding::FAMILY, "gemini-openai-compatible"] {
+        let mut other = glm.clone();
+        other.provider = family.to_owned();
+        assert_eq!(cap_key(&build(&other, &glm_request)), Some("max_tokens"), "{family}");
+    }
+}
+
+/// Record §4 D6: the key is declared on both Azure families only, an `enum` of the two wire names
+/// with native's default, and a value outside it is refused before any request is built.
+#[test]
+fn the_cap_field_is_declared_with_the_native_default_and_refuses_other_values() {
+    let manifest = shipped_manifest();
+    for family in azure_openai_cap_field::FAMILIES {
+        let key = &manifest.config_schema[family][azure_openai_cap_field::KEY];
+        assert_eq!(
+            key.syntax,
+            ValueSyntaxV1::Enum(vec!["max_completion_tokens".to_owned(), "max_tokens".to_owned()]),
+            "{family}"
+        );
+        assert!(!key.required, "{family}");
+        assert_eq!(key.default.as_deref(), Some(NATIVE_AZURE_DEFAULT_CAP_FIELD), "{family}");
+    }
+    for family in ["openai-compatible", "github-copilot", "gemini-openai-compatible", "glm-coding"]
+    {
+        assert!(!manifest.declared_keys(family).contains(azure_openai_cap_field::KEY), "{family}");
+    }
+    let (config, request) = parts(AZURE_FIXTURES[0]);
+    for value in ["none", "max_output_tokens", "MAX_TOKENS", "max_tokens "] {
+        let mut chosen = config.clone();
+        chosen.declared.insert(azure_openai_cap_field::KEY, value).expect("a well-formed value");
+        let error = OpenAiCompatibleReferenceV1.build_http_request(&request, &chosen).unwrap_err();
+        assert_eq!((error.code, error.http_status), (ErrorCode::Internal, 500), "{value}");
+    }
+}
+
+// -- client thinking fields (record §10, T9-Q9 (a)) ---------------------------------------------
+
+const PASSTHROUGH_FIXTURES: [&str; 4] = [
+    "provider.request.glm-coding-client-thinking",
+    "provider.request.openai-compatible-client-enable-thinking",
+    "provider.request.azure-openai-dated-client-thinking",
+    "provider.request.gemini-openai-compatible-drops-client-thinking",
+];
+
+/// Record §10: native sends the client's Chat body on every type these families serve, so a
+/// client's `thinking` or `enable_thinking` reaches the upstream verbatim, `null` included, and is
+/// absent when the client sent none. Native builds the Gemini body through the IR, so
+/// `gemini-openai-compatible` forwards nothing. Forwarding adds the one key and changes nothing
+/// else.
+#[test]
+fn client_thinking_fields_are_forwarded_as_native_does() {
+    assert_eq!(client_passthrough::FIELDS, ["thinking", "enable_thinking"]);
+    assert_eq!(
+        client_passthrough::FAMILIES,
+        [
+            "openai-compatible",
+            "azure-openai-v1",
+            "github-copilot",
+            "azure-openai-dated",
+            "glm-coding"
+        ]
+    );
+    let (base, request) = parts(GLM_FIXTURES[0]);
+    for family in client_passthrough::FAMILIES.into_iter().chain(["gemini-openai-compatible"]) {
+        let mut config = base.clone();
+        config.provider = family.to_owned();
+        let plain = build(&config, &request);
+        for field in client_passthrough::FIELDS {
+            assert!(plain.body.as_ref().unwrap().get(field).is_none(), "{family} {field}");
+            for value in [json!({"type": "disabled"}), json!(false), Value::Null] {
+                let mut with = request.clone();
+                with.extensions.insert(field.to_owned(), value.clone());
+                let mut body = build(&config, &with).body.unwrap();
+                let forwarded = body.as_object_mut().unwrap().remove(field);
+                let expected = (family != "gemini-openai-compatible").then_some(value);
+                assert_eq!(forwarded, expected, "{family} {field}");
+                assert_eq!(Some(body), plain.body, "{family} {field}: nothing else changes");
+            }
+        }
+    }
+}
+
+/// Record §10: no forwarded field shares a name with a key the package writes, so forwarding can
+/// never overwrite the package's own body; an extension that names a written key (here `model`
+/// and the cap) is not forwarded at all.
+#[test]
+fn forwarded_fields_never_collide_with_the_package_body() {
+    let mut request: ChatRequest = serde_json::from_value(json!({
+        "model": "glm-4.6",
+        "messages": [{"role": "user", "content": "hi"}],
+        "tools": [{"name": "f", "description": "d", "parameters": {"type": "object"}}],
+        "tool_choice": "auto",
+        "parallel_tool_calls": true,
+        "response_format": {"type": "json_object"},
+        "sampling": {"temperature": 0.1, "top_p": 0.5, "max_output_tokens": 9, "stop": ["x"]},
+        "reasoning_effort": "high",
+        "stream": true
+    }))
+    .unwrap();
+    let (config, _) = parts(GLM_FIXTURES[0]);
+    let written = build(&config, &request).body.unwrap();
+    for field in client_passthrough::FIELDS {
+        assert!(written.get(field).is_none(), "{field}");
+    }
+    for key in ["model", "max_tokens", "stream"] {
+        request.extensions.insert(key.to_owned(), json!("client"));
+    }
+    assert_eq!(build(&config, &request).body.unwrap(), written);
+}
+
+/// The four request rows run under gate ② natively and in the sandbox (`sandbox_parity_v1`).
+#[test]
+fn gate_two_runs_the_passthrough_cases() {
+    let manifest = shipped_manifest();
+    let pack = FixturePackV1::load(&root().join("fixtures")).expect("the shipped pack loads");
+    let report = run_provider_component_suite_v1_for_manifest(
+        &OpenAiCompatibleReferenceV1,
+        &pack,
+        &manifest,
+    );
+    assert!(report.is_passing(), "{report}");
+    for case in PASSTHROUGH_FIXTURES {
+        assert!(
+            report
+                .outcomes()
+                .iter()
+                .any(|outcome| outcome.check == CheckV1::FixtureMatch && outcome.case == case),
+            "{case} never ran"
+        );
+    }
 }
 
 // -- the package -------------------------------------------------------------------------------
@@ -353,8 +539,12 @@ fn the_t9_families_retire_the_patch_identity() {
     for retired in ["2.6.9", "2.6.10"] {
         assert_ne!(manifest.version, retired);
     }
-    // Published as 2.7.0 with 0.66.0; the speech Azure OpenAI families' Q47 bump made it 2.7.1.
-    assert_eq!(manifest.version, "2.7.1");
+    // Published as 2.7.0 with 0.66.0; the speech Azure OpenAI families' Q47 bump made it 2.7.1,
+    // published with 0.67.0. The cap field (§4 D6) changes what the two Azure families send, so
+    // the package takes the minor 2.8.0
+    // (`shipped_packages_v1::t9_cap_field_retires_every_published_067_package_identity`).
+    assert_ne!(manifest.version, "2.7.1");
+    assert_eq!(manifest.version, "2.8.0");
     assert_eq!(OpenAiCompatibleReferenceV1.metadata().version, manifest.version);
     assert_eq!(manifest.compatibility.south_runtime, "0.60.0");
 }

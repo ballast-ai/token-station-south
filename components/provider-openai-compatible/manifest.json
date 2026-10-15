@@ -1,6 +1,6 @@
 {
   "name": "provider-openai-compatible",
-  "version": "2.7.1",
+  "version": "2.8.0",
   "api_version": "provider-adapter-v2",
   "providers": [
     "openai-compatible",
@@ -149,6 +149,28 @@
         "syntax": "api_version_date",
         "default": "2024-10-21",
         "description": "The Azure OpenAI API version sent as ?api-version=, a date with an optional -preview suffix such as 2025-04-01-preview. Defaults to 2024-10-21. A row on Azure's unversioned v1 surface uses the azure-openai-v1 family instead."
+      },
+      "max_tokens_field": {
+        "syntax": {
+          "enum": [
+            "max_completion_tokens",
+            "max_tokens"
+          ]
+        },
+        "default": "max_completion_tokens",
+        "description": "The body key the output cap is sent under: max_completion_tokens (the default, as the host's native Azure OpenAI arm sends it) or max_tokens for a deployment that accepts only the legacy key. A migrated row takes the native row's max_tokens_field, else max_tokens when it cleared accepts_max_completion_tokens."
+      }
+    },
+    "azure-openai-v1": {
+      "max_tokens_field": {
+        "syntax": {
+          "enum": [
+            "max_completion_tokens",
+            "max_tokens"
+          ]
+        },
+        "default": "max_completion_tokens",
+        "description": "The body key the output cap is sent under: max_completion_tokens (the default, as the host's native Azure OpenAI arm sends it) or max_tokens for a deployment that accepts only the legacy key. A migrated row takes the native row's max_tokens_field, else max_tokens when it cleared accepts_max_completion_tokens."
       }
     },
     "github-copilot": {
