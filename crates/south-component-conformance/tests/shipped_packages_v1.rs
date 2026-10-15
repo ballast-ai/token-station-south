@@ -1453,7 +1453,11 @@ fn r3_retires_every_published_055_package_identity() {
 /// `ComponentManifestV1` refuses unknown fields; `image-gemini` needs the first runtime with media 2.
 fn declared_runtime_now(name: &str) -> &'static str {
     match name {
-        "provider-gemini"
+        // `provider-anthropic` from 1.2.0: the Claude Code families declare
+        // `subscription_quota_families`, which no runtime before 0.60.0 parses (Claude Code record
+        // §9).
+        "provider-anthropic"
+        | "provider-gemini"
         | "provider-kiro"
         | "provider-openai-compatible"
         | "provider-openai-responses" => "0.60.0",
@@ -2634,7 +2638,9 @@ fn provider_vertex_retires_every_published_065_package_identity() {
         ("image-qwen", "1.0.8", "1.0.9"),
         ("image-stability", "1.0.6", "1.0.7"),
         ("image-vertex", "1.0.2", "1.0.3"),
-        ("provider-anthropic", "1.1.9", "1.1.10"),
+        // The Claude Code families then took the minor 1.2.0 over this patch (Claude Code record
+        // §9, `claude_code_conformance_v1::the_claude_code_families_retire_the_patch_identity`).
+        ("provider-anthropic", "1.1.9", "1.2.0"),
         ("provider-anthropic-bedrock-invoke", "1.1.9", "1.1.10"),
         ("provider-bedrock-converse", "1.1.9", "1.1.10"),
         ("provider-bedrock-converse-bearer", "1.1.9", "1.1.10"),
