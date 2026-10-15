@@ -160,7 +160,7 @@ credentials:          families ["claude-code"]
 | D5 | Operator header extras: native refuses them for `claude_code`; a component row has no declaration for that, so whatever the host does for component rows applies. | **Unverified**; host prerequisite H5 |
 | D6 | A refresh response without `expires_in`: native refreshes again on the next request; the recipe caches the token 60 s. | Registered (CC-Q6) |
 | D7 | Refresh margin 30 s (host default) instead of native 300 s. | Registered (Codex precedent) |
-| D8 | A refresh response without `refresh_token` keeps the stored one (no-wipe). Native passes `None` into its CAS write; whether that clears the column, and so flips the credential to the setup form, depends on `write_refreshed_cas`. | **Unverified** native defect; the recipe's behaviour is the safe one |
+| D8 | ~~A refresh response without `refresh_token` keeps the stored one (no-wipe); native possibly wipes it.~~ **Withdrawn 2026-10-15**: native keeps it too. `update_provider_credential_tokens_cas` only writes `refresh_token` when the response carries one (`None` = keep the old value; `server:gateway/src/modules/catalog/repo/credentials.rs:1064-1090`), so the recipe and native agree. | No difference |
 | D9 | A 5xx or a non-latching 4xx from the token endpoint: native returns 400 to the client; the recipe is `transient`, which the host maps to its own failure class. Latching is identical. | Registered (as Codex RQ3-Q9, Kiro) |
 | D10 | A hand-entered login credential with an access token and an expiry: native uses the access token until it is due; the recipe has no manual seed, so the first request refreshes. Imports are identical. | Registered |
 | D11 | The setup-token family keeps a static slot: whatever the host does for static slots applies (no refresh, no latch on a 401 from the upstream). Native also never refreshes a setup token. | Identical in effect |
@@ -259,3 +259,5 @@ same reference.
 - 2026-10-15: first draft, accepted under lv's directive of the same day; implemented with the defaults.
 - 2026-10-15: H1 answered from the host code (met when read, not run); the row split before routing stated as a host / ops
   prerequisite (H2).
+- 2026-10-15: D8 withdrawn after the host session read native's CAS write: it keeps the stored refresh token when the
+  response omits one, as the recipe does.
