@@ -2359,8 +2359,15 @@ fn s_s_1_retires_every_published_063_package_identity() {
 /// The version every speech package carries: each was published as 1.0.0 with 0.65.0, and
 /// provider-vertex's Q47 bump made it 1.0.1
 /// (`provider_vertex_retires_every_published_065_package_identity`). The tests below describe the
-/// batches that defined the packages, before that release.
+/// batches that defined the packages, before that release. `speech-vertex` moved on to 1.1.0 with
+/// Q7's refusal ([`speech_version`]).
 const SPEECH_VERSION: &str = "1.0.1";
+
+/// The version a speech package carries: [`SPEECH_VERSION`], except `speech-vertex`, which Q7's
+/// refusal made 1.1.0 (`speech_vertex_1_1_refuses_q7_and_retires_its_published_identity`).
+fn speech_version(name: &str) -> &'static str {
+    if name == "speech-vertex" { "1.1.0" } else { SPEECH_VERSION }
+}
 
 /// Speech world batch V3-1 (record `2026-10-14-speech-v3-1-tts.md` §1, §6): four packages start at
 /// 1.0.0 in the speech world, `synthesize` only, the secret slot `provider_api_key`, no config keys.
@@ -2583,7 +2590,7 @@ fn the_v4_speech_packages_declare_their_values_and_runtime() {
         ),
     ] {
         let manifest = read(name);
-        assert_eq!(manifest.version, SPEECH_VERSION, "{name}");
+        assert_eq!(manifest.version, speech_version(name), "{name}");
         assert_eq!(manifest.api_version, south_provider_api::SPEECH_WORLD, "{name}");
         assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), [family], "{name}");
         assert_eq!(manifest.capabilities.iter().collect::<Vec<_>>(), capabilities, "{name}");
@@ -2734,9 +2741,11 @@ fn provider_vertex_retires_every_published_065_package_identity() {
         )
         .unwrap();
         assert_ne!(manifest.version, published, "{name} reused its published identity");
-        // `task-veo-v2` moved on from this patch to a minor version with the Vertex family, in
-        // the same unreleased cycle (`task_veo_v2_gains_the_vertex_family_and_bearer`).
-        if name != "task-veo-v2" {
+        // `task-veo-v2` moved on from this patch to a minor version with the Vertex family, and
+        // `speech-vertex` with Q7's refusal, in the same unreleased cycle
+        // (`task_veo_v2_gains_the_vertex_family_and_bearer`,
+        // `speech_vertex_1_1_refuses_q7_and_retires_its_published_identity`).
+        if !matches!(name, "task-veo-v2" | "speech-vertex") {
             assert_eq!(manifest.version, now, "{name}");
         }
         let runtime = match name {
@@ -2823,7 +2832,7 @@ fn the_speech_packages_declare_contracts_speech_1_and_this_release() {
             continue;
         }
         let name = manifest.name.clone();
-        assert_eq!(manifest.version, SPEECH_VERSION, "{name}");
+        assert_eq!(manifest.version, speech_version(&name), "{name}");
         assert_eq!(manifest.compatibility.contracts.get("speech"), Some(&speech), "{name}");
         assert_eq!(
             manifest.compatibility.south_runtime,
@@ -2855,6 +2864,41 @@ fn the_speech_packages_declare_contracts_speech_1_and_this_release() {
             "speech-xai",
         ]
     );
+}
+
+/// `speech-vertex` 1.1.0 (V4 record `2026-10-15-speech-v4-tts.md` §3.4; lv's Q7 ruling of
+/// 2026-09-30, moved into 0.66.0 by lv on 2026-10-15): `mp3`, `opus`, `aac` and `flac`, which 1.0.x
+/// served as WAV as native does, are refused before dispatch. A behaviour change is a minor
+/// version (the `provider-kiro` 1.1.0 precedent): the published 1.0.0 identity and the unpublished
+/// `provider-vertex` patch 1.0.1 both retire. This release cycle already did its Q47 round, so
+/// nothing else moves. The manifest changes nothing but its version, so the runtime stays 0.65.0,
+/// the first that records `contracts.speech` 1, and the contracts stay `{media: 1, speech: 1}`.
+#[test]
+fn speech_vertex_1_1_refuses_q7_and_retires_its_published_identity() {
+    let manifest: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(repo_root().join("components/speech-vertex/manifest.json"))
+            .unwrap(),
+    )
+    .unwrap();
+    for retired in ["1.0.0", "1.0.1"] {
+        assert_ne!(manifest.version, retired, "a changed package cannot reuse an identity");
+    }
+    assert_eq!(manifest.version, "1.1.0");
+    assert_eq!(
+        manifest.version,
+        south_component_conformance::reference_vertex_speech::VERSION,
+        "the guest reports the reference's version"
+    );
+    assert_eq!(manifest.providers, ["vertex-ai-speech"]);
+    assert_eq!(manifest.capabilities.iter().collect::<Vec<_>>(), ["synthesize"]);
+    assert_eq!(manifest.compatibility.south_runtime, "0.65.0");
+    assert_eq!(
+        manifest.compatibility.contracts,
+        std::collections::BTreeMap::from([("media".to_owned(), 1), ("speech".to_owned(), 1)])
+    );
+    let mut media_1_only = host_range::host_range();
+    media_1_only.contracts.insert("media".to_owned(), BTreeSet::from([1]));
+    assert_eq!(compatibility_admits(&manifest, &media_1_only), Ok(()));
 }
 
 /// `task-veo-v2` gains the `vertex-veo-video` family (design record

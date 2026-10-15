@@ -24,11 +24,15 @@ Every expectation was written by hand from the record and from token-station-ser
   and `Verse` are sent as written (record §8 item 2, reproduced); a Gemini name verbatim, padding and case kept; a
   non-string is `Kore`; an elided voice an `as_is` reference.
 - `prepare.format-*` transcribe `vertex_tts_audio_format` (`vertex_tts_tests.rs:8-45`): absent / `wav` (any case) is WAV,
-  `pcm` (any case) raw PCM labelled `audio/L16; rate=24000`; **Q7 (1.0.0): `mp3`, `MP3`, `opus`, `aac` and `flac` are
-  served as WAV**, as native does for the dual run; a later minor refuses them (record §3.4). Any other string, `""`
-  included, is refused with native's text; a non-string is absent; an elided one is refused.
-- Responses (record §3.3): audio in `parts[0]` and in `parts[1]`, `pcm`, a degraded `mp3`, Hangul; native's `find_map`
-  stopping at a first `inlineData.data` that is not a string; `""`; text-only parts; no candidates; candidates absent;
+  `pcm` (any case) raw PCM labelled `audio/L16; rate=24000`. **Q7 (1.1.0): `mp3`, `MP3`, `opus`, `aac` and `flac` are
+  refused** before dispatch, "Gemini TTS on Vertex cannot emit response_format='{f}'. Supported: wav, pcm." with the
+  value lower-cased (MiMo's form). Native serves them as WAV, and so did 1.0.x, whose pack pinned these five cases as
+  successes; lv moved 1.1.0 into 0.66.0 on 2026-10-15, ahead of the host's Vertex dual run, so the refusal is a
+  registered intentional difference from native (record §3.4). Any other string, `""` included, is refused with
+  native's text without its parenthesis ("(mp3/opus/aac/flac degrade to wav)"); a non-string is absent; an elided one
+  is refused.
+- Responses (record §3.3): audio in `parts[0]` and in `parts[1]`, `pcm`, Hangul (1.0.x's degraded `mp3` case went
+  with the downgrade); native's `find_map` stopping at a first `inlineData.data` that is not a string; `""`; text-only parts; no candidates; candidates absent;
   audio only in `candidates[1]` (native reads `candidates[0]` only); a non-policy finish reason (all `unknown`, sidecar
   `audio`); a blocked prompt (`rejected`, `content_policy`) and a `SAFETY` finish (`unknown`, `content_policy`, I3-2
   GI-Q5); audio beside a policy finish delivered; a non-object body and a body that is not JSON; 400 (an unknown voice),

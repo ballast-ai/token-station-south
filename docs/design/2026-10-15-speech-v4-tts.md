@@ -2,7 +2,7 @@
 
 Status: accepted (lv reviewed it on 2026-10-15 and ruled SV-Q10 and SV-Q11 as recommended, §12); implemented
 (Implementation, below); declared in `contracts.speech` 1 at speech step S-S-5, released in 0.65.0 (release record `2026-10-15-release-0.65.0.md`) (`speech-vertex`
-1.1.0 is not part of it).
+1.1.0 was not part of it; lv moved it into 0.66.0 on 2026-10-15, §3.4, implemented in "`speech-vertex` 1.1.0" below).
 
 Date: 2026-10-15
 
@@ -274,11 +274,11 @@ Copied from `image-vertex` (and so from `embeddings-vertex`), through the shared
   anything else is sent **as the client wrote it** (untrimmed, case kept). `coral`, `ballad` and `verse` are therefore sent
   as voice names (native defect §8 item 2, reproduced). An elided `voice` is forwarded as an `as_is` reference.
 - **Format** (`vertex_tts_audio_format`, `tts_providers.rs:917-937`), the client `response_format` lower-cased (Unicode):
-  absent or `wav` → *wav*; `pcm` → *pcm*; `mp3`, `opus`, `aac`, `flac` → *wav* (Q7, §3.4); any other string →
-  `invalid_request` "Unknown response_format='{f}'. Gemini TTS on Vertex emits 24kHz mono PCM; supported: wav, pcm
-  (mp3/opus/aac/flac degrade to wav)." (native's text); a non-string is absent; an elided one is refused (V3-1
-  interpretation 4). Nothing is sent upstream for the format: the upstream always returns 24 kHz mono 16-bit PCM
-  (`tts_providers.rs:851-857`, `:875`).
+  absent or `wav` → *wav*; `pcm` → *pcm*; `mp3`, `opus`, `aac`, `flac` → *wav* in 1.0.x and `invalid_request` in
+  1.1.0 (Q7, §3.4); any other string → `invalid_request` "Unknown response_format='{f}'. Gemini TTS on Vertex emits
+  24kHz mono PCM; supported: wav, pcm (mp3/opus/aac/flac degrade to wav)." (native's text) in 1.0.x, without the
+  parenthesis in 1.1.0; a non-string is absent; an elided one is refused (V3-1 interpretation 4). Nothing is sent
+  upstream for the format: the upstream always returns 24 kHz mono 16-bit PCM (`tts_providers.rs:851-857`, `:875`).
 - **Immutable paths**: `contents`, `generationConfig.responseModalities` (= native, `tts.rs:63`). The voice path is not
   immutable (native's table omits it).
 
@@ -327,6 +327,16 @@ lv ruled Q7 on 2026-09-30: copy native's downgrade of mp3, opus, aac and flac to
   `response_format` when the caller omits it is **unverified** (an omitted format is *wav* in both versions).
 - What "after the dual run" means is the host's acceptance, not a south date; south does not ship 1.1.0 in the same
   release as 1.0.0.
+- **Timing overridden (lv, 2026-10-15): ship `speech-vertex` 1.1.0 too.** 1.1.0 no longer waits for the host's
+  acceptance of the Vertex TTS dual run: it ships in 0.66.0, the release after the one that published 1.0.0 (0.65.0), so
+  the rule above still holds and only the trigger moved. The behaviour is the one above, unchanged: the four values are
+  `invalid_request` before dispatch with MiMo's form of the text, the value lower-cased; the "Unknown …" text drops its
+  parenthesis; an omitted format stays *wav*. Consequence for the host: a Vertex TTS dual run that re-pins to 0.66.0
+  first compares against 1.1.0, so `mp3`, `opus`, `aac` and `flac` show a 400 before dispatch where native serves WAV
+  with 200 (native's downgrade, `vertex_tts_tests.rs:28-37`). That is a registered intentional difference from native
+  (this section, P16), not a dual-run failure; a dual run that wants those four values compared byte for byte has to
+  stay on 1.0.x (0.65.0). Whether SDKs send `response_format: mp3` when the caller omits it (§13, **unverified**) still
+  decides how many callers see the refusal.
 
 ### 3.5 VI-Q1 and BYOK
 
@@ -468,8 +478,8 @@ ideograph is). Required cases:
   missing project (pinned by name in the suite test, not in the pack: the `pre_dispatch_refusal` row admits only
   `invalid_request` / `capability`, I3-3 departure 1); each voice class (the eight folded names and `""`, `coral` sent
   through, a Gemini name with padding and case kept, non-string, elided); every `response_format` row including the four
-  Q7 downgrades and an unknown value; the five `credential.*` cases copied from `fixtures-image-vertex/`; a 2xx with audio
-  in `parts[0]` and in `parts[1]`, a first `inlineData.data` that is not a string, `""`, no candidates, `blockReason`, a
+  Q7 downgrades (refusals in 1.1.0) and an unknown value; the five `credential.*` cases copied from
+  `fixtures-image-vertex/`; a 2xx with audio in `parts[0]` and in `parts[1]`, a first `inlineData.data` that is not a string, `""`, no candidates, `blockReason`, a
   policy `finishReason`; the Google error envelope.
 - **Azure**: the `media_arms.rs:143-201` exchange (header, auth, one content type); each `response_format` row, `MP3`
   refused (exact match), elided; each voice rule (a table name, `Alloy` passed through, `en-GB-Sonia`, a full id
@@ -628,7 +638,9 @@ the component path; 1, 2, 8 and 9 are reproduced for the dual run; 5 is kept (§
 - **P13 Vertex path segments percent-encoded** (I3-3 V4); identical for every `[A-Za-z0-9._-]` value.
 - **P14 The recipe executor mints the Vertex token** (I3-3 V6), sharing the stored token with the other Vertex packages.
 - **P15 The WAV container refuses PCM that is not whole frames** (record §10); native wraps it.
-- **P16 Q7** (§3.4): 1.0.0 downgrades as native; 1.1.0 refuses after the dual run, as ruled.
+- **P16 Q7** (§3.4): 1.0.0 downgrades as native; 1.1.0 refuses, as ruled, and ships in 0.66.0 (lv, 2026-10-15),
+  whether or not the host's dual run has been accepted by then, so a dual run on 0.66.0 registers the refusal of the
+  four values as an intentional difference from native.
 - **P17 Status of a 2xx delivery is 200** (V3-1 §7 item 14).
 
 ## 10. Versioning (Q47)
@@ -645,8 +657,8 @@ No code is written by this record; the implementation follows the V3-1 and V3-2 
 - **`south-provider-api`**: unchanged.
 - **Packages**: `speech-qwen` and `speech-vertex` start at 1.0.0, `contracts` `{media: 1}`, `south_runtime` 0.64.0.
   `speech-azure` gains `synthesize` at 1.0.0 if V3-3 and V4 both land before the release that first publishes it (S-S-5),
-  else at 1.1.0 (V3-3 §10's rule). `speech-vertex` 1.1.0 (Q7) follows in a later release. `speech-qwen`'s `url`
-  artifact carries SV-Q10's member, which a 0.64.0 `south-contracts` would refuse; that does not move its
+  else at 1.1.0 (V3-3 §10's rule). `speech-vertex` 1.1.0 (Q7) follows in a later release (lv moved it
+  into 0.66.0 on 2026-10-15, §3.4). `speech-qwen`'s `url` artifact carries SV-Q10's member, which a 0.64.0 `south-contracts` would refuse; that does not move its
   `south_runtime` (the 0.64.0 gate ① admits the manifest, which is what the declaration states), and no host admits a
   speech package before S-S-5 records `contracts.speech` 1 with the member in it. All three gain `speech: 1` at
   S-S-5 with the other speech packages. `image-qwen`, `image-gemini` and `image-vertex` change no behaviour (the shared
@@ -834,7 +846,8 @@ references ride those versions and no package is patched again. `south-provider-
    an audio counterpart is unverified (§13). Shared as the record says; a speech-specific table would be a later minor.
 3. For the release (S-S-5): add `"speech": 1` to the three manifests with the other speech packages, and record the
    `upgrade_insecure` member in `contracts.speech` 1; no runtime moves. `speech-vertex` 1.1.0 (Q7's refusal) follows the
-   host's acceptance of the Vertex TTS dual run, in a later release.
+   host's acceptance of the Vertex TTS dual run, in a later release. *Superseded 2026-10-15*: lv moved 1.1.0 into 0.66.0
+   without waiting for the dual run (§3.4); implemented in "`speech-vertex` 1.1.0" below.
 4. The host items of §7 (and V3-1 §7, V3-2 §4, V3-3 §6) remain prerequisites of any cutover; §11's measurements are
    listed in each pack's README.
 
@@ -886,6 +899,56 @@ container, a blocked prompt as `unknown`; `every_azure_synthesis_mutation_turns_
 unescaped voice, forbidden characters as references, the upstream `content-type` echoed), and the V3-1 break module
 turns its row red on all three packs.
 
+### `speech-vertex` 1.1.0 (2026-10-15)
+
+Q7's refusal (§3.4), moved into 0.66.0 by lv on 2026-10-15, on branch `speech-vertex-1.1` (on `origin/main` `a9fef08`):
+
+- `reference_vertex_speech.rs`: `mp3`, `opus`, `aac` and `flac` (any case) are `invalid_request` 400 before dispatch,
+  "Gemini TTS on Vertex cannot emit response_format='{f}'. Supported: wav, pcm." with the value lower-cased, as MiMo
+  writes it; the "Unknown …" text ends "supported: wav, pcm."; absent, `wav` and `pcm` are unchanged. `VERSION` 1.1.0.
+- Pack `fixtures-speech-vertex/`: the five `prepare.format-*-degrades-to-wav` cases (`mp3`, `MP3`, `opus`, `aac`,
+  `flac`) become `prepare.format-*-refused` with the same inputs; the three "Unknown …" refusals lose the parenthesis;
+  `response.mp3-served-as-wav` is removed, since its prepare case no longer prepares a call (the WAV response path stays
+  pinned by `response.native` and `response.audio-in-second-part`). The README records the change.
+- `vertex_speech_suite`: `q7_transcode_only_formats_are_refused` replaces `q7_transcode_only_formats_degrade_to_wav`
+  (exact texts, any case, an omitted format still WAV); the wrapper mutation is now "serve the four as WAV again" and must
+  turn the five refusal cases red.
+- Versions: the manifest, `Cargo.toml` and the component lockfile move 1.0.1 → 1.1.0 (a behaviour change is a minor, the
+  `provider-kiro` 1.1.0 precedent). This cycle already did its Q47 round (#232, `south-component-conformance` 0.65.0,
+  every published package patched), so nothing else moves. The manifest changes nothing but its version, so
+  `south_runtime` stays 0.65.0, the first runtime that records `contracts.speech` 1 and therefore the oldest that
+  admits it. `shipped_packages_v1` pins the retirement of 1.0.0 and 1.0.1
+  (`speech_vertex_1_1_refuses_q7_and_retires_its_published_identity`).
+
+Gate results, run on 2026-10-15 against the final tree (macOS, on `origin/main` `12f3d95`), mirroring
+`.github/workflows/ci.yml`, with `set -o pipefail`:
+
+| Gate | Result |
+|---|---|
+| `cargo fmt --all -- --check` | clean |
+| `cargo clippy --workspace --all-targets --all-features -- -D warnings` | clean |
+| `PROPTEST_CASES=32 cargo nextest run --workspace --all-features` | 2,194 passed, 4 skipped, 0 failed |
+| `cargo test --workspace --doc --all-features` | 3 passed |
+| `cargo test --workspace --no-default-features` | 2,017 passed, 2 ignored, 0 failed |
+| `RUSTDOCFLAGS=-D warnings cargo doc --workspace --no-deps --all-features` | clean |
+| `cargo check --manifest-path fuzz/Cargo.toml --all-targets --locked` | passed |
+| `scripts/check-boundaries.sh --self-test`, `scripts/check-boundaries.sh` | passed |
+| `python3 -m unittest discover -s scripts -p 'test_*.py'` | 72 passed |
+| `scripts/check-language.sh` (self-test, files, `--commits`) | passed |
+| `cargo machete` (workspace and `fuzz/`) | no unused dependency |
+| `cargo deny check`, `cargo audit` (workspace and `fuzz/`) | passed |
+| every `scripts/build-*-component.sh` | 39 built |
+| `scripts/check-declared-runtime.sh --build` | every package loads under the runtime it declares (`speech-vertex` 1.1.0 under 0.65.0, this tree) |
+
+The root `Cargo.lock` (untracked) resolved rustls 0.23.46 and wasmtime 49.0.3.
+
+**Mutation** (applied to the reference, the named test binaries run, the file restored from a copy): accepting `mp3`
+again (`"wav" | "mp3" => Ok("wav")`) turned red `vertex_speech_suite::q7_transcode_only_formats_are_refused`,
+`::the_reference_passes_its_own_pack`, and, through the rebuilt guest,
+`vertex_speech_sandbox_parity::the_sandboxed_component_passes_gate_two_byte_for_byte` and
+`::every_abi_answer_is_byte_identical_to_the_native_reference`. After the restore the three binaries
+(`vertex_speech_suite`, `vertex_speech_sandbox_parity`, `shipped_packages_v1`) pass again, 86 of 86.
+
 ## Revision note
 
 - 2026-10-15: first draft (proposed).
@@ -896,3 +959,7 @@ turns its row red on all three packs.
 - 2026-10-15: speech step S-S-5 records `contracts.speech` 1 in `compatibility.json` and adds `"speech": 1` to this
   batch's manifests (speech record, S-S-5 implementation); status declared in `contracts.speech` 1, to be released in
   0.65.0. No design decision of this record changed.
+- 2026-10-15: lv moved `speech-vertex` 1.1.0 (Q7's refusal) into 0.66.0 ("ship speech-vertex 1.1.0 too") instead of
+  waiting for the host's acceptance of the Vertex TTS dual run. §3.2, §3.4, §5, P16, §10 and Open question 3 updated; the
+  consequence for the host's dual run is stated in §3.4; "`speech-vertex` 1.1.0" added to the Implementation section.
+  The refusal itself is unchanged from §3.4.

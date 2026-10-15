@@ -1305,7 +1305,8 @@ manifests and documents; a manifest is not part of `component.wasm`, so no other
   release paragraph in place of the Unreleased ones; the replay, `release_index.py`, the declared-runtime check against
   the archives, and the status lines of this record and the four batch records flipped to "released".
 - `speech-vertex` 1.1.0 (Q7's refusal) is not in this release; it follows the host's acceptance of the Vertex TTS dual
-  run.
+  run. (Superseded 2026-10-15: lv moved 1.1.0 into 0.66.0 without waiting for the dual run; V4 record
+  §3.4.)
 
 GATE_RESULTS_PLACEHOLDER
 
@@ -1360,3 +1361,6 @@ GATE_RESULTS_PLACEHOLDER
 - 2026-10-15: S-S-5 (pre-release half) implemented (S-S-5 implementation): `compatibility.json` records
   `contracts.speech` 1, the suite fields and `speech_v1` `not_verified` for both hosts; the nine speech packages declare
   `speech` 1 and this tree's release; the Q9 commitment is written. No design decision of this record changed.
+- 2026-10-15: lv moved `speech-vertex` 1.1.0 (Q7's refusal) into 0.66.0, ahead of the host's Vertex TTS dual run (V4
+  record §3.4); the S-S-5 implementation line that said it follows the dual run is marked superseded. No design decision
+  of this record changed: Q7's two versions stand, only the second one's timing moved.

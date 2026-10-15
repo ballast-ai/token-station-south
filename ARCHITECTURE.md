@@ -245,6 +245,14 @@ only (`credits_used`, at most six decimal places, never negative; otherwise `unk
 required fact of §9.1's last column (`credits`, `images_reported`, declared token buckets); no published package returns
 the outcome, so none changes. No version moves: `provider-vertex` already moved `south-component-conformance` to 0.65.0
 in this unreleased cycle. No contract number changes.
+**Unreleased (`speech-vertex` 1.1.0: Q7's refusal)**: speech batch V4 record `docs/design/2026-10-15-speech-v4-tts.md`
+§3.4 (lv's Q7 ruling of 2026-09-30; lv moved 1.1.0 into 0.66.0 on 2026-10-15 instead of waiting for the host's Vertex
+TTS dual run). `response_format` `mp3`, `opus`, `aac` and `flac`, which native and 1.0.x serve as WAV, are
+`invalid_request` before dispatch ("Gemini TTS on Vertex cannot emit response_format='{f}'. Supported: wav, pcm.");
+the "Unknown …" text drops its parenthesis; an omitted format stays WAV. The five 1.0.x pack cases for those values
+become refusal cases. A host dual run on 0.66.0 sees the refusal as a registered intentional difference from native. A
+behaviour change, so a minor version (1.0.1 → 1.1.0); the manifest changes nothing else and keeps `south_runtime` 0.65.0
+and `{media: 1, speech: 1}`. No crate version moves: `provider-vertex` already did this cycle's Q47 round.
 **Unreleased (`provider-vertex` 1.0.0: Gemini models on Vertex AI for text)**: design record
 `docs/design/2026-10-15-provider-vertex.md` (accepted 2026-10-15; VX-Q1 (a), `generateContent` on every surface; VX-Q2,
 family `vertex-ai`). The Gemini reference's request body, response reader, stream parser (with SF27) and refusals move

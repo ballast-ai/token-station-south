@@ -371,7 +371,7 @@ dependencies = [
 
 [[package]]
 name = "speech-vertex"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "south-component-conformance",
  "wit-bindgen",
