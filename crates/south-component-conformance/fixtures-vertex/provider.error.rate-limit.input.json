@@ -1,0 +1,7 @@
+{
+  "status": 429,
+  "headers": {
+    "retry-after": "2"
+  },
+  "body": "{\"error\": {\"code\": 429, \"status\": \"RESOURCE_EXHAUSTED\", \"message\": \"Quota exceeded\"}}"
+}

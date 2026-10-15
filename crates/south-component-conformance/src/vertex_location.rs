@@ -1,6 +1,7 @@
-//! The location rules the two Vertex AI references share: `embeddings-vertex` (embeddings record
-//! §16) and `image-vertex` (image world step I3-3, design record
-//! `docs/design/2026-10-13-image-i3-3-vertex.md` §4).
+//! The location rules the Vertex AI references share: `embeddings-vertex` (embeddings record
+//! §16), `image-vertex` (image world step I3-3, design record
+//! `docs/design/2026-10-13-image-i3-3-vertex.md` §4), `speech-vertex` (speech batch V4 §3.1) and
+//! `provider-vertex` (design record `docs/design/2026-10-15-provider-vertex.md` §3).
 //!
 //! Transcribed from token-station-server's `build_vertex_media_url` / `vertex_host_for_region` in
 //! `gateway/src/modules/inference/engine/vertex.rs`. `region` and the project come from
@@ -11,7 +12,7 @@
 //! `global`, whose prefixed host answers 404. Any other base URL (a proxy, a test server) is used
 //! as given. A missing value is a 500 naming the key, before any request refusal.
 //!
-//! One module, so the two references cannot drift.
+//! One module, so the references cannot drift.
 
 use token_station_protocol::{ErrorCode, ErrorEnvelope, ProviderConfig};
 

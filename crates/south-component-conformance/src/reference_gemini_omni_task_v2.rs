@@ -380,7 +380,7 @@ impl TaskComponentV2 for GeminiOmniTaskComponentV2 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "task-gemini-omni-v2".into(),
-            version: "0.1.3".into(),
+            version: "0.1.4".into(),
             api_version: "task-adapter-v2".into(),
         }
     }

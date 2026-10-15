@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"candidates\": [{\"content\": {\"role\": \"model\"}, \"finishReason\": \"MAX_TOKENS\", \"index\": 0}], \"usageMetadata\": {\"promptTokenCount\": 12, \"thoughtsTokenCount\": 16, \"totalTokenCount\": 28}, \"modelVersion\": \"gemini-2.5-flash\"}"
+}

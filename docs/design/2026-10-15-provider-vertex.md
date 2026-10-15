@@ -1,7 +1,7 @@
 # Provider world: `provider-vertex` (Gemini models on Vertex AI, text)
 
-Status: accepted (lv reviewed it on 2026-10-15 and ruled VX-Q1 (a) and VX-Q2 `vertex-ai` as recommended, §5). Not
-implemented.
+Status: accepted (lv reviewed it on 2026-10-15 and ruled VX-Q1 (a) and VX-Q2 `vertex-ai` as recommended, §5).
+Implemented (see Implementation).
 
 Date: 2026-10-15
 
@@ -109,7 +109,110 @@ step past 0.64.0 and every package published with 0.65.0 takes a patch with unch
 1.0.0 declares the oldest runtime that admits its declarations (`north_request_passthrough` needs 0.60.0, the minted
 slot and `vertex_sa` are older), to be confirmed by `check-declared-runtime`. No contract change.
 
+## Implementation
+
+### What landed
+
+- **The shared wire** (§3): `provider-gemini`'s request body, response reader, stream parser (with SF27) and refusals
+  moved, unchanged, from `reference_gemini.rs` into the crate-private module `gemini_text`. The module exposes
+  `serves` (the family check), `refuse_foreign_reasoning_replay`, `require_model`, `operation` (the `:method` suffix and
+  query), `descriptor` (the JSON `POST` with the body and no auth), `parse_response`, `map_provider_error` and
+  `stream_parser`; the parser's unit tests moved with it. `reference_gemini.rs` keeps the family `gemini`, the
+  `v1beta/models/{model}:{method}` route and the `x-goog-api-key` header, and calls the shared checks in the order it
+  always had (Claude replay, `OpenAI` replay, family, model). Its fixed `config.provider != "gemini"` became
+  `gemini_text::serves(config, "gemini")`, with the same message. `fixtures-gemini/` and the Gemini tests are unchanged.
+- **`reference_vertex.rs`**: family `vertex-ai`; the family check first, then
+  `vertex_location::publisher_model_path` (region, then project, then the base URL check), then the request refusals,
+  so a configuration error is a 500 naming the key before any request refusal (P3, as `image-vertex`); the URL is
+  `{base}/{path}` plus `?alt=sse` when streaming; `Auth::bearer` on the configured slot.
+- **`components/provider-vertex`** 1.0.0: as §3 lists. `config_schema["vertex-ai"]` and `credentials` are
+  `image-vertex`'s byte for byte (a test compares the manifest text). `south_runtime` 0.60.0.
+- **`fixtures-vertex/`**: fixtures-gemini's rows with the route, auth and values adapted; the host's Vertex
+  thinking-exhausted request and its non-streaming and streaming answers; the location rows; `image-vertex`'s five
+  credential cases. Its README records where each expectation came from.
+- **Tests**: `tests/vertex_conformance_v1.rs` (gates ① and ②, the decided rows, the byte equality, the configuration
+  refusals by name, the family check in both directions, the shared code over every `fixtures-gemini/` case, two fault
+  components) and `tests/vertex_sandbox_parity_v1.rs` (the guest passes gate ② byte for byte, its report equals the
+  native one, and the configuration refusals are byte-identical across the ABI); build script; `ci.yml` / `release.yml`
+  / `shipped_packages_v1` (38 official components).
+
+### Interpretations
+
+1. **`request_facts.model.url` is `/publishers/google/models/{model}:`.** Gate ① admits a template that starts with
+   `/`, holds exactly one `{model}` and no other brace, `?`, `#` or space; gate ② requires the URL path to *contain* the
+   template with the model encoded as one segment. `provider-gemini`'s `/models/{model}:` would also pass (it is a
+   suffix of the Vertex path); the longer form pins the publisher segment, which is the part of the Vertex path that
+   names the model.
+2. **The region mismatch is a pack row as well as a named refusal.** Unlike the image suite, the provider suite admits
+   any error envelope as a request case's expectation, so
+   `provider.request.another-regions-vertex-host-is-refused` sits in the pack. The other configuration refusals (missing
+   region, missing project, the prefixed `global` host) and the mismatch are pinned by name in the suite test against a
+   request the package would otherwise refuse, and through the guest in the parity test.
+3. **Mirrored rows are adapted by rule.** `fixtures-gemini/`'s request rows were adapted mechanically (row, URL, auth)
+   rather than re-derived; the shared-code test holds both references to the same output over every Gemini case, so a
+   mirrored row cannot hide a difference. Gemini's `provider.request.chat` is `provider.request.system-and-sampling`
+   here, because `provider.request.chat` is the host-transcribed request.
+4. **No `endpoint` declaration.** The origin follows the region, so the package declares none, as `image-vertex`.
+
+### Contradiction flagged
+
+- **§5 VX-Q1 overstates what changes.** The record says native serves `/v1/chat/completions` and `/v1/messages` on a
+  Vertex row through the OpenAI-compatible endpoint. The host's own tests show `/v1/chat/completions` on a `vertex_ai`
+  row reaching `…/publishers/google/models/gemini-2.5-flash:generateContent` with the Bearer token
+  (`server:gateway/tests/gemini_thinking_exhausted.rs`, `vertex_chat_nonstream_thinking_exhausted_returns_length_and_settles`;
+  the `(VertexAi, GeminiGenerate)` arm of `text_admission.rs`), and the Responses surface falls back through chat
+  (`sender/responses.rs`). Only `/v1/messages` uses `…/endpoints/openapi/chat/completions`
+  (`server:gateway/tests/messages_providers.rs`). Under VX-Q1 (a) the registered difference is therefore the messages
+  surface's upstream wire (and the `google/` prefix on rows that serve it), not the chat surface's. The ruling is
+  unaffected; §6 item 4's preflight should list only rows that carry `google/`.
+
+### Open questions
+
+- None blocking. The record's §6 host steps are unchanged; the dual run (§6 item 6) should cover `/v1/messages` against
+  the OpenAI-compatible native arm as the one surface whose upstream wire changes.
+
+### Gate results
+
+Run locally on the final tree (macOS, toolchain 1.96.0, root lockfile with wasmtime 49.0.3 and rustls 0.23.46), mirroring
+`ci.yml` with `set -o pipefail`:
+
+| Gate | Result |
+|---|---|
+| `cargo fmt --all -- --check` | pass |
+| `cargo clippy --workspace --all-targets --all-features -- -D warnings` | pass (the first run flagged `unnecessary_wraps` on the moved `map_provider_error`, which never fails; it now returns the envelope and both references wrap it) |
+| `PROPTEST_CASES=32 cargo nextest run --workspace --all-features` | 2146 passed, 4 skipped (12 in `vertex_conformance_v1`, 5 in `vertex_sandbox_parity_v1`; every Gemini test unchanged and passing) |
+| `cargo test --workspace --doc --all-features` | 3 passed |
+| `cargo test --workspace --no-default-features` | 1975 passed |
+| `RUSTDOCFLAGS=-D warnings cargo doc --workspace --no-deps --all-features` | pass |
+| `cargo check --manifest-path fuzz/Cargo.toml --all-targets --locked` | pass |
+| `scripts/check-boundaries.sh --self-test` and `scripts/check-boundaries.sh` | pass |
+| `python3 -m unittest discover -s scripts -p 'test_*.py'` | 72 passed |
+| `scripts/check-language.sh` (self-test, files, commits since `origin/main`) | pass |
+| `cargo machete` (root and `fuzz/`) | pass |
+| `cargo deny check` and `cargo audit` (root and `fuzz/`) | pass |
+| every `scripts/build-*-component.sh`, then `scripts/check-declared-runtime.sh --build` | pass: `provider-vertex` loads under the v0.60.0 runtime; with its `south_runtime` set to 0.59.0 the v0.59.0 runtime refuses it (`unknown variant generate_content`), so 0.60.0 is the oldest runtime that admits it |
+
+Mutations (each applied to the source, the suite test run, the source restored from a copy):
+
+| Mutation | Red tests in `vertex_conformance_v1` |
+|---|---|
+| `provider-vertex`'s family check removed | `each_package_refuses_the_other_family` |
+| `provider-gemini`'s family check removed | `each_package_refuses_the_other_family` |
+| another region's Vertex host accepted (`base_of` check disabled) | `gate_two_passes_over_the_shipped_pack` (the region-mismatch row), `a_configuration_error_is_a_500_before_any_request_refusal` |
+| the exported `project_id` read before the `project` override | `gate_two_passes_over_the_shipped_pack` (the project-override row), `a_configuration_error_is_a_500_before_any_request_refusal`, `accepting_a_vertex_base_of_another_region_fails_its_rows` |
+| the request refusals run before the location | `a_configuration_error_is_a_500_before_any_request_refusal`, `accepting_a_vertex_base_of_another_region_fails_its_rows` |
+
+### Versions (Q47 against v0.65.0)
+
+`south-component-conformance` 0.64.0 → 0.65.0 (the shared module and the new reference). Every package published with
+0.65.0 (all 37) takes a patch with unchanged behaviour and keeps its `south_runtime` and its contracts; the reference
+`VERSION` constants move with them, and `provider_vertex_retires_every_published_065_package_identity` pins each new
+identity. `south-contracts` (0.56.0) and `south-provider-api` (0.58.0) are unchanged. `provider-vertex` ships at 1.0.0
+with `south_runtime` 0.60.0.
+
 ## Revision note
 
 - 2026-10-15: first draft (proposed).
 - 2026-10-15: lv accepted the record and ruled VX-Q1 (a) and VX-Q2 `vertex-ai` as recommended; status accepted.
+- 2026-10-15: implemented; Implementation section added (what landed, interpretations, the VX-Q1 contradiction, gate
+  results, versions).

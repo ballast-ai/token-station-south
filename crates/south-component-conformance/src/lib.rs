@@ -73,10 +73,14 @@ pub mod reference;
 pub mod reference_anthropic;
 pub mod reference_anthropic_bedrock_invoke;
 pub mod reference_bedrock_converse;
+// The `:generateContent` text wire the Gemini API and Vertex AI provider packages share (design
+// record docs/design/2026-10-15-provider-vertex.md §3).
+mod gemini_text;
 pub mod reference_gemini;
 pub mod reference_kiro;
 pub mod reference_kling_task;
 pub mod reference_openai_responses;
+pub mod reference_vertex;
 mod report;
 pub mod responses_vocabulary;
 #[cfg(feature = "sandbox")]
@@ -225,6 +229,6 @@ pub mod reference_qwen_speech;
 pub mod reference_vertex_speech;
 // The XML well-formedness reader the `ssml_escaping` row uses.
 mod ssml_check;
-// The location rules the three Vertex AI references share (image record I3-3 §4; speech batch V4
-// §3.1).
+// The location rules the four Vertex AI references share (image record I3-3 §4; speech batch V4
+// §3.1; provider-vertex record §3).
 mod vertex_location;

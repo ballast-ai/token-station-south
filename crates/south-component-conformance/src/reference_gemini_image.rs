@@ -40,7 +40,7 @@ use crate::{ComponentResultV1, ImageComponentV1, ImageOutcomeV1, ImageRenderedV1
 /// The package name this reference is published as.
 pub const NAME: &str = "image-gemini";
 /// The package version.
-pub const VERSION: &str = "1.0.7";
+pub const VERSION: &str = "1.0.8";
 /// The world this reference exports.
 pub const WORLD: &str = "image-adapter-v1";
 /// The family, as a host's image rows name it.

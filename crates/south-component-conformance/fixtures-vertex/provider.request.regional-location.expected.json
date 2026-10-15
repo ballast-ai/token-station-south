@@ -1,0 +1,26 @@
+{
+  "method": "POST",
+  "url": "https://europe-west4-aiplatform.googleapis.com/v1/projects/test-project/locations/europe-west4/publishers/google/models/gemini-2.5-flash:generateContent",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "auth": {
+    "scheme": "bearer",
+    "secret": "provider_api_key"
+  },
+  "body": {
+    "contents": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "text": "hi"
+          }
+        ]
+      }
+    ],
+    "generationConfig": {
+      "maxOutputTokens": 16
+    }
+  }
+}
