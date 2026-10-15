@@ -2932,10 +2932,12 @@ fn task_veo_v2_gains_the_vertex_family_and_bearer() {
         &std::fs::read_to_string(repo_root().join("components/task-veo-v2/manifest.json")).unwrap(),
     )
     .unwrap();
-    for retired in ["0.35.23", "0.35.24"] {
+    // 0.36.0 was published with 0.66.0; Q-VV1's poll prefix rewrite (lv 2026-10-15) is a
+    // behaviour fix in the same family, so the package takes a patch
+    // (`veo_task_suite_v2::a_project_number_operation_name_is_polled_under_the_binding_prefix`).
+    for retired in ["0.35.23", "0.35.24", "0.36.0"] {
         assert_ne!(manifest.version, retired, "a changed package cannot reuse an identity");
     }
-    // Published as 0.36.0 with 0.66.0; the speech Azure OpenAI families' Q47 bump made it 0.36.1.
     assert_eq!(manifest.version, "0.36.1");
     assert_eq!(manifest.providers, ["veo-video", "vertex-veo-video"]);
     assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer", "header_secret"]);

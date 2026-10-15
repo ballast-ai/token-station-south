@@ -34,6 +34,8 @@
 //! - **Observe**: `GET {origin}/v1/{operation name}`, the name carrying `projects/…`, as native
 //!   `build_video_query_url` does for a `projects/` name; the body is read as the Gemini LRO shape
 //!   (`generateVideoResponse.generatedSamples[].video.uri`), as native `normalize_veo` reads it.
+//!   A name of the shape `projects/*/locations/*/publishers/google/models/*/operations/*` is
+//!   polled under the binding's own location prefix instead (see the differences below).
 //!
 //! Differences from the host-native arm, deliberate:
 //! - Input images must already be `data:` URIs (the host's pre-fetch inlines remote images);
@@ -52,6 +54,16 @@
 //!   which line answered); a `projects/…` name is bounded by the wire's upstream-id limit rather
 //!   than the 128-byte task-id limit the Gemini names keep, since a Vertex name with a UUID
 //!   operation id is longer than 128 bytes.
+//! - Before polling, the Vertex family replaces the `projects/{p}/locations/{r}` prefix of an
+//!   operation name of the shape `projects/*/locations/*/publishers/google/models/*/operations/*`
+//!   with the binding's own prefix, so the poll URL is
+//!   `{base}/publishers/google/models/{m}/operations/{id}`, under the same location prefix as the
+//!   submit URL (lv 2026-10-15, Q-VV1).
+//!   Vertex may answer with the project **number** where the binding carries the project id
+//!   (**unverified**: no capture), and a poll outside the bound endpoint is one a host refuses to
+//!   send. Native polls the name verbatim. A `projects/…` name of any other shape is polled
+//!   verbatim as before, so a host's `authorize` still refuses it when it leaves the bound
+//!   endpoint; the stored task id is never rewritten.
 //! - A provider family other than these two is refused.
 use crate::{ComponentResultV1, PreparedTaskV2, SubmitOutcomeV2, TaskComponentV2};
 use serde_json::{Value, json};
@@ -162,6 +174,30 @@ fn vertex_operation_name(name: &str) -> bool {
     name.len() <= south_contracts::MAX_ARTIFACT_REF_BYTES
         && name.starts_with("projects/")
         && plain_segments(name)
+}
+/// The poll path of a Vertex operation name of the shape
+/// `projects/<p>/locations/<r>/publishers/google/models/<m>/operations/<id>`, relative to the
+/// binding's location prefix: `publishers/google/models/<m>/operations/<id>`. The name's own
+/// project and location are dropped, so the poll stays under the prefix the submit used even when
+/// Vertex names the project by number and the binding by id (Q-VV1, **unverified**). `None` for
+/// any other shape, which is polled verbatim.
+fn vertex_operation_under_binding(name: &str) -> Option<String> {
+    let segments: Vec<&str> = name.split('/').collect();
+    match segments.as_slice() {
+        [
+            "projects",
+            _,
+            "locations",
+            _,
+            "publishers",
+            "google",
+            "models",
+            model,
+            "operations",
+            id,
+        ] => Some(format!("publishers/google/models/{model}/operations/{id}")),
+        _ => None,
+    }
 }
 /// The scheme and authority of the binding's endpoint: native polls a Vertex operation at
 /// `{vertex_api_base}/v1/{name}`, and the location prefix the host binds is
@@ -421,12 +457,15 @@ impl TaskComponentV2 for VeoTaskComponentV2 {
             return Err(invalid("invalid Veo operation name"));
         }
         // Native `build_video_query_url`: `{base}/v1beta/{name}` on the Gemini API; a `projects/…`
-        // name at `{vertex_api_base}/v1/{name}`, the origin of the bound location prefix.
+        // name at `{vertex_api_base}/v1/{name}`, the origin of the bound location prefix. A
+        // publisher-model operation name is first moved under the binding's own location prefix
+        // (Q-VV1), which is the same URL when the name repeats the bound project and location.
         let url = match family {
             Family::Gemini => under_base(config, &format!("{GEMINI_ROUTE}/{id}")),
-            Family::Vertex => {
-                format!("{}/{VERTEX_ROUTE}/{id}", origin(&config.base_url.as_str()))
-            }
+            Family::Vertex => match vertex_operation_under_binding(id) {
+                Some(path) => under_base(config, &path),
+                None => format!("{}/{VERTEX_ROUTE}/{id}", origin(&config.base_url.as_str())),
+            },
         };
         Ok(request(config, family, HttpMethod::Get, url))
     }

@@ -1,0 +1,8 @@
+{
+  "method": "GET",
+  "url": "https://us-central1-aiplatform.example/v1/projects/123456789012/locations/us-central1/operations/0b1c2d3e-4f50-4617-8899-aabbccddeeff",
+  "auth": {
+    "scheme": "bearer",
+    "secret": "provider_api_key"
+  }
+}
