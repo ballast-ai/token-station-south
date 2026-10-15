@@ -160,16 +160,20 @@ slot and `vertex_sa` are older), to be confirmed by `check-declared-runtime`. No
   Vertex row through the OpenAI-compatible endpoint. The host's own tests show `/v1/chat/completions` on a `vertex_ai`
   row reaching `…/publishers/google/models/gemini-2.5-flash:generateContent` with the Bearer token
   (`server:gateway/tests/gemini_thinking_exhausted.rs`, `vertex_chat_nonstream_thinking_exhausted_returns_length_and_settles`;
-  the `(VertexAi, GeminiGenerate)` arm of `text_admission.rs`), and the Responses surface falls back through chat
-  (`sender/responses.rs`). Only `/v1/messages` uses `…/endpoints/openapi/chat/completions`
-  (`server:gateway/tests/messages_providers.rs`). Under VX-Q1 (a) the registered difference is therefore the messages
-  surface's upstream wire (and the `google/` prefix on rows that serve it), not the chat surface's. The ruling is
+  the `(VertexAi, GeminiGenerate)` arm of `text_admission.rs`). `/v1/messages` uses `…/endpoints/openapi/chat/completions`
+  (`server:gateway/tests/messages_providers.rs`), and so does `/v1/responses`: the Responses surface falls back through
+  the Chat wire under the row's dialect, `openai-compatible` by default (`server:…/text_admission/sender/responses.rs:606-613`;
+  corrected 2026-10-15, the first version of this note said Responses followed chat to `generateContent`). Under VX-Q1 (a)
+  the registered difference is therefore the upstream wire of two surfaces, messages and responses (and the `google/`
+  prefix on rows that serve them), not the chat surface's. A component row also serves tools on those two surfaces
+  through the Gemini body (`tools` / `functionDeclarations`); the host session reports that this opens tools where the
+  native arm did not, registered as a difference, unverified against the upstream. The ruling is
   unaffected; §6 item 4's preflight should list only rows that carry `google/`.
 
 ### Open questions
 
-- None blocking. The record's §6 host steps are unchanged; the dual run (§6 item 6) should cover `/v1/messages` against
-  the OpenAI-compatible native arm as the one surface whose upstream wire changes.
+- None blocking. The record's §6 host steps are unchanged; the dual run (§6 item 6) should cover `/v1/messages` and
+  `/v1/responses` against the OpenAI-compatible native arm, the two surfaces whose upstream wire changes, tools included.
 
 ### Gate results
 
@@ -216,3 +220,6 @@ with `south_runtime` 0.60.0.
 - 2026-10-15: lv accepted the record and ruled VX-Q1 (a) and VX-Q2 `vertex-ai` as recommended; status accepted.
 - 2026-10-15: implemented; Implementation section added (what landed, interpretations, the VX-Q1 contradiction, gate
   results, versions).
+- 2026-10-15 (after 0.66.0): corrected the contradiction note: `/v1/responses` also uses the OpenAI-compatible native
+  endpoint, so two surfaces change wire; the tools difference on them registered (read by the host session, confirmed
+  in `sender/responses.rs`).
