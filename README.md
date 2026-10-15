@@ -220,7 +220,7 @@ directory shape the runtime loads — `manifest.json` beside `component.wasm`.
 | `task-bailian-v2` | bailian | `bash scripts/build-bailian-task-v2-component.sh` | released |
 | `task-xai-v2` | `xai-video` | `bash scripts/build-xai-task-v2-component.sh` | released |
 | `task-byteplus-v2` | `byteplus-video` | `bash scripts/build-byteplus-task-v2-component.sh` | released |
-| `task-veo-v2` | `veo-video` | `bash scripts/build-veo-task-v2-component.sh` | released |
+| `task-veo-v2` | `veo-video`, `vertex-veo-video` | `bash scripts/build-veo-task-v2-component.sh` | released; unreleased: the `vertex-veo-video` family (the native arm's Vertex logic, `bearer`, task contract 7; 0.36.0, [record](docs/design/2026-10-15-veo-vertex-task-component.md)) |
 | `task-wan-image-v2` | `wan-image` | `bash scripts/build-wan-image-task-v2-component.sh` | released |
 | `task-gmi-image-v2` | `gmi-image` | `bash scripts/build-gmi-image-task-v2-component.sh` | released |
 | `task-gemini-omni-v2` | `vertex-interactions-video`, `gemini-interactions-video` | `bash scripts/build-gemini-omni-task-v2-component.sh` | task contract 8 (inline artifacts and token buckets) with media contract 1; Gemini Omni video over the Interactions API, Vertex sampled and the Gemini API line provisional, from 0.62.0 (0.1.0) |
