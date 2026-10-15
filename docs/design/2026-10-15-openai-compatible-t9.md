@@ -158,7 +158,7 @@ are the same. A family keeps `azure-openai-v1`'s published behaviour and its row
 | D8 | Dated Responses (`/openai/deployments/{d}/responses?api-version=`) and dated embeddings are not covered: `provider-openai-responses` and `embeddings-openai-compatible` have no dated family. A dated `azure_openai` row whose models serve Responses or embeddings keeps those surfaces on the native arm, or moves to the v1 surface. | Out of T9's scope; T9-Q7 |
 | D9 | `glm-coding` reads the credential's `api_key` slot only, as native (plain `glm` also took `oauth_token`). | Identical |
 | D10 | Operator header extras, `x-request-id` and `traceparent` forwarding: whatever the host does for component rows applies. | Host-generic |
-| D11 | Responses through Chat (revision). On a native row the host collapses a text-only part array to a string after the IR (`sender/responses.rs:764-767, 804-829`); on a `component` row it does not (`:764`, `!component_row`), and the component renders a part array as an array. The text is the same; only the shape differs. Applies to `glm-coding` (native serves Responses through Chat, §2.1) and to an `azure_openai` row with `supports_responses` off. Whether Z.ai or Azure treat the two shapes differently is **unverified**. | Registered |
+| D11 | Responses through Chat (revision; scope narrowed 2026-10-16 from the host's dual run). On a native row the host collapses a text-only part array to a string after the IR (`sender/responses.rs:764-767, 804-829`); on a `component` row it does not (`:764`, `!component_row`). A user turn of plain text renders as a string on both sides, one segment or several, so it shows no difference. The difference appears only on an assistant turn of a multi-turn input that carries a reasoning item: the IR holds reasoning plus text, the reasoning does not enter the Chat body, and the remaining text segments are collapsed to a string by native and sent as an array by the component (the host's dual run registers it at `body/messages/1/content`). The text is the same; only the shape differs. Applies to `glm-coding` (native serves Responses through Chat, §2.1) and to an `azure_openai` row with `supports_responses` off. Whether Z.ai or Azure treat the two shapes differently is **unverified**. | Registered |
 
 ## 6. Host prerequisites for cutover
 
@@ -357,3 +357,6 @@ What was implemented (`reference::client_passthrough`, `forward_client_fields`):
   - §10: T9-Q9, a client's `thinking` on GLM rows, analysed; resolved to (a) under the same directive and implemented
     in the same cycle (`provider-openai-compatible` 2.8.0): `thinking` and `enable_thinking` forwarded verbatim on the
     five families whose native types send the client body; A+ deferred. D2, D3 and H4 updated.
+- 2026-10-16 (from the host's 0.68.0 re-pin and its dual run): §5 D11 narrowed. Plain user text shows no difference;
+  only an assistant turn whose IR carries reasoning plus text differs (native string, component array). The release
+  0.68.0 record's one-line summary of D11 predates this and is kept as history.
