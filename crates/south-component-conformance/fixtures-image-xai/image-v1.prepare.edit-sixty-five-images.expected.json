@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "xAI image edits accept at most 64 input images (got 65)"
+  }
+}

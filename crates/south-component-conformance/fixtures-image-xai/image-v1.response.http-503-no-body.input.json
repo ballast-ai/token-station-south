@@ -1,0 +1,6 @@
+{
+  "prepare_case": "image-v1.prepare.generate-standard-defaults",
+  "response": {
+    "status": 503
+  }
+}

@@ -15,7 +15,7 @@ mod host_range;
 
 /// The official components this repository ships. Named, so that an empty or
 /// mistyped scan below cannot pass over nothing.
-const OFFICIAL_COMPONENTS: [&str; 38] = [
+const OFFICIAL_COMPONENTS: [&str; 39] = [
     "embeddings-gemini",
     "embeddings-openai-compatible",
     "embeddings-vertex",
@@ -26,6 +26,7 @@ const OFFICIAL_COMPONENTS: [&str; 38] = [
     "image-qwen",
     "image-stability",
     "image-vertex",
+    "image-xai",
     "provider-anthropic",
     "provider-anthropic-bedrock-invoke",
     "provider-bedrock-converse",
@@ -1874,6 +1875,34 @@ fn image_ideogram_declares_media_1_and_the_runtime_of_the_record() {
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["ideogram-image"]);
     assert!(manifest.declared_keys("ideogram-image").is_empty());
     assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["header_secret"]);
+    assert_eq!(manifest.compatibility.contracts.get("media"), Some(&1));
+    assert_eq!(manifest.compatibility.contracts.get("image"), Some(&1));
+    assert_eq!(manifest.compatibility.south_runtime, "0.57.0");
+    assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
+    let mut media_1_only = host_range::host_range();
+    media_1_only.contracts.insert("media".to_owned(), BTreeSet::from([1]));
+    assert_eq!(compatibility_admits(&manifest, &media_1_only), Ok(()));
+}
+
+/// `image-xai` (I3-7, record `2026-10-15-image-i3-7-xai.md` §1) starts at 1.0.0 in the image
+/// world: family `xai-image`, no config keys, `bearer` only (the native OpenAI-compatible
+/// `Authorization` header), `generate` and `edit`, and `contracts` `{image: 1, media: 1}`. It names
+/// no word past media 1 (its only transform is `as_is`), so it declares the oldest runtime that
+/// admits its declarations, 0.57.0, as `image-azure` and `image-ideogram` do, and a media 1 host
+/// admits it.
+#[test]
+fn image_xai_declares_media_1_bearer_and_the_runtime_of_the_record() {
+    let manifest: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(repo_root().join("components/image-xai/manifest.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(manifest.name, "image-xai");
+    assert_eq!(manifest.version, "1.0.0");
+    assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
+    assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["xai-image"]);
+    assert_eq!(manifest.capabilities.iter().collect::<Vec<_>>(), ["edit", "generate"]);
+    assert!(manifest.declared_keys("xai-image").is_empty());
+    assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer"]);
     assert_eq!(manifest.compatibility.contracts.get("media"), Some(&1));
     assert_eq!(manifest.compatibility.contracts.get("image"), Some(&1));
     assert_eq!(manifest.compatibility.south_runtime, "0.57.0");

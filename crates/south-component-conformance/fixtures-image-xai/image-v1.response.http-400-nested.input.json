@@ -1,0 +1,12 @@
+{
+  "prepare_case": "image-v1.prepare.edit-image-object",
+  "response": {
+    "status": 400,
+    "body": {
+      "error": {
+        "message": "Image is too large",
+        "type": "invalid_request_error"
+      }
+    }
+  }
+}

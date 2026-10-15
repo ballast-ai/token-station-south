@@ -1,0 +1,14 @@
+{
+  "prepare_case": "image-v1.prepare.edit-size-dropped",
+  "response": {
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "b64_json": "",
+          "url": "https://imgen.x.ai/xai-imgen/xai-tmp-imgen-2.jpeg"
+        }
+      ]
+    }
+  }
+}

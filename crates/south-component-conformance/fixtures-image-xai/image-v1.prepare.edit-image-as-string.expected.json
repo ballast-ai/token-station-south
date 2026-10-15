@@ -1,0 +1,53 @@
+{
+  "descriptor": {
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "image": {
+            "$south.ref": {
+              "blob": "b0",
+              "transform": "as_is"
+            }
+          },
+          "model": "grok-imagine-image",
+          "prompt": "p"
+        }
+      }
+    },
+    "method": "POST",
+    "path": "v1/images/edits"
+  },
+  "facts": {
+    "inputs": {
+      "input_image": 1,
+      "mask": 0,
+      "reference_image": 0
+    },
+    "metering_forms": [
+      "images"
+    ],
+    "operation": "edit",
+    "requested_outputs": 1,
+    "tier": {
+      "resolution": "1k"
+    }
+  },
+  "immutable_body_paths": [
+    "model",
+    "n",
+    "resolution",
+    "quality",
+    "image",
+    "images"
+  ],
+  "repeat": 1,
+  "response_body_form": "json",
+  "response_elision_paths": [
+    "/data/*/b64_json"
+  ],
+  "state": {}
+}

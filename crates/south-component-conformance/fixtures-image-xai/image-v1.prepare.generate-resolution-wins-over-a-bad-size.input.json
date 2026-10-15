@@ -1,0 +1,20 @@
+{
+  "provider_config": {
+    "provider": "xai-image",
+    "base_url": "https://api.x.ai",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "json": {
+      "prompt": "p",
+      "resolution": "2K",
+      "size": 5
+    }
+  },
+  "context": {
+    "upstream_model": "grok-imagine-image",
+    "metering_required": [
+      "images"
+    ]
+  }
+}

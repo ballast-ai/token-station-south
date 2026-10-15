@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "'n' must be in 1..=10 for xAI /v1/images/edits, got 11"
+  }
+}

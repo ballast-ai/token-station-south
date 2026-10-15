@@ -1,0 +1,10 @@
+{
+  "prepare_case": "image-v1.prepare.generate-standard-defaults",
+  "response": {
+    "status": 403,
+    "body": {
+      "code": "Permission denied",
+      "error": "Your team has no credits"
+    }
+  }
+}

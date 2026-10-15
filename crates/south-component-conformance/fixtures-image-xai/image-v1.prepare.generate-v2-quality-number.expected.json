@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "xAI `quality` for grok-imagine-image-2.0 must be low, medium or auto (the price card has no other tier), got 5"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "template": {
+    "data": [
+      {
+        "revised_prompt": "",
+        "url": {
+          "$south.artifact": {
+            "as": "url",
+            "index": 0
+          }
+        }
+      }
+    ],
+    "usage": {
+      "cost_in_usd_ticks": 200000000
+    }
+  }
+}

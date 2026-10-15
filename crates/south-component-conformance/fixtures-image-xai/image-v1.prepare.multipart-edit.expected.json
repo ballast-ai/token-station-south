@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "/v1/images/edits for xAI grok-imagine models requires Content-Type: application/json with an `image` object or `images` array; the OpenAI multipart images.edit() shape is not supported by xAI."
+  }
+}
