@@ -215,7 +215,9 @@ fn the_manifest_declares_the_two_families_with_the_native_values() {
     // Published as 1.2.0 with 0.66.0; 1.2.1 carries both the 0.67.0 Q47 round and the
     // immutable request headers (record `2026-10-15-immutable-request-headers.md`).
     assert_eq!(manifest.version, "1.2.1");
-    assert_eq!(manifest.compatibility.south_runtime, "0.60.0");
+    // `immutable_request_headers`, which no runtime before 0.67.0 parses (`ComponentManifestV1`
+    // refuses unknown fields); 0.67.0 shipped it.
+    assert_eq!(manifest.compatibility.south_runtime, "0.67.0");
 }
 
 /// Protected request headers record (`docs/design/2026-10-15-immutable-request-headers.md`,

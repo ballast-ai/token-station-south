@@ -1460,11 +1460,12 @@ const SPEECH_RUNTIME: &str = "0.65.0";
 /// `ComponentManifestV1` refuses unknown fields; `image-gemini` needs the first runtime with media 2.
 fn declared_runtime_now(name: &str) -> &'static str {
     match name {
-        // `provider-anthropic` from 1.2.0: the Claude Code families declare
-        // `subscription_quota_families`, which no runtime before 0.60.0 parses (Claude Code record
-        // §9).
-        "provider-anthropic"
-        | "provider-gemini"
+        // `provider-anthropic` from 1.2.1: the Claude Code families declare
+        // `immutable_request_headers`, which no runtime before 0.67.0 parses (record
+        // `2026-10-15-immutable-request-headers.md`); 0.67.0 shipped it, so the literal. Its 1.2.0
+        // declared 0.60.0 for `subscription_quota_families` (Claude Code record §9).
+        "provider-anthropic" => "0.67.0",
+        "provider-gemini"
         | "provider-kiro"
         | "provider-openai-compatible"
         | "provider-openai-responses" => "0.60.0",
@@ -2973,7 +2974,7 @@ fn speech_azure_openai_retires_every_published_066_package_identity() {
         ("image-stability", "1.0.7", "1.0.8", "0.57.0", &[("image", 1), ("media", 1)]),
         ("image-vertex", "1.0.3", "1.0.4", "0.59.0", &[("image", 1), ("media", 2)]),
         ("image-xai", "1.0.0", "1.0.1", "0.57.0", &[("image", 1), ("media", 1)]),
-        ("provider-anthropic", "1.2.0", "1.2.1", "0.60.0", &[]),
+        ("provider-anthropic", "1.2.0", "1.2.1", "0.67.0", &[]),
         ("provider-anthropic-bedrock-invoke", "1.1.10", "1.1.11", "0.57.0", &[]),
         ("provider-bedrock-converse", "1.1.10", "1.1.11", "0.57.0", &[]),
         ("provider-bedrock-converse-bearer", "1.1.10", "1.1.11", "0.57.0", &[]),
