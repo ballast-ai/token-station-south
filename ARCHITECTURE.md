@@ -211,7 +211,7 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.65.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.58.0 and 0.64.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.65.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.58.0 and 0.65.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
 **Unreleased (`provider-vertex` 1.0.0: Gemini models on Vertex AI for text)**: design record
 `docs/design/2026-10-15-provider-vertex.md` (accepted 2026-10-15; VX-Q1 (a), `generateContent` on every surface; VX-Q2,
 family `vertex-ai`). The Gemini reference's request body, response reader, stream parser (with SF27) and refusals move
@@ -222,8 +222,9 @@ world, `chat` / `stream` / `tool_call`, `bearer` on the `vertex_sa`-minted slot 
 path with the shared `vertex_location` rules, declares `image-vertex`'s configuration keys and credentials section byte
 for byte, `north_request_passthrough` and `north_passthrough` `generate_content`, request facts with the model at
 `/publishers/google/models/{model}:`, and `south_runtime` 0.60.0, the first runtime that parses
-`north_request_passthrough`. Gate ② pack `fixtures-vertex/` (with `image-vertex`'s five credential cases). No contract
-number changes; the kernel pin is unchanged.
+`north_request_passthrough`. Gate ② pack `fixtures-vertex/` (with `image-vertex`'s five credential cases). Q47 against
+v0.65.0: `south-component-conformance` 0.65.0; every package published with 0.65.0 takes a patch with unchanged
+behaviour and keeps its `south_runtime` and its contracts. No contract number changes; the kernel pin is unchanged.
 **v0.65.0 (the speech world: batches V3-1 to V4 and `contracts.speech` 1; `contracts.media` 3; Kiro native rewrites)**:
 release record `docs/design/2026-10-15-release-0.65.0.md`. Speech world step S-S-5, `contracts.speech` 1: speech record
 `docs/design/2026-09-30-speech-world.md` §14, §18 and "S-S-5 implementation" (released in 0.65.0 with V3-1 to V4).
