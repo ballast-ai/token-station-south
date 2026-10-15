@@ -177,6 +177,7 @@ pub mod reference_ideogram_image;
 pub mod reference_minimax_image;
 pub mod reference_qwen_image;
 pub mod reference_stability_image;
+pub mod reference_xai_image;
 // The request and response pieces the two I3-1 image references share.
 mod image_shared;
 // The `:generateContent` image pieces the Gemini API package and the Vertex package of I3-3 share

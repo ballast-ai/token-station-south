@@ -1,0 +1,28 @@
+{
+  "artifacts": [
+    {
+      "encoding": "base64",
+      "form": "inline",
+      "media_type": "image/jpeg",
+      "pointer": "/data/0/b64_json"
+    }
+  ],
+  "extras": {
+    "body": {
+      "data": [
+        {
+          "b64_json": null,
+          "revised_prompt": "",
+          "url": "https://imgen.x.ai/xai-imgen/xai-tmp-imgen-2.jpeg"
+        }
+      ]
+    }
+  },
+  "metering": {
+    "credits": null,
+    "images_reported": null,
+    "tokens": null,
+    "upstream_cost": null
+  },
+  "outcome": "succeeded"
+}

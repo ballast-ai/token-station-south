@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "xAI `resolution` must be 1k/2k (or OpenAI-style 1024x1024/2048x2048), got '8k'"
+  }
+}

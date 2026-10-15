@@ -1,0 +1,25 @@
+{
+  "provider_config": {
+    "provider": "xai-image",
+    "base_url": "https://api.x.ai",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "json": {
+      "prompt": "p",
+      "image_url": {
+        "$south.blob": {
+          "id": "b0",
+          "bytes": 3145728,
+          "head": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFc"
+        }
+      }
+    }
+  },
+  "context": {
+    "upstream_model": "grok-imagine-image",
+    "metering_required": [
+      "images"
+    ]
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "artifacts": [
+    {
+      "form": "url",
+      "pointer": "/data/0/url"
+    }
+  ],
+  "extras": {
+    "body": {
+      "data": [
+        {
+          "url": null
+        }
+      ],
+      "usage": {
+        "cost_in_usd_ticks": 1100000000
+      }
+    }
+  },
+  "metering": {
+    "credits": null,
+    "images_reported": null,
+    "tokens": null,
+    "upstream_cost": {
+      "amount": "0.11",
+      "currency": "USD"
+    }
+  },
+  "outcome": "succeeded"
+}

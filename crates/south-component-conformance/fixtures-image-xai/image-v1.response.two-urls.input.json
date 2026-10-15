@@ -1,0 +1,21 @@
+{
+  "prepare_case": "image-v1.prepare.generate-pass-through",
+  "response": {
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "url": "https://imgen.x.ai/xai-imgen/xai-tmp-imgen-1.jpeg",
+          "revised_prompt": "p1"
+        },
+        {
+          "url": "https://imgen.x.ai/xai-imgen/xai-tmp-imgen-2.jpeg",
+          "revised_prompt": "p2"
+        }
+      ],
+      "usage": {
+        "cost_in_usd_ticks": 1000000000
+      }
+    }
+  }
+}

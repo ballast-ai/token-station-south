@@ -1,0 +1,27 @@
+{
+  "artifacts": [
+    {
+      "form": "url",
+      "pointer": "/data/0/url"
+    }
+  ],
+  "extras": {
+    "body": {
+      "data": [
+        {
+          "url": null
+        }
+      ],
+      "usage": {
+        "images": 1
+      }
+    }
+  },
+  "metering": {
+    "credits": null,
+    "images_reported": null,
+    "tokens": null,
+    "upstream_cost": null
+  },
+  "outcome": "succeeded"
+}

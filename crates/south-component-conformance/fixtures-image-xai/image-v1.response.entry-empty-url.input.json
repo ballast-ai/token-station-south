@@ -1,0 +1,13 @@
+{
+  "prepare_case": "image-v1.prepare.generate-standard-defaults",
+  "response": {
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "url": ""
+        }
+      ]
+    }
+  }
+}

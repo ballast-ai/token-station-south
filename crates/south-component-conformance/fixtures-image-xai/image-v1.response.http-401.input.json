@@ -1,0 +1,10 @@
+{
+  "prepare_case": "image-v1.prepare.generate-standard-defaults",
+  "response": {
+    "status": 401,
+    "body": {
+      "code": "Unauthenticated",
+      "error": "Incorrect API key provided"
+    }
+  }
+}

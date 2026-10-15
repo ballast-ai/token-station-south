@@ -238,6 +238,17 @@ for byte, `north_request_passthrough` and `north_passthrough` `generate_content`
 `north_request_passthrough`. Gate ② pack `fixtures-vertex/` (with `image-vertex`'s five credential cases). Q47 against
 v0.65.0: `south-component-conformance` 0.65.0; every package published with 0.65.0 takes a patch with unchanged
 behaviour and keeps its `south_runtime` and its contracts. No contract number changes; the kernel pin is unchanged.
+**Unreleased (`image-xai` 1.0.0: image world step I3-7, xAI Grok Imagine)**: design record
+`docs/design/2026-10-15-image-i3-7-xai.md` (accepted under lv's 2026-10-15 directive). `image-xai` (family `xai-image`,
+`bearer`, `generate` and `edit`, contracts `{image: 1, media: 1}`, `south_runtime` 0.57.0) serves the six Grok Imagine
+ids of the native arm. Both operations are JSON; a body with a non-null source-image field is an edit (XI-Q2). The
+client's body passes through as the native OpenAI-compatible arm forwards it, with `model` set, `size` removed and
+`resolution` normalised; on an edit `image_url` / `image_urls` fold into `image` / `images`. It is the first package to
+report tier candidates and the `upstream_cost` evidence fact (record §8, §9.1, §9.4 item 4): `resolution` always,
+`quality` when `grok-imagine-image-2.0` pins it, else the candidates `low` / `medium` with the surface's default, and
+`usage.cost_in_usd_ticks` as decimal dollars; the host recognises the served tier and bills its own tier-keyed price
+list (H5). Gate ② pack `fixtures-image-xai/`. No Q47 bump of its own: the reference lands in the same unreleased
+`south-component-conformance` 0.65.0 cycle. No contract number changes; the kernel pin is unchanged.
 **v0.65.0 (the speech world: batches V3-1 to V4 and `contracts.speech` 1; `contracts.media` 3; Kiro native rewrites)**:
 release record `docs/design/2026-10-15-release-0.65.0.md`. Speech world step S-S-5, `contracts.speech` 1: speech record
 `docs/design/2026-09-30-speech-world.md` §14, §18 and "S-S-5 implementation" (released in 0.65.0 with V3-1 to V4).

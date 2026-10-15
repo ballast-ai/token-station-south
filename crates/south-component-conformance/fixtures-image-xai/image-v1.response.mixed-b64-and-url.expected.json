@@ -1,0 +1,33 @@
+{
+  "artifacts": [
+    {
+      "encoding": "base64",
+      "form": "inline",
+      "media_type": "image/jpeg",
+      "pointer": "/data/0/b64_json"
+    },
+    {
+      "form": "url",
+      "pointer": "/data/1/url"
+    }
+  ],
+  "extras": {
+    "body": {
+      "data": [
+        {
+          "b64_json": null
+        },
+        {
+          "url": null
+        }
+      ]
+    }
+  },
+  "metering": {
+    "credits": null,
+    "images_reported": null,
+    "tokens": null,
+    "upstream_cost": null
+  },
+  "outcome": "succeeded"
+}

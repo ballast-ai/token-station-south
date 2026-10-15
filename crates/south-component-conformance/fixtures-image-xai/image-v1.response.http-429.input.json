@@ -1,0 +1,10 @@
+{
+  "prepare_case": "image-v1.prepare.generate-standard-defaults",
+  "response": {
+    "status": 429,
+    "body": {
+      "code": "Too many requests",
+      "error": "Rate limit exceeded"
+    }
+  }
+}

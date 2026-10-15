@@ -1,0 +1,279 @@
+[
+  {
+    "input_roles": [
+      {
+        "key": "images",
+        "role": "input_image"
+      },
+      {
+        "key": "image",
+        "role": "input_image"
+      },
+      {
+        "key": "image_url",
+        "role": "input_image"
+      },
+      {
+        "key": "image_urls",
+        "role": "input_image"
+      }
+    ],
+    "metering_forms": [
+      "images"
+    ],
+    "model": "grok-imagine-image",
+    "operations": [
+      "generate",
+      "edit"
+    ],
+    "repeat": false,
+    "request_elision_paths": [
+      "/image",
+      "/image/url",
+      "/images/*",
+      "/images/*/url",
+      "/image_url",
+      "/image_url/*",
+      "/image_urls/*"
+    ],
+    "response_formats": [
+      "url",
+      "b64_json"
+    ],
+    "tier_dimensions": [
+      "resolution"
+    ],
+    "token_buckets": []
+  },
+  {
+    "input_roles": [
+      {
+        "key": "images",
+        "role": "input_image"
+      },
+      {
+        "key": "image",
+        "role": "input_image"
+      },
+      {
+        "key": "image_url",
+        "role": "input_image"
+      },
+      {
+        "key": "image_urls",
+        "role": "input_image"
+      }
+    ],
+    "metering_forms": [
+      "images"
+    ],
+    "model": "grok-imagine-image-2.0",
+    "operations": [
+      "generate",
+      "edit"
+    ],
+    "repeat": false,
+    "request_elision_paths": [
+      "/image",
+      "/image/url",
+      "/images/*",
+      "/images/*/url",
+      "/image_url",
+      "/image_url/*",
+      "/image_urls/*"
+    ],
+    "response_formats": [
+      "url",
+      "b64_json"
+    ],
+    "tier_dimensions": [
+      "resolution",
+      "quality"
+    ],
+    "token_buckets": []
+  },
+  {
+    "input_roles": [
+      {
+        "key": "images",
+        "role": "input_image"
+      },
+      {
+        "key": "image",
+        "role": "input_image"
+      },
+      {
+        "key": "image_url",
+        "role": "input_image"
+      },
+      {
+        "key": "image_urls",
+        "role": "input_image"
+      }
+    ],
+    "metering_forms": [
+      "images"
+    ],
+    "model": "grok-imagine-image-quality",
+    "operations": [
+      "generate",
+      "edit"
+    ],
+    "repeat": false,
+    "request_elision_paths": [
+      "/image",
+      "/image/url",
+      "/images/*",
+      "/images/*/url",
+      "/image_url",
+      "/image_url/*",
+      "/image_urls/*"
+    ],
+    "response_formats": [
+      "url",
+      "b64_json"
+    ],
+    "tier_dimensions": [
+      "resolution"
+    ],
+    "token_buckets": []
+  },
+  {
+    "input_roles": [
+      {
+        "key": "images",
+        "role": "input_image"
+      },
+      {
+        "key": "image",
+        "role": "input_image"
+      },
+      {
+        "key": "image_url",
+        "role": "input_image"
+      },
+      {
+        "key": "image_urls",
+        "role": "input_image"
+      }
+    ],
+    "metering_forms": [
+      "images"
+    ],
+    "model": "grok-imagine-image-pro",
+    "operations": [
+      "generate",
+      "edit"
+    ],
+    "repeat": false,
+    "request_elision_paths": [
+      "/image",
+      "/image/url",
+      "/images/*",
+      "/images/*/url",
+      "/image_url",
+      "/image_url/*",
+      "/image_urls/*"
+    ],
+    "response_formats": [
+      "url",
+      "b64_json"
+    ],
+    "tier_dimensions": [
+      "resolution"
+    ],
+    "token_buckets": []
+  },
+  {
+    "input_roles": [
+      {
+        "key": "images",
+        "role": "input_image"
+      },
+      {
+        "key": "image",
+        "role": "input_image"
+      },
+      {
+        "key": "image_url",
+        "role": "input_image"
+      },
+      {
+        "key": "image_urls",
+        "role": "input_image"
+      }
+    ],
+    "metering_forms": [
+      "images"
+    ],
+    "model": "grok-imagine-image-quality-latest",
+    "operations": [
+      "generate",
+      "edit"
+    ],
+    "repeat": false,
+    "request_elision_paths": [
+      "/image",
+      "/image/url",
+      "/images/*",
+      "/images/*/url",
+      "/image_url",
+      "/image_url/*",
+      "/image_urls/*"
+    ],
+    "response_formats": [
+      "url",
+      "b64_json"
+    ],
+    "tier_dimensions": [
+      "resolution"
+    ],
+    "token_buckets": []
+  },
+  {
+    "input_roles": [
+      {
+        "key": "images",
+        "role": "input_image"
+      },
+      {
+        "key": "image",
+        "role": "input_image"
+      },
+      {
+        "key": "image_url",
+        "role": "input_image"
+      },
+      {
+        "key": "image_urls",
+        "role": "input_image"
+      }
+    ],
+    "metering_forms": [
+      "images"
+    ],
+    "model": "grok-imagine-image-quality-20260403",
+    "operations": [
+      "generate",
+      "edit"
+    ],
+    "repeat": false,
+    "request_elision_paths": [
+      "/image",
+      "/image/url",
+      "/images/*",
+      "/images/*/url",
+      "/image_url",
+      "/image_url/*",
+      "/image_urls/*"
+    ],
+    "response_formats": [
+      "url",
+      "b64_json"
+    ],
+    "tier_dimensions": [
+      "resolution"
+    ],
+    "token_buckets": []
+  }
+]

@@ -1,0 +1,28 @@
+{
+  "template": {
+    "created": 1700000000,
+    "data": [
+      {
+        "b64_json": {
+          "$south.artifact": {
+            "as": "b64_json",
+            "index": 0
+          }
+        },
+        "revised_prompt": "a fox"
+      },
+      {
+        "b64_json": {
+          "$south.artifact": {
+            "as": "b64_json",
+            "index": 1
+          }
+        },
+        "revised_prompt": "a fox"
+      }
+    ],
+    "usage": {
+      "cost_in_usd_ticks": 1400000000
+    }
+  }
+}

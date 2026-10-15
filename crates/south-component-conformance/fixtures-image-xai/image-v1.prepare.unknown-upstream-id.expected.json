@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "upstream model 'grok-2-image-1212' is not an xAI Grok Imagine image model"
+  }
+}

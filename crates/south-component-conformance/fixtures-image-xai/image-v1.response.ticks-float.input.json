@@ -1,0 +1,16 @@
+{
+  "prepare_case": "image-v1.prepare.generate-v2-auto",
+  "response": {
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "url": "https://imgen.x.ai/xai-imgen/xai-tmp-imgen-1.jpeg"
+        }
+      ],
+      "usage": {
+        "cost_in_usd_ticks": 600000000.0
+      }
+    }
+  }
+}

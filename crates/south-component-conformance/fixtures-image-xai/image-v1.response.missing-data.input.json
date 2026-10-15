@@ -1,0 +1,11 @@
+{
+  "prepare_case": "image-v1.prepare.generate-standard-defaults",
+  "response": {
+    "status": 200,
+    "body": {
+      "usage": {
+        "cost_in_usd_ticks": 200000000
+      }
+    }
+  }
+}

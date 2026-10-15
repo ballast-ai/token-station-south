@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "xAI `image_url` must be a string URL/data URI or an array of them (got an object)"
+  }
+}

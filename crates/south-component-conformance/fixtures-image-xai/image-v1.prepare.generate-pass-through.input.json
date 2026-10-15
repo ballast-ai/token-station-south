@@ -1,0 +1,39 @@
+{
+  "provider_config": {
+    "provider": "xai-image",
+    "base_url": "https://api.x.ai",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "json": {
+      "prompt": {
+        "$south.blob": {
+          "id": "b0",
+          "bytes": 1048577,
+          "head": "a very long prompt"
+        }
+      },
+      "aspect_ratio": "16:9",
+      "response_format": "url",
+      "user": "u-1",
+      "image_size": "2K",
+      "style": {
+        "note": {
+          "$south.blob": {
+            "id": "b1",
+            "bytes": 2000000,
+            "head": "x"
+          }
+        }
+      },
+      "n": 3,
+      "stream": false
+    }
+  },
+  "context": {
+    "upstream_model": "grok-imagine-image-quality",
+    "metering_required": [
+      "images"
+    ]
+  }
+}

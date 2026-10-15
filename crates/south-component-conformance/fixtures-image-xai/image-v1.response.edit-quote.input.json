@@ -1,0 +1,17 @@
+{
+  "prepare_case": "image-v1.prepare.edit-image-url-array-to-images",
+  "response": {
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "url": "https://imgen.x.ai/xai-imgen/xai-tmp-imgen-1.jpeg",
+          "revised_prompt": ""
+        }
+      ],
+      "usage": {
+        "cost_in_usd_ticks": 900000000
+      }
+    }
+  }
+}

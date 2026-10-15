@@ -107,6 +107,7 @@ jobs:
           scripts/build-image-qwen-component.sh
           scripts/build-image-stability-component.sh
           scripts/build-image-vertex-component.sh
+          scripts/build-image-xai-component.sh
           scripts/build-speech-openai-compatible-component.sh
           scripts/build-speech-xai-component.sh
           scripts/build-speech-groq-component.sh
@@ -158,6 +159,7 @@ jobs:
             --test qwen_image_sandbox_parity \
             --test stability_image_sandbox_parity \
             --test vertex_image_sandbox_parity \
+            --test xai_image_sandbox_parity \
             --test openai_compatible_speech_sandbox_parity \
             --test xai_speech_sandbox_parity \
             --test groq_speech_sandbox_parity \
@@ -218,6 +220,7 @@ jobs:
           package image-qwen image_qwen.wasm
           package image-stability image_stability.wasm
           package image-vertex image_vertex.wasm
+          package image-xai image_xai.wasm
           package speech-openai-compatible speech_openai_compatible.wasm
           package speech-xai speech_xai.wasm
           package speech-groq speech_groq.wasm

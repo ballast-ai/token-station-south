@@ -1,0 +1,70 @@
+{
+  "provider_config": {
+    "provider": "xai-image",
+    "base_url": "https://api.x.ai",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "json": {
+      "prompt": "p",
+      "images": [
+        {
+          "type": "image_url",
+          "url": {
+            "$south.blob": {
+              "id": "b0",
+              "bytes": 26,
+              "head": "https://img.test/0.png"
+            }
+          }
+        },
+        {
+          "type": "image_url",
+          "url": {
+            "$south.blob": {
+              "id": "b1",
+              "bytes": 26,
+              "head": "https://img.test/1.png"
+            }
+          }
+        },
+        {
+          "type": "image_url",
+          "url": {
+            "$south.blob": {
+              "id": "b2",
+              "bytes": 26,
+              "head": "https://img.test/2.png"
+            }
+          }
+        },
+        {
+          "type": "image_url",
+          "url": {
+            "$south.blob": {
+              "id": "b3",
+              "bytes": 26,
+              "head": "https://img.test/3.png"
+            }
+          }
+        },
+        {
+          "type": "image_url",
+          "url": {
+            "$south.blob": {
+              "id": "b4",
+              "bytes": 26,
+              "head": "https://img.test/4.png"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "context": {
+    "upstream_model": "grok-imagine-image-2.0",
+    "metering_required": [
+      "images"
+    ]
+  }
+}

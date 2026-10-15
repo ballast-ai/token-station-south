@@ -1,0 +1,25 @@
+{
+  "artifacts": [
+    {
+      "form": "url",
+      "pointer": "/data/0/url"
+    }
+  ],
+  "extras": {
+    "body": {
+      "data": [
+        {
+          "revised_prompt": "",
+          "url": null
+        }
+      ]
+    }
+  },
+  "metering": {
+    "credits": null,
+    "images_reported": null,
+    "tokens": null,
+    "upstream_cost": null
+  },
+  "outcome": "succeeded"
+}
