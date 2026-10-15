@@ -11,7 +11,7 @@ from running anything.
 
 ## 1. Problem
 
-A host's model rows carry operator request extras (server P5 "附加配置"): body fields and request headers the host adds
+A host's model rows carry operator request extras (the server's P5 extra request config): body fields and request headers the host adds
 to the upstream request. For body fields a package already says what an extra must not touch: the provider-world
 manifest field `immutable_body_paths` (per family; the `OpenAI` Responses upstream record §3.4, D11; used by
 `provider-openai-responses` for `store`, host rule R49, and by `provider-anthropic` for `system` on `claude-code`).
