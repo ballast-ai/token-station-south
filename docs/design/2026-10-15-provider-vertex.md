@@ -1,6 +1,7 @@
 # Provider world: `provider-vertex` (Gemini models on Vertex AI, text)
 
-Status: proposed (2026-10-15), for lv's review. Not implemented.
+Status: accepted (lv reviewed it on 2026-10-15 and ruled VX-Q1 (a) and VX-Q2 `vertex-ai` as recommended, §5). Not
+implemented.
 
 Date: 2026-10-15
 
@@ -66,6 +67,9 @@ values differ:
 
 ## 5. Open questions for lv
 
+**Ruled by lv on 2026-10-15: VX-Q1 (a), `generateContent` for every surface, and VX-Q2, the family is `vertex-ai`.**
+The items below keep their text; each recommendation is the ruling. `<family>` in §3 reads `vertex-ai`.
+
 - **VX-Q1 Which upstream wire serves the chat, messages and responses surfaces.** Native serves `/v1beta` through
   `generateContent`, but serves `/v1/chat/completions` and `/v1/messages` on a Vertex row through Vertex's
   **OpenAI-compatible** endpoint `…/endpoints/openapi/chat/completions` (`server:…/engine/vertex.rs:162-180`,
@@ -108,3 +112,4 @@ slot and `vertex_sa` are older), to be confirmed by `check-declared-runtime`. No
 ## Revision note
 
 - 2026-10-15: first draft (proposed).
+- 2026-10-15: lv accepted the record and ruled VX-Q1 (a) and VX-Q2 `vertex-ai` as recommended; status accepted.
