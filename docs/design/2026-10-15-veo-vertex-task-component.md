@@ -137,9 +137,10 @@ unchanged), and Vertex rows in `fixtures-veo-task-v2/` hand-transcribed from `du
 - *Name length.* A `projects/…` name is bounded by the wire's upstream-id limit (`MAX_ARTIFACT_REF_BYTES`), not by the
   128-byte task-id limit the Gemini names keep: a Vertex name with a UUID operation id is about 145 bytes. Native has no
   bound.
-- *Project and location.* The component does not compare the name's project and location with the binding's; native
-  does not either. A name outside the bound location yields a descriptor a host's `authorize` refuses (tested), so the
-  credential never leaves the location.
+- *Project and location.* Superseded in 0.36.1 by Q-VV1 (below). As released in 0.36.0, the component did not compare
+  the name's project and location with the binding's, as native does not; a name outside the bound location yielded a
+  descriptor a host's `authorize` refuses, so the credential never left the location, but such a task could not be
+  polled.
 - *`storageUri` (VV-Q3).* Native `build_veo_submit_body` copies only the fields it knows, so a client `storageUri` is
   neither refused nor sent. An operator's request extra may still set `parameters.storageUri` (not an immutable path,
   as in native `VEO_VIDEO_OWNED`); the answer would then carry no `generatedSamples` and observe as `unknown`, as native.
@@ -160,9 +161,8 @@ unchanged), and Vertex rows in `fixtures-veo-task-v2/` hand-transcribed from `du
 
 **Open questions.**
 
-- *Project number or id.* If Vertex returns operation names with the project **number** while the binding carries the
-  project id, the poll URL leaves the bound endpoint, the host refuses it and the task cannot be polled; native polls it
-  regardless. Only a capture (with VV-Q2) settles it; a host could also bind the location prefix by number.
+- *Project number or id.* Ruled by lv on 2026-10-15 (Q-VV1, "south rewrites the prefix"); see "Q-VV1" below. The
+  question whether Vertex answers with the number at all stays open (**unverified**).
 - *The clip URI.* Whether `video.uri` (if the native shape is right at all) lies under the bound location prefix, which
   a host's gated fetch may require, is unknown; the fixtures use a placeholder under it.
 
@@ -177,6 +177,52 @@ credential as the Gemini header instead of a bearer (the four `prepare.vertex-*`
 and the Vertex poll under the location prefix instead of the origin's `/v1/` (`observe.vertex-operation` and the
 authorize tests).
 
+### Q-VV1: the poll prefix (`task-veo-v2` 0.36.1)
+
+**Ruling (lv 2026-10-15).** Vertex may return the `predictLongRunning` operation name with the project **number**
+(`projects/123456789012/…`) while the binding's location prefix carries the project **id**. The poll URL built from the
+name verbatim then leaves the bound endpoint, the host's `authorize` refuses it, and the task can never be polled.
+Native polls the name verbatim and checks nothing. lv ruled that south rewrites the prefix; no capture is awaited.
+
+**Rule.** On observe, the Vertex family matches the operation name segment by segment against
+`projects/{p}/locations/{r}/publishers/google/models/{m}/operations/{id}` (exactly ten segments, the literals
+`projects`, `locations`, `publishers`, `google`, `models` and `operations` in place; every segment already passed the
+existing name check: non-empty, not `.` or `..`, ASCII alphanumerics and `-_.` only). When it matches, `{p}` and `{r}`
+are dropped and the poll URL is `{base}/publishers/google/models/{m}/operations/{id}`, where `{base}` is the binding's
+location prefix, the same prefix the submit URL is built under. For a name that repeats the bound project and location
+this is native's URL byte for byte (`observe.vertex-operation` unchanged). The stored task id (the upstream name) is
+not rewritten; only the poll URL changes. A different location in the name is replaced as well, since the ruling names
+the whole `projects/*/locations/*` prefix.
+
+**Any other shape.** A `projects/…` name that passes the existing name check but not the ten-segment shape (a generic
+`projects/{p}/locations/{r}/operations/{id}`, a missing location, a trailing segment, a publisher other than `google`)
+is polled verbatim at `{origin}/v1/{name}`, as in 0.36.0 and as native: the existing observe code refuses only names that
+fail its character and family checks, and polls every name it accepts, so a pass-through keeps that style and leaves the
+backstop where it was, the host's `authorize`, which still refuses such a name when it leaves the bound endpoint. A
+name that fails the existing check is still refused with `invalid Veo operation name` (400), unchanged.
+
+**Unverified (registered, not blocking).** Whether Vertex names the operation by project number, by project id, or as
+the request named it, is not known: the repo holds no capture of a Vertex Veo create response, and no real-key capture
+is awaited (lv 2026-10-15). If Vertex always echoes the binding's form, the rewrite never changes a URL. If the poll
+under the rewritten prefix were refused upstream for an operation created under the number (not expected, since the
+number and the id name the same project), the task would observe `unknown` and stall as it would have under the host's
+refusal. This doubt sits beside VV-Q2's (whether the poll is `GET …/operations/{id}` at all, or
+`fetchPredictOperation`), which a real-account capture settles together.
+
+**Tests.** `veo_task_suite_v2`: `a_project_number_operation_name_is_polled_under_the_binding_prefix` (number, and a
+different location, rewritten; sendable), `a_matching_operation_name_polls_the_native_url_unchanged`,
+`an_operation_name_of_another_shape_is_polled_verbatim_or_refused` (four other shapes polled verbatim and refused by
+`authorize`; the same shape under the bound project sendable; three malformed names refused). Frozen rows
+`task-v2.observe.vertex-project-number` and `task-v2.observe.vertex-other-shape` carry both outcomes through the
+native and the sandboxed builds.
+
+**Version (Q47).** A behaviour fix in an existing family, with no new family, auth arm, declaration or contract, so
+`task-veo-v2` takes a patch: 0.36.0 (published with 0.66.0) → **0.36.1**; `south_runtime` 0.57.0 and task contract 7
+unchanged. The reference and the fixtures live in `south-component-conformance`, which therefore must move past 0.65.0
+before the next release (`check_crate_versions.py`); that round, and the patch it gives every other package, is left to
+the cycle's conformance round on another branch (not part of this change). `task-veo-v2` already carries a new
+identity in this cycle and needs no further step there.
+
 ## Revision note
 
 - 2026-10-15: first draft (proposed).
@@ -189,3 +235,5 @@ authorize tests).
   the frozen fixtures as baseline (no dual run, no drain-preflight deletion); the reliance on the deletion list is struck.
   §3 and §4 register the gated clip fetch as new and unverified, and §4 the shared create parse's consequence for
   `created.vertex-name`.
+- 2026-10-15 (after 0.66.0): Q-VV1 (lv): the Vertex family polls a publisher-model operation name under the binding's
+  own location prefix; registered as unverified ("Q-VV1"); `task-veo-v2` 0.36.1; unreleased.

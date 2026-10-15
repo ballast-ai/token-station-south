@@ -146,9 +146,9 @@ pub struct WorldSchemaV1 {
     pub value_channel: bool,
     /// Whether the world admits the declarations that shape a chat request:
     /// `endpoint`, `host_values`, `signing`, `stream_framing`,
-    /// `usage_evidence`, `request_facts`, `immutable_body_paths` and
-    /// `north_passthrough`. Without it gate ① refuses each as a provider-world
-    /// declaration.
+    /// `usage_evidence`, `request_facts`, `immutable_body_paths`,
+    /// `immutable_request_headers` and `north_passthrough`. Without it gate ①
+    /// refuses each as a provider-world declaration.
     pub request_declarations: bool,
     /// Which of the B7a instance declarations (`query_parameters`,
     /// `quota_headers`, `user_agent`; §10) the world admits. Gate ① refuses
@@ -747,6 +747,19 @@ pub struct ComponentManifestV1 {
     /// only.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub immutable_body_paths: BTreeMap<String, Vec<String>>,
+    /// Each family's request headers that operator request extras may neither set, remove nor
+    /// rewrite (the protected request headers record,
+    /// `docs/design/2026-10-15-immutable-request-headers.md`; ruled Q-CC3 by lv on 2026-10-15).
+    /// Lowercase RFC 9110 `tchar` names (HTTP header names are case-insensitive, so a host compares
+    /// an extra's name lowercased), distinct, at most [`MAX_IMMUTABLE_REQUEST_HEADERS`] of at most
+    /// [`MAX_IMMUTABLE_REQUEST_HEADER_NAME_BYTES`] bytes. A name may be one the component or the
+    /// host leaves out of some request: immutable then means "stays absent". Nothing is protected
+    /// implicitly: a family that wants its authentication header, its `user-agent` or a header the
+    /// host fills lists it, so a host can refuse an extra when it is saved, before any request
+    /// exists. Absent means no declared headers, which is what every earlier package gets.
+    /// Provider world only.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub immutable_request_headers: BTreeMap<String, Vec<String>>,
     /// Each family whose upstream already answers in a northbound protocol, and which one
     /// (the `OpenAI` Responses upstream record §3.4, §8.2; ruled R-Q1). A host **may** then deliver the
     /// upstream's own bytes to a client of that protocol under the record's §8.2 conditions; a
@@ -931,6 +944,14 @@ pub const MAX_IMMUTABLE_BODY_PATHS: usize = 64;
 /// `south_contracts::MAX_IMMUTABLE_BODY_PATH_BYTES`.
 pub const MAX_IMMUTABLE_BODY_PATH_BYTES: usize = 256;
 
+/// The most immutable request headers one family may declare: as many as a request descriptor
+/// may carry ordinary headers (`south_contracts::MAX_PROVIDER_HEADER_COUNT`).
+pub const MAX_IMMUTABLE_REQUEST_HEADERS: usize = 64;
+
+/// The most bytes one immutable request header name may have: the bound on a declared secret
+/// header name ([`MAX_SECRET_HEADER_NAME_BYTES`]).
+pub const MAX_IMMUTABLE_REQUEST_HEADER_NAME_BYTES: usize = MAX_SECRET_HEADER_NAME_BYTES;
+
 /// A northbound protocol a family's upstream may already answer in (`north_passthrough`).
 ///
 /// A closed set owned by south, spelled apart from every family name on purpose: it names the
@@ -980,6 +1001,31 @@ pub fn are_immutable_body_paths(paths: &[String]) -> bool {
                 && path.split('.').all(segment_ok)
                 && !paths[..index].contains(path)
         })
+}
+
+/// Whether `names` are valid immutable request header names.
+///
+/// Each is 1 to [`MAX_IMMUTABLE_REQUEST_HEADER_NAME_BYTES`] bytes of lowercase RFC 9110 `tchar`
+/// (the `secret_headers` name syntax, [`validate_secret_header_name`]), no repeats, at most
+/// [`MAX_IMMUTABLE_REQUEST_HEADERS`] names. Reserved names (`authorization`, `x-api-key`,
+/// `user-agent`, …) are allowed: protecting them is the point. Uppercase is refused rather than
+/// folded, so the declaration a host compares with is the one the package wrote.
+#[must_use]
+pub fn are_immutable_request_headers(names: &[String]) -> bool {
+    let name_ok = |name: &str| {
+        !name.is_empty()
+            && name.len() <= MAX_IMMUTABLE_REQUEST_HEADER_NAME_BYTES
+            && name.bytes().all(|byte| {
+                byte.is_ascii_lowercase()
+                    || byte.is_ascii_digit()
+                    || b"!#$%&'*+-.^_`|~".contains(&byte)
+            })
+    };
+    names.len() <= MAX_IMMUTABLE_REQUEST_HEADERS
+        && names
+            .iter()
+            .enumerate()
+            .all(|(index, name)| name_ok(name) && !names[..index].contains(name))
 }
 
 /// Where a request names its model.
@@ -1280,6 +1326,7 @@ impl ComponentManifestV1 {
             self.validate_signing_declaration()?;
             self.validate_delivery_declarations()?;
         } else if !self.immutable_body_paths.is_empty()
+            || !self.immutable_request_headers.is_empty()
             || !self.north_passthrough.is_empty()
             || !self.north_request_passthrough.is_empty()
             || !self.subscription_quota_families.is_empty()
@@ -1439,10 +1486,11 @@ impl ComponentManifestV1 {
         Ok(())
     }
 
-    /// `immutable_body_paths` and `north_passthrough` (the `OpenAI` Responses upstream record §3.4):
-    /// each names a family the manifest declares, and each path list follows the immutable-path
-    /// grammar. A family may declare an empty list, which says nothing; the protocol is a closed
-    /// enum, so serde already refused any other word.
+    /// `immutable_body_paths` and `north_passthrough` (the `OpenAI` Responses upstream record §3.4),
+    /// and `immutable_request_headers` (the protected request headers record): each names a family
+    /// the manifest declares, each path list follows the immutable-path grammar and each header
+    /// list the immutable-header grammar. A family may declare an empty list, which says nothing;
+    /// the protocol is a closed enum, so serde already refused any other word.
     fn validate_delivery_declarations(&self) -> Result<(), ManifestErrorV1> {
         for (family, paths) in &self.immutable_body_paths {
             let invalid = |detail: &str| ManifestErrorV1::InvalidImmutableBodyPaths {
@@ -1456,6 +1504,21 @@ impl ComponentManifestV1 {
                 return Err(invalid(
                     "each path must be distinct dotted [A-Za-z0-9_-] segments, at most 64 paths of \
                      at most 256 bytes",
+                ));
+            }
+        }
+        for (family, names) in &self.immutable_request_headers {
+            let invalid = |detail: &str| ManifestErrorV1::InvalidImmutableRequestHeaders {
+                family: family.clone(),
+                detail: detail.to_owned(),
+            };
+            if !self.providers.contains(family) {
+                return Err(invalid("names a family the manifest does not declare"));
+            }
+            if !are_immutable_request_headers(names) {
+                return Err(invalid(
+                    "each name must be distinct lowercase RFC 9110 tchar, at most 64 names of at \
+                     most 64 bytes",
                 ));
             }
         }
@@ -1880,15 +1943,19 @@ pub enum ManifestErrorV1 {
     RequestFactsIsAProviderWorldDeclaration,
     #[error("request_facts for family `{family}`: {detail}")]
     InvalidRequestFacts { family: String, detail: String },
-    /// `immutable_body_paths`, `north_passthrough`, `north_request_passthrough` or
-    /// `subscription_quota_families` in a world without request declarations.
+    /// `immutable_body_paths`, `immutable_request_headers`, `north_passthrough`,
+    /// `north_request_passthrough` or `subscription_quota_families` in a world without request
+    /// declarations.
     #[error(
-        "immutable_body_paths, north_passthrough, north_request_passthrough and \
-         subscription_quota_families are provider-world declarations"
+        "immutable_body_paths, immutable_request_headers, north_passthrough, \
+         north_request_passthrough and subscription_quota_families are provider-world declarations"
     )]
     DeliveryIsAProviderWorldDeclaration,
     #[error("immutable_body_paths for family `{family}`: {detail}")]
     InvalidImmutableBodyPaths { family: String, detail: String },
+    /// New in `south-provider-api` 0.59.0: a host matching this enum exhaustively must add the arm.
+    #[error("immutable_request_headers for family `{family}`: {detail}")]
+    InvalidImmutableRequestHeaders { family: String, detail: String },
     #[error("north_passthrough for family `{family}`: {detail}")]
     InvalidNorthPassthrough { family: String, detail: String },
     #[error("north_request_passthrough for family `{family}`: {detail}")]

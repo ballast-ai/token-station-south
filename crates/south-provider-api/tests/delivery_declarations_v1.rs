@@ -8,8 +8,9 @@ use std::path::Path;
 
 use serde_json::json;
 use south_provider_api::{
-    ComponentManifestV1, MAX_IMMUTABLE_BODY_PATH_BYTES, MAX_IMMUTABLE_BODY_PATHS, ManifestErrorV1,
-    NorthProtocolV1, are_immutable_body_paths,
+    ComponentManifestV1, MAX_IMMUTABLE_BODY_PATH_BYTES, MAX_IMMUTABLE_BODY_PATHS,
+    MAX_IMMUTABLE_REQUEST_HEADER_NAME_BYTES, MAX_IMMUTABLE_REQUEST_HEADERS, ManifestErrorV1,
+    NorthProtocolV1, are_immutable_body_paths, are_immutable_request_headers,
 };
 
 fn shipped(package: &str) -> ComponentManifestV1 {
@@ -258,6 +259,108 @@ fn subscription_quota_families_name_declared_provider_families() {
         let mut manifest = shipped(package);
         let family = manifest.providers[0].clone();
         manifest.subscription_quota_families.insert(family);
+        assert_eq!(
+            manifest.validate(),
+            Err(ManifestErrorV1::DeliveryIsAProviderWorldDeclaration),
+            "{package}"
+        );
+    }
+}
+
+/// `immutable_request_headers` (the protected request headers record,
+/// `docs/design/2026-10-15-immutable-request-headers.md`; Q-CC3): absent on a package that declares
+/// none, omitted from the wire, and nothing changes.
+#[test]
+fn absent_immutable_request_headers_are_omitted_and_change_nothing() {
+    let manifest = openai();
+    assert!(manifest.immutable_request_headers.is_empty());
+    let wire = serde_json::to_value(&manifest).unwrap();
+    assert!(wire.get("immutable_request_headers").is_none());
+    assert_eq!(manifest.validate(), Ok(()));
+}
+
+#[test]
+fn a_declared_family_may_fix_request_headers() {
+    let mut manifest = openai();
+    manifest.immutable_request_headers = BTreeMap::from([(
+        "openai-compatible".to_owned(),
+        paths(&["authorization", "user-agent", "x-example-version"]),
+    )]);
+    assert_eq!(manifest.validate(), Ok(()));
+
+    let wire = serde_json::to_value(&manifest).unwrap();
+    assert_eq!(
+        wire["immutable_request_headers"],
+        json!({"openai-compatible": ["authorization", "user-agent", "x-example-version"]})
+    );
+    let back: ComponentManifestV1 = serde_json::from_value(wire).unwrap();
+    assert_eq!(back, manifest);
+
+    // An empty list says nothing, as for body paths.
+    manifest.immutable_request_headers = BTreeMap::from([("openai-compatible".to_owned(), vec![])]);
+    assert_eq!(manifest.validate(), Ok(()));
+}
+
+#[test]
+fn immutable_request_headers_for_an_undeclared_family_are_refused_by_name() {
+    let mut manifest = openai();
+    manifest.immutable_request_headers =
+        BTreeMap::from([("nowhere".to_owned(), paths(&["user-agent"]))]);
+    assert!(matches!(
+        manifest.validate(),
+        Err(ManifestErrorV1::InvalidImmutableRequestHeaders { family, detail })
+            if family == "nowhere" && detail.contains("does not declare")
+    ));
+}
+
+#[test]
+fn immutable_request_headers_are_distinct_lowercase_tchar_names() {
+    let long = "a".repeat(MAX_IMMUTABLE_REQUEST_HEADER_NAME_BYTES + 1);
+    let at_limit = "a".repeat(MAX_IMMUTABLE_REQUEST_HEADER_NAME_BYTES);
+    for good in [
+        &["x-api-key"][..],
+        &["authorization", "user-agent", "content-type", "accept"],
+        &["x_custom.v2", "a!#$%&'*+-.^_`|~9"],
+        &[at_limit.as_str()],
+        &[],
+    ] {
+        assert!(are_immutable_request_headers(&paths(good)), "{good:?}");
+    }
+    for bad in [
+        &[""][..],
+        &["User-Agent"],
+        &["X-API-KEY"],
+        &["x api key"],
+        &["x-api-key:"],
+        &["anthropic-beta\r\n"],
+        &["(comment)"],
+        &["x/y"],
+        &["x-api-key", "x-api-key"],
+        &[long.as_str()],
+    ] {
+        assert!(!are_immutable_request_headers(&paths(bad)), "{bad:?}");
+        let mut manifest = openai();
+        manifest.immutable_request_headers =
+            BTreeMap::from([("openai-compatible".to_owned(), paths(bad))]);
+        assert!(
+            matches!(
+                manifest.validate(),
+                Err(ManifestErrorV1::InvalidImmutableRequestHeaders { .. })
+            ),
+            "{bad:?}"
+        );
+    }
+    let many: Vec<String> = (0..=MAX_IMMUTABLE_REQUEST_HEADERS).map(|n| format!("h{n}")).collect();
+    assert!(!are_immutable_request_headers(&many));
+    assert!(are_immutable_request_headers(&many[..MAX_IMMUTABLE_REQUEST_HEADERS]));
+}
+
+#[test]
+fn other_worlds_refuse_immutable_request_headers() {
+    for package in ["embeddings-openai-compatible", "task-kling-v2", "image-azure"] {
+        let mut manifest = shipped(package);
+        let family = manifest.providers[0].clone();
+        manifest.immutable_request_headers = BTreeMap::from([(family, paths(&["user-agent"]))]);
         assert_eq!(
             manifest.validate(),
             Err(ManifestErrorV1::DeliveryIsAProviderWorldDeclaration),

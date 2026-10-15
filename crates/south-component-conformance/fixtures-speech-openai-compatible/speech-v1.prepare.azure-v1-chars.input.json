@@ -1,0 +1,27 @@
+{
+  "provider_config": {
+    "provider": "azure-openai-v1",
+    "base_url": "https://my-resource.openai.azure.com/openai/v1",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "tts-prod"
+      }
+    ]
+  },
+  "request": {
+    "json": {
+      "model": "media/tts",
+      "input": "hello world",
+      "voice": "alloy",
+      "response_format": "wav"
+    }
+  },
+  "context": {
+    "upstream_model": "tts-prod",
+    "operation": "synthesize",
+    "metering_required": [
+      "characters"
+    ]
+  }
+}

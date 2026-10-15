@@ -7,7 +7,7 @@
 //! component:
 //!
 //! - **Family and auth**: `openai-compatible`, `bearer` on the configured slot (SV-Q1: no
-//!   `azure-openai-v1` family in 1.0.0).
+//!   `azure-openai-v1` family in 1.0.0; the Azure families below arrive in 1.1.0).
 //! - **Path**: the embeddings package's API-root rule — `audio/speech` under the binding's
 //!   `base_url` when it has a path, `v1/audio/speech` when it is an origin (native
 //!   `{endpoint}/v1/audio/speech` for an origin-only endpoint).
@@ -43,6 +43,25 @@
 //!   `duration`, else `usage.seconds` when `usage.type` is `"duration"`, else `seconds: null`; a
 //!   text answer passed through with `seconds: null`.
 //! - **Immutable form fields** `model`, `file`, `response_format`, `stream` (native `audio.rs:76`).
+//!
+//! **Azure `OpenAI`** (design record `docs/design/2026-10-15-speech-azure-openai.md`; SV-Q1 (a)'s
+//! "later minor"), transcribed from the same two native arms reached on an `azure_openai` or
+//! `azure_foundry` row, whose URL native's `build_upstream_url` rewrites
+//! (`engine/upstream.rs:537-581`) and whose key it presents in `api-key` (`upstream.rs:190-196`).
+//! Two families, the provider world's names, so one host row serves text and speech:
+//!
+//! - **`azure-openai-v1`**: the GA v1 surface. The `base_url` is `{endpoint}/openai/v1` (the
+//!   embeddings package's family), so the API-root rule above gives `audio/speech`,
+//!   `audio/transcriptions` and `audio/translations` below it; the deployment rides in the body's
+//!   `model` (or the `model` part), as for `openai-compatible`.
+//! - **`azure-openai-dated`**: the deployment-addressed surface,
+//!   `openai/deployments/{deployment}/audio/{speech,transcriptions,translations}` below the row
+//!   endpoint with the query `api-version={version}`; the deployment is the upstream model, one
+//!   escaped segment; the version is the config value `api_version` (`api_version_date`, default
+//!   `2024-10-21`, the provider world's key and default). An undated version is a 500 configuration
+//!   error and an empty upstream model a 400, before any request refusal.
+//! - **Both**: `header_secret` `api-key` on the configured slot; body, parts, metering, readers and
+//!   errors exactly as `openai-compatible`, because native runs the same arms.
 
 use serde_json::{Value, json};
 use south_contracts::media::ResponseBodyFormV1;
@@ -57,20 +76,28 @@ use crate::asr_shared::{OpenAiAsr, openai_outcome, prepare_openai};
 use crate::openai_speech::{
     AUDIO_ELISION_PATH, client_format, forwarded_body, media_type_of, sse_outcome,
 };
+use crate::reference::azure_openai_dated;
 use crate::speech_shared::{
-    bearer, binary_outcome, descriptor, facts, input, json_body, non_2xx, openai_error_message,
-    prepared, required_forms, scalar_count, serves, view_status,
+    bearer, binary_outcome, capability, descriptor, facts, input, internal, json_body, non_2xx,
+    openai_error_message, prepared, required_forms, scalar_count, view_status,
 };
 use crate::{ComponentResultV1, SpeechComponentV1, SpeechOutcomeV1};
 
 /// The package name this reference is published as.
 pub const NAME: &str = "speech-openai-compatible";
 /// The package version.
-pub const VERSION: &str = "1.0.1";
+pub const VERSION: &str = "1.1.0";
 /// The world this reference exports.
 pub const WORLD: &str = "speech-adapter-v1";
 /// The family, the provider and embeddings worlds' name.
 pub const OPENAI_COMPATIBLE: &str = "openai-compatible";
+/// Azure `OpenAI`'s GA v1 surface, the provider and embeddings worlds' name.
+pub const AZURE_OPENAI_V1: &str = "azure-openai-v1";
+/// Azure `OpenAI`'s dated, deployment-addressed surface, the provider world's name.
+pub const AZURE_OPENAI_DATED: &str = azure_openai_dated::FAMILY;
+/// The header Azure `OpenAI` and Azure Foundry read the resource key from (native
+/// `apply_provider_auth`, `upstream.rs:190-196`).
+pub const AZURE_SECRET_HEADER: &str = "api-key";
 
 const FORMS: [SpeechMeteringFormV1; 2] =
     [SpeechMeteringFormV1::Characters, SpeechMeteringFormV1::Tokens];
@@ -88,6 +115,112 @@ fn api_path(config: &ProviderConfig, endpoint: &str) -> String {
     if rest.contains('/') { endpoint.to_owned() } else { format!("v1/{endpoint}") }
 }
 
+/// The family a configuration names, when this package serves it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Family {
+    OpenAiCompatible,
+    AzureV1,
+    AzureDated,
+}
+
+impl Family {
+    fn of(config: &ProviderConfig) -> ComponentResultV1<Self> {
+        match config.provider.as_str() {
+            OPENAI_COMPATIBLE => Ok(Self::OpenAiCompatible),
+            AZURE_OPENAI_V1 => Ok(Self::AzureV1),
+            AZURE_OPENAI_DATED => Ok(Self::AzureDated),
+            _ => Err(capability(format!(
+                "this package serves the {OPENAI_COMPATIBLE}, {AZURE_OPENAI_V1} and \
+                 {AZURE_OPENAI_DATED} families"
+            ))),
+        }
+    }
+
+    const fn name(self) -> &'static str {
+        match self {
+            Self::OpenAiCompatible => OPENAI_COMPATIBLE,
+            Self::AzureV1 => AZURE_OPENAI_V1,
+            Self::AzureDated => AZURE_OPENAI_DATED,
+        }
+    }
+}
+
+/// Where a call goes and how it is authenticated: path below the binding, query, auth arm.
+struct Route {
+    path: String,
+    query: Option<Value>,
+    auth: Option<Value>,
+}
+
+/// `{"arm": "header_secret", "header": "api-key", "slot": …}` on the configured slot.
+fn azure_key(config: &ProviderConfig) -> Option<Value> {
+    config.auth.as_ref().map(|slot| {
+        json!({ "arm": "header_secret", "header": AZURE_SECRET_HEADER, "slot": slot.as_str() })
+    })
+}
+
+/// The dated version: the config value, else native's default; anything not dated is a
+/// configuration error (the provider world's `azure-openai-dated` rule, T9 record §4 D3).
+fn dated_version(config: &ProviderConfig) -> ComponentResultV1<&str> {
+    let version = config
+        .declared
+        .get(azure_openai_dated::API_VERSION_KEY)
+        .unwrap_or(azure_openai_dated::DEFAULT_API_VERSION);
+    if crate::reference::is_dated_api_version(version) {
+        Ok(version)
+    } else {
+        Err(internal(format!(
+            "the `{}` configuration value is not a dated API version",
+            azure_openai_dated::API_VERSION_KEY
+        )))
+    }
+}
+
+/// The route of `endpoint` (`audio/speech`, `audio/transcriptions` or `audio/translations`) for
+/// the family. The dated family's configuration and deployment are checked here, so they are
+/// refused before any request refusal.
+fn route(
+    config: &ProviderConfig,
+    family: Family,
+    endpoint: &str,
+    upstream_model: &str,
+) -> ComponentResultV1<Route> {
+    Ok(match family {
+        Family::OpenAiCompatible => {
+            Route { path: api_path(config, endpoint), query: None, auth: bearer(config) }
+        }
+        Family::AzureV1 => {
+            Route { path: api_path(config, endpoint), query: None, auth: azure_key(config) }
+        }
+        Family::AzureDated => {
+            let version = dated_version(config)?;
+            if upstream_model.is_empty() {
+                return Err(capability(
+                    "Azure OpenAI addresses the deployment in the URL path, so a request without \
+                     a model has no deployment to send to",
+                ));
+            }
+            Route {
+                path: format!(
+                    "openai/deployments/{}/{endpoint}",
+                    crate::url_segment::encode(upstream_model)
+                ),
+                query: Some(json!([{ "name": "api-version", "value": version }])),
+                auth: azure_key(config),
+            }
+        }
+    })
+}
+
+/// The upstream endpoint of an operation.
+const fn endpoint_of(operation: SpeechOperationV1) -> &'static str {
+    match operation {
+        SpeechOperationV1::Synthesize => "audio/speech",
+        SpeechOperationV1::Transcribe => "audio/transcriptions",
+        SpeechOperationV1::Translate => "audio/translations",
+    }
+}
+
 impl SpeechComponentV1 for OpenAiCompatibleSpeechReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
@@ -101,7 +234,7 @@ impl SpeechComponentV1 for OpenAiCompatibleSpeechReferenceV1 {
         &self,
         config: &ProviderConfig,
     ) -> ComponentResultV1<Vec<SpeechModelCapabilitiesV1>> {
-        crate::asr_shared::capabilities(config, OPENAI_COMPATIBLE, &FORMS, true)
+        crate::asr_shared::capabilities(config, Family::of(config)?.name(), &FORMS, true)
     }
 
     fn prepare(
@@ -110,18 +243,15 @@ impl SpeechComponentV1 for OpenAiCompatibleSpeechReferenceV1 {
         request: &Value,
         context: &SpeechCallContextV1,
     ) -> ComponentResultV1<PreparedSpeechCallV1> {
-        serves(config, OPENAI_COMPATIBLE)?;
+        let family = Family::of(config)?;
+        let route = route(config, family, endpoint_of(context.operation), &context.upstream_model)?;
         if context.operation.is_recognition() {
-            let endpoint = if context.operation == SpeechOperationV1::Translate {
-                "audio/translations"
-            } else {
-                "audio/transcriptions"
-            };
             let protocol = OpenAiAsr {
-                path: api_path(config, endpoint),
+                path: route.path,
+                query: route.query,
                 drops_model: false,
                 translates: true,
-                auth: bearer(config),
+                auth: route.auth,
                 upstream_model: &context.upstream_model,
             };
             return prepare_openai(config, request, context, &protocol);
@@ -146,13 +276,7 @@ impl SpeechComponentV1 for OpenAiCompatibleSpeechReferenceV1 {
         }
         prepared(
             facts(count, &forms, media_type),
-            descriptor(
-                &api_path(config, "audio/speech"),
-                None,
-                bearer(config),
-                &Value::Object(template),
-                &[],
-            )?,
+            descriptor(&route.path, route.query, route.auth, &Value::Object(template), &[])?,
             form,
             elision,
             &IMMUTABLE_BODY_PATHS,

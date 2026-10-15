@@ -64,6 +64,8 @@ fn the_pack_carries_every_vertex_row() {
         "task-v2.created.vertex-accepted",
         "task-v2.created.vertex-name",
         "task-v2.observe.vertex-operation",
+        "task-v2.observe.vertex-project-number",
+        "task-v2.observe.vertex-other-shape",
         "task-v2.observe.vertex-gemini-name",
         "task-v2.observe.vertex-gemini-locator",
         "task-v2.observe.gemini-vertex-locator",
@@ -117,10 +119,7 @@ fn each_family_addresses_and_authenticates_as_native_does() {
     );
 }
 
-/// A Vertex operation in another project or location is polled where native polls it, and a host
-/// refuses to send that descriptor: the credential never leaves the bound location.
-#[test]
-fn a_vertex_operation_outside_the_bound_location_is_not_sendable() {
+fn vertex_submission() -> (ProviderConfig, south_contracts::TaskLocatorV2) {
     let vertex = config("vertex-veo-video", VERTEX_BASE);
     let prepared = VeoTaskComponentV2
         .build_submit_request(
@@ -129,10 +128,86 @@ fn a_vertex_operation_outside_the_bound_location_is_not_sendable() {
             &HostMintedValuesV1::new("host-1", None).unwrap(),
         )
         .unwrap();
-    let elsewhere = "projects/123456789/locations/us-central1/publishers/google/models/\
+    (vertex, prepared.locator)
+}
+
+/// Q-VV1 (lv 2026-10-15; **unverified**, no capture): Vertex may name the operation with the
+/// project number where the binding carries the project id. A publisher-model operation name is
+/// polled under the binding's own location prefix, the prefix the submit used, so a host's
+/// `authorize` sends it; the operation's model and id are kept.
+#[test]
+fn a_project_number_operation_name_is_polled_under_the_binding_prefix() {
+    let (vertex, locator) = vertex_submission();
+    let by_number = "projects/123456789012/locations/us-central1/publishers/google/models/\
                      veo-3.1-generate-001/operations/op7";
+    let poll =
+        VeoTaskComponentV2.build_observe_request(&vertex, "veo", by_number, &locator).unwrap();
+    assert_eq!(
+        poll.url,
+        format!("{VERTEX_BASE}/publishers/google/models/veo-3.1-generate-001/operations/op7")
+    );
+    vertex.authorize(&poll).unwrap();
+    assert!(matches!(poll.auth, Some(Auth::Bearer { .. })));
+    // Another location is replaced as well: the whole `projects/*/locations/*` prefix is the
+    // binding's.
+    let elsewhere = "projects/123456789012/locations/europe-west4/publishers/google/models/\
+                     veo-3.1-generate-001/operations/op7";
+    let poll =
+        VeoTaskComponentV2.build_observe_request(&vertex, "veo", elsewhere, &locator).unwrap();
+    assert_eq!(
+        poll.url,
+        format!("{VERTEX_BASE}/publishers/google/models/veo-3.1-generate-001/operations/op7")
+    );
+    vertex.authorize(&poll).unwrap();
+}
+
+/// A name that already repeats the bound project and location polls the URL native polls, byte
+/// for byte: the rewrite changes nothing there.
+#[test]
+fn a_matching_operation_name_polls_the_native_url_unchanged() {
+    let (vertex, locator) = vertex_submission();
     let poll = VeoTaskComponentV2
-        .build_observe_request(&vertex, "veo", elsewhere, &prepared.locator)
+        .build_observe_request(&vertex, "veo", VERTEX_OPERATION, &locator)
         .unwrap();
-    assert!(vertex.authorize(&poll).is_err());
+    assert_eq!(poll.url, format!("https://us-central1-aiplatform.example/v1/{VERTEX_OPERATION}"));
+    assert_eq!(
+        poll.url,
+        format!("{VERTEX_BASE}/publishers/google/models/veo-3.1-generate-001/operations/op7")
+    );
+    vertex.authorize(&poll).unwrap();
+}
+
+/// A `projects/…` name of any other shape is not rewritten: it is polled verbatim at the origin's
+/// `/v1/{name}`, as before Q-VV1 and as native, so one outside the bound location yields a
+/// descriptor a host's `authorize` refuses and the credential never leaves the location. A name
+/// with an empty, `.` or `..` segment or a foreign byte is refused before any URL is built.
+#[test]
+fn an_operation_name_of_another_shape_is_polled_verbatim_or_refused() {
+    let (vertex, locator) = vertex_submission();
+    for other in [
+        "projects/123456789012/locations/us-central1/operations/op7",
+        "projects/123456789012/operations/op7",
+        "projects/123456789012/locations/us-central1/publishers/google/models/\
+         veo-3.1-generate-001/operations/op7/extra",
+        "projects/123456789012/locations/us-central1/publishers/other/models/\
+         veo-3.1-generate-001/operations/op7",
+    ] {
+        let poll =
+            VeoTaskComponentV2.build_observe_request(&vertex, "veo", other, &locator).unwrap();
+        assert_eq!(poll.url, format!("https://us-central1-aiplatform.example/v1/{other}"));
+        assert!(vertex.authorize(&poll).is_err(), "{other} must stay outside the binding");
+    }
+    // The same other shape under the bound project and location is sendable, as before.
+    let inside = "projects/sample-project/locations/us-central1/operations/op7";
+    let poll = VeoTaskComponentV2.build_observe_request(&vertex, "veo", inside, &locator).unwrap();
+    assert_eq!(poll.url, format!("{VERTEX_BASE}/operations/op7"));
+    vertex.authorize(&poll).unwrap();
+    for malformed in [
+        "projects//locations/us-central1/publishers/google/models/veo/operations/op7",
+        "projects/../locations/us-central1/publishers/google/models/veo/operations/op7",
+        "projects/123/locations/us-central1/publishers/google/models/veo/operations/op?7",
+    ] {
+        let refused = VeoTaskComponentV2.build_observe_request(&vertex, "veo", malformed, &locator);
+        assert_eq!(refused.unwrap_err().message, "invalid Veo operation name", "{malformed}");
+    }
 }

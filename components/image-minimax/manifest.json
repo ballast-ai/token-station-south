@@ -1,6 +1,6 @@
 {
   "name": "image-minimax",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "api_version": "image-adapter-v1",
   "providers": [
     "minimax-image"

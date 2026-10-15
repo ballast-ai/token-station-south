@@ -1,0 +1,45 @@
+{
+  "facts": {
+    "operation": "synthesize",
+    "characters": {
+      "count": 11,
+      "upper": 11
+    },
+    "metering_forms": [
+      "characters"
+    ],
+    "output_media_type": "audio/wav"
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "audio/speech",
+    "auth": {
+      "arm": "header_secret",
+      "header": "api-key",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "model": "tts-prod",
+          "input": "hello world",
+          "voice": "alloy",
+          "response_format": "wav"
+        }
+      }
+    }
+  },
+  "response_body_form": "binary",
+  "response_elision_paths": [],
+  "immutable_body_paths": [
+    "input",
+    "model",
+    "stream_format",
+    "response_format"
+  ],
+  "state": {
+    "form": "binary",
+    "format": "wav",
+    "characters": 11
+  }
+}

@@ -1,6 +1,6 @@
 {
   "provider_config": {
-    "provider": "azure-openai-v1",
+    "provider": "azure_openai",
     "base_url": "https://api.openai.com",
     "auth": "provider_api_key",
     "models": [

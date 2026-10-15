@@ -1,6 +1,6 @@
 {
   "name": "provider-anthropic",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "api_version": "provider-adapter-v2",
   "providers": [
     "anthropic",
@@ -19,6 +19,30 @@
   "immutable_body_paths": {
     "claude-code": [
       "system"
+    ]
+  },
+  "immutable_request_headers": {
+    "claude-code": [
+      "accept",
+      "anthropic-beta",
+      "anthropic-dangerous-direct-browser-access",
+      "anthropic-version",
+      "authorization",
+      "content-type",
+      "user-agent",
+      "x-api-key",
+      "x-app"
+    ],
+    "claude-code-setup-token": [
+      "accept",
+      "anthropic-beta",
+      "anthropic-dangerous-direct-browser-access",
+      "anthropic-version",
+      "authorization",
+      "content-type",
+      "user-agent",
+      "x-api-key",
+      "x-app"
     ]
   },
   "credentials": {

@@ -157,7 +157,7 @@ credentials:          families ["claude-code"]
 | D2 | A client's `anthropic-beta` and `anthropic-version` (Messages surface) are not sent: the component does not see client headers. Native appends the client's beta flags after the required set (e.g. `context-1m-*`, `fine-grained-tool-streaming-*`). The `anthropic` family has the same loss today. | **Unverified** impact on Claude Code clients; registered |
 | D3 | The identity is injected into the body the component builds from the IR, not into the client's own Messages body. A client's `system` that the north codec does not carry verbatim (non-text system blocks) differs exactly as it does for `anthropic`. | Shared with `anthropic` |
 | D4 | Operator body extras cannot set or remove `system` on `claude-code` (immutable). Native applied body extras before the identity, so an extra could set `system` and the identity was still prepended. | Justified (CC-Q4): keeps the identity first |
-| D5 | Operator header extras: native refuses them for `claude_code`; a component row has no declaration for that, so whatever the host does for component rows applies. | **Unverified**; host prerequisite H5 |
+| D5 | Operator header extras: native refuses them for `claude_code`; a component row has no declaration for that, so whatever the host does for component rows applies. | **Unverified**; host prerequisite H5. Narrowed by `immutable_request_headers` (record `2026-10-15-immutable-request-headers.md`, Q-CC3) |
 | D6 | A refresh response without `expires_in`: native refreshes again on the next request; the recipe caches the token 60 s. | Registered (CC-Q6) |
 | D7 | Refresh margin 30 s (host default) instead of native 300 s. | Registered (Codex precedent) |
 | D8 | ~~A refresh response without `refresh_token` keeps the stored one (no-wipe); native possibly wipes it.~~ **Withdrawn 2026-10-15**: native keeps it too. `update_provider_credential_tokens_cas` only writes `refresh_token` when the response carries one (`None` = keep the old value; `server:gateway/src/modules/catalog/repo/credentials.rs:1064-1090`), so the recipe and native agree. | No difference |
@@ -261,3 +261,5 @@ same reference.
   prerequisite (H2).
 - 2026-10-15: D8 withdrawn after the host session read native's CAS write: it keeps the stored refresh token when the
   response omits one, as the recipe does.
+- 2026-10-15: D5 / H5: lv ruled Q-CC3; both families declare `immutable_request_headers` in 1.2.1 (record
+  `2026-10-15-immutable-request-headers.md`), which the host enforces.

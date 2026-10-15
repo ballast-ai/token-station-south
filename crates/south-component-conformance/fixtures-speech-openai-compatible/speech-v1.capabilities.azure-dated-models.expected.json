@@ -1,0 +1,39 @@
+[
+  {
+    "model": "tts-prod",
+    "operations": [
+      "synthesize",
+      "transcribe"
+    ],
+    "metering_forms": [
+      "characters",
+      "tokens",
+      "seconds"
+    ]
+  },
+  {
+    "model": "whisper-prod",
+    "operations": [
+      "synthesize",
+      "transcribe",
+      "translate"
+    ],
+    "metering_forms": [
+      "characters",
+      "tokens",
+      "seconds"
+    ]
+  },
+  {
+    "model": "gpt-4o-transcribe",
+    "operations": [
+      "synthesize",
+      "transcribe"
+    ],
+    "metering_forms": [
+      "characters",
+      "tokens",
+      "seconds"
+    ]
+  }
+]

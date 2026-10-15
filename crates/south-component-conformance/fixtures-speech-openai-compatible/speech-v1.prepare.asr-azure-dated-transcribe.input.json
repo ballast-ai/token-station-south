@@ -1,0 +1,56 @@
+{
+  "provider_config": {
+    "provider": "azure-openai-dated",
+    "base_url": "https://my-resource.openai.azure.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "tts-prod"
+      },
+      {
+        "model": "whisper-prod",
+        "supported_parameters": [
+          "speech.translate",
+          "speech.verbose_json"
+        ]
+      },
+      {
+        "model": "gpt-4o-transcribe"
+      }
+    ],
+    "declared": {
+      "api_version": "2024-06-01"
+    }
+  },
+  "request": {
+    "multipart": {
+      "parts": [
+        {
+          "kind": "text",
+          "name": "model",
+          "value": "media/asr"
+        },
+        {
+          "kind": "text",
+          "name": "response_format",
+          "value": "json"
+        },
+        {
+          "kind": "file",
+          "name": "file",
+          "blob": "b0",
+          "filename": "a.mp3",
+          "media_type": "audio/mpeg",
+          "bytes": 9
+        }
+      ]
+    }
+  },
+  "context": {
+    "upstream_model": "whisper-prod",
+    "operation": "transcribe",
+    "metering_required": [
+      "seconds"
+    ]
+  }
+}
