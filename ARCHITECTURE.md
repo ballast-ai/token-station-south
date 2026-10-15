@@ -211,8 +211,11 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.65.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.58.0 and 0.65.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
-**Unreleased (`task-veo-v2`: the `vertex-veo-video` family)**: design record
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.66.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.58.0 and 0.65.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**v0.66.0 (`provider-vertex`, Veo on Vertex, `image-xai`, `image-reve`, the Claude Code families, Bedrock Mantle, T9,
+`speech-vertex` 1.1.0)**: release record `docs/design/2026-10-15-release-0.66.0.md`; every change below was written
+under lv's 2026-10-15 directive (migrate by the native code, doubts registered as unverified).
+`task-veo-v2`: the `vertex-veo-video` family: design record
 `docs/design/2026-10-15-veo-vertex-task-component.md` (accepted and revised 2026-10-15: VV-Q1 (b), VV-Q2 (b), VV-Q3;
 "Implementation"). `task-veo-v2` gains a second family that reproduces the host's native Vertex Veo arm, not Google's
 documented Vertex wire (an **unverified** doubt the record registers):
@@ -225,7 +228,7 @@ manifest gains the provider and the `bearer` arm, keeps task contract 7 and its 
 minor version (0.36.0, past `provider-vertex`'s patch 0.35.24 in this cycle, so no further Q47 round). No contract
 changes. Per L-Q2 (lv 2026-10-14) the family re-launches Vertex Veo after the native line goes offline; the gated clip
 fetch has no native baseline.
-**Unreleased (`provider-openai-responses` 1.4.0: the `bedrock-mantle` family)**: design record
+`provider-openai-responses` 1.4.0: the `bedrock-mantle` family: design record
 `docs/design/2026-10-15-bedrock-mantle.md` (accepted under lv's 2026-10-15 directive; BM-Q1 to BM-Q5 at their defaults).
 AWS Bedrock's OpenAI-compatible host becomes a third family of `provider-openai-responses`, whose behaviour is
 `openai-responses`'s unchanged; it adds the endpoint template `https://bedrock-mantle.{region}.api.aws` with one required
@@ -234,7 +237,7 @@ native Mantle tests rather than captured; a trailing `data: [DONE]` on the Respo
 refuses it. The chat surface stays servable by `openai-compatible` with the origin as row endpoint (two rows in
 `fixtures/`). No further Q47 step: `south-component-conformance` is already 0.65.0 in this cycle; `south_runtime` stays
 0.60.0.
-**Unreleased (`image-reve` 1.0.0: the Reve bridge, image world step I3-6)**: design record
+`image-reve` 1.0.0: the Reve bridge, image world step I3-6: design record
 `docs/design/2026-10-13-image-i3-6-reve.md` (accepted 2026-10-13; RV-Q0 lifted 2026-10-15). `image-reve` (image world,
 family `reve-image`, `bearer` on `provider_api_key`, `generate` and `edit`) reproduces the host's two OpenAI-surface Reve
 bridges: a JSON generation to `v1/image/create`, a multipart edit sent as JSON to `v1/image/edit` or `v1/image/remix` with
@@ -244,8 +247,8 @@ only (`credits_used`, at most six decimal places, never negative; otherwise `unk
 `south_runtime` 0.57.0. The image suite's `missing_meter_is_not_zero` now also checks `charged_failure` for every
 required fact of §9.1's last column (`credits`, `images_reported`, declared token buckets); no published package returns
 the outcome, so none changes. No version moves: `provider-vertex` already moved `south-component-conformance` to 0.65.0
-in this unreleased cycle. No contract number changes.
-**Unreleased (`speech-vertex` 1.1.0: Q7's refusal)**: speech batch V4 record `docs/design/2026-10-15-speech-v4-tts.md`
+in this cycle. No contract number changes.
+`speech-vertex` 1.1.0: Q7's refusal: speech batch V4 record `docs/design/2026-10-15-speech-v4-tts.md`
 §3.4 (lv's Q7 ruling of 2026-09-30; lv moved 1.1.0 into 0.66.0 on 2026-10-15 instead of waiting for the host's Vertex
 TTS dual run). `response_format` `mp3`, `opus`, `aac` and `flac`, which native and 1.0.x serve as WAV, are
 `invalid_request` before dispatch ("Gemini TTS on Vertex cannot emit response_format='{f}'. Supported: wav, pcm.");
@@ -253,7 +256,7 @@ the "Unknown …" text drops its parenthesis; an omitted format stays WAV. The f
 become refusal cases. A host dual run on 0.66.0 sees the refusal as a registered intentional difference from native. A
 behaviour change, so a minor version (1.0.1 → 1.1.0); the manifest changes nothing else and keeps `south_runtime` 0.65.0
 and `{media: 1, speech: 1}`. No crate version moves: `provider-vertex` already did this cycle's Q47 round.
-**Unreleased (`provider-vertex` 1.0.0: Gemini models on Vertex AI for text)**: design record
+`provider-vertex` 1.0.0: Gemini models on Vertex AI for text: design record
 `docs/design/2026-10-15-provider-vertex.md` (accepted 2026-10-15; VX-Q1 (a), `generateContent` on every surface; VX-Q2,
 family `vertex-ai`). The Gemini reference's request body, response reader, stream parser (with SF27) and refusals move
 into the crate-private module `gemini_text`, which `provider-gemini` and the new `provider-vertex` both call; each
@@ -266,7 +269,7 @@ for byte, `north_request_passthrough` and `north_passthrough` `generate_content`
 `north_request_passthrough`. Gate ② pack `fixtures-vertex/` (with `image-vertex`'s five credential cases). Q47 against
 v0.65.0: `south-component-conformance` 0.65.0; every package published with 0.65.0 takes a patch with unchanged
 behaviour and keeps its `south_runtime` and its contracts. No contract number changes; the kernel pin is unchanged.
-**Unreleased (`image-xai` 1.0.0: image world step I3-7, xAI Grok Imagine)**: design record
+`image-xai` 1.0.0: image world step I3-7, xAI Grok Imagine: design record
 `docs/design/2026-10-15-image-i3-7-xai.md` (accepted under lv's 2026-10-15 directive). `image-xai` (family `xai-image`,
 `bearer`, `generate` and `edit`, contracts `{image: 1, media: 1}`, `south_runtime` 0.57.0) serves the six Grok Imagine
 ids of the native arm. Both operations are JSON; a body with a non-null source-image field is an edit (XI-Q2). The
@@ -275,9 +278,9 @@ client's body passes through as the native OpenAI-compatible arm forwards it, wi
 report tier candidates and the `upstream_cost` evidence fact (record §8, §9.1, §9.4 item 4): `resolution` always,
 `quality` when `grok-imagine-image-2.0` pins it, else the candidates `low` / `medium` with the surface's default, and
 `usage.cost_in_usd_ticks` as decimal dollars; the host recognises the served tier and bills its own tier-keyed price
-list (H5). Gate ② pack `fixtures-image-xai/`. No Q47 bump of its own: the reference lands in the same unreleased
+list (H5). Gate ② pack `fixtures-image-xai/`. No Q47 bump of its own: the reference lands in the same
 `south-component-conformance` 0.65.0 cycle. No contract number changes; the kernel pin is unchanged.
-**Unreleased (`provider-openai-compatible` 2.7.0: host plan row T9, `glm-coding` and `azure-openai-dated`)**: design
+`provider-openai-compatible` 2.7.0: host plan row T9, `glm-coding` and `azure-openai-dated`: design
 record `docs/design/2026-10-15-openai-compatible-t9.md` (accepted under lv's 2026-10-15 directive). Two families
 transcribed from the host's native arms. `glm-coding` (Z.ai GLM Coding Plan): Chat Completions at
 `{base_url}/api/coding/paas/v4/chat/completions` below the native origin endpoint, `bearer`, the manifest's

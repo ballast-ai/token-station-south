@@ -1,7 +1,7 @@
 # Task world: Veo on Vertex AI (a `vertex-veo-video` family in `task-veo-v2`)
 
 Status: accepted, revised the same day (lv 2026-10-15: migrate by the existing code's logic, prioritising speed; §5).
-Implemented, unreleased ("Implementation").
+Implemented ("Implementation"); released in 0.66.0.
 
 Date: 2026-10-15
 
