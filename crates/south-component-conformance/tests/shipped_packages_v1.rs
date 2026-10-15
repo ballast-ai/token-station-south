@@ -2709,7 +2709,9 @@ fn provider_vertex_retires_every_published_065_package_identity() {
         ("provider-bedrock-converse-bearer", "1.1.9", "1.1.10"),
         ("provider-gemini", "1.3.9", "1.3.10"),
         ("provider-kiro", "1.1.0", "1.1.1"),
-        ("provider-openai-compatible", "2.6.9", "2.6.10"),
+        // The T9 families then took the minor 2.7.0 over this patch (T9 record §8,
+        // `openai_compatible_t9_v1::the_t9_families_retire_the_patch_identity`).
+        ("provider-openai-compatible", "2.6.9", "2.7.0"),
         // The `bedrock-mantle` family (record `2026-10-15-bedrock-mantle.md` §11) adds behaviour in
         // the same unreleased cycle: a minor version.
         ("provider-openai-responses", "1.3.9", "1.4.0"),

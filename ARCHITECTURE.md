@@ -277,6 +277,18 @@ report tier candidates and the `upstream_cost` evidence fact (record §8, §9.1,
 `usage.cost_in_usd_ticks` as decimal dollars; the host recognises the served tier and bills its own tier-keyed price
 list (H5). Gate ② pack `fixtures-image-xai/`. No Q47 bump of its own: the reference lands in the same unreleased
 `south-component-conformance` 0.65.0 cycle. No contract number changes; the kernel pin is unchanged.
+**Unreleased (`provider-openai-compatible` 2.7.0: host plan row T9, `glm-coding` and `azure-openai-dated`)**: design
+record `docs/design/2026-10-15-openai-compatible-t9.md` (accepted under lv's 2026-10-15 directive). Two families
+transcribed from the host's native arms. `glm-coding` (Z.ai GLM Coding Plan): Chat Completions at
+`{base_url}/api/coding/paas/v4/chat/completions` below the native origin endpoint, `bearer`, the manifest's
+`user_agent` `opencode/1.15.6` for this family alone, and a `subscription_quota_families` entry; native's Messages leg
+to Z.ai's Anthropic-compatible endpoint is not reproduced (a registered difference). `azure-openai-dated`: Azure
+OpenAI's deployment-addressed surface, `{base_url}/openai/deployments/{deployment}/chat/completions?api-version={version}`
+with the deployment as one escaped segment, `header_secret` `api-key`, the version from the config key `api_version`
+(`api_version_date`, default `2024-10-21`, native's), an undated value refused as a configuration error. Both share the
+package's translation; an undeclared family is still refused. Gate ② gains six request rows in `fixtures/`. The package
+takes a minor version (2.7.0, past its patch 2.6.10 in this cycle, so no further Q47 round) and keeps `south_runtime`
+0.60.0. No contract changes; the kernel pin is unchanged.
 **v0.65.0 (the speech world: batches V3-1 to V4 and `contracts.speech` 1; `contracts.media` 3; Kiro native rewrites)**:
 release record `docs/design/2026-10-15-release-0.65.0.md`. Speech world step S-S-5, `contracts.speech` 1: speech record
 `docs/design/2026-09-30-speech-world.md` §14, §18 and "S-S-5 implementation" (released in 0.65.0 with V3-1 to V4).
