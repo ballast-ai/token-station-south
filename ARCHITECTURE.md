@@ -234,6 +234,17 @@ native Mantle tests rather than captured; a trailing `data: [DONE]` on the Respo
 refuses it. The chat surface stays servable by `openai-compatible` with the origin as row endpoint (two rows in
 `fixtures/`). No further Q47 step: `south-component-conformance` is already 0.65.0 in this cycle; `south_runtime` stays
 0.60.0.
+**Unreleased (`image-reve` 1.0.0: the Reve bridge, image world step I3-6)**: design record
+`docs/design/2026-10-13-image-i3-6-reve.md` (accepted 2026-10-13; RV-Q0 lifted 2026-10-15). `image-reve` (image world,
+family `reve-image`, `bearer` on `provider_api_key`, `generate` and `edit`) reproduces the host's two OpenAI-surface Reve
+bridges: a JSON generation to `v1/image/create`, a multipart edit sent as JSON to `v1/image/edit` or `v1/image/remix` with
+the images inlined through `base64` references, the endpoint read from the route's `endpoint` pin. It meters `credits`
+only (`credits_used`, at most six decimal places, never negative; otherwise `unknown`) and is the first package to return
+`charged_failure` (a content violation, content policy 400, with its credits). `contracts` `{image: 1, media: 1}`,
+`south_runtime` 0.57.0. The image suite's `missing_meter_is_not_zero` now also checks `charged_failure` for every
+required fact of §9.1's last column (`credits`, `images_reported`, declared token buckets); no published package returns
+the outcome, so none changes. No version moves: `provider-vertex` already moved `south-component-conformance` to 0.65.0
+in this unreleased cycle. No contract number changes.
 **Unreleased (`provider-vertex` 1.0.0: Gemini models on Vertex AI for text)**: design record
 `docs/design/2026-10-15-provider-vertex.md` (accepted 2026-10-15; VX-Q1 (a), `generateContent` on every surface; VX-Q2,
 family `vertex-ai`). The Gemini reference's request body, response reader, stream parser (with SF27) and refusals move
