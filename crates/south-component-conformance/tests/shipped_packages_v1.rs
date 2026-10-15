@@ -1448,6 +1448,11 @@ fn r3_retires_every_published_055_package_identity() {
     }
 }
 
+/// The runtime every speech package declares: 0.65.0, the first release that records
+/// `contracts.speech` (S-S-5). The 0.65.0 release commit moved them to it from the interim
+/// declaration of this tree's release.
+const SPEECH_RUNTIME: &str = "0.65.0";
+
 /// The `south_runtime` a package declares today. Most packages still need only the 0.57.0 runtime
 /// (`canonical_ir` 4); the three that declare a manifest field added in 0.60.0
 /// (`north_request_passthrough`, `subscription_quota_families`; D7, record
@@ -2373,7 +2378,7 @@ fn speech_version(name: &str) -> &'static str {
 /// 1.0.0 in the speech world, `synthesize` only, the secret slot `provider_api_key`, no config keys.
 /// Three declare `contracts.media` 1, and a media 1 host admits them. `speech-elevenlabs` declares the
 /// query parameter `output_format` and so `contracts.media` 3, which a media 2 host refuses. Since
-/// step S-S-5 all four also declare `contracts.speech` 1, new in this tree, and so this tree's release
+/// step S-S-5 all four also declare `contracts.speech` 1, new in 0.65.0, and so that release
 /// (the workspace version), which the release commit moves with the workspace version (the I3-2 /
 /// `task-gemini-omni-v2` precedent).
 #[test]
@@ -2420,9 +2425,9 @@ fn the_v3_1_speech_packages_declare_their_media_contract_and_runtime() {
             "{name}"
         );
         assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()), "{name}");
-        // `contracts.speech` is new in this tree (S-S-5), so every speech package declares this
-        // tree's release (`the_speech_packages_declare_contracts_speech_1_and_this_release`).
-        assert_eq!(manifest.compatibility.south_runtime, host_range::south_release(), "{name}");
+        // `contracts.speech` arrived in 0.65.0 (S-S-5), so every speech package declares that
+        // release (`the_speech_packages_declare_contracts_speech_1_and_this_release`).
+        assert_eq!(manifest.compatibility.south_runtime, SPEECH_RUNTIME, "{name}");
         if media == 1 {
             assert!(manifest.query_parameters.is_empty(), "{name}");
             assert_eq!(compatibility_admits(&manifest, &media_1_only), Ok(()), "{name}");
@@ -2440,7 +2445,7 @@ fn the_v3_1_speech_packages_declare_their_media_contract_and_runtime() {
 /// Speech world batch V3-2 (record `2026-10-14-speech-v3-2-tts.md` §1, §3): `speech-mimo` and
 /// `speech-minimax` start at 1.0.0 in the speech world, `synthesize` only, `bearer` on the secret
 /// slot `provider_api_key`, `contracts` `{media: 1, speech: 1}` (`speech` from step S-S-5) and so
-/// this tree's release; a media 1 host admits them. Neither declares a query
+/// 0.65.0; a media 1 host admits them. Neither declares a query
 /// parameter: `GroupId` is a sanctioned name. `speech-minimax` declares one non-secret config key,
 /// `group_id`, with `image-minimax`'s `digits` syntax and description (IM-Q3); `speech-mimo` none.
 #[test]
@@ -2472,7 +2477,7 @@ fn the_v3_2_speech_packages_declare_their_runtime_and_values() {
             std::collections::BTreeMap::from([("media".to_owned(), 1), ("speech".to_owned(), 1)]),
             "{name}"
         );
-        assert_eq!(manifest.compatibility.south_runtime, host_range::south_release(), "{name}");
+        assert_eq!(manifest.compatibility.south_runtime, SPEECH_RUNTIME, "{name}");
         assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()), "{name}");
         assert_eq!(compatibility_admits(&manifest, &media_1_only), Ok(()), "{name}");
         let declared: Vec<String> =
@@ -2501,7 +2506,7 @@ fn the_v3_2_speech_packages_declare_their_runtime_and_values() {
 /// no version move and keep their runtime and contracts; `speech-azure` starts at 1.0.0,
 /// `transcribe` only, `header_secret`, no config keys and no query parameter (`api-version` is a
 /// sanctioned name), `contracts.media` 1, which a media 1 host admits. No other speech package
-/// changes. Step S-S-5 adds `contracts.speech` 1 and with it this tree's release as the runtime of
+/// changes. Step S-S-5 adds `contracts.speech` 1 and with it 0.65.0 as the runtime of
 /// every speech package. Speech batch V4 then gives
 /// `speech-azure` `synthesize` at the same unpublished 1.0.0
 /// (`the_v4_speech_packages_declare_their_values_and_runtime`).
@@ -2519,17 +2524,13 @@ fn the_v3_3_speech_packages_declare_their_operations_and_runtime() {
     let mut media_1_only = host_range::host_range();
     media_1_only.contracts.insert("media".to_owned(), BTreeSet::from([1]));
     for (name, capabilities, runtime) in [
-        (
-            "speech-openai-compatible",
-            vec!["synthesize", "transcribe", "translate"],
-            host_range::south_release(),
-        ),
-        ("speech-xai", vec!["synthesize", "transcribe"], host_range::south_release()),
-        ("speech-elevenlabs", vec!["synthesize", "transcribe"], host_range::south_release()),
-        ("speech-azure", vec!["synthesize", "transcribe"], host_range::south_release()),
-        ("speech-groq", vec!["synthesize"], host_range::south_release()),
-        ("speech-mimo", vec!["synthesize"], host_range::south_release()),
-        ("speech-minimax", vec!["synthesize"], host_range::south_release()),
+        ("speech-openai-compatible", vec!["synthesize", "transcribe", "translate"], SPEECH_RUNTIME),
+        ("speech-xai", vec!["synthesize", "transcribe"], SPEECH_RUNTIME),
+        ("speech-elevenlabs", vec!["synthesize", "transcribe"], SPEECH_RUNTIME),
+        ("speech-azure", vec!["synthesize", "transcribe"], SPEECH_RUNTIME),
+        ("speech-groq", vec!["synthesize"], SPEECH_RUNTIME),
+        ("speech-mimo", vec!["synthesize"], SPEECH_RUNTIME),
+        ("speech-minimax", vec!["synthesize"], SPEECH_RUNTIME),
     ] {
         let manifest = read(name);
         assert_eq!(manifest.version, SPEECH_VERSION, "{name}");
@@ -2553,7 +2554,7 @@ fn the_v3_3_speech_packages_declare_their_operations_and_runtime() {
 /// Speech world batch V4 (record `2026-10-15-speech-v4-tts.md` §1, §2.6, §3.1, §4.1, §10):
 /// `speech-qwen` and `speech-vertex` start at 1.0.0 in the speech world, `synthesize` only (Qwen also
 /// `artifact_fetch`), `bearer` on the secret slot `provider_api_key`, `contracts` `{media: 1,
-/// speech: 1}` (`speech` from step S-S-5) and so this tree's release; a media 1 host admits them.
+/// speech: 1}` (`speech` from step S-S-5) and so 0.65.0; a media 1 host admits them.
 /// Neither declares a query parameter. `speech-vertex` declares `image-vertex`'s
 /// configuration keys and credentials section byte for byte, so one row and one credential serve
 /// the three Vertex packages; `speech-qwen` declares neither. `speech-azure` gains `synthesize` at
@@ -2597,7 +2598,7 @@ fn the_v4_speech_packages_declare_their_values_and_runtime() {
         assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer"], "{name}");
         assert_eq!(manifest.declared_keys(family), keys.into_iter().collect(), "{name}");
         assert!(manifest.query_parameters.is_empty(), "{name}");
-        assert_eq!(manifest.compatibility.south_runtime, host_range::south_release(), "{name}");
+        assert_eq!(manifest.compatibility.south_runtime, SPEECH_RUNTIME, "{name}");
         assert_eq!(
             manifest.compatibility.contracts,
             std::collections::BTreeMap::from([("media".to_owned(), 1), ("speech".to_owned(), 1)]),
@@ -2837,9 +2838,8 @@ fn the_speech_packages_declare_contracts_speech_1_and_this_release() {
         assert_eq!(manifest.version, speech_version(&name), "{name}");
         assert_eq!(manifest.compatibility.contracts.get("speech"), Some(&speech), "{name}");
         assert_eq!(
-            manifest.compatibility.south_runtime,
-            host_range::south_release(),
-            "{name}: declares this tree's release until the release commit moves it"
+            manifest.compatibility.south_runtime, SPEECH_RUNTIME,
+            "{name}: declares 0.65.0, the first runtime that records contracts.speech"
         );
         assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()), "{name}");
         for refusing in [&without_speech, &speech_2_only] {
