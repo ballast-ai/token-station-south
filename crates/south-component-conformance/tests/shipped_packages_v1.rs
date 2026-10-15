@@ -2365,7 +2365,7 @@ fn s_s_1_retires_every_published_063_package_identity() {
 }
 
 /// The version every speech package carries: each was published as 1.0.0 with 0.65.0,
-/// provider-vertex's Q47 bump made it 1.0.1 (published with 0.66.0) and the speech Azure OpenAI
+/// provider-vertex's Q47 bump made it 1.0.1 (published with 0.66.0) and the speech `azure-openai`
 /// families' Q47 bump 1.0.2 (`speech_azure_openai_retires_every_published_066_package_identity`).
 /// The tests below describe the batches that defined the packages, before those releases.
 /// `speech-vertex` and `speech-openai-compatible` moved on to minors ([`speech_version`]).
@@ -2374,7 +2374,7 @@ const SPEECH_VERSION: &str = "1.0.2";
 /// The version a speech package carries: [`SPEECH_VERSION`], except `speech-vertex`, which Q7's
 /// refusal made 1.1.0 and the 0.67.0 cycle's Q47 bump 1.1.1
 /// (`speech_vertex_1_1_refuses_q7_and_retires_its_published_identity`), and
-/// `speech-openai-compatible`, which the Azure OpenAI families made 1.1.0
+/// `speech-openai-compatible`, which the `azure-openai` families made 1.1.0
 /// (`speech_openai_compatible_1_1_adds_the_azure_openai_families`).
 fn speech_version(name: &str) -> &'static str {
     match name {
@@ -2707,7 +2707,7 @@ fn v3_1_retires_every_published_064_package_identity() {
 /// `component.wasm` changes: each identity published with 0.65.0 retires. No published package
 /// changes behaviour (`provider-gemini` only calls the shared pieces from their new module): each
 /// takes a patch and keeps its `south_runtime` and its `contracts`. The identity each package took
-/// here (published with 0.66.0) is no longer pinned: the speech Azure OpenAI families gave every
+/// here (published with 0.66.0) is no longer pinned: the speech `azure-openai` families gave every
 /// package one more (`speech_azure_openai_retires_every_published_066_package_identity`).
 #[test]
 fn provider_vertex_retires_every_published_065_package_identity() {
@@ -2949,14 +2949,18 @@ fn task_veo_v2_gains_the_vertex_family_and_bearer() {
     assert_eq!(compatibility_admits(&manifest, &task_7_only), Ok(()));
 }
 
-/// The speech Azure OpenAI families (design record `2026-10-15-speech-azure-openai.md` §8) change
+/// The speech `azure-openai` families (design record `2026-10-15-speech-azure-openai.md` §8) change
 /// `south-component-conformance` (0.65.0 → 0.66.0) after release 0.66.0, which every guest links,
 /// so every `component.wasm` changes: each identity published with 0.66.0 retires. Only
 /// `speech-openai-compatible` changes behaviour, a minor (1.0.1 → 1.1.0); every other package takes
 /// a patch. No package moves its `south_runtime` or its `contracts`.
+/// A package, its identity published with 0.66.0, its identity now, its `south_runtime` and its
+/// `contracts`.
+type RetiredIdentity<'a> = (&'a str, &'a str, &'a str, &'a str, &'a [(&'a str, u32)]);
+
 #[test]
 fn speech_azure_openai_retires_every_published_066_package_identity() {
-    let rows: [(&str, &str, &str, &str, &[(&str, u32)]); 40] = [
+    let rows: [RetiredIdentity<'_>; 40] = [
         ("embeddings-gemini", "1.1.15", "1.1.16", "0.57.0", &[("embeddings", 2)]),
         ("embeddings-openai-compatible", "1.0.18", "1.0.19", "0.57.0", &[("embeddings", 1)]),
         ("embeddings-vertex", "1.0.17", "1.0.18", "0.57.0", &[("embeddings", 1)]),

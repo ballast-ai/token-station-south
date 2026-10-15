@@ -89,12 +89,13 @@ pub mod claude_code {
     /// The component cannot send it: `user-agent` is reserved, and the host fills the controlled
     /// slot from the manifest. Here so a test can pin the manifest to the host's value.
     pub const USER_AGENT: &str = "claude-cli/2.1.114 (external, cli)";
-    /// The request headers both families declare immutable (manifest
-    /// `immutable_request_headers`; `docs/design/2026-10-15-immutable-request-headers.md`,
+    /// The request headers both families declare immutable, sorted.
+    ///
+    /// Manifest `immutable_request_headers` (`docs/design/2026-10-15-immutable-request-headers.md`,
     /// Q-CC3): every header either form sends, the credential header of either presentation and
     /// the user-agent, so an operator's header extra can neither replace the CLI identity nor add
     /// a second credential. One list for both forms, as one native refusal covered both; a name a
-    /// form does not send stays absent. Sorted.
+    /// form does not send stays absent.
     pub const IMMUTABLE_REQUEST_HEADERS: [&str; 9] = [
         "accept",
         "anthropic-beta",

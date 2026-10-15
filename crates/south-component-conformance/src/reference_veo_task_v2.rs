@@ -462,10 +462,10 @@ impl TaskComponentV2 for VeoTaskComponentV2 {
         // (Q-VV1), which is the same URL when the name repeats the bound project and location.
         let url = match family {
             Family::Gemini => under_base(config, &format!("{GEMINI_ROUTE}/{id}")),
-            Family::Vertex => match vertex_operation_under_binding(id) {
-                Some(path) => under_base(config, &path),
-                None => format!("{}/{VERTEX_ROUTE}/{id}", origin(&config.base_url.as_str())),
-            },
+            Family::Vertex => vertex_operation_under_binding(id).map_or_else(
+                || format!("{}/{VERTEX_ROUTE}/{id}", origin(&config.base_url.as_str())),
+                |path| under_base(config, &path),
+            ),
         };
         Ok(request(config, family, HttpMethod::Get, url))
     }
