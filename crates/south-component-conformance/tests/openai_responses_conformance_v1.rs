@@ -5,13 +5,14 @@
 //! Design record: `docs/design/2026-09-30-openai-responses-upstream-component.md` (step R1); the
 //! `openai-codex` family and the four client fields are step R3
 //! (`docs/design/2026-10-12-responses-r3-codex-and-request-fields.md`), whose own facts are in
-//! `openai_codex_conformance_v1`.
+//! `openai_codex_conformance_v1`; the `bedrock-mantle` family's are in
+//! `bedrock_mantle_conformance_v1` (`docs/design/2026-10-15-bedrock-mantle.md`).
 
 use std::path::Path;
 
 use serde_json::{Value, json};
 use south_component_conformance::reference_openai_responses::{
-    CODEX_FAMILY, FAMILY, NAME, OpenAiResponsesReferenceV1, VERSION,
+    CODEX_FAMILY, FAMILY, MANTLE_FAMILY, NAME, OpenAiResponsesReferenceV1, VERSION,
 };
 use south_component_conformance::responses_vocabulary::{extension, replay};
 use south_component_conformance::{
@@ -72,10 +73,10 @@ fn gate_one_admits_the_shipped_package_and_its_reported_identity() {
     assert!(reported_identity_matches(&OpenAiResponsesReferenceV1.metadata(), &manifest));
     assert_eq!(manifest.api_version, PROVIDER_WORLD);
     assert_eq!(manifest.version, VERSION);
-    assert_eq!(manifest.providers, [FAMILY, CODEX_FAMILY]);
+    assert_eq!(manifest.providers, [FAMILY, CODEX_FAMILY, MANTLE_FAMILY]);
 }
 
-/// Gate ②: the reference implementation answers its own frozen pack — both directories — exactly.
+/// Gate ②: the reference implementation answers its own frozen pack — every directory — exactly.
 #[test]
 fn gate_two_passes_over_the_shipped_pack() {
     let report = run_provider_component_suite_v1_for_manifest(
@@ -92,9 +93,10 @@ fn gate_two_passes_over_the_shipped_pack() {
     assert!(ran(CheckV1::CredentialRecipeMatch));
 }
 
-/// Record §3.4, as reconciled for step R3 (R3 record §2.1): two families, with exactly the
-/// declarations the sketch gives each; the credential section is judged in
-/// `openai_codex_conformance_v1`.
+/// Record §3.4, as reconciled for step R3 (R3 record §2.1) and extended by the Bedrock Mantle
+/// record (§3): three families, with exactly the declarations each record gives; the credential
+/// section is judged in `openai_codex_conformance_v1`, the Mantle endpoint and region in
+/// `bedrock_mantle_conformance_v1`.
 #[test]
 fn the_manifest_declares_what_the_record_gives_the_families() {
     let manifest = shipped_manifest();
@@ -110,23 +112,29 @@ fn the_manifest_declares_what_the_record_gives_the_families() {
     let credentials = manifest.credentials.as_ref().expect("the minted Codex slot (R3)");
     assert_eq!(credentials.families.as_deref(), Some(&[CODEX_FAMILY.to_owned()][..]));
     assert!(manifest.signing.is_none() && manifest.emits.is_empty());
-    assert!(manifest.endpoint.is_empty() && manifest.config_schema.is_empty());
+    // Only `bedrock-mantle` declares an endpoint template and a configuration key.
+    assert_eq!(manifest.endpoint.keys().collect::<Vec<_>>(), [MANTLE_FAMILY]);
+    assert_eq!(manifest.config_schema.keys().collect::<Vec<_>>(), [MANTLE_FAMILY]);
     assert!(manifest.user_agent.is_empty() && manifest.host_values.is_empty());
     assert_eq!(
         serde_json::to_value(&manifest.request_facts).unwrap(),
         json!({FAMILY: {"output_cap": ["/max_output_tokens"], "model": {"body": "/model"},
                         "stream": {"body": "/stream"}},
                CODEX_FAMILY: {"output_cap": [], "model": {"body": "/model"},
-                              "stream": {"body": "/stream"}}})
+                              "stream": {"body": "/stream"}},
+               MANTLE_FAMILY: {"output_cap": ["/max_output_tokens"], "model": {"body": "/model"},
+                               "stream": {"body": "/stream"}}})
     );
     assert_eq!(
         serde_json::to_value(&manifest.immutable_body_paths).unwrap(),
         json!({FAMILY: ["store"],
-               CODEX_FAMILY: ["store", "stream", "instructions", "temperature", "max_output_tokens"]})
+               CODEX_FAMILY: ["store", "stream", "instructions", "temperature", "max_output_tokens"],
+               MANTLE_FAMILY: ["store"]})
     );
     assert_eq!(manifest.north_passthrough.get(FAMILY), Some(&NorthProtocolV1::Responses));
     assert_eq!(manifest.north_passthrough.get(CODEX_FAMILY), Some(&NorthProtocolV1::Responses));
-    assert_eq!(manifest.north_passthrough.len(), 2);
+    assert_eq!(manifest.north_passthrough.get(MANTLE_FAMILY), Some(&NorthProtocolV1::Responses));
+    assert_eq!(manifest.north_passthrough.len(), 3);
     assert_eq!(manifest.conformance.fixtures, format!("{PACK}/"));
 }
 
@@ -388,21 +396,21 @@ fn the_client_fields_are_held_to_the_codec_bounds() {
     }
 }
 
-/// The package serves its two families: a request for any other is a capability error with no
+/// The package serves its three families: a request for any other is a capability error with no
 /// request built.
 #[test]
-fn only_the_two_families_are_served() {
+fn only_the_three_families_are_served() {
     let mut request: ChatRequest = serde_json::from_value(
         read_json("provider.request.text.input.json")["chat_request"].clone(),
     )
     .unwrap();
     request.stream = true;
-    for family in [FAMILY, CODEX_FAMILY] {
+    for family in [FAMILY, CODEX_FAMILY, MANTLE_FAMILY] {
         let mut config = config();
         family.clone_into(&mut config.provider);
         assert!(OpenAiResponsesReferenceV1.build_http_request(&request, &config).is_ok());
     }
-    for family in ["openai-compatible", "azure-openai-v1", "codex", ""] {
+    for family in ["openai-compatible", "azure-openai-v1", "codex", "bedrock", "mantle", ""] {
         let mut config = config();
         family.clone_into(&mut config.provider);
         let refused = OpenAiResponsesReferenceV1.build_http_request(&request, &config).unwrap_err();

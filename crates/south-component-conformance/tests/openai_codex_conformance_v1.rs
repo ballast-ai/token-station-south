@@ -104,7 +104,7 @@ fn the_codex_pack_carries_every_decided_row() {
     }
 }
 
-/// The two directories are judged as one pack, so every Codex row is `codex-*`, every Codex
+/// The directories are judged as one pack, so every Codex row is `codex-*`, every Codex
 /// request row is for `openai-codex`, and no case name repeats across the two.
 #[test]
 fn the_codex_pack_holds_codex_rows_only_and_no_name_repeats() {
@@ -128,9 +128,13 @@ fn the_codex_pack_holds_codex_rows_only_and_no_name_repeats() {
     let union = packs::package_pack();
     let mut seen = BTreeSet::new();
     for name in union.cases().iter().map(|case| &case.name) {
-        assert!(seen.insert(name.clone()), "`{name}` repeats across the two directories");
+        assert!(seen.insert(name.clone()), "`{name}` repeats across the directories");
     }
-    assert_eq!(union.cases().len(), responses.cases().len() + pack.cases().len());
+    let mantle = packs::load(packs::MANTLE_PACK);
+    assert_eq!(
+        union.cases().len(),
+        responses.cases().len() + pack.cases().len() + mantle.cases().len()
+    );
 }
 
 /// Record §12.2, moved here by §17.4: `UsageNeverDefaulted` runs on stream fixtures, and every

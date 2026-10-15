@@ -403,7 +403,7 @@ struct Dialect {
     cache: &'static [&'static str],
 }
 
-const DIALECTS: [Dialect; 8] = [
+const DIALECTS: [Dialect; 9] = [
     // `prompt_tokens` already contains `prompt_tokens_details.cached_tokens`.
     Dialect {
         dir: "fixtures",
@@ -458,6 +458,14 @@ const DIALECTS: [Dialect; 8] = [
     // The Codex family speaks the same wire and the same usage convention (R3 record §3.1).
     Dialect {
         dir: "fixtures-openai-codex",
+        usage_key: "usage",
+        prompt: &["input_tokens"],
+        cache: &["cached_tokens", "cache_write_tokens"],
+    },
+    // So does Bedrock Mantle, as the host's native parser reads it (record 2026-10-15-bedrock-mantle
+    // §5; unverified against Mantle's own traffic).
+    Dialect {
+        dir: "fixtures-bedrock-mantle",
         usage_key: "usage",
         prompt: &["input_tokens"],
         cache: &["cached_tokens", "cache_write_tokens"],

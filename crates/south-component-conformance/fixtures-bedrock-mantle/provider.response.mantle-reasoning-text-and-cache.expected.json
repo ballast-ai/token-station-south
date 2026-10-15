@@ -1,0 +1,30 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": [
+          {
+            "thinking": "The user greets me; answer briefly.",
+            "type": "thinking"
+          },
+          {
+            "text": "Hello!",
+            "type": "text"
+          }
+        ],
+        "role": "assistant"
+      }
+    }
+  ],
+  "id": "resp_mantle_2",
+  "model": "openai.gpt-oss-120b",
+  "usage": {
+    "cache_read_tokens": 1024,
+    "cache_write_tokens": 0,
+    "input_tokens": 1200,
+    "output_tokens": 40,
+    "reasoning_tokens": 12
+  }
+}

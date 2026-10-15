@@ -4,7 +4,8 @@
   "api_version": "provider-adapter-v2",
   "providers": [
     "openai-responses",
-    "openai-codex"
+    "openai-codex",
+    "bedrock-mantle"
   ],
   "capabilities": [
     "chat",
@@ -15,6 +16,18 @@
   "auth_arms": [
     "bearer"
   ],
+  "endpoint": {
+    "bedrock-mantle": "https://bedrock-mantle.{region}.api.aws"
+  },
+  "config_schema": {
+    "bedrock-mantle": {
+      "region": {
+        "syntax": "aws_region",
+        "required": true,
+        "description": "The AWS region whose bedrock-mantle host serves the models, such as us-east-1. The host fills the endpoint template with it."
+      }
+    }
+  },
   "request_facts": {
     "openai-responses": {
       "output_cap": [
@@ -35,6 +48,17 @@
       "stream": {
         "body": "/stream"
       }
+    },
+    "bedrock-mantle": {
+      "output_cap": [
+        "/max_output_tokens"
+      ],
+      "model": {
+        "body": "/model"
+      },
+      "stream": {
+        "body": "/stream"
+      }
     }
   },
   "immutable_body_paths": {
@@ -47,11 +71,15 @@
       "instructions",
       "temperature",
       "max_output_tokens"
+    ],
+    "bedrock-mantle": [
+      "store"
     ]
   },
   "north_passthrough": {
     "openai-responses": "responses",
-    "openai-codex": "responses"
+    "openai-codex": "responses",
+    "bedrock-mantle": "responses"
   },
   "credentials": {
     "schema": "south.credential-recipe.v1",

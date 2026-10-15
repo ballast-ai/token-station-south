@@ -61,6 +61,13 @@ pub mod codex {
     pub const ACCOUNT_HEADER: &str = "chatgpt-account-id";
 }
 
+/// The `bedrock-mantle` family's spelling (design record `2026-10-15-bedrock-mantle.md`): AWS
+/// Bedrock's OpenAI-compatible `bedrock-mantle` host, which speaks this wire unchanged.
+pub mod mantle {
+    /// The family name.
+    pub const FAMILY: &str = "bedrock-mantle";
+}
+
 /// The `response.*` stream event types (record §6.1). The closed list a component accepts is
 /// [`event::ACCEPTED`]; the failure frame `error` is recognised before it (record §6.4).
 pub mod event {

@@ -1,0 +1,18 @@
+{
+  "chunks": [
+    "data: {\"type\":\"response.created\",\"sequence_number\":0,\"response\":{\"id\":\"resp_mantle_3\",\"object\":\"response\",\"created_at\":1760486400,\"status\":\"in_progress\",\"error\":null,\"incomplete_details\":null,\"model\":\"openai.gpt-oss-120b\",\"output\":[],\"usage\":null}}\n\n",
+    "data: {\"type\":\"response.in_progress\",\"sequence_number\":1,\"response\":{\"id\":\"resp_mantle_3\",\"object\":\"response\",\"created_at\":1760486400,\"status\":\"in_progress\",\"error\":null,\"incomplete_details\":null,\"model\":\"openai.gpt-oss-120b\",\"output\":[],\"usage\":null}}\n\n",
+    "data: {\"type\":\"response.output_item.added\",\"sequence_number\":2,\"output_index\":0,\"item\":{\"id\":\"rs_mantle_3\",\"type\":\"reasoning\",\"summary\":[],\"content\":[]}}\n\n",
+    "data: {\"type\":\"response.reasoning_text.delta\",\"sequence_number\":3,\"item_id\":\"rs_mantle_3\",\"output_index\":0,\"content_index\":0,\"delta\":\"Greeting.\"}\n\n",
+    "data: {\"type\":\"response.reasoning_text.delta\",\"sequence_number\":4,\"item_id\":\"rs_mantle_3\",\"output_index\":0,\"content_index\":0,\"delta\":\" Be brief.\"}\n\n",
+    "data: {\"type\":\"response.reasoning_text.done\",\"sequence_number\":5,\"item_id\":\"rs_mantle_3\",\"output_index\":0,\"content_index\":0,\"text\":\"Greeting. Be brief.\"}\n\n",
+    "data: {\"type\":\"response.output_item.done\",\"sequence_number\":6,\"output_index\":0,\"item\":{\"id\":\"rs_mantle_3\",\"type\":\"reasoning\",\"summary\":[],\"content\":[{\"type\":\"reasoning_text\",\"text\":\"Greeting. Be brief.\"}]}}\n\n",
+    "data: {\"type\":\"response.output_item.added\",\"sequence_number\":7,\"output_index\":1,\"item\":{\"id\":\"msg_mantle_3\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"role\":\"assistant\"}}\n\n",
+    "data: {\"type\":\"response.content_part.added\",\"sequence_number\":8,\"item_id\":\"msg_mantle_3\",\"output_index\":1,\"content_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"text\":\"\"}}\n\n",
+    "data: {\"type\":\"response.output_text.delta\",\"sequence_number\":9,\"item_id\":\"msg_mantle_3\",\"output_index\":1,\"content_index\":0,\"delta\":\"Hello!\"}\n\n",
+    "data: {\"type\":\"response.output_text.done\",\"sequence_number\":10,\"item_id\":\"msg_mantle_3\",\"output_index\":1,\"content_index\":0,\"text\":\"Hello!\"}\n\n",
+    "data: {\"type\":\"response.content_part.done\",\"sequence_number\":11,\"item_id\":\"msg_mantle_3\",\"output_index\":1,\"content_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"text\":\"Hello!\"}}\n\n",
+    "data: {\"type\":\"response.output_item.done\",\"sequence_number\":12,\"output_index\":1,\"item\":{\"id\":\"msg_mantle_3\",\"type\":\"message\",\"status\":\"completed\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"text\":\"Hello!\"}]}}\n\n",
+    "data: {\"type\":\"response.completed\",\"sequence_number\":13,\"response\":{\"id\":\"resp_mantle_3\",\"object\":\"response\",\"created_at\":1760486400,\"status\":\"completed\",\"error\":null,\"incomplete_details\":null,\"model\":\"openai.gpt-oss-120b\",\"output\":[{\"id\":\"rs_mantle_3\",\"type\":\"reasoning\",\"summary\":[],\"content\":[{\"type\":\"reasoning_text\",\"text\":\"Greeting. Be brief.\"}]},{\"id\":\"msg_mantle_3\",\"type\":\"message\",\"status\":\"completed\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"text\":\"Hello!\"}]}],\"usage\":{\"input_tokens\":80,\"input_tokens_details\":{\"cached_tokens\":64},\"output_tokens\":30,\"output_tokens_details\":{\"reasoning_tokens\":6},\"total_tokens\":110}}}\n\n"
+  ]
+}

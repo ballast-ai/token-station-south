@@ -1,6 +1,7 @@
 //! The `OpenAI` Responses component's sandbox acceptance test over its frozen
-//! fixture pack: both directories, so both families (`openai-responses` and, since R3,
-//! `openai-codex`) and the Codex recipe's credential rows are judged against the wasm build.
+//! fixture pack: all three directories, so every family (`openai-responses`, since R3
+//! `openai-codex`, and `bedrock-mantle`) and the Codex recipe's credential rows are judged against
+//! the wasm build.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -82,8 +83,8 @@ fn the_sandboxed_component_passes_gate_two_byte_for_byte() {
         eprintln!("{failure}");
     }
     assert!(report.is_passing(), "{report}");
-    // Both families' request rows ran in the sandbox.
-    for family in ["openai-responses", "openai-codex"] {
+    // Every family's request rows ran in the sandbox.
+    for family in ["openai-responses", "openai-codex", "bedrock-mantle"] {
         assert!(
             shipped_pack().cases().iter().any(|case| {
                 case.input.pointer("/provider_config/provider").and_then(|p| p.as_str())

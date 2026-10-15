@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"id\":\"resp-1\",\"model\":\"openai.gpt-oss-120b-1:0\",\"object\":\"response\",\"output\":[{\"content\":[{\"annotations\":[],\"text\":\"hello\",\"type\":\"output_text\"}],\"id\":\"msg-1\",\"role\":\"assistant\",\"status\":\"completed\",\"type\":\"message\"}],\"status\":\"completed\",\"usage\":{\"input_tokens\":1000,\"output_tokens\":500,\"total_tokens\":1500}}"
+}

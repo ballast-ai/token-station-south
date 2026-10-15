@@ -1,0 +1,54 @@
+{
+  "provider_config": {
+    "provider": "bedrock-mantle",
+    "base_url": "https://bedrock-mantle.us-east-1.api.aws",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "openai.gpt-oss-120b",
+        "tool": true,
+        "vision": false,
+        "json_schema": true,
+        "context_window": 131072,
+        "supported_parameters": [
+          "reasoning_effort",
+          "temperature",
+          "top_p"
+        ]
+      },
+      {
+        "model": "openai.gpt-oss-120b-1:0",
+        "tool": true,
+        "vision": false,
+        "json_schema": true,
+        "context_window": 131072,
+        "supported_parameters": [
+          "reasoning_effort",
+          "temperature",
+          "top_p"
+        ]
+      }
+    ],
+    "declared": {
+      "region": "us-east-1"
+    }
+  },
+  "chat_request": {
+    "messages": [
+      {
+        "content": "Summarize our last meeting.",
+        "role": "user"
+      }
+    ],
+    "metadata": {
+      "tenant": "acme",
+      "trace": "t-1"
+    },
+    "model": "openai.gpt-oss-120b",
+    "prompt_cache_key": "meetings-acme",
+    "sampling": {},
+    "stream": false,
+    "truncation": "auto",
+    "user": "user-42"
+  }
+}
