@@ -240,4 +240,4 @@ identity in this cycle and needs no further step there.
 - 2026-10-16 (after 0.70.0): the host deletes `vertex_ai`, so §2 no longer holds: the package declares the `vertex_sa`
   recipe for `vertex-veo-video` and the operator writes the location prefix in full as the component row's endpoint
   (record [`2026-10-16-task-vertex-credentials.md`](2026-10-16-task-vertex-credentials.md), lv 2026-10-16; fresh
-  production deployment, no row migration); `task-veo-v2` 0.37.0; unreleased (0.71.0).
+  production deployment, no row migration); `task-veo-v2` 0.37.0; released in 0.71.0.
