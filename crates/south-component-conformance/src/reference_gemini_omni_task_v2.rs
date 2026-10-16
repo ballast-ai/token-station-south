@@ -6,7 +6,9 @@
 //! - **`vertex-interactions-video`** (sampled, O0-b and O0-c): `POST {base}/interactions` with
 //!   `response_format.delivery = "inline"` and `background: true`, then `GET
 //!   {base}/interactions/{id}` until `completed`. The base is the operator's `v1beta1` project
-//!   endpoint; the credential is the minted service-account token, presented as a bearer. The clip
+//!   endpoint; the credential is the service-account token the host mints by the package's
+//!   `vertex_sa` recipe (from 0.2.0; record `2026-10-16-task-vertex-credentials.md`), presented as
+//!   a bearer. The clip
 //!   arrives as standard base64 inside the JSON, which the host elides before this component sees
 //!   it (`response_blob_paths`), so the component names it by pointer (an inline artifact).
 //! - **`gemini-interactions-video`** (provisional: not sampled, transcribed from token-station-server's
@@ -380,7 +382,7 @@ impl TaskComponentV2 for GeminiOmniTaskComponentV2 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "task-gemini-omni-v2".into(),
-            version: "0.1.8".into(),
+            version: "0.2.0".into(),
             api_version: "task-adapter-v2".into(),
         }
     }

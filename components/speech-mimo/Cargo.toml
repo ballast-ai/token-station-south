@@ -4,7 +4,7 @@
 # `sandbox` feature stays off).
 [package]
 name = "speech-mimo"
-version = "1.0.5"
+version = "1.0.6"
 edition = "2021"
 publish = false
 

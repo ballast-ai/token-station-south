@@ -1,6 +1,6 @@
 {
   "name": "task-gemini-omni-v2",
-  "version": "0.1.8",
+  "version": "0.2.0",
   "api_version": "task-adapter-v2",
   "providers": [
     "gemini-interactions-video",
@@ -15,6 +15,105 @@
     "bearer",
     "header_secret"
   ],
+  "credentials": {
+    "schema": "south.credential-recipe.v1",
+    "families": [
+      "vertex-interactions-video"
+    ],
+    "fields": {
+      "service_account": {
+        "secret": true,
+        "required": true,
+        "media": "application/json",
+        "description": "The service account key file (JSON) access tokens are minted with."
+      },
+      "project_id": {
+        "secret": false,
+        "required": true,
+        "syntax": "gcp_project_id",
+        "description": "The Google Cloud project the service account belongs to."
+      }
+    },
+    "import": {
+      "service_account": {
+        "file": "service-account-json",
+        "pointers": [
+          ""
+        ]
+      },
+      "project_id": {
+        "file": "service-account-json",
+        "pointers": [
+          "/project_id"
+        ]
+      }
+    },
+    "slots": {
+      "provider_api_key": {
+        "minted": "vertex_sa"
+      }
+    },
+    "recipes": {
+      "vertex_sa": {
+        "steps": [
+          {
+            "id": "assertion",
+            "kind": "jwt_sign",
+            "alg": "RS256",
+            "key": {
+              "field": "service_account",
+              "pointer": "/private_key"
+            },
+            "claims": {
+              "iss": {
+                "field": "service_account",
+                "pointer": "/client_email"
+              },
+              "scope": {
+                "const": "https://www.googleapis.com/auth/cloud-platform"
+              },
+              "aud": {
+                "endpoint_of": "token"
+              },
+              "iat": {
+                "now_plus": 0
+              },
+              "exp": {
+                "now_plus": 600
+              }
+            }
+          },
+          {
+            "id": "token",
+            "kind": "oauth2_token",
+            "encoding": "form",
+            "endpoint": "https://oauth2.googleapis.com/token",
+            "params": {
+              "grant_type": {
+                "const": "urn:ietf:params:oauth:grant-type:jwt-bearer"
+              },
+              "assertion": {
+                "output": "assertion.jwt"
+              }
+            },
+            "extract": {
+              "access_token": {
+                "pointer": "/access_token",
+                "secret": true
+              },
+              "expires_at": {
+                "relative_seconds": "/expires_in"
+              }
+            }
+          }
+        ],
+        "present": "token.access_token",
+        "rotates_refresh_material": false,
+        "refresh_margin_seconds": 300,
+        "min_ttl_seconds": 301
+      }
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

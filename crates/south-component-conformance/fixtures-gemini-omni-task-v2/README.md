@@ -22,3 +22,9 @@ Sources:
 
 Rows the record requires by name are listed in `tests/gemini_omni_task_suite_v2.rs`. The three `.meta.json` sidecars
 name the usage object and each required bucket's wire member for `UsageNeverDefaulted` and `MissingMeterIsNotZero`.
+
+Credential cases (`task-gemini-omni-v2` 0.2.0): the package declares a `credentials` section scoped to
+`vertex-interactions-video` (design record `docs/design/2026-10-16-task-vertex-credentials.md`), so gate ② runs the five
+`credential.*` cases of `fixtures-image-vertex/`, copied byte for byte except that the two minted expectations export no
+attributes: the task world has no value channel, so the section declares no `project_id` attribute (record §2). No case
+names a family. The fixture signer is `FixtureSignerV1` (an FNV-1a stand-in, not a signature).

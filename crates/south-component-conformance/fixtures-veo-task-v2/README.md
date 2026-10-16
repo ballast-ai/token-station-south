@@ -60,3 +60,12 @@ binding's own location prefix (the project number in the sample is replaced by t
 bound project id), so a host's `authorize` sends it; any other `projects/…` shape is
 polled verbatim, as before. Whether Vertex answers with a project number at all is
 **unverified** (no capture; record "Q-VV1").
+
+## Credential cases (`task-veo-v2` 0.37.0)
+
+The package declares a `credentials` section scoped to `vertex-veo-video` (design record
+`docs/design/2026-10-16-task-vertex-credentials.md`), so gate ② runs the five `credential.*`
+cases of `fixtures-image-vertex/`, copied byte for byte except that the two minted
+expectations export no attributes: the task world has no value channel, so the section
+declares no `project_id` attribute (record §2). No case names a family. The fixture signer is
+`FixtureSignerV1` (an FNV-1a stand-in, not a signature).

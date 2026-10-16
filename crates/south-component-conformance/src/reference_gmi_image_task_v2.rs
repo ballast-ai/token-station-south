@@ -188,7 +188,7 @@ impl TaskComponentV2 for GmiImageTaskComponentV2 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "task-gmi-image-v2".into(),
-            version: "0.35.28".into(),
+            version: "0.35.29".into(),
             api_version: "task-adapter-v2".into(),
         }
     }

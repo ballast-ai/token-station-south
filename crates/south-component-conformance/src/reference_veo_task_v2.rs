@@ -11,7 +11,9 @@
 //! What this dialect needs from task contract 6, and why it could not move before:
 //! - **Credential**: the Gemini API authenticates with `x-goog-api-key`, so every `veo-video`
 //!   descriptor asks for the credential in that header. The Vertex line presents the
-//!   service-account token the host mints as a bearer (native `durable.rs` `apply_vertex_auth`).
+//!   service-account token the host mints as a bearer (native `durable.rs` `apply_vertex_auth`);
+//!   from 0.37.0 the host mints it by the package's own `vertex_sa` recipe, declared for that
+//!   family only (record `docs/design/2026-10-16-task-vertex-credentials.md`).
 //! - **Credential-gated artifacts**: a generated sample's `video.uri` downloads only with the
 //!   same credential, so every artifact is `fetch_with_credential`, which the host fetches with the
 //!   submission's authentication (the family's header or bearer). The rendered body keeps the native
@@ -27,8 +29,9 @@
 //! The Vertex family (design record `docs/design/2026-10-15-veo-vertex-task-component.md` §4, lv
 //! 2026-10-15: VV-Q1 (b), VV-Q2 (b), VV-Q3) reproduces the native arm, not Google's documented
 //! Vertex wire, which the record registers as an **unverified** doubt:
-//! - **Base**: the host passes the location prefix `{origin}/v1/projects/{p}/locations/{r}` as the
-//!   binding's endpoint (native `component_task_endpoint` / `vertex_task_endpoint`).
+//! - **Base**: the binding's endpoint is the location prefix `{origin}/v1/projects/{p}/locations/{r}`
+//!   (native `component_task_endpoint` / `vertex_task_endpoint`); from 0.37.0 the operator writes
+//!   it in full as the component row's endpoint (record `2026-10-16-task-vertex-credentials.md`).
 //! - **Submit**: `POST {base}/publishers/google/models/{model}:predictLongRunning` with the same
 //!   body as the Gemini line (native `veo_run` / `build_vertex_media_url`).
 //! - **Observe**: `GET {origin}/v1/{operation name}`, the name carrying `projects/…`, as native
@@ -299,7 +302,7 @@ impl TaskComponentV2 for VeoTaskComponentV2 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "task-veo-v2".into(),
-            version: "0.36.4".into(),
+            version: "0.37.0".into(),
             api_version: "task-adapter-v2".into(),
         }
     }
