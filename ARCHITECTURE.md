@@ -211,8 +211,10 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.69.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.60.0 and 0.69.0, the last two unreleased) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
-**Unreleased (`provider-openai-compatible` 2.10.0: the `kimi-code` family)**: design record
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.70.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.60.0 and 0.69.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**v0.70.0 (`provider-openai-compatible` 2.10.0, the `kimi-code` family; `image-openai-compatible` 1.0.0; the image world
+admits `user_agent`)**: release record `docs/design/2026-10-16-release-0.70.0.md`.
+`provider-openai-compatible` 2.10.0, the `kimi-code` family: design record
 `docs/design/2026-10-16-kimi-code-family.md` (lv, 2026-10-16). Native `kimi_code` rows, which host plan row T8 mapped onto
 `openai-compatible` by configuration, would lose the host's 429 subscription-quota alert on that family, so the package
 gains `kimi-code`: the `openai-compatible` wire posted to `{endpoint}/v1/chat/completions` (native's default URL arm,
@@ -252,8 +254,8 @@ must use the two new functions (token-station-server names neither outside comme
 `8045ee94`, so its re-pin is not broken by them). No descriptor, WIT, runtime or contract number changes: `user-agent` stays a reserved header, so the host sends
 the manifest value through its controlled user-agent slot, as for a chat package (host H7). Every runtime before 0.70.0
 refuses the manifest at gate ① (fail closed), so the package must declare `south_runtime` 0.70.0: following the 0.60.0
-and 0.67.0 precedents this branch keeps 0.57.0 and the **0.70.0 release commit raises it** (with
-`shipped_packages_v1::declared_runtime_now`); until then the release-only declared-runtime check refuses the package.
+and 0.67.0 precedents the feature branch kept 0.57.0 and the 0.70.0 release commit raised it (with
+`shipped_packages_v1::declared_runtime_now`).
 Q47: `south-provider-api` 0.59.0 → 0.60.0 with its requirements and every lockfile naming it; the other guest-linked
 crates keep this cycle's versions.
 **v0.69.0 (`provider-openai-compatible` 2.9.0: the `glm-coding` thinking switch; the Anthropic `tool_choice` of `none`)**:
