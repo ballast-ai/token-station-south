@@ -1,6 +1,6 @@
 # Task world: the Vertex families declare their own credentials
 
-Status: accepted (lv, 2026-10-16, relayed by the host session). Implemented; unreleased (0.71.0 cycle).
+Status: accepted (lv, 2026-10-16, relayed by the host session). Implemented; released in 0.71.0.
 
 Date: 2026-10-16
 
