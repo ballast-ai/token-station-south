@@ -1,6 +1,6 @@
 {
   "name": "speech-vertex",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "api_version": "speech-adapter-v1",
   "providers": [
     "vertex-ai-speech"

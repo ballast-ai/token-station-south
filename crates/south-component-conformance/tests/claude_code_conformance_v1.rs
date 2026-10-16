@@ -222,7 +222,9 @@ fn the_manifest_declares_the_two_families_with_the_native_values() {
     // (`shipped_packages_v1::kimi_code_retires_every_published_069_package_identity`);
     // published as 1.2.4 with 0.70.0, the Vertex task credentials' Q47 bump made it 1.2.5
     // (`shipped_packages_v1::task_vertex_credentials_retires_every_published_070_package_identity`).
-    assert_eq!(manifest.version, "1.2.5");
+    // Published as 1.2.5 with 0.71.0; the explicit cache reads' Q47 bump made it 1.2.6
+    // (`shipped_packages_v1::explicit_cache_reads_retires_every_published_071_package_identity`).
+    assert_eq!(manifest.version, "1.2.6");
     // `immutable_request_headers`, which no runtime before 0.67.0 parses (`ComponentManifestV1`
     // refuses unknown fields); 0.67.0 shipped it.
     assert_eq!(manifest.compatibility.south_runtime, "0.67.0");
@@ -298,7 +300,10 @@ fn immutable_request_headers_retire_the_published_1_2_0_identity() {
     assert_ne!(manifest.version, "1.2.3");
     // 1.2.4 was published with 0.70.0; the Vertex task credentials' Q47 bump made it 1.2.5.
     assert_ne!(manifest.version, "1.2.4");
-    assert_eq!(manifest.version, "1.2.5");
+    // 1.2.5 was published with 0.71.0; the explicit cache reads' Q47 bump made it 1.2.6
+    // (`shipped_packages_v1::explicit_cache_reads_retires_every_published_071_package_identity`).
+    assert_ne!(manifest.version, "1.2.5");
+    assert_eq!(manifest.version, "1.2.6");
     assert_eq!(AnthropicReferenceV1.metadata().version, manifest.version);
 }
 

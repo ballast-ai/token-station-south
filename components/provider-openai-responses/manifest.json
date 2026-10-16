@@ -1,6 +1,6 @@
 {
   "name": "provider-openai-responses",
-  "version": "1.4.5",
+  "version": "1.4.6",
   "api_version": "provider-adapter-v2",
   "providers": [
     "openai-responses",

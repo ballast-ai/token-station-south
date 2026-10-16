@@ -1,6 +1,6 @@
 {
   "name": "image-azure",
-  "version": "1.0.19",
+  "version": "1.0.20",
   "api_version": "image-adapter-v1",
   "providers": [
     "azure-mai"

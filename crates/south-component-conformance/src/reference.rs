@@ -630,6 +630,14 @@ fn checked_sum(left: u64, right: u64) -> ComponentResultV1<u64> {
 /// - The cache-write subset is `prompt_tokens_details.cache_write_tokens`
 ///   (`OpenAI`) or `prompt_tokens_details.cache_creation_input_tokens` (Bailian);
 ///   when both are present the Bailian key wins, matching the host's evidence.
+/// - The presence of `prompt_tokens_details.cache_creation_input_tokens`, even
+///   at 0, marks Bailian's explicit-cache mode: every hit of that response,
+///   orchestration's cached subset included, is an explicit-cache read and is
+///   reported as `explicit_cache_read_tokens` (a subset of `cache_read_tokens`,
+///   which stays the total). Without the key every hit is implicit and the
+///   explicit part is 0. The rule is keyed on the wire, not on the family,
+///   exactly as the host's native evidence reads it (record
+///   `docs/design/2026-10-17-explicit-cache-reads.md`).
 fn usage_of(raw: &Value) -> ComponentResultV1<Usage> {
     if !raw.is_object() {
         return Err(provider_protocol_error("a chat completion must carry a usage object"));
@@ -681,11 +689,12 @@ fn usage_of(raw: &Value) -> ComponentResultV1<Usage> {
         None => optional_count(Some(raw), "prompt_cache_hit_tokens", invalid_count)?,
     };
     let cache_read_tokens = checked_sum(cached, orchestration_cached)?;
-    let cache_write_tokens = match prompt_details
-        .and_then(|details| details.get("cache_creation_input_tokens"))
-    {
-        Some(_) => optional_count(prompt_details, "cache_creation_input_tokens", invalid_count)?,
-        None => optional_count(prompt_details, "cache_write_tokens", invalid_count)?,
+    let explicit_cache =
+        prompt_details.and_then(|details| details.get("cache_creation_input_tokens")).is_some();
+    let cache_write_tokens = if explicit_cache {
+        optional_count(prompt_details, "cache_creation_input_tokens", invalid_count)?
+    } else {
+        optional_count(prompt_details, "cache_write_tokens", invalid_count)?
     };
     if checked_sum(cache_read_tokens, cache_write_tokens)? > input_tokens {
         return Err(provider_protocol_error(
@@ -702,6 +711,7 @@ fn usage_of(raw: &Value) -> ComponentResultV1<Usage> {
         input_tokens,
         output_tokens,
         cache_read_tokens,
+        explicit_cache_read_tokens: if explicit_cache { cache_read_tokens } else { 0 },
         cache_write_tokens,
         reasoning_tokens,
         ..Usage::default()
@@ -942,7 +952,7 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-openai-compatible".to_owned(),
-            version: "2.10.1".to_owned(),
+            version: "2.11.0".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }

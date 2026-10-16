@@ -1,6 +1,6 @@
 {
   "name": "provider-vertex",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "api_version": "provider-adapter-v2",
   "providers": [
     "vertex-ai"
