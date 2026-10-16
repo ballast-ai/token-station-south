@@ -1,6 +1,7 @@
 # GLM Coding Plan Messages clients on a `glm-coding` row (host Q-T9)
 
-Status: proposed. The questions in §6 are for lv; each carries a recommendation.
+Status: ruled. lv ruled §6 on 2026-10-16 as recommended (relayed by the host session): Q-GM1 = O1, Q-GM2 = (a),
+Q-GM3 = register the remainder. The §4 fix is a separate pull request (#250); A+ follows in `provider-openai-compatible`.
 
 Date: 2026-10-16
 
@@ -102,7 +103,7 @@ the family's wire) and Vertex text (Q-VX1, Messages and Responses switch to the 
 switch registered as a difference. O2 remains the fallback if the post-cutover checks show a loss that matters
 (T9-Q5).
 
-## 6. Questions for lv
+## 6. Questions for lv (ruled 2026-10-16, all as recommended)
 
 - **Q-GM1. Which option.** Recommendation: **O1**. The losses that matter most to a coding client are the thinking
   switch (fixed by A+) and `tool_choice: none` (fixed by §4 for every row); the rest are fields GLM's Chat endpoint has
@@ -119,7 +120,7 @@ switch registered as a difference. O2 remains the fallback if the post-cutover c
   Mantle and Vertex precedents did. Recommendation: yes. R8 (`document` → 400) is the one a client sees as an error;
   the alternative is a host-side refusal before admission, which changes nothing for the client.
 
-## 7. If O1 is ruled
+## 7. Follow-up (O1 ruled)
 
 South: `provider-openai-compatible` minor (A+ in `glm-coding` only, fixtures for `enabled`, `disabled`, `adaptive` and
 absent, plus a Messages-shaped fixture), and the §4 codec fix in the same cycle. Host (not south's work): repin; the T9
