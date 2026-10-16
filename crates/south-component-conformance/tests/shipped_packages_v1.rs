@@ -1497,6 +1497,10 @@ fn declared_runtime_now(name: &str) -> &'static str {
         // `min_poll_interval_seconds`, which no runtime before 0.63.0 parses (`ComponentManifestV1`
         // refuses unknown fields); 0.63.0 shipped it, so the literal.
         "task-minimax-v2" => "0.63.0",
+        // OCI step 2 (design record `2026-10-16-image-openai-compatible.md` §11): `glm-coding`
+        // declares `user_agent`, which no image world before 0.70.0 admits; 0.70.0 shipped it, so the
+        // literal.
+        "image-openai-compatible" => "0.70.0",
         _ => "0.57.0",
     }
 }
@@ -2120,10 +2124,9 @@ fn image_reve_declares_media_1_and_the_runtime_of_the_record() {
 /// so 0.57.0 (`canonical_ir` 4) would do; the `glm-coding` `user_agent` is admitted only by the
 /// image world of `south-provider-api` 0.60.0, first shipped in south 0.70.0, so no earlier
 /// runtime's gate ① admits this manifest (each refuses it as a provider-world declaration: fail
-/// closed). Following the 0.60.0 and 0.67.0 precedents (record §11), this branch leaves the
-/// declaration at 0.57.0 and the **0.70.0 release commit raises it to 0.70.0**, with
-/// `declared_runtime_now` and this assertion; until then the release-only declared-runtime check
-/// (`scripts/check-declared-runtime.sh`) is expected to refuse the package under 0.57.0.
+/// closed). Following the 0.60.0 and 0.67.0 precedents (record §11), the feature branch left the
+/// declaration at 0.57.0 and the 0.70.0 release commit raised it to 0.70.0, with
+/// `declared_runtime_now` and this assertion.
 #[test]
 fn image_openai_compatible_declares_media_1_and_the_runtime_of_the_record() {
     let manifest: ComponentManifestV1 = serde_json::from_str(
@@ -2156,8 +2159,8 @@ fn image_openai_compatible_declares_media_1_and_the_runtime_of_the_record() {
     assert_eq!(manifest.user_agent_for("glm-coding"), Some("opencode/1.15.6"));
     assert_eq!(manifest.compatibility.contracts.get("media"), Some(&1));
     assert_eq!(manifest.compatibility.contracts.get("image"), Some(&1));
-    // The 0.70.0 release commit raises this to "0.70.0" (see above).
-    assert_eq!(manifest.compatibility.south_runtime, "0.57.0");
+    // Raised by the 0.70.0 release commit: the image world admits `user_agent` from 0.70.0 (see above).
+    assert_eq!(manifest.compatibility.south_runtime, "0.70.0");
     assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
     let mut media_1_only = host_range::host_range();
     media_1_only.contracts.insert("media".to_owned(), BTreeSet::from([1]));
