@@ -100,6 +100,16 @@ fn a_named_tool_choice_keeps_its_name_and_an_undefined_role_is_refused() {
     .expect("converts");
     assert_eq!(any.tool_choice, Some(ToolChoice::Required));
 
+    let none = chat_request_from_anthropic_messages(&json!({
+        "model": "m", "max_tokens": 1, "messages": [], "tool_choice": {"type": "none"}
+    }))
+    .expect("converts");
+    assert_eq!(
+        none.tool_choice,
+        Some(ToolChoice::None),
+        "dropping it would turn 'no tool calls' into 'the model decides'"
+    );
+
     let error = chat_request_from_anthropic_messages(&json!({
         "model": "m", "max_tokens": 1,
         "messages": [{"role": "narrator", "content": "..."}]

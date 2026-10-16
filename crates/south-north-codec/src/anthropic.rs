@@ -573,6 +573,9 @@ fn tool_choice_from_wire(choice: Option<&Value>) -> Option<ToolChoice> {
     match choice?.get("type").and_then(Value::as_str) {
         Some("auto") => Some(ToolChoice::Auto),
         Some("any") => Some(ToolChoice::Required),
+        // "No tool calls this turn" while the declarations stay. Reading it as no choice would
+        // let every upstream fall back to "the model decides" and call a tool the client forbade.
+        Some("none") => Some(ToolChoice::None),
         // A named tool keeps its name. The neighbouring protocol's object shape
         // is the IR's carrier for it, so the intent survives instead of being
         // downgraded to "any tool will do" — which would let the model call one
