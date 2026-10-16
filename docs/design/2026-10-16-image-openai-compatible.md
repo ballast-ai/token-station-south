@@ -93,8 +93,10 @@ falls through to the fallback (`:637-737`). `images/observe.rs:94-117` lists the
   (`crates/gateway-provider-protocol/src/usage_types.rs:402-426`): text / image input only from
   `input_tokens_details.{text_tokens,image_tokens}`; cached from `input_tokens_details.cached_tokens`, else top-level
   `cached_tokens`; output `output_tokens`, else `output_tokens_details.{text,image}_tokens` summed; each read with
-  `as_i64` (a float, even integral, reads as 0; a negative is kept). No bucket > 0 → 502, parked for manual review with
-  evidence (`openai_compat.rs:220-261`; edit `handlers.rs:1656-1708`).
+  `as_i64` (a float, even integral, reads as 0; a negative is read as is). No bucket > 0 → 502, parked for manual review with
+  evidence (`openai_compat.rs:220-261`; edit `handlers.rs:1656-1708`). A negative bucket passes delivery: the client
+  gets 200 and the settlement's money check refuses the negative, so the call parks for manual review (host read-back,
+  OCI dual run).
 
 ### 2.5 Response and errors
 
@@ -182,7 +184,7 @@ Following precedent (accepted under the 2026-10-13 pre-approval):
 | D7 | Multipart re-encoded with the host's boundary; parts compared decoded | Azure C7 |
 | D8 | Client status on success is the executor's 200, not the upstream's 2xx; error bodies are the host's envelope | I3-5 / RV-Q5 (b) |
 | D9 | An integral float token count is accepted; native reads it as 0 (under-bill or a false 502) | I3-2 "integral float" |
-| D10 | A negative / fractional token count on a token row parks; native kept a negative (under-bill) | `image-azure` header note |
+| D10 | A negative / fractional token count on a token row parks before delivery (the client gets an error); native delivers 200 and parks at settlement, when the money check refuses the negative. Both arms park; only the client status differs (corrected from the host's OCI dual run; an earlier draft said native kept the negative) | `image-azure` header note |
 
 New, registered:
 
@@ -351,10 +353,11 @@ So no image package needs anything newer for these families, and 0.57.0 is the o
 | D19 | An edit with more than 64 images (or masks) is refused before admission (I5); native forwarded it | contract maximum |
 
 **Host prerequisites added.** H1 also covers the two Azure families: an `azure_openai` row whose effective version is
-`v1` (any case) binds `azure-openai-v1` with `base_url = {endpoint}/openai/v1`, a dated row binds `azure-openai-dated`
+`v1` (any case) binds `azure-openai-v1` at `{endpoint}/openai/v1`, a dated row binds `azure-openai-dated`
 with the row endpoint and `declared.api_version` = the row's version (omitted when unset), exactly as speech Azure
 record H2 / H4 bind the same rows; a model whose `azure_api_version` differs from its row's moves to a row of its own
-first (T9 H3). `azure_foundry` rows keep their own image arm (`image-azure`); they never reached the fallback.
+first (T9 H3). The host's image bindings only have `row_endpoint`, so the `v1` row is rebuilt as a `component` row
+whose endpoint is `{endpoint}/openai/v1` (host read-back; the host's OCI dual run covers it). `azure_foundry` rows keep their own image arm (`image-azure`); they never reached the fallback.
 
 **Native read against the record** (server `0f9eef6d`): no contradiction found in §2. Two nuances the record left
 implicit: native's multipart edit refuses a body without a `model` part (400, before admission) and parses `n` with
