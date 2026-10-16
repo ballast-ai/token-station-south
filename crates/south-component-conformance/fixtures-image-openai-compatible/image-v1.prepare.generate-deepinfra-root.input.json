@@ -1,0 +1,21 @@
+{
+  "provider_config": {
+    "provider": "openai-compatible",
+    "base_url": "https://api.deepinfra.com/v1/openai",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "json": {
+      "model": "flux",
+      "prompt": "a teapot",
+      "response_format": "b64_json",
+      "size": "1024*1024"
+    }
+  },
+  "context": {
+    "upstream_model": "black-forest-labs/FLUX-1-schnell",
+    "metering_required": [
+      "images"
+    ]
+  }
+}

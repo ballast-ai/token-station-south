@@ -1,0 +1,12 @@
+{
+  "prepare_case": "image-v1.prepare.generate-openai-origin",
+  "response": {
+    "status": 429,
+    "body": {
+      "error": {
+        "message": "Rate limit reached",
+        "type": "requests"
+      }
+    }
+  }
+}

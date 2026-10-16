@@ -1,0 +1,20 @@
+{
+  "provider_config": {
+    "provider": "openai-compatible",
+    "base_url": "https://ark.ap-southeast.bytepluses.com/api/v3",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "json": {
+      "model": "seedream",
+      "prompt": "p",
+      "size": "2k"
+    }
+  },
+  "context": {
+    "upstream_model": "seedream-4-0-250828",
+    "metering_required": [
+      "images"
+    ]
+  }
+}

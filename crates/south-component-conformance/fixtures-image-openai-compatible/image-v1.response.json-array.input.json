@@ -1,0 +1,11 @@
+{
+  "prepare_case": "image-v1.prepare.generate-glm-root",
+  "response": {
+    "status": 200,
+    "body": [
+      {
+        "url": "https://x.example/1.png"
+      }
+    ]
+  }
+}

@@ -222,6 +222,23 @@ config keys, a `subscription_quota_families` entry, and the client `thinking` / 
 `south-component-conformance` 0.69.0; `provider-openai-compatible` takes the minor 2.10.0 and every other package a
 patch with unchanged behaviour, each keeping its `south_runtime` and contracts. No contract number changes; the kernel
 pin is unchanged.
+The same unreleased cycle adds the new **`image-openai-compatible`** (1.0.0, step 1 of design record
+`docs/design/2026-10-16-image-openai-compatible.md`; D9 reconsidered by lv on 2026-10-16, OCI-Q1 (b)): the host's
+OpenAI-compatible image fallback as a package, so the host can retire the `glm`, `byteplus` and `deepinfra` provider
+types (its S7-3) and later the arm itself. Families `openai-compatible` (`bearer`; the API-root rule of
+`speech-openai-compatible`, so the GLM, BytePlus and DeepInfra endpoints the S7 plan prescribes give native's URLs),
+`azure-openai-v1` and `azure-openai-dated` (`header_secret` `api-key`; the dated family posts to
+`openai/deployments/{deployment}/images/…` with the sanctioned `api-version` query from its `api_version` key, default
+`2024-10-21`, as `speech-openai-compatible` 1.1). Generation forwards the client's JSON with `model` set, edits forward
+the multipart parts in order; every configured id is declared; `n` and `stream` are refused with the native texts;
+the size hint becomes the `size` fact. Response: `b64_json` as `inline` PNG (or `output_format`), `url` as `url`
+artifacts, render in the upstream's form; `tokens` with the declared bucket `total_output` (OCI-Q4) or `images`.
+Native money defects are fixed and registered (record §5): delivered images are billed (D1, D2), a top-level
+`input_tokens` is reported as `total_input` (D11), integral floats count (D9), negative or fractional counts park a
+token row (D10), a missing output count parks (D12). Contracts `{image: 1, media: 1}`, `south_runtime` 0.57.0 (the
+image world admitted both auth arms, the value channel and the `api-version` query from 0.52.0). Gate ② pack
+`fixtures-image-openai-compatible/`. It joins the cycle's Q47 round without a second bump. `glm-coding` (the image world
+admitting the manifest `user_agent`) is step 2.
 **v0.69.0 (`provider-openai-compatible` 2.9.0: the `glm-coding` thinking switch; the Anthropic `tool_choice` of `none`)**:
 release record `docs/design/2026-10-16-release-0.69.0.md`. The north codec keeps an Anthropic `tool_choice` of
 `{"type": "none"}` as `ToolChoice::None` instead of dropping it (#250; `south-north-codec` is not guest-linked, so no

@@ -1,0 +1,12 @@
+{
+  "provider_config": {
+    "provider": "azure-openai-v1",
+    "base_url": "https://example-resource.openai.azure.com/openai/v1",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "gpt-image-1"
+      }
+    ]
+  }
+}

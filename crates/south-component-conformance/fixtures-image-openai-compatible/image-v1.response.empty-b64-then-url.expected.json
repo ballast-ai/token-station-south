@@ -1,0 +1,26 @@
+{
+  "outcome": "succeeded",
+  "artifacts": [
+    {
+      "form": "url",
+      "pointer": "/data/0/url"
+    }
+  ],
+  "metering": {
+    "tokens": null,
+    "images_reported": null,
+    "credits": null,
+    "upstream_cost": null
+  },
+  "extras": {
+    "body": {
+      "created": 1700000000,
+      "data": [
+        {
+          "b64_json": null,
+          "url": null
+        }
+      ]
+    }
+  }
+}

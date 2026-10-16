@@ -1,0 +1,19 @@
+{
+  "provider_config": {
+    "provider": "openai-compatible",
+    "base_url": "https://api.z.ai/api/paas/v4",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "json": {
+      "model": "glm/cogview-4",
+      "prompt": "a red fox"
+    }
+  },
+  "context": {
+    "upstream_model": "cogview-4-250304",
+    "metering_required": [
+      "images"
+    ]
+  }
+}

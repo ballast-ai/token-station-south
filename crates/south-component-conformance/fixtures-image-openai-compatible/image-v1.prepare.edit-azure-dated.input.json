@@ -1,0 +1,37 @@
+{
+  "provider_config": {
+    "provider": "azure-openai-dated",
+    "base_url": "https://example-resource.openai.azure.com",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "multipart": {
+      "parts": [
+        {
+          "kind": "text",
+          "name": "model",
+          "value": "gpt-image-1"
+        },
+        {
+          "kind": "text",
+          "name": "prompt",
+          "value": "add a hat"
+        },
+        {
+          "kind": "file",
+          "name": "image",
+          "blob": "b0",
+          "filename": "photo.png",
+          "media_type": "image/png",
+          "bytes": 2048
+        }
+      ]
+    }
+  },
+  "context": {
+    "upstream_model": "gpt-image-1-prod",
+    "metering_required": [
+      "tokens"
+    ]
+  }
+}

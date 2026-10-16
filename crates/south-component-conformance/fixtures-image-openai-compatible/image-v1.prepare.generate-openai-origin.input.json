@@ -1,0 +1,21 @@
+{
+  "provider_config": {
+    "provider": "openai-compatible",
+    "base_url": "https://api.openai.com",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "json": {
+      "model": "gpt-image-1",
+      "prompt": "a cat",
+      "quality": "high",
+      "size": "1536x1024"
+    }
+  },
+  "context": {
+    "upstream_model": "gpt-image-1",
+    "metering_required": [
+      "tokens"
+    ]
+  }
+}

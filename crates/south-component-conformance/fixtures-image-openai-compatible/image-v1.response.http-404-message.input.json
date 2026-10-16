@@ -1,0 +1,9 @@
+{
+  "prepare_case": "image-v1.prepare.edit-glm",
+  "response": {
+    "status": 404,
+    "body": {
+      "message": "Not Found"
+    }
+  }
+}

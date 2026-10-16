@@ -1,0 +1,37 @@
+{
+  "provider_config": {
+    "provider": "openai-compatible",
+    "base_url": "https://api.openai.com",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "multipart": {
+      "parts": [
+        {
+          "kind": "text",
+          "name": "model",
+          "value": "dall-e-2"
+        },
+        {
+          "kind": "file",
+          "name": "image",
+          "blob": "b0",
+          "filename": "photo.png",
+          "media_type": "image/png",
+          "bytes": 2048
+        },
+        {
+          "kind": "text",
+          "name": "n",
+          "value": "0"
+        }
+      ]
+    }
+  },
+  "context": {
+    "upstream_model": "dall-e-2",
+    "metering_required": [
+      "images"
+    ]
+  }
+}

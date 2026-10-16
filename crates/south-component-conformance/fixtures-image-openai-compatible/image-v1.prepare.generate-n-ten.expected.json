@@ -1,0 +1,51 @@
+{
+  "facts": {
+    "operation": "generate",
+    "inputs": {
+      "input_image": 0,
+      "reference_image": 0,
+      "mask": 0
+    },
+    "requested_outputs": 10,
+    "tier": {},
+    "metering_forms": [
+      "images"
+    ]
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "v1/images/generations",
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "model": "dall-e-2",
+          "prompt": "p",
+          "n": 10
+        }
+      }
+    }
+  },
+  "repeat": 1,
+  "response_body_form": "json",
+  "response_elision_paths": [
+    "/data/*/b64_json"
+  ],
+  "immutable_body_paths": [
+    "model",
+    "n",
+    "size",
+    "image_size",
+    "quality",
+    "resolution",
+    "response_format"
+  ],
+  "state": {
+    "metering_required": [
+      "images"
+    ]
+  }
+}

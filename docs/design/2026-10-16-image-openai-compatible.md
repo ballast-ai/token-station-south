@@ -4,7 +4,9 @@ Status: accepted under lv's 2026-10-16 ruling (below) and lv's 2026-10-15 direct
 speed first; where native behaviour is doubtful, reproduce it and register the doubt as **unverified**; do not wait for
 real-key captures, do not query production). lv's 2026-10-13 pre-approvals for image packages apply: a difference that
 follows a precedent is accepted (§5), and every open question carries a recommended default, which the implementation
-implements (§8).
+implements (§8). **Step 1 implemented** (unreleased, 0.70.0 cycle): `image-openai-compatible` 1.0.0 with the
+`openai-compatible`, `azure-openai-v1` and `azure-openai-dated` families; what landed, the interpretations and the
+differences added while implementing are in §10. Step 2 (`glm-coding`) is not implemented.
 
 Date: 2026-10-16
 
@@ -286,3 +288,76 @@ Corrected on 2026-10-16 from the host's read-back: the first version put `azure-
 
 Whether Z.ai's Coding Plan endpoint serves image generation at all is **unverified**; native forwards there, so the
 family reproduces it.
+
+## 10. Implementation (step 1)
+
+**What landed.** The reference `crates/south-component-conformance/src/reference_openai_compatible_image.rs`, the guest
+`components/image-openai-compatible/` (1.0.0; contracts `{image: 1, media: 1}`, `south_runtime` 0.57.0), the gate ②
+pack `fixtures-image-openai-compatible/`, the suite test `tests/openai_compatible_image_suite.rs` (named behaviours and
+a mutations module), the sandbox parity test `tests/openai_compatible_image_sandbox_parity.rs`, the build script
+`scripts/build-image-openai-compatible-component.sh`, the `release.yml` rows (build, gate ② report, package; `ci.yml`
+discovers build scripts since #244), the official list and an identity test in `tests/shipped_packages_v1.rs`, README and
+ARCHITECTURE. The package joins the 0.70.0 cycle's Q47 round (the `kimi-code` family opened it); no other version moves.
+The four Q47 round tests taken before this package compare against the official list less the packages no release up
+to 0.69.0 published (`UNPUBLISHED_BY_069`), since a round cannot name a package that did not exist.
+
+**Runtime.** 0.57.0, as §7 planned. Every declaration was admitted by the image world as it shipped in 0.52.0: both
+auth arms (`bearer`, `header_secret`), the value channel (`config_schema`, as `image-minimax` 0.57.0 declares
+`group_id`), and a media descriptor's sanctioned `api-version` query (`QueryParameterV1::ApiVersion`, parsed by 0.57.0's
+`MediaRequestDescriptorV1::parse`); the `api_version_date` value syntax and a config key's `default` exist since 0.43.0.
+So no image package needs anything newer for these families, and 0.57.0 is the oldest runtime an image package names
+(`canonical_ir` 4).
+
+**Interpretations (I#), each pinned by the pack or a named test.**
+
+- **I1 Capabilities.** The contract has no per-operation input roles, so `mask` → `mask` is declared for every model
+  (§4 said "edit only"); a generation never counts one (inputs are 0 there, §2.3).
+- **I2 Order of refusals.** Configuration first (the family; on `azure-openai-dated` an undated `api_version` is a 500
+  configuration error and an empty upstream model a capability refusal), then the host's metering requirement (only
+  `tokens` and `images` can be reported; anything else, or none, is a capability refusal), then the request:
+  `speech-openai-compatible`'s order. Within a generation only `n` is checked (native checks nothing else); within an
+  edit an elided text part first (as `image-azure`), then `n`, then `stream` (native's order).
+- **I3 Edit `n`.** The first text part named `n`, trimmed, parsed as a decimal `u32` (so `+3` is 3 and an empty value is
+  refused, as native's `str::parse::<u32>`); absent is 1.
+- **I4 `model` parts.** Every text part named `model` carries the upstream id (native rewrote only the first; a second
+  `model` part would otherwise reach the upstream unchanged). `model` is appended when absent (the host requires one
+  for routing anyway, native refused its absence with 400).
+- **I5 Input counts.** Parts named `image` / `image[]` and `mask` are counted whatever their kind, as native's
+  `multipart_edit_inputs` counts them; more than 64 of one role (the contract's per-role maximum) is refused, where
+  native forwarded any number.
+- **I6 Size fact.** `size`, else `image_size`, as a string (a present non-string or `null` `size` gives none, as native);
+  `Nk` → `{N×1024, N×1024}`, `WxH` / `W*H` / `W×H` (any case, spaces trimmed) as written. A dimension of 0 or above the
+  contract's 65,536 gives no `size` fact (the host then prices with `image_price`); native read `0x0` as a 1K long edge.
+- **I7 Token buckets.** `total_output` is `output_tokens`, else the sum of `output_tokens_details.text_tokens` and
+  `image_tokens` when either is present; `text_output` / `image_output` are never reported (native rolls output up).
+  `cached_input` is `input_tokens_details.cached_tokens`, else the top-level `cached_tokens`. On an `images` row a
+  malformed count drops the whole `tokens` fact (reported `null`); a well-formed usage is reported as evidence.
+- **I8 Artifacts.** An empty `b64_json` string counts as absent, so an entry with an empty `b64_json` and a `url` is a
+  `url` artifact; every `b64_json` of the upstream body is `null` in the render skeleton (the response view elides
+  them), so an unused empty one renders as `null`.
+- **I9 Error message.** `error.message`, else `error` as a string, else `message`, else `detail` (U5); the code follows
+  the status only (no content-policy mapping, which native does not have either).
+
+**Differences added while implementing** (beside D1 to D15):
+
+| # | Difference | Kind |
+|---|---|---|
+| D16 | `azure-openai-dated`: the deployment is one escaped path segment (native sent it raw; a valid Azure deployment name is unchanged by the escape) | `speech-openai-compatible` precedent (speech Azure record D5) |
+| D17 | `azure-openai-dated`: an empty upstream model is refused before admission (native would send `/openai/deployments//images/…`) | speech Azure record D4 |
+| D18 | Every `model` text part of an edit carries the upstream id (I4); native rewrote only the first | correctness: what is billed is what is sent |
+| D19 | An edit with more than 64 images (or masks) is refused before admission (I5); native forwarded it | contract maximum |
+
+**Host prerequisites added.** H1 also covers the two Azure families: an `azure_openai` row whose effective version is
+`v1` (any case) binds `azure-openai-v1` with `base_url = {endpoint}/openai/v1`, a dated row binds `azure-openai-dated`
+with the row endpoint and `declared.api_version` = the row's version (omitted when unset), exactly as speech Azure
+record H2 / H4 bind the same rows; a model whose `azure_api_version` differs from its row's moves to a row of its own
+first (T9 H3). `azure_foundry` rows keep their own image arm (`image-azure`); they never reached the fallback.
+
+**Native read against the record** (server `0f9eef6d`): no contradiction found in §2. Two nuances the record left
+implicit: native's multipart edit refuses a body without a `model` part (400, before admission) and parses `n` with
+`str::parse::<u32>` after trimming (so `+3` passes and an empty value is refused); both are reproduced or moot (I3, I4).
+
+**Gates (phase 2, not yet run when this section was written).** The pack's expectations were written from this record
+by an independent transcription before the reference ran; the first run of the suite reconciles them with the
+reference row by row, and any difference found is either a reference bug or a record correction, noted here.
+

@@ -1,0 +1,81 @@
+{
+  "facts": {
+    "operation": "generate",
+    "inputs": {
+      "input_image": 0,
+      "reference_image": 0,
+      "mask": 0
+    },
+    "requested_outputs": 3,
+    "tier": {},
+    "metering_forms": [
+      "images"
+    ]
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "images/generations",
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "model": "seedream-4-0-250828",
+          "prompt": {
+            "$south.ref": {
+              "blob": "b0",
+              "transform": "as_is"
+            }
+          },
+          "image": [
+            {
+              "$south.ref": {
+                "blob": "b1",
+                "transform": "as_is"
+              }
+            },
+            "https://example.com/ref.png"
+          ],
+          "watermark": true,
+          "user": "u-1",
+          "extra": {
+            "note": {
+              "$south.ref": {
+                "blob": "b2",
+                "transform": "as_is"
+              }
+            },
+            "k": [
+              1,
+              2
+            ]
+          },
+          "response_format": "url",
+          "n": 3,
+          "stream": false
+        }
+      }
+    }
+  },
+  "repeat": 1,
+  "response_body_form": "json",
+  "response_elision_paths": [
+    "/data/*/b64_json"
+  ],
+  "immutable_body_paths": [
+    "model",
+    "n",
+    "size",
+    "image_size",
+    "quality",
+    "resolution",
+    "response_format"
+  ],
+  "state": {
+    "metering_required": [
+      "images"
+    ]
+  }
+}

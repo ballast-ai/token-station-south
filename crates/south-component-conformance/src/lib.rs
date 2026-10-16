@@ -175,6 +175,7 @@ pub use image_suite::{IMAGE_COMPONENT_SUITE_V1, run_image_component_suite_v1};
 pub mod reference_azure_image;
 pub mod reference_ideogram_image;
 pub mod reference_minimax_image;
+pub mod reference_openai_compatible_image;
 pub mod reference_qwen_image;
 pub mod reference_reve_image;
 pub mod reference_stability_image;

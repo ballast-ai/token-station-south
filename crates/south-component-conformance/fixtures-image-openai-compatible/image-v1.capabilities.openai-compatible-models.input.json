@@ -1,0 +1,18 @@
+{
+  "provider_config": {
+    "provider": "openai-compatible",
+    "base_url": "https://api.z.ai/api/paas/v4",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "cogview-4-250304"
+      },
+      {
+        "model": "glm-image"
+      },
+      {
+        "model": "seedream-4-0-250828"
+      }
+    ]
+  }
+}

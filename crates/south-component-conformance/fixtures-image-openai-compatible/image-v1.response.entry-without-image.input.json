@@ -1,0 +1,16 @@
+{
+  "prepare_case": "image-v1.prepare.generate-glm-root",
+  "response": {
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "url": "https://cdn.example.com/1.png"
+        },
+        {
+          "revised_prompt": "p"
+        }
+      ]
+    }
+  }
+}
