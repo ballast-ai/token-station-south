@@ -211,7 +211,17 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.69.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.59.0 and 0.68.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.69.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.59.0 and 0.69.0, the last unreleased) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**Unreleased (`provider-openai-compatible` 2.10.0: the `kimi-code` family)**: design record
+`docs/design/2026-10-16-kimi-code-family.md` (lv, 2026-10-16). Native `kimi_code` rows, which host plan row T8 mapped onto
+`openai-compatible` by configuration, would lose the host's 429 subscription-quota alert on that family, so the package
+gains `kimi-code`: the `openai-compatible` wire posted to `{endpoint}/v1/chat/completions` (native's default URL arm,
+the endpoint taken as is, an origin or a path), `bearer` on the static slot, no user-agent, no endpoint template, no
+config keys, a `subscription_quota_families` entry, and the client `thinking` / `enable_thinking` passthrough of T9-Q9
+(a). `reasoning.mode` is not rendered (A+ stays `glm-coding`'s). Gate ② gains five request rows. Q47 against v0.69.0:
+`south-component-conformance` 0.69.0; `provider-openai-compatible` takes the minor 2.10.0 and every other package a
+patch with unchanged behaviour, each keeping its `south_runtime` and contracts. No contract number changes; the kernel
+pin is unchanged.
 **v0.69.0 (`provider-openai-compatible` 2.9.0: the `glm-coding` thinking switch; the Anthropic `tool_choice` of `none`)**:
 release record `docs/design/2026-10-16-release-0.69.0.md`. The north codec keeps an Anthropic `tool_choice` of
 `{"type": "none"}` as `ToolChoice::None` instead of dropping it (#250; `south-north-codec` is not guest-linked, so no

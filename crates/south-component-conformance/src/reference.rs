@@ -88,6 +88,30 @@ pub mod glm_coding {
     pub const USER_AGENT: &str = "opencode/1.15.6";
 }
 
+// -- the kimi-code family ----------------------------------------------------
+
+/// The Kimi Code (Moonshot AI) coding subscription family.
+///
+/// Design record `docs/design/2026-10-16-kimi-code-family.md`, transcribed from the host's native
+/// `kimi_code` arm. The wire is the `openai-compatible` Chat Completions wire; the family exists so
+/// the host knows a 429 on such a row is the subscription's quota (`subscription_quota_families`,
+/// native `is_coding_plan`), which configuration of `openai-compatible` cannot say.
+pub mod kimi_code {
+    /// The family, as a host's provider rows name it.
+    pub const FAMILY: &str = "kimi-code";
+    /// The Chat Completions path appended to the operator's endpoint.
+    ///
+    /// The endpoint is an origin such as `https://api.moonshot.cn` or carries a path: native
+    /// `build_upstream_url` has no `KimiCode` arm, so its default arm appends the canonical path
+    /// `/v1/chat/completions` to the trimmed endpoint.
+    pub const CHAT_PATH: &str = "/v1/chat/completions";
+    /// The endpoint native's type preset fills in for a new row, which an operator may edit.
+    ///
+    /// Not a manifest endpoint template: the family takes whatever endpoint the row names, as
+    /// native does.
+    pub const NATIVE_PRESET_ENDPOINT: &str = "https://api.moonshot.cn";
+}
+
 /// Azure `OpenAI`'s dated, deployment-addressed surface.
 ///
 /// Design record `docs/design/2026-10-15-openai-compatible-t9.md` §3.2, transcribed from the
@@ -116,13 +140,15 @@ pub mod azure_openai_dated {
 pub mod client_passthrough {
     /// The forwarded keys, each written under its own name.
     pub const FIELDS: [&str; 2] = ["thinking", "enable_thinking"];
-    /// The families that forward them.
-    pub const FAMILIES: [&str; 5] = [
+    /// The families that forward them. `kimi-code` joined with the family itself (Kimi Code record
+    /// §3): native sends a `kimi_code` row's client body too.
+    pub const FAMILIES: [&str; 6] = [
         "openai-compatible",
         "azure-openai-v1",
         "github-copilot",
         super::azure_openai_dated::FAMILY,
         super::glm_coding::FAMILY,
+        super::kimi_code::FAMILY,
     ];
 }
 
@@ -916,7 +942,7 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-openai-compatible".to_owned(),
-            version: "2.9.0".to_owned(),
+            version: "2.10.0".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
@@ -961,6 +987,13 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
                 config.base_url.as_str().trim_end_matches('/'),
                 glm_coding::CHAT_PATH
             ),
+            // Native's default arm, `{endpoint}{api_path}`: the canonical path below whatever the
+            // row names, an origin or a path. The kernel's `resolve` agrees on an origin only.
+            kimi_code::FAMILY => format!(
+                "{}{}",
+                config.base_url.as_str().trim_end_matches('/'),
+                kimi_code::CHAT_PATH
+            ),
             azure_openai_dated::FAMILY => azure_dated_url(request, config)?,
             _ => config.base_url.resolve(ProviderApi::ChatCompletions),
         };
@@ -985,9 +1018,10 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
         // The host holds the value; this names the slot and the fixed
         // presentation selected by the trusted provider dialect.
         descriptor.auth = match (config.provider.as_str(), config.auth.clone()) {
-            ("openai-compatible" | GITHUB_COPILOT | glm_coding::FAMILY, secret) => {
-                secret.map(Auth::bearer)
-            }
+            (
+                "openai-compatible" | GITHUB_COPILOT | glm_coding::FAMILY | kimi_code::FAMILY,
+                secret,
+            ) => secret.map(Auth::bearer),
             ("azure-openai-v1" | azure_openai_dated::FAMILY, Some(secret)) => {
                 Some(Auth::header("api-key", secret).map_err(internal)?)
             }

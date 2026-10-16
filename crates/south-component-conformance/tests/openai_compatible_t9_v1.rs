@@ -143,9 +143,14 @@ fn glm_coding_declares_the_native_user_agent_and_a_subscription_quota() {
         Some(NATIVE_GLM_CODING_UA)
     );
     assert_eq!(instances.user_agent("openai-compatible"), None);
+    // `kimi-code` joined later (`kimi_code_v1`, Kimi Code record §3).
     assert_eq!(
         manifest.subscription_quota_families,
-        BTreeSet::from(["github-copilot".to_owned(), glm_coding::FAMILY.to_owned()])
+        BTreeSet::from([
+            "github-copilot".to_owned(),
+            glm_coding::FAMILY.to_owned(),
+            "kimi-code".to_owned()
+        ])
     );
     assert_eq!(manifest.credentials_for(glm_coding::FAMILY), None);
     assert!(!manifest.endpoint.contains_key(glm_coding::FAMILY));
@@ -357,7 +362,8 @@ fn azure_families_send_the_cap_as_native_does() {
     }
     let (glm, glm_request) = parts(GLM_FIXTURES[0]);
     assert!(glm_request.sampling.max_output_tokens.is_some());
-    for family in ["openai-compatible", glm_coding::FAMILY, "gemini-openai-compatible"] {
+    for family in ["openai-compatible", glm_coding::FAMILY, "gemini-openai-compatible", "kimi-code"]
+    {
         let mut other = glm.clone();
         other.provider = family.to_owned();
         assert_eq!(cap_key(&build(&other, &glm_request)), Some("max_tokens"), "{family}");
@@ -379,8 +385,13 @@ fn the_cap_field_is_declared_with_the_native_default_and_refuses_other_values() 
         assert!(!key.required, "{family}");
         assert_eq!(key.default.as_deref(), Some(NATIVE_AZURE_DEFAULT_CAP_FIELD), "{family}");
     }
-    for family in ["openai-compatible", "github-copilot", "gemini-openai-compatible", "glm-coding"]
-    {
+    for family in [
+        "openai-compatible",
+        "github-copilot",
+        "gemini-openai-compatible",
+        "glm-coding",
+        "kimi-code",
+    ] {
         assert!(!manifest.declared_keys(family).contains(azure_openai_cap_field::KEY), "{family}");
     }
     let (config, request) = parts(AZURE_FIXTURES[0]);
@@ -416,7 +427,8 @@ fn client_thinking_fields_are_forwarded_as_native_does() {
             "azure-openai-v1",
             "github-copilot",
             "azure-openai-dated",
-            "glm-coding"
+            "glm-coding",
+            "kimi-code"
         ]
     );
     let (base, request) = parts(GLM_FIXTURES[0]);
@@ -685,7 +697,11 @@ fn the_t9_families_retire_the_patch_identity() {
     // the family sends, so the package takes the minor 2.9.0
     // (`shipped_packages_v1::glm_thinking_retires_every_published_068_package_identity`).
     assert_ne!(manifest.version, "2.8.0");
-    assert_eq!(manifest.version, "2.9.0");
+    // Published as 2.9.0 with 0.69.0; the `kimi-code` family (Kimi Code record §8) adds a family,
+    // so the package takes the minor 2.10.0
+    // (`shipped_packages_v1::kimi_code_retires_every_published_069_package_identity`).
+    assert_ne!(manifest.version, "2.9.0");
+    assert_eq!(manifest.version, "2.10.0");
     assert_eq!(OpenAiCompatibleReferenceV1.metadata().version, manifest.version);
     assert_eq!(manifest.compatibility.south_runtime, "0.60.0");
 }
