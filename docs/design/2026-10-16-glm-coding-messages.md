@@ -52,7 +52,7 @@ for every row below. "Dropped" means silently: no error reaches the client.
 | R3 | `system` block array | Joined into one string | Text kept |
 | R4 | `temperature`, `top_p`, `max_tokens`, `stop_sequences` | Kept (`stop_sequences` → `stop`) | — |
 | R5 | `top_k`, `metadata`, `service_tier`, unknown top-level keys (`service_tier`: the server host's admission answers 400 before either arm, `authorize.rs:414-417`) | **Dropped** (`top_k` is typed but not rendered; `metadata` is kept out of the IR; the rest go to `extensions`, which `glm-coding` forwards only for `thinking` / `enable_thinking`) | A key the IR reserves (`reasoning_effort`, `parallel_tool_calls`, …) sent on Messages is a 400 |
-| R6 | `tool_choice` | `auto` → `auto`, `any` → `required`, `tool` → named function; `disable_parallel_tool_use` → `parallel_tool_calls` (unreachable on the server host: its admission accepts `auto` / `any` only with no other key, so a choice carrying `disable_parallel_tool_use` is a 400 before either arm). **`none` is lost**: the codec maps it to no choice (`anthropic.rs:572-586`), so the tools are sent and the model may call them | A south defect, not a GLM difference: §4 |
+| R6 | `tool_choice` | `auto` → `auto`, `any` → `required`, `tool` → named function; `disable_parallel_tool_use` → `parallel_tool_calls` (unreachable on the server host: its admission accepts `auto` / `any` only with no other key, so a choice carrying `disable_parallel_tool_use` is a 400 before either arm; lv ruled on 2026-10-16 that the host admits it together with `none`, see the host's `host-fixes-069`). **`none` is lost**: the codec maps it to no choice (`anthropic.rs:572-586`), so the tools are sent and the model may call them | A south defect, not a GLM difference: §4 |
 | R7 | Image blocks | base64 → data URL, url → url, as `image_url` | — |
 | R8 | `document` blocks (PDF) | **400** (the Chat body has no carrier) | Native passes them to Z.ai; whether Z.ai accepts them is unverified |
 | R9 | `tool_result` | String or text array flattened to a string; **non-text inner blocks and `is_error` dropped** | — |
@@ -89,7 +89,8 @@ produces it.
 the server host it never gets that far: text billing admission (`server:gateway/src/modules/inference/engine/token_counter/authorize.rs`
 `validate_anthropic_tool_choice`, `:634-651`) accepts a Messages `tool_choice` only as `auto` or `any` with no other
 key, or one named tool, and answers 400 for `none` before either arm runs. So the defect was unreachable there, and
-the host was refusing a valid Anthropic request. lv ruled on 2026-10-16 that the host admits `none`; the codec fix
+the host was refusing a valid Anthropic request. lv ruled on 2026-10-16 that the host admits `none` and `disable_parallel_tool_use` (the host's `host-fixes-069`; typed
+server tools and `service_tier` stay refused); the codec fix
 (#250) is what makes that admission correct. The defect stays real for any host that admits `none`.
 
 It is a correctness defect, so it is fixed without a ruling, in a separate code change: the codec maps `none` to
