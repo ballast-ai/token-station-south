@@ -864,7 +864,11 @@ choice open, the implementation chose as follows.
   `compatibility.json` are left to the release.
 - **Known differences from the host's evidence**, for the dual run to account for:
   1. Bailian's explicit-cache reads are priced apart from implicit hits by the host. The IR has a single read
-     bucket and cannot express the difference.
+     bucket and cannot express the difference. *Resolved 2026-10-17 without a kernel change (lv, "south kernel IR
+     explicit/implicit two buckets"): protocol 0.5.0 already carries `Usage.explicit_cache_read_tokens` (§13.7), and
+     `provider-openai-compatible` 2.11.0 (0.72.0, unreleased) fills it by the host's own rule: the presence of
+     `prompt_tokens_details.cache_creation_input_tokens` makes every hit an explicit read. Record
+     `2026-10-17-explicit-cache-reads.md`.*
   2. A thinking response from DashScope that reports no `reasoning_tokens` is recognised by the host through
      `reasoning_content`. The IR carries only the count.
   3. The host refuses non-zero Chat audio tokens as a cost-admission rule. This is host policy and stays there.
@@ -1233,7 +1237,7 @@ B7a).
 | The Anthropic variant of Bedrock InvokeModel | A **separate package** (e.g. `provider-anthropic-bedrock-invoke`) sharing source with `provider-anthropic`: `host_signed` must stand alone (manifest.rs:385-387) while `provider-anthropic` uses `header_secret`, so it cannot be a family of that package (R6). The body carries `anthropic_version` and the model is in the URL; the stream is eventstream, and the `bytes` in the payload is base64-wrapped Anthropic event JSON; signing is `aws-sigv4`. Expanded in `2026-10-08-bedrock-invoke-anthropic-component.md` (accepted 2026-10-09, implemented by B6-2 as `provider-anthropic-bedrock-invoke` 1.0.0, not yet released) | §5 |
 | Non-chat operations such as model listing | The kernel has `ProviderApi::Models` (kernel:provider.rs:137-143); the provider world has no corresponding function. A WIT world cannot have optional exports, so adding a function to v2 makes a new world; recommended is a separate small world (e.g. `provider-catalog-v1`: build a list request, parse a list response), used by the host for health probing and model discovery, replacing the per-type probe fallback table (P21 Appendix B.3) | §8 (multiple worlds coexisting) |
 | Quota header normalization | §10 | B7a |
-| IR explicit / implicit cache buckets | Kernel chain (P21 §7) | kernel (B7b) |
+| IR explicit / implicit cache buckets | Kernel chain (P21 §7). *Done: the kernel half landed with protocol 0.5.0 (§13.7, `Usage.explicit_cache_read_tokens`); the package half needed no further kernel change and is `provider-openai-compatible` 2.11.0 (0.72.0, unreleased; record `2026-10-17-explicit-cache-reads.md`)* | kernel (B7b) |
 | Task estimate in "whole-order milliunits" | An additive change to the task contract (P21 S5) | §8.6 |
 
 ## 12. The synthetic unseen-provider guests (T21)
@@ -1957,7 +1961,7 @@ Q14 value channel is wired in §13.8 and nothing here depends on it.
 |---|---|
 | `Auth::BearerAndHeader { name, secret }`: the secret as `Authorization: Bearer` and verbatim in `name` | A descriptor can now ask for the combined arm. Admission is new (B7b, below). |
 | `Auth::header` and its deserialization admit any lowercase RFC 9110 token of at most 64 bytes outside the kernel's `NEVER_CREDENTIAL_HEADERS`; the 0.4.0 catalog names keep any case as written; `CREDENTIAL_HEADERS` and `is_credential_header` are public | The kernel no longer decides which names a package may use. A component's descriptor can name a header the manifest declares in `secret_headers`; `admit_descriptor_auth` decides (B7b). |
-| `Usage.explicit_cache_read_tokens`, a subset of `cache_read_tokens`, omitted from the wire at zero; `Usage::is_partitioned` | No reference reports it, so every package's wire is unchanged. The gate ② partition judge learns the subset rule so a package that starts reporting it is judged. |
+| `Usage.explicit_cache_read_tokens`, a subset of `cache_read_tokens`, omitted from the wire at zero; `Usage::is_partitioned` | No reference reports it, so every package's wire is unchanged. The gate ② partition judge learns the subset rule so a package that starts reporting it is judged. *(From `provider-openai-compatible` 2.11.0, 0.72.0 unreleased, that reference reports it for Bailian's explicit-cache mode: record `2026-10-17-explicit-cache-reads.md`.)* |
 | `ProviderConfig.declared` and `ChatRequest.host_values` become `ComponentValues` (keys of 1 to 64 bytes of `[a-z0-9_]`, values of 1 to 4096 bytes of printable ASCII, validated on construction and on deserialization) | South builds neither outside fixtures and no fixture sets them. Wiring is §13.8. |
 | `ProviderEndpoint::permits` admits an encoded slash inside one segment below the endpoint path when every decoded piece is non-empty and neither `.` nor `..`; the endpoint path itself still refuses it | Issue #138. The same rule would admit a task id containing `/` in an observe URL; #151 made the seven task-v2 components refuse it themselves (its record §4.1), so no task test moves here. |
 

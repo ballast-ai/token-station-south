@@ -211,7 +211,16 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.71.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.60.0 and 0.70.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.71.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.60.0 and 0.71.0, the last unreleased) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**Unreleased (`provider-openai-compatible` 2.11.0: explicit cache reads)**: design record
+`docs/design/2026-10-17-explicit-cache-reads.md` (lv, 2026-10-17). The package reports Bailian's explicit-cache reads as
+the IR's `explicit_cache_read_tokens` (kernel protocol 0.5.0's subset of `cache_read_tokens`), by the host's native
+rule: the presence of `prompt_tokens_details.cache_creation_input_tokens`, even at 0, makes every hit of the response,
+orchestration's cached subset included, an explicit read. Keyed on the wire, not on the family; an upstream that never
+sends the key is unchanged. No kernel change. Gate ② gains `provider.response.bailian-explicit-cache` and
+`provider.stream.bailian-explicit-cache`. Q47 against v0.71.0: `south-component-conformance` 0.71.0;
+`provider-openai-compatible` takes a minor and every other package a patch with unchanged behaviour, each keeping its
+`south_runtime` and contracts. No contract number changes; the kernel pin is unchanged.
 **v0.71.0 (`task-veo-v2` 0.37.0 and `task-gemini-omni-v2` 0.2.0: the Vertex task credentials)**: release record
 `docs/design/2026-10-16-release-0.71.0.md`. Design record
 `docs/design/2026-10-16-task-vertex-credentials.md` (lv, 2026-10-16). The host deletes its `vertex_ai` provider type, which

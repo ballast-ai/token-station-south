@@ -717,6 +717,127 @@ fn openai_compatible_folds_orchestration_and_reads_both_cache_write_keys() {
     assert_partitioned(usage, 100, 30, 60, "bailian explicit cache");
 }
 
+// Bailian (DashScope's OpenAI-compatible mode) prices an explicit-cache read apart from an
+// implicit hit. The signal is the presence of `prompt_tokens_details.cache_creation_input_tokens`,
+// even at 0: in explicit mode every hit of the response, orchestration's cached subset included,
+// is an explicit read. The rule is keyed on the wire, not on the family, as the host's native
+// evidence reads it (record `2026-10-17-explicit-cache-reads.md`). The IR carries the explicit
+// part as `explicit_cache_read_tokens`, a subset of `cache_read_tokens`, which stays the total.
+
+/// (`cache_read_tokens`, `explicit_cache_read_tokens`, `cache_write_tokens`) of a response.
+fn cache_buckets(wire: &Value) -> (u64, u64, u64) {
+    let usage = OpenAiCompatibleReferenceV1
+        .parse_response(&response(&openai_body(wire)))
+        .unwrap_or_else(|error| panic!("{wire}: {error:?}"))
+        .usage;
+    assert!(usage.is_partitioned(), "{usage:?}");
+    (usage.cache_read_tokens, usage.explicit_cache_read_tokens, usage.cache_write_tokens)
+}
+
+#[test]
+fn openai_compatible_reports_explicit_cache_reads_when_the_creation_key_is_present() {
+    // Explicit mode: hits and writes in one response.
+    assert_eq!(
+        cache_buckets(&json!({"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120,
+            "prompt_tokens_details": {"cached_tokens": 30, "cache_creation_input_tokens": 60}})),
+        (30, 30, 60),
+    );
+    // Explicit mode with the creation key at 0: a later request that only reads the cache.
+    assert_eq!(
+        cache_buckets(&json!({"prompt_tokens": 3019, "completion_tokens": 104,
+            "total_tokens": 3123, "prompt_tokens_details": {"cached_tokens": 2048,
+            "cache_creation_input_tokens": 0, "cache_type": "ephemeral"}})),
+        (2048, 2048, 0),
+    );
+    // Explicit mode with the top-level hit count.
+    assert_eq!(
+        cache_buckets(&json!({"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120,
+            "prompt_cache_hit_tokens": 25,
+            "prompt_tokens_details": {"cache_creation_input_tokens": 0}})),
+        (25, 25, 0),
+    );
+    // Both write keys: the Bailian key wins, and with it explicit mode.
+    assert_eq!(
+        cache_buckets(&json!({"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120,
+            "prompt_tokens_details": {"cached_tokens": 10, "cache_write_tokens": 5,
+                                      "cache_creation_input_tokens": 7}})),
+        (10, 10, 7),
+    );
+    // Orchestration's cached subset is a hit like any other, so in explicit mode it is explicit.
+    assert_eq!(
+        cache_buckets(&json!({"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 420,
+            "prompt_tokens_details": {"cached_tokens": 20, "cache_creation_input_tokens": 0,
+                                      "orchestration_input_tokens": 300,
+                                      "orchestration_input_cached_tokens": 50},
+            "completion_tokens_details": {"orchestration_output_tokens": 40}})),
+        (70, 70, 0),
+    );
+    // A report whose hits and writes exceed the prompt is refused in explicit mode as well.
+    refused(
+        &OpenAiCompatibleReferenceV1,
+        &openai_body(&json!({"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120,
+            "prompt_tokens_details": {"cached_tokens": 60, "cache_creation_input_tokens": 50}})),
+        "bailian explicit cache, hits and writes larger than the prompt",
+    );
+}
+
+#[test]
+fn openai_compatible_reports_every_hit_as_implicit_without_the_creation_key() {
+    assert_eq!(
+        cache_buckets(&json!({"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120,
+            "prompt_tokens_details": {"cached_tokens": 30}})),
+        (30, 0, 0),
+    );
+    // Kimi and DeepSeek: the top-level hit count.
+    assert_eq!(
+        cache_buckets(&json!({"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120,
+            "prompt_cache_hit_tokens": 25})),
+        (25, 0, 0),
+    );
+    // OpenAI's own write key does not switch the mode.
+    assert_eq!(
+        cache_buckets(&json!({"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120,
+            "prompt_tokens_details": {"cached_tokens": 10, "cache_write_tokens": 5}})),
+        (10, 0, 5),
+    );
+    assert_eq!(
+        cache_buckets(&json!({"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 420,
+            "prompt_tokens_details": {"orchestration_input_tokens": 300,
+                                      "orchestration_input_cached_tokens": 50},
+            "completion_tokens_details": {"orchestration_output_tokens": 40}})),
+        (50, 0, 0),
+    );
+}
+
+#[test]
+fn openai_compatible_stream_reports_explicit_cache_reads_by_the_same_rule() {
+    let stream = |details: &str| {
+        let usage_chunk = format!(
+            "data: {{\"choices\":[],\"usage\":{{\"prompt_tokens\":2000,\"completion_tokens\":30,\"total_tokens\":2030,\"prompt_tokens_details\":{details}}}}}\n\n"
+        );
+        folded(
+            &OpenAiCompatibleReferenceV1,
+            &[
+                "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hi\"},\"finish_reason\":\"stop\"}]}\n\n",
+                usage_chunk.as_str(),
+                "data: [DONE]\n\n",
+            ],
+        )
+    };
+    let usage = stream(r#"{"cached_tokens":1024,"cache_creation_input_tokens":512}"#);
+    assert_partitioned(usage, 2000, 1024, 512, "bailian explicit cache stream");
+    assert_eq!(usage.explicit_cache_read_tokens, 1024);
+    assert!(usage.is_partitioned());
+
+    let usage = stream(r#"{"cached_tokens":1024,"cache_creation_input_tokens":0}"#);
+    assert_partitioned(usage, 2000, 1024, 0, "bailian explicit cache stream, no write");
+    assert_eq!(usage.explicit_cache_read_tokens, 1024);
+
+    let usage = stream(r#"{"cached_tokens":1024}"#);
+    assert_partitioned(usage, 2000, 1024, 0, "implicit cache stream");
+    assert_eq!(usage.explicit_cache_read_tokens, 0);
+}
+
 // Anthropic: a message reports both sides; a stream reports input in
 // `message_start` and output in `message_delta`. `cache_creation` splits
 // `cache_creation_input_tokens` into the 5-minute and 1-hour tiers.
