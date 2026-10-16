@@ -6,7 +6,8 @@ real-key captures, do not query production). lv's 2026-10-13 pre-approvals for i
 follows a precedent is accepted (§5), and every open question carries a recommended default, which the implementation
 implements (§8). **Step 1 implemented** (unreleased, 0.70.0 cycle): `image-openai-compatible` 1.0.0 with the
 `openai-compatible`, `azure-openai-v1` and `azure-openai-dated` families; what landed, the interpretations and the
-differences added while implementing are in §10. Step 2 (`glm-coding`) is not implemented.
+differences added while implementing are in §10. **Step 2 implemented** (unreleased, same cycle): the image world admits
+the manifest `user_agent` (`south-provider-api` 0.60.0) and the same unpublished 1.0.0 gains `glm-coding`; see §11.
 
 Date: 2026-10-16
 
@@ -262,6 +263,8 @@ would get a 4xx, released by P29); **U5** error body shapes (§4); **U6** `image
 
 ## 9. Step 2: Azure OpenAI and the GLM Coding Plan (OCI-Q1 (b))
 
+**Implemented**: the Azure families in step 1 (§10), `glm-coding` and the image world's `user_agent` in step 2 (§11).
+
 The image world admits none of the B7a instance declarations (`InstanceDeclarationsV1::None`,
 `crates/south-provider-api/src/manifest.rs:159-176`), and the host's image sandbox parses descriptors with
 `parse_prepared_image_call_v1`, which has no declared table (speech has a `_with_declared` form). What each remaining
@@ -281,7 +284,7 @@ So:
   declares a `south_runtime` that admits it, set in the release commit) and adds `glm-coding`, mirroring
   `provider-openai-compatible`'s `glm-coding`. `query_parameters` stays unadmitted: nothing here needs it.
 - **Host prerequisite H7**: the host's image executor sends the manifest user-agent (written by the host on 2026-10-16,
-  pending its build). Until it ships, `glm-coding` image rows stay on the native arm.
+  pending its build; exact requirements in §11). Until it ships, `glm-coding` image rows stay on the native arm.
 
 Corrected on 2026-10-16 from the host's read-back: the first version put `azure-openai-dated` in step 2 behind a
 `query_parameters` declaration it does not need.
@@ -367,3 +370,143 @@ parity test (5, gate ② over the built `component.wasm`, byte for byte against 
 local verification list and the release-only checks. Source mutations of the reference, each restored from a backup,
 went red: the API-root rule, the D11 fold, the D9 integral-float reading, the delivered count and the `api-version`
 query (the PR lists them).
+
+## 11. Implementation (step 2)
+
+**Native read** (server `origin/dev-v2` = `daabf5f5`, `engine/upstream.rs`; unchanged from `0f9eef6d` on these lines):
+`build_upstream_url`'s `GlmCoding` arm sends every path other than `/v1/messages` to
+`{endpoint}/api/coding/paas/v4{path without its /v1}` with `{endpoint}` trailing-`/`-trimmed, so the image fallback's
+`/v1/images/generations` and `/v1/images/edits` become `…/api/coding/paas/v4/images/{generations,edits}` whatever the
+endpoint's own path; the type preset fills `https://api.z.ai` (`infra/config/providers.rs`, `GlmCoding`).
+`apply_provider_auth`'s `GlmCoding` arm calls `require_api_key` (**`api_key` only**: unlike `Glm`, which prefers
+`oauth_token` through `require_oauth_or_api_key`, so D14 does not apply to this family) and adds
+`User-Agent: GLM_CODING_IMPERSONATION_UA` = `opencode/1.15.6`. Everything else (body, `n`, size hint, metering,
+artifacts, held path) is the shared fallback arm of §2, so the family reuses `openai-compatible`'s behaviour. The image
+handlers have no coding-plan quota alert (no `is_coding_plan` / subscription-quota read under `handler/images`), so the
+image family needs no `subscription_quota_families` entry (the image world does not admit one either).
+
+**Contract change: the image world admits `user_agent`.** `south-provider-api` 0.59.0 → **0.60.0** (minor):
+
+- `InstanceDeclarationsV1` gains the value **`UserAgent`** (`user_agent` only), and `IMAGE_WORLD_SCHEMA` takes it; the
+  other worlds keep their values (provider `All`, speech `QueryParameters`, task / task-v2 / embeddings `None`), so
+  each refuses exactly what it refused before. `admits_quota_headers_and_user_agent` is split into
+  `admits_quota_headers` (`All` only) and `admits_user_agent` (`UserAgent` or `All`); gate ①'s refusal order
+  (`query_parameters`, `quota_headers`, `user_agent`) and error (`InstanceIsAProviderWorldDeclaration`) are unchanged.
+  A fourth enum value, rather than three independent flags, keeps every world's posture one value that
+  `every_world_states_its_host_import_and_admitted_declarations` pins; no world admits `quota_headers` without the other
+  two, so the four values cover every posture in use.
+- **Rules**: the image world's `user_agent` is checked by the same `validate_user_agents` as the provider world's: the
+  family must be one the manifest declares, and the value must satisfy `is_user_agent_value` (1 to 256 bytes of
+  printable ASCII, no leading or trailing space), the controlled user-agent grammar of
+  `DeclaredUserAgentV1::from_manifest_value`. `quota_headers` and `query_parameters` stay refused in the image world.
+- **Does it break hosts?** `InstanceDeclarationsV1` is **not** `#[non_exhaustive]`, so a host that matches it
+  exhaustively must add the `UserAgent` arm on re-pin, and a host that calls the removed
+  `admits_quota_headers_and_user_agent` must call the two new functions. token-station-server names neither outside
+  comments (checked at `0f9eef6d`, at `daabf5f5` and at its H7 commit `8045ee94` on `host-fixes-069`), so its re-pin
+  is not broken by the change. `ComponentManifestV1` and `ManifestErrorV1` are unchanged.
+- **No other south change.** `user-agent` is a reserved header (`south-contracts` `RESERVED_HEADERS`), so a media
+  descriptor can never carry it, and the image runtime, `parse_prepared_image_call_v1`, `SandboxedImageComponentV1` and
+  the prepared-call types need no field or slot: the host reads the value from the manifest
+  (`ComponentManifestV1::user_agent_for(family)`) exactly as the text path does (`DeclaredUserAgentV1`). The speech
+  world's `_with_declared` descriptor form exists for declared **query parameters**, which the image world still does
+  not admit. No WIT, IR, runtime ABI or `contracts.*` number moves.
+- Gate ① tests: `provider_api_v2.rs` (`every_world_states_its_host_import_and_admitted_declarations` pins every
+  world's value and each value against each declaration; `image_manifest_refuses_provider_only_declarations` no longer
+  refuses `user_agent`; new `the_image_world_admits_user_agent_under_the_provider_rules`: a declared family is
+  admitted, an undeclared family and values outside the grammar are refused, the 256-byte bound holds, `quota_headers`
+  and `query_parameters` are still refused beside an admitted user-agent, and the task, embeddings and speech worlds
+  still refuse `user_agent`) and `instance_declarations_v1.rs` (new `the_image_world_admits_user_agent_alone` over the
+  shipped `image-openai-compatible` manifest).
+
+**Package.** `image-openai-compatible` gains the family **`glm-coding`** (the provider world's name, `reference::
+glm_coding::FAMILY`): the descriptor path is `api/coding/paas/v4/images/{generations,edits}` (`GLM_CODING_API_ROOT`)
+below the binding's `base_url`, whatever its path (native appends the root to the endpoint as is), no query, `bearer`
+on the configured slot; body, facts, immutable paths, response and render are `openai-compatible`'s. The manifest
+declares `"user_agent": {"glm-coding": "opencode/1.15.6"}`, pinned by `glm_coding_declares_the_provider_world_user_agent`
+to `reference::glm_coding::USER_AGENT` and to `provider-openai-compatible`'s manifest, and declared for no other family.
+No config key. The wrong-family refusal names four families.
+
+**Package version: stays 1.0.0.** No release published 1.0.0 (the 0.70.0 cycle is open), so the first published
+identity simply carries the four families; a 1.1.0 would claim a published 1.0.0 without `glm-coding` that no host could
+ever have pinned. The package is in the cycle's Q47 round already (`UNPUBLISHED_BY_069`).
+
+**Runtime.** Every runtime before 0.70.0 parses `user_agent` (the field exists since 0.43.0) but its image world refuses
+it at gate ① (`InstanceIsAProviderWorldDeclaration("user_agent")`), so a host on an older south fails closed and never
+admits the package while dropping the user-agent. The package must therefore declare `south_runtime` **0.70.0**.
+Following the 0.60.0 precedent (`2026-10-13-release-0.60.0.md` §3) and the 0.67.0 one (`provider-anthropic`'s
+`immutable_request_headers`, `2026-10-15-immutable-request-headers.md` §5), this branch leaves the manifest at 0.57.0
+and the **0.70.0 release commit raises it to 0.70.0**, together with `shipped_packages_v1::declared_runtime_now` (add
+`"image-openai-compatible" => "0.70.0"`) and the literal in
+`image_openai_compatible_declares_media_1_and_the_runtime_of_the_record`. Until that commit the release-only
+declared-runtime check (`scripts/check-declared-runtime.sh`, which loads the package under the 0.57.0 tag's gate ①) is
+**expected to refuse** this package; nothing in the regular gates runs it. That an older runtime refuses is read from
+code (`validate_instances` with the image world's `None`), not run.
+
+**Versions (Q47).** `south-provider-api` 0.59.0 → 0.60.0, with the requirement in `south-component-conformance`,
+`south-provider-conformance`, `south-provider-runtime` and `south-testkit`, and the lockfile entry (name and version) in
+every component's `Cargo.lock`, the synthetic-speech guest's and `fuzz/Cargo.lock` (as the 0.67.0 precedent did).
+`south-component-conformance` stays 0.69.0 (the cycle's round already moved it; its source changed, which that unreleased
+version covers) and `south-contracts` stays 0.56.0 (unchanged). No other package changes identity: they all took the
+cycle's patch already, and a lockfile line for an unreleased `south-provider-api` is part of that same unreleased
+identity. `compatibility.json` lists no crate versions; ARCHITECTURE's crate-version line now says 0.60.0.
+
+**Fixtures and tests.** Gate ② rows for `glm-coding`, written from native's arms before the reference was extended:
+capabilities (two ids), generation on the preset origin, on the origin with a trailing slash, on an endpoint with a path,
+without an auth slot, a multipart edit, and a `url`-only response without `usage` (U1). Named suite tests
+`glm_coding_posts_below_the_coding_plan_root` (paths for an origin, a trailing slash and a path-bearing endpoint; the
+body, facts and owned set equal `openai-compatible`'s; no auth without a slot) and
+`glm_coding_declares_the_provider_world_user_agent`; the family joins `the_manifest_declares_the_four_families`,
+`every_configured_id_is_declared_on_every_family` and `the_auth_arm_follows_the_family`; a mutation
+`GlmCodingWithoutItsRoot` (the family routed as `openai-compatible` with an origin) must fail the pack.
+
+**Fixture reconciliation and gates (phase 2).** The reference matched every new `glm-coding` row on its first run,
+so no fixture row was changed and no record correction was needed; the native arm stayed the authority for each row's
+input. One existing gate ① test, `component_values_v1::the_image_world_holds_its_values_to_the_provider_rules`, pinned
+the old refusal of an image-world `user_agent`; it now pins its admission and the refusal of `quota_headers` (a
+behaviour change this step makes on purpose). Gates on the branch: Clippy (all targets, all features, `-D warnings`),
+`cargo nextest run --workspace --all-features` (2296 passed, 4 skipped), doc tests, the no-default-features check and
+`south-component-conformance` tests (839 passed), the fuzz check, rustdoc, the boundary, language and MSRV scripts, the
+script unit tests (83), `cargo deny` and `cargo audit` (workspace and fuzz), `cargo machete`; the suite (17), the
+sandbox parity test (5, gate ② over the rebuilt `component.wasm`, byte for byte) and the pack (115 cases). The Q47
+check `check_crate_versions.py --tag v0.70.0` reports `south-provider-api` 0.59.0 → 0.60.0 and
+`south-component-conformance` 0.68.0 → 0.69.0. `check-declared-runtime.sh --build` refuses exactly one package,
+`image-openai-compatible` under 0.57.0 ("user_agent is a provider-world declaration"), as planned above; with the
+package's `south_runtime` set to this tree's version (restored afterwards) every package loads. Mutations, each
+restored from a backup, went red: in the reference, the Coding Plan root replaced by the API-root rule, `glm-coding`
+authenticated with the Azure `api-key`, and the family left unrecognised; in the contract, the image world back to
+`None`, the image world admitting all three declarations, and the speech world's value admitting `user_agent`.
+
+**Differences.** None new for `glm-coding` beyond `openai-compatible`'s D1 to D12, D15 and D18, D19 (the shared
+behaviour): the URL is native's for every endpoint (no D13 analogue: native and the package both append the fixed
+root), the credential read is native's (`api_key` only, no D14 analogue), and the user-agent is native's byte for byte
+once the host sends the manifest value. Whether Z.ai's Coding Plan endpoint serves image generation stays **unverified**
+(§9).
+
+**Host prerequisites for `glm-coding` (H7 and its neighbours).** In addition to H1 to H6:
+
+- **H7 Controlled user-agent on image calls.** When the host seals an image call for a row whose binding family is
+  `glm-coding` (in general: any family for which the package's manifest declares a user-agent), it takes
+  `ComponentManifestV1::user_agent_for(family)`, converts it with
+  `south_contracts::DeclaredUserAgentV1::from_manifest_value` (the grammar gate ① already checked), and sets the
+  controlled user-agent slot of **both** the JSON (generation) and the multipart (edit) calls, on the synchronous and
+  the held paths; a family without a declaration sends no slot (the call is unchanged); a value the conversion refuses
+  is a 503 before admission, never a silently dropped header. The slot replaces the HTTP client's default
+  `user-agent`, and no operator request extra may set `user-agent` on these calls. Written by the host as `8045ee94`
+  ("H7", `declared_user_agent_for` in `handler/images/component/mod.rs`, both call shapes) and on the host's `dev-v2` at
+  `51013ebc`; by the host's read-back the synchronous and the held paths both go through the one sealing step, so
+  both carry the slot. It can be exercised end to end only against a south that admits the declaration (this step),
+  i.e. after the re-pin.
+- **H1 for `glm-coding`**: re-pin to the release carrying `south-provider-api` 0.60.0 (0.70.0; an older south refuses
+  the package at gate ①). One `[south.image_bindings.*]` for family `glm-coding` with `base_url = "row_endpoint"`, on a
+  `component` row whose endpoint is native's (`https://api.z.ai`, the same endpoint the text family
+  `provider-openai-compatible` `glm-coding` uses, so one row serves both); auth `bearer` on `provider_api_key` filled
+  from the credential's `api_key` (native never read `oauth_token` on this type).
+- **H4 for `glm-coding`**: the preflight family table gains `glm-coding` (replacing native `glm_coding` image models):
+  every enabled image model on a `glm_coding` row routed; the routed row's credentials carry `api_key`; the package's
+  `user_agent_for("glm-coding")` equals `opencode/1.15.6` (FAIL otherwise).
+- **H5 for `glm-coding`**: the dual run adds a native `glm_coding` row against a `component` row with family
+  `glm-coding`, same endpoint and credential: path `…/api/coding/paas/v4/images/{generations,edits}`,
+  `Authorization: Bearer`, and **`user-agent: opencode/1.15.6` compared as a literal on both arms**, sync and held, plus
+  an edit.
+- **H6**: the `glm_coding` image arm's share of the fallback can go once `glm_coding` image models are routed; the arm
+  itself still waits for the `openai` and `azure_openai` rows (§6).

@@ -159,18 +159,22 @@ pub struct WorldSchemaV1 {
 /// Which B7a instance declarations (host-zero-vendor-boundary §10) a world
 /// admits.
 ///
-/// Three values rather than one flag per declaration because the declarations
-/// are not independent in practice: every world that admits `quota_headers` or
-/// `user_agent` (whose only consumers are chat transports) also admits
-/// `query_parameters`, and the speech world admits `query_parameters` alone,
-/// for `ElevenLabs`'s `output_format` (2026-09-30 speech-world record, §5 D3b
-/// and §17.3).
+/// Four values rather than one flag per declaration because the declarations
+/// are not independent in practice: every world that admits `quota_headers`
+/// (whose only consumers are chat transports) also admits `query_parameters`
+/// and `user_agent`; the speech world admits `query_parameters` alone, for
+/// `ElevenLabs`'s `output_format` (2026-09-30 speech-world record, §5 D3b and
+/// §17.3); the image world admits `user_agent` alone, for the GLM Coding
+/// Plan's image family (2026-10-16 `image-openai-compatible` record, §9 and
+/// §11). No world admits `quota_headers` without the other two.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InstanceDeclarationsV1 {
-    /// None of the three. The task, embeddings and image worlds.
+    /// None of the three. The task and embeddings worlds.
     None,
     /// `query_parameters` only. The speech world.
     QueryParameters,
+    /// `user_agent` only. The image world (since 0.60.0 of this crate).
+    UserAgent,
     /// All three. The provider world.
     All,
 }
@@ -182,10 +186,17 @@ impl InstanceDeclarationsV1 {
         matches!(self, Self::QueryParameters | Self::All)
     }
 
-    /// Whether the world admits `quota_headers` and `user_agent`.
+    /// Whether the world admits `quota_headers`.
     #[must_use]
-    pub const fn admits_quota_headers_and_user_agent(self) -> bool {
+    pub const fn admits_quota_headers(self) -> bool {
         matches!(self, Self::All)
+    }
+
+    /// Whether the world admits `user_agent`, under the one controlled user-agent value
+    /// grammar whatever the world.
+    #[must_use]
+    pub const fn admits_user_agent(self) -> bool {
+        matches!(self, Self::UserAgent | Self::All)
     }
 }
 
@@ -494,8 +505,10 @@ pub const IMAGE_CAPABILITIES: &[&str] = &["generate", "edit"];
 /// Its auth arms are the two descriptor credential arms: a minted credential
 /// (Vertex) arrives through a `minted` slot and is presented as `bearer`, so
 /// `oauth` is not an arm here, and nothing in this world signs (§4). It admits
-/// the value channel, as the embeddings world does, and no other declaration
-/// beyond the vocabulary (§18.3).
+/// the value channel, as the embeddings world does, and of the instance
+/// declarations `user_agent` alone (since 0.60.0 of this crate; the
+/// `image-openai-compatible` record §9 and §11), which a host sends through
+/// its controlled user-agent slot exactly as it does for a chat package.
 pub const IMAGE_WORLD_SCHEMA: WorldSchemaV1 = WorldSchemaV1 {
     world: IMAGE_WORLD,
     wit_package: IMAGE_WIT_PACKAGE,
@@ -505,7 +518,7 @@ pub const IMAGE_WORLD_SCHEMA: WorldSchemaV1 = WorldSchemaV1 {
     host_import: HostImportV1::Pure,
     value_channel: true,
     request_declarations: false,
-    instance_declarations: InstanceDeclarationsV1::None,
+    instance_declarations: InstanceDeclarationsV1::UserAgent,
 };
 
 /// The speech world's capability vocabulary, closed.
@@ -718,7 +731,8 @@ pub struct ComponentManifestV1 {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub config_schema: BTreeMap<String, BTreeMap<String, crate::ConfigKeyV1>>,
     // B7a (query, quota, user-agent): provider instances, §10. Provider world only, except that
-    // the speech world also admits `query_parameters` ([`InstanceDeclarationsV1::QueryParameters`]).
+    // the speech world also admits `query_parameters` ([`InstanceDeclarationsV1::QueryParameters`])
+    // and the image world `user_agent` ([`InstanceDeclarationsV1::UserAgent`]).
     /// Query parameters the package's requests may carry beyond the fixed sanctioned ones, each a
     /// name and a value syntax. A `Vec`, so a repeated name is refused rather than collapsed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -729,7 +743,7 @@ pub struct ComponentManifestV1 {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub quota_headers: Vec<crate::QuotaHeaderDeclarationV1>,
     /// Each family's `user-agent` value, under the controlled user-agent value grammar (§16 Q15).
-    /// A family without an entry sends whatever the host sends today.
+    /// A family without an entry sends whatever the host sends today. Provider and image worlds.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub user_agent: BTreeMap<String, String>,
     /// The `ChatRequest.host_values` keys this package's component reads, from the closed

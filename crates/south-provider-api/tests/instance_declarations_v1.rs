@@ -420,3 +420,35 @@ fn instances_are_provider_world_declarations() {
         Err(ManifestErrorV1::InstanceIsAProviderWorldDeclaration("user_agent".to_owned()))
     );
 }
+
+/// From 0.60.0 the image world admits `user_agent` (and only it): `image-openai-compatible`
+/// declares the GLM Coding Plan's for `glm-coding` alone (`image-openai-compatible` record §11), and
+/// the same declaration of `quota_headers` or `query_parameters` stays refused.
+#[test]
+fn the_image_world_admits_user_agent_alone() {
+    let image = manifest("image-openai-compatible");
+    assert_eq!(image.validate(), Ok(()));
+    assert_eq!(image.user_agent.keys().collect::<Vec<_>>(), ["glm-coding"]);
+    assert_eq!(image.user_agent_for("glm-coding"), Some("opencode/1.15.6"));
+    assert_eq!(image.user_agent_for("openai-compatible"), None);
+    assert!(image.query_parameters.is_empty() && image.quota_headers.is_empty());
+
+    let mut quotas = image.clone();
+    quotas.quota_headers = vec![quota("x-acme-remaining", "x-ratelimit-remaining-tokens")];
+    assert_eq!(
+        quotas.validate(),
+        Err(ManifestErrorV1::InstanceIsAProviderWorldDeclaration("quota_headers".to_owned()))
+    );
+    let mut query_parameters = image.clone();
+    query_parameters.query_parameters = vec![query("page", QueryValueSyntaxV1::Digits)];
+    assert_eq!(
+        query_parameters.validate(),
+        Err(ManifestErrorV1::InstanceIsAProviderWorldDeclaration("query_parameters".to_owned()))
+    );
+    let mut undeclared = image;
+    undeclared.user_agent.insert("kimi-code".to_owned(), "acme/1.0".to_owned());
+    assert!(matches!(
+        undeclared.validate(),
+        Err(ManifestErrorV1::InvalidUserAgent { family, .. }) if family == "kimi-code"
+    ));
+}

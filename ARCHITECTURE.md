@@ -211,7 +211,7 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.69.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.59.0 and 0.69.0, the last unreleased) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.69.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.60.0 and 0.69.0, the last two unreleased) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
 **Unreleased (`provider-openai-compatible` 2.10.0: the `kimi-code` family)**: design record
 `docs/design/2026-10-16-kimi-code-family.md` (lv, 2026-10-16). Native `kimi_code` rows, which host plan row T8 mapped onto
 `openai-compatible` by configuration, would lose the host's 429 subscription-quota alert on that family, so the package
@@ -237,8 +237,25 @@ Native money defects are fixed and registered (record §5): delivered images are
 `input_tokens` is reported as `total_input` (D11), integral floats count (D9), negative or fractional counts park a
 token row (D10), a missing output count parks (D12). Contracts `{image: 1, media: 1}`, `south_runtime` 0.57.0 (the
 image world admitted both auth arms, the value channel and the `api-version` query from 0.52.0). Gate ② pack
-`fixtures-image-openai-compatible/`. It joins the cycle's Q47 round without a second bump. `glm-coding` (the image world
-admitting the manifest `user_agent`) is step 2.
+`fixtures-image-openai-compatible/`. It joins the cycle's Q47 round without a second bump.
+Step 2 (record §11) adds the family **`glm-coding`** to the same unpublished 1.0.0: native's `GlmCoding` arm, posted to
+`api/coding/paas/v4/images/{generations,edits}` below the row endpoint whatever its path (native's preset is the origin
+`https://api.z.ai`), `bearer` on the static slot (native reads `api_key` only), and the manifest `user_agent`
+`{"glm-coding": "opencode/1.15.6"}` (equal to `provider-openai-compatible`'s, native `GLM_CODING_IMPERSONATION_UA`);
+body, facts, metering and artifacts are the `openai-compatible` family's. For it **`south-provider-api` 0.60.0** opens
+the image world to `user_agent` alone: `InstanceDeclarationsV1` gains the value `UserAgent` (the image world's), and
+`admits_quota_headers_and_user_agent` is split into `admits_quota_headers` and `admits_user_agent`; the value grammar
+and the "declared family" rule are the provider world's; `quota_headers` and `query_parameters` stay refused there, and
+the task, embeddings and speech worlds are unchanged. **Hosts on re-pin**: the enum is not `#[non_exhaustive]`, so a
+host matching it exhaustively must add the arm, and a host calling the removed `admits_quota_headers_and_user_agent`
+must use the two new functions (token-station-server names neither outside comments, at `0f9eef6d` and at its H7 commit
+`8045ee94`, so its re-pin is not broken by them). No descriptor, WIT, runtime or contract number changes: `user-agent` stays a reserved header, so the host sends
+the manifest value through its controlled user-agent slot, as for a chat package (host H7). Every runtime before 0.70.0
+refuses the manifest at gate ① (fail closed), so the package must declare `south_runtime` 0.70.0: following the 0.60.0
+and 0.67.0 precedents this branch keeps 0.57.0 and the **0.70.0 release commit raises it** (with
+`shipped_packages_v1::declared_runtime_now`); until then the release-only declared-runtime check refuses the package.
+Q47: `south-provider-api` 0.59.0 → 0.60.0 with its requirements and every lockfile naming it; the other guest-linked
+crates keep this cycle's versions.
 **v0.69.0 (`provider-openai-compatible` 2.9.0: the `glm-coding` thinking switch; the Anthropic `tool_choice` of `none`)**:
 release record `docs/design/2026-10-16-release-0.69.0.md`. The north codec keeps an Anthropic `tool_choice` of
 `{"type": "none"}` as `ToolChoice::None` instead of dropping it (#250; `south-north-codec` is not guest-linked, so no
@@ -886,4 +903,6 @@ the grammar. `DeclaredInstancesV1` in `south-component-conformance` validates th
 types: `QueryParameterV1::Declared` (HTTP contract 10), `ProviderQuotaHeaderMapV1` (quota metadata contract 2),
 and `DeclaredUserAgentV1`, which fills the request's single user-agent slot beside the `'static`
 `ControlledUserAgentV1`. Query values still never come from credential resolution. Design record:
-`docs/design/2026-09-30-host-zero-vendor-boundary.md` §10.
+`docs/design/2026-09-30-host-zero-vendor-boundary.md` §10. Two other worlds admit one declaration each under the same
+rules: the speech world `query_parameters` (speech record §17.3) and, from `south-provider-api` 0.60.0, the image world
+`user_agent` (`docs/design/2026-10-16-image-openai-compatible.md` §11).

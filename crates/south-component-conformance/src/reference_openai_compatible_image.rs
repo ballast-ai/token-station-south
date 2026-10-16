@@ -7,18 +7,21 @@
 //! `handler/images/openai_compat.rs`, the generic multipart edit pass-through of `handlers.rs`, the
 //! owned sets `OPENAI_COMPAT_IMAGE_OWNED` and `MULTIPART_EDIT_OWNED` of `handler/images/execute.rs`,
 //! `image_size_hint` / `image_size_long_edge` of `engine/token_counter/media.rs`,
-//! `ImageTokenUsage::from_openai_usage` of the protocol crate, and the `AzureOpenai` arm of
-//! `engine/upstream.rs`:
+//! `ImageTokenUsage::from_openai_usage` of the protocol crate, and the `AzureOpenai` and `GlmCoding`
+//! arms of `engine/upstream.rs`:
 //!
-//! - **Families** (OCI-Q1 (b), step 1): `openai-compatible` (`bearer`), and the two Azure `OpenAI`
-//!   URL forms of `speech-openai-compatible` 1.1, `azure-openai-v1` and `azure-openai-dated`
-//!   (`header_secret` `api-key`). The GLM Coding Plan (`glm-coding`) is step 2.
+//! - **Families** (OCI-Q1 (b)): `openai-compatible` (`bearer`), and the two Azure `OpenAI` URL
+//!   forms of `speech-openai-compatible` 1.1, `azure-openai-v1` and `azure-openai-dated`
+//!   (`header_secret` `api-key`), from step 1; the GLM Coding Plan, `glm-coding` (`bearer`, and the
+//!   manifest's `user_agent` `opencode/1.15.6`, which the host sends through its controlled
+//!   user-agent slot), from step 2.
 //! - **Path**: `openai-compatible` and `azure-openai-v1` use the API-root rule of
 //!   `speech-openai-compatible` (`images/generations` / `images/edits` below the binding's
 //!   `base_url` when it has a path, `v1/…` when it is an origin); `azure-openai-dated` posts to
 //!   `openai/deployments/{deployment}/images/…` with the sanctioned `api-version` query, the
 //!   deployment being the upstream model as one escaped segment and the version the config value
-//!   `api_version` (default `2024-10-21`).
+//!   `api_version` (default `2024-10-21`); `glm-coding` posts to `api/coding/paas/v4/images/…`
+//!   below the row endpoint whatever its path, as native's `GlmCoding` URL arm does.
 //! - **Generation** (JSON): the client's body with `model` set to the upstream id; every other
 //!   member forwarded as sent, an elided string as an `as_is` reference. `n` as the handler reads
 //!   it (absent or `null` 1, an integer or integral float, 1..=10).
@@ -56,7 +59,7 @@ use crate::image_shared::{
     bearer, capability, capped, code_message, internal, invalid, is_blob, non_2xx,
     non_empty_inline, status_code, view_status, with_refs,
 };
-use crate::reference::azure_openai_dated;
+use crate::reference::{azure_openai_dated, glm_coding};
 use crate::{ComponentResultV1, ImageComponentV1, ImageOutcomeV1, ImageRenderedV1};
 
 /// The package name this reference is published as.
@@ -73,6 +76,13 @@ pub const AZURE_OPENAI_V1: &str = "azure-openai-v1";
 pub const AZURE_OPENAI_DATED: &str = azure_openai_dated::FAMILY;
 /// The header Azure `OpenAI` reads the resource key from (native `apply_provider_auth`).
 pub const AZURE_SECRET_HEADER: &str = "api-key";
+/// The Z.ai GLM Coding Plan, the provider world's name (`provider-openai-compatible`'s family).
+pub const GLM_CODING: &str = glm_coding::FAMILY;
+/// The GLM Coding Plan's API root below the row endpoint.
+///
+/// The endpoint is an origin such as `https://api.z.ai`; native `build_upstream_url`'s `GlmCoding`
+/// arm appends this root for every path that is not `/v1/messages`.
+pub const GLM_CODING_API_ROOT: &str = "api/coding/paas/v4";
 
 const GENERATIONS: &str = "images/generations";
 const EDITS: &str = "images/edits";
@@ -106,6 +116,7 @@ enum Family {
     OpenAiCompatible,
     AzureV1,
     AzureDated,
+    GlmCoding,
 }
 
 impl Family {
@@ -114,9 +125,10 @@ impl Family {
             OPENAI_COMPATIBLE => Ok(Self::OpenAiCompatible),
             AZURE_OPENAI_V1 => Ok(Self::AzureV1),
             AZURE_OPENAI_DATED => Ok(Self::AzureDated),
+            GLM_CODING => Ok(Self::GlmCoding),
             _ => Err(capability(format!(
-                "this package serves the {OPENAI_COMPATIBLE}, {AZURE_OPENAI_V1} and \
-                 {AZURE_OPENAI_DATED} families"
+                "this package serves the {OPENAI_COMPATIBLE}, {AZURE_OPENAI_V1}, \
+                 {AZURE_OPENAI_DATED} and {GLM_CODING} families"
             ))),
         }
     }
@@ -193,6 +205,14 @@ fn route(
                 auth: azure_key(config),
             }
         }
+        // Native appends the Coding Plan root to the trimmed endpoint whatever its path, and
+        // presents `api_key` only (no `oauth_token` fallback, unlike `glm`). The user-agent is
+        // not the descriptor's to carry (`user-agent` is reserved): the manifest declares it.
+        Family::GlmCoding => Route {
+            path: format!("{GLM_CODING_API_ROOT}/{endpoint}"),
+            query: None,
+            auth: bearer(config),
+        },
     })
 }
 

@@ -434,7 +434,8 @@ fn the_image_world_admits_config_keys_and_exported_attributes() {
 }
 
 /// What the image world admits is held to the provider world's key rules, and nothing beyond the
-/// two value sources is widened: `endpoint` and `host_values` stay provider-only.
+/// two value sources and the `user_agent` instance declaration (`image-openai-compatible` record
+/// §11, from 0.60.0) is widened: `endpoint`, `host_values` and `quota_headers` stay provider-only.
 #[test]
 fn the_image_world_holds_its_values_to_the_provider_rules() {
     let refused = |edit: &dyn Fn(&mut Value)| {
@@ -467,9 +468,12 @@ fn the_image_world_holds_its_values_to_the_provider_rules() {
         refused(&|m| m["host_values"] = json!(["attempt_id"])),
         Err(ManifestErrorV1::InstanceIsAProviderWorldDeclaration("host_values".to_owned()))
     );
+    assert_eq!(refused(&|m| m["user_agent"] = json!({ "gemini": "acme/1.0" })), Ok(()));
     assert_eq!(
-        refused(&|m| m["user_agent"] = json!({ "gemini": "acme/1.0" })),
-        Err(ManifestErrorV1::InstanceIsAProviderWorldDeclaration("user_agent".to_owned()))
+        refused(&|m| m["quota_headers"] = json!([
+            { "header": "x-acme-remaining", "field": "x-ratelimit-remaining-tokens" }
+        ])),
+        Err(ManifestErrorV1::InstanceIsAProviderWorldDeclaration("quota_headers".to_owned()))
     );
 }
 

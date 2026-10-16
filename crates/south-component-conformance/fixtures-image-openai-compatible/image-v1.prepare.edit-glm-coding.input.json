@@ -1,0 +1,42 @@
+{
+  "provider_config": {
+    "provider": "glm-coding",
+    "base_url": "https://api.z.ai",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "multipart": {
+      "parts": [
+        {
+          "kind": "text",
+          "name": "prompt",
+          "value": "add a hat"
+        },
+        {
+          "kind": "file",
+          "name": "image",
+          "blob": "b0",
+          "filename": "photo.png",
+          "media_type": "image/png",
+          "bytes": 2048
+        },
+        {
+          "kind": "text",
+          "name": "n",
+          "value": "2"
+        },
+        {
+          "kind": "text",
+          "name": "size",
+          "value": "1024x1024"
+        }
+      ]
+    }
+  },
+  "context": {
+    "upstream_model": "cogview-4-250304",
+    "metering_required": [
+      "images"
+    ]
+  }
+}

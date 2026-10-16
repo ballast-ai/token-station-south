@@ -1,0 +1,20 @@
+{
+  "provider_config": {
+    "provider": "glm-coding",
+    "base_url": "https://api.z.ai/",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "json": {
+      "model": "glm-coding/cogview-4",
+      "prompt": "a red fox",
+      "n": 2
+    }
+  },
+  "context": {
+    "upstream_model": "cogview-4-250304",
+    "metering_required": [
+      "images"
+    ]
+  }
+}

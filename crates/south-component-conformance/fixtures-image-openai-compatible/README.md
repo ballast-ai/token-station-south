@@ -1,8 +1,8 @@
 # `fixtures-image-openai-compatible`
 
 Gate ② pack (`south.image-component.v1`) of `image-openai-compatible`, the host's OpenAI-compatible image fallback as a
-package (`docs/design/2026-10-16-image-openai-compatible.md` §2 to §5, §7; step 1: the `openai-compatible`,
-`azure-openai-v1` and `azure-openai-dated` families).
+package (`docs/design/2026-10-16-image-openai-compatible.md` §2 to §5, §7, §11; step 1: the `openai-compatible`,
+`azure-openai-v1` and `azure-openai-dated` families; step 2: `glm-coding`).
 
 The inputs were written from the server repository's native fallback arm (the strict `n` and the generic multipart edit
 pass-through of `handler/images/handlers.rs`, `handler/images/openai_compat.rs`, the owned sets of
@@ -30,3 +30,11 @@ details, integral floats for D9, a negative, a fraction and a string for D10, ou
 Seedream shape for OCI-Q4, an edit); images rows with well-formed and malformed usage; and 400 (nested, string `error`),
 404 (`message`), 422 (`detail`), 401, 403, 429, 408, 500 and a 503 without a body. Renders: `b64_json`, `url`, mixed,
 both in one entry, a token row with its usage, an edit and an `output_format`.
+
+Step 2 rows (`glm-coding`), written from native's `GlmCoding` arms of `engine/upstream.rs` (`build_upstream_url`:
+`{endpoint}/api/coding/paas/v4{path without /v1}`; `apply_provider_auth`: `Bearer` on `api_key` only) before the
+reference was extended: capabilities for two ids; a generation on the preset origin `https://api.z.ai` (with a `size`
+fact), on the origin with a trailing slash (with `n` 2), on an endpoint with a path (the root is appended whatever the
+path, as native) and without an auth slot; a multipart edit (the `model` part appended, `n` and `size` read); and a
+`url`-only response without `usage` (record U1). The wrong-family refusal now names four families. The user-agent is a
+manifest declaration, not part of any descriptor, so no row carries it; the suite test pins it.
