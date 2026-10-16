@@ -211,7 +211,48 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.66.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.58.0 and 0.65.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.68.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.59.0 and 0.67.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**v0.68.0 (`provider-openai-compatible` 2.8.0: the T9 follow-ups)**: release record
+`docs/design/2026-10-16-release-0.68.0.md`.
+`provider-openai-compatible` 2.8.0: the T9 cap field: design record
+`docs/design/2026-10-15-openai-compatible-t9.md` §4 D6 (revision of 2026-10-15, under lv's directive of the same day).
+Native sends an `azure_openai` row's output cap as `max_completion_tokens` unless the row opts out, so the two Azure
+OpenAI families, `azure-openai-v1` and `azure-openai-dated`, now write the cap under the config key `max_tokens_field`
+(`enum` of `max_completion_tokens` and `max_tokens`, default `max_completion_tokens`, native's); a host migrating a row
+copies the row's `max_tokens_field`, else `max_tokens` when the row cleared `accepts_max_completion_tokens`. A value
+outside the two is a configuration error (500) before any request is built. Every other family keeps `max_tokens`.
+Gate ② gains three request rows and the dated row now expects `max_completion_tokens`. The record also corrects §2.1
+(native `glm_coding` serves Responses through the Chat fallback rather than refusing it). T9-Q9 (a): a client's
+`thinking` or `enable_thinking` is forwarded verbatim, only when sent, on `openai-compatible`, `azure-openai-v1`,
+`github-copilot`, `azure-openai-dated` and `glm-coding`, whose native types send the client body (not on
+`gemini-openai-compatible`); gate ② gains four more rows. Q47 against v0.67.0: `south-component-conformance` 0.67.0; `provider-openai-compatible`
+takes the minor 2.8.0 and every other package a patch with unchanged behaviour, each keeping its `south_runtime` and
+contracts. No contract number changes; the kernel pin is unchanged.
+**v0.67.0 (speech on Azure OpenAI, the Veo on Vertex poll prefix, `immutable_request_headers`)**: release record
+`docs/design/2026-10-15-release-0.67.0.md`.
+`speech-openai-compatible` 1.1.0: the Azure OpenAI families: design record
+`docs/design/2026-10-15-speech-azure-openai.md` (accepted under lv's 2026-10-15 ruling; AO-Q1 to AO-Q7 at their
+defaults). Speech on Azure OpenAI and Azure Foundry rows, which native serves through the same OpenAI-compatible TTS and
+ASR arms with an Azure URL and the `api-key` header, becomes two families of `speech-openai-compatible`, named as the
+provider world names them: `azure-openai-v1` (`audio/speech`, `audio/transcriptions`, `audio/translations` below
+`{endpoint}/openai/v1`) and `azure-openai-dated` (`openai/deployments/{deployment}/audio/…?api-version=`, the
+deployment one escaped segment, the config key `api_version` with `provider-openai-compatible`'s declaration byte for
+byte, default `2024-10-21`; an undated value is a 500, an empty deployment a 400). Both present the key as
+`header_secret` `api-key`; bodies, parts, metering and readers are `openai-compatible`'s. Not to be confused with
+`speech-azure` (the Azure Speech service). Q47 against v0.66.0: `south-component-conformance` 0.66.0;
+`speech-openai-compatible` takes the minor 1.1.0 and every other package a patch with unchanged behaviour, each keeping
+its `south_runtime` and contracts. No contract number changes.
+`task-veo-v2` 0.36.1: the Vertex poll prefix (Q-VV1, design record `docs/design/2026-10-15-veo-vertex-task-component.md`).
+A Vertex operation name of the shape `projects/*/locations/*/publishers/google/models/{m}/operations/{id}` is polled
+under the binding's own location prefix, so a name carrying the project number stays inside the authorized endpoint;
+a matching name gives native's URL unchanged, other shapes are polled verbatim. Unverified: no capture of a Vertex Veo
+create response.
+`immutable_request_headers` (Q-CC3, design record `docs/design/2026-10-15-immutable-request-headers.md`):
+`south-provider-api` 0.59.0 adds a per-family provider-world manifest declaration, shaped like `immutable_body_paths`,
+of the request headers a host's extra request configuration must never set; lower-case names, no implicit members.
+`provider-anthropic` 1.2.1 declares nine for `claude-code` and `claude-code-setup-token` and so declares
+`south_runtime` 0.67.0, the first runtime that parses the field. `ManifestErrorV1` gains
+`InvalidImmutableRequestHeaders`, so a host matching it exhaustively adds the arm when it re-pins.
 **v0.66.0 (`provider-vertex`, Veo on Vertex, `image-xai`, `image-reve`, the Claude Code families, Bedrock Mantle, T9,
 `speech-vertex` 1.1.0)**: release record `docs/design/2026-10-15-release-0.66.0.md`; every change below was written
 under lv's 2026-10-15 directive (migrate by the native code, doubts registered as unverified).

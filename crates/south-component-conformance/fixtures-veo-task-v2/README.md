@@ -52,3 +52,11 @@ line answered, so a `projects/…` name is accepted, as native `parse_veo_create
 accepts any name. The Gemini family still refuses to poll it (`observe.vertex`).
 `storageUri` (VV-Q3) is neither refused nor sent: native builds the upstream body
 from the fields it knows (`prepare.vertex-storage-uri`).
+
+`observe.vertex-project-number` and `observe.vertex-other-shape` (0.36.1, Q-VV1, lv
+2026-10-15) are **not** native: native polls every name verbatim. A name of the shape
+`projects/*/locations/*/publishers/google/models/*/operations/*` is polled under the
+binding's own location prefix (the project number in the sample is replaced by the
+bound project id), so a host's `authorize` sends it; any other `projects/…` shape is
+polled verbatim, as before. Whether Vertex answers with a project number at all is
+**unverified** (no capture; record "Q-VV1").

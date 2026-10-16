@@ -1,6 +1,6 @@
 {
   "name": "speech-qwen",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "api_version": "speech-adapter-v1",
   "providers": [
     "bailian-qwen-speech"

@@ -1,7 +1,7 @@
 {
   "schema_version": 7,
   "release": {
-    "version": "0.66.0",
+    "version": "0.68.0",
     "stability": "library_slice"
   },
   "runtime_abi": 1,

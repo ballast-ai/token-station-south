@@ -103,11 +103,97 @@ pub mod azure_openai_dated {
     pub const DEFAULT_API_VERSION: &str = "2024-10-21";
 }
 
+/// Client fields the IR does not type that native forwards on these families (design record
+/// `docs/design/2026-10-15-openai-compatible-t9.md` §10, T9-Q9 (a)).
+///
+/// The host's native arm for every type these families serve (`glm`, `glm_coding`, Bailian,
+/// `byteplus`, `kimi_code`, `deepinfra`, `github_copilot`, `azure_openai`, `azure_foundry`) sends the
+/// client's Chat body itself, so a client's `thinking` (Z.ai) or `enable_thinking` (Bailian) reaches
+/// the upstream unchanged. The Chat north codec keeps such keys verbatim in
+/// `ChatRequest.extensions`; the package writes them back, only when the client sent them, as
+/// `provider-openai-responses` writes its client fields (R3). Native builds the Gemini body through
+/// the IR instead, so `gemini-openai-compatible` forwards nothing.
+pub mod client_passthrough {
+    /// The forwarded keys, each written under its own name.
+    pub const FIELDS: [&str; 2] = ["thinking", "enable_thinking"];
+    /// The families that forward them.
+    pub const FAMILIES: [&str; 5] = [
+        "openai-compatible",
+        "azure-openai-v1",
+        "github-copilot",
+        super::azure_openai_dated::FAMILY,
+        super::glm_coding::FAMILY,
+    ];
+}
+
+/// Writes the client's [`client_passthrough::FIELDS`] into `body` verbatim (`null` included, as
+/// native sends it) for a family in [`client_passthrough::FAMILIES`]. A key the package already
+/// wrote is never overwritten: the package's own keys are the wire contract, and none of them
+/// shares a name with a forwarded field.
+fn forward_client_fields(request: &ChatRequest, config: &ProviderConfig, body: &mut Value) {
+    if !client_passthrough::FAMILIES.contains(&config.provider.as_str()) {
+        return;
+    }
+    let Value::Object(map) = body else {
+        return;
+    };
+    for field in client_passthrough::FIELDS {
+        if let Some(value) = request.extensions.get(field)
+            && !map.contains_key(field)
+        {
+            map.insert(field.to_owned(), value.clone());
+        }
+    }
+}
+
+/// The output cap key of the two Azure `OpenAI` families, `azure-openai-v1` and
+/// [`azure_openai_dated`].
+///
+/// Design record `docs/design/2026-10-15-openai-compatible-t9.md` §4 D6, transcribed from the
+/// host's native `needs_max_tokens_rewrite`: an `azure_openai` (or `azure_foundry`) row sends the
+/// cap as `max_completion_tokens` unless the row's `max_tokens_field` column says `max_tokens`, or,
+/// with the column unset, the row clears `accepts_max_completion_tokens` (default on). The host
+/// writes that per-row choice into this key when it migrates the row; absent, the native default
+/// applies. Every other family of the package keeps `max_tokens`, as native does for the types it
+/// serves.
+pub mod azure_openai_cap_field {
+    /// The families that read [`KEY`].
+    pub const FAMILIES: [&str; 2] = ["azure-openai-v1", super::azure_openai_dated::FAMILY];
+    /// The configuration key that carries the cap's wire name (`ProviderConfig.declared`), named
+    /// after the native row column.
+    pub const KEY: &str = "max_tokens_field";
+    /// The modern wire name, native's default for an Azure `OpenAI` row.
+    pub const MAX_COMPLETION_TOKENS: &str = "max_completion_tokens";
+    /// The legacy wire name, the row's opt-out.
+    pub const MAX_TOKENS: &str = "max_tokens";
+    /// The wire name when the operator sets none. The manifest declares the same value as the
+    /// key's `default`.
+    pub const DEFAULT: &str = MAX_COMPLETION_TOKENS;
+}
+
+/// The body key the output cap is written under for `config`'s family (record §4 D6). A value
+/// other than the two wire names is refused, as an undated `api_version` is, so a host that skipped
+/// the manifest's `enum` check cannot put another key in the body.
+fn cap_field(config: &ProviderConfig) -> ComponentResultV1<&'static str> {
+    use azure_openai_cap_field::{DEFAULT, FAMILIES, KEY, MAX_COMPLETION_TOKENS, MAX_TOKENS};
+    if !FAMILIES.contains(&config.provider.as_str()) {
+        return Ok(MAX_TOKENS);
+    }
+    match config.declared.get(KEY).unwrap_or(DEFAULT) {
+        MAX_COMPLETION_TOKENS => Ok(MAX_COMPLETION_TOKENS),
+        MAX_TOKENS => Ok(MAX_TOKENS),
+        _ => Err(internal(format!(
+            "the `{KEY}` configuration value is neither `{MAX_COMPLETION_TOKENS}` nor `{MAX_TOKENS}`"
+        ))),
+    }
+}
+
 /// Whether `value` is a dated API version, `YYYY-MM-DD` with an optional `-preview`: the
 /// `api_version_date` syntax the manifest declares for [`azure_openai_dated::API_VERSION_KEY`].
 /// A host validates the value before it reaches the component; this keeps a host that skips the
-/// check from putting anything else in the query.
-fn is_dated_api_version(value: &str) -> bool {
+/// check from putting anything else in the query. `speech-openai-compatible`'s
+/// `azure-openai-dated` family applies the same check (`reference_openai_compatible_speech`).
+pub(crate) fn is_dated_api_version(value: &str) -> bool {
     let date = value.strip_suffix("-preview").unwrap_or(value);
     date.len() == 10
         && date.bytes().enumerate().all(|(index, byte)| match index {
@@ -359,8 +445,10 @@ fn message_to_openai_for_model(
     Ok(Value::Object(out))
 }
 
-/// Fails only through message rendering, for a part this wire cannot spell.
+/// Fails through message rendering, for a part this wire cannot spell, and on a cap field value
+/// that is not a wire name (record §4 D6).
 fn body_of(request: &ChatRequest, config: &ProviderConfig) -> ComponentResultV1<Value> {
+    let cap_key = cap_field(config)?;
     let mut body = Map::new();
     body.insert("model".to_owned(), json!(request.model));
     let requires_reasoning_content = wants_reasoning_content(request, config);
@@ -381,7 +469,7 @@ fn body_of(request: &ChatRequest, config: &ProviderConfig) -> ComponentResultV1<
         body.insert("top_p".to_owned(), json!(top_p));
     }
     if let Some(max_tokens) = request.sampling.max_output_tokens {
-        body.insert("max_tokens".to_owned(), json!(max_tokens));
+        body.insert(cap_key.to_owned(), json!(max_tokens));
     }
     if !request.sampling.stop.is_empty() {
         body.insert("stop".to_owned(), json!(request.sampling.stop));
@@ -801,7 +889,7 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-openai-compatible".to_owned(),
-            version: "2.7.0".to_owned(),
+            version: "2.8.0".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
@@ -864,6 +952,7 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
         {
             map.insert("reasoning_effort".to_owned(), json!(effort));
         }
+        forward_client_fields(request, config, &mut body);
         descriptor.body = Some(body);
         // The host holds the value; this names the slot and the fixed
         // presentation selected by the trusted provider dialect.

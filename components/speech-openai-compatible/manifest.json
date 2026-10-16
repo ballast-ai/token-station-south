@@ -1,9 +1,11 @@
 {
   "name": "speech-openai-compatible",
-  "version": "1.0.1",
+  "version": "1.1.1",
   "api_version": "speech-adapter-v1",
   "providers": [
-    "openai-compatible"
+    "openai-compatible",
+    "azure-openai-v1",
+    "azure-openai-dated"
   ],
   "capabilities": [
     "synthesize",
@@ -11,8 +13,18 @@
     "translate"
   ],
   "auth_arms": [
-    "bearer"
+    "bearer",
+    "header_secret"
   ],
+  "config_schema": {
+    "azure-openai-dated": {
+      "api_version": {
+        "syntax": "api_version_date",
+        "default": "2024-10-21",
+        "description": "The Azure OpenAI API version sent as ?api-version=, a date with an optional -preview suffix such as 2025-04-01-preview. Defaults to 2024-10-21. A row on Azure's unversioned v1 surface uses the azure-openai-v1 family instead."
+      }
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

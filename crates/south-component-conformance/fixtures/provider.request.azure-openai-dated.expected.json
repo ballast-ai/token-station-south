@@ -12,7 +12,7 @@
         "content": "Weather in Beijing?"
       }
     ],
-    "max_tokens": 321
+    "max_completion_tokens": 321
   },
   "auth": {
     "scheme": "header",

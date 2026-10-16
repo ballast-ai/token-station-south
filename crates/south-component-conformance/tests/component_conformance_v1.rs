@@ -88,7 +88,7 @@ fn the_manifest_secret_header_rules_are_the_host_halfs() {
 fn reference_manifest() -> ComponentManifestV1 {
     ComponentManifestV1 {
         name: "provider-openai-compatible".to_owned(),
-        version: "2.7.0".to_owned(),
+        version: "2.8.0".to_owned(),
         api_version: PROVIDER_WORLD.to_owned(),
         providers: vec![
             "openai-compatible".to_owned(),
@@ -123,6 +123,7 @@ fn reference_manifest() -> ComponentManifestV1 {
         user_agent: std::collections::BTreeMap::new(),
         host_values: Vec::new(),
         immutable_body_paths: std::collections::BTreeMap::new(),
+        immutable_request_headers: std::collections::BTreeMap::new(),
         north_passthrough: std::collections::BTreeMap::new(),
         north_request_passthrough: std::collections::BTreeMap::new(),
         subscription_quota_families: std::collections::BTreeSet::new(),

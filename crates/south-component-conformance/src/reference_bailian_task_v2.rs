@@ -94,7 +94,7 @@ impl TaskComponentV2 for BailianTaskComponentV2 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "task-bailian-v2".into(),
-            version: "0.31.24".into(),
+            version: "0.31.26".into(),
             api_version: "task-adapter-v2".into(),
         }
     }

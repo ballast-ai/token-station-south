@@ -665,6 +665,9 @@ pub fn word_cues(words: &[Word<'_>]) -> Vec<Cue> {
 pub struct OpenAiAsr<'a> {
     /// The upstream path of the operation.
     pub path: String,
+    /// The upstream query, when the family's route has one (`speech-openai-compatible`'s
+    /// `azure-openai-dated`, the sanctioned `api-version`).
+    pub query: Option<Value>,
     /// Whether every `model` text part is removed (`speech-xai`) instead of set to the upstream id.
     pub drops_model: bool,
     /// Whether the package translates (`speech-openai-compatible`).
@@ -707,7 +710,13 @@ pub fn prepare_openai(
     Ok(prepared(
         context.operation,
         forms,
-        multipart_descriptor(&protocol.path, None, protocol.auth.clone(), &upstream_parts, &[])?,
+        multipart_descriptor(
+            &protocol.path,
+            protocol.query.clone(),
+            protocol.auth.clone(),
+            &upstream_parts,
+            &[],
+        )?,
         form,
         &OPENAI_IMMUTABLE_FORM_FIELDS,
         &json!({ "op": operation_word(context.operation), "format": format, "verbose": verbose }),

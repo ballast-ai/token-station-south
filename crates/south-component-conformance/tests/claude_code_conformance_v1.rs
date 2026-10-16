@@ -212,8 +212,82 @@ fn the_manifest_declares_the_two_families_with_the_native_values() {
         manifest.immutable_body_paths,
         BTreeMap::from([(claude_code::FAMILY.to_owned(), vec!["system".to_owned()])])
     );
-    assert_eq!(manifest.version, "1.2.0");
-    assert_eq!(manifest.compatibility.south_runtime, "0.60.0");
+    // Published as 1.2.0 with 0.66.0; 1.2.1 carries both the 0.67.0 Q47 round and the
+    // immutable request headers (record `2026-10-15-immutable-request-headers.md`); published as
+    // 1.2.1 with 0.67.0, the T9 cap field's Q47 bump made it 1.2.2
+    // (`shipped_packages_v1::t9_cap_field_retires_every_published_067_package_identity`).
+    assert_eq!(manifest.version, "1.2.2");
+    // `immutable_request_headers`, which no runtime before 0.67.0 parses (`ComponentManifestV1`
+    // refuses unknown fields); 0.67.0 shipped it.
+    assert_eq!(manifest.compatibility.south_runtime, "0.67.0");
+}
+
+/// Protected request headers record (`docs/design/2026-10-15-immutable-request-headers.md`,
+/// Q-CC3): both Claude Code families declare one list of immutable request headers, the
+/// reference's; `anthropic` declares none, as native refused header extras for `claude_code` rows
+/// only.
+#[test]
+fn the_claude_code_families_declare_their_immutable_request_headers() {
+    let manifest = shipped_manifest();
+    let declared: Vec<String> =
+        claude_code::IMMUTABLE_REQUEST_HEADERS.iter().map(|name| (*name).to_owned()).collect();
+    assert_eq!(
+        manifest.immutable_request_headers,
+        BTreeMap::from([
+            (claude_code::FAMILY.to_owned(), declared.clone()),
+            (claude_code::SETUP_TOKEN_FAMILY.to_owned(), declared),
+        ])
+    );
+    assert!(south_provider_api::are_immutable_request_headers(
+        &manifest.immutable_request_headers[claude_code::FAMILY]
+    ));
+    let mut sorted = claude_code::IMMUTABLE_REQUEST_HEADERS.to_vec();
+    sorted.sort_unstable();
+    assert_eq!(sorted, claude_code::IMMUTABLE_REQUEST_HEADERS);
+}
+
+/// The list covers what each family fixes: every header its requests carry in either mode, the
+/// header its credential is presented in, and the user-agent the host fills (declared for
+/// `claude-code`, the host's own for `claude-code-setup-token`). A header the component starts
+/// sending without declaring it fails here.
+#[test]
+fn the_immutable_request_headers_cover_every_header_each_family_fixes() {
+    let manifest = shipped_manifest();
+    for family in [claude_code::FAMILY, claude_code::SETUP_TOKEN_FAMILY] {
+        let declared = &manifest.immutable_request_headers[family];
+        let protects = |name: &str| declared.iter().any(|declared| declared == name);
+        assert!(protects("user-agent"), "{family}");
+        for stream in [false, true] {
+            for system in [None, Some(json!("Be terse."))] {
+                let descriptor = build(family, &chat(system, stream)).unwrap();
+                for name in headers(&descriptor).keys() {
+                    assert!(protects(name.as_str()), "{family}: `{name}` is sent but not declared");
+                }
+                let credential = match &descriptor.auth {
+                    Some(Auth::Header { name, .. }) => name.clone(),
+                    Some(Auth::Bearer { .. }) => "authorization".to_owned(),
+                    other => panic!("{family} presents {other:?}"),
+                };
+                assert!(protects(credential.as_str()), "{family}: `{credential}` is not declared");
+            }
+        }
+        // Both presentations are protected on both forms, so an extra cannot add the other one.
+        assert!(protects("authorization") && protects("x-api-key"), "{family}");
+    }
+    assert!(!manifest.immutable_request_headers.contains_key("anthropic"));
+}
+
+/// Declaring the immutable request headers changes the manifest, so the identity published with
+/// 0.66.0 retires: a patch, since no request the component builds changes. The reference's
+/// `metadata()` moves with it.
+#[test]
+fn immutable_request_headers_retire_the_published_1_2_0_identity() {
+    let manifest = shipped_manifest();
+    assert_ne!(manifest.version, "1.2.0");
+    // 1.2.1 was published with 0.67.0; the T9 cap field's Q47 bump made it 1.2.2.
+    assert_ne!(manifest.version, "1.2.1");
+    assert_eq!(manifest.version, "1.2.2");
+    assert_eq!(AnthropicReferenceV1.metadata().version, manifest.version);
 }
 
 /// Record §9: the families are new behaviour, so the package takes a minor version; the patch

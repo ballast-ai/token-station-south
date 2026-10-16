@@ -49,7 +49,7 @@ use crate::{ComponentResultV1, SpeechComponentV1, SpeechOutcomeV1};
 /// The package name this reference is published as.
 pub const NAME: &str = "speech-xai";
 /// The package version.
-pub const VERSION: &str = "1.0.1";
+pub const VERSION: &str = "1.0.3";
 /// The world this reference exports.
 pub const WORLD: &str = "speech-adapter-v1";
 /// The family, as a host's speech bindings name it.
@@ -143,6 +143,7 @@ impl SpeechComponentV1 for XaiSpeechReferenceV1 {
         if context.operation.is_recognition() {
             let protocol = OpenAiAsr {
                 path: "v1/stt".to_owned(),
+                query: None,
                 drops_model: true,
                 translates: false,
                 auth: bearer(config),

@@ -1,6 +1,6 @@
 {
   "name": "provider-anthropic",
-  "version": "1.2.0",
+  "version": "1.2.2",
   "api_version": "provider-adapter-v2",
   "providers": [
     "anthropic",
@@ -19,6 +19,30 @@
   "immutable_body_paths": {
     "claude-code": [
       "system"
+    ]
+  },
+  "immutable_request_headers": {
+    "claude-code": [
+      "accept",
+      "anthropic-beta",
+      "anthropic-dangerous-direct-browser-access",
+      "anthropic-version",
+      "authorization",
+      "content-type",
+      "user-agent",
+      "x-api-key",
+      "x-app"
+    ],
+    "claude-code-setup-token": [
+      "accept",
+      "anthropic-beta",
+      "anthropic-dangerous-direct-browser-access",
+      "anthropic-version",
+      "authorization",
+      "content-type",
+      "user-agent",
+      "x-api-key",
+      "x-app"
     ]
   },
   "credentials": {
@@ -138,7 +162,7 @@
     "kernel_version": "0.5.0",
     "kernel_revision": "c0bca10c2d9f9a439680865feb65c9edf598fc65",
     "wit_package": "token-station:adapter@2.0.0",
-    "south_runtime": "0.60.0",
+    "south_runtime": "0.67.0",
     "runtime_abi": 1,
     "kernel_contracts": {
       "canonical_ir": 4,
