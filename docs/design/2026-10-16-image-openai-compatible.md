@@ -130,8 +130,8 @@ from data, not from three families or config keys:
 These are exactly the endpoints the S7 plan already prescribes for the same rows' text surfaces (§8 S7-3), so one
 `component` row serves text (`provider-openai-compatible`), embeddings, speech and images with one endpoint. Binding:
 `family = "openai-compatible"`, `base_url = "row_endpoint"`, auth `bearer` on `provider_api_key`. No config keys, no
-`supported_parameters` words are needed (Q12 allowed them; nothing differs). Azure OpenAI and the GLM Coding Plan follow in
-step 2 (OCI-Q1, §9).
+`supported_parameters` words are needed (Q12 allowed them; nothing differs). The two Azure OpenAI families join this package in
+step 1 and the GLM Coding Plan follows in step 2 (OCI-Q1, §9).
 
 ## 4. Mapping to the image contract
 
@@ -189,7 +189,7 @@ New, registered:
 | D12 | Token rows: a 2xx `usage` with input but no output count parks; native settled any non-zero bucket | partial-report gap, record §9.1 |
 | D13 | URL for misconfigured rows: an `openai`-type row whose endpoint has a path (native `{endpoint}/v1/…`) or a GLM row given an origin (native `{endpoint}/images/…`) composes differently under the API-root rule | data, preflight (H4) |
 | D14 | GLM credentials holding only `oauth_token` are not read (component reads `api_key`); operators re-enter as `api_key` | S7 plan §8, P24 D1 |
-| D15 | Held success that cannot store artifacts: the host executor verifies before settling and parks explicitly; native's error escaped `run_held_advance` and left the task to the orphan sweep (`durable.rs:1048-1057`) | native defect (correctness: funds held until lease expiry) |
+| D15 | Held success that cannot store artifacts: the host executor verifies before settling and parks explicitly; native's error escaped `run_held_advance` and left the task to the orphan sweep (`durable.rs:1048-1057`) | native defect (correctness: funds held until lease expiry); fixed in the host on 2026-10-16 (parks at once) |
 
 Unverified (reproduced, not blocking): **U1** GLM CogView answers `url` only and no `usage`; **U2** BytePlus Seedream's
 `usage` is `{generated_images, output_tokens, total_tokens}` with no input count (hence OCI-Q4); **U3** DeepInfra's
@@ -240,7 +240,8 @@ would get a 4xx, released by P29); **U5** error body shapes (§4); **U6** `image
 - **OCI-Q1 Scope of families.** (a) `openai-compatible` only; (b) also `azure-openai-v1` / `azure-openai-dated` (as
   `speech-openai-compatible` 1.1) and `glm-coding`. **Ruled (b)** by lv on 2026-10-16 ("do it all at once"), so the
   host can delete the whole arm (H6). Delivered in two steps inside the 0.70.0 cycle (§9): step 1 is this package with
-  `openai-compatible`; step 2 opens the image world to the two declarations the other three families need and adds them.
+  `openai-compatible`, `azure-openai-v1` and `azure-openai-dated`; step 2 opens the image world to the manifest
+  `user_agent` and adds `glm-coding`.
 - **OCI-Q2 Family name.** (a) `openai-compatible` (embeddings / speech precedent); (b) `openai-compatible-image`.
   **Default (a).**
 - **OCI-Q3 Top-level `input_tokens` with no breakdown.** (a) report `total_input` (host bills it; fixes a native
@@ -259,24 +260,29 @@ would get a 4xx, released by P29); **U5** error body shapes (§4); **U6** `image
 
 ## 9. Step 2: Azure OpenAI and the GLM Coding Plan (OCI-Q1 (b))
 
-The image world admits none of the B7a instance declarations today (`InstanceDeclarationsV1::None`,
-`crates/south-provider-api/src/manifest.rs:159-176`), and the three remaining families each need one:
+The image world admits none of the B7a instance declarations (`InstanceDeclarationsV1::None`,
+`crates/south-provider-api/src/manifest.rs:159-176`), and the host's image sandbox parses descriptors with
+`parse_prepared_image_call_v1`, which has no declared table (speech has a `_with_declared` form). What each remaining
+family needs:
 
 | Family | Native URL (fallback arm) | Needs |
 |---|---|---|
-| `azure-openai-v1` | `{endpoint}/openai/v1/images/{generations,edits}`, `api-key` | nothing new (`header_secret`); can ship in step 1 if ready |
-| `azure-openai-dated` | `{endpoint}/openai/deployments/{deployment}/images/…?api-version=…`, `api-key` | `query_parameters` (`api-version`), as the speech world admits for `ElevenLabs` |
+| `azure-openai-v1` | `{endpoint}/openai/v1/images/{generations,edits}`, `api-key` | nothing new (`header_secret`) |
+| `azure-openai-dated` | `{endpoint}/openai/deployments/{deployment}/images/…?api-version=…`, `api-key` | nothing new: `api-version` is the contract's sanctioned `QueryParameterV1::ApiVersion`, which a media descriptor carries without any declaration (`crates/south-contracts/src/media/descriptor.rs:208-215`), as `speech-openai-compatible` does on media 1 |
 | `glm-coding` | `{endpoint}/api/coding/paas/v4/images/…`, Bearer, `User-Agent: opencode/1.15.6` | `user_agent`, today admitted only by the provider world |
 
-Step 2 therefore:
-- widens the image world's instance declarations to admit `query_parameters` and `user_agent` (a `south-provider-api`
-  minor; packages declaring either need a `south_runtime` that admits them, set in the release commit as before);
-- adds the three families to this package, mirroring `speech-openai-compatible` 1.1 for the two Azure families
-  (`api_version` config key, default `2024-10-21`) and `provider-openai-compatible`'s `glm-coding` for the user-agent;
-- **host prerequisite H7**: the host's image executor must send a declared query parameter and the declared user-agent
-  from the manifest, as its text and speech transports already do (generic, rule 6 exception 1). Until it does, rows of
-  those three families stay on the native arm, and the arm cannot be deleted.
+So:
+- **Step 1** carries `openai-compatible`, `azure-openai-v1` and `azure-openai-dated` (the two Azure families mirror
+  `speech-openai-compatible` 1.1: `header_secret` `api-key`, the dated family's `api_version` config key defaulting to
+  `2024-10-21`).
+- **Step 2** widens the image world to admit the manifest `user_agent` (a `south-provider-api` minor; the package then
+  declares a `south_runtime` that admits it, set in the release commit) and adds `glm-coding`, mirroring
+  `provider-openai-compatible`'s `glm-coding`. `query_parameters` stays unadmitted: nothing here needs it.
+- **Host prerequisite H7**: the host's image executor sends the manifest user-agent (written by the host on 2026-10-16,
+  pending its build). Until it ships, `glm-coding` image rows stay on the native arm.
+
+Corrected on 2026-10-16 from the host's read-back: the first version put `azure-openai-dated` in step 2 behind a
+`query_parameters` declaration it does not need.
 
 Whether Z.ai's Coding Plan endpoint serves image generation at all is **unverified**; native forwards there, so the
 family reproduces it.
-
