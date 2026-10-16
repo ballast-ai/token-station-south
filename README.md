@@ -286,15 +286,17 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo nextest run --workspace --all-features
 cargo test --workspace --doc --all-features
-cargo test --workspace --no-default-features
+cargo check --workspace --all-targets --no-default-features
+cargo test -p south-component-conformance --no-default-features  # the only crate with a feature
 cargo check --manifest-path fuzz/Cargo.toml --all-targets --locked
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features
-rustup run 1.96.0 cargo check --workspace --all-targets
+python3 scripts/check_msrv.py  # a no-op while the pinned toolchain is a release of the MSRV
 scripts/check-boundaries.sh --self-test
 scripts/check-boundaries.sh
-python3 -m unittest discover -s scripts -p 'test_*.py'  # release index and digest-stability check
+python3 -m unittest discover -s scripts -p 'test_*.py'  # release tooling and the build scripts
 scripts/check-language.sh --self-test
 scripts/check-language.sh
+scripts/check-language.sh --commits origin/main..HEAD  # CI checks the pull request's commits
 cargo deny check
 cargo deny --manifest-path fuzz/Cargo.toml --config deny.toml --locked check
 cargo audit

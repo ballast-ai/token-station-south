@@ -33,53 +33,15 @@ jobs:
           tool: cargo-nextest,cargo-deny,cargo-audit,cargo-machete
       # Without a cache every run compiles wasmtime and the other dependencies from scratch, in
       # the lint, test, no-default-features and doc steps alike. The root workspace, the fuzz
-      # workspace, every wasm guest component and every runtime-test guest are separate cargo
-      # workspaces with their own `target/`, so each is listed. Only main saves the cache: a pull
-      # request restores main's, and never evicts it with a cache of its own.
+      # workspace and every runtime-test guest are separate cargo workspaces with their own
+      # `target/`, so each is listed. The component packages are separate workspaces too, but
+      # `scripts/component-build.sh` builds them all in the root's `target/components`, which the
+      # root entry covers. Only main saves the cache: a pull request restores main's, and never
+      # evicts it with a cache of its own.
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: |
             .
-            components/embeddings-gemini
-            components/embeddings-openai-compatible
-            components/embeddings-vertex
-            components/image-azure
-            components/image-gemini
-            components/image-ideogram
-            components/image-minimax
-            components/image-qwen
-            components/image-reve
-            components/image-stability
-            components/image-vertex
-            components/image-xai
-            components/provider-anthropic
-            components/provider-anthropic-bedrock-invoke
-            components/provider-bedrock-converse
-            components/provider-bedrock-converse-bearer
-            components/provider-gemini
-            components/provider-kiro
-            components/provider-openai-compatible
-            components/provider-openai-responses
-            components/provider-vertex
-            components/speech-azure
-            components/speech-elevenlabs
-            components/speech-groq
-            components/speech-mimo
-            components/speech-minimax
-            components/speech-openai-compatible
-            components/speech-qwen
-            components/speech-vertex
-            components/speech-xai
-            components/task-bailian-v2
-            components/task-byteplus-v2
-            components/task-gemini-omni-v2
-            components/task-gmi-image-v2
-            components/task-kling
-            components/task-kling-v2
-            components/task-minimax-v2
-            components/task-veo-v2
-            components/task-wan-image-v2
-            components/task-xai-v2
             crates/south-component-conformance/tests/guests/synthetic-speech
             crates/south-provider-runtime/tests/guests/t03-canary-provider
             crates/south-provider-runtime/tests/guests/t09-canary-task
@@ -96,18 +58,43 @@ jobs:
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - name: Test
         run: cargo nextest run --workspace --all-features
+      # The declared-runtime discipline (boundary record §13.6): every package's
+      # south_runtime is the oldest runtime it needs, and each package is loaded under
+      # exactly that runtime's release tag. release.yml runs the same check on the
+      # archives it publishes; running it on the release pull request as well catches
+      # a wrong declaration before the tag exists. Only release branches pay for it:
+      # it builds one older runtime per distinct declaration. It is a step here rather
+      # than its own job because the Test step's nextest setup script has just built
+      # every component, so the build scripts below are no-ops instead of a second
+      # build of every component on another runner.
+      - name: Declared runtimes admit their packages
+        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/')
+        run: |
+          set -euo pipefail
+          for script in scripts/build-*-component.sh; do
+            bash "${script}"
+          done
+          scripts/check-declared-runtime.sh --build
       - name: Doctest
         run: cargo test --workspace --doc --all-features
+      # `sandbox` on south-component-conformance is the workspace's only feature and is off by
+      # default, so for every other crate this build is the all-features build. Every crate still
+      # has to compile without default features; only the one crate with a feature has tests that
+      # change, so only its tests run again.
       - name: No default features
-        run: cargo test --workspace --no-default-features
+        run: |
+          cargo check --workspace --all-targets --no-default-features
+          cargo test -p south-component-conformance --no-default-features
       - name: Fuzz target compile check
         run: cargo check --manifest-path fuzz/Cargo.toml --all-targets --locked
       - name: Documentation
         env:
           RUSTDOCFLAGS: -D warnings
         run: cargo doc --workspace --no-deps --all-features
+      # A no-op while the pinned toolchain is a release of the MSRV (Clippy has already compiled
+      # every target on it); a real check once the two diverge.
       - name: MSRV
-        run: rustup run 1.96.0 cargo check --workspace --all-targets
+        run: python3 scripts/check_msrv.py
       - name: Dependency boundaries
         run: |
           scripts/check-boundaries.sh --self-test
@@ -155,30 +142,6 @@ jobs:
         run: |
           scripts/check-language.sh --commits \
             '${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}'
-
-  # The declared-runtime discipline (boundary record §13.6): every package's
-  # south_runtime is the oldest runtime it needs, and each package is loaded under
-  # exactly that runtime's release tag. release.yml runs the same check on the
-  # archives it publishes; running it on the release pull request as well catches
-  # a wrong declaration before the tag exists. Only release branches pay for it:
-  # it builds every component and one older runtime per distinct declaration.
-  declared-runtime:
-    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master
-        with:
-          toolchain: 1.96.0
-          targets: wasm32-wasip2
-      - name: Build components
-        run: |
-          set -euo pipefail
-          for script in scripts/build-*-component.sh; do
-            bash "${script}"
-          done
-      - name: Declared runtimes admit their packages
-        run: scripts/check-declared-runtime.sh --build
 
   # The Q47 crate version check (boundary record §13.12), which release.yml
   # also runs on the tag: a guest-linked crate changed since the previous release
