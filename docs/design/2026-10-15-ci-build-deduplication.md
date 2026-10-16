@@ -1,6 +1,8 @@
 # CI and local verification: build each thing once
 
-Status: proposed.
+Status: accepted. lv approved it on 2026-10-16. It merged as #244 and shipped first in release 0.69.0: the release
+pull request #252 ran D4's declared-runtime step for the first time and passed, and its `quality` job took 17m13s,
+against 20m48s for 0.67.0's.
 
 Date: 2026-10-15
 
