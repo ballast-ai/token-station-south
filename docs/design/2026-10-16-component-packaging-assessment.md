@@ -1,6 +1,6 @@
 # Component packaging: what the plug-in boundary delivers today
 
-Status: proposed; Q2 ruled. lv, 2026-10-16: (A). The goal is that a plug-in is really pluggable: adding or changing a
+Status: proposed; Q1 answered, Q2 ruled. lv, 2026-10-16: (A). The goal is that a plug-in is really pluggable: adding or changing a
 provider package compiles that package and nothing else, neither the host nor any other package. §3.1 turns that into
 acceptance criteria. This record makes no change itself; each step it leads to gets a record of its own.
 
@@ -18,12 +18,15 @@ on its own (gate ①, range handshake, import scan, identity probe), and adding 
 that directory without rebuilding the host (host plan 46: "a new dialect means only dropping a wasm package from South; the host is not rebuilt"). The loader
 does all of that. Four facts keep the promise from being kept.
 
-1. **The deployment ships no packages.** The host's `deploy/Dockerfile` copies the binary and CA certificates into a
-   `scratch` image. No compose file, Helm chart or production config template mounts a components directory.
-   `scripts/fetch_south_components.sh` is run by the local matrix and by acceptance runs. The host's own review records
-   this as intended (the components directory is not in the tree, so by default the references run instead of the sandbox; "intended: fetching packages is a deployment step"). So unless an
-   operator fetches packages outside the repository, the known dialects run on the native reference implementations and
-   no other package is loaded. Which of the two happens in production is not recorded anywhere I could read (Q1).
+1. **Production loads packages, but the repository does not say how.** lv confirmed on 2026-10-16 that in production
+   every dialect runs on its wasm package (Q1). Yet the host's `deploy/Dockerfile` copies only the binary and CA
+   certificates into a `scratch` image, and no compose file, Helm chart or production config template mounts a
+   components directory; `scripts/fetch_south_components.sh` is run by the local matrix and acceptance runs. So the
+   packages reach production by an operator step outside the repository. That step is the only thing between
+   production and the native fallback: when the root holds no package for a known dialect, the host runs the native
+   reference without an error (the host review records this as intended for development: "the components directory is
+   not in the tree, so by default the references run instead of the sandbox"). A lost or misconfigured directory in
+   production would silently drop the sandbox.
 2. **Every provider's logic is compiled into the host anyway.** The translation code of all forty packages lives in
    one crate, `south-component-conformance`: 36,017 lines, of which 18,971 are `reference_*.rs` modules, about 3,800
    are helpers shared by a family of vendors (`anthropic_dialect`, `gemini_text`, `asr_shared`, `image_shared`, ...),
@@ -108,9 +111,10 @@ The choice is between two ends, and it is lv's (Q2).
 I recommend (A), in this order, each step gated on the work it would otherwise collide with:
 
 1. **Measure and decide** (this record): fill in §2.2, answer Q1, rule Q2. No code changes.
-2. **Ship packages with the deployment** (host). Put the packages in the image or a mounted volume as part of the
-   host's cutover checklist, not as a separate deployment. Run on the wasm path in production for a period before the
-   native references become test-only.
+2. **Make the wasm path the only production path** (host). Production already runs on packages (Q1), so this step
+   records the operator's delivery step in the repository (image or mounted volume, in the host's cutover checklist),
+   makes a production build refuse to start when a known dialect has no admitted package instead of falling back, and
+   moves the native references behind a test-only dependency. No soak period is needed for the wasm path itself.
 3. **Split the shared crate** (South). In a release cycle with no new world in progress. Start with the embeddings world
    (three packages) to prove the SDK boundary, then one world at a time. Families that share code today
    (`reference_anthropic` is used by the Bedrock Invoke, Vertex and Claude Code paths; `asr_shared` by four speech
@@ -123,8 +127,8 @@ I recommend (A), in this order, each step gated on the work it would otherwise c
 The goal is met when all five hold. Each later record names which of them it moves.
 
 - **P1. Adding a package needs no host build.** A package for an existing world, with a new family, is loaded by
-  putting it in the components directory (and pinning it if its family is contested). Today the loader does this; the
-  deployment does not ship the directory (§1 item 1).
+  putting it in the components directory (and pinning it if its family is contested). Production meets this today
+  (Q1); what is missing is that the delivery step is not in the repository (§1 item 1).
 - **P2. The host links no provider logic.** A production host build does not compile any `reference_*` module or vendor
   helper; the native references are a test-only dependency. Today every host build links all forty (§1 item 2).
 - **P3. Changing one family rebuilds one family.** A change to one vendor family's logic changes only the
@@ -146,8 +150,8 @@ record of its own.
 
 ## 4. Questions for lv
 
-- **Q1.** In production today, does the host load packages, or does it run the native references? The host's system
-  page (`/admin/api/system`, `south_packages`) shows the source of each dialect.
+- **Q1.** In production today, does the host load packages, or does it run the native references? **Answered**
+  (lv, 2026-10-16): every dialect runs on its wasm package.
 - **Q2.** (A) or (B)? **Ruled (A)** (lv, 2026-10-16), with the goal stated in §3.1.
 - **Q3.** Under (A), is a family crate's version the identity that moves, with the SDK versioned on its own as Q47's
   three crates are now? Recommended: yes; Q47's rule then applies to the SDK alone.
