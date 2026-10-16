@@ -211,7 +211,18 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.70.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.60.0 and 0.69.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.70.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.60.0 and 0.70.0, the last unreleased) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**Unreleased (`task-veo-v2` 0.37.0 and `task-gemini-omni-v2` 0.2.0: the Vertex task credentials)**: design record
+`docs/design/2026-10-16-task-vertex-credentials.md` (lv, 2026-10-16). The host deletes its `vertex_ai` provider type, which
+minted the Vertex token for the two task-world Vertex families by row type and derived their location prefix. Each
+package now declares the `vertex_sa` recipe of `image-vertex` in a `credentials` section scoped to its Vertex family
+(`vertex-veo-video`, `vertex-interactions-video`; the Gemini API families keep their static `x-goog-api-key`), without
+the exported `project_id` attribute, which the task world refuses (no value channel). The operator writes the location
+prefix in full as the component row's endpoint. Manifest only: no component logic changes, no `south_runtime` moves
+(0.57.0 and 0.62.0 admit the section). Gate ② gains the five Vertex `credential.*` cases in both packs. Q47 against
+v0.70.0: `south-component-conformance` 0.70.0; the two packages take a minor and every other package a patch with
+unchanged behaviour, each keeping its `south_runtime` and contracts. No contract number changes; the kernel pin is
+unchanged.
 **v0.70.0 (`provider-openai-compatible` 2.10.0, the `kimi-code` family; `image-openai-compatible` 1.0.0; the image world
 admits `user_agent`)**: release record `docs/design/2026-10-16-release-0.70.0.md`.
 `provider-openai-compatible` 2.10.0, the `kimi-code` family: design record

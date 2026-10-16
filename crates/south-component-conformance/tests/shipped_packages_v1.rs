@@ -1066,7 +1066,9 @@ fn the_invoke_package_declares_the_runtime_converse_declares() {
     // (`glm_thinking_retires_every_published_068_package_identity`).
     // Published as 1.1.13 with 0.69.0; the kimi-code family's Q47 bump made it 1.1.14
     // (`kimi_code_retires_every_published_069_package_identity`).
-    assert_eq!(invoke.version, "1.1.14");
+    // Published as 1.1.14 with 0.70.0; the Vertex task credentials' Q47 bump made it 1.1.15
+    // (`task_vertex_credentials_retires_every_published_070_package_identity`).
+    assert_eq!(invoke.version, "1.1.15");
     assert_eq!(invoke.compatibility.south_runtime, "0.57.0");
     assert_eq!(invoke.compatibility, read("provider-bedrock-converse").compatibility);
 }
@@ -1372,7 +1374,9 @@ fn the_responses_package_declares_the_runtime_that_first_admits_its_declarations
     // (`glm_thinking_retires_every_published_068_package_identity`).
     // Published as 1.4.3 with 0.69.0; the kimi-code family's Q47 bump made it 1.4.4
     // (`kimi_code_retires_every_published_069_package_identity`).
-    assert_eq!(manifest.version, "1.4.4");
+    // Published as 1.4.4 with 0.70.0; the Vertex task credentials' Q47 bump made it 1.4.5
+    // (`task_vertex_credentials_retires_every_published_070_package_identity`).
+    assert_eq!(manifest.version, "1.4.5");
     assert_eq!(manifest.compatibility.south_runtime, "0.60.0");
     assert!(!manifest.immutable_body_paths.is_empty() && !manifest.north_passthrough.is_empty());
     assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
@@ -1819,7 +1823,9 @@ fn image_gemini_declares_media_2_which_a_media_1_host_refuses() {
     // (`glm_thinking_retires_every_published_068_package_identity`).
     // Published as 1.0.11 with 0.69.0; the kimi-code family's Q47 bump made it 1.0.12
     // (`kimi_code_retires_every_published_069_package_identity`).
-    assert_eq!(manifest.version, "1.0.12");
+    // Published as 1.0.12 with 0.70.0; the Vertex task credentials' Q47 bump made it 1.0.13
+    // (`task_vertex_credentials_retires_every_published_070_package_identity`).
+    assert_eq!(manifest.version, "1.0.13");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["gemini-image"]);
     assert!(manifest.declared_keys("gemini-image").is_empty());
@@ -1867,7 +1873,9 @@ fn the_i3_1_image_packages_declare_the_runtime_and_values_of_the_record() {
         // (`glm_thinking_retires_every_published_068_package_identity`).
         // Published as 1.0.12 with 0.69.0; the kimi-code family's Q47 bump made it 1.0.13
         // (`kimi_code_retires_every_published_069_package_identity`).
-        assert_eq!(manifest.version, "1.0.13", "{name}");
+        // Published as 1.0.13 with 0.70.0; the Vertex task credentials' Q47 bump made it 1.0.14
+        // (`task_vertex_credentials_retires_every_published_070_package_identity`).
+        assert_eq!(manifest.version, "1.0.14", "{name}");
         assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD, "{name}");
         assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), [family], "{name}");
         assert_eq!(manifest.compatibility.south_runtime, "0.57.0", "{name}");
@@ -1898,7 +1906,9 @@ fn image_stability_declares_media_1_and_the_runtime_of_the_record() {
     // (`glm_thinking_retires_every_published_068_package_identity`).
     // Published as 1.0.10 with 0.69.0; the kimi-code family's Q47 bump made it 1.0.11
     // (`kimi_code_retires_every_published_069_package_identity`).
-    assert_eq!(manifest.version, "1.0.11");
+    // Published as 1.0.11 with 0.70.0; the Vertex task credentials' Q47 bump made it 1.0.12
+    // (`task_vertex_credentials_retires_every_published_070_package_identity`).
+    assert_eq!(manifest.version, "1.0.12");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["stability-image"]);
     assert!(manifest.declared_keys("stability-image").is_empty());
@@ -1932,7 +1942,9 @@ fn image_ideogram_declares_media_1_and_the_runtime_of_the_record() {
     // (`glm_thinking_retires_every_published_068_package_identity`).
     // Published as 1.0.9 with 0.69.0; the kimi-code family's Q47 bump made it 1.0.10
     // (`kimi_code_retires_every_published_069_package_identity`).
-    assert_eq!(manifest.version, "1.0.10");
+    // Published as 1.0.10 with 0.70.0; the Vertex task credentials' Q47 bump made it 1.0.11
+    // (`task_vertex_credentials_retires_every_published_070_package_identity`).
+    assert_eq!(manifest.version, "1.0.11");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["ideogram-image"]);
     assert!(manifest.declared_keys("ideogram-image").is_empty());
@@ -1966,7 +1978,9 @@ fn image_xai_declares_media_1_bearer_and_the_runtime_of_the_record() {
     // (`glm_thinking_retires_every_published_068_package_identity`).
     // Published as 1.0.3 with 0.69.0; the kimi-code family's Q47 bump made it 1.0.4
     // (`kimi_code_retires_every_published_069_package_identity`).
-    assert_eq!(manifest.version, "1.0.4");
+    // Published as 1.0.4 with 0.70.0; the Vertex task credentials' Q47 bump made it 1.0.5
+    // (`task_vertex_credentials_retires_every_published_070_package_identity`).
+    assert_eq!(manifest.version, "1.0.5");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["xai-image"]);
     assert_eq!(manifest.capabilities.iter().collect::<Vec<_>>(), ["edit", "generate"]);
@@ -2008,7 +2022,9 @@ fn image_vertex_declares_media_2_the_vertex_recipe_and_the_media_2_runtime() {
     // (`glm_thinking_retires_every_published_068_package_identity`).
     // Published as 1.0.6 with 0.69.0; the kimi-code family's Q47 bump made it 1.0.7
     // (`kimi_code_retires_every_published_069_package_identity`).
-    assert_eq!(manifest.version, "1.0.7");
+    // Published as 1.0.7 with 0.70.0; the Vertex task credentials' Q47 bump made it 1.0.8
+    // (`task_vertex_credentials_retires_every_published_070_package_identity`).
+    assert_eq!(manifest.version, "1.0.8");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["vertex-ai-image"]);
     assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer"]);
@@ -2057,7 +2073,9 @@ fn provider_vertex_declares_the_vertex_recipe_and_the_runtime_of_its_newest_decl
     // (`glm_thinking_retires_every_published_068_package_identity`).
     // Published as 1.0.3 with 0.69.0; the kimi-code family's Q47 bump made it 1.0.4
     // (`kimi_code_retires_every_published_069_package_identity`).
-    assert_eq!(manifest.version, "1.0.4");
+    // Published as 1.0.4 with 0.70.0; the Vertex task credentials' Q47 bump made it 1.0.5
+    // (`task_vertex_credentials_retires_every_published_070_package_identity`).
+    assert_eq!(manifest.version, "1.0.5");
     assert_eq!(manifest.api_version, south_provider_api::PROVIDER_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["vertex-ai"]);
     assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer"]);
@@ -2099,7 +2117,9 @@ fn image_reve_declares_media_1_and_the_runtime_of_the_record() {
     // (`glm_thinking_retires_every_published_068_package_identity`).
     // Published as 1.0.3 with 0.69.0; the kimi-code family's Q47 bump made it 1.0.4
     // (`kimi_code_retires_every_published_069_package_identity`).
-    assert_eq!(manifest.version, "1.0.4");
+    // Published as 1.0.4 with 0.70.0; the Vertex task credentials' Q47 bump made it 1.0.5
+    // (`task_vertex_credentials_retires_every_published_070_package_identity`).
+    assert_eq!(manifest.version, "1.0.5");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["reve-image"]);
     assert!(manifest.declared_keys("reve-image").is_empty());
@@ -2117,8 +2137,8 @@ fn image_reve_declares_media_1_and_the_runtime_of_the_record() {
 /// starts at 1.0.0 in the image world with the families `openai-compatible`, `azure-openai-v1`,
 /// `azure-openai-dated` (step 1) and `glm-coding` (step 2; OCI-Q1 (b)), `bearer` and
 /// `header_secret` (the Azure `api-key`), the dated family's `api_version` key, the `glm-coding`
-/// user-agent, and `contracts` `{image: 1, media: 1}`. It stays 1.0.0 through step 2: no release
-/// published it, so the first published identity carries all four families.
+/// user-agent, and `contracts` `{image: 1, media: 1}`. It stayed 1.0.0 through step 2: no release
+/// had published it, so the first published identity (0.70.0) carries all four families.
 ///
 /// Runtime: everything step 1 declares was admitted by the image world as it shipped in 0.52.0,
 /// so 0.57.0 (`canonical_ir` 4) would do; the `glm-coding` `user_agent` is admitted only by the
@@ -2136,7 +2156,9 @@ fn image_openai_compatible_declares_media_1_and_the_runtime_of_the_record() {
         .unwrap(),
     )
     .unwrap();
-    assert_eq!(manifest.version, "1.0.0", "unpublished");
+    // Published as 1.0.0 with 0.70.0; the Vertex task credentials' Q47 bump made it 1.0.1
+    // (`task_vertex_credentials_retires_every_published_070_package_identity`).
+    assert_eq!(manifest.version, "1.0.1");
     assert_eq!(
         manifest.version,
         south_component_conformance::reference_openai_compatible_image::VERSION
@@ -2264,7 +2286,9 @@ fn provider_kiro_declares_the_runtime_of_its_newest_declaration() {
     // (`glm_thinking_retires_every_published_068_package_identity`).
     // Published as 1.1.4 with 0.69.0; the kimi-code family's Q47 bump made it 1.1.5
     // (`kimi_code_retires_every_published_069_package_identity`).
-    assert_eq!(manifest.version, "1.1.5");
+    // Published as 1.1.5 with 0.70.0; the Vertex task credentials' Q47 bump made it 1.1.6
+    // (`task_vertex_credentials_retires_every_published_070_package_identity`).
+    assert_eq!(manifest.version, "1.1.6");
     assert_eq!(manifest.api_version, south_provider_api::PROVIDER_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["kiro"]);
     assert!(manifest.subscription_quota_families.contains("kiro"));
@@ -2300,13 +2324,22 @@ fn task_gemini_omni_v2_declares_task_8_which_a_task_7_host_refuses() {
     // (`glm_thinking_retires_every_published_068_package_identity`).
     // Published as 0.1.7 with 0.69.0; the kimi-code family's Q47 bump made it 0.1.8
     // (`kimi_code_retires_every_published_069_package_identity`).
-    assert_eq!(manifest.version, "0.1.8");
+    // Published as 0.1.8 with 0.70.0; the Vertex task credentials' minor made it 0.2.0
+    // (`task_vertex_credentials_retires_every_published_070_package_identity`).
+    assert_eq!(manifest.version, "0.2.0");
     assert_eq!(manifest.api_version, south_provider_api::TASK_WORLD_V2);
     assert_eq!(manifest.compatibility.contracts.get("task"), Some(&8));
     assert_eq!(manifest.compatibility.contracts.get("media"), Some(&1));
     // Published with 0.62.0, so the literal: a later release bump must not move it.
     assert_eq!(manifest.compatibility.south_runtime, "0.62.0");
     assert_eq!(manifest.response_blob_paths, ["/steps/*/content/*/data", "/output_video/data"]);
+    // 0.2.0 (design record `2026-10-16-task-vertex-credentials.md`): the Vertex family's
+    // `credentials` section; 0.62.0 still admits the manifest.
+    assert_task_vertex_credentials(
+        &manifest,
+        "vertex-interactions-video",
+        "gemini-interactions-video",
+    );
     let this_release = host_range::host_range();
     assert_eq!(compatibility_admits(&manifest, &this_release), Ok(()));
     let mut task_7_only = this_release;
@@ -2512,23 +2545,26 @@ fn s_s_1_retires_every_published_063_package_identity() {
 /// published with 0.67.0), then the T9 cap field's Q47 bump 1.0.3
 /// (`t9_cap_field_retires_every_published_067_package_identity`, published with 0.68.0), the
 /// `glm-coding` thinking switch's 1.0.4 (`glm_thinking_retires_every_published_068_package_identity`,
-/// published with 0.69.0) and the `kimi-code` family's 1.0.5
-/// (`kimi_code_retires_every_published_069_package_identity`).
+/// published with 0.69.0), the `kimi-code` family's 1.0.5
+/// (`kimi_code_retires_every_published_069_package_identity`, published with 0.70.0) and the
+/// Vertex task credentials' 1.0.6
+/// (`task_vertex_credentials_retires_every_published_070_package_identity`).
 /// The tests below describe the batches that defined the packages, before those releases.
 /// `speech-vertex` and `speech-openai-compatible` moved on to minors ([`speech_version`]).
-const SPEECH_VERSION: &str = "1.0.5";
+const SPEECH_VERSION: &str = "1.0.6";
 
 /// The version a speech package carries: [`SPEECH_VERSION`], except `speech-vertex`, which Q7's
 /// refusal made 1.1.0, the 0.67.0 cycle's Q47 bump 1.1.1, the T9 cap field's 1.1.2, the
-/// `glm-coding` thinking switch's 1.1.3 and the `kimi-code` family's 1.1.4
-/// (`speech_vertex_1_1_refuses_q7_and_retires_its_published_identity`), and
+/// `glm-coding` thinking switch's 1.1.3, the `kimi-code` family's 1.1.4 and the Vertex task
+/// credentials' 1.1.5 (`speech_vertex_1_1_refuses_q7_and_retires_its_published_identity`), and
 /// `speech-openai-compatible`, which the `azure-openai` families made 1.1.0, the T9 cap field's
-/// Q47 bump 1.1.1, the `glm-coding` thinking switch's 1.1.2 and the `kimi-code` family's 1.1.3
+/// Q47 bump 1.1.1, the `glm-coding` thinking switch's 1.1.2, the `kimi-code` family's 1.1.3 and the
+/// Vertex task credentials' 1.1.4
 /// (`speech_openai_compatible_1_1_adds_the_azure_openai_families`).
 fn speech_version(name: &str) -> &'static str {
     match name {
-        "speech-vertex" => "1.1.4",
-        "speech-openai-compatible" => "1.1.3",
+        "speech-vertex" => "1.1.5",
+        "speech-openai-compatible" => "1.1.4",
         _ => SPEECH_VERSION,
     }
 }
@@ -2973,7 +3009,9 @@ fn minimax_immutable_paths_retire_the_published_task_minimax_v2_identity() {
     // (`glm_thinking_retires_every_published_068_package_identity`).
     // Published as 0.33.5 with 0.69.0; the kimi-code family's Q47 bump made it 0.33.6
     // (`kimi_code_retires_every_published_069_package_identity`).
-    assert_eq!(manifest.version, "0.33.6");
+    // Published as 0.33.6 with 0.70.0; the Vertex task credentials' Q47 bump made it 0.33.7
+    // (`task_vertex_credentials_retires_every_published_070_package_identity`).
+    assert_eq!(manifest.version, "0.33.7");
     assert_eq!(manifest.compatibility.south_runtime, declared_runtime_now("task-minimax-v2"));
     assert_eq!(manifest.compatibility.contracts.get("task"), Some(&7));
 }
@@ -3061,7 +3099,9 @@ fn speech_vertex_1_1_refuses_q7_and_retires_its_published_identity() {
     // (`glm_thinking_retires_every_published_068_package_identity`).
     // Published as 1.1.3 with 0.69.0; the kimi-code family's Q47 bump made it 1.1.4
     // (`kimi_code_retires_every_published_069_package_identity`).
-    assert_eq!(manifest.version, "1.1.4");
+    // Published as 1.1.4 with 0.70.0; the Vertex task credentials' Q47 bump made it 1.1.5
+    // (`task_vertex_credentials_retires_every_published_070_package_identity`).
+    assert_eq!(manifest.version, "1.1.5");
     assert_eq!(
         manifest.version,
         south_component_conformance::reference_vertex_speech::VERSION,
@@ -3079,6 +3119,34 @@ fn speech_vertex_1_1_refuses_q7_and_retires_its_published_identity() {
     assert_eq!(compatibility_admits(&manifest, &media_1_only), Ok(()));
 }
 
+/// The Vertex task credentials (design record `2026-10-16-task-vertex-credentials.md`): a task
+/// package's `credentials` section applies to its Vertex family only (the Gemini API family keeps
+/// its static `x-goog-api-key`) and is, apart from `families`, `image-vertex`'s section without
+/// its exported `project_id` attribute, which the task world refuses (no value channel; the row
+/// endpoint carries the project, record §2). The same stored service-account credential therefore
+/// serves both packages, and gate ① admits the manifest.
+fn assert_task_vertex_credentials(manifest: &ComponentManifestV1, vertex: &str, gemini: &str) {
+    assert_eq!(manifest.validate(), Ok(()), "{}", manifest.name);
+    let section = manifest.credentials.as_ref().expect("the Vertex family declares its recipe");
+    assert_eq!(section.families.as_deref(), Some(&[vertex.to_owned()][..]));
+    assert_eq!(manifest.credentials_for(vertex), Some(section));
+    assert_eq!(manifest.credentials_for(gemini), None);
+    let image: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(repo_root().join("components/image-vertex/manifest.json"))
+            .unwrap(),
+    )
+    .unwrap();
+    let mut expected = image.credentials.expect("image-vertex declares the Vertex recipe");
+    assert_eq!(expected.families, None);
+    assert_eq!(expected.recipes.keys().collect::<Vec<_>>(), ["vertex_sa"]);
+    for recipe in expected.recipes.values_mut() {
+        assert_eq!(recipe.attributes.keys().collect::<Vec<_>>(), ["project_id"]);
+        recipe.attributes.clear();
+    }
+    expected.families = Some(vec![vertex.to_owned()]);
+    assert_eq!(section, &expected);
+}
+
 /// `task-veo-v2` gains the `vertex-veo-video` family (design record
 /// `docs/design/2026-10-15-veo-vertex-task-component.md` §4, §7; lv 2026-10-15, VV-Q1 (b)): the
 /// native arm's Vertex logic in the same package, with the host-minted token presented as `bearer`
@@ -3086,6 +3154,9 @@ fn speech_vertex_1_1_refuses_q7_and_retires_its_published_identity() {
 /// package takes a minor version past the unpublished `provider-vertex` patch 0.35.24 (the same
 /// unreleased cycle, so no further Q47 round); the clip stays an upstream URI, so the task contract stays 7 and
 /// a task-7-only host still admits it, and the runtime stays the oldest that admits the manifest.
+/// 0.37.0 (design record `2026-10-16-task-vertex-credentials.md`) adds the Vertex family's
+/// `credentials` section, so the package mints its own token instead of the host's `vertex_ai` row
+/// type doing it ([`assert_task_vertex_credentials`]); 0.57.0 still admits the manifest.
 #[test]
 fn task_veo_v2_gains_the_vertex_family_and_bearer() {
     let manifest: ComponentManifestV1 = serde_json::from_str(
@@ -3095,7 +3166,7 @@ fn task_veo_v2_gains_the_vertex_family_and_bearer() {
     // 0.36.0 was published with 0.66.0; Q-VV1's poll prefix rewrite (lv 2026-10-15) is a
     // behaviour fix in the same family, so the package takes a patch
     // (`veo_task_suite_v2::a_project_number_operation_name_is_polled_under_the_binding_prefix`).
-    for retired in ["0.35.23", "0.35.24", "0.36.0"] {
+    for retired in ["0.35.23", "0.35.24", "0.36.0", "0.36.1", "0.36.2", "0.36.3", "0.36.4"] {
         assert_ne!(manifest.version, retired, "a changed package cannot reuse an identity");
     }
     // Published as 0.36.1 with 0.67.0; the T9 cap field's Q47 bump made it 0.36.2
@@ -3104,12 +3175,14 @@ fn task_veo_v2_gains_the_vertex_family_and_bearer() {
     // (`glm_thinking_retires_every_published_068_package_identity`).
     // Published as 0.36.3 with 0.69.0; the kimi-code family's Q47 bump made it 0.36.4
     // (`kimi_code_retires_every_published_069_package_identity`).
-    assert_eq!(manifest.version, "0.36.4");
+    // Published as 0.36.4 with 0.70.0; the Vertex task credentials' minor made it 0.37.0
+    // (`task_vertex_credentials_retires_every_published_070_package_identity`).
+    assert_eq!(manifest.version, "0.37.0");
     assert_eq!(manifest.providers, ["veo-video", "vertex-veo-video"]);
     assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer", "header_secret"]);
     assert_eq!(manifest.compatibility.contracts.get("task"), Some(&7));
     assert_eq!(manifest.compatibility.south_runtime, declared_runtime_now("task-veo-v2"));
-    assert!(manifest.credentials.is_none(), "the host mints the Vertex token (record §2)");
+    assert_task_vertex_credentials(&manifest, "vertex-veo-video", "veo-video");
     assert!(manifest.declared_keys("vertex-veo-video").is_empty(), "no config_schema (record §2)");
     let mut task_7_only = host_range::host_range();
     task_7_only.contracts.insert("task".to_owned(), [7].into());
@@ -3211,7 +3284,7 @@ fn speech_openai_compatible_1_1_adds_the_azure_openai_families() {
     };
     let manifest: ComponentManifestV1 =
         serde_json::from_value(read("speech-openai-compatible")).unwrap();
-    for retired in ["1.0.0", "1.0.1", "1.0.2", "1.1.0", "1.1.1", "1.1.2"] {
+    for retired in ["1.0.0", "1.0.1", "1.0.2", "1.1.0", "1.1.1", "1.1.2", "1.1.3"] {
         assert_ne!(manifest.version, retired, "a changed package cannot reuse an identity");
     }
     // Published as 1.1.0 with 0.67.0; the T9 cap field's Q47 bump made it 1.1.1
@@ -3220,7 +3293,9 @@ fn speech_openai_compatible_1_1_adds_the_azure_openai_families() {
     // (`glm_thinking_retires_every_published_068_package_identity`).
     // Published as 1.1.2 with 0.69.0; the kimi-code family's Q47 bump made it 1.1.3
     // (`kimi_code_retires_every_published_069_package_identity`).
-    assert_eq!(manifest.version, "1.1.3");
+    // Published as 1.1.3 with 0.70.0; the Vertex task credentials' Q47 bump made it 1.1.4
+    // (`task_vertex_credentials_retires_every_published_070_package_identity`).
+    assert_eq!(manifest.version, "1.1.4");
     assert_eq!(
         manifest.version,
         south_component_conformance::reference_openai_compatible_speech::VERSION,
@@ -3400,7 +3475,9 @@ fn glm_thinking_retires_every_published_068_package_identity() {
 /// so every `component.wasm` changes: each identity published with 0.69.0 retires. Only
 /// `provider-openai-compatible` changes behaviour (it declares the new family), a minor
 /// (2.9.0 → 2.10.0); every other package takes a patch. No package moves its `south_runtime` or
-/// its `contracts`.
+/// its `contracts`. The identity each package took here was published with 0.70.0 and retires in
+/// turn: the Vertex task credentials gave every package one more
+/// (`task_vertex_credentials_retires_every_published_070_package_identity`).
 #[test]
 fn kimi_code_retires_every_published_069_package_identity() {
     let rows: [RetiredIdentity<'_>; 40] = [
@@ -3456,6 +3533,84 @@ fn kimi_code_retires_every_published_069_package_identity() {
         )
         .unwrap();
         assert_ne!(manifest.version, published, "{name} reused its identity published with 0.69.0");
+        assert_ne!(manifest.version, now, "{name} reused its identity published with 0.70.0");
+        assert_eq!(
+            manifest.compatibility.south_runtime, runtime,
+            "{name}: the round moves no runtime"
+        );
+        let contracts: std::collections::BTreeMap<String, u32> =
+            contracts.iter().map(|(world, version)| ((*world).to_owned(), *version)).collect();
+        assert_eq!(manifest.compatibility.contracts, contracts, "{name}");
+    }
+}
+
+/// The Vertex task credentials (design record `2026-10-16-task-vertex-credentials.md`, lv
+/// 2026-10-16) change `south-component-conformance` (0.69.0 → 0.70.0) after release 0.70.0, which
+/// every guest links, so every `component.wasm` changes: each identity published with 0.70.0
+/// retires, `image-openai-compatible`'s first one included. Only `task-veo-v2` and
+/// `task-gemini-omni-v2` change what they declare (a `credentials` section scoped to their Vertex
+/// family), a minor each (0.36.4 → 0.37.0, 0.1.8 → 0.2.0); every other package takes a patch. No
+/// package moves its `south_runtime` or its `contracts`.
+#[test]
+fn task_vertex_credentials_retires_every_published_070_package_identity() {
+    let rows: [RetiredIdentity<'_>; 41] = [
+        ("embeddings-gemini", "1.1.19", "1.1.20", "0.57.0", &[("embeddings", 2)]),
+        ("embeddings-openai-compatible", "1.0.22", "1.0.23", "0.57.0", &[("embeddings", 1)]),
+        ("embeddings-vertex", "1.0.21", "1.0.22", "0.57.0", &[("embeddings", 1)]),
+        ("image-azure", "1.0.18", "1.0.19", "0.57.0", &[("image", 1), ("media", 1)]),
+        ("image-gemini", "1.0.12", "1.0.13", "0.59.0", &[("image", 1), ("media", 2)]),
+        ("image-ideogram", "1.0.10", "1.0.11", "0.57.0", &[("image", 1), ("media", 1)]),
+        ("image-minimax", "1.0.13", "1.0.14", "0.57.0", &[("image", 1), ("media", 1)]),
+        ("image-openai-compatible", "1.0.0", "1.0.1", "0.70.0", &[("image", 1), ("media", 1)]),
+        ("image-qwen", "1.0.13", "1.0.14", "0.57.0", &[("image", 1), ("media", 1)]),
+        ("image-reve", "1.0.4", "1.0.5", "0.57.0", &[("image", 1), ("media", 1)]),
+        ("image-stability", "1.0.11", "1.0.12", "0.57.0", &[("image", 1), ("media", 1)]),
+        ("image-vertex", "1.0.7", "1.0.8", "0.59.0", &[("image", 1), ("media", 2)]),
+        ("image-xai", "1.0.4", "1.0.5", "0.57.0", &[("image", 1), ("media", 1)]),
+        ("provider-anthropic", "1.2.4", "1.2.5", "0.67.0", &[]),
+        ("provider-anthropic-bedrock-invoke", "1.1.14", "1.1.15", "0.57.0", &[]),
+        ("provider-bedrock-converse", "1.1.14", "1.1.15", "0.57.0", &[]),
+        ("provider-bedrock-converse-bearer", "1.1.14", "1.1.15", "0.57.0", &[]),
+        ("provider-gemini", "1.3.14", "1.3.15", "0.60.0", &[]),
+        ("provider-kiro", "1.1.5", "1.1.6", "0.60.0", &[]),
+        ("provider-openai-compatible", "2.10.0", "2.10.1", "0.60.0", &[]),
+        ("provider-openai-responses", "1.4.4", "1.4.5", "0.60.0", &[]),
+        ("provider-vertex", "1.0.4", "1.0.5", "0.60.0", &[]),
+        ("speech-azure", "1.0.5", "1.0.6", "0.65.0", &[("media", 1), ("speech", 1)]),
+        ("speech-elevenlabs", "1.0.5", "1.0.6", "0.65.0", &[("media", 3), ("speech", 1)]),
+        ("speech-groq", "1.0.5", "1.0.6", "0.65.0", &[("media", 1), ("speech", 1)]),
+        ("speech-mimo", "1.0.5", "1.0.6", "0.65.0", &[("media", 1), ("speech", 1)]),
+        ("speech-minimax", "1.0.5", "1.0.6", "0.65.0", &[("media", 1), ("speech", 1)]),
+        ("speech-openai-compatible", "1.1.3", "1.1.4", "0.65.0", &[("media", 1), ("speech", 1)]),
+        ("speech-qwen", "1.0.5", "1.0.6", "0.65.0", &[("media", 1), ("speech", 1)]),
+        ("speech-vertex", "1.1.4", "1.1.5", "0.65.0", &[("media", 1), ("speech", 1)]),
+        ("speech-xai", "1.0.5", "1.0.6", "0.65.0", &[("media", 1), ("speech", 1)]),
+        ("task-bailian-v2", "0.31.28", "0.31.29", "0.57.0", &[("task", 7)]),
+        ("task-byteplus-v2", "0.36.28", "0.36.29", "0.57.0", &[("task", 7)]),
+        ("task-gemini-omni-v2", "0.1.8", "0.2.0", "0.62.0", &[("media", 1), ("task", 8)]),
+        ("task-gmi-image-v2", "0.35.28", "0.35.29", "0.57.0", &[("task", 7)]),
+        ("task-kling", "1.0.31", "1.0.32", "0.57.0", &[("task", 7)]),
+        ("task-kling-v2", "0.32.29", "0.32.30", "0.57.0", &[("task", 7)]),
+        ("task-minimax-v2", "0.33.6", "0.33.7", "0.63.0", &[("task", 7)]),
+        ("task-veo-v2", "0.36.4", "0.37.0", "0.57.0", &[("task", 7)]),
+        ("task-wan-image-v2", "0.35.28", "0.35.29", "0.57.0", &[("task", 7)]),
+        ("task-xai-v2", "0.35.28", "0.35.29", "0.57.0", &[("task", 7)]),
+    ];
+    let shipped: BTreeSet<&str> = rows.iter().map(|row| row.0).collect();
+    assert_eq!(
+        shipped,
+        BTreeSet::from(OFFICIAL_COMPONENTS),
+        "every official package takes the round"
+    );
+    for (name, published, now, runtime, contracts) in rows {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_ne!(manifest.version, published, "{name} reused its identity published with 0.70.0");
         assert_eq!(manifest.version, now, "{name}");
         assert_eq!(
             manifest.compatibility.south_runtime, runtime,

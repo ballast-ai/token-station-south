@@ -237,3 +237,7 @@ identity in this cycle and needs no further step there.
   `created.vertex-name`.
 - 2026-10-15 (after 0.66.0): Q-VV1 (lv): the Vertex family polls a publisher-model operation name under the binding's
   own location prefix; registered as unverified ("Q-VV1"); `task-veo-v2` 0.36.1; unreleased.
+- 2026-10-16 (after 0.70.0): the host deletes `vertex_ai`, so §2 no longer holds: the package declares the `vertex_sa`
+  recipe for `vertex-veo-video` and the operator writes the location prefix in full as the component row's endpoint
+  (record [`2026-10-16-task-vertex-credentials.md`](2026-10-16-task-vertex-credentials.md), lv 2026-10-16; fresh
+  production deployment, no row migration); `task-veo-v2` 0.37.0; unreleased (0.71.0).

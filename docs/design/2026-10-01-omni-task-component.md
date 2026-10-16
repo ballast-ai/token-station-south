@@ -618,6 +618,13 @@ stopgaps, both J1 items to clear before DP0 is claimed:
 - or a host change that lets a Vertex row's task endpoint carry an API version, which is host code and is not
   recommended.
 
+**Superseded (2026-10-16, after 0.70.0; unreleased, 0.71.0)**: the host deletes `vertex_ai`. `task-gemini-omni-v2`
+0.2.0 declares §9.1's recipe in a `credentials` section scoped to `vertex-interactions-video` (without the exported
+`project_id`, which the task world refuses), and the first stopgap above is the only form: the operator writes the full
+`v1beta1` prefix as the component row's endpoint. Record
+[`2026-10-16-task-vertex-credentials.md`](2026-10-16-task-vertex-credentials.md) (lv 2026-10-16; fresh production
+deployment, no row migration).
+
 ### 9.4 P26-F4 disappears
 
 P26-F4 is the bridge sending `x-goog-api-key` to whatever `uri` the upstream response names, through a client that

@@ -701,7 +701,10 @@ fn the_t9_families_retire_the_patch_identity() {
     // so the package takes the minor 2.10.0
     // (`shipped_packages_v1::kimi_code_retires_every_published_069_package_identity`).
     assert_ne!(manifest.version, "2.9.0");
-    assert_eq!(manifest.version, "2.10.0");
+    // Published as 2.10.0 with 0.70.0; the Vertex task credentials' Q47 bump made it 2.10.1
+    // (`shipped_packages_v1::task_vertex_credentials_retires_every_published_070_package_identity`).
+    assert_ne!(manifest.version, "2.10.0");
+    assert_eq!(manifest.version, "2.10.1");
     assert_eq!(OpenAiCompatibleReferenceV1.metadata().version, manifest.version);
     assert_eq!(manifest.compatibility.south_runtime, "0.60.0");
 }
