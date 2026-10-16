@@ -271,9 +271,11 @@ round's table now asserts only that its identities retired. `south-contracts` an
   alternatives were a family default without the key (cannot carry a row that opted out) or a model capability word
   (native's choice is not per model).
 - **T9-Q9** A client's `thinking` on GLM rows (§10). **Resolved: (a)**, under lv's directive of 2026-10-15 (migrate
-  by the native code): forwarding the client's value reproduces native. A+ is deferred (needs a ruling on `adaptive`).
+  by the native code): forwarding the client's value reproduces native. **A+ ruled 2026-10-16** (lv, Q-GM1 O1 and
+  Q-GM2 (a) of `2026-10-16-glm-coding-messages.md`): `glm-coding` renders `reasoning.mode`, `adaptive` writes nothing
+  (§10, `provider-openai-compatible` 2.9.0).
 
-## 10. A client's `thinking` on GLM rows (T9-Q9, resolved to (a))
+## 10. A client's `thinking` on GLM rows (T9-Q9, resolved to (a); A+ added 2026-10-16)
 
 **The issue.** A `-thinking` model alias on a native `glm` or `glm_coding` row injects `thinking: {"type": "enabled"}`
 only when the client sent no `thinking` (`body_patch.rs:541-551`), and on Chat the client's own value goes to Z.ai
@@ -342,6 +344,30 @@ What was implemented (`reference::client_passthrough`, `forward_client_fields`):
 - **Unverified:** whether Azure OpenAI or the Copilot proxy refuse an unknown `thinking` field; native forwards it the
   same way, so a client that sends it there gets native's answer.
 
+**A+, from 0.69.0 (`provider-openai-compatible` 2.9.0).** Ruled by lv on 2026-10-16 with the GLM Messages record
+(`2026-10-16-glm-coding-messages.md` §5 O1, §6 Q-GM2 (a)); implemented in `reference::render_glm_thinking`:
+
+- **Family:** `glm-coding` only. Every other family writes no `thinking` from the mode, as before
+  (`no_other_family_renders_the_reasoning_mode`).
+- **Mapping:** when the body has no `thinking` after the client fields are forwarded, `reasoning.mode` `enabled`
+  writes `thinking: {"type": "enabled"}` and `disabled` writes `{"type": "disabled"}`. `adaptive` has no GLM
+  spelling and, like an absent mode, writes nothing, so the upstream default decides (Q-GM2 (a)).
+  `reasoning.budget_tokens` has no GLM carrier and is never written.
+- **Precedence:** a Chat client's own `thinking` extension (forwarded above) wins over the mode. A Messages client
+  never has one, because the Anthropic north codec consumes the key into `reasoning.mode`.
+- **Registered difference (Q-GM2):** a `-thinking` alias row's `keep_existing` extra injects `enabled` for an
+  `adaptive` Messages client, where native passes `adaptive` to Z.ai's Anthropic endpoint.
+- **Fixtures:** `glm-coding-reasoning-enabled` (with a budget, dropped), `glm-coding-reasoning-disabled`,
+  `glm-coding-reasoning-adaptive`, `glm-coding-client-thinking-wins-over-reasoning-mode` and
+  `openai-compatible-ignores-reasoning-mode`; the absent case is every existing `glm-coding` row. Tests:
+  `glm_coding_renders_the_reasoning_mode_as_thinking`, `a_messages_client_keeps_its_thinking_switch_on_glm_coding`
+  (the IR from a Messages body through `chat_request_from_anthropic_messages`),
+  `a_client_thinking_extension_wins_over_the_reasoning_mode`, `no_other_family_renders_the_reasoning_mode` and
+  `gate_two_runs_the_reasoning_mode_cases`.
+- **Versions (Q47 against v0.68.0):** `south-component-conformance` 0.68.0; `provider-openai-compatible` takes the
+  minor 2.9.0 and every other package a patch with unchanged behaviour, each keeping its `south_runtime` and contracts
+  (`shipped_packages_v1::glm_thinking_retires_every_published_068_package_identity`).
+
 ## Revision note
 
 - 2026-10-15: first draft, accepted under lv's directive of the same day; implemented with the defaults.
@@ -360,3 +386,5 @@ What was implemented (`reference::client_passthrough`, `forward_client_fields`):
 - 2026-10-16 (from the host's 0.68.0 re-pin and its dual run): §5 D11 narrowed. Plain user text shows no difference;
   only an assistant turn whose IR carries reasoning plus text differs (native string, component array). The release
   0.68.0 record's one-line summary of D11 predates this and is kept as history.
+- 2026-10-16 (lv, Q-GM1 O1 and Q-GM2 (a) of `2026-10-16-glm-coding-messages.md`): §10 A+ implemented in
+  `provider-openai-compatible` 2.9.0; §9 T9-Q9 updated.
