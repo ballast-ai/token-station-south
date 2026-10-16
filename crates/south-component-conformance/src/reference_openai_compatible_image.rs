@@ -78,9 +78,10 @@ pub const AZURE_OPENAI_DATED: &str = azure_openai_dated::FAMILY;
 pub const AZURE_SECRET_HEADER: &str = "api-key";
 /// The Z.ai GLM Coding Plan, the provider world's name (`provider-openai-compatible`'s family).
 pub const GLM_CODING: &str = glm_coding::FAMILY;
-/// The API root of the GLM Coding Plan's `OpenAI`-compatible surface below the row endpoint (an
-/// origin such as `https://api.z.ai`): native `build_upstream_url`'s `GlmCoding` arm, for every
-/// path that is not `/v1/messages`.
+/// The GLM Coding Plan's API root below the row endpoint.
+///
+/// The endpoint is an origin such as `https://api.z.ai`; native `build_upstream_url`'s `GlmCoding`
+/// arm appends this root for every path that is not `/v1/messages`.
 pub const GLM_CODING_API_ROOT: &str = "api/coding/paas/v4";
 
 const GENERATIONS: &str = "images/generations";
