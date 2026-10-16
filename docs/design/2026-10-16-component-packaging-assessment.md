@@ -1,7 +1,8 @@
 # Component packaging: what the plug-in boundary delivers today
 
-Status: proposed. This record makes no change. It measures, states the questions for lv, and proposes the order of the
-work, so that the changes it leads to each get a record of their own.
+Status: proposed; Q2 ruled. lv, 2026-10-16: (A). The goal is that a plug-in is really pluggable: adding or changing a
+provider package compiles that package and nothing else, neither the host nor any other package. §3.1 turns that into
+acceptance criteria. This record makes no change itself; each step it leads to gets a record of its own.
 
 Date: 2026-10-16
 
@@ -117,6 +118,29 @@ I recommend (A), in this order, each step gated on the work it would otherwise c
 4. **One adapter per world in the host** (host). After the host's native-arm deletion reaches zero, because that work
    edits the same files.
 
+### 3.1 Acceptance criteria for (A)
+
+The goal is met when all five hold. Each later record names which of them it moves.
+
+- **P1. Adding a package needs no host build.** A package for an existing world, with a new family, is loaded by
+  putting it in the components directory (and pinning it if its family is contested). Today the loader does this; the
+  deployment does not ship the directory (§1 item 1).
+- **P2. The host links no provider logic.** A production host build does not compile any `reference_*` module or vendor
+  helper; the native references are a test-only dependency. Today every host build links all forty (§1 item 2).
+- **P3. Changing one family rebuilds one family.** A change to one vendor family's logic changes only the
+  `component.wasm` of the packages of that family; every other package keeps its digest, version and gate ② report.
+  Today it changes all forty (§2.2 E1); the target is the E2 row.
+- **P4. A package-only South release needs no host change.** When a release changes packages but not the runtime, the
+  WIT worlds or the shared SDK, the host fetches the new packages from the release index without a new pin, a rebuild
+  or an edit to a hand-copied manifest. Today every repin edits 57 to 72 host files (§1 item 4).
+- **P5. Operator pins survive unrelated releases.** A family pin names a digest that only changes when that family
+  changes, so a release that does not touch the family leaves the pin valid. Today every release breaks every pin
+  (R26).
+
+What still rebuilds the host, by design: a change to `south-provider-runtime`, to a WIT world or the shared SDK, or a
+new world. Those are the platform, not plug-ins; a new world in particular needs a host adapter, and (A) keeps that to
+one adapter per world.
+
 The two items in §2.3 are independent of the choice and can be done at any time between releases, each under a short
 record of its own.
 
@@ -124,7 +148,7 @@ record of its own.
 
 - **Q1.** In production today, does the host load packages, or does it run the native references? The host's system
   page (`/admin/api/system`, `south_packages`) shows the source of each dialect.
-- **Q2.** (A) or (B)? Recommended: (A).
+- **Q2.** (A) or (B)? **Ruled (A)** (lv, 2026-10-16), with the goal stated in §3.1.
 - **Q3.** Under (A), is a family crate's version the identity that moves, with the SDK versioned on its own as Q47's
   three crates are now? Recommended: yes; Q47's rule then applies to the SDK alone.
 - **Q4.** Should the §2.3 test-layout changes go ahead now, separately from Q2? Recommended: yes.
