@@ -357,7 +357,13 @@ first (T9 H3). `azure_foundry` rows keep their own image arm (`image-azure`); th
 implicit: native's multipart edit refuses a body without a `model` part (400, before admission) and parses `n` with
 `str::parse::<u32>` after trimming (so `+3` passes and an empty value is refused); both are reproduced or moot (I3, I4).
 
-**Gates (phase 2, not yet run when this section was written).** The pack's expectations were written from this record
-by an independent transcription before the reference ran; the first run of the suite reconciles them with the
-reference row by row, and any difference found is either a reference bug or a record correction, noted here.
+**Fixture reconciliation.** The pack's expectations were written from this record by an independent transcription
+before the reference ran. On the first run the reference passed all 109 cases with no difference, so no row was
+changed and no record correction was needed; the native arm was the authority for each row's input (§2) and the
+record for each difference (§5, D16 to D19 above).
 
+**Gates.** The suite test (15 tests, the pack and the mutations module), `shipped_packages_v1` (78) and the sandbox
+parity test (5, gate ② over the built `component.wasm`, byte for byte against the reference) pass, with the README's
+local verification list and the release-only checks. Source mutations of the reference, each restored from a backup,
+went red: the API-root rule, the D11 fold, the D9 integral-float reading, the delivered count and the `api-version`
+query (the PR lists them).

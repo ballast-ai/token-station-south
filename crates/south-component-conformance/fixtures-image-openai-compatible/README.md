@@ -9,7 +9,7 @@ pass-through of `handler/images/handlers.rs`, `handler/images/openai_compat.rs`,
 `handler/images/execute.rs`, the size hint of `engine/token_counter/media.rs`, `ImageTokenUsage::from_openai_usage` and
 the `AzureOpenai` arm of `engine/upstream.rs`), not from captured traffic; the success and error bodies follow the
 OpenAI images shape and are unverified against a capture (record U1 to U6). The expectations were written from the
-record by an independent transcription, before the reference ran, and reconciled with the reference row by row.
+record by an independent transcription, before the reference ran; the reference matched every row on its first run.
 
 Rows: capabilities for each family (every configured id declared), no models and the wrong family; the URL roots of
 record §3 (GLM, BytePlus and DeepInfra endpoints with a path, an OpenAI origin), the two D13 shapes (an `openai` row

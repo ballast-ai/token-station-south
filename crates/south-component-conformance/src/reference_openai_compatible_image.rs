@@ -391,15 +391,13 @@ fn token_usage(usage: &Value) -> Result<ImageTokenUsageV1, ()> {
         Some(cached) => Some(cached),
         None => count(&usage["cached_tokens"])?,
     };
-    let output = match count(&usage["output_tokens"])? {
-        Some(output) => Some(output),
-        None => {
-            let output_details = &usage["output_tokens_details"];
-            match (count(&output_details["text_tokens"])?, count(&output_details["image_tokens"])?)
-            {
-                (None, None) => None,
-                (text, image) => Some(text.unwrap_or(0).checked_add(image.unwrap_or(0)).ok_or(())?),
-            }
+    let output = if let Some(output) = count(&usage["output_tokens"])? {
+        Some(output)
+    } else {
+        let output_details = &usage["output_tokens_details"];
+        match (count(&output_details["text_tokens"])?, count(&output_details["image_tokens"])?) {
+            (None, None) => None,
+            (text, image) => Some(text.unwrap_or(0).checked_add(image.unwrap_or(0)).ok_or(())?),
         }
     };
     Ok(ImageTokenUsageV1 {

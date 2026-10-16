@@ -522,7 +522,7 @@ mod mutations {
                     }
                     _ => error,
                 })?;
-            if let Break::AlwaysV1 = self.0 {
+            if matches!(self.0, Break::AlwaysV1) {
                 let mut descriptor: Value =
                     serde_json::from_str(&prepared.descriptor.to_json()).unwrap();
                 let path = descriptor["path"].as_str().unwrap().to_owned();
@@ -581,7 +581,7 @@ mod mutations {
             context: &ImageRenderContextV1,
         ) -> ComponentResultV1<ImageRenderedV1> {
             let rendered = NATIVE.render(state, outcomes, context)?;
-            if let Break::NulledPlaceholder = self.0 {
+            if matches!(self.0, Break::NulledPlaceholder) {
                 let mut template: Value = serde_json::from_str(&rendered.template).unwrap();
                 if let Some(entry) = template["data"].get_mut(0).and_then(Value::as_object_mut) {
                     for value in entry.values_mut() {
