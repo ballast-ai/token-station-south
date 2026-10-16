@@ -1305,17 +1305,30 @@ fn every_world_states_its_host_import_and_admitted_declarations() {
     assert_eq!(posture(&TASK_WORLD_SCHEMA), (HostImportV1::Linked, false, false, none));
     assert_eq!(posture(&TASK_WORLD_SCHEMA_V2), (HostImportV1::Unlinked, false, false, none));
     assert_eq!(posture(&EMBEDDINGS_WORLD_SCHEMA), (HostImportV1::Pure, true, false, none));
-    assert_eq!(posture(&IMAGE_WORLD_SCHEMA), (HostImportV1::Pure, true, false, none));
+    // The image world takes the value channel and, of the instance declarations, `user_agent`
+    // alone (`image-openai-compatible` record §9 and §11, from 0.60.0 of this crate).
+    assert_eq!(
+        posture(&IMAGE_WORLD_SCHEMA),
+        (HostImportV1::Pure, true, false, InstanceDeclarationsV1::UserAgent)
+    );
     // The speech world takes the value channel and, of the instance declarations,
     // `query_parameters` alone (speech record §17.3).
     assert_eq!(
         posture(&SPEECH_WORLD_SCHEMA),
         (HostImportV1::Pure, true, false, InstanceDeclarationsV1::QueryParameters)
     );
-    assert!(InstanceDeclarationsV1::QueryParameters.admits_query_parameters());
-    assert!(!InstanceDeclarationsV1::QueryParameters.admits_quota_headers_and_user_agent());
-    assert!(all.admits_query_parameters() && all.admits_quota_headers_and_user_agent());
-    assert!(!none.admits_query_parameters() && !none.admits_quota_headers_and_user_agent());
+    // Each value against each declaration: (query_parameters, quota_headers, user_agent).
+    let admits = |declarations: InstanceDeclarationsV1| {
+        (
+            declarations.admits_query_parameters(),
+            declarations.admits_quota_headers(),
+            declarations.admits_user_agent(),
+        )
+    };
+    assert_eq!(admits(none), (false, false, false));
+    assert_eq!(admits(InstanceDeclarationsV1::QueryParameters), (true, false, false));
+    assert_eq!(admits(InstanceDeclarationsV1::UserAgent), (false, false, true));
+    assert_eq!(admits(all), (true, true, true));
     let linked: Vec<&str> = KNOWN_WORLDS
         .iter()
         .filter(|schema| schema.host_import.is_linked())
@@ -1445,7 +1458,8 @@ fn image_manifest_refuses_words_and_arms_outside_its_vocabulary() {
     }
 }
 
-/// The image world admits the value channel and nothing else beyond its vocabulary (§18.3).
+/// The image world admits the value channel and, of the instance declarations, `user_agent`
+/// alone; nothing else beyond its vocabulary (§18.3; `image-openai-compatible` record §11).
 #[test]
 fn image_manifest_refuses_provider_only_declarations() {
     let mut signed = image_manifest();
@@ -1482,13 +1496,6 @@ fn image_manifest_refuses_provider_only_declarations() {
         Err(ManifestErrorV1::InstanceIsAProviderWorldDeclaration("host_values".to_owned()))
     );
 
-    let mut agent = image_manifest();
-    agent.user_agent.insert("azure-foundry".to_owned(), "acme/1.0".to_owned());
-    assert_eq!(
-        agent.validate(),
-        Err(ManifestErrorV1::InstanceIsAProviderWorldDeclaration("user_agent".to_owned()))
-    );
-
     let mut quota = image_manifest();
     quota.quota_headers = vec![south_provider_api::QuotaHeaderDeclarationV1 {
         header: "x-quota-remaining".to_owned(),
@@ -1508,6 +1515,80 @@ fn image_manifest_refuses_provider_only_declarations() {
         query.validate(),
         Err(ManifestErrorV1::InstanceIsAProviderWorldDeclaration("query_parameters".to_owned()))
     );
+}
+
+/// The image world admits `user_agent` (`image-openai-compatible` record §11, from 0.60.0 of this
+/// crate) under the provider world's rules: only for a family the manifest declares and only under
+/// the controlled user-agent value grammar. `quota_headers` and `query_parameters` stay refused,
+/// and an admitted `user_agent` beside a refused declaration does not hide the refusal.
+#[test]
+fn the_image_world_admits_user_agent_under_the_provider_rules() {
+    let with_agent = |family: &str, value: &str| {
+        let mut manifest = image_manifest();
+        manifest.user_agent.insert(family.to_owned(), value.to_owned());
+        manifest
+    };
+    let admitted = with_agent("azure-foundry", "opencode/1.15.6");
+    assert_eq!(admitted.validate(), Ok(()));
+    assert_eq!(admitted.user_agent_for("azure-foundry"), Some("opencode/1.15.6"));
+    assert_eq!(admitted.user_agent_for("azure-mai"), None);
+
+    // The family must be one the manifest declares.
+    assert!(matches!(
+        with_agent("glm-coding", "opencode/1.15.6").validate(),
+        Err(ManifestErrorV1::InvalidUserAgent { family, .. }) if family == "glm-coding"
+    ));
+    // The value grammar is the provider world's (`is_user_agent_value`), not a lighter copy.
+    for value in ["", " leading", "trailing ", "line\r\nbreak", "tab\there", "non-ascii/é"] {
+        assert!(!south_provider_api::is_user_agent_value(value));
+        assert!(
+            matches!(
+                with_agent("azure-foundry", value).validate(),
+                Err(ManifestErrorV1::InvalidUserAgent { .. })
+            ),
+            "{value:?} must be refused"
+        );
+    }
+    let longest = "a".repeat(256);
+    assert_eq!(with_agent("azure-foundry", &longest).validate(), Ok(()));
+    let too_long = "a".repeat(257);
+    assert!(matches!(
+        with_agent("azure-foundry", &too_long).validate(),
+        Err(ManifestErrorV1::InvalidUserAgent { .. })
+    ));
+
+    // `quota_headers` and `query_parameters` stay refused beside an admitted user-agent.
+    let mut quota = with_agent("azure-foundry", "acme/1.0");
+    quota.quota_headers = vec![south_provider_api::QuotaHeaderDeclarationV1 {
+        header: "x-quota-remaining".to_owned(),
+        field: "x-ratelimit-remaining-tokens".to_owned(),
+    }];
+    assert_eq!(
+        quota.validate(),
+        Err(ManifestErrorV1::InstanceIsAProviderWorldDeclaration("quota_headers".to_owned()))
+    );
+    let mut query = with_agent("azure-foundry", "acme/1.0");
+    query.query_parameters = vec![south_provider_api::QueryParameterDeclarationV1 {
+        name: "output_format".to_owned(),
+        syntax: south_provider_api::QueryValueSyntaxV1::Token,
+    }];
+    assert_eq!(
+        query.validate(),
+        Err(ManifestErrorV1::InstanceIsAProviderWorldDeclaration("query_parameters".to_owned()))
+    );
+
+    // The widening is the image world's: the task, embeddings and speech worlds still refuse it,
+    // for a family their manifest declares.
+    for mut other in [task_manifest(), embeddings_manifest(), speech_manifest()] {
+        let family = other.providers[0].clone();
+        other.user_agent.insert(family, "acme/1.0".to_owned());
+        assert_eq!(
+            other.validate(),
+            Err(ManifestErrorV1::InstanceIsAProviderWorldDeclaration("user_agent".to_owned())),
+            "{}",
+            other.api_version
+        );
+    }
 }
 
 /// No world accepts another world's suite or package, and adding the image world leaves every

@@ -1,14 +1,15 @@
 //! `south.image-component.v1` against the `image-openai-compatible` native reference and its
 //! shipped fixture pack, and the behaviours of design record
-//! `2026-10-16-image-openai-compatible.md` §2 to §5 pinned by name.
+//! `2026-10-16-image-openai-compatible.md` §2 to §5, §9 and §11 pinned by name.
 
 use std::path::Path;
 
 use serde_json::{Value, json};
 use south_component_conformance::image_fixture::ImageFixturePackV1;
+use south_component_conformance::reference::glm_coding;
 use south_component_conformance::reference_openai_compatible_image::{
-    AZURE_OPENAI_DATED, AZURE_OPENAI_V1, EDIT_IMMUTABLE, GENERATION_IMMUTABLE, OPENAI_COMPATIBLE,
-    OpenAiCompatibleImageReferenceV1,
+    AZURE_OPENAI_DATED, AZURE_OPENAI_V1, EDIT_IMMUTABLE, GENERATION_IMMUTABLE, GLM_CODING,
+    GLM_CODING_API_ROOT, OPENAI_COMPATIBLE, OpenAiCompatibleImageReferenceV1,
 };
 use south_component_conformance::{ImageComponentV1, ImageOutcomeV1, run_image_component_suite_v1};
 use south_contracts::image::{ImageCallContextV1, ImageRenderContextV1, ImageTokenUsageV1};
@@ -18,6 +19,8 @@ use token_station_protocol::{ErrorCode, ErrorEnvelope, ProviderConfig};
 const REFERENCE: OpenAiCompatibleImageReferenceV1 = OpenAiCompatibleImageReferenceV1;
 const GLM: &str = "https://api.z.ai/api/paas/v4";
 const AZURE: &str = "https://example-resource.openai.azure.com";
+/// Native `ProviderType::GlmCoding`'s preset endpoint, an origin.
+const GLM_CODING_ORIGIN: &str = "https://api.z.ai";
 
 fn root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -100,15 +103,16 @@ fn the_reference_passes_its_own_pack() {
     assert!(failures.is_empty(), "{failures:#?}");
 }
 
-/// The manifest names the three families of step 1, both auth arms and the dated family's
-/// `api_version` key with native's default (record §9, OCI-Q1 (b)).
+/// The manifest names the three families of step 1 and `glm-coding` of step 2, both auth arms and
+/// the dated family's `api_version` key with native's default (record §9, OCI-Q1 (b)).
 #[test]
-fn the_manifest_declares_the_step_1_families() {
+fn the_manifest_declares_the_four_families() {
     let manifest = manifest();
     assert_eq!(
         manifest.providers.iter().map(String::as_str).collect::<Vec<_>>(),
-        [OPENAI_COMPATIBLE, AZURE_OPENAI_V1, AZURE_OPENAI_DATED]
+        [OPENAI_COMPATIBLE, AZURE_OPENAI_V1, AZURE_OPENAI_DATED, GLM_CODING]
     );
+    assert!(manifest.declared_keys(GLM_CODING).is_empty());
     assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer", "header_secret"]);
     assert!(manifest.declared_keys(OPENAI_COMPATIBLE).is_empty());
     assert!(manifest.declared_keys(AZURE_OPENAI_V1).is_empty());
@@ -131,6 +135,7 @@ fn every_configured_id_is_declared_on_every_family() {
         (OPENAI_COMPATIBLE, GLM.to_owned()),
         (AZURE_OPENAI_V1, format!("{AZURE}/openai/v1")),
         (AZURE_OPENAI_DATED, AZURE.to_owned()),
+        (GLM_CODING, GLM_CODING_ORIGIN.to_owned()),
     ] {
         let mut config = config(provider, &base, None);
         config.models =
@@ -175,12 +180,13 @@ fn the_api_root_rule_places_the_path() {
     }
 }
 
-/// `openai-compatible` presents `Bearer`; both Azure families the `api-key` header (native
-/// `apply_provider_auth`).
+/// `openai-compatible` and `glm-coding` present `Bearer`; both Azure families the `api-key` header
+/// (native `apply_provider_auth`).
 #[test]
 fn the_auth_arm_follows_the_family() {
     for (provider, base, auth) in [
         (OPENAI_COMPATIBLE, GLM, json!({ "arm": "bearer", "slot": "provider_api_key" })),
+        (GLM_CODING, GLM_CODING_ORIGIN, json!({ "arm": "bearer", "slot": "provider_api_key" })),
         (
             AZURE_OPENAI_V1,
             "https://example-resource.openai.azure.com/openai/v1",
@@ -195,6 +201,67 @@ fn the_auth_arm_follows_the_family() {
         let prepared = generate(&config(provider, base, None), &json!({ "prompt": "p" })).unwrap();
         assert_eq!(prepared["descriptor"]["auth"], auth, "{provider}");
     }
+}
+
+/// §9 / §11: `glm-coding` posts below the row endpoint at native's fixed Coding Plan root
+/// (`build_upstream_url`'s `GlmCoding` arm: `{endpoint}/api/coding/paas/v4/images/…`), whatever the
+/// endpoint's path, with no query; the request and its facts are `openai-compatible`'s.
+#[test]
+fn glm_coding_posts_below_the_coding_plan_root() {
+    assert_eq!(GLM_CODING_API_ROOT, "api/coding/paas/v4");
+    for base in [GLM_CODING_ORIGIN, "https://api.z.ai/", "https://proxy.example/zai"] {
+        let config = config(GLM_CODING, base, None);
+        let prepared = generate(&config, &json!({ "prompt": "p", "size": "1024x1024" })).unwrap();
+        assert_eq!(
+            prepared["descriptor"]["path"], "api/coding/paas/v4/images/generations",
+            "{base}"
+        );
+        assert!(prepared["descriptor"].get("query").is_none());
+        let prepared = edit(&config, &json!([file("image", "b0"), text("n", "2")])).unwrap();
+        assert_eq!(prepared["descriptor"]["path"], "api/coding/paas/v4/images/edits", "{base}");
+        assert_eq!(prepared["facts"]["requested_outputs"], 2);
+    }
+    // Beyond the route, the family is the `openai-compatible` wire: same body, facts and owned set.
+    let body = json!({ "model": "c", "prompt": "p", "n": 3, "size": "2K", "watermark": false });
+    let glm = generate(&config(GLM_CODING, GLM_CODING_ORIGIN, None), &body).unwrap();
+    let openai = generate(&config(OPENAI_COMPATIBLE, GLM, None), &body).unwrap();
+    for key in ["facts", "immutable_body_paths", "state", "response_elision_paths"] {
+        assert_eq!(glm[key], openai[key], "{key}");
+    }
+    assert_eq!(glm["descriptor"]["body"], openai["descriptor"]["body"]);
+    // A row without an auth slot sends no auth, as on the other families.
+    let mut no_slot = config(GLM_CODING, GLM_CODING_ORIGIN, None);
+    no_slot.auth = None;
+    let prepared = generate(&no_slot, &json!({ "prompt": "p" })).unwrap();
+    assert!(prepared["descriptor"].get("auth").is_none());
+}
+
+/// §11: the `glm-coding` user-agent is the manifest's (the descriptor cannot carry `user-agent`,
+/// a reserved header), equal to `provider-openai-compatible`'s for the same family (native
+/// `GLM_CODING_IMPERSONATION_UA`), and declared for no other family; the image world admits it.
+#[test]
+fn glm_coding_declares_the_provider_world_user_agent() {
+    let manifest = manifest();
+    assert_eq!(manifest.user_agent_for(GLM_CODING), Some(glm_coding::USER_AGENT));
+    assert_eq!(glm_coding::USER_AGENT, "opencode/1.15.6");
+    let text: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(
+            root().join("../../components/provider-openai-compatible/manifest.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(text.user_agent_for(GLM_CODING), manifest.user_agent_for(GLM_CODING));
+    for family in [OPENAI_COMPATIBLE, AZURE_OPENAI_V1, AZURE_OPENAI_DATED] {
+        assert_eq!(manifest.user_agent_for(family), None, "{family}");
+    }
+    assert_eq!(manifest.user_agent.len(), 1);
+    assert!(manifest.query_parameters.is_empty() && manifest.quota_headers.is_empty());
+    assert_eq!(manifest.validate(), Ok(()));
+    // The descriptor never names a user-agent itself.
+    let prepared =
+        generate(&config(GLM_CODING, GLM_CODING_ORIGIN, None), &json!({ "prompt": "p" })).unwrap();
+    assert!(!prepared["descriptor"].to_string().to_ascii_lowercase().contains("user-agent"));
 }
 
 /// §9: the dated family addresses the deployment (the upstream model, one escaped segment, as
@@ -483,6 +550,8 @@ mod mutations {
     enum Break {
         /// The API-root rule dropped: `v1/` prefixed whatever the endpoint.
         AlwaysV1,
+        /// `glm-coding` routed as `openai-compatible`: the Coding Plan root dropped.
+        GlmCodingWithoutItsRoot,
         /// The D11 fold dropped: a top-level `input_tokens` not reported.
         NoTotalInput,
         /// One delivered image fewer than the upstream answered.
@@ -526,8 +595,22 @@ mod mutations {
                 let mut descriptor: Value =
                     serde_json::from_str(&prepared.descriptor.to_json()).unwrap();
                 let path = descriptor["path"].as_str().unwrap().to_owned();
-                if !path.starts_with("v1/") && !path.starts_with("openai/") {
+                if !path.starts_with("v1/")
+                    && !path.starts_with("openai/")
+                    && !path.starts_with("api/")
+                {
                     descriptor["path"] = Value::String(format!("v1/{path}"));
+                }
+                prepared.descriptor =
+                    MediaRequestDescriptorV1::parse(&descriptor.to_string(), &MediaLimitsV1::V1)
+                        .unwrap();
+            }
+            if matches!(self.0, Break::GlmCodingWithoutItsRoot) {
+                let mut descriptor: Value =
+                    serde_json::from_str(&prepared.descriptor.to_json()).unwrap();
+                let path = descriptor["path"].as_str().unwrap().to_owned();
+                if let Some(rest) = path.strip_prefix("api/coding/paas/v4/") {
+                    descriptor["path"] = Value::String(format!("v1/{rest}"));
                 }
                 prepared.descriptor =
                     MediaRequestDescriptorV1::parse(&descriptor.to_string(), &MediaLimitsV1::V1)
@@ -600,6 +683,7 @@ mod mutations {
     fn each_rule_bites() {
         for (broken, check) in [
             (Break::AlwaysV1, CheckV1::FixtureMatch),
+            (Break::GlmCodingWithoutItsRoot, CheckV1::FixtureMatch),
             (Break::NoTotalInput, CheckV1::FixtureMatch),
             (Break::DropsAnImage, CheckV1::FixtureMatch),
             (Break::NulledPlaceholder, CheckV1::FixtureMatch),

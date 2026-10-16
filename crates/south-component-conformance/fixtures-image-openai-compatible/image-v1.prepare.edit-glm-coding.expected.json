@@ -1,0 +1,77 @@
+{
+  "facts": {
+    "operation": "edit",
+    "inputs": {
+      "input_image": 1,
+      "reference_image": 0,
+      "mask": 0
+    },
+    "requested_outputs": 2,
+    "tier": {},
+    "metering_forms": [
+      "images"
+    ],
+    "size": {
+      "width": 1024,
+      "height": 1024
+    }
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "api/coding/paas/v4/images/edits",
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "multipart": {
+        "parts": [
+          {
+            "name": "prompt",
+            "value": "add a hat"
+          },
+          {
+            "name": "image",
+            "blob": "b0",
+            "transform": "as_is",
+            "filename": "photo.png",
+            "media_type": "image/png"
+          },
+          {
+            "name": "n",
+            "value": "2"
+          },
+          {
+            "name": "size",
+            "value": "1024x1024"
+          },
+          {
+            "name": "model",
+            "value": "cogview-4-250304"
+          }
+        ]
+      }
+    }
+  },
+  "repeat": 1,
+  "response_body_form": "json",
+  "response_elision_paths": [
+    "/data/*/b64_json"
+  ],
+  "immutable_body_paths": [
+    "model",
+    "n",
+    "size",
+    "quality",
+    "width",
+    "height",
+    "image",
+    "mask",
+    "response_format"
+  ],
+  "state": {
+    "metering_required": [
+      "images"
+    ]
+  }
+}

@@ -2109,14 +2109,21 @@ fn image_reve_declares_media_1_and_the_runtime_of_the_record() {
     assert_eq!(compatibility_admits(&manifest, &media_1_only), Ok(()));
 }
 
-/// `image-openai-compatible` (design record `2026-10-16-image-openai-compatible.md` §7, step 1)
-/// starts at 1.0.0 in the image world with the families `openai-compatible`, `azure-openai-v1` and
-/// `azure-openai-dated` (OCI-Q1 (b)), `bearer` and `header_secret` (the Azure `api-key`), the dated
-/// family's `api_version` key, and `contracts` `{image: 1, media: 1}`. Everything it declares was
-/// admitted by the image world as it shipped (0.52.0: both auth arms, the value channel, the
-/// sanctioned `api-version` query of a media descriptor; the `api_version_date` syntax since 0.43.0),
-/// so it declares the oldest runtime an image package may name, 0.57.0 (`canonical_ir` 4), as
-/// `image-azure`, `image-minimax` (a config key) and `image-xai` do, and a media 1 host admits it.
+/// `image-openai-compatible` (design record `2026-10-16-image-openai-compatible.md` §7, §10 and §11)
+/// starts at 1.0.0 in the image world with the families `openai-compatible`, `azure-openai-v1`,
+/// `azure-openai-dated` (step 1) and `glm-coding` (step 2; OCI-Q1 (b)), `bearer` and
+/// `header_secret` (the Azure `api-key`), the dated family's `api_version` key, the `glm-coding`
+/// user-agent, and `contracts` `{image: 1, media: 1}`. It stays 1.0.0 through step 2: no release
+/// published it, so the first published identity carries all four families.
+///
+/// Runtime: everything step 1 declares was admitted by the image world as it shipped in 0.52.0,
+/// so 0.57.0 (`canonical_ir` 4) would do; the `glm-coding` `user_agent` is admitted only by the
+/// image world of `south-provider-api` 0.60.0, first shipped in south 0.70.0, so no earlier
+/// runtime's gate ① admits this manifest (each refuses it as a provider-world declaration: fail
+/// closed). Following the 0.60.0 and 0.67.0 precedents (record §11), this branch leaves the
+/// declaration at 0.57.0 and the **0.70.0 release commit raises it to 0.70.0**, with
+/// `declared_runtime_now` and this assertion; until then the release-only declared-runtime check
+/// (`scripts/check-declared-runtime.sh`) is expected to refuse the package under 0.57.0.
 #[test]
 fn image_openai_compatible_declares_media_1_and_the_runtime_of_the_record() {
     let manifest: ComponentManifestV1 = serde_json::from_str(
@@ -2132,17 +2139,24 @@ fn image_openai_compatible_declares_media_1_and_the_runtime_of_the_record() {
         south_component_conformance::reference_openai_compatible_image::VERSION
     );
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
-    assert_eq!(manifest.providers, ["openai-compatible", "azure-openai-v1", "azure-openai-dated"]);
+    assert_eq!(
+        manifest.providers,
+        ["openai-compatible", "azure-openai-v1", "azure-openai-dated", "glm-coding"]
+    );
     assert_eq!(manifest.capabilities.iter().collect::<Vec<_>>(), ["edit", "generate"]);
     assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer", "header_secret"]);
     assert!(manifest.declared_keys("openai-compatible").is_empty());
     assert!(manifest.declared_keys("azure-openai-v1").is_empty());
+    assert!(manifest.declared_keys("glm-coding").is_empty());
     assert_eq!(
         manifest.declared_keys("azure-openai-dated").into_iter().collect::<Vec<_>>(),
         ["api_version"]
     );
+    assert_eq!(manifest.user_agent.keys().collect::<Vec<_>>(), ["glm-coding"]);
+    assert_eq!(manifest.user_agent_for("glm-coding"), Some("opencode/1.15.6"));
     assert_eq!(manifest.compatibility.contracts.get("media"), Some(&1));
     assert_eq!(manifest.compatibility.contracts.get("image"), Some(&1));
+    // The 0.70.0 release commit raises this to "0.70.0" (see above).
     assert_eq!(manifest.compatibility.south_runtime, "0.57.0");
     assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
     let mut media_1_only = host_range::host_range();

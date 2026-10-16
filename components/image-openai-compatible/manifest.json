@@ -5,7 +5,8 @@
   "providers": [
     "openai-compatible",
     "azure-openai-v1",
-    "azure-openai-dated"
+    "azure-openai-dated",
+    "glm-coding"
   ],
   "capabilities": [
     "edit",
@@ -23,6 +24,9 @@
         "description": "The Azure OpenAI API version sent as ?api-version=, a date with an optional -preview suffix such as 2025-04-01-preview. Defaults to 2024-10-21. A row on Azure's unversioned v1 surface uses the azure-openai-v1 family instead."
       }
     }
+  },
+  "user_agent": {
+    "glm-coding": "opencode/1.15.6"
   },
   "permissions": {
     "network": false,

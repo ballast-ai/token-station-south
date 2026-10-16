@@ -1,0 +1,15 @@
+{
+  "provider_config": {
+    "provider": "glm-coding",
+    "base_url": "https://api.z.ai",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "cogview-4-250304"
+      },
+      {
+        "model": "glm-image"
+      }
+    ]
+  }
+}

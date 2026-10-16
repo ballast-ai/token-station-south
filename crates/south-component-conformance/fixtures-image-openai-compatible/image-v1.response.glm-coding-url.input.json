@@ -1,0 +1,14 @@
+{
+  "prepare_case": "image-v1.prepare.generate-glm-coding-origin",
+  "response": {
+    "status": 200,
+    "body": {
+      "created": 1700000000,
+      "data": [
+        {
+          "url": "https://aigc-files.bigmodel.cn/api/cogview/1.png"
+        }
+      ]
+    }
+  }
+}
