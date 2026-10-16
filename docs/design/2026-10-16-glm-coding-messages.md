@@ -1,6 +1,6 @@
 # GLM Coding Plan Messages clients on a `glm-coding` row (host Q-T9)
 
-Status: ruled. lv ruled §6 on 2026-10-16 as recommended (relayed by the host session): Q-GM1 = O1, Q-GM2 = (a),
+Status: ruled. Corrected on 2026-10-16 from the host's read-back (§4, R5, R6, R11, S6). lv ruled §6 on 2026-10-16 as recommended (relayed by the host session): Q-GM1 = O1, Q-GM2 = (a),
 Q-GM3 = register the remainder. The §4 fix is a separate pull request (#250); A+ follows in `provider-openai-compatible`.
 
 Date: 2026-10-16
@@ -51,13 +51,13 @@ for every row below. "Dropped" means silently: no error reaches the client.
 | R2 | `cache_control` markers (system, content, tools, tool results, top level) | Validated (an invalid marker is a 400) and typed in the IR, then **dropped**: Chat has no marker | Whether Z.ai's Anthropic endpoint honours them is unverified; the Chat endpoint's own caching still reports `cached_tokens` (R-9) |
 | R3 | `system` block array | Joined into one string | Text kept |
 | R4 | `temperature`, `top_p`, `max_tokens`, `stop_sequences` | Kept (`stop_sequences` → `stop`) | — |
-| R5 | `top_k`, `metadata`, `service_tier`, unknown top-level keys | **Dropped** (`top_k` is typed but not rendered; `metadata` is kept out of the IR; the rest go to `extensions`, which `glm-coding` forwards only for `thinking` / `enable_thinking`) | A key the IR reserves (`reasoning_effort`, `parallel_tool_calls`, …) sent on Messages is a 400 |
-| R6 | `tool_choice` | `auto` → `auto`, `any` → `required`, `tool` → named function; `disable_parallel_tool_use` → `parallel_tool_calls`. **`none` is lost**: the codec maps it to no choice (`anthropic.rs:572-586`), so the tools are sent and the model may call them | A south defect, not a GLM difference: §4 |
+| R5 | `top_k`, `metadata`, `service_tier`, unknown top-level keys (`service_tier`: the server host's admission answers 400 before either arm, `authorize.rs:414-417`) | **Dropped** (`top_k` is typed but not rendered; `metadata` is kept out of the IR; the rest go to `extensions`, which `glm-coding` forwards only for `thinking` / `enable_thinking`) | A key the IR reserves (`reasoning_effort`, `parallel_tool_calls`, …) sent on Messages is a 400 |
+| R6 | `tool_choice` | `auto` → `auto`, `any` → `required`, `tool` → named function; `disable_parallel_tool_use` → `parallel_tool_calls` (unreachable on the server host: its admission accepts `auto` / `any` only with no other key, so a choice carrying `disable_parallel_tool_use` is a 400 before either arm). **`none` is lost**: the codec maps it to no choice (`anthropic.rs:572-586`), so the tools are sent and the model may call them | A south defect, not a GLM difference: §4 |
 | R7 | Image blocks | base64 → data URL, url → url, as `image_url` | — |
 | R8 | `document` blocks (PDF) | **400** (the Chat body has no carrier) | Native passes them to Z.ai; whether Z.ai accepts them is unverified |
 | R9 | `tool_result` | String or text array flattened to a string; **non-text inner blocks and `is_error` dropped** | — |
 | R10 | History `thinking` blocks | Kept in the IR with their signature; on the wire they become `reasoning_content` only if the model row declares `upstream_requires_reasoning_content` (otherwise dropped); the signature is always lost; `redacted_thinking` dropped | GLM's preserved-thinking behaviour on Chat needs the model flag; unverified |
-| R11 | Server tools (`web_search` and the like) | Become client function tools: name kept, `type` lost | Native forwards them; whether Z.ai serves them is unverified |
+| R11 | Server tools (`web_search` and the like) | Become client function tools: name kept, `type` lost | **Corrected (host read-back, 2026-10-16):** the server host's admission refuses typed server tools with 400 before either arm (`validate_anthropic_tools`), so native does not forward them and the difference is unreachable there |
 | R12 | `anthropic-version`, `anthropic-beta` headers | Not sent | Same as every component row; `anthropic-beta` not forwarded is the claude-code precedent |
 
 ### 3.2 Response
@@ -69,7 +69,7 @@ for every row below. "Dropped" means silently: no error reaches the client.
 | S3 | `stop_reason` | `stop` → `end_turn`, `length` → `max_tokens`, `tool_calls` → `tool_use`, `content_filter` → `content_filter`; any other GLM value (`sensitive`, `network_error`) travels verbatim, by design (`anthropic.rs:364-378`), so a Messages client can see a value outside Anthropic's vocabulary |
 | S4 | `id`, `model` | Non-streaming: Z.ai's Chat `id` with a `msg_` prefix and Z.ai's `model`. Streaming: a host-synthesized id and the routed model |
 | S5 | Stream shape | Synthesized frames; `message_start` carries input usage 0 (GLM reports usage at the end, the full usage is in `message_delta`); no `ping`; blocks ordered thinking, text, tools; an upstream error mid-stream becomes one generic `error` frame |
-| S6 | Errors | Rendered by the host in its own error shape, not Z.ai's Anthropic error body |
+| S6 | Errors | Rendered by the host in its own error shape. **Narrowed (host read-back, 2026-10-16):** native wraps Z.ai's upstream errors in the host's error shape too, so neither arm delivers Z.ai's Anthropic error body; what differs is only what the host's shape carries from each upstream body |
 
 Money: both arms settle from the upstream's own token report, so the amounts follow whatever each endpoint reports for
 the same prompt. Whether Z.ai's two endpoints count the same prompt identically is **unverified**; on the subscription
@@ -83,7 +83,14 @@ fills it (`crates/south-north-codec/src/request.rs:225`). So a Messages client t
 its tools sent with no choice, which every upstream reads as "the model decides". This affects every component row a
 Messages client reaches, not only `glm-coding`: `provider-anthropic` withholds both the tools and the choice when it
 sees `ToolChoice::None` (`reference_anthropic.rs:461-468`, `tools_of`), but that branch never fires because the codec never
-produces it. Native passes the client's choice through.
+produces it.
+
+**Correction (2026-10-16, host read-back).** The first version said native passes the client's choice through. On
+the server host it never gets that far: text billing admission (`server:gateway/src/modules/inference/engine/token_counter/authorize.rs`
+`validate_anthropic_tool_choice`, `:634-651`) accepts a Messages `tool_choice` only as `auto` or `any` with no other
+key, or one named tool, and answers 400 for `none` before either arm runs. So the defect was unreachable there, and
+the host was refusing a valid Anthropic request. lv ruled on 2026-10-16 that the host admits `none`; the codec fix
+(#250) is what makes that admission correct. The defect stays real for any host that admits `none`.
 
 It is a correctness defect, so it is fixed without a ruling, in a separate code change: the codec maps `none` to
 `ToolChoice::None`, with codec and per-dialect tests. It changes `south-north-codec`, so hosts pick it up at the next
