@@ -211,8 +211,9 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.71.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.60.0 and 0.71.0, the last unreleased) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
-**Unreleased (`provider-openai-compatible` 2.11.0: explicit cache reads)**: design record
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.72.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.60.0 and 0.71.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**v0.72.0 (`provider-openai-compatible` 2.11.0: explicit cache reads)**: release record
+`docs/design/2026-10-17-release-0.72.0.md`. Design record
 `docs/design/2026-10-17-explicit-cache-reads.md` (lv, 2026-10-17). The package reports Bailian's explicit-cache reads as
 the IR's `explicit_cache_read_tokens` (kernel protocol 0.5.0's subset of `cache_read_tokens`), by the host's native
 rule: the presence of `prompt_tokens_details.cache_creation_input_tokens`, even at 0, makes every hit of the response,
