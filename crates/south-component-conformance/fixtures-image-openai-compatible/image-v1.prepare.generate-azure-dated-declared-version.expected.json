@@ -1,0 +1,59 @@
+{
+  "facts": {
+    "operation": "generate",
+    "inputs": {
+      "input_image": 0,
+      "reference_image": 0,
+      "mask": 0
+    },
+    "requested_outputs": 1,
+    "tier": {},
+    "metering_forms": [
+      "images"
+    ]
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "openai/deployments/dall-e-3/images/generations",
+    "query": [
+      {
+        "name": "api-version",
+        "value": "2025-04-01-preview"
+      }
+    ],
+    "auth": {
+      "arm": "header_secret",
+      "header": "api-key",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "model": "dall-e-3",
+          "prompt": "a cat",
+          "n": 1,
+          "style": "vivid"
+        }
+      }
+    }
+  },
+  "repeat": 1,
+  "response_body_form": "json",
+  "response_elision_paths": [
+    "/data/*/b64_json"
+  ],
+  "immutable_body_paths": [
+    "model",
+    "n",
+    "size",
+    "image_size",
+    "quality",
+    "resolution",
+    "response_format"
+  ],
+  "state": {
+    "metering_required": [
+      "images"
+    ]
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "provider_config": {
+    "provider": "openai-compatible",
+    "base_url": "https://api.deepinfra.com/v1/openai",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "multipart": {
+      "parts": [
+        {
+          "kind": "text",
+          "name": "model",
+          "value": "x"
+        },
+        {
+          "kind": "file",
+          "name": "image[]",
+          "blob": "b0",
+          "filename": "photo.png",
+          "media_type": "image/png",
+          "bytes": 2048
+        },
+        {
+          "kind": "file",
+          "name": "image[]",
+          "blob": "b1",
+          "filename": "b.jpg",
+          "media_type": "image/jpeg",
+          "bytes": 2048
+        },
+        {
+          "kind": "file",
+          "name": "image[]",
+          "blob": "b2",
+          "filename": "c.webp",
+          "media_type": "image/webp",
+          "bytes": 2048
+        },
+        {
+          "kind": "text",
+          "name": "prompt",
+          "value": "merge"
+        },
+        {
+          "kind": "text",
+          "name": "user",
+          "value": "u-1"
+        },
+        {
+          "kind": "text",
+          "name": "quality",
+          "value": "high"
+        }
+      ]
+    }
+  },
+  "context": {
+    "upstream_model": "black-forest-labs/FLUX-1-kontext-dev",
+    "metering_required": [
+      "images"
+    ]
+  }
+}

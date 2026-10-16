@@ -1,0 +1,16 @@
+{
+  "prepare_case": "image-v1.prepare.generate-openai-origin",
+  "response": {
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "b64_json": "iVBORw0KGgoAAAANSUhEUg=="
+        }
+      ],
+      "usage": {
+        "input_tokens": 50
+      }
+    }
+  }
+}

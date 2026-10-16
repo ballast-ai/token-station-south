@@ -1,0 +1,11 @@
+{
+  "prepare_case": "image-v1.prepare.generate-glm-root",
+  "response": {
+    "status": 500,
+    "body": {
+      "error": {
+        "message": "Internal error"
+      }
+    }
+  }
+}

@@ -1,0 +1,78 @@
+[
+  {
+    "model": "gpt-image-1-prod",
+    "operations": [
+      "generate",
+      "edit"
+    ],
+    "input_roles": [
+      {
+        "key": "image",
+        "role": "input_image"
+      },
+      {
+        "key": "image[]",
+        "role": "input_image"
+      },
+      {
+        "key": "mask",
+        "role": "mask"
+      }
+    ],
+    "response_formats": [
+      "url",
+      "b64_json"
+    ],
+    "metering_forms": [
+      "tokens",
+      "images"
+    ],
+    "token_buckets": [
+      "total_output"
+    ],
+    "tier_dimensions": [],
+    "repeat": false,
+    "request_elision_paths": [
+      "/image",
+      "/image/*"
+    ]
+  },
+  {
+    "model": "dall-e-3",
+    "operations": [
+      "generate",
+      "edit"
+    ],
+    "input_roles": [
+      {
+        "key": "image",
+        "role": "input_image"
+      },
+      {
+        "key": "image[]",
+        "role": "input_image"
+      },
+      {
+        "key": "mask",
+        "role": "mask"
+      }
+    ],
+    "response_formats": [
+      "url",
+      "b64_json"
+    ],
+    "metering_forms": [
+      "tokens",
+      "images"
+    ],
+    "token_buckets": [
+      "total_output"
+    ],
+    "tier_dimensions": [],
+    "repeat": false,
+    "request_elision_paths": [
+      "/image",
+      "/image/*"
+    ]
+  }
+]

@@ -1,0 +1,15 @@
+{
+  "template": {
+    "created": 1700000000,
+    "data": [
+      {
+        "url": {
+          "$south.artifact": {
+            "index": 0,
+            "as": "url"
+          }
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "provider_config": {
+    "provider": "openai-compatible",
+    "base_url": "https://ark.ap-southeast.bytepluses.com/api/v3",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "json": {
+      "model": "client-name",
+      "prompt": {
+        "$south.blob": {
+          "id": "b0",
+          "bytes": 1048577,
+          "head": "a very long prompt"
+        }
+      },
+      "image": [
+        {
+          "$south.blob": {
+            "id": "b1",
+            "bytes": 30000,
+            "head": "data:image/png;base64,iVBORw0K"
+          }
+        },
+        "https://example.com/ref.png"
+      ],
+      "watermark": true,
+      "user": "u-1",
+      "extra": {
+        "note": {
+          "$south.blob": {
+            "id": "b2",
+            "bytes": 2000000,
+            "head": "x"
+          }
+        },
+        "k": [
+          1,
+          2
+        ]
+      },
+      "response_format": "url",
+      "n": 3,
+      "stream": false
+    }
+  },
+  "context": {
+    "upstream_model": "seedream-4-0-250828",
+    "metering_required": [
+      "images"
+    ]
+  }
+}

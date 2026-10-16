@@ -1,0 +1,15 @@
+{
+  "prepare_case": "image-v1.prepare.generate-glm-root",
+  "response": {
+    "status": 200,
+    "body": {
+      "created": 1700000000,
+      "data": [
+        {
+          "b64_json": "",
+          "url": "https://cdn.example.com/4.png"
+        }
+      ]
+    }
+  }
+}

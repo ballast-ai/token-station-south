@@ -1,0 +1,5 @@
+{
+  "outcome": "unknown",
+  "reason": "a declared token bucket is missing",
+  "error": null
+}

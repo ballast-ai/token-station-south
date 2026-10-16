@@ -1,0 +1,8 @@
+{
+  "response_cases": [
+    "image-v1.response.tokens-with-details"
+  ],
+  "context": {
+    "created": 1700000001
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "outcome": "succeeded",
+  "artifacts": [
+    {
+      "form": "url",
+      "pointer": "/data/0/url"
+    }
+  ],
+  "metering": {
+    "tokens": {
+      "text_input": null,
+      "image_input": null,
+      "cached_text_input": null,
+      "cached_image_input": null,
+      "cached_input": null,
+      "text_output": null,
+      "image_output": null,
+      "total_input": null,
+      "total_output": 16384
+    },
+    "images_reported": null,
+    "credits": null,
+    "upstream_cost": null
+  },
+  "extras": {
+    "body": {
+      "created": 1700000000,
+      "data": [
+        {
+          "url": null,
+          "size": "2048x2048"
+        }
+      ],
+      "usage": {
+        "generated_images": 1,
+        "output_tokens": 16384,
+        "total_tokens": 16384
+      }
+    }
+  }
+}

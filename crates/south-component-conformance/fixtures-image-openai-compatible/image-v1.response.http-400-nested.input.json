@@ -1,0 +1,12 @@
+{
+  "prepare_case": "image-v1.prepare.generate-glm-root",
+  "response": {
+    "status": 400,
+    "body": {
+      "error": {
+        "code": "1214",
+        "message": "prompt is required"
+      }
+    }
+  }
+}

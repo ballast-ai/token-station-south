@@ -1,0 +1,9 @@
+{
+  "prepare_case": "image-v1.prepare.generate-deepinfra-root",
+  "response": {
+    "status": 422,
+    "body": {
+      "detail": "Model not found"
+    }
+  }
+}

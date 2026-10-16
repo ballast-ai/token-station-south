@@ -1,0 +1,12 @@
+{
+  "prepare_case": "image-v1.prepare.generate-byteplus-root",
+  "response": {
+    "status": 403,
+    "body": {
+      "error": {
+        "code": "AccessDenied",
+        "message": "The request failed because you do not have access to the requested resource."
+      }
+    }
+  }
+}

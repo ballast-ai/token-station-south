@@ -1,0 +1,18 @@
+{
+  "provider_config": {
+    "provider": "azure-openai-dated",
+    "base_url": "https://example-resource.openai.azure.com",
+    "auth": "provider_api_key",
+    "declared": {
+      "api_version": "2025-04-01-preview"
+    },
+    "models": [
+      {
+        "model": "gpt-image-1-prod"
+      },
+      {
+        "model": "dall-e-3"
+      }
+    ]
+  }
+}

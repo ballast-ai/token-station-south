@@ -1,0 +1,19 @@
+{
+  "provider_config": {
+    "provider": "azure-openai-dated",
+    "base_url": "https://example-resource.openai.azure.com",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "json": {
+      "model": "gpt-image-1",
+      "prompt": "a cat"
+    }
+  },
+  "context": {
+    "upstream_model": "gpt-image-1-prod",
+    "metering_required": [
+      "images"
+    ]
+  }
+}

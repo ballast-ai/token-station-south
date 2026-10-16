@@ -1,0 +1,19 @@
+{
+  "provider_config": {
+    "provider": "openai-compatible",
+    "base_url": "https://api.openai.com",
+    "auth": "provider_api_key"
+  },
+  "request": {
+    "json": {
+      "model": "dall-e-3",
+      "prompt": "p"
+    }
+  },
+  "context": {
+    "upstream_model": "dall-e-3",
+    "metering_required": [
+      "credits"
+    ]
+  }
+}

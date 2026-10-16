@@ -1,0 +1,50 @@
+{
+  "facts": {
+    "operation": "generate",
+    "inputs": {
+      "input_image": 0,
+      "reference_image": 0,
+      "mask": 0
+    },
+    "requested_outputs": 1,
+    "tier": {},
+    "metering_forms": [
+      "images"
+    ]
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "images/generations",
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "model": "cogview-4-250304",
+          "prompt": "a cat"
+        }
+      }
+    }
+  },
+  "repeat": 1,
+  "response_body_form": "json",
+  "response_elision_paths": [
+    "/data/*/b64_json"
+  ],
+  "immutable_body_paths": [
+    "model",
+    "n",
+    "size",
+    "image_size",
+    "quality",
+    "resolution",
+    "response_format"
+  ],
+  "state": {
+    "metering_required": [
+      "images"
+    ]
+  }
+}

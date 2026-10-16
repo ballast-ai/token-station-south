@@ -15,7 +15,7 @@ mod host_range;
 
 /// The official components this repository ships. Named, so that an empty or
 /// mistyped scan below cannot pass over nothing.
-const OFFICIAL_COMPONENTS: [&str; 40] = [
+const OFFICIAL_COMPONENTS: [&str; 41] = [
     "embeddings-gemini",
     "embeddings-openai-compatible",
     "embeddings-vertex",
@@ -23,6 +23,7 @@ const OFFICIAL_COMPONENTS: [&str; 40] = [
     "image-gemini",
     "image-ideogram",
     "image-minimax",
+    "image-openai-compatible",
     "image-qwen",
     "image-reve",
     "image-stability",
@@ -57,6 +58,16 @@ const OFFICIAL_COMPONENTS: [&str; 40] = [
     "task-gmi-image-v2",
     "task-gemini-omni-v2",
 ];
+
+/// Official packages that no release up to 0.69.0 published: a Q47 round taken before them cannot
+/// name them. `image-openai-compatible` starts at 1.0.0 in the 0.70.0 cycle, after the cycle's
+/// round (`kimi_code_retires_every_published_069_package_identity`).
+const UNPUBLISHED_BY_069: [&str; 1] = ["image-openai-compatible"];
+
+/// The official packages a round up to and including the 0.70.0 cycle's covers.
+fn published_with_069() -> BTreeSet<&'static str> {
+    OFFICIAL_COMPONENTS.into_iter().filter(|name| !UNPUBLISHED_BY_069.contains(name)).collect()
+}
 
 fn repo_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().and_then(Path::parent).expect("repo root")
@@ -2098,6 +2109,47 @@ fn image_reve_declares_media_1_and_the_runtime_of_the_record() {
     assert_eq!(compatibility_admits(&manifest, &media_1_only), Ok(()));
 }
 
+/// `image-openai-compatible` (design record `2026-10-16-image-openai-compatible.md` §7, step 1)
+/// starts at 1.0.0 in the image world with the families `openai-compatible`, `azure-openai-v1` and
+/// `azure-openai-dated` (OCI-Q1 (b)), `bearer` and `header_secret` (the Azure `api-key`), the dated
+/// family's `api_version` key, and `contracts` `{image: 1, media: 1}`. Everything it declares was
+/// admitted by the image world as it shipped (0.52.0: both auth arms, the value channel, the
+/// sanctioned `api-version` query of a media descriptor; the `api_version_date` syntax since 0.43.0),
+/// so it declares the oldest runtime an image package may name, 0.57.0 (`canonical_ir` 4), as
+/// `image-azure`, `image-minimax` (a config key) and `image-xai` do, and a media 1 host admits it.
+#[test]
+fn image_openai_compatible_declares_media_1_and_the_runtime_of_the_record() {
+    let manifest: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(
+            repo_root().join("components/image-openai-compatible/manifest.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(manifest.version, "1.0.0", "unpublished");
+    assert_eq!(
+        manifest.version,
+        south_component_conformance::reference_openai_compatible_image::VERSION
+    );
+    assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
+    assert_eq!(manifest.providers, ["openai-compatible", "azure-openai-v1", "azure-openai-dated"]);
+    assert_eq!(manifest.capabilities.iter().collect::<Vec<_>>(), ["edit", "generate"]);
+    assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer", "header_secret"]);
+    assert!(manifest.declared_keys("openai-compatible").is_empty());
+    assert!(manifest.declared_keys("azure-openai-v1").is_empty());
+    assert_eq!(
+        manifest.declared_keys("azure-openai-dated").into_iter().collect::<Vec<_>>(),
+        ["api_version"]
+    );
+    assert_eq!(manifest.compatibility.contracts.get("media"), Some(&1));
+    assert_eq!(manifest.compatibility.contracts.get("image"), Some(&1));
+    assert_eq!(manifest.compatibility.south_runtime, "0.57.0");
+    assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
+    let mut media_1_only = host_range::host_range();
+    media_1_only.contracts.insert("media".to_owned(), BTreeSet::from([1]));
+    assert_eq!(compatibility_admits(&manifest, &media_1_only), Ok(()));
+}
+
 /// KC1 record §5: the two Anthropic-family packages read the host's per-tenant end-user hash
 /// (`end_user_hash`, mapped to `metadata.user_id`); the Kiro record (§4.5, boundary §13.8) has
 /// `provider-kiro` read the attempt id (`attempt_id`, its `conversationId`); no other package
@@ -3103,11 +3155,7 @@ fn speech_azure_openai_retires_every_published_066_package_identity() {
         ("task-xai-v2", "0.35.24", "0.35.25", "0.57.0", &[("task", 7)]),
     ];
     let shipped: BTreeSet<&str> = rows.iter().map(|row| row.0).collect();
-    assert_eq!(
-        shipped,
-        BTreeSet::from(OFFICIAL_COMPONENTS),
-        "every official package takes the round"
-    );
+    assert_eq!(shipped, published_with_069(), "every official package takes the round");
     for (name, published, now, runtime, contracts) in rows {
         let manifest: ComponentManifestV1 = serde_json::from_str(
             &std::fs::read_to_string(
@@ -3234,11 +3282,7 @@ fn t9_cap_field_retires_every_published_067_package_identity() {
         ("task-xai-v2", "0.35.25", "0.35.26", "0.57.0", &[("task", 7)]),
     ];
     let shipped: BTreeSet<&str> = rows.iter().map(|row| row.0).collect();
-    assert_eq!(
-        shipped,
-        BTreeSet::from(OFFICIAL_COMPONENTS),
-        "every official package takes the round"
-    );
+    assert_eq!(shipped, published_with_069(), "every official package takes the round");
     for (name, published, now, runtime, contracts) in rows {
         let manifest: ComponentManifestV1 = serde_json::from_str(
             &std::fs::read_to_string(
@@ -3313,11 +3357,7 @@ fn glm_thinking_retires_every_published_068_package_identity() {
         ("task-xai-v2", "0.35.26", "0.35.27", "0.57.0", &[("task", 7)]),
     ];
     let shipped: BTreeSet<&str> = rows.iter().map(|row| row.0).collect();
-    assert_eq!(
-        shipped,
-        BTreeSet::from(OFFICIAL_COMPONENTS),
-        "every official package takes the round"
-    );
+    assert_eq!(shipped, published_with_069(), "every official package takes the round");
     for (name, published, now, runtime, contracts) in rows {
         let manifest: ComponentManifestV1 = serde_json::from_str(
             &std::fs::read_to_string(
@@ -3389,11 +3429,7 @@ fn kimi_code_retires_every_published_069_package_identity() {
         ("task-xai-v2", "0.35.27", "0.35.28", "0.57.0", &[("task", 7)]),
     ];
     let shipped: BTreeSet<&str> = rows.iter().map(|row| row.0).collect();
-    assert_eq!(
-        shipped,
-        BTreeSet::from(OFFICIAL_COMPONENTS),
-        "every official package takes the round"
-    );
+    assert_eq!(shipped, published_with_069(), "every official package takes the round");
     for (name, published, now, runtime, contracts) in rows {
         let manifest: ComponentManifestV1 = serde_json::from_str(
             &std::fs::read_to_string(

@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "multipart `n` field value 0 is outside the supported range 1..=10"
+  }
+}

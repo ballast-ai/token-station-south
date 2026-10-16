@@ -1,0 +1,16 @@
+{
+  "template": {
+    "created": 1700000000,
+    "data": [
+      {
+        "b64_json": {
+          "$south.artifact": {
+            "index": 0,
+            "as": "b64_json"
+          }
+        },
+        "revised_prompt": "a red fox, snow"
+      }
+    ]
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "outcome": "succeeded",
+  "artifacts": [
+    {
+      "form": "inline",
+      "pointer": "/data/0/b64_json",
+      "encoding": "base64",
+      "media_type": "image/png"
+    }
+  ],
+  "metering": {
+    "tokens": {
+      "text_input": 20,
+      "image_input": null,
+      "cached_text_input": null,
+      "cached_image_input": null,
+      "cached_input": 3,
+      "text_output": null,
+      "image_output": null,
+      "total_input": 20,
+      "total_output": 4160
+    },
+    "images_reported": null,
+    "credits": null,
+    "upstream_cost": null
+  },
+  "extras": {
+    "body": {
+      "created": 1700000000,
+      "data": [
+        {
+          "b64_json": null
+        }
+      ],
+      "usage": {
+        "input_tokens": 20,
+        "cached_tokens": 8,
+        "input_tokens_details": {
+          "text_tokens": 20,
+          "cached_tokens": 3
+        },
+        "output_tokens": 4160
+      }
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "prepare_case": "image-v1.prepare.generate-byteplus-token-row",
+  "response": {
+    "status": 200,
+    "body": {
+      "created": 1700000000,
+      "data": [
+        {
+          "url": "https://cdn.example.com/s.jpeg",
+          "size": "2048x2048"
+        }
+      ],
+      "usage": {
+        "generated_images": 1,
+        "output_tokens": 16384,
+        "total_tokens": 16384
+      }
+    }
+  }
+}

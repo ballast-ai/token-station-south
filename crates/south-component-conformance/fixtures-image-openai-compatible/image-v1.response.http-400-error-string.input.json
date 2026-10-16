@@ -1,0 +1,9 @@
+{
+  "prepare_case": "image-v1.prepare.generate-deepinfra-root",
+  "response": {
+    "status": 400,
+    "body": {
+      "error": "bad size"
+    }
+  }
+}
