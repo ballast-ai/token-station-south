@@ -459,6 +459,23 @@ body, facts and owned set equal `openai-compatible`'s; no auth without a slot) a
 `every_configured_id_is_declared_on_every_family` and `the_auth_arm_follows_the_family`; a mutation
 `GlmCodingWithoutItsRoot` (the family routed as `openai-compatible` with an origin) must fail the pack.
 
+**Fixture reconciliation and gates (phase 2).** The reference matched every new `glm-coding` row on its first run,
+so no fixture row was changed and no record correction was needed; the native arm stayed the authority for each row's
+input. One existing gate ① test, `component_values_v1::the_image_world_holds_its_values_to_the_provider_rules`, pinned
+the old refusal of an image-world `user_agent`; it now pins its admission and the refusal of `quota_headers` (a
+behaviour change this step makes on purpose). Gates on the branch: Clippy (all targets, all features, `-D warnings`),
+`cargo nextest run --workspace --all-features` (2296 passed, 4 skipped), doc tests, the no-default-features check and
+`south-component-conformance` tests (839 passed), the fuzz check, rustdoc, the boundary, language and MSRV scripts, the
+script unit tests (83), `cargo deny` and `cargo audit` (workspace and fuzz), `cargo machete`; the suite (17), the
+sandbox parity test (5, gate ② over the rebuilt `component.wasm`, byte for byte) and the pack (115 cases). The Q47
+check `check_crate_versions.py --tag v0.70.0` reports `south-provider-api` 0.59.0 → 0.60.0 and
+`south-component-conformance` 0.68.0 → 0.69.0. `check-declared-runtime.sh --build` refuses exactly one package,
+`image-openai-compatible` under 0.57.0 ("user_agent is a provider-world declaration"), as planned above; with the
+package's `south_runtime` set to this tree's version (restored afterwards) every package loads. Mutations, each
+restored from a backup, went red: in the reference, the Coding Plan root replaced by the API-root rule, `glm-coding`
+authenticated with the Azure `api-key`, and the family left unrecognised; in the contract, the image world back to
+`None`, the image world admitting all three declarations, and the speech world's value admitting `user_agent`.
+
 **Differences.** None new for `glm-coding` beyond `openai-compatible`'s D1 to D12, D15 and D18, D19 (the shared
 behaviour): the URL is native's for every endpoint (no D13 analogue: native and the package both append the fixed
 root), the credential read is native's (`api_key` only, no D14 analogue), and the user-agent is native's byte for byte
@@ -475,8 +492,10 @@ once the host sends the manifest value. Whether Z.ai's Coding Plan endpoint serv
   the held paths; a family without a declaration sends no slot (the call is unchanged); a value the conversion refuses
   is a 503 before admission, never a silently dropped header. The slot replaces the HTTP client's default
   `user-agent`, and no operator request extra may set `user-agent` on these calls. Written by the host as `8045ee94`
-  ("H7", `declared_user_agent_for` in `handler/images/component/mod.rs`, both call shapes); it can be exercised end to end
-  only against a south that admits the declaration (this step), i.e. after the re-pin.
+  ("H7", `declared_user_agent_for` in `handler/images/component/mod.rs`, both call shapes) and on the host's `dev-v2` at
+  `51013ebc`; by the host's read-back the synchronous and the held paths both go through the one sealing step, so
+  both carry the slot. It can be exercised end to end only against a south that admits the declaration (this step),
+  i.e. after the re-pin.
 - **H1 for `glm-coding`**: re-pin to the release carrying `south-provider-api` 0.60.0 (0.70.0; an older south refuses
   the package at gate ①). One `[south.image_bindings.*]` for family `glm-coding` with `base_url = "row_endpoint"`, on a
   `component` row whose endpoint is native's (`https://api.z.ai`, the same endpoint the text family
