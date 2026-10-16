@@ -55,7 +55,7 @@ use crate::{ComponentResultV1, SpeechComponentV1, SpeechDeliveryV1, SpeechOutcom
 /// The package name this reference is published as.
 pub const NAME: &str = "speech-vertex";
 /// The package version.
-pub const VERSION: &str = "1.1.2";
+pub const VERSION: &str = "1.1.3";
 /// The world this reference exports.
 pub const WORLD: &str = "speech-adapter-v1";
 /// The family, as a host's speech bindings name it.

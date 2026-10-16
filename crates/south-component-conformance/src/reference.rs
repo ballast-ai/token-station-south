@@ -17,8 +17,8 @@ use south_provider_api::{ComponentMetadataV1, PROVIDER_WORLD};
 use token_station_protocol::{
     Auth, ChatRequest, ChatResponse, Choice, Content, ContentPart, ErrorCode, ErrorEnvelope,
     Extensions, FinishReason, HttpMethod, HttpRequestDescriptor, HttpResponseParts, Message,
-    ProviderApi, ProviderConfig, ReasoningEffort, ResponseFormat, Role, SafeHeaders, StreamEvent,
-    ToolCall, Usage,
+    ProviderApi, ProviderConfig, ReasoningEffort, ReasoningMode, ResponseFormat, Role, SafeHeaders,
+    StreamEvent, ToolCall, Usage,
 };
 
 use crate::component::{ComponentResultV1, ProviderComponentV1, StreamParserV1};
@@ -143,6 +143,33 @@ fn forward_client_fields(request: &ChatRequest, config: &ProviderConfig, body: &
         {
             map.insert(field.to_owned(), value.clone());
         }
+    }
+}
+
+/// Renders the IR's `reasoning.mode` as Z.ai's `thinking` switch on [`glm_coding::FAMILY`] only
+/// (design record `docs/design/2026-10-16-glm-coding-messages.md` §5 O1 and §6 Q-GM2 (a), lv
+/// 2026-10-16; option A+ of `docs/design/2026-10-15-openai-compatible-t9.md` §10).
+///
+/// A Messages client of a `glm-coding` row reaches the Chat endpoint through the IR, where the
+/// Anthropic north codec has consumed its `thinking` into `reasoning.mode`. `Enabled` and
+/// `Disabled` become `thinking: {"type": "enabled" | "disabled"}`; `Adaptive` has no GLM spelling
+/// and, like an absent mode, writes nothing, so the upstream default decides (Q-GM2 (a)).
+/// `reasoning.budget_tokens` has no GLM carrier and is never written. A `thinking` already in the
+/// body (a Chat client's own extension, forwarded by [`forward_client_fields`]) wins. Every other
+/// family is unchanged.
+fn render_glm_thinking(request: &ChatRequest, config: &ProviderConfig, body: &mut Value) {
+    if config.provider != glm_coding::FAMILY {
+        return;
+    }
+    let kind = match request.reasoning.mode {
+        Some(ReasoningMode::Enabled) => "enabled",
+        Some(ReasoningMode::Disabled) => "disabled",
+        Some(ReasoningMode::Adaptive) | None => return,
+    };
+    if let Value::Object(map) = body
+        && !map.contains_key("thinking")
+    {
+        map.insert("thinking".to_owned(), json!({"type": kind}));
     }
 }
 
@@ -889,7 +916,7 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-openai-compatible".to_owned(),
-            version: "2.8.0".to_owned(),
+            version: "2.9.0".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
@@ -953,6 +980,7 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
             map.insert("reasoning_effort".to_owned(), json!(effort));
         }
         forward_client_fields(request, config, &mut body);
+        render_glm_thinking(request, config, &mut body);
         descriptor.body = Some(body);
         // The host holds the value; this names the slot and the fixed
         // presentation selected by the trusted provider dialect.

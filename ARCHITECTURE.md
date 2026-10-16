@@ -211,7 +211,16 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.68.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.59.0 and 0.67.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.68.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.59.0 and 0.68.0, the last unreleased) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**Unreleased (`provider-openai-compatible` 2.9.0: the `glm-coding` thinking switch)**: design record
+`docs/design/2026-10-16-glm-coding-messages.md` §5 O1 and §6 Q-GM2 (a) (lv, 2026-10-16), option A+ of
+`docs/design/2026-10-15-openai-compatible-t9.md` §10. A Messages client of a `glm-coding` row reaches the Chat endpoint
+through the IR, so `glm-coding` now renders `reasoning.mode` `enabled` / `disabled` as Z.ai's `thinking.type` when the
+body has no `thinking`; `adaptive` and an absent mode write nothing (the upstream default decides), and
+`reasoning.budget_tokens` is never written. A Chat client's own `thinking` (T9-Q9 (a)) still wins; every other family is
+unchanged. Gate ② gains five request rows. Q47 against v0.68.0: `south-component-conformance` 0.68.0;
+`provider-openai-compatible` takes the minor 2.9.0 and every other package a patch with unchanged behaviour, each keeping
+its `south_runtime` and contracts. No contract number changes; the kernel pin is unchanged.
 **v0.68.0 (`provider-openai-compatible` 2.8.0: the T9 follow-ups)**: release record
 `docs/design/2026-10-16-release-0.68.0.md`.
 `provider-openai-compatible` 2.8.0: the T9 cap field: design record

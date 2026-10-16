@@ -1,6 +1,6 @@
 {
   "name": "image-gemini",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "api_version": "image-adapter-v1",
   "providers": [
     "gemini-image"

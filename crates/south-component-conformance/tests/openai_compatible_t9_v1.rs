@@ -489,6 +489,143 @@ fn gate_two_runs_the_passthrough_cases() {
     }
 }
 
+// -- reasoning.mode on glm-coding (GLM Messages record §5 O1, §6 Q-GM2 (a); T9 record §10 A+) ---
+
+const REASONING_MODE_FIXTURES: [&str; 5] = [
+    "provider.request.glm-coding-reasoning-enabled",
+    "provider.request.glm-coding-reasoning-disabled",
+    "provider.request.glm-coding-reasoning-adaptive",
+    "provider.request.glm-coding-client-thinking-wins-over-reasoning-mode",
+    "provider.request.openai-compatible-ignores-reasoning-mode",
+];
+
+/// The `thinking` the reference writes for `request` on `config`, `None` when it writes none.
+fn thinking_of(config: &ProviderConfig, request: &ChatRequest) -> Option<Value> {
+    build(config, request).body.unwrap().get("thinking").cloned()
+}
+
+/// GLM Messages record §5 O1 and §6 Q-GM2 (a), lv 2026-10-16: `glm-coding` renders `enabled` and
+/// `disabled` as Z.ai's `thinking.type`; `adaptive` and an absent mode write nothing, so the
+/// upstream default decides; `budget_tokens` has no GLM carrier and is never written. Rendering
+/// adds the one key and changes nothing else.
+#[test]
+fn glm_coding_renders_the_reasoning_mode_as_thinking() {
+    let (config, plain) = parts(GLM_FIXTURES[0]);
+    assert!(plain.reasoning.is_unset());
+    let written = build(&config, &plain).body.unwrap();
+    assert!(written.get("thinking").is_none(), "an absent mode writes nothing");
+    for (mode, budget, expected) in [
+        ("enabled", None, Some(json!({"type": "enabled"}))),
+        ("enabled", Some(2048), Some(json!({"type": "enabled"}))),
+        ("disabled", None, Some(json!({"type": "disabled"}))),
+        ("disabled", Some(2048), Some(json!({"type": "disabled"}))),
+        ("adaptive", None, None),
+        ("adaptive", Some(2048), None),
+    ] {
+        let mut request = plain.clone();
+        request.reasoning.mode = Some(serde_json::from_value(json!(mode)).unwrap());
+        request.reasoning.budget_tokens = budget;
+        let mut body = build(&config, &request).body.unwrap();
+        let thinking = body.as_object_mut().unwrap().remove("thinking");
+        assert_eq!(thinking, expected, "{mode} {budget:?}");
+        assert_eq!(body, written, "{mode} {budget:?}: nothing else changes");
+    }
+    let mut budget_only = plain;
+    budget_only.reasoning.budget_tokens = Some(2048);
+    assert_eq!(thinking_of(&config, &budget_only), None, "a budget alone has no GLM carrier");
+}
+
+/// A Messages client of a `glm-coding` row: the Anthropic north codec consumes its `thinking` into
+/// `reasoning.mode`, and the package writes it back as Z.ai's switch, the budget dropped. Native
+/// sends this client's body to Z.ai's Anthropic endpoint (GLM Messages record §2); the wire switch
+/// is the registered difference O1 accepts.
+#[test]
+fn a_messages_client_keeps_its_thinking_switch_on_glm_coding() {
+    let (config, _) = parts(GLM_FIXTURES[0]);
+    for (thinking, expected) in [
+        (json!({"type": "enabled", "budget_tokens": 4096}), Some(json!({"type": "enabled"}))),
+        (json!({"type": "disabled"}), Some(json!({"type": "disabled"}))),
+        (json!({"type": "adaptive"}), None),
+    ] {
+        let request = south_north_codec::chat_request_from_anthropic_messages(&json!({
+            "model": "glm-4.6",
+            "max_tokens": 1024,
+            "messages": [{"role": "user", "content": "Weather in Beijing?"}],
+            "thinking": thinking,
+        }))
+        .expect("the Messages body decodes");
+        assert!(!request.extensions.contains_key("thinking"), "the codec consumes the key");
+        assert_eq!(thinking_of(&config, &request), expected, "{thinking}");
+    }
+    let request = south_north_codec::chat_request_from_anthropic_messages(&json!({
+        "model": "glm-4.6",
+        "max_tokens": 1024,
+        "messages": [{"role": "user", "content": "Weather in Beijing?"}],
+    }))
+    .expect("the Messages body decodes");
+    assert_eq!(thinking_of(&config, &request), None, "no thinking, no switch");
+}
+
+/// T9-Q9 (a) still holds: a Chat client's own `thinking` extension wins over the mode, whatever
+/// either says, `null` included.
+#[test]
+fn a_client_thinking_extension_wins_over_the_reasoning_mode() {
+    let (config, plain) = parts(GLM_FIXTURES[0]);
+    for mode in ["enabled", "disabled", "adaptive"] {
+        for client in [json!({"type": "disabled"}), json!({"type": "enabled"}), Value::Null] {
+            let mut request = plain.clone();
+            request.reasoning.mode = Some(serde_json::from_value(json!(mode)).unwrap());
+            request.extensions.insert("thinking".to_owned(), client.clone());
+            assert_eq!(thinking_of(&config, &request), Some(client.clone()), "{mode} {client}");
+        }
+    }
+}
+
+/// Only `glm-coding` renders the mode: every other family of the package writes no `thinking` for
+/// it, as before.
+#[test]
+fn no_other_family_renders_the_reasoning_mode() {
+    let (base, plain) = parts(GLM_FIXTURES[0]);
+    let declared = shipped_manifest().providers;
+    assert!(declared.iter().any(|family| family == glm_coding::FAMILY));
+    for family in declared.iter().filter(|family| *family != glm_coding::FAMILY) {
+        let mut config = base.clone();
+        config.provider.clone_from(family);
+        if family == azure_openai_dated::FAMILY || family == "azure-openai-v1" {
+            config.base_url =
+                serde_json::from_value(json!("https://x.openai.azure.com/openai/v1")).unwrap();
+        }
+        let before = build(&config, &plain).body;
+        for mode in ["enabled", "disabled", "adaptive"] {
+            let mut request = plain.clone();
+            request.reasoning.mode = Some(serde_json::from_value(json!(mode)).unwrap());
+            assert_eq!(build(&config, &request).body, before, "{family} {mode}");
+        }
+    }
+}
+
+/// The five request rows run under gate ② natively and in the sandbox (`sandbox_parity_v1`).
+#[test]
+fn gate_two_runs_the_reasoning_mode_cases() {
+    let manifest = shipped_manifest();
+    let pack = FixturePackV1::load(&root().join("fixtures")).expect("the shipped pack loads");
+    let report = run_provider_component_suite_v1_for_manifest(
+        &OpenAiCompatibleReferenceV1,
+        &pack,
+        &manifest,
+    );
+    assert!(report.is_passing(), "{report}");
+    for case in REASONING_MODE_FIXTURES {
+        assert!(
+            report
+                .outcomes()
+                .iter()
+                .any(|outcome| outcome.check == CheckV1::FixtureMatch && outcome.case == case),
+            "{case} never ran"
+        );
+    }
+}
+
 // -- the package -------------------------------------------------------------------------------
 
 /// The family check: a family the package does not declare is refused, so a row naming the
@@ -544,7 +681,11 @@ fn the_t9_families_retire_the_patch_identity() {
     // the package takes the minor 2.8.0
     // (`shipped_packages_v1::t9_cap_field_retires_every_published_067_package_identity`).
     assert_ne!(manifest.version, "2.7.1");
-    assert_eq!(manifest.version, "2.8.0");
+    // Published as 2.8.0 with 0.68.0; A+ on `glm-coding` (GLM Messages record §5 O1) changes what
+    // the family sends, so the package takes the minor 2.9.0
+    // (`shipped_packages_v1::glm_thinking_retires_every_published_068_package_identity`).
+    assert_ne!(manifest.version, "2.8.0");
+    assert_eq!(manifest.version, "2.9.0");
     assert_eq!(OpenAiCompatibleReferenceV1.metadata().version, manifest.version);
     assert_eq!(manifest.compatibility.south_runtime, "0.60.0");
 }
