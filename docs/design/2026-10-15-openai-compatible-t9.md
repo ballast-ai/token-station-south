@@ -388,3 +388,7 @@ What was implemented (`reference::client_passthrough`, `forward_client_fields`):
   0.68.0 record's one-line summary of D11 predates this and is kept as history.
 - 2026-10-16 (lv, Q-GM1 O1 and Q-GM2 (a) of `2026-10-16-glm-coding-messages.md`): §10 A+ implemented in
   `provider-openai-compatible` 2.9.0; §9 T9-Q9 updated.
+- 2026-10-16 (lv, the `kimi-code` family): the preamble's "row T8 maps `kimi_code` onto the existing families by
+  configuration alone" no longer holds for `kimi_code`. An `openai-compatible` row does not raise the host's 429
+  subscription-quota alert, so `kimi_code` rows move to the new `kimi-code` family instead
+  ([`2026-10-16-kimi-code-family.md`](2026-10-16-kimi-code-family.md), `provider-openai-compatible` 2.10.0).

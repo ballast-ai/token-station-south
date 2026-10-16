@@ -1,6 +1,6 @@
 {
   "name": "task-gmi-image-v2",
-  "version": "0.35.27",
+  "version": "0.35.28",
   "api_version": "task-adapter-v2",
   "providers": [
     "gmi-image"

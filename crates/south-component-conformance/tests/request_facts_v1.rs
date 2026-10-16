@@ -111,6 +111,7 @@ fn request_facts_round_trip_and_stay_off_the_wire_when_absent() {
         "gemini-openai-compatible",
         "azure-openai-dated",
         "glm-coding",
+        "kimi-code",
     ] {
         assert_eq!(
             shipped("provider-openai-compatible").request_facts_for(family),

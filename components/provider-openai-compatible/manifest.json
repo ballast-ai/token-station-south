@@ -1,6 +1,6 @@
 {
   "name": "provider-openai-compatible",
-  "version": "2.9.0",
+  "version": "2.10.0",
   "api_version": "provider-adapter-v2",
   "providers": [
     "openai-compatible",
@@ -8,7 +8,8 @@
     "github-copilot",
     "gemini-openai-compatible",
     "azure-openai-dated",
-    "glm-coding"
+    "glm-coding",
+    "kimi-code"
   ],
   "capabilities": [
     "chat",
@@ -193,7 +194,8 @@
   },
   "subscription_quota_families": [
     "github-copilot",
-    "glm-coding"
+    "glm-coding",
+    "kimi-code"
   ],
   "permissions": {
     "network": false,

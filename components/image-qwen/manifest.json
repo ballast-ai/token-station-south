@@ -1,6 +1,6 @@
 {
   "name": "image-qwen",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "api_version": "image-adapter-v1",
   "providers": [
     "bailian-qwen-image"
