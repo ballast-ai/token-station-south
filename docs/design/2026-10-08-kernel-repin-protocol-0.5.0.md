@@ -87,7 +87,7 @@ Upstream change: token-station #40 (protocol 0.5.0) and #41 (router-core 0.5.0, 
 - **`ProviderConfig::declared` and `ChatRequest::host_values`** (`ComponentValues`): new, defaulted, and skipped when
   empty, so no fixture and no wire shape changes. Nothing in south reads or writes them yet; Q14 (step 4) does.
 - **`Usage::explicit_cache_read_tokens`**: new, defaulted, and not serialized at zero. No reference reports it, so the
-  fixtures and the usage judges are unchanged. (Later: `provider-openai-compatible` 2.11.0, 0.72.0 unreleased, reports
+  fixtures and the usage judges are unchanged. (Later: `provider-openai-compatible` 2.11.0, released in 0.72.0, reports
   it for Bailian's explicit-cache mode; record `2026-10-17-explicit-cache-reads.md`.)
 
 No provider component's translation, request, response or stream output changes, and the fixture packs are untouched.

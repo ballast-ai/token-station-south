@@ -1,7 +1,7 @@
 # Explicit cache reads in the IR: `provider-openai-compatible` reports Bailian's explicit-cache mode
 
 Status: accepted (lv, 2026-10-17: "south kernel IR explicit/implicit two buckets", south half assigned to this
-repository). Implemented; unreleased (0.72.0).
+repository). Implemented; released in 0.72.0.
 
 Date: 2026-10-17
 
