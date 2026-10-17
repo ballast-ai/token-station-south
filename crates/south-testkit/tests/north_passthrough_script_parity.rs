@@ -22,7 +22,6 @@ use south_provider_conformance::{
     NorthPassthroughPathV1, NorthPassthroughProtocolV2 as Protocol, north_passthrough_fixtures_v2,
     north_passthrough_frames_v1,
 };
-use token_station_protocol::StreamEvent;
 
 /// The stream cases whose double stands for a correct component.
 const FAITHFUL_CASES: [Case; 9] = [
@@ -37,6 +36,15 @@ const FAITHFUL_CASES: [Case; 9] = [
     Case::TerminalAtEndOfInputIsRepaired,
 ];
 
+/// Whether an IR stream event is the named variant. The test names the variant through `Debug`
+/// because this crate may not depend on the kernel IR crate (`scripts/check-boundaries.sh`).
+fn is_variant(event: &impl std::fmt::Debug, name: &str) -> bool {
+    let rendered = format!("{event:?}");
+    rendered == name
+        || rendered.starts_with(&format!("{name} {{"))
+        || rendered.starts_with(&format!("{name}("))
+}
+
 /// What `provider-anthropic`'s reference parser answers for each frame of `bytes`, fed one whole
 /// frame per call.
 fn parsed_verdicts(bytes: &[u8]) -> Vec<Verdict> {
@@ -46,12 +54,8 @@ fn parsed_verdicts(bytes: &[u8]) -> Vec<Verdict> {
     for frame in &frames {
         let verdict = match parser.parse_chunk(frame.bytes()) {
             Err(_) => Verdict::Trap,
-            Ok(events) if events.iter().any(|event| matches!(event, StreamEvent::Error { .. })) => {
-                Verdict::Error
-            }
-            Ok(events) if events.iter().any(|event| matches!(event, StreamEvent::Done { .. })) => {
-                Verdict::Done
-            }
+            Ok(events) if events.iter().any(|event| is_variant(event, "Error")) => Verdict::Error,
+            Ok(events) if events.iter().any(|event| is_variant(event, "Done")) => Verdict::Done,
             Ok(_) => Verdict::Events,
         };
         verdicts.push(verdict);
