@@ -657,9 +657,7 @@ fn check_stream(
     let settled = position(steps, &NorthPassthroughStepV1::SettlementPersisted);
     let settlements = count(steps, &NorthPassthroughStepV1::SettlementPersisted);
     let terminal_right = if completes {
-        let first_withheld = NorthPassthroughFrameV1::first_withheld(&frames, protocol);
-        let terminal_start =
-            starts.get(first_withheld).and_then(|start| owners.get(*start)).copied();
+        let terminal_start = withheld_start(&frames, protocol, &starts, &owners);
         settlements == 1
             && starts.len() == segments.len()
             && matches!((settled, terminal_start), (Some(settled), Some(start)) if settled < start)
@@ -701,6 +699,18 @@ fn check_stream(
     checker.check(leaked, Category::Leak);
 
     checker.check(!ended_once_last(steps), Category::Ended);
+}
+
+/// The step that forwarded the first withheld frame
+/// ([`NorthPassthroughFrameV1::first_withheld`]), if it was forwarded.
+fn withheld_start(
+    frames: &[NorthPassthroughFrameV1],
+    protocol: NorthPassthroughProtocolV2,
+    starts: &[usize],
+    owners: &[usize],
+) -> Option<usize> {
+    let first = NorthPassthroughFrameV1::first_withheld(frames, protocol);
+    starts.get(first).and_then(|start| owners.get(*start)).copied()
 }
 
 fn contains(haystack: &[u8], needle: &[u8]) -> bool {

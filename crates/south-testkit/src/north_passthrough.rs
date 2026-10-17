@@ -438,7 +438,6 @@ impl<'a> Run<'a> {
                 }
                 self.fail(Step::SettledAsFailure, data.as_ref());
             }
-            Verdict::Trap => self.fail(Step::MarkedDeliveryUnknown, None),
             Verdict::Done
                 if !self.armed
                     && (is(NORTH_PASSTHROUGH_MESSAGES_DONE_TYPE)
@@ -451,7 +450,6 @@ impl<'a> Run<'a> {
                     self.held.push(frame);
                 }
             }
-            Verdict::Done => self.fail(Step::MarkedDeliveryUnknown, None),
             Verdict::Events if self.armed && is(NORTH_PASSTHROUGH_MESSAGES_PING_TYPE) => {
                 self.held.push(frame);
             }
@@ -459,14 +457,13 @@ impl<'a> Run<'a> {
                 self.held.push(frame);
                 self.release_held(at_end_of_input);
             }
-            Verdict::Events if self.armed || terminal => {
-                self.fail(Step::MarkedDeliveryUnknown, None);
-            }
-            Verdict::Events => {
+            Verdict::Events if !self.armed && !terminal => {
                 if !early {
                     self.forward(&frame, data.as_ref());
                 }
             }
+            // A trap, `Done` on any other frame or twice, and any other frame after `Done`.
+            _ => self.fail(Step::MarkedDeliveryUnknown, None),
         }
     }
 
