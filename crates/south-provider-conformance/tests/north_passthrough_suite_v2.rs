@@ -206,7 +206,8 @@ fn each_messages_passthrough_body_withholds_from_its_done_frame() {
     assert_eq!(first(Body::MessagesText), (5, delta.clone()));
     assert_eq!(first(Body::MessagesCitationsAndUnknownBlock), (6, delta.clone()));
     assert_eq!(first(Body::MessagesTruncated), (2, delta));
-    let cited = north_passthrough_frames_v1(&Body::MessagesCitationsAndUnknownBlock.bytes()).unwrap();
+    let cited =
+        north_passthrough_frames_v1(&Body::MessagesCitationsAndUnknownBlock.bytes()).unwrap();
     assert_eq!(cited[7].messages_type(), Some(NORTH_PASSTHROUGH_MESSAGES_PING_TYPE));
     // The other protocols withhold only their last frame.
     let frames = north_passthrough_frames_v1(&Body::MixedFraming.bytes()).unwrap();

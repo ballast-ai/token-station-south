@@ -505,7 +505,8 @@ impl NorthPassthroughBodyV1 {
             // The upstream fails mid-answer, before `Done`: after it, the parser ignores an `error`
             // (§3.5). The opening is the text body's, LF-framed as the Anthropic wire is.
             Self::MessagesErrorAfterFrames => {
-                let cut = MESSAGES_TEXT.find("event: content_block_stop").unwrap_or(MESSAGES_TEXT.len());
+                let cut =
+                    MESSAGES_TEXT.find("event: content_block_stop").unwrap_or(MESSAGES_TEXT.len());
                 [&MESSAGES_TEXT.as_bytes()[..cut], MESSAGES_ERROR_EVENT].concat()
             }
             Self::MessagesTruncated => [MESSAGES_MIXED_OPENING, MESSAGES_MIXED_DELTA].concat(),
