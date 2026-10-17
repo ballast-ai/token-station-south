@@ -653,8 +653,7 @@ fn check_stream(
     }
     checker.check(!ordered, Category::Order);
 
-    // Terminal: released once, after the settlement; never settled on a failure. For `messages`
-    // every frame from the `Done` frame on is withheld with the terminal (record §3.5).
+    // Terminal (from the `messages` `Done` frame on, §3.5): released after the settlement, once.
     let settled = position(steps, &NorthPassthroughStepV1::SettlementPersisted);
     let settlements = count(steps, &NorthPassthroughStepV1::SettlementPersisted);
     let terminal_right = if completes {
