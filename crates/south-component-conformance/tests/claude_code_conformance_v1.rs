@@ -227,9 +227,10 @@ fn the_manifest_declares_the_two_families_with_the_native_values() {
     // Published as 1.2.6 with 0.72.0; the Messages pass-through record's minor made it 1.3.0
     // (`messages_passthrough_retires_every_published_072_package_identity`).
     assert_eq!(manifest.version, "1.3.0");
-    // `immutable_request_headers`, which no runtime before 0.67.0 parses (`ComponentManifestV1`
-    // refuses unknown fields); 0.67.0 shipped it.
-    assert_eq!(manifest.compatibility.south_runtime, "0.67.0");
+    // `immutable_request_headers` needed 0.67.0 (`ComponentManifestV1` refuses unknown fields); from
+    // 1.3.0 `north_request_passthrough` `messages` and `forwarded_client_headers` need 0.73.0
+    // (record `2026-10-17-messages-passthrough-and-count-tokens.md` §8.1), which shipped them.
+    assert_eq!(manifest.compatibility.south_runtime, "0.73.0");
 }
 
 /// Protected request headers record (`docs/design/2026-10-15-immutable-request-headers.md`,

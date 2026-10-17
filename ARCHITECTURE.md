@@ -211,7 +211,21 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.72.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.60.0 and 0.71.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.73.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.61.0 and 0.72.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**v0.73.0 (Messages pass-through, forwarded client headers, count tokens)**: release record
+`docs/design/2026-10-17-release-0.73.0.md`. Design record
+`docs/design/2026-10-17-messages-passthrough-and-count-tokens.md` (lv, 2026-10-17, Q1–Q6 as recommended). Three gaps
+stopped the host from deleting its native `gemini` and `anthropic` types; each is closed by a declaration the host reads,
+with no new WIT function. M1: `north_request_passthrough` admits `messages`, and `provider-anthropic` 1.3.0 passes
+Messages through both ways for family `anthropic`. M2: the provider-world field `forwarded_client_headers` names the
+client headers a host copies onto a pass-through request (never reserved, secret or immutable ones);
+`provider-anthropic` forwards `anthropic-beta`. M3: the field `count_tokens` declares the counting operation as one
+path-suffix replacement of the non-stream probe descriptor (`rewrite_count_tokens_path`); `gemini`, `vertex-ai` and
+`anthropic` declare it. Gate ② gains `ForwardedHeadersAbsent` and `CountTokensPath`; delivery suite v2 gains the
+`messages` protocol (43 → 63 cases), so the server host's `north_passthrough_delivery_v2` entry is `not_verified` again.
+The three declaring packages raise `south_runtime` to 0.73.0 in the release commit (record §8.1). Q47 against v0.72.0:
+`south-provider-api` 0.61.0 and `south-component-conformance` 0.72.0; `provider-anthropic`, `provider-gemini` and
+`provider-vertex` take a minor and every other package a patch. No contract number changes; the kernel pin is unchanged.
 **v0.72.0 (`provider-openai-compatible` 2.11.0: explicit cache reads)**: release record
 `docs/design/2026-10-17-release-0.72.0.md`. Design record
 `docs/design/2026-10-17-explicit-cache-reads.md` (lv, 2026-10-17). The package reports Bailian's explicit-cache reads as
