@@ -201,7 +201,7 @@ fn request_passthrough_is_refused_unless_every_condition_holds() {
             m.north_passthrough =
                 BTreeMap::from([("gemini".to_owned(), NorthProtocolV1::ChatCompletions)]);
         },
-        "north codec does not speak",
+        "only generate_content and messages",
     );
     refused(&|m| m.north_passthrough.clear(), "response side must pass through");
     refused(

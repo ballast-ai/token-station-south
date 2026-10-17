@@ -42,7 +42,7 @@ const EVERY_GENERATE_CONTENT_CASE: [Case; 21] = [
 ];
 
 /// Every fault the reference executor knows, version one's and version two's.
-const EVERY_FAULT: [Fault; 22] = [
+const EVERY_FAULT: [Fault; 23] = [
     Fault::ForwardBeforeReturn,
     Fault::CoalesceFrames,
     Fault::ReleaseTerminalBeforeSettlement,
@@ -65,6 +65,7 @@ const EVERY_FAULT: [Fault; 22] = [
     Fault::GenerateContentNon2xxReplaced,
     Fault::GenerateContentNon2xxStatusRewritten,
     Fault::TerminalOnFirstCandidateOnly,
+    Fault::MessagesNoFailureEvent,
 ];
 
 fn case_ids(fixtures: &[NorthPassthroughFixtureV1]) -> Vec<Case> {
@@ -83,13 +84,11 @@ fn north_passthrough_v2_identity_and_canonical_case_order_are_frozen() {
     );
     // Version two's Responses cases are version one's, unchanged.
     assert_eq!(north_passthrough_fixtures_v2(Protocol::Responses), north_passthrough_fixtures_v1());
-    assert_eq!(Protocol::ALL, [Protocol::Responses, Protocol::GenerateContent]);
+    assert_eq!(Protocol::ALL, [Protocol::Responses, Protocol::GenerateContent, Protocol::Messages]);
     for protocol in Protocol::ALL {
         assert_eq!(Protocol::from_north_protocol(protocol.north_protocol()), Some(protocol));
     }
-    for protocol in [NorthProtocolV1::ChatCompletions, NorthProtocolV1::Messages] {
-        assert_eq!(Protocol::from_north_protocol(protocol), None, "{protocol:?}");
-    }
+    assert_eq!(Protocol::from_north_protocol(NorthProtocolV1::ChatCompletions), None);
 }
 
 fn failed(harness: &dyn NorthPassthroughHarnessV2, protocol: Protocol) -> Vec<Case> {
@@ -155,6 +154,7 @@ fn north_passthrough_v2_judges_responses_exactly_as_v1() {
         Fault::GenerateContentNon2xxReplaced,
         Fault::GenerateContentNon2xxStatusRewritten,
         Fault::TerminalOnFirstCandidateOnly,
+        Fault::MessagesNoFailureEvent,
     ] {
         let executor = ReferenceNorthPassthroughExecutorV1::with_fault(fault);
         assert_eq!(failed(&executor, Protocol::Responses), [], "{fault:?}");
@@ -194,7 +194,7 @@ const EVERY_FAILURE_CASE: [Case; 9] = [
 
 #[test]
 fn each_generate_content_passthrough_mistake_fails_exactly_the_cases_that_guard_it() {
-    let expectations: [(Fault, &[Case]); 22] = [
+    let expectations: [(Fault, &[Case]); 23] = [
         (Fault::ForwardBeforeReturn, &EVERY_RELAYING_STREAM_CASE),
         (Fault::CoalesceFrames, &EVERY_RELAYING_STREAM_CASE),
         (Fault::KeepAliveMidFrame, &EVERY_RELAYING_STREAM_CASE),
@@ -242,6 +242,7 @@ fn each_generate_content_passthrough_mistake_fails_exactly_the_cases_that_guard_
         (Fault::GenerateContentNon2xxReplaced, &[Case::BufferedNon2xxDeliveredAsSent]),
         (Fault::GenerateContentNon2xxStatusRewritten, &[Case::BufferedNon2xxDeliveredAsSent]),
         (Fault::TerminalOnFirstCandidateOnly, &[Case::FinishReasonOnAnyCandidateIsTerminal]),
+        (Fault::MessagesNoFailureEvent, &[]),
     ];
     // Every fault has an expectation, once.
     for fault in EVERY_FAULT {

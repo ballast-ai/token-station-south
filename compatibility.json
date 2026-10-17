@@ -251,8 +251,7 @@
         "cases": 22
       },
       "north_passthrough_delivery_v2": {
-        "status": "verified",
-        "cases": 43
+        "status": "not_verified"
       },
       "north_render": {
         "status": "verified",

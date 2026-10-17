@@ -147,8 +147,9 @@ pub struct WorldSchemaV1 {
     /// Whether the world admits the declarations that shape a chat request:
     /// `endpoint`, `host_values`, `signing`, `stream_framing`,
     /// `usage_evidence`, `request_facts`, `immutable_body_paths`,
-    /// `immutable_request_headers` and `north_passthrough`. Without it gate ①
-    /// refuses each as a provider-world declaration.
+    /// `immutable_request_headers`, `north_passthrough`, `north_request_passthrough`,
+    /// `forwarded_client_headers` and `count_tokens`. Without it gate ① refuses each as a
+    /// provider-world declaration.
     pub request_declarations: bool,
     /// Which of the B7a instance declarations (`query_parameters`,
     /// `quota_headers`, `user_agent`; §10) the world admits. Gate ① refuses
@@ -784,12 +785,32 @@ pub struct ComponentManifestV1 {
     /// Each family whose request a host may send as the **client's own body** for a protocol the
     /// north codec does not speak, keeping the method, URL, headers and authentication the component
     /// builds for the probe IR (the `generateContent` request pass-through record,
-    /// `docs/design/2026-10-14-generate-content-request-passthrough.md` §3). Gate ① admits only
-    /// [`NorthProtocolV1::GenerateContent`], only together with the same protocol in
-    /// `north_passthrough`, and only with request facts on that protocol's wire. Absent means the
-    /// request is always built from the IR. Provider world only.
+    /// `docs/design/2026-10-14-generate-content-request-passthrough.md` §3). Gate ① admits
+    /// [`NorthProtocolV1::GenerateContent`] and, since 0.73.0, [`NorthProtocolV1::Messages`] (the
+    /// Messages pass-through record, `docs/design/2026-10-17-messages-passthrough-and-count-tokens.md`
+    /// §3.1), only together with the same protocol in `north_passthrough`, and only with request
+    /// facts on that protocol's wire. Absent means the request is always built from the IR.
+    /// Provider world only.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub north_request_passthrough: BTreeMap<String, NorthProtocolV1>,
+    /// Each family's client request headers a host copies unchanged onto a pass-through request
+    /// (one under `north_request_passthrough`, or a counting request under `count_tokens`; the
+    /// Messages pass-through record §4). Lowercase RFC 9110 `tchar` names, distinct, at most
+    /// [`MAX_FORWARDED_CLIENT_HEADERS`]; never a [`FORWARDING_REFUSED_HEADERS`] name, a declared
+    /// `secret_headers` name or one of the family's `immutable_request_headers`. Only a family
+    /// that declares `north_request_passthrough` may forward. Gate ② requires that the component's
+    /// probe descriptor carries none of them, so a host never merges a client value into the
+    /// component's. Absent means no client header is forwarded. Provider world only.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub forwarded_client_headers: BTreeMap<String, Vec<String>>,
+    /// Each family that serves its client protocol's token-counting endpoint, and where its
+    /// counting URL is relative to its generation URL (the Messages pass-through record §5). A host
+    /// builds the probe descriptor with `stream: false`, rewrites its path with
+    /// [`rewrite_count_tokens_path`], and sends the client's body unchanged; counting is not
+    /// billed. Only a family that passes the same protocol's request through may count. Absent
+    /// means the family does not count. Provider world only.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub count_tokens: BTreeMap<String, CountTokensDeclarationV1>,
     /// Families whose credentials are subscriptions with a usage quota (coding plans): a `429` from
     /// such an upstream usually means the subscription's quota is spent, not a transient rate limit,
     /// so a host may alert its operators (the host's subscription-quota alert, ruled by lv on
@@ -997,6 +1018,104 @@ impl NorthProtocolV1 {
 /// The request facts every family declaring `generate_content` request pass-through must have:
 /// the client's own wire puts the cap at this pointer and the model and stream flag in the URL.
 pub const GENERATE_CONTENT_OUTPUT_CAP: &str = "/generationConfig/maxOutputTokens";
+
+/// Where every family declaring `messages` request pass-through must put the output cap.
+///
+/// Its other request facts are the model at `/model` and the stream flag at `/stream`: the
+/// client's own wire (the Messages pass-through record §3.1).
+pub const MESSAGES_OUTPUT_CAP: &str = "/max_tokens";
+
+/// The most client headers one family may forward (`forwarded_client_headers`).
+pub const MAX_FORWARDED_CLIENT_HEADERS: usize = 16;
+
+/// The most bytes either side of a `count_tokens` path suffix may have.
+pub const MAX_COUNT_TOKENS_PATH_SUFFIX_BYTES: usize = 64;
+
+/// The header names `forwarded_client_headers` may never name: authentication, hop-by-hop and
+/// framing headers, `cookie`, `user-agent` and the `SigV4` headers.
+///
+/// Mirrors `south_contracts`' reserved header set (policy version 2), repeated because this crate
+/// depends on no other south crate; a conformance-crate test pins the two together.
+pub const FORWARDING_REFUSED_HEADERS: &[&str] = &[
+    "api-key",
+    "authorization",
+    "connection",
+    "content-length",
+    "cookie",
+    "expect",
+    "host",
+    "keep-alive",
+    "ocp-apim-subscription-key",
+    "proxy-authorization",
+    "proxy-connection",
+    "set-cookie",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+    "user-agent",
+    "x-amz-content-sha256",
+    "x-amz-date",
+    "x-amz-security-token",
+    "x-api-key",
+    "x-goog-api-key",
+    "xi-api-key",
+];
+
+/// One family's `count_tokens` declaration (the Messages pass-through record §5.1).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CountTokensDeclarationV1 {
+    /// The client surface whose counting endpoint this serves: `generate_content` or `messages`.
+    pub protocol: NorthProtocolV1,
+    /// How the generation URL's path becomes the counting one.
+    pub path_suffix: PathSuffixV1,
+}
+
+/// A path suffix replacement: the generation URL's path ends with `from`, which becomes `to`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PathSuffixV1 {
+    pub from: String,
+    pub to: String,
+}
+
+impl PathSuffixV1 {
+    /// Both sides are 1 to [`MAX_COUNT_TOKENS_PATH_SUFFIX_BYTES`] bytes of `[A-Za-z0-9._~:/-]`,
+    /// and they differ: no query, fragment, percent-encoding or template braces.
+    #[must_use]
+    pub fn is_valid(&self) -> bool {
+        let side_ok = |side: &str| {
+            !side.is_empty()
+                && side.len() <= MAX_COUNT_TOKENS_PATH_SUFFIX_BYTES
+                && side.bytes().all(|b| b.is_ascii_alphanumeric() || b"._~:/-".contains(&b))
+        };
+        side_ok(&self.from) && side_ok(&self.to) && self.from != self.to
+    }
+}
+
+/// The counting URL for a generation URL (the Messages pass-through record §5.2 step 2).
+///
+/// The path must end with `suffix.from`, which is replaced by `suffix.to`; scheme, authority and
+/// query are kept. `None` when `url` has no `scheme://authority` or its path does not end with the
+/// suffix, which a host treats as a component fault, never a fallback. Hosts and gate ② share this
+/// one function.
+#[must_use]
+pub fn rewrite_count_tokens_path(url: &str, suffix: &PathSuffixV1) -> Option<String> {
+    let (scheme, rest) = url.split_once("://")?;
+    if scheme.is_empty() {
+        return None;
+    }
+    let path_start = rest.find('/')?;
+    let (authority, after) = rest.split_at(path_start);
+    if authority.is_empty() || authority.contains(['?', '#']) {
+        return None;
+    }
+    let tail_start = after.find(['?', '#']).unwrap_or(after.len());
+    let (path, tail) = after.split_at(tail_start);
+    let stem = path.strip_suffix(suffix.from.as_str())?;
+    Some(format!("{scheme}://{authority}{stem}{}{tail}", suffix.to))
+}
 
 /// Whether `paths` are valid immutable body paths.
 ///
@@ -1343,6 +1462,8 @@ impl ComponentManifestV1 {
             || !self.immutable_request_headers.is_empty()
             || !self.north_passthrough.is_empty()
             || !self.north_request_passthrough.is_empty()
+            || !self.forwarded_client_headers.is_empty()
+            || !self.count_tokens.is_empty()
             || !self.subscription_quota_families.is_empty()
         {
             return Err(ManifestErrorV1::DeliveryIsAProviderWorldDeclaration);
@@ -1549,12 +1670,14 @@ impl ComponentManifestV1 {
         {
             return Err(ManifestErrorV1::InvalidSubscriptionQuotaFamily(family.clone()));
         }
-        self.validate_request_passthrough()
+        self.validate_request_passthrough()?;
+        self.validate_forwarded_client_headers()?;
+        self.validate_count_tokens()
     }
 
-    /// `north_request_passthrough` (the `generateContent` request pass-through record §3.1): a
-    /// declared family, a protocol the north codec does not speak, the same protocol on the
-    /// response side, and request facts on the client's own wire.
+    /// `north_request_passthrough` (the `generateContent` request pass-through record §3.1, the
+    /// Messages pass-through record §3.1): a declared family, `generate_content` or `messages`,
+    /// the same protocol on the response side, and request facts on the client's own wire.
     fn validate_request_passthrough(&self) -> Result<(), ManifestErrorV1> {
         for (family, protocol) in &self.north_request_passthrough {
             let invalid = |detail: &str| ManifestErrorV1::InvalidNorthRequestPassthrough {
@@ -1564,9 +1687,9 @@ impl ComponentManifestV1 {
             if !self.providers.contains(family) {
                 return Err(invalid("names a family the manifest does not declare"));
             }
-            if protocol.has_north_codec() {
+            if !matches!(protocol, NorthProtocolV1::GenerateContent | NorthProtocolV1::Messages) {
                 return Err(invalid(
-                    "only a protocol the north codec does not speak may pass the request through",
+                    "only generate_content and messages may pass the request through",
                 ));
             }
             if self.north_passthrough.get(family) != Some(protocol) {
@@ -1576,6 +1699,20 @@ impl ComponentManifestV1 {
                 ));
             }
             let facts = self.request_facts.get(family);
+            if *protocol == NorthProtocolV1::Messages {
+                let on_the_wire = facts.is_some_and(|facts| {
+                    facts.output_cap == [MESSAGES_OUTPUT_CAP]
+                        && facts.model == ModelLocationV1::Body("/model".to_owned())
+                        && facts.stream == StreamLocationV1::Body("/stream".to_owned())
+                });
+                if !on_the_wire {
+                    return Err(invalid(
+                        "request_facts must put the cap at /max_tokens, the model at /model and \
+                         the stream flag at /stream",
+                    ));
+                }
+                continue;
+            }
             let on_the_wire = facts.is_some_and(|facts| {
                 facts.output_cap == [GENERATE_CONTENT_OUTPUT_CAP]
                     && matches!(facts.model, ModelLocationV1::Url(_))
@@ -1585,6 +1722,87 @@ impl ComponentManifestV1 {
                 return Err(invalid(
                     "request_facts must put the cap at /generationConfig/maxOutputTokens and the \
                      model and stream flag in the URL",
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// `forwarded_client_headers` (the Messages pass-through record §4.1): a declared request
+    /// pass-through family, a bounded list of distinct lowercase `tchar` names, and none that the
+    /// host reserves, the package presents a secret in, or the family protects from extras.
+    fn validate_forwarded_client_headers(&self) -> Result<(), ManifestErrorV1> {
+        for (family, names) in &self.forwarded_client_headers {
+            let invalid = |detail: &str| ManifestErrorV1::InvalidForwardedClientHeaders {
+                family: family.clone(),
+                detail: detail.to_owned(),
+            };
+            if !self.providers.contains(family) {
+                return Err(invalid("names a family the manifest does not declare"));
+            }
+            if !self.north_request_passthrough.contains_key(family) {
+                return Err(invalid(
+                    "only a request pass-through family may forward client headers: declare \
+                     north_request_passthrough",
+                ));
+            }
+            if names.len() > MAX_FORWARDED_CLIENT_HEADERS || !are_immutable_request_headers(names) {
+                return Err(invalid(
+                    "each name must be distinct lowercase RFC 9110 tchar, at most 16 names of at \
+                     most 64 bytes",
+                ));
+            }
+            for name in names {
+                if FORWARDING_REFUSED_HEADERS.contains(&name.as_str()) {
+                    return Err(invalid(&format!("`{name}` is reserved by the host")));
+                }
+                if self.secret_headers.contains(name) {
+                    return Err(invalid(&format!(
+                        "`{name}` is one of the package's secret_headers"
+                    )));
+                }
+                if self
+                    .immutable_request_headers
+                    .get(family)
+                    .is_some_and(|fixed| fixed.contains(name))
+                {
+                    return Err(invalid(&format!(
+                        "`{name}` is one of the family's immutable_request_headers"
+                    )));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// `count_tokens` (the Messages pass-through record §5.1): a declared family that passes the
+    /// same protocol's request through, `generate_content` or `messages`, and a well-formed path
+    /// suffix.
+    fn validate_count_tokens(&self) -> Result<(), ManifestErrorV1> {
+        for (family, declaration) in &self.count_tokens {
+            let invalid = |detail: &str| ManifestErrorV1::InvalidCountTokens {
+                family: family.clone(),
+                detail: detail.to_owned(),
+            };
+            if !self.providers.contains(family) {
+                return Err(invalid("names a family the manifest does not declare"));
+            }
+            if !matches!(
+                declaration.protocol,
+                NorthProtocolV1::GenerateContent | NorthProtocolV1::Messages
+            ) {
+                return Err(invalid("only generate_content and messages have a counting endpoint"));
+            }
+            if self.north_request_passthrough.get(family) != Some(&declaration.protocol) {
+                return Err(invalid(
+                    "the client's counting body is its protocol's wire: declare the same protocol \
+                     in north_request_passthrough",
+                ));
+            }
+            if !declaration.path_suffix.is_valid() {
+                return Err(invalid(
+                    "path_suffix must be two different non-empty [A-Za-z0-9._~:/-] strings of at \
+                     most 64 bytes",
                 ));
             }
         }
@@ -1958,11 +2176,12 @@ pub enum ManifestErrorV1 {
     #[error("request_facts for family `{family}`: {detail}")]
     InvalidRequestFacts { family: String, detail: String },
     /// `immutable_body_paths`, `immutable_request_headers`, `north_passthrough`,
-    /// `north_request_passthrough` or `subscription_quota_families` in a world without request
-    /// declarations.
+    /// `north_request_passthrough`, `forwarded_client_headers`, `count_tokens` or
+    /// `subscription_quota_families` in a world without request declarations.
     #[error(
         "immutable_body_paths, immutable_request_headers, north_passthrough, \
-         north_request_passthrough and subscription_quota_families are provider-world declarations"
+         north_request_passthrough, forwarded_client_headers, count_tokens and \
+         subscription_quota_families are provider-world declarations"
     )]
     DeliveryIsAProviderWorldDeclaration,
     #[error("immutable_body_paths for family `{family}`: {detail}")]
@@ -1974,6 +2193,12 @@ pub enum ManifestErrorV1 {
     InvalidNorthPassthrough { family: String, detail: String },
     #[error("north_request_passthrough for family `{family}`: {detail}")]
     InvalidNorthRequestPassthrough { family: String, detail: String },
+    /// New in `south-provider-api` 0.61.0: a host matching this enum exhaustively must add the arm.
+    #[error("forwarded_client_headers for family `{family}`: {detail}")]
+    InvalidForwardedClientHeaders { family: String, detail: String },
+    /// New in `south-provider-api` 0.61.0: a host matching this enum exhaustively must add the arm.
+    #[error("count_tokens for family `{family}`: {detail}")]
+    InvalidCountTokens { family: String, detail: String },
     #[error("subscription_quota_families names `{0}`, a family the manifest does not declare")]
     InvalidSubscriptionQuotaFamily(String),
     #[error("credentials: {0}")]

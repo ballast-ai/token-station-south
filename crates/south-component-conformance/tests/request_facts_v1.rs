@@ -54,9 +54,11 @@ fn gate_one_refuses_a_malformed_declaration() {
     let declared = |family: &str, facts: RequestFactsV1| {
         let mut manifest = shipped("provider-gemini");
         manifest.request_facts.clear();
-        // Request pass-through requires the family's facts on its wire; this test varies them.
+        // Request pass-through (and counting, which needs it) requires the family's facts on its
+        // wire; this test varies them.
         manifest.north_request_passthrough.clear();
         manifest.north_passthrough.clear();
+        manifest.count_tokens.clear();
         manifest.request_facts.insert(family.to_owned(), facts);
         manifest.validate()
     };

@@ -58,10 +58,11 @@ pub trait NorthPassthroughHarnessV1 {
 ///
 /// Each `stream` or `buffered` call is one independent exchange in which the host has already
 /// chosen pass-through delivery for a client of `protocol`, to a family declaring
-/// `north_passthrough: <protocol>` (and, for `generate_content`, `north_request_passthrough` too).
+/// `north_passthrough: <protocol>` (and, for `generate_content` and `messages`,
+/// `north_request_passthrough` too).
 pub trait NorthPassthroughHarnessV2 {
-    /// The fixed public message of the host's Responses failure event. The suite reads it only for
-    /// Responses: `generate_content` has no failure event.
+    /// The fixed public message of the host's failure event: Responses' `response.failed` and the
+    /// `messages` `error` event. `generate_content` has no failure event.
     fn fixed_failure_message(&self) -> String;
 
     /// The delivery the host chooses for `setup`, before dispatch.
@@ -208,8 +209,9 @@ pub enum NorthPassthroughMismatchCategoryV1 {
     Terminal,
     /// The funds transition of a failed exchange: missing, repeated, or after the failure event.
     Funds,
-    /// The host's failure event: its shape, identity, sequence number or message (Responses), or
-    /// any frame at all written after the relayed ones (`generate_content`).
+    /// The host's failure event: its shape, identity, sequence number or message (Responses), its
+    /// shape or message (`messages`), or any frame at all written after the relayed ones
+    /// (`generate_content`).
     FailureEvent,
     /// The upstream's own failure text reached the client.
     Leak,
@@ -687,6 +689,7 @@ fn check_stream(
                 failure_event_right(tail, relayed, identity.as_ref(), last_sequence, fixed)
             }
             NorthPassthroughProtocolV2::GenerateContent => tail.is_empty(),
+            NorthPassthroughProtocolV2::Messages => messages_failure_event_right(tail, fixed),
         };
         checker.check(!right, Category::FailureEvent);
     }
@@ -755,6 +758,18 @@ fn failure_event_right(
         && data[0]["response"]["id"] == *id
         && data[0]["response"]["model"] == *model
         && data[0]["response"]["created_at"] == *created_at
+}
+
+/// The host's own Messages failure event: exactly one `error` event whose data is
+/// `{"type":"error","error":{"type":<string>,"message":<fixed>}}`.
+fn messages_failure_event_right(tail: &[u8], fixed: &str) -> bool {
+    let Ok(events) = decode_sse_v1(tail) else { return false };
+    let [event] = events.as_slice() else { return false };
+    let Ok(data) = serde_json::from_str::<Value>(event.data()) else { return false };
+    event.event() == "error"
+        && data["type"] == "error"
+        && data["error"]["type"].is_string()
+        && data["error"]["message"] == fixed
 }
 
 fn check_buffered(

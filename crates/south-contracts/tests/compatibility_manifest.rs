@@ -521,7 +521,7 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 1
                 // `host_passes_the_north_passthrough_delivery_suite_v2`, asserting that the passed
                 // case ids equal every distinct case id of each protocol; 43 is that sum.
                 // Same pin, billing forms and matrix as v1 above.
-                ("north_passthrough_delivery_v2", "verified", Some(43)),
+                ("north_passthrough_delivery_v2", "not_verified", None),
                 // north_render (render-gaps record §8, G1) verified at v0.61.0: server `0ae71a52`
                 // (carried in dev-v2 `4ecf5526`) adds `chat_stream_render_parity_tests` in
                 // `text_admission/sender.rs`, two tests that load all eight files of

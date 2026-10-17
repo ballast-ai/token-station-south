@@ -13,6 +13,10 @@
 //! stream without any frame of the executor's own, and a non-2xx answer is delivered with the
 //! upstream's status and body.
 //!
+//! For `messages` (record `docs/design/2026-10-17-messages-passthrough-and-count-tokens.md` §3.4)
+//! the terminal frame is `message_stop`, a failure ends the stream with one fixed-message `error`
+//! event of the executor's own, and a non-2xx answer is replaced by the executor's own error.
+//!
 //! [`NorthPassthroughFaultV1`] names one deliberate wiring mistake per assertion of the suite.
 //! The suite's self-tests (`tests/north_passthrough_runner_v1.rs`, `..._v2.rs`) show the
 //! reference passes and each mistake fails exactly the cases that guard it.
@@ -79,6 +83,9 @@ pub enum NorthPassthroughFaultV1 {
     GenerateContentNon2xxStatusRewritten,
     /// `generate_content`: looks for `finishReason` on the first candidate only.
     TerminalOnFirstCandidateOnly,
+    /// `messages`: ends a failed stream without the `error` event of its own, as for
+    /// `generate_content`.
+    MessagesNoFailureEvent,
 }
 
 /// The reference executor.
@@ -158,9 +165,11 @@ impl NorthPassthroughHarnessV2 for ReferenceNorthPassthroughExecutorV1 {
 
     fn delivery(&self, setup: &NorthPassthroughSetupV1) -> NorthPassthroughDeliveryV1 {
         use NorthPassthroughFaultV1 as Fault;
-        // The client's tools matter only when the codec maps the request; a protocol without a
-        // codec passes the request through too.
-        let lossless = !setup.inbound().has_north_codec()
+        // The client's tools matter only when the codec maps the request; `generate_content` and
+        // `messages` pass the request through too.
+        let request_passes_through =
+            matches!(setup.inbound(), NorthProtocolV1::GenerateContent | NorthProtocolV1::Messages);
+        let lossless = request_passes_through
             || self.is(Fault::DeliveryIgnoresLossless)
             || setup.client_tools().as_array().is_some_and(|tools| {
                 tools
@@ -272,6 +281,11 @@ impl NorthPassthroughHarnessV2 for ReferenceNorthPassthroughExecutorV1 {
             steps.push(Step::SettledAsFailure);
             let answer = if self.is(NorthPassthroughFaultV1::BufferedRelaysFailure) {
                 body.to_vec()
+            } else if protocol == NorthPassthroughProtocolV2::Messages {
+                json!({"type": "error", "error": {"type": "api_error",
+                                 "message": REFERENCE_NORTH_PASSTHROUGH_FAILURE_MESSAGE_V1}})
+                .to_string()
+                .into_bytes()
             } else {
                 json!({"error": {"type": "server_error",
                                  "message": REFERENCE_NORTH_PASSTHROUGH_FAILURE_MESSAGE_V1}})
@@ -465,7 +479,18 @@ impl<'a> Run<'a> {
             self.end();
             return;
         }
-        let event = self.failure_event(failing);
+        if self.protocol == NorthPassthroughProtocolV2::Messages
+            && self.is(NorthPassthroughFaultV1::MessagesNoFailureEvent)
+        {
+            self.steps.push(funds);
+            self.end();
+            return;
+        }
+        let event = if self.protocol == NorthPassthroughProtocolV2::Messages {
+            self.messages_failure_event(failing)
+        } else {
+            self.failure_event(failing)
+        };
         if self.is(NorthPassthroughFaultV1::FailureEventBeforeFunds) {
             self.steps.push(NorthPassthroughStepV1::Forwarded(event));
             self.steps.push(funds);
@@ -479,6 +504,17 @@ impl<'a> Run<'a> {
     fn end(&mut self) {
         self.steps.push(NorthPassthroughStepV1::Ended);
         self.done = true;
+    }
+
+    /// The host's own Messages failure event: one `error` event with the fixed message.
+    fn messages_failure_event(&self, failing: Option<&Value>) -> Vec<u8> {
+        let upstream_text = failing.and_then(|data| data["error"]["message"].as_str());
+        let message = match upstream_text {
+            Some(text) if self.is(NorthPassthroughFaultV1::LeakUpstreamMessage) => text,
+            _ => REFERENCE_NORTH_PASSTHROUGH_FAILURE_MESSAGE_V1,
+        };
+        let data = json!({"type": "error", "error": {"type": "api_error", "message": message}});
+        format!("event: error\ndata: {data}\n\n").into_bytes()
     }
 
     /// The host's own failure event: one `response.failed` on a relayed stream, or `response.created`

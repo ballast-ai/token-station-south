@@ -17,6 +17,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use south_provider_api::{
     ComponentManifestV1, ModelLocationV1, RequestFactsV1, StreamLocationV1, UsageEvidenceV1,
+    rewrite_count_tokens_path,
 };
 use token_station_protocol::{
     ChatRequest, ErrorEnvelope, HttpRequestDescriptor, HttpResponseParts, ProviderConfig,
@@ -196,6 +197,7 @@ fn run_suite(
                         outcomes.extend(descriptor_independent_of_body(
                             case, &built, manifest, &invoke,
                         ));
+                        outcomes.extend(passthrough_operations(case, &built, manifest, &invoke));
                     }
                     outcomes.push(undeclared_values_ignored(case, &built, manifest, &invoke));
                 }
@@ -603,18 +605,7 @@ fn descriptor_independent_of_body(
         let built = built.as_ref().map_err(Failure::detail)?;
         parse(built).map_err(|failure| failure.detail())
     };
-    let mut probe = input.chat_request.clone();
-    probe.messages =
-        vec![token_station_protocol::Message::text(token_station_protocol::Role::User, ".")];
-    probe.tools.clear();
-    probe.tool_choice = None;
-    probe.response_format = None;
-    let cap = probe.sampling.max_output_tokens;
-    probe.sampling = token_station_protocol::Sampling::default();
-    probe.sampling.max_output_tokens = cap;
-    let probe_built = invoke(
-        &serde_json::json!({"provider_config": input.provider_config, "chat_request": probe}),
-    );
+    let probe_built = invoke(&probe_input(&input, input.chat_request.stream));
     let outcome = match (descriptor(built), descriptor(&probe_built)) {
         (Ok(own), Ok(probed)) => {
             let differs = [
@@ -637,6 +628,88 @@ fn descriptor_independent_of_body(
         (Err(problem), _) | (_, Err(problem)) => OutcomeV1::failed(check, &case.name, problem),
     };
     Some(outcome)
+}
+
+/// The probe IR's input (the `generateContent` request pass-through record §3.2): the fixture's
+/// request with one `"."` user message and nothing else but the model, the given stream flag and
+/// the cap, under the fixture's provider configuration.
+fn probe_input(input: &RequestInput, stream: bool) -> Value {
+    let mut probe = input.chat_request.clone();
+    probe.messages =
+        vec![token_station_protocol::Message::text(token_station_protocol::Role::User, ".")];
+    probe.tools.clear();
+    probe.tool_choice = None;
+    probe.response_format = None;
+    probe.stream = stream;
+    let cap = probe.sampling.max_output_tokens;
+    probe.sampling = token_station_protocol::Sampling::default();
+    probe.sampling.max_output_tokens = cap;
+    serde_json::json!({"provider_config": input.provider_config, "chat_request": probe})
+}
+
+/// `ForwardedHeadersAbsent` and `CountTokensPath` (the Messages pass-through record §6), for a
+/// family declaring `forwarded_client_headers` or `count_tokens`: the fixture's descriptor and the
+/// probe's for both stream flags carry none of the forwarded headers, so a host never merges a
+/// client value into the component's; and the non-stream probe's descriptor is a `POST` whose
+/// path [`rewrite_count_tokens_path`] rewrites. Empty for a family that declares neither.
+fn passthrough_operations(
+    case: &CaseV1,
+    built: &Invoked,
+    manifest: &ComponentManifestV1,
+    invoke: &dyn Fn(&Value) -> Invoked,
+) -> Vec<OutcomeV1> {
+    let input: RequestInput = match parse(&case.input) {
+        Ok(input) => input,
+        Err(_) => return Vec::new(),
+    };
+    let family = &input.provider_config.provider;
+    let descriptor = |built: &Invoked| -> Result<HttpRequestDescriptor, String> {
+        let built = built.as_ref().map_err(Failure::detail)?;
+        parse(built).map_err(|failure| failure.detail())
+    };
+    let mut outcomes = Vec::new();
+    if let Some(forwarded) = manifest.forwarded_client_headers.get(family) {
+        let check = CheckV1::ForwardedHeadersAbsent;
+        let built = [
+            ("the request", descriptor(built)),
+            ("the non-stream probe", descriptor(&invoke(&probe_input(&input, false)))),
+            ("the stream probe", descriptor(&invoke(&probe_input(&input, true)))),
+        ];
+        let problem = built.iter().find_map(|(which, descriptor)| match descriptor {
+            Err(problem) => Some(format!("{which}: {problem}")),
+            Ok(descriptor) => {
+                forwarded.iter().find(|name| descriptor.headers.get(name).is_some()).map(|name| {
+                    format!("{which} sets `{name}`, which the host forwards from the client")
+                })
+            }
+        });
+        outcomes.push(problem.map_or_else(
+            || OutcomeV1::passed(check, &case.name),
+            |problem| OutcomeV1::failed(check, &case.name, problem),
+        ));
+    }
+    if let Some(counting) = manifest.count_tokens.get(family) {
+        let check = CheckV1::CountTokensPath;
+        let outcome = match descriptor(&invoke(&probe_input(&input, false))) {
+            Err(problem) => OutcomeV1::failed(check, &case.name, problem),
+            Ok(probe) if probe.method != token_station_protocol::HttpMethod::Post => {
+                OutcomeV1::failed(check, &case.name, "the non-stream probe is not a POST")
+            }
+            Ok(probe) => match rewrite_count_tokens_path(&probe.url, &counting.path_suffix) {
+                Some(_) => OutcomeV1::passed(check, &case.name),
+                None => OutcomeV1::failed(
+                    check,
+                    &case.name,
+                    format!(
+                        "the non-stream probe's URL path does not end with `{}`",
+                        counting.path_suffix.from
+                    ),
+                ),
+            },
+        };
+        outcomes.push(outcome);
+    }
+    outcomes
 }
 
 /// Builds the request twice through the same serialization, once with a

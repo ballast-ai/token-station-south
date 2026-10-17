@@ -147,3 +147,97 @@ fn every_generate_content_passthrough_frame_is_json() {
         }
     }
 }
+
+fn messages_terminal(body: Body) -> Vec<bool> {
+    north_passthrough_frames_v1(&body.bytes())
+        .unwrap()
+        .iter()
+        .map(|frame| frame.is_terminal_frame(Protocol::Messages))
+        .collect()
+}
+
+/// The `messages` bodies (record `docs/design/2026-10-17-messages-passthrough-and-count-tokens.md`
+/// §3.4) cut into the frames their cases count on.
+#[test]
+fn each_messages_passthrough_body_cuts_into_the_frames_its_cases_count_on() {
+    assert_eq!(messages_terminal(Body::MessagesMixedFraming), [false, false, false, true]);
+    assert_eq!(
+        messages_terminal(Body::MessagesText),
+        [false, false, false, false, false, false, true]
+    );
+    assert_eq!(
+        messages_terminal(Body::MessagesCitationsAndUnknownBlock),
+        [false, false, false, false, false, false, true]
+    );
+    assert_eq!(messages_terminal(Body::MessagesErrorFirst), [false]);
+    assert_eq!(messages_terminal(Body::MessagesErrorAfterFrames), [false, false, false, false]);
+    assert_eq!(messages_terminal(Body::MessagesTruncated), [false, false, false]);
+    for body in [Body::MessagesTerminalWithoutBlankLine, Body::MessagesTerminalWithoutLineEnd] {
+        let frames = north_passthrough_frames_v1(&body.bytes()).unwrap();
+        assert_eq!(frames.len(), 4, "{body:?}");
+        assert!(frames[3].at_end_of_input(), "{body:?}");
+        assert!(frames[3].is_terminal_frame(Protocol::Messages), "{body:?}");
+    }
+    let frames = north_passthrough_frames_v1(&Body::MessagesMixedFraming.bytes()).unwrap();
+    assert_eq!(
+        frames.iter().flat_map(|frame| frame.bytes().to_vec()).collect::<Vec<_>>(),
+        Body::MessagesMixedFraming.bytes()
+    );
+    assert!(frames.iter().all(|frame| !frame.is_terminal_frame(Protocol::Responses)));
+    assert!(frames.iter().all(|frame| !frame.is_terminal_frame(Protocol::GenerateContent)));
+    let cited = Body::MessagesCitationsAndUnknownBlock.bytes();
+    for marker in [&b"citations_delta"[..], &b"server_tool_use_v9"[..]] {
+        assert!(cited.windows(marker.len()).any(|window| window == marker));
+    }
+}
+
+#[test]
+fn the_messages_passthrough_terminal_rule() {
+    let terminal = |data| north_passthrough_is_terminal_data_v2(Protocol::Messages, &data);
+    assert!(terminal(json!({"type": "message_stop"})));
+    assert!(!terminal(json!({"type": "message_delta", "delta": {"stop_reason": "end_turn"}})));
+    assert!(!terminal(json!({"type": "error", "error": {"type": "overloaded_error"}})));
+    assert!(!terminal(json!({"type": "response.completed"})));
+    assert!(!terminal(json!({"candidates": [{"finishReason": "STOP"}]})));
+}
+
+/// `MessagesText` is the Anthropic fixture pack's own stream row.
+#[test]
+fn the_copied_messages_passthrough_body_equals_the_anthropic_pack_row() {
+    let pack = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../south-component-conformance/fixtures-anthropic");
+    let input: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(pack.join("provider.stream.text-and-terminal.input.json"))
+            .unwrap(),
+    )
+    .unwrap();
+    let joined: String =
+        input["chunks"].as_array().unwrap().iter().map(|chunk| chunk.as_str().unwrap()).collect();
+    assert_eq!(Body::MessagesText.bytes(), joined.as_bytes());
+}
+
+/// Each leak marker is in its body; every `messages` buffered body but the success is never
+/// forwarded, a non-2xx one included.
+#[test]
+fn every_messages_passthrough_upstream_failure_text_is_in_its_body() {
+    for body in [Body::MessagesErrorFirst, Body::MessagesErrorAfterFrames] {
+        let text = body.upstream_failure_text().unwrap();
+        let bytes = body.bytes();
+        assert!(bytes.windows(text.len()).any(|window| window == text.as_bytes()), "{body:?}");
+    }
+    let mut withheld = 0;
+    for fixture in north_passthrough_fixtures_v2(Protocol::Messages) {
+        if let NorthPassthroughPathV1::Buffered { status, body, forwarded, .. } = fixture.path() {
+            assert!(serde_json::from_str::<serde_json::Value>(body).is_ok());
+            match north_passthrough_buffered_upstream_text_v1(body) {
+                Some(text) => {
+                    assert!(body.contains(text));
+                    assert!(!forwarded);
+                    withheld += 1;
+                }
+                None => assert!(*forwarded && (200..300).contains(status)),
+            }
+        }
+    }
+    assert_eq!(withheld, 2);
+}
