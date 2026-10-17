@@ -132,8 +132,9 @@ fn the_manifest_declares_exactly_what_the_record_decided() {
             kernel_version: "0.5.0".to_owned(),
             kernel_revision: "c0bca10c2d9f9a439680865feb65c9edf598fc65".to_owned(),
             wit_package: WIT_PACKAGE.to_owned(),
-            // §7: `north_request_passthrough` is the newest declaration, first parsed by 0.60.0.
-            south_runtime: "0.60.0".to_owned(),
+            // `count_tokens` (record `2026-10-17-messages-passthrough-and-count-tokens.md` §8.1) is
+            // the newest declaration, first parsed by 0.73.0.
+            south_runtime: "0.73.0".to_owned(),
             runtime_abi: Some(south_provider_api::RUNTIME_ABI),
             kernel_contracts: std::collections::BTreeMap::from([
                 ("canonical_ir".to_owned(), 4),
