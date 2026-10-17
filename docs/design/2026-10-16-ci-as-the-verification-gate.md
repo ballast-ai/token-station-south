@@ -1,8 +1,9 @@
 # Verification: CI is the gate, local runs the fast checks, and a verified tree is not verified again
 
-Status: proposed. lv chose the direction on 2026-10-16: South's full verification runs in CI, and locally only the
-fast checks; the host keeps its local matrix as its gate and records its verdict (a host record of its own). The
-details below are for ruling.
+Status: accepted (lv, 2026-10-17: Q1–Q3 as recommended, and the release owner's local replay is dropped too, V3;
+confirmed in this repository's session). lv chose the direction on 2026-10-16: South's full verification runs in CI,
+and locally only the fast checks; the host keeps its local matrix as its gate and records its verdict (a host record
+of its own).
 
 Date: 2026-10-16
 
@@ -76,10 +77,18 @@ The decision is a small Python script, `scripts/verified_tree.py`, so it has uni
 (`scripts/test_verified_tree.py`): equal trees and a cache hit skip; unequal trees run; a cache miss runs; no pull
 request, no successful run, a missing artifact and an API error each run.
 
+### V3. A release is not replayed locally
+
+CONTRIBUTING.md asks the release owner to run `scripts/check-declared-runtime.sh --build` and
+`python3 scripts/check_crate_versions.py --unreleased` locally before a release. CI already runs both on every
+`release/*` pull request, on the same tree, so the local replay repeats a check whose answer CI gives anyway, on the
+shared laptop. It is dropped: the release pull request's CI is the gate. The two commands stay documented so that a CI
+failure can be reproduced locally, and the release owner may run them on demand.
+
 ## 3. What does not change
 
 - What CI checks, and on which events `quality` starts.
-- The release path: a release pull request and `release.yml` run in full (Q3).
+- The release path in CI: a release pull request and `release.yml` run in full (Q3). Only the local replay goes (V3).
 - The host: its matrix stays its gate (the host's own record).
 
 ## 4. Expected effect
@@ -91,7 +100,11 @@ request, no successful run, a missing artifact and an API error each run.
   skip rate after a week.
 - The cost: a test failure that the local full run would have caught is found by CI 12 to 20 minutes later.
 
-## 5. Questions for lv
+## 5. Questions for lv, and the rulings
+
+Ruled by lv on 2026-10-17: every question as recommended. Q1: AGENTS.md and CONTRIBUTING.md are reworded as in V1 (and,
+for V3, CONTRIBUTING.md's two "run it locally before a release" sentences). Q2: no branch protection now; V2's skip
+rate is measured first. Q3: reusing the release pull request's artifacts is a separate record, later. lv added V3.
 
 - **Q1.** Reword AGENTS.md and CONTRIBUTING.md as in V1? Recommended: yes; without it every session keeps running the
   full list because the rule says so.
