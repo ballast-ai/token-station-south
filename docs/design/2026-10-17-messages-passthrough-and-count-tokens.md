@@ -1,8 +1,9 @@
 # Messages pass-through, forwarded client headers, and a count-tokens operation
 
-Status: proposed. Requested by the host (server-14 session, 2026-10-17), relaying lv's ruling of the same day that the
-host's native `gemini` and `anthropic` provider types are deleted once their families run on components. Three gaps stop
-that deletion; this record proposes the south half of all three, for one release. The details below are for ruling.
+Status: accepted (lv, 2026-10-17: Q1–Q6 all as recommended, §9; confirmed in this repository's session). Requested
+by the host (server-14 session, 2026-10-17), relaying lv's ruling of the same day that the host's native `gemini` and
+`anthropic` provider types are deleted once their families run on components. Three gaps stop that deletion; this
+record decides the south half of all three, for release 0.73.0.
 
 Date: 2026-10-17
 
@@ -233,7 +234,12 @@ its faults; `shipped_packages_v1` reads the new declarations.
 
 Release: next minor (0.73.0). The host re-pins and implements its side in its own record.
 
-## 9. Questions for lv
+## 9. Questions for lv, and the rulings
+
+Ruled by lv on 2026-10-17: every question as recommended. Q2: a `messages` error frame and a non-2xx are rendered by
+the host through the codec, as Responses. Q3: forwarded client headers apply only to pass-through requests. Q4:
+`provider-anthropic` declares `count_tokens`, and the host opens the northbound counting route. Q5: a counting non-2xx
+may fail over through `map-provider-error`; §5.2 step 3 stands. Q6: no `anthropic-bedrock-invoke` counting now.
 
 - **Q1.** Adopt M1, M2 and M3 as written? Recommended: yes.
 - **Q2.** On a `messages` pass-through, should an upstream `error` frame and a non-2xx be relayed as the upstream sent
