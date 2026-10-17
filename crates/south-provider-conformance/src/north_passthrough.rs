@@ -45,8 +45,11 @@
 //! `docs/design/2026-10-17-messages-passthrough-and-count-tokens.md` §3.4, added in 0.73.0) keep
 //! the frame, order and settlement rules too, and their own three:
 //!
-//! - **Terminal frame**: the `message_stop` event (JSON data `type` `message_stop`), whose call
-//!   returned `Done`.
+//! - **Terminal frames** (version 3, corrected in §3.5): `Done` arrives on the `message_delta`
+//!   that carries the stop reason. The host withholds that frame, any `ping` after it, and the
+//!   `message_stop` event, whose calls answer nothing, and releases them together after the
+//!   settlement. Any other frame after `Done`, and a stream that ends before `message_stop`,
+//!   park.
 //! - **Failure**: an upstream `error` frame is never relayed; the host ends the stream with one
 //!   `error` event of its own, `{"type":"error","error":{"type":…,"message":<fixed>}}`, after the
 //!   funds transition, as Responses does with its fixed `response.failed`.
@@ -58,7 +61,7 @@
 use std::fmt;
 
 use serde_json::Value;
-use south_host_grammars::{SseDecoderV1, SseErrorV1};
+use south_host_grammars::{DEFAULT_SSE_EVENT_TYPE, SseDecoderV1, SseErrorV1};
 use south_provider_api::NorthProtocolV1;
 
 mod runner;
@@ -81,7 +84,7 @@ pub const NORTH_PASSTHROUGH_TERMINAL_TYPES_V1: [&str; 2] =
     ["response.completed", "response.incomplete"];
 
 /// The pass-through delivery conformance suite version, parameterised by protocol.
-pub const NORTH_PASSTHROUGH_DELIVERY_SUITE_V2_VERSION: u32 = 2;
+pub const NORTH_PASSTHROUGH_DELIVERY_SUITE_V2_VERSION: u32 = 3;
 
 /// The stable identifier for pass-through delivery conformance version two.
 pub const NORTH_PASSTHROUGH_DELIVERY_SUITE_V2_ID: &str = "south.north-passthrough-delivery.v2";
@@ -137,8 +140,11 @@ impl NorthPassthroughProtocolV2 {
 ///
 /// For Responses, a terminal `type` ([`NORTH_PASSTHROUGH_TERMINAL_TYPES_V1`]); for
 /// `generate_content`, some `candidates[*].finishReason` set (not null); for `messages`, the `type`
-/// [`NORTH_PASSTHROUGH_MESSAGES_TERMINAL_TYPE`]. A host releases such a frame only when its call
-/// also returned `Done`.
+/// [`NORTH_PASSTHROUGH_MESSAGES_TERMINAL_TYPE`]. For Responses and `generate_content`, a host
+/// releases such a frame only when its call also returned `Done`. For `messages`, `Done` arrives
+/// earlier, on a [`NORTH_PASSTHROUGH_MESSAGES_DONE_TYPE`] frame, and the host withholds that
+/// frame, any [`NORTH_PASSTHROUGH_MESSAGES_PING_TYPE`] after it, and the terminal frame
+/// (design record `docs/design/2026-10-17-messages-passthrough-and-count-tokens.md` §3.5).
 #[must_use]
 pub fn north_passthrough_is_terminal_data_v2(
     protocol: NorthPassthroughProtocolV2,
@@ -160,6 +166,14 @@ pub fn north_passthrough_is_terminal_data_v2(
 /// The `type` of the event that ends a successful Messages stream.
 pub const NORTH_PASSTHROUGH_MESSAGES_TERMINAL_TYPE: &str = "message_stop";
 
+/// The `type` of the Messages event on which a component reports `Done`: the one that carries the
+/// stop reason and the output usage. The host withholds it until the settlement persists.
+pub const NORTH_PASSTHROUGH_MESSAGES_DONE_TYPE: &str = "message_delta";
+
+/// The `type` of the Messages keep-alive event, the one event a host withholds between
+/// `Done` and the terminal frame instead of parking.
+pub const NORTH_PASSTHROUGH_MESSAGES_PING_TYPE: &str = "ping";
+
 fn has_finish_reason(data: &Value) -> bool {
     data.get("candidates").and_then(Value::as_array).is_some_and(|candidates| {
         candidates
@@ -173,6 +187,8 @@ fn has_finish_reason(data: &Value) -> bool {
 pub struct NorthPassthroughFrameV1 {
     bytes: Vec<u8>,
     kind: Option<String>,
+    /// The SSE `event:` name, when the frame names one other than the default.
+    event: Option<String>,
     sequence_number: Option<u64>,
     finish_reason: bool,
     at_end_of_input: bool,
@@ -218,9 +234,32 @@ impl NorthPassthroughFrameV1 {
             NorthPassthroughProtocolV2::Responses => self.is_terminal_type(),
             NorthPassthroughProtocolV2::GenerateContent => self.finish_reason,
             NorthPassthroughProtocolV2::Messages => {
-                self.kind() == Some(NORTH_PASSTHROUGH_MESSAGES_TERMINAL_TYPE)
+                self.messages_type() == Some(NORTH_PASSTHROUGH_MESSAGES_TERMINAL_TYPE)
             }
         }
+    }
+
+    /// The Messages event type of the frame: its SSE `event:` name, or, when it names none, the
+    /// `type` of its JSON data. The two agree on the Anthropic wire; a frame that carries only one
+    /// of them is still typed.
+    #[must_use]
+    pub fn messages_type(&self) -> Option<&str> {
+        self.event.as_deref().or_else(|| self.kind())
+    }
+
+    /// The index of the first frame a host withholds until the settlement persists: for
+    /// `messages`, the first [`NORTH_PASSTHROUGH_MESSAGES_DONE_TYPE`] frame (§3.5); for the other
+    /// protocols, and for a `messages` stream with no such frame, the last frame.
+    #[must_use]
+    pub fn first_withheld(frames: &[Self], protocol: NorthPassthroughProtocolV2) -> usize {
+        let last = frames.len().saturating_sub(1);
+        if protocol != NorthPassthroughProtocolV2::Messages {
+            return last;
+        }
+        frames
+            .iter()
+            .position(|frame| frame.messages_type() == Some(NORTH_PASSTHROUGH_MESSAGES_DONE_TYPE))
+            .unwrap_or(last)
     }
 
     /// Whether the end of input dispatched the frame (no blank line ended it).
@@ -238,7 +277,7 @@ impl NorthPassthroughFrameV1 {
         bytes
     }
 
-    fn new(bytes: Vec<u8>, data: &str, at_end_of_input: bool) -> Self {
+    fn new(bytes: Vec<u8>, event: &str, data: &str, at_end_of_input: bool) -> Self {
         let json: Option<Value> = serde_json::from_str(data).ok();
         let kind = json
             .as_ref()
@@ -248,7 +287,8 @@ impl NorthPassthroughFrameV1 {
         let sequence_number =
             json.as_ref().and_then(|value| value.get("sequence_number")).and_then(Value::as_u64);
         let finish_reason = json.as_ref().is_some_and(has_finish_reason);
-        Self { bytes, kind, sequence_number, finish_reason, at_end_of_input }
+        let event = (event != DEFAULT_SSE_EVENT_TYPE).then(|| event.to_owned());
+        Self { bytes, kind, event, sequence_number, finish_reason, at_end_of_input }
     }
 }
 
@@ -258,6 +298,7 @@ impl fmt::Debug for NorthPassthroughFrameV1 {
             .debug_struct("NorthPassthroughFrameV1")
             .field("byte_count", &self.bytes.len())
             .field("kind", &self.kind)
+            .field("event", &self.event)
             .field("sequence_number", &self.sequence_number)
             .field("finish_reason", &self.finish_reason)
             .field("at_end_of_input", &self.at_end_of_input)
@@ -283,6 +324,7 @@ pub fn north_passthrough_frames_v1(
         let end = usize::try_from(decoder.position()).unwrap_or(body.len()).min(body.len());
         frames.push(NorthPassthroughFrameV1::new(
             body.get(start..end).unwrap_or_default().to_vec(),
+            event.event(),
             event.data(),
             false,
         ));
@@ -291,6 +333,7 @@ pub fn north_passthrough_frames_v1(
     if let Some(event) = decoder.finish()? {
         frames.push(NorthPassthroughFrameV1::new(
             body.get(start..).unwrap_or_default().to_vec(),
+            event.event(),
             event.data(),
             true,
         ));
@@ -453,19 +496,28 @@ impl NorthPassthroughBodyV1 {
                 GEMINI_MIXED_TERMINAL.strip_suffix(b"\n\n").unwrap_or(GEMINI_MIXED_TERMINAL),
             ]
             .concat(),
-            Self::MessagesMixedFraming => [MESSAGES_MIXED_HEAD, MESSAGES_MIXED_TERMINAL].concat(),
+            Self::MessagesMixedFraming => {
+                [MESSAGES_MIXED_OPENING, MESSAGES_MIXED_DELTA, MESSAGES_MIXED_TERMINAL].concat()
+            }
             Self::MessagesText => MESSAGES_TEXT.as_bytes().to_vec(),
             Self::MessagesCitationsAndUnknownBlock => MESSAGES_CITATIONS.to_vec(),
             Self::MessagesErrorFirst => MESSAGES_ERROR_FIRST.to_vec(),
-            Self::MessagesErrorAfterFrames => [MESSAGES_MIXED_HEAD, MESSAGES_ERROR_EVENT].concat(),
-            Self::MessagesTruncated => MESSAGES_MIXED_HEAD.to_vec(),
+            // The upstream fails mid-answer, before `Done`: after it, the parser ignores an `error`
+            // (§3.5). The opening is the text body's, LF-framed as the Anthropic wire is.
+            Self::MessagesErrorAfterFrames => {
+                let cut = MESSAGES_TEXT.find("event: content_block_stop").unwrap_or(MESSAGES_TEXT.len());
+                [&MESSAGES_TEXT.as_bytes()[..cut], MESSAGES_ERROR_EVENT].concat()
+            }
+            Self::MessagesTruncated => [MESSAGES_MIXED_OPENING, MESSAGES_MIXED_DELTA].concat(),
             Self::MessagesTerminalWithoutBlankLine => [
-                MESSAGES_MIXED_HEAD,
+                MESSAGES_MIXED_OPENING,
+                MESSAGES_MIXED_DELTA,
                 MESSAGES_MIXED_TERMINAL.strip_suffix(b"\n").unwrap_or(MESSAGES_MIXED_TERMINAL),
             ]
             .concat(),
             Self::MessagesTerminalWithoutLineEnd => [
-                MESSAGES_MIXED_HEAD,
+                MESSAGES_MIXED_OPENING,
+                MESSAGES_MIXED_DELTA,
                 MESSAGES_MIXED_TERMINAL.strip_suffix(b"\n\n").unwrap_or(MESSAGES_MIXED_TERMINAL),
             ]
             .concat(),
@@ -1003,7 +1055,8 @@ encountered in cell 4; request dropped.\",\"status\":\"INTERNAL\"}}";
 const GEMINI_BUFFERED_429: &str = "{\"error\":{\"code\":429,\"message\":\"Resource has been \
 exhausted (e.g. check quota).\",\"status\":\"RESOURCE_EXHAUSTED\"}}";
 
-const MESSAGES_MIXED_HEAD: &[u8] = b"\xEF\xBB\xBF: keep-alive\r\n\
+/// The first two frames of the mixed-framing body, before `Done`.
+const MESSAGES_MIXED_OPENING: &[u8] = b"\xEF\xBB\xBF: keep-alive\r\n\
 event: message_start\r\n\
 data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_mixed\",\"type\":\"message\",\
 \"role\":\"assistant\",\"model\":\"claude-sonnet-4-5\",\"content\":[],\"stop_reason\":null,\
@@ -1012,8 +1065,10 @@ data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_mixed\",\"type\":\"m
 event: content_block_delta\r\
 data: {\"type\":\"content_block_delta\",\"index\":0,\r\
 data: \"delta\":{\"type\":\"text_delta\",\"text\":\"and sunny.\"}}\r\
-\r\
-: ping\n\
+\r";
+
+/// The mixed-framing body's `message_delta`, on which the component answers `Done` (§3.5).
+const MESSAGES_MIXED_DELTA: &[u8] = b": ping\n\
 event: message_delta\n\
 data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\
 \"usage\":{\"output_tokens\":5}}\n\
@@ -1037,6 +1092,9 @@ data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"citati
 \"citation\":{\"type\":\"char_location\",\"cited_text\":\"18C\",\"document_index\":0,\
 \"start_char_index\":0,\"end_char_index\":3}}}\n\
 \n\
+event: content_block_stop\n\
+data: {\"type\":\"content_block_stop\",\"index\":0}\n\
+\n\
 event: content_block_start\n\
 data: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\
 \"server_tool_use_v9\",\"id\":\"srvtoolu_1\",\"payload\":{\"probe\":1}}}\n\
@@ -1047,6 +1105,9 @@ data: {\"type\":\"content_block_stop\",\"index\":1}\n\
 event: message_delta\n\
 data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\
 \"usage\":{\"output_tokens\":7}}\n\
+\n\
+event: ping\n\
+data: {\"type\":\"ping\"}\n\
 \n\
 event: message_stop\n\
 data: {\"type\":\"message_stop\"}\n\
@@ -1383,8 +1444,11 @@ fn messages_fixtures() -> Vec<NorthPassthroughFixtureV1> {
     use NorthPassthroughStreamOutcomeV1::{Completes, FailsAfter};
     use NorthProtocolV1::{ChatCompletions, GenerateContent, Messages, Responses};
 
-    let completes = script(&[Events, Events, Events, Done], Finish::Clean, Persists);
-    let seven = script(&[vec![Events; 6], vec![Done]].concat(), Finish::Clean, Persists);
+    // `Done` arrives on `message_delta`, and `message_stop` answers nothing (§3.5).
+    let completes = script(&[Events, Events, Done, Events], Finish::Clean, Persists);
+    let seven = script(&[vec![Events; 5], vec![Done, Events]].concat(), Finish::Clean, Persists);
+    let cited =
+        script(&[vec![Events; 6], vec![Done, Events, Events]].concat(), Finish::Clean, Persists);
     let delivery = |case_id, setups, passes_through| NorthPassthroughFixtureV1 {
         case_id,
         path: NorthPassthroughPathV1::Delivery { setups, passes_through },
@@ -1424,7 +1488,7 @@ fn messages_fixtures() -> Vec<NorthPassthroughFixtureV1> {
             completes.clone(),
             Completes,
         ),
-        stream(Case::ForwardAfterReturn, Body::MessagesText, Whole, seven.clone(), Completes),
+        stream(Case::ForwardAfterReturn, Body::MessagesText, Whole, seven, Completes),
         stream(
             Case::TerminalWithheldUntilSettled,
             Body::MessagesMixedFraming,
@@ -1436,7 +1500,7 @@ fn messages_fixtures() -> Vec<NorthPassthroughFixtureV1> {
             Case::UnknownContentForwardedUnchanged,
             Body::MessagesCitationsAndUnknownBlock,
             Whole,
-            seven,
+            cited,
             Completes,
         ),
         stream(
@@ -1464,21 +1528,21 @@ fn messages_fixtures() -> Vec<NorthPassthroughFixtureV1> {
             Case::ErrorEventReplaced,
             Body::MessagesErrorAfterFrames,
             Whole,
-            script(&[Events, Events, Events, Error], Finish::Clean, Persists),
-            FailsAfter { relayed: 3, fed: 4 },
+            script(&[Events, Events, Events, Events, Error], Finish::Clean, Persists),
+            FailsAfter { relayed: 4, fed: 5 },
         ),
         stream(
             Case::ComponentErrorForwardsNothing,
             Body::MessagesMixedFraming,
             Whole,
-            script(&[Events, Error, Events, Done], Finish::Clean, Persists),
+            script(&[Events, Error, Done, Events], Finish::Clean, Persists),
             FailsAfter { relayed: 1, fed: 2 },
         ),
         stream(
             Case::ComponentTrapForwardsNothing,
             Body::MessagesMixedFraming,
             Whole,
-            script(&[Events, Trap, Events, Done], Finish::Clean, Persists),
+            script(&[Events, Trap, Done, Events], Finish::Clean, Persists),
             FailsAfter { relayed: 1, fed: 2 },
         ),
         stream(
@@ -1492,15 +1556,15 @@ fn messages_fixtures() -> Vec<NorthPassthroughFixtureV1> {
             Case::TruncatedStreamFails,
             Body::MessagesTruncated,
             Whole,
-            script(&[Events, Events, Events], Finish::Truncated, Persists),
-            FailsAfter { relayed: 3, fed: 3 },
+            script(&[Events, Events, Done], Finish::Truncated, Persists),
+            FailsAfter { relayed: 2, fed: 3 },
         ),
         stream(
             Case::SettlementFailureWithholdsTerminal,
             Body::MessagesMixedFraming,
             Whole,
-            script(&[Events, Events, Events, Done], Finish::Clean, Fails),
-            FailsAfter { relayed: 3, fed: 4 },
+            script(&[Events, Events, Done, Events], Finish::Clean, Fails),
+            FailsAfter { relayed: 2, fed: 4 },
         ),
         stream(
             Case::TerminalAtEndOfInputIsRepaired,

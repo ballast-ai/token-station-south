@@ -1,5 +1,5 @@
 //! Self-test of the `messages` cases of `south.north-passthrough-delivery.v2` (design record
-//! `docs/design/2026-10-17-messages-passthrough-and-count-tokens.md` §3.4): the reference executor
+//! `docs/design/2026-10-17-messages-passthrough-and-count-tokens.md` §3.4, corrected in §3.5): the reference executor
 //! passes every case, with and without keep-alive comments between frames, and each deliberate
 //! mistake fails exactly the cases that guard it.
 
@@ -98,7 +98,7 @@ fn the_reference_executor_passes_every_messages_passthrough_case() {
 
 #[test]
 fn each_messages_passthrough_mistake_fails_exactly_the_cases_that_guard_it() {
-    let expectations: [(Fault, &[Case]); 23] = [
+    let expectations: [(Fault, &[Case]); 24] = [
         (Fault::ForwardBeforeReturn, &EVERY_RELAYING_STREAM_CASE),
         (Fault::CoalesceFrames, &EVERY_RELAYING_STREAM_CASE),
         (Fault::KeepAliveMidFrame, &EVERY_RELAYING_STREAM_CASE),
@@ -147,6 +147,19 @@ fn each_messages_passthrough_mistake_fails_exactly_the_cases_that_guard_it() {
         (Fault::GenerateContentNon2xxStatusRewritten, &[]),
         (Fault::TerminalOnFirstCandidateOnly, &[]),
         (Fault::MessagesNoFailureEvent, &EVERY_FAILURE_CASE),
+        // Every case that reaches a `Done` on `message_delta` (record §3.5).
+        (
+            Fault::MessagesForwardDoneFrame,
+            &[
+                Case::ForwardedUnchanged,
+                Case::ForwardAfterReturn,
+                Case::TerminalWithheldUntilSettled,
+                Case::UnknownContentForwardedUnchanged,
+                Case::TruncatedStreamFails,
+                Case::SettlementFailureWithholdsTerminal,
+                Case::TerminalAtEndOfInputIsRepaired,
+            ],
+        ),
     ];
     for (fault, expected) in expectations {
         let got = failed(ReferenceNorthPassthroughExecutorV1::with_fault(fault));

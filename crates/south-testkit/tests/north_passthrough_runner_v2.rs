@@ -42,7 +42,7 @@ const EVERY_GENERATE_CONTENT_CASE: [Case; 21] = [
 ];
 
 /// Every fault the reference executor knows, version one's and version two's.
-const EVERY_FAULT: [Fault; 23] = [
+const EVERY_FAULT: [Fault; 24] = [
     Fault::ForwardBeforeReturn,
     Fault::CoalesceFrames,
     Fault::ReleaseTerminalBeforeSettlement,
@@ -66,6 +66,7 @@ const EVERY_FAULT: [Fault; 23] = [
     Fault::GenerateContentNon2xxStatusRewritten,
     Fault::TerminalOnFirstCandidateOnly,
     Fault::MessagesNoFailureEvent,
+    Fault::MessagesForwardDoneFrame,
 ];
 
 fn case_ids(fixtures: &[NorthPassthroughFixtureV1]) -> Vec<Case> {
@@ -77,7 +78,9 @@ fn case_ids(fixtures: &[NorthPassthroughFixtureV1]) -> Vec<Case> {
 #[test]
 fn north_passthrough_v2_identity_and_canonical_case_order_are_frozen() {
     assert_eq!(NORTH_PASSTHROUGH_DELIVERY_SUITE_V2_ID, "south.north-passthrough-delivery.v2");
-    assert_eq!(NORTH_PASSTHROUGH_DELIVERY_SUITE_V2_VERSION, 2);
+    // Version 3: the `messages` scripts answer `Done` on `message_delta` (record
+    // `docs/design/2026-10-17-messages-passthrough-and-count-tokens.md` §3.5).
+    assert_eq!(NORTH_PASSTHROUGH_DELIVERY_SUITE_V2_VERSION, 3);
     assert_eq!(
         case_ids(&north_passthrough_fixtures_v2(Protocol::GenerateContent)),
         EVERY_GENERATE_CONTENT_CASE
@@ -155,6 +158,7 @@ fn north_passthrough_v2_judges_responses_exactly_as_v1() {
         Fault::GenerateContentNon2xxStatusRewritten,
         Fault::TerminalOnFirstCandidateOnly,
         Fault::MessagesNoFailureEvent,
+        Fault::MessagesForwardDoneFrame,
     ] {
         let executor = ReferenceNorthPassthroughExecutorV1::with_fault(fault);
         assert_eq!(failed(&executor, Protocol::Responses), [], "{fault:?}");
@@ -194,7 +198,7 @@ const EVERY_FAILURE_CASE: [Case; 9] = [
 
 #[test]
 fn each_generate_content_passthrough_mistake_fails_exactly_the_cases_that_guard_it() {
-    let expectations: [(Fault, &[Case]); 23] = [
+    let expectations: [(Fault, &[Case]); 24] = [
         (Fault::ForwardBeforeReturn, &EVERY_RELAYING_STREAM_CASE),
         (Fault::CoalesceFrames, &EVERY_RELAYING_STREAM_CASE),
         (Fault::KeepAliveMidFrame, &EVERY_RELAYING_STREAM_CASE),
@@ -243,6 +247,7 @@ fn each_generate_content_passthrough_mistake_fails_exactly_the_cases_that_guard_
         (Fault::GenerateContentNon2xxStatusRewritten, &[Case::BufferedNon2xxDeliveredAsSent]),
         (Fault::TerminalOnFirstCandidateOnly, &[Case::FinishReasonOnAnyCandidateIsTerminal]),
         (Fault::MessagesNoFailureEvent, &[]),
+        (Fault::MessagesForwardDoneFrame, &[]),
     ];
     // Every fault has an expectation, once.
     for fault in EVERY_FAULT {
