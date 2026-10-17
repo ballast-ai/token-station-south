@@ -1,6 +1,6 @@
 {
   "name": "provider-gemini",
-  "version": "1.3.16",
+  "version": "1.4.0",
   "api_version": "provider-adapter-v2",
   "providers": [
     "gemini"
@@ -32,6 +32,15 @@
   },
   "north_request_passthrough": {
     "gemini": "generate_content"
+  },
+  "count_tokens": {
+    "gemini": {
+      "protocol": "generate_content",
+      "path_suffix": {
+        "from": ":generateContent",
+        "to": ":countTokens"
+      }
+    }
   },
   "permissions": {
     "network": false,

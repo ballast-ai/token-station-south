@@ -212,8 +212,20 @@ non-stream path ends with something other than `from`.
 | `south-component-conformance` | gate ② rows of §6; the reserved-list pin test; references unchanged in behaviour |
 | `components/provider-anthropic` | `request_facts`, `north_passthrough`, `north_request_passthrough`, `forwarded_client_headers` for `anthropic` (and `count_tokens` if Q4) |
 | `components/provider-gemini`, `components/provider-vertex` | `count_tokens` |
-| every package | Q47 patch (`south-provider-api` changes) |
-| `compatibility.json` | `south.north-passthrough-delivery.v2` stays `not_verified` for the `messages` cases until a host runs them |
+| every package | Q47 patch (`south-provider-api` 0.60.0 → 0.61.0, `south-component-conformance` 0.71.0 → 0.72.0) |
+| `compatibility.json` | the host's `north_passthrough_delivery_v2` entry goes back to `not_verified` (§8.1) |
+
+### 8.1 Two consequences found while implementing
+
+- **The three declaring packages need runtime 0.73.0.** `ComponentManifestV1` refuses unknown fields, so a runtime
+  before 0.73.0 refuses `forwarded_client_headers` and `count_tokens`, and its gate ① refuses `messages` request
+  pass-through. `provider-anthropic` (1.3.0), `provider-gemini` (1.4.0) and `provider-vertex` (1.1.0) therefore raise
+  `south_runtime` to 0.73.0 (CONTRIBUTING, "a package declares the oldest runtime it needs") in the release pull request
+  that ships them, as D7's packages moved to 0.60.0 in release 0.60.0 (#198): until the workspace is 0.73.0, no runtime
+  of that number exists for the gates to load them under. A host must record runtime 0.73.0 to admit them.
+- **The delivery suite v2 grew from 43 to 63 cases** (20 `messages` cases), so the host's recorded `verified` run no
+  longer describes the table, and `host_capability_evidence_freshness_v1` refuses it. The entry is `not_verified`
+  until the host re-runs v2 for all three protocols; editing the count without a run would fabricate the evidence.
 
 Tests, written first and failing: gate ① acceptance and each refusal in §3.1, §4.1 and §5.1; the gate ② rows against the
 declaring references and the fault fixtures; the delivery suite's `messages` cases against the reference executor and

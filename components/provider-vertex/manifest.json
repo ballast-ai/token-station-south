@@ -1,6 +1,6 @@
 {
   "name": "provider-vertex",
-  "version": "1.0.6",
+  "version": "1.1.0",
   "api_version": "provider-adapter-v2",
   "providers": [
     "vertex-ai"
@@ -144,6 +144,15 @@
   },
   "north_request_passthrough": {
     "vertex-ai": "generate_content"
+  },
+  "count_tokens": {
+    "vertex-ai": {
+      "protocol": "generate_content",
+      "path_suffix": {
+        "from": ":generateContent",
+        "to": ":countTokens"
+      }
+    }
   },
   "permissions": {
     "network": false,

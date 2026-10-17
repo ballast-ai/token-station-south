@@ -1,6 +1,6 @@
 {
   "name": "image-stability",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "api_version": "image-adapter-v1",
   "providers": [
     "stability-image"

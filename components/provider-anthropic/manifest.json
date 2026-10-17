@@ -1,6 +1,6 @@
 {
   "name": "provider-anthropic",
-  "version": "1.2.6",
+  "version": "1.3.0",
   "api_version": "provider-adapter-v2",
   "providers": [
     "anthropic",
@@ -16,6 +16,19 @@
     "bearer",
     "header_secret"
   ],
+  "request_facts": {
+    "anthropic": {
+      "output_cap": [
+        "/max_tokens"
+      ],
+      "model": {
+        "body": "/model"
+      },
+      "stream": {
+        "body": "/stream"
+      }
+    }
+  },
   "immutable_body_paths": {
     "claude-code": [
       "system"
@@ -143,6 +156,26 @@
     "claude-code",
     "claude-code-setup-token"
   ],
+  "north_passthrough": {
+    "anthropic": "messages"
+  },
+  "north_request_passthrough": {
+    "anthropic": "messages"
+  },
+  "forwarded_client_headers": {
+    "anthropic": [
+      "anthropic-beta"
+    ]
+  },
+  "count_tokens": {
+    "anthropic": {
+      "protocol": "messages",
+      "path_suffix": {
+        "from": "/v1/messages",
+        "to": "/v1/messages/count_tokens"
+      }
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

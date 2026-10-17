@@ -113,6 +113,20 @@ pub enum CheckV1 {
     /// The host keeps the probe's descriptor and sends the client's own body; a component that put
     /// anything from the body into the URL or a header would send a request the host never sealed.
     DescriptorIndependentOfBody,
+    /// For a family that declares `forwarded_client_headers`, neither the fixture request's
+    /// descriptor nor the probe IR's, for either stream flag, carries a forwarded header (the
+    /// Messages pass-through record, `docs/design/2026-10-17-messages-passthrough-and-count-tokens.md`
+    /// §4.3, §6).
+    ///
+    /// The host copies those headers from the client; one the component also set would have to be
+    /// merged, and no generic rule merges two values of a vendor header.
+    ForwardedHeadersAbsent,
+    /// For a family that declares `count_tokens`, the probe IR's non-stream descriptor is a `POST`
+    /// whose URL path ends with the declared suffix, so `rewrite_count_tokens_path` yields the
+    /// counting URL (the Messages pass-through record §5.2, §6).
+    ///
+    /// A host that cannot rewrite the path refuses the counting request as a component fault.
+    CountTokensPath,
     /// Each `credential.*` fixture's run of the package's credential recipe, by south's reference
     /// interpreter, equals the fixture's expected run: the rendered exchange requests, the
     /// extracted values, the expiry, the write-back and the exported attributes (B4,
@@ -270,6 +284,8 @@ impl CheckV1 {
             Self::DescriptorAuthWithinManifest => "descriptor_auth_within_manifest",
             Self::RequestFactsHonoured => "request_facts_honoured",
             Self::DescriptorIndependentOfBody => "descriptor_independent_of_body",
+            Self::ForwardedHeadersAbsent => "forwarded_headers_absent",
+            Self::CountTokensPath => "count_tokens_path",
             Self::CredentialRecipeMatch => "credential_recipe_match",
             Self::UndeclaredValuesIgnored => "undeclared_values_ignored",
             Self::LocatorResolves => "locator_resolves",

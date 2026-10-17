@@ -5,7 +5,7 @@
 # feature stays off).
 [package]
 name = "provider-openai-responses"
-version = "1.4.6"
+version = "1.4.7"
 edition = "2021"
 publish = false
 

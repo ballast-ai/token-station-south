@@ -288,7 +288,7 @@ impl TaskComponentV2 for KlingTaskReferenceV2 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "task-kling-v2".into(),
-            version: "0.32.31".into(),
+            version: "0.32.32".into(),
             api_version: "task-adapter-v2".into(),
         }
     }

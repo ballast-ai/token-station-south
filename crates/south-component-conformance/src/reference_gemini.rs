@@ -40,7 +40,7 @@ impl ProviderComponentV1 for GeminiReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-gemini".to_owned(),
-            version: "1.3.16".to_owned(),
+            version: "1.4.0".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
