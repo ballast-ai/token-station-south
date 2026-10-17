@@ -21,6 +21,7 @@ tokio = { workspace = true, features = ["macros", "sync", "time"] }
 tokio-util = { workspace = true, features = ["rt"] }
 
 [dev-dependencies]
+south-component-conformance = { path = "../south-component-conformance", version = "0.72.0" }
 static_assertions.workspace = true
 tokio = { workspace = true, features = ["macros", "rt", "sync", "test-util", "time"] }
 

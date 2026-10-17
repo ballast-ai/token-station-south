@@ -7,6 +7,7 @@ use std::path::Path;
 
 use serde_json::json;
 use south_provider_conformance::{
+    NORTH_PASSTHROUGH_MESSAGES_DONE_TYPE, NORTH_PASSTHROUGH_MESSAGES_PING_TYPE,
     NorthPassthroughBodyV1 as Body, NorthPassthroughFrameV1, NorthPassthroughPathV1,
     NorthPassthroughProtocolV2 as Protocol, north_passthrough_buffered_upstream_text_v1,
     north_passthrough_fixtures_v2, north_passthrough_frames_v1,
@@ -167,10 +168,10 @@ fn each_messages_passthrough_body_cuts_into_the_frames_its_cases_count_on() {
     );
     assert_eq!(
         messages_terminal(Body::MessagesCitationsAndUnknownBlock),
-        [false, false, false, false, false, false, true]
+        [false, false, false, false, false, false, false, false, true]
     );
     assert_eq!(messages_terminal(Body::MessagesErrorFirst), [false]);
-    assert_eq!(messages_terminal(Body::MessagesErrorAfterFrames), [false, false, false, false]);
+    assert_eq!(messages_terminal(Body::MessagesErrorAfterFrames), [false; 5]);
     assert_eq!(messages_terminal(Body::MessagesTruncated), [false, false, false]);
     for body in [Body::MessagesTerminalWithoutBlankLine, Body::MessagesTerminalWithoutLineEnd] {
         let frames = north_passthrough_frames_v1(&body.bytes()).unwrap();
@@ -189,6 +190,31 @@ fn each_messages_passthrough_body_cuts_into_the_frames_its_cases_count_on() {
     for marker in [&b"citations_delta"[..], &b"server_tool_use_v9"[..]] {
         assert!(cited.windows(marker.len()).any(|window| window == marker));
     }
+}
+
+/// The first frame each `messages` body withholds is its `message_delta`, on which the component
+/// answers `Done` (record §3.5); the citations body has a `ping` between it and `message_stop`.
+#[test]
+fn each_messages_passthrough_body_withholds_from_its_done_frame() {
+    let first = |body: Body| {
+        let frames = north_passthrough_frames_v1(&body.bytes()).unwrap();
+        let index = NorthPassthroughFrameV1::first_withheld(&frames, Protocol::Messages);
+        (index, frames[index].messages_type().map(str::to_owned))
+    };
+    let delta = Some(NORTH_PASSTHROUGH_MESSAGES_DONE_TYPE.to_owned());
+    assert_eq!(first(Body::MessagesMixedFraming), (2, delta.clone()));
+    assert_eq!(first(Body::MessagesText), (5, delta.clone()));
+    assert_eq!(first(Body::MessagesCitationsAndUnknownBlock), (6, delta.clone()));
+    assert_eq!(first(Body::MessagesTruncated), (2, delta));
+    let cited =
+        north_passthrough_frames_v1(&Body::MessagesCitationsAndUnknownBlock.bytes()).unwrap();
+    assert_eq!(cited[7].messages_type(), Some(NORTH_PASSTHROUGH_MESSAGES_PING_TYPE));
+    // The other protocols withhold only their last frame.
+    let frames = north_passthrough_frames_v1(&Body::MixedFraming.bytes()).unwrap();
+    assert_eq!(
+        NorthPassthroughFrameV1::first_withheld(&frames, Protocol::Responses),
+        frames.len() - 1
+    );
 }
 
 #[test]

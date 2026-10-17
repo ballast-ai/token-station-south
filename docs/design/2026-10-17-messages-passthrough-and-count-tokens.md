@@ -87,8 +87,9 @@ pass-through body would lose what the upstream requires of them. They keep rende
 `south.north-passthrough-delivery.v2` gains the protocol `messages` (`NorthPassthroughProtocolV2::Messages`), with:
 
 - **Frames** forwarded verbatim, one SSE frame at a time, as for the other two protocols.
-- **Terminal**: the `message_stop` event, for which the component's `parse-stream-chunk` reports `Done`. The host
-  withholds it until settlement.
+- **Terminal** (corrected 2026-10-17, §3.5): `Done` arrives on the `message_delta` that carries the stop reason, not on
+  `message_stop`. The host withholds that frame, any `ping` after it, and `message_stop`, and releases them together
+  after settlement.
 - **Failure**: an upstream `event: error` frame is not relayed; the host writes the north codec's Messages error event
   of its own, as Responses does with its fixed `response.failed`, since the codec speaks this protocol (Q2).
 - **Non-2xx**: not relayed; the host renders its own error through the codec, as for Responses (Q2).
@@ -97,6 +98,67 @@ pass-through body would lose what the upstream requires of them. They keep rende
 
 Fixtures: a text stream, a tool-use stream, a stream with a `citations` delta and an unknown block type, an `error`
 frame first, and a non-2xx body, each checked byte for byte against what the reference parses.
+
+### 3.5 Correction (2026-10-17): `Done` arrives on `message_delta`
+
+The host's read-back after release 0.73.0 (server-14 session) found that §3.4 and the suite described a component that
+does not exist. Both assumed the component reports `Done` on `message_stop`. The shipped `provider-anthropic` reports
+`Finish`, `Usage` and `Done` on the `message_delta` that carries usage, and nothing on `message_stop`. It does this by
+design: the Anthropic component record D3 (`2026-08-22-anthropic-provider-component.md`) emits the terminal triple on
+the frame that carries usage, or at EOF. A host that followed the suite literally would therefore park every real
+Messages stream. Its case `DoneWithoutTerminalTypeParks` refuses `Done` on a frame that is not `message_stop`. The
+host shipped tolerating both shapes.
+
+Nothing checked the suite's scripts against the reference parser, which is why this was missed. The scripts were
+written from §3.4, and §3.4 was written from the protocol's shape, not from the parser.
+
+Ruled 2026-10-17 (confirmed in this repository's session): the suite follows the parser, and the component is
+unchanged. Changing the parser would re-identify every package (Q47) and overturn D3 for no gain on the wire. The
+delivery rule for `messages` is now:
+
+1. `Done` must arrive on a `message_delta` frame. `Done` on any other frame parks the stream, as before.
+2. From that frame on, the host withholds every frame: the `message_delta` itself, then any `ping` event whose call
+   returned cleanly with no events, then `message_stop`, whose call must also return cleanly with no events.
+3. When `message_stop` is in hand, the host settles. Once the settlement persists, it releases the withheld frames in
+   order. If the settlement fails, it releases none of them and ends with its own `error` event.
+4. Between `Done` and `message_stop`, any frame other than `ping` parks the stream and is not relayed, and so does
+   any component `Error` or `Trap`. A frame after `message_stop` parks too.
+5. A stream that ends after `Done` without `message_stop` parks, as a truncation does. The real upstream always sends
+   `message_stop`; this fails closed, as Responses and `generate_content` do on truncation.
+6. `message_stop` with no `Done` before it parks (`TerminalTypeWithoutDoneParks`), and so does `Done` that arrives only
+   at EOF (`LaggingComponentParks`).
+
+Suite changes: `south.north-passthrough-delivery.v2` moves to suite version 3. The `messages` scripts put `Done` on
+`message_delta` and a clean empty call on `message_stop`. The Terminal check now requires every frame from the `Done`
+frame on to be released after the settlement.
+
+Case and body changes:
+
+- `TruncatedStreamFails` ends right after the `Done` frame.
+- `SettlementFailureWithholdsTerminal` fails the settlement after `Done`.
+- `ErrorEventReplaced` fails before `Done`, because the parser ignores an `error` that comes after it. Its opening is
+  the text body's four LF-framed frames.
+- The citations body closes its first block and carries a `ping` event between `message_delta` and `message_stop`.
+
+The reference executor gains the fault `MessagesForwardDoneFrame`, which forwards the `Done` frame at once, as the host
+does today.
+
+A new test drives `provider-anthropic`'s reference parser over the body of every `messages` case that stands for a
+correct component, frame by frame, and requires its answers to equal the case's script. A script can no longer disagree
+with the parser it stands in for.
+
+Run on the Responses and `generate_content` bodies, the same test fails: their reference parsers refuse those synthetic
+framing probes, or answer an error body with events. The Responses table is the frozen v1 suite. Making those bodies
+parser-faithful is therefore left to a record of its own, and the test checks `messages` only.
+
+The parity test also found a gap in the parser, which this record does not fix. `provider-anthropic` ends a frame
+only at `\n\n` or `\r\n\r\n` (`sse_frame_boundary`), but SSE also allows a lone CR as a line end. The suite's
+mixed-framing body has one CR-framed frame. The parser does not see that frame's end, and parses it together with
+the frame after it. Its answers still match the scripts, because `Done` stays on the `message_delta` frame. The
+Anthropic API frames with LF, so nothing on the wire is affected today. A fix changes a component and re-identifies
+every package (Q47), so it waits for a release that has another reason to.
+
+The host's v2 entry in `compatibility.json` stays `not_verified`. The host re-runs v2 against suite version 3.
 
 ## 4. M2: forwarded client headers
 

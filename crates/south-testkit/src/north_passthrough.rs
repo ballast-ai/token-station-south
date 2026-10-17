@@ -13,23 +13,27 @@
 //! stream without any frame of the executor's own, and a non-2xx answer is delivered with the
 //! upstream's status and body.
 //!
-//! For `messages` (record `docs/design/2026-10-17-messages-passthrough-and-count-tokens.md` §3.4)
-//! the terminal frame is `message_stop`, a failure ends the stream with one fixed-message `error`
-//! event of the executor's own, and a non-2xx answer is replaced by the executor's own error.
+//! For `messages` (record `docs/design/2026-10-17-messages-passthrough-and-count-tokens.md` §3.4,
+//! corrected in §3.5) `Done` arrives on `message_delta`: the executor withholds that frame, any
+//! `ping` after it and `message_stop`, and releases them together after the settlement; a failure
+//! ends the stream with one fixed-message `error` event of the executor's own, and a non-2xx answer
+//! is replaced by the executor's own error.
 //!
 //! [`NorthPassthroughFaultV1`] names one deliberate wiring mistake per assertion of the suite.
 //! The suite's self-tests (`tests/north_passthrough_runner_v1.rs`, `..._v2.rs`) show the
 //! reference passes and each mistake fails exactly the cases that guard it.
 
 use serde_json::{Value, json};
-use south_host_grammars::{SseDecoderV1, decode_sse_v1};
+use south_host_grammars::{DEFAULT_SSE_EVENT_TYPE, SseDecoderV1, decode_sse_v1};
 use south_provider_api::NorthProtocolV1;
 use south_provider_conformance::{
-    NorthPassthroughBufferedVerdictV1, NorthPassthroughDeliveryV1, NorthPassthroughFinishVerdictV1,
-    NorthPassthroughFrameVerdictV1, NorthPassthroughHarnessV1, NorthPassthroughHarnessV2,
-    NorthPassthroughProtocolV2, NorthPassthroughScriptV1, NorthPassthroughSettlementV1,
-    NorthPassthroughSetupV1, NorthPassthroughStepV1, NorthPassthroughTimelineV1,
-    north_passthrough_is_terminal_data_v2, north_passthrough_terminator_v1,
+    NORTH_PASSTHROUGH_MESSAGES_DONE_TYPE, NORTH_PASSTHROUGH_MESSAGES_PING_TYPE,
+    NORTH_PASSTHROUGH_MESSAGES_TERMINAL_TYPE, NorthPassthroughBufferedVerdictV1,
+    NorthPassthroughDeliveryV1, NorthPassthroughFinishVerdictV1, NorthPassthroughFrameVerdictV1,
+    NorthPassthroughHarnessV1, NorthPassthroughHarnessV2, NorthPassthroughProtocolV2,
+    NorthPassthroughScriptV1, NorthPassthroughSettlementV1, NorthPassthroughSetupV1,
+    NorthPassthroughStepV1, NorthPassthroughTimelineV1, north_passthrough_is_terminal_data_v2,
+    north_passthrough_terminator_v1,
 };
 
 /// The reference executor's fixed public failure message.
@@ -86,6 +90,9 @@ pub enum NorthPassthroughFaultV1 {
     /// `messages`: ends a failed stream without the `error` event of its own, as for
     /// `generate_content`.
     MessagesNoFailureEvent,
+    /// `messages`: forwards the `message_delta` that answered `Done` at once, withholding only
+    /// `message_stop` (record §3.5).
+    MessagesForwardDoneFrame,
 }
 
 /// The reference executor.
@@ -311,6 +318,20 @@ struct Run<'a> {
     identity: Option<Identity>,
     last_sequence: Option<u64>,
     done: bool,
+    /// `messages`: whether a `message_delta` answered `Done`.
+    armed: bool,
+    /// `messages`: the frames withheld since `Done`.
+    held: Vec<Vec<u8>>,
+}
+
+/// The Messages event type of a frame: its SSE `event:` name, or the `type` of its JSON data
+/// when it names none (`NorthPassthroughFrameV1::messages_type`).
+fn messages_type_of(frame: &[u8], data: Option<&Value>) -> Option<String> {
+    let named = decode_sse_v1(frame)
+        .ok()
+        .and_then(|events| events.first().map(|event| event.event().to_owned()))
+        .filter(|name| name != DEFAULT_SSE_EVENT_TYPE);
+    named.or_else(|| data.and_then(|data| data["type"].as_str()).map(str::to_owned))
 }
 
 /// The JSON data of a frame's first event.
@@ -334,6 +355,8 @@ impl<'a> Run<'a> {
             identity: None,
             last_sequence: None,
             done: false,
+            armed: false,
+            held: Vec::new(),
         }
     }
 
@@ -345,6 +368,10 @@ impl<'a> Run<'a> {
         use NorthPassthroughFaultV1 as Fault;
         use NorthPassthroughFrameVerdictV1 as Verdict;
         use NorthPassthroughStepV1 as Step;
+        if self.protocol == NorthPassthroughProtocolV2::Messages {
+            self.handle_messages(frame, at_end_of_input);
+            return;
+        }
         let data = data_of(&frame);
         let terminal_type = data.as_ref().is_some_and(|data| self.is_terminal(data));
         self.steps.push(Step::Fed(frame.clone()));
@@ -378,6 +405,97 @@ impl<'a> Run<'a> {
                 if !early {
                     self.forward(&frame, data.as_ref());
                 }
+            }
+        }
+    }
+
+    /// One `messages` frame (record §3.5): `Done` must arrive on `message_delta`; from it on every
+    /// frame is withheld, `ping` and `message_stop` with nothing to report, and `message_stop`
+    /// releases them all once the settlement persists. Anything else after `Done` parks.
+    fn handle_messages(&mut self, frame: Vec<u8>, at_end_of_input: bool) {
+        use NorthPassthroughFaultV1 as Fault;
+        use NorthPassthroughFrameVerdictV1 as Verdict;
+        use NorthPassthroughStepV1 as Step;
+        let data = data_of(&frame);
+        let kind = messages_type_of(&frame, data.as_ref());
+        let is = |wanted: &str| kind.as_deref() == Some(wanted);
+        let terminal = is(NORTH_PASSTHROUGH_MESSAGES_TERMINAL_TYPE);
+        self.steps.push(Step::Fed(frame.clone()));
+        let verdict = self.script.frame(self.calls);
+        self.calls += 1;
+        let early = self.is(Fault::ForwardBeforeReturn)
+            && verdict == Verdict::Events
+            && !self.armed
+            && !terminal;
+        if early {
+            self.forward(&frame, data.as_ref());
+        }
+        self.steps.push(Step::Returned);
+        match verdict {
+            Verdict::Error => {
+                if self.is(Fault::RelayFailureFrame) {
+                    self.steps.push(Step::Forwarded(frame));
+                }
+                self.fail(Step::SettledAsFailure, data.as_ref());
+            }
+            Verdict::Done
+                if !self.armed
+                    && (is(NORTH_PASSTHROUGH_MESSAGES_DONE_TYPE)
+                        || self.is(Fault::TerminalOnDoneAlone)) =>
+            {
+                self.armed = true;
+                if self.is(Fault::MessagesForwardDoneFrame) {
+                    self.forward(&frame, data.as_ref());
+                } else {
+                    self.held.push(frame);
+                }
+            }
+            Verdict::Events if self.armed && is(NORTH_PASSTHROUGH_MESSAGES_PING_TYPE) => {
+                self.held.push(frame);
+            }
+            Verdict::Events if terminal && (self.armed || self.is(Fault::TerminalOnTypeAlone)) => {
+                self.held.push(frame);
+                self.release_held(at_end_of_input);
+            }
+            Verdict::Events if !self.armed && !terminal => {
+                if !early {
+                    self.forward(&frame, data.as_ref());
+                }
+            }
+            // A trap, `Done` on any other frame or twice, and any other frame after `Done`.
+            _ => self.fail(Step::MarkedDeliveryUnknown, None),
+        }
+    }
+
+    /// `messages`: releases every withheld frame once the settlement persists, as [`Self::release`]
+    /// does for one terminal frame.
+    fn release_held(&mut self, at_end_of_input: bool) {
+        use NorthPassthroughFaultV1 as Fault;
+        use NorthPassthroughStepV1 as Step;
+        let mut frames = std::mem::take(&mut self.held);
+        if at_end_of_input
+            && !self.is(Fault::NoTerminatorRepair)
+            && let Some(last) = frames.last_mut()
+        {
+            let terminator = north_passthrough_terminator_v1(last);
+            last.extend_from_slice(terminator);
+        }
+        if self.is(Fault::ReleaseTerminalBeforeSettlement) {
+            self.steps.extend(frames.iter().cloned().map(Step::Forwarded));
+        }
+        match self.script.settlement() {
+            NorthPassthroughSettlementV1::Persists => {
+                self.steps.push(Step::SettlementPersisted);
+                if !self.is(Fault::ReleaseTerminalBeforeSettlement) {
+                    self.steps.extend(frames.into_iter().map(Step::Forwarded));
+                }
+                self.end();
+            }
+            NorthPassthroughSettlementV1::Fails => {
+                if self.is(Fault::ForwardTerminalWhenSettlementFails) {
+                    self.steps.extend(frames.into_iter().map(Step::Forwarded));
+                }
+                self.fail(Step::MarkedDeliveryUnknown, None);
             }
         }
     }
