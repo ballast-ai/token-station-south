@@ -114,14 +114,34 @@ without opening the header to request extras. This revises PRH-Q3 of the protect
 already covered the header. The credential headers (`x-api-key`, `authorization`) stay covered by south's reserved
 headers, which every host applies (`SafeHeaders`).
 
-## 5. No south change for the forced-tool pre-refusal
+## 5. The forced-tool pre-refusal: DH-Q4 needs a component change first
 
-DH-Q4 = A deletes the host's pre-refusal (H5). Reading the host shows nothing depends on it for failover: a
-`ToolChoiceUnsupported` from `seal_target` is fatal on Chat (`chat.rs:206-230`), Messages (`messages.rs:211-224`) and
-Responses (`sender/responses.rs:90-94`, `:340`); only a replay mismatch moves to the next candidate. The components
-already refuse the same requests (`anthropic_dialect.rs:204-213`). One client-visible difference is left to the host:
-the code changes from the host's `tool_choice_unsupported` to the component's capability error, both HTTP 400.
-`refuses_forced_tool` and `DIALECT_PARAMETERS` stay exported, as removing them is not needed for this record.
+DH-Q4 = A deletes the host's pre-refusal (H5) and leaves the refusal to the components. Failover does not depend on
+the pre-refusal: a `ToolChoiceUnsupported` from `seal_target` is fatal on Chat (`chat.rs:206-230`), Messages
+(`messages.rs:211-224`) and Responses (`sender/responses.rs:90-94`, `:340`), and only a replay mismatch moves to the
+next candidate.
+
+The precondition of A does not hold everywhere, though (found by the host on 2026-10-18):
+
+- `provider-anthropic` and `provider-bedrock-converse` refuse exactly what the host pre-refuses
+  (`anthropic_dialect.rs:204-213`).
+- `provider-kiro` does not. A forced choice has no slot on its wire, so it sends the tools as for `auto`, and its
+  comment relies on the host's pre-refusal (`reference_kiro.rs:357-361`).
+- `provider-openai-compatible` does not read `anthropic.tool_choice.auto_only` at all. A Claude model behind an
+  OpenAI-compatible family (e.g. `github-copilot`) that declares the word is refused today by the host alone.
+
+So deleting H5 first would let a forced choice through on those families. Before the host deletes it, each such
+component refuses itself and declares the word in `model_parameters`:
+
+- `provider-kiro`: read `anthropic.tool_choice.auto_only` and refuse a forced choice with the capability error
+  `anthropic_dialect` uses. Its `model_parameters` gains the word.
+- `provider-openai-compatible`: the same, on every family. **Unverified** whether any of its families should honor
+  the other five Claude words; this record adds only the refusal (MP-Q7).
+
+The refusal moves from the host to the component unchanged in meaning; one client-visible difference is left to the
+host: the error code changes from the host's `tool_choice_unsupported` to the component's capability error, both
+HTTP 400. `refuses_forced_tool` and `DIALECT_PARAMETERS` stay exported, as removing them is not needed for this
+record.
 
 ## 6. Shipped declarations
 
@@ -134,8 +154,9 @@ declares nothing.
 | `provider-bedrock-converse` | `bedrock` | the six `anthropic.*` words, the three `bedrock.converse.cache_point*` words, `reasoning_replay.claude.v1` | — |
 | `provider-bedrock-converse-bearer` | `bedrock-bearer` | as `bedrock` | — |
 | `provider-anthropic-bedrock-invoke` | `anthropic-bedrock-invoke` | **unverified**: the words its reference reads (its record says the dialect applies as in `provider-anthropic`) | — |
-| `provider-openai-compatible` | `openai-compatible` | `reasoning_content`, `reasoning_effort` | — |
-| `provider-openai-compatible` | the other six families | `reasoning_effort` (MP-Q3) | — |
+| `provider-openai-compatible` | `openai-compatible` | `anthropic.tool_choice.auto_only` (§5), `reasoning_content`, `reasoning_effort` | — |
+| `provider-openai-compatible` | the other six families | `anthropic.tool_choice.auto_only` (§5), `reasoning_effort` (MP-Q3) | — |
+| `provider-kiro` | `kiro` | `anthropic.tool_choice.auto_only` (§5) | — |
 | `provider-openai-responses` | all three families | `reasoning_effort`, `reasoning_replay.openai.v1` | — |
 
 Declaring `reasoning_content` only on `openai-compatible` keeps H3 byte-identical. Two deliberate changes follow from
@@ -174,8 +195,9 @@ the table, both registered:
    `ANTHROPIC_DIALECT_PREFIX`, the `DIALECT_PARAMETERS` and `CACHE_POINT_PARAMETERS` imports and the
    `reasoning_replay.` constant. Keep the adaptive/budget exclusivity check, or leave it to `Dialect::of`, which
    refuses it at request time (MP-Q5).
-2. H3, H5: build the capability per §2 items 3–4, and delete `openai_compatible_model_capability`'s name comparison
-   and the forced-tool pre-refusal (DH-Q4).
+2. H3, H5: build the capability per §2 items 3–4, and delete `openai_compatible_model_capability`'s name comparison.
+   Delete the forced-tool pre-refusal (DH-Q4) only after re-pinning to the release in which `provider-kiro` and
+   `provider-openai-compatible` refuse themselves (§5).
 3. H1: `leg_accepts` reads the family's declared replay words (§2 item 5). `ReplayLeg` loses its name-keyed variant.
 4. H2: `responses_request_ir` takes `drops_unsigned_thinking.contains(family)`.
 5. H6: remove `anthropic-version` from `HOST_MANAGED_HEADERS`. Stored extras on that name for `anthropic` rows are
@@ -197,9 +219,14 @@ the table, both registered:
 - **MP-Q5** The adaptive/budget mutual exclusion is a Claude rule the host checks at save time. **Recommended:** the
   host drops it. `Dialect::of` refuses the combination at request time, so a misconfigured model fails on its first
   request rather than at save.
+- **MP-Q7** `provider-kiro` and `provider-openai-compatible` take only the forced-tool refusal (§5), not the other
+  Claude words. **Recommended: yes**; the other words reshape requests and need their own measurement. The
+  alternative is DH-Q4 option B, a declared `refuses` rule, but that is a second field for one word.
 - **MP-Q6** Field names. **Recommended:** `model_parameters` and `drops_unsigned_thinking`. The DH record's working
   name `reasoning_replay` is not used, because the replay carriers are covered by `model_parameters` (§2 item 5).
 
 ## Revision note
 
 - 2026-10-18: first draft. Not implemented, built or tested.
+- 2026-10-18: §5 corrected. `provider-kiro` and `provider-openai-compatible` do not refuse a forced choice (the
+  host found it); they now take the refusal before H5 is deleted. MP-Q7 added.
