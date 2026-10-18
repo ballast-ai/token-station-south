@@ -12,9 +12,11 @@
 pub const CACHE_POINT_PARAMETERS: [&str; 3] =
     crate::reference_bedrock_converse::CACHE_POINT_PARAMETERS;
 
-/// The `model_parameters` words of each shipped provider family (the family model parameters
-/// record, `docs/design/2026-10-18-family-model-parameters.md` §6), sorted as a manifest lists
-/// them. `shipped_packages_v1` pins every manifest to these.
+/// The `model_parameters` words of each shipped provider family.
+///
+/// Sorted as a manifest lists them (the family model parameters record,
+/// `docs/design/2026-10-18-family-model-parameters.md` §6); `family_model_parameters_v1` pins every
+/// manifest to these.
 pub mod family {
     /// `anthropic`, `claude-code`, `claude-code-setup-token` and `anthropic-bedrock-invoke`: the
     /// Claude dialect and the Claude replay carrier.
