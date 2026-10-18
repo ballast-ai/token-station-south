@@ -1,7 +1,8 @@
 # Family model parameters and unsigned thinking: provider-world manifest declarations
 
 Status: proposed. Requested by lv on 2026-10-18 (host dialect de-hardcoding record, DH-Q2 = A: "south adds the
-manifest fields, releases them, the host consumes them, south writes its own English record"). Open points in §8.
+manifest fields, releases them, the host consumes them, south writes its own English record"). Rulings relayed from lv on 2026-10-18 (by token-station-server-14, confirmed by the user) are marked in §9; open
+points remain there.
 
 Date: 2026-10-18
 
@@ -97,8 +98,7 @@ a family the manifest declares; provider world only. The shape follows the prece
 Semantics: for a declared family, a host removes thinking and redacted-thinking parts from every assistant turn
 that carries no replay marker, before the IR reaches the component. For any other family it keeps them on turns that
 carry tool calls. This is H2 with the family name replaced by the declaration. On the host's Responses surface it is
-byte-identical. The host applies H2 only on Responses today; whether Chat and Messages should follow is a host
-question (MP-Q2).
+byte-identical. The host applies it on the Responses surface only, as H2 does today (MP-Q2, ruled).
 
 The alternative is that `provider-anthropic` drops unsigned thinking itself. Its `assistant_part_to_block` today
 writes a thinking block without a signature when the model does not declare replay (`reference_anthropic.rs:289-303`).
@@ -130,8 +130,11 @@ The precondition of A does not hold everywhere, though (found by the host on 202
 - `provider-openai-compatible` does not read `anthropic.tool_choice.auto_only` at all. A Claude model behind an
   OpenAI-compatible family (e.g. `github-copilot`) that declares the word is refused today by the host alone.
 
-So deleting H5 first would let a forced choice through on those families. Before the host deletes it, each such
-component refuses itself and declares the word in `model_parameters`:
+So deleting H5 first would let a forced choice through on those families. **lv ruled on 2026-10-18 (DH-Q4
+revisited):** the host keeps H5 until it re-pins to the release in which every family that may serve a Claude model
+refuses a forced choice itself, and that work joins this release. The implementation goes through every provider
+family. Each one either refuses a forced choice when the model declares `anthropic.tool_choice.auto_only`, pinned by
+a test, or this record says why a model declaring the word cannot route to it. Known so far:
 
 - `provider-kiro`: read `anthropic.tool_choice.auto_only` and refuse a forced choice with the capability error
   `anthropic_dialect` uses. Its `model_parameters` gains the word.
@@ -193,8 +196,8 @@ the table, both registered:
 
 1. H4: derive reserved namespaces and admitted words from the loaded packages' `model_parameters` (§2 item 2). Drop
    `ANTHROPIC_DIALECT_PREFIX`, the `DIALECT_PARAMETERS` and `CACHE_POINT_PARAMETERS` imports and the
-   `reasoning_replay.` constant. Keep the adaptive/budget exclusivity check, or leave it to `Dialect::of`, which
-   refuses it at request time (MP-Q5).
+   `reasoning_replay.` constant. Keep the save-time adaptive/budget exclusivity check, judged by the declared words
+   instead of a dialect name (MP-Q5, ruled): south exports the exclusive pair beside the words (§7).
 2. H3, H5: build the capability per §2 items 3–4, and delete `openai_compatible_model_capability`'s name comparison.
    Delete the forced-tool pre-refusal (DH-Q4) only after re-pinning to the release in which `provider-kiro` and
    `provider-openai-compatible` refuse themselves (§5).
@@ -209,16 +212,18 @@ the table, both registered:
 - **MP-Q1** Unsigned thinking: (a) the `drops_unsigned_thinking` declaration, which is byte-identical, or (b)
   `provider-anthropic` drops unsigned thinking itself, so no field is needed but the requests change on every
   surface. **Recommended: (a)**; (b) can follow after measurement.
-- **MP-Q2** Should the host apply `drops_unsigned_thinking` on Chat and Messages too? That is a host decision.
-  South's semantics are surface-independent.
+- **MP-Q2** Should the host apply `drops_unsigned_thinking` on Chat and Messages too? **Ruled (lv, 2026-10-18): no.**
+  Responses only, as today; only the family name is replaced by the declaration.
 - **MP-Q3** Identity versus intent for `claude-code`, `claude-code-setup-token` and `anthropic-bedrock-invoke`.
   Today they are not in H2's strip, and only `openai-compatible` gets `reasoning_content` in H3, not `glm-coding` or
   `kimi-code`. **Recommended:** ship the byte-identical table now, and widen each list in its own change with a
   measurement.
 - **MP-Q4** `speech.` words stay a `south-contracts` vocabulary. **Recommended: yes**; they are not dialect words.
-- **MP-Q5** The adaptive/budget mutual exclusion is a Claude rule the host checks at save time. **Recommended:** the
-  host drops it. `Dialect::of` refuses the combination at request time, so a misconfigured model fails on its first
-  request rather than at save.
+- **MP-Q5** The adaptive/budget mutual exclusion is a Claude rule the host checks at save time. **Ruled (lv,
+  2026-10-18): keep the save-time check**, judged by declared words rather than a dialect name. South therefore
+  exports the exclusive pairs as data the host can read without naming `anthropic` (exact form left to the
+  implementation; the simplest is a per-family `exclusive` list in `model_parameters`, which would change §2's shape,
+  so it is settled before code).
 - **MP-Q7** `provider-kiro` and `provider-openai-compatible` take only the forced-tool refusal (§5), not the other
   Claude words. **Recommended: yes**; the other words reshape requests and need their own measurement. The
   alternative is DH-Q4 option B, a declared `refuses` rule, but that is a second field for one word.
@@ -230,3 +235,7 @@ the table, both registered:
 - 2026-10-18: first draft. Not implemented, built or tested.
 - 2026-10-18: §5 corrected. `provider-kiro` and `provider-openai-compatible` do not refuse a forced choice (the
   host found it); they now take the refusal before H5 is deleted. MP-Q7 added.
+- 2026-10-18: lv's rulings recorded (relayed by token-station-server-14, confirmed by the user). DH-Q4 revisited: the
+  host keeps its pre-refusal until it re-pins to the release in which every family that may serve a Claude model
+  refuses a forced choice itself; that work joins this release (§5). MP-Q2: Responses only. MP-Q5: keep the save-time
+  exclusivity check, judged by declared words.
