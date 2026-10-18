@@ -1,0 +1,15 @@
+{
+  "provider_config": {
+    "provider": "gmi-image",
+    "base_url": "https://console.gmi.example",
+    "auth": "provider_api_key",
+    "organization_id": "org-123"
+  },
+  "request": {
+    "model": "seedream-3-0-t2i-250415",
+    "prompt": "a cat"
+  },
+  "minted": {
+    "task_id": "host-1"
+  }
+}

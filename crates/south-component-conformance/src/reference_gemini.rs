@@ -40,7 +40,7 @@ impl ProviderComponentV1 for GeminiReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-gemini".to_owned(),
-            version: "1.4.0".to_owned(),
+            version: "1.5.0".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
@@ -60,6 +60,9 @@ impl ProviderComponentV1 for GeminiReferenceV1 {
         gemini_text::refuse_foreign_reasoning_replay(request)?;
         gemini_text::serves(config, GEMINI)?;
         gemini_text::require_model(request)?;
+        // A model that refuses a forced tool choice is refused here, as on every provider family
+        // (the family model parameters record §5, DH-Q4 revisited).
+        crate::anthropic_dialect::refuse_declared_forced_tool(request, config)?;
         // `ProviderApi::resolve` covers four canonical shapes and none of them
         // is this one, so the URL is built from the endpoint's own text — which
         // is what `permits` authorizes against.

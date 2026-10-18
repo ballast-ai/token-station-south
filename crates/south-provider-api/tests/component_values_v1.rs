@@ -235,15 +235,28 @@ fn a_config_key_and_an_attribute_may_not_share_a_name() {
     assert_eq!(parse(scoped).validate(), Ok(()));
 }
 
-/// The provider and embeddings worlds receive `declared` from this vocabulary; no task host path
-/// builds it.
+/// Task v1 still builds no `declared`, so it refuses credential attributes; task v2 builds it since
+/// the section attributes record (`docs/design/2026-10-18-section-attributes-and-task-values.md`
+/// §3, SA-Q2) and admits them, with `config_schema`.
 #[test]
-fn credential_attributes_are_refused_in_the_task_worlds() {
-    let mut task = shipped("task-kling-v2");
-    task["credentials"]["recipes"]["kling_jwt"]["attributes"] =
+fn credential_attributes_are_refused_in_task_v1_and_admitted_in_task_v2() {
+    let mut task_v2 = shipped("task-kling-v2");
+    task_v2["credentials"]["recipes"]["kling_jwt"]["attributes"] =
         json!({ "access_key": { "field": "access_key", "export": true } });
+    let section = task_v2["credentials"].clone();
+    assert_eq!(parse(task_v2.clone()).validate(), Ok(()));
+    task_v2["config_schema"] = json!({
+        "kling": { "region": { "syntax": "aws_region", "required": false, "description": "A region." } }
+    });
+    let manifest = parse(task_v2);
+    assert_eq!(manifest.validate(), Ok(()));
+    assert_eq!(manifest.declared_keys("kling"), ["access_key", "region"].into_iter().collect());
+
+    let mut task_v1 = shipped("task-kling");
+    task_v1["credentials"] = section;
+    task_v1["permissions"]["secrets"] = json!(["provider_api_key"]);
     assert_eq!(
-        parse(task).validate(),
+        parse(task_v1).validate(),
         Err(ManifestErrorV1::InstanceIsAProviderWorldDeclaration(
             "credential attributes".to_owned()
         ))
@@ -378,20 +391,15 @@ fn the_embeddings_world_holds_its_values_to_the_provider_rules() {
     );
 }
 
-/// The task worlds still refuse `config_schema`: the widening is the embeddings world's alone.
+/// Task v1 still refuses `config_schema`. Task v2 admits it since the section attributes record
+/// (§3, SA-Q2), as [`credential_attributes_are_refused_in_task_v1_and_admitted_in_task_v2`] shows.
 #[test]
-fn the_task_worlds_still_refuse_config_keys() {
-    for package in ["task-kling-v2", "task-kling"] {
-        let mut task = shipped(package);
-        task["config_schema"] = json!({
-            "kling": { "region": { "syntax": "aws_region", "description": "A region." } }
-        });
-        assert_eq!(
-            parse(task).validate(),
-            Err(ManifestErrorV1::EndpointIsAProviderWorldDeclaration),
-            "{package}"
-        );
-    }
+fn task_v1_still_refuses_config_keys() {
+    let mut task = shipped("task-kling");
+    task["config_schema"] = json!({
+        "kling": { "region": { "syntax": "aws_region", "description": "A region." } }
+    });
+    assert_eq!(parse(task).validate(), Err(ManifestErrorV1::EndpointIsAProviderWorldDeclaration));
 }
 
 /// [`embeddings_with_values`] moved to the image world: what a Vertex-shaped image family declares

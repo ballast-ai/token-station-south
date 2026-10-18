@@ -1,6 +1,6 @@
 {
   "name": "provider-bedrock-converse",
-  "version": "1.1.17",
+  "version": "1.2.0",
   "api_version": "provider-adapter-v2",
   "providers": [
     "bedrock"
@@ -42,6 +42,28 @@
         "secret": true,
         "description": "The AWS session token, only for temporary credentials from AWS STS."
       }
+    }
+  },
+  "model_parameters": {
+    "bedrock": {
+      "words": [
+        "anthropic.effort.xhigh",
+        "anthropic.sampling.exclusive",
+        "anthropic.sampling.none",
+        "anthropic.thinking.adaptive",
+        "anthropic.thinking.budget",
+        "anthropic.tool_choice.auto_only",
+        "bedrock.converse.cache_point",
+        "bedrock.converse.cache_point.tools",
+        "bedrock.converse.cache_point.ttl_1h",
+        "reasoning_replay.claude.v1"
+      ],
+      "exclusive": [
+        [
+          "anthropic.thinking.adaptive",
+          "anthropic.thinking.budget"
+        ]
+      ]
     }
   },
   "permissions": {

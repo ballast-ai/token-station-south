@@ -1,6 +1,6 @@
 {
   "name": "provider-anthropic",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "api_version": "provider-adapter-v2",
   "providers": [
     "anthropic",
@@ -35,6 +35,9 @@
     ]
   },
   "immutable_request_headers": {
+    "anthropic": [
+      "anthropic-version"
+    ],
     "claude-code": [
       "accept",
       "anthropic-beta",
@@ -176,6 +179,62 @@
       }
     }
   },
+  "model_parameters": {
+    "anthropic": {
+      "words": [
+        "anthropic.effort.xhigh",
+        "anthropic.sampling.exclusive",
+        "anthropic.sampling.none",
+        "anthropic.thinking.adaptive",
+        "anthropic.thinking.budget",
+        "anthropic.tool_choice.auto_only",
+        "reasoning_replay.claude.v1"
+      ],
+      "exclusive": [
+        [
+          "anthropic.thinking.adaptive",
+          "anthropic.thinking.budget"
+        ]
+      ]
+    },
+    "claude-code": {
+      "words": [
+        "anthropic.effort.xhigh",
+        "anthropic.sampling.exclusive",
+        "anthropic.sampling.none",
+        "anthropic.thinking.adaptive",
+        "anthropic.thinking.budget",
+        "anthropic.tool_choice.auto_only",
+        "reasoning_replay.claude.v1"
+      ],
+      "exclusive": [
+        [
+          "anthropic.thinking.adaptive",
+          "anthropic.thinking.budget"
+        ]
+      ]
+    },
+    "claude-code-setup-token": {
+      "words": [
+        "anthropic.effort.xhigh",
+        "anthropic.sampling.exclusive",
+        "anthropic.sampling.none",
+        "anthropic.thinking.adaptive",
+        "anthropic.thinking.budget",
+        "anthropic.tool_choice.auto_only",
+        "reasoning_replay.claude.v1"
+      ],
+      "exclusive": [
+        [
+          "anthropic.thinking.adaptive",
+          "anthropic.thinking.budget"
+        ]
+      ]
+    }
+  },
+  "drops_unsigned_thinking": [
+    "anthropic"
+  ],
   "permissions": {
     "network": false,
     "filesystem": false,

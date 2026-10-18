@@ -79,7 +79,7 @@ pub const MANTLE_FAMILY: &str = mantle::FAMILY;
 pub const NAME: &str = "provider-openai-responses";
 
 /// The package's version.
-pub const VERSION: &str = "1.4.7";
+pub const VERSION: &str = "1.5.0";
 
 /// The reference component. Stateless; each stream gets its own parser.
 #[derive(Debug, Default, Clone, Copy)]
@@ -1337,6 +1337,9 @@ impl ProviderComponentV1 for OpenAiResponsesReferenceV1 {
             CODEX_FAMILY => true,
             other => return Err(capability(format!("unsupported provider dialect `{other}`"))),
         };
+        // A model that refuses a forced tool choice is refused here, as on every provider family
+        // (the family model parameters record §5, DH-Q4 revisited).
+        crate::anthropic_dialect::refuse_declared_forced_tool(request, config)?;
         // R-Q5: the Codex backend only streams, and a non-streaming caller is refused here,
         // before any upstream call, rather than buffered (record §4.3).
         if codex && !request.stream {

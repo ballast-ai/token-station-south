@@ -129,6 +129,8 @@ fn reference_manifest() -> ComponentManifestV1 {
         forwarded_client_headers: std::collections::BTreeMap::new(),
         count_tokens: std::collections::BTreeMap::new(),
         subscription_quota_families: std::collections::BTreeSet::new(),
+        model_parameters: std::collections::BTreeMap::new(),
+        drops_unsigned_thinking: std::collections::BTreeSet::new(),
         response_blob_paths: Vec::new(),
         token_buckets: Vec::new(),
         required_token_buckets: Vec::new(),
@@ -765,6 +767,8 @@ fn task_manifest() -> ComponentManifestV1 {
         forwarded_client_headers: std::collections::BTreeMap::new(),
         count_tokens: std::collections::BTreeMap::new(),
         subscription_quota_families: std::collections::BTreeSet::new(),
+        model_parameters: std::collections::BTreeMap::new(),
+        drops_unsigned_thinking: std::collections::BTreeSet::new(),
         response_blob_paths: Vec::new(),
         token_buckets: Vec::new(),
         required_token_buckets: Vec::new(),
@@ -1307,7 +1311,8 @@ fn every_world_states_its_host_import_and_admitted_declarations() {
     let (none, all) = (InstanceDeclarationsV1::None, InstanceDeclarationsV1::All);
     assert_eq!(posture(&PROVIDER_WORLD_SCHEMA), (HostImportV1::Linked, true, true, all));
     assert_eq!(posture(&TASK_WORLD_SCHEMA), (HostImportV1::Linked, false, false, none));
-    assert_eq!(posture(&TASK_WORLD_SCHEMA_V2), (HostImportV1::Unlinked, false, false, none));
+    // Task v2 takes the value channel since the section attributes record (§3, SA-Q2).
+    assert_eq!(posture(&TASK_WORLD_SCHEMA_V2), (HostImportV1::Unlinked, true, false, none));
     assert_eq!(posture(&EMBEDDINGS_WORLD_SCHEMA), (HostImportV1::Pure, true, false, none));
     // The image world takes the value channel and, of the instance declarations, `user_agent`
     // alone (`image-openai-compatible` record §9 and §11, from 0.60.0 of this crate).

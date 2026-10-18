@@ -1,6 +1,6 @@
 {
   "name": "task-gmi-image-v2",
-  "version": "0.35.31",
+  "version": "0.36.0",
   "api_version": "task-adapter-v2",
   "providers": [
     "gmi-image"
@@ -13,6 +13,36 @@
   "auth_arms": [
     "bearer"
   ],
+  "credentials": {
+    "schema": "south.credential-recipe.v1",
+    "fields": {
+      "api_key": {
+        "secret": true,
+        "required": true,
+        "description": "The GMI Cloud API key."
+      },
+      "organization_id": {
+        "secret": false,
+        "required": false,
+        "syntax": {
+          "printable_ascii": 128
+        },
+        "description": "The GMI Cloud organization id, sent as X-Organization-ID when set."
+      }
+    },
+    "slots": {
+      "provider_api_key": {
+        "field": "api_key"
+      }
+    },
+    "attributes": {
+      "organization_id": {
+        "field": "organization_id",
+        "export": true,
+        "persist": false
+      }
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,
