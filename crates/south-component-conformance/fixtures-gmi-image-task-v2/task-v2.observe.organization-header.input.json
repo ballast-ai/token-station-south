@@ -3,7 +3,9 @@
     "provider": "gmi-image",
     "base_url": "https://console.gmi.example",
     "auth": "provider_api_key",
-    "organization_id": "org-123"
+    "declared": {
+      "organization_id": "org-123"
+    }
   },
   "upstream_model": "seedream-3-0-t2i-250415",
   "upstream_task_id": "gmi-req-1",

@@ -1,6 +1,6 @@
 {
   "name": "provider-gemini",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "api_version": "provider-adapter-v2",
   "providers": [
     "gemini"
@@ -40,6 +40,13 @@
         "from": ":generateContent",
         "to": ":countTokens"
       }
+    }
+  },
+  "model_parameters": {
+    "gemini": {
+      "words": [
+        "anthropic.tool_choice.auto_only"
+      ]
     }
   },
   "permissions": {

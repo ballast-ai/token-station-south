@@ -35,7 +35,7 @@ use crate::gemini_text;
 /// The package name this reference is published as.
 pub const NAME: &str = "provider-vertex";
 /// The package version.
-pub const VERSION: &str = "1.1.1";
+pub const VERSION: &str = "1.2.0";
 /// The family, as a host's provider rows name it (VX-Q2).
 pub const VERTEX_AI: &str = "vertex-ai";
 
@@ -72,6 +72,9 @@ impl ProviderComponentV1 for VertexReferenceV1 {
             crate::vertex_location::publisher_model_path(config, &request.model, method)?;
         gemini_text::refuse_foreign_reasoning_replay(request)?;
         gemini_text::require_model(request)?;
+        // A model that refuses a forced tool choice is refused here, as on every provider family
+        // (the family model parameters record §5, DH-Q4 revisited).
+        crate::anthropic_dialect::refuse_declared_forced_tool(request, config)?;
         let mut descriptor = gemini_text::descriptor(request, format!("{base}/{path}{query}"))?;
         descriptor.auth = config.auth.clone().map(Auth::bearer);
         Ok(descriptor)

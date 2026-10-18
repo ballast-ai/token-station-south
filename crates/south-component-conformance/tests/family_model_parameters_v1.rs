@@ -59,9 +59,9 @@ fn every_provider_package_declares_the_words_its_reference_reads() {
     }
     assert_eq!(compatible.model_parameters.len(), compatible.providers.len());
 
-    // The Gemini and Vertex text wires read no `supported_parameters` word.
+    // The Gemini and Vertex text wires read the forced-tool refusal's word alone (lv, 2026-10-18).
     for package in ["provider-gemini", "provider-vertex"] {
-        assert!(shipped(package).model_parameters.is_empty(), "{package}");
+        every_family(&shipped(package), &family::GEMINI_TEXT, &[]);
     }
     for package in [
         "provider-anthropic",
@@ -71,6 +71,8 @@ fn every_provider_package_declares_the_words_its_reference_reads() {
         "provider-openai-compatible",
         "provider-openai-responses",
         "provider-kiro",
+        "provider-gemini",
+        "provider-vertex",
     ] {
         assert_eq!(shipped(package).validate(), Ok(()), "{package}");
     }
@@ -109,42 +111,54 @@ fn the_anthropic_family_protects_anthropic_version() {
     assert_eq!(anthropic.immutable_request_headers["claude-code-setup-token"].len(), 9);
 }
 
-/// §2 item 4: a host may now build a model capability with no words for a family that declares
-/// `model_parameters`, where it built none before. The OpenAI-compatible component builds the same
-/// request either way.
+/// §2 item 4 and MP-D2: a missing and an empty model capability are not the same input. The
+/// OpenAI-compatible component builds the same request for both in general, but on a model whose
+/// name starts with `deepseek` a missing entry keeps the DeepSeek heuristic (`reasoning_content`
+/// sent) and an empty one is a declared "no". So a host builds a capability only for a family that
+/// declares a host-derived word, as it did before (`openai-compatible` alone, MP-Q3); building
+/// one for every declaring family would drop the field on, say, `DeepSeek-R1` behind
+/// `azure-openai-v1`.
 #[test]
-fn a_missing_and_an_empty_model_capability_build_the_same_request() {
+fn a_missing_and_an_empty_model_capability_differ_only_on_a_deepseek_model() {
     let config = |models: serde_json::Value| -> ProviderConfig {
         serde_json::from_value(json!({
-            "provider": "glm-coding",
-            "base_url": "https://example.test/v1",
+            "provider": "azure-openai-v1",
+            "base_url": "https://example.test/openai/v1",
             "models": models,
         }))
         .unwrap()
     };
-    for extra in [
-        json!({}),
-        json!({"reasoning": {"effort": "high"}}),
-        json!({"reasoning": {"mode": "enabled", "budget_tokens": 2048}}),
-    ] {
+    let built = |model: &str, extra: &serde_json::Value, models: serde_json::Value| {
         let mut value = json!({
-            "model": "m",
+            "model": model,
             "messages": [
                 {"role": "user", "content": "hi"},
-                {"role": "assistant", "content": [{"type": "thinking", "thinking": "t"}, {"type": "text", "text": "a"}]},
+                {"role": "assistant", "content": [
+                    {"type": "thinking", "thinking": "t"},
+                    {"type": "text", "text": "a"}
+                ], "tool_calls": [{"id": "c1", "name": "f", "arguments": "{}"}]},
+                {"role": "tool", "tool_call_id": "c1", "content": "r"},
                 {"role": "user", "content": "again"}
             ],
+            "tools": [{"name": "f", "parameters": {"type": "object"}}],
             "sampling": {"max_output_tokens": 64},
         });
         for (key, field) in extra.as_object().unwrap() {
             value[key] = field.clone();
         }
         let request: ChatRequest = serde_json::from_value(value).unwrap();
-        let missing = OpenAiCompatibleReferenceV1.build_http_request(&request, &config(json!([])));
-        let empty = OpenAiCompatibleReferenceV1.build_http_request(
-            &request,
-            &config(json!([{"model": "m", "supported_parameters": []}])),
-        );
-        assert_eq!(format!("{missing:?}"), format!("{empty:?}"), "{extra}");
+        format!("{:?}", OpenAiCompatibleReferenceV1.build_http_request(&request, &config(models)))
+    };
+    for extra in [
+        json!({}),
+        json!({"reasoning": {"effort": "high"}}),
+        json!({"reasoning": {"mode": "enabled", "budget_tokens": 2048}}),
+    ] {
+        let empty = json!([{"model": "m", "supported_parameters": []}]);
+        assert_eq!(built("m", &extra, json!([])), built("m", &extra, empty), "{extra}");
     }
+    let empty = json!([{"model": "DeepSeek-R1", "supported_parameters": []}]);
+    let missing = built("DeepSeek-R1", &json!({}), json!([]));
+    assert!(missing.contains("reasoning_content"), "{missing}");
+    assert_ne!(missing, built("DeepSeek-R1", &json!({}), empty));
 }

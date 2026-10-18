@@ -10,8 +10,12 @@
 //!   response is `accepted-terminal` (task contract 5 already had the outcome; the host settles it
 //!   directly since token-station-server P13 C6).
 //! - **Organization header**: the native arm sends `X-Organization-ID` from the credential's
-//!   non-secret account id. A component never sees credential rows, so the host passes that value
-//!   as the provider-config extension `organization_id`; when present it becomes the header.
+//!   non-secret account id. Since 0.36.0 the package declares that value as the credential field
+//!   `organization_id`, exported as the attribute of the same name, so it arrives in
+//!   `ProviderConfig.declared` (the section attributes record,
+//!   `docs/design/2026-10-18-section-attributes-and-task-values.md` §4). For one release the
+//!   provider-config extension `organization_id`, which hosts sent before, still stands in when
+//!   `declared` has none (SA-Q3). A non-empty value becomes the header.
 //! - **Counts**: GMI prices per request, not per image, and reports no usage. `n` is still the
 //!   requested output count and the delivered URL count is `usage.outputs` — pricing policy is the
 //!   host's.
@@ -28,6 +32,9 @@ use token_station_protocol::{
 };
 
 const QUEUE: &str = "api/v1/ie/requestqueue/apikey/requests";
+/// The exported credential attribute (and, until SA-Q3 retires it, the provider-config extension)
+/// that carries the GMI organization id.
+pub const ORGANIZATION_ATTRIBUTE: &str = "organization_id";
 /// Request-body paths the host must not rewrite (contract 6): what decides how many images of
 /// which size and quality the request produces.
 const IMMUTABLE_BODY_PATHS: [&str; 4] = ["model", "payload.n", "payload.size", "payload.quality"];
@@ -165,9 +172,9 @@ fn request(
     );
     descriptor.auth = config.auth.clone().map(Auth::bearer);
     let organization = config
-        .extensions
-        .get("organization_id")
-        .and_then(Value::as_str)
+        .declared
+        .get(ORGANIZATION_ATTRIBUTE)
+        .or_else(|| config.extensions.get(ORGANIZATION_ATTRIBUTE).and_then(Value::as_str))
         .filter(|id| !id.is_empty());
     let mut headers: Vec<(&str, &str)> = Vec::new();
     if json_body {
@@ -188,7 +195,7 @@ impl TaskComponentV2 for GmiImageTaskComponentV2 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "task-gmi-image-v2".into(),
-            version: "0.35.32".into(),
+            version: "0.36.0".into(),
             api_version: "task-adapter-v2".into(),
         }
     }

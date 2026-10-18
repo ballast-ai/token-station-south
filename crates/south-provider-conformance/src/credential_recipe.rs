@@ -217,6 +217,7 @@ fn rotating_credentials() -> CredentialsV1 {
             SlotV1::Minted("rotating_refresh".to_owned()),
         )]),
         recipes: BTreeMap::from([("rotating_refresh".to_owned(), recipe)]),
+        attributes: BTreeMap::new(),
     }
 }
 
@@ -254,6 +255,7 @@ fn non_rotating_credentials() -> CredentialsV1 {
             SlotV1::Minted("client_credentials".to_owned()),
         )]),
         recipes: BTreeMap::from([("client_credentials".to_owned(), recipe)]),
+        attributes: BTreeMap::new(),
     }
 }
 
@@ -332,6 +334,7 @@ fn attributed_credentials() -> CredentialsV1 {
             ("client_credentials".to_owned(), recipe(token(None), &exports)),
             ("workspace_credentials".to_owned(), recipe(token(Some("workspace")), &exports)),
         ]),
+        attributes: BTreeMap::new(),
     }
 }
 

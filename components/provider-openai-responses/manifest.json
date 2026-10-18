@@ -207,18 +207,21 @@
   "model_parameters": {
     "bedrock-mantle": {
       "words": [
+        "anthropic.tool_choice.auto_only",
         "reasoning_effort",
         "reasoning_replay.openai.v1"
       ]
     },
     "openai-codex": {
       "words": [
+        "anthropic.tool_choice.auto_only",
         "reasoning_effort",
         "reasoning_replay.openai.v1"
       ]
     },
     "openai-responses": {
       "words": [
+        "anthropic.tool_choice.auto_only",
         "reasoning_effort",
         "reasoning_replay.openai.v1"
       ]

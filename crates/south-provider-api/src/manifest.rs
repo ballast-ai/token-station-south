@@ -440,7 +440,9 @@ pub const TASK_WORLD_SCHEMA_V2: WorldSchemaV1 = WorldSchemaV1 {
     capabilities: TASK_CAPABILITIES,
     auth_arms: &["bearer", "header_secret"],
     host_import: HostImportV1::Unlinked,
-    value_channel: false,
+    // Since the section attributes record (`2026-10-18-section-attributes-and-task-values.md` §3):
+    // a task-v2 host builds `ProviderConfig.declared` for every call a task makes.
+    value_channel: true,
     request_declarations: false,
     instance_declarations: InstanceDeclarationsV1::None,
 };

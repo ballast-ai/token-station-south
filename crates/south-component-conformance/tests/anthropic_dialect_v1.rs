@@ -8,7 +8,9 @@ use south_component_conformance::{
     ProviderComponentV1, anthropic_dialect, reference::OpenAiCompatibleReferenceV1,
     reference_anthropic::AnthropicReferenceV1,
     reference_anthropic_bedrock_invoke::AnthropicBedrockInvokeReferenceV1,
-    reference_bedrock_converse::BedrockConverseReferenceV1, reference_kiro::KiroReferenceV1,
+    reference_bedrock_converse::BedrockConverseReferenceV1, reference_gemini::GeminiReferenceV1,
+    reference_kiro::KiroReferenceV1, reference_openai_responses::OpenAiResponsesReferenceV1,
+    reference_vertex::VertexReferenceV1,
 };
 use south_provider_api::HOST_VALUE_ATTEMPT_ID;
 use token_station_protocol::{ChatRequest, ErrorCode, ProviderConfig};
@@ -16,10 +18,21 @@ use token_station_protocol::{ChatRequest, ErrorCode, ProviderConfig};
 const MODEL: &str = "claude-x";
 
 fn config(provider: &str, base_url: &str, words: &[&str]) -> ProviderConfig {
+    config_declaring(provider, base_url, words, &json!({}))
+}
+
+/// `config` with the `declared` values the family's package reads.
+fn config_declaring(
+    provider: &str,
+    base_url: &str,
+    words: &[&str],
+    declared: &Value,
+) -> ProviderConfig {
     serde_json::from_value(json!({
         "provider": provider,
         "base_url": base_url,
         "models": [{"model": MODEL, "supported_parameters": words}],
+        "declared": declared,
     }))
     .unwrap()
 }
@@ -32,9 +45,9 @@ fn converse(words: &[&str]) -> ProviderConfig {
     config("bedrock", "https://bedrock-runtime.us-east-1.amazonaws.com", words)
 }
 
-/// Every component that may serve a Claude model, with a row of each of its families (the family
-/// model parameters record §5, DH-Q4 revisited: each refuses a forced tool itself before the host
-/// deletes its pre-refusal).
+/// Every provider component, with a row of each of its families (the family model parameters record
+/// §5, DH-Q4 revisited: each refuses a forced tool itself before the host deletes its pre-refusal;
+/// lv ruled on 2026-10-18 that no family is exempt by its wire).
 fn claude_serving(words: &[&str]) -> Vec<(&'static dyn ProviderComponentV1, ProviderConfig)> {
     let mut rows: Vec<(&'static dyn ProviderComponentV1, ProviderConfig)> = vec![
         (&AnthropicReferenceV1, anthropic(words)),
@@ -48,6 +61,38 @@ fn claude_serving(words: &[&str]) -> Vec<(&'static dyn ProviderComponentV1, Prov
             ),
         ),
         (&KiroReferenceV1, config("kiro", "https://q.us-east-1.amazonaws.com", words)),
+        (&GeminiReferenceV1, config("gemini", "https://generativelanguage.googleapis.com", words)),
+        (
+            &VertexReferenceV1,
+            config_declaring(
+                "vertex-ai",
+                "https://us-central1-aiplatform.googleapis.com",
+                words,
+                &json!({"region": "us-central1", "project_id": "my-project-1"}),
+            ),
+        ),
+        (
+            &OpenAiResponsesReferenceV1,
+            config("openai-responses", "https://api.openai.com/v1", words),
+        ),
+        (
+            &OpenAiResponsesReferenceV1,
+            config_declaring(
+                "openai-codex",
+                "https://chatgpt.com/backend-api/codex",
+                words,
+                &json!({"account_id": "acct-1"}),
+            ),
+        ),
+        (
+            &OpenAiResponsesReferenceV1,
+            config_declaring(
+                "bedrock-mantle",
+                "https://bedrock-mantle.us-east-1.api.aws/v1",
+                words,
+                &json!({"region": "us-east-1"}),
+            ),
+        ),
     ];
     for family in [
         "openai-compatible",
@@ -76,9 +121,11 @@ fn request(extra: &Value) -> ChatRequest {
     serde_json::from_value(value).unwrap()
 }
 
-/// `request` as the host fills it for `config`'s package: `provider-kiro` declares the attempt id.
+/// `request` as the host fills it for `config`'s package: `provider-kiro` declares the attempt id,
+/// and the Codex backend serves only streams.
 fn filled(config: &ProviderConfig, request: &ChatRequest) -> ChatRequest {
     let mut request = request.clone();
+    request.stream |= config.provider == "openai-codex";
     if config.provider == "kiro" {
         request
             .host_values

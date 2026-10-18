@@ -55,8 +55,13 @@ pub mod family {
     /// (MP-Q3).
     pub const OPENAI_COMPATIBLE_OTHER: [&str; 2] =
         ["anthropic.tool_choice.auto_only", "reasoning_effort"];
-    /// Every `provider-openai-responses` family.
-    pub const OPENAI_RESPONSES: [&str; 2] = ["reasoning_effort", "reasoning_replay.openai.v1"];
+    /// Every `provider-openai-responses` family: the forced-tool refusal (lv, 2026-10-18), the
+    /// effort and the OpenAI replay carrier.
+    pub const OPENAI_RESPONSES: [&str; 3] =
+        ["anthropic.tool_choice.auto_only", "reasoning_effort", "reasoning_replay.openai.v1"];
+    /// `gemini` and `vertex-ai`: the forced-tool refusal only (lv, 2026-10-18: no family is
+    /// exempt by its wire).
+    pub const GEMINI_TEXT: [&str; 1] = ["anthropic.tool_choice.auto_only"];
     /// `kiro`: the forced-tool refusal only (MP-Q7).
     pub const KIRO: [&str; 1] = ["anthropic.tool_choice.auto_only"];
 }
@@ -73,7 +78,8 @@ mod tests {
 
     #[test]
     fn the_family_lists_are_sorted_and_spelled_by_their_readers() {
-        let lists: [&[&str]; 6] = [
+        let lists: [&[&str]; 7] = [
+            &family::GEMINI_TEXT,
             &family::CLAUDE,
             &family::BEDROCK_CONVERSE,
             &family::OPENAI_COMPATIBLE,
@@ -100,7 +106,9 @@ mod tests {
         let effort = responses_vocabulary::extension::REASONING_EFFORT;
         assert!(family::OPENAI_RESPONSES.contains(&effort));
         assert!(family::OPENAI_COMPATIBLE.contains(&effort));
-        assert!(family::KIRO.contains(&anthropic_dialect::TOOL_CHOICE_AUTO_ONLY));
+        for list in lists {
+            assert!(list.contains(&anthropic_dialect::TOOL_CHOICE_AUTO_ONLY), "{list:?}");
+        }
     }
 
     #[test]

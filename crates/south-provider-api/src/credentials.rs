@@ -65,6 +65,12 @@ pub struct CredentialsV1 {
     /// The minting recipes, by name.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub recipes: BTreeMap<String, RecipeV1>,
+    /// Non-secret values the section exports whatever its slots' sources, each from one stored
+    /// field, under a complete recipe's attribute rules (the section attributes record,
+    /// `docs/design/2026-10-18-section-attributes-and-task-values.md` §2). No name is also an
+    /// attribute of a recipe. Absent means none.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub attributes: BTreeMap<String, AttributeV1>,
 }
 
 /// One field of a credential.
@@ -540,9 +546,9 @@ impl CredentialsV1 {
     /// the keys this section contributes to `ProviderConfig.declared` (§13.8).
     #[must_use]
     pub fn attribute_names(&self) -> BTreeSet<&str> {
-        self.recipes
-            .values()
-            .flat_map(|recipe| recipe.attributes.keys())
+        self.attributes
+            .keys()
+            .chain(self.recipes.values().flat_map(|recipe| recipe.attributes.keys()))
             .map(String::as_str)
             .collect()
     }
@@ -552,25 +558,30 @@ impl CredentialsV1 {
     /// `None` when no recipe exports `name`.
     #[must_use]
     pub fn admits_attribute(&self, name: &str, value: &str) -> Option<bool> {
+        if let Some(attribute) = self.attributes.get(name) {
+            return Some(self.field_admits(attribute, value));
+        }
         let mut declared = self
             .recipes
             .values()
             .filter_map(|recipe| recipe.attributes.get(name).map(|attribute| (recipe, attribute)))
             .peekable();
         declared.peek()?;
-        Some(declared.any(|(recipe, attribute)| {
-            match &attribute.field {
-                _ if attribute.selected_recipe => {
-                    recipe.select.iter().any(|rule| rule.recipe == value)
-                }
-                Some(field) => self
-                    .fields
-                    .get(field)
-                    .and_then(|field| field.syntax.as_ref())
-                    .is_some_and(|syntax| syntax.admits(value)),
-                None => false,
-            }
+        Some(declared.any(|(recipe, attribute)| match &attribute.field {
+            _ if attribute.selected_recipe => recipe.select.iter().any(|rule| rule.recipe == value),
+            Some(_) => self.field_admits(attribute, value),
+            None => false,
         }))
+    }
+
+    /// Whether `value` has the syntax of the field a field attribute exports.
+    fn field_admits(&self, attribute: &AttributeV1, value: &str) -> bool {
+        attribute
+            .field
+            .as_ref()
+            .and_then(|field| self.fields.get(field))
+            .and_then(|field| field.syntax.as_ref())
+            .is_some_and(|syntax| syntax.admits(value))
     }
 
     /// Gate ① for the section (§3.7). `secret_slots` are the manifest's `permissions.secrets` and
@@ -640,6 +651,20 @@ impl CredentialsV1 {
             {
                 return Err("the seed names a malformed file kind or pointer".to_owned());
             }
+        }
+        // The section attributes record §2: a complete recipe's rules, and one source per name.
+        self.check_attributes(&self.attributes)
+            .map_err(|detail| format!("section attributes: {detail}"))?;
+        if let Some((name, recipe)) = self.recipes.iter().find_map(|(recipe, declared)| {
+            declared
+                .attributes
+                .keys()
+                .find(|name| self.attributes.contains_key(*name))
+                .map(|name| (name, recipe))
+        }) {
+            return Err(format!(
+                "section attribute `{name}` is also an attribute of recipe `{recipe}`"
+            ));
         }
         for (name, recipe) in &self.recipes {
             if !is_name(name) {
@@ -734,7 +759,7 @@ impl CredentialsV1 {
                 return Err("a TTL bound may only narrow the host's 60 s to 24 h clamp".to_owned());
             }
         }
-        self.check_attributes(recipe)?;
+        self.check_attributes(&recipe.attributes)?;
 
         // Outputs each step makes available to later steps, in order.
         let mut outputs: BTreeSet<String> = BTreeSet::new();
@@ -795,8 +820,8 @@ impl CredentialsV1 {
 
     /// A complete recipe's attributes: each from exactly one field, declared non-secret and with a
     /// value syntax (§3.4 rule 4, §13.8).
-    fn check_attributes(&self, recipe: &RecipeV1) -> Result<(), String> {
-        for (attribute, declared) in &recipe.attributes {
+    fn check_attributes(&self, attributes: &BTreeMap<String, AttributeV1>) -> Result<(), String> {
+        for (attribute, declared) in attributes {
             if !is_name(attribute) || !declared.export {
                 return Err(format!(
                     "attribute `{attribute}` must be a snake_case name with export: true"

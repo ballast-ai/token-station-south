@@ -276,7 +276,7 @@ dependencies = [
 
 [[package]]
 name = "provider-gemini"
-version = "1.4.1"
+version = "1.5.0"
 dependencies = [
  "south-component-conformance",
  "wit-bindgen",

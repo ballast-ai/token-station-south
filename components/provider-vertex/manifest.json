@@ -1,6 +1,6 @@
 {
   "name": "provider-vertex",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "api_version": "provider-adapter-v2",
   "providers": [
     "vertex-ai"
@@ -152,6 +152,13 @@
         "from": ":generateContent",
         "to": ":countTokens"
       }
+    }
+  },
+  "model_parameters": {
+    "vertex-ai": {
+      "words": [
+        "anthropic.tool_choice.auto_only"
+      ]
     }
   },
   "permissions": {

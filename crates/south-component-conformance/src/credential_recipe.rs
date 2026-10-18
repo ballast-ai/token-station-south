@@ -55,9 +55,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use south_provider_api::{
-    ConstantV1, CredentialsV1, EncodingV1, ExtractV1, HOST_MAX_TTL_SECONDS, HOST_MIN_TTL_SECONDS,
-    JwtAlgorithmV1, PredicateV1, PresentCandidateV1, PresentFieldV1, RecipeV1, SlotV1,
-    StatusActionV1, StepKindV1, StepMethodV1, StepV1, ValueSourceV1, WithoutRefreshMaterialV1,
+    AttributeV1, ConstantV1, CredentialsV1, EncodingV1, ExtractV1, HOST_MAX_TTL_SECONDS,
+    HOST_MIN_TTL_SECONDS, JwtAlgorithmV1, PredicateV1, PresentCandidateV1, PresentFieldV1,
+    RecipeV1, SlotV1, StatusActionV1, StepKindV1, StepMethodV1, StepV1, ValueSourceV1,
+    WithoutRefreshMaterialV1,
 };
 
 use crate::url_segment;
@@ -185,8 +186,10 @@ pub struct ExportedAttributesV1 {
 /// The slot's recipe is selected exactly as a run selects it; a field attribute takes the field's
 /// present value (a declared `default` included) and a selector's attribute the name of the recipe
 /// it chose. A `persist` attribute whose field is absent takes its value from `persisted` (the last
-/// value the host stored), and is otherwise absent. A slot that names a field or no recipe exports
-/// nothing.
+/// value the host stored), and is otherwise absent. The section's own `attributes` (the section
+/// attributes record, `docs/design/2026-10-18-section-attributes-and-task-values.md` §2) are
+/// exported under the same rules for every slot, whatever its source; a slot that names a field or
+/// no recipe exports only those.
 ///
 /// # Errors
 ///
@@ -198,16 +201,28 @@ pub fn exported_attributes_v1(
     fields: &BTreeMap<String, String>,
     persisted: &BTreeMap<String, String>,
 ) -> Result<ExportedAttributesV1, RecipeOutcomeV1> {
-    let Some(SlotV1::Minted(name)) = credentials.slots.get(slot) else {
+    if credentials.attributes.is_empty()
+        && !matches!(credentials.slots.get(slot), Some(SlotV1::Minted(_)))
+    {
         return Ok(ExportedAttributesV1::default());
-    };
+    }
     let fields = resolve_fields(credentials, fields)?;
-    let chosen = select(credentials, name, &fields)?;
     let mut exported = ExportedAttributesV1 {
-        values: attributes(credentials, &chosen, &fields),
+        values: field_attributes(credentials, &credentials.attributes, &fields),
         persist: BTreeMap::new(),
     };
-    for (attribute, declared) in &chosen.recipe.attributes {
+    let chosen = match credentials.slots.get(slot) {
+        Some(SlotV1::Minted(name)) => Some(select(credentials, name, &fields)?),
+        _ => None,
+    };
+    if let Some(chosen) = &chosen {
+        exported.values.extend(attributes(credentials, chosen, &fields));
+    }
+    let declared = credentials
+        .attributes
+        .iter()
+        .chain(chosen.iter().flat_map(|chosen| chosen.recipe.attributes.iter()));
+    for (attribute, declared) in declared {
         if !declared.persist {
             continue;
         }
@@ -242,17 +257,27 @@ fn attributes(
         .flat_map(|selector| selector.attributes.iter())
         .filter(|(_, attribute)| attribute.export && attribute.selected_recipe)
         .map(|(name, _)| (name.clone(), chosen.name.to_owned()));
-    let from_fields = chosen
-        .recipe
-        .attributes
+    let mut exported: BTreeMap<String, String> = from_selector.collect();
+    exported.extend(field_attributes(credentials, &chosen.recipe.attributes, fields));
+    exported
+}
+
+/// The exported field attributes of `declared` over present `fields`: each from a present
+/// non-secret field.
+fn field_attributes(
+    credentials: &CredentialsV1,
+    declared: &BTreeMap<String, AttributeV1>,
+    fields: &BTreeMap<&str, &str>,
+) -> BTreeMap<String, String> {
+    declared
         .iter()
         .filter(|(_, attribute)| attribute.export && !attribute.selected_recipe)
         .filter_map(|(name, attribute)| {
             let field = attribute.field.as_deref()?;
             credentials.fields.get(field).filter(|declared| !declared.secret)?;
             Some((name.clone(), (*fields.get(field)?).to_owned()))
-        });
-    from_selector.chain(from_fields).collect()
+        })
+        .collect()
 }
 
 /// How a run ended. The `detail` strings are for people and are not part of a fixture.

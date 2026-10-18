@@ -2128,9 +2128,9 @@ fn provider_vertex_declares_the_vertex_recipe_and_the_runtime_of_its_newest_decl
     // (`explicit_cache_reads_retires_every_published_071_package_identity`).
     // Published as 1.0.6 with 0.72.0; the Messages pass-through record's minor made it 1.1.0
     // (`messages_passthrough_retires_every_published_072_package_identity`).
-    // Published as 1.1.0 with 0.73.1; the family model parameters record's Q47 bump made it 1.1.1
+    // Published as 1.1.0 with 0.73.1; the family model parameters record's minor made it 1.2.0
     // (`family_model_parameters_retires_every_published_0731_package_identity`).
-    assert_eq!(manifest.version, "1.1.1");
+    assert_eq!(manifest.version, "1.2.0");
     assert_eq!(manifest.api_version, south_provider_api::PROVIDER_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["vertex-ai"]);
     assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer"]);
@@ -3898,15 +3898,20 @@ fn messages_passthrough_retires_every_published_072_package_identity() {
 /// The family model parameters record (`2026-10-18-family-model-parameters.md`) changes
 /// `south-provider-api` (0.61.0 → 0.62.0) and `south-component-conformance` (0.72.0 → 0.73.0) after
 /// release 0.73.1 (which republished 0.73.0's identities unchanged), which every guest links, so
-/// every `component.wasm` changes: each identity published with 0.73.1 retires. Seven packages
+/// every `component.wasm` changes: each identity published with 0.73.1 retires. Nine packages
 /// change what they declare and take a minor: `provider-anthropic` (1.3.0 → 1.4.0:
 /// `model_parameters`, `drops_unsigned_thinking`, `anthropic-version` protected on `anthropic`),
 /// `provider-anthropic-bedrock-invoke`, `provider-bedrock-converse`,
 /// `provider-bedrock-converse-bearer` (1.1.17 → 1.2.0), `provider-kiro` (1.1.8 → 1.2.0, which also
-/// refuses a forced tool choice itself), `provider-openai-compatible` (2.11.1 → 2.12.0, likewise)
-/// and `provider-openai-responses` (1.4.7 → 1.5.0). No package moves its `south_runtime` or its
-/// `contracts` in this change: the seven raise theirs in the release that ships the declarations
-/// (record §7), as the Messages pass-through record's three did in 0.73.0.
+/// refuses a forced tool choice itself), `provider-openai-compatible` (2.11.1 → 2.12.0, likewise),
+/// `provider-openai-responses` (1.4.7 → 1.5.0, likewise), `provider-gemini` (1.4.0 → 1.5.0) and
+/// `provider-vertex` (1.1.0 → 1.2.0), which declare and refuse a forced tool choice too (lv,
+/// 2026-10-18). The section attributes record
+/// (`2026-10-18-section-attributes-and-task-values.md`), in the same release, makes
+/// `task-gmi-image-v2` 0.35.31 → 0.36.0 (a `credentials` section exporting `organization_id`). No
+/// package moves its `south_runtime` or its `contracts` in this change: the ten raise theirs in
+/// the release that ships the declarations (records §7 and §6), as the Messages pass-through
+/// record's three did in 0.73.0.
 #[test]
 fn family_model_parameters_retires_every_published_0731_package_identity() {
     let rows: [RetiredIdentity<'_>; 41] = [
@@ -3927,11 +3932,11 @@ fn family_model_parameters_retires_every_published_0731_package_identity() {
         ("provider-anthropic", "1.3.0", "1.4.0", "0.73.0", &[]),
         ("provider-bedrock-converse-bearer", "1.1.17", "1.2.0", "0.57.0", &[]),
         ("provider-bedrock-converse", "1.1.17", "1.2.0", "0.57.0", &[]),
-        ("provider-gemini", "1.4.0", "1.4.1", "0.73.0", &[]),
+        ("provider-gemini", "1.4.0", "1.5.0", "0.73.0", &[]),
         ("provider-kiro", "1.1.8", "1.2.0", "0.60.0", &[]),
         ("provider-openai-compatible", "2.11.1", "2.12.0", "0.60.0", &[]),
         ("provider-openai-responses", "1.4.7", "1.5.0", "0.60.0", &[]),
-        ("provider-vertex", "1.1.0", "1.1.1", "0.73.0", &[]),
+        ("provider-vertex", "1.1.0", "1.2.0", "0.73.0", &[]),
         ("speech-azure", "1.0.8", "1.0.9", "0.65.0", &[("media", 1), ("speech", 1)]),
         ("speech-elevenlabs", "1.0.8", "1.0.9", "0.65.0", &[("media", 3), ("speech", 1)]),
         ("speech-groq", "1.0.8", "1.0.9", "0.65.0", &[("media", 1), ("speech", 1)]),
@@ -3944,7 +3949,7 @@ fn family_model_parameters_retires_every_published_0731_package_identity() {
         ("task-bailian-v2", "0.31.31", "0.31.32", "0.57.0", &[("task", 7)]),
         ("task-byteplus-v2", "0.36.31", "0.36.32", "0.57.0", &[("task", 7)]),
         ("task-gemini-omni-v2", "0.2.2", "0.2.3", "0.62.0", &[("media", 1), ("task", 8)]),
-        ("task-gmi-image-v2", "0.35.31", "0.35.32", "0.57.0", &[("task", 7)]),
+        ("task-gmi-image-v2", "0.35.31", "0.36.0", "0.57.0", &[("task", 7)]),
         ("task-kling-v2", "0.32.32", "0.32.33", "0.57.0", &[("task", 7)]),
         ("task-kling", "1.0.34", "1.0.35", "0.57.0", &[("task", 7)]),
         ("task-minimax-v2", "0.33.9", "0.33.10", "0.63.0", &[("task", 7)]),

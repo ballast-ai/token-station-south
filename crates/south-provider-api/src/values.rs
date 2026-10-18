@@ -79,7 +79,7 @@ impl ComponentManifestV1 {
     /// Gate ① for the value channel: `host_values` from the closed vocabulary, once each, and only
     /// in a world with [`WorldSchemaV1::request_declarations`] (the provider world); credential
     /// attributes only in a world whose host builds `declared` ([`WorldSchemaV1::value_channel`]:
-    /// provider, embeddings, image and speech); and no family whose config key and exported
+    /// provider, embeddings, image, speech and task v2); and no family whose config key and exported
     /// attribute share a name.
     pub(crate) fn validate_component_values(
         &self,
@@ -91,10 +91,10 @@ impl ComponentManifestV1 {
                 "host_values".to_owned(),
             ));
         }
-        // An embeddings, image or speech host builds `declared` per attempt, as a provider host
-        // does (embeddings record §16, image record §18.3, speech record §17.3). No task host path
-        // builds it from a recipe; a word nothing honors would be a promise (as for the combined
-        // auth arm, §16 Q36).
+        // An embeddings, image, speech or task-v2 host builds `declared` per attempt, as a provider
+        // host does (embeddings record §16, image record §18.3, speech record §17.3, section
+        // attributes record §3). No task-v1 host path builds it; a word nothing honors would be a
+        // promise (as for the combined auth arm, §16 Q36).
         if !world.value_channel {
             if self
                 .credentials

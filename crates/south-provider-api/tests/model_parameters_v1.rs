@@ -20,8 +20,12 @@ fn shipped(package: &str) -> ComponentManifestV1 {
     serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
 }
 
+/// `provider-gemini` without the declarations it ships, so each test starts from none.
 fn gemini() -> ComponentManifestV1 {
-    shipped("provider-gemini")
+    let mut manifest = shipped("provider-gemini");
+    manifest.model_parameters.clear();
+    manifest.drops_unsigned_thinking.clear();
+    manifest
 }
 
 fn words(list: &[&str]) -> Vec<String> {

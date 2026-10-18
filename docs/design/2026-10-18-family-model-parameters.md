@@ -81,12 +81,15 @@ Semantics, for a host:
 3. **Host-derived words go only to families that declare them.** A host that derives a word from its own model
    settings (today `reasoning_content` from `upstream_requires_reasoning_content`) adds it to the target's capability
    only when the row's family declares that word.
-4. **A family that declares the field gets a model capability.** A host builds the `ModelCapability` for the target
-   model of every row whose family declares at least one word. For a family that declares none, it builds one only
-   as today. The two components that read capabilities by model lookup (`Dialect::of`, `reference.rs:320-331`) treat a
-   missing entry and an entry with no words alike. `family_model_parameters_v1` pins this for the OpenAI-compatible
-   component (with and without a thinking request); `Dialect::of` returns the default dialect for both by
-   construction.
+4. **A host builds a model capability where it did before, by declaration instead of by name.** It builds the
+   `ModelCapability` for the target model on a family that declares a host-derived word (today `reasoning_content`,
+   so `openai-compatible` alone), and as it does today when the model declares words of its own. It does **not**
+   build an empty one for every declaring family. A missing entry and an empty one are different inputs:
+   `wants_reasoning_content` (`reference.rs:328-333`) keeps the DeepSeek name heuristic for a missing entry and reads
+   an empty one as a declared "no", so an empty capability would drop `reasoning_content` from a `deepseek…` model
+   on the six other OpenAI-compatible families (found by the host on 2026-10-18). `family_model_parameters_v1` pins
+   both: the same request for an ordinary model, a different one for `DeepSeek-R1`. `Dialect::of` returns the
+   default dialect for both by construction.
 5. **Replay carriers follow the declaration.** A family accepts a carrier only when it declares that carrier's model
    word: an OpenAI opaque item needs `reasoning_replay.openai.v1`, a Claude carrier needs `reasoning_replay.claude.v1`.
    The model must still declare the word as well. This replaces H1's family name. On `anthropic` it is byte-identical,
@@ -106,7 +109,8 @@ The families whose upstream refuses an unsigned thinking block in an earlier ass
 ```
 
 `ComponentManifestV1::drops_unsigned_thinking: BTreeSet<String>`, `#[serde(default)]`, omitted when empty; each entry
-a family the manifest declares; provider world only. The shape follows the precedent of
+a family the manifest declares (`ManifestErrorV1::InvalidDropsUnsignedThinkingFamily` names one that is not); provider
+world only. The shape follows the precedent of
 `subscription_quota_families`.
 
 Semantics: for a declared family, a host removes thinking and redacted-thinking parts from every assistant turn
@@ -148,21 +152,22 @@ So deleting H5 first would let a forced choice through on those families. **lv r
 revisited):** the host keeps H5 until it re-pins to the release in which every family that may serve a Claude model
 refuses a forced choice itself, and that work joins this release. The implementation goes through every provider
 family. Each one either refuses a forced choice when the model declares `anthropic.tool_choice.auto_only`, pinned by
-a test, or this record says why a model declaring the word cannot route to it. Known so far:
+a test. lv ruled on 2026-10-18 that no family is exempt by its wire. The first draft exempted `gemini`, `vertex-ai`
+and the three `provider-openai-responses` families as unable to serve a Claude model, but that was argued from the
+wire, not measured. Done in this release:
 
 - `provider-kiro`: read `anthropic.tool_choice.auto_only` and refuse a forced choice with the capability error
   `anthropic_dialect` uses. Its `model_parameters` gains the word.
 - `provider-openai-compatible`: the same, on every family. **Unverified** whether any of its families should honor
   the other five Claude words; this record adds only the refusal (MP-Q7).
+- `provider-gemini`, `provider-vertex` and `provider-openai-responses` (all three families, `bedrock-mantle` and
+  `openai-codex` included): the same refusal, and the word in their `model_parameters`.
 - `provider-anthropic-bedrock-invoke` already refuses: it builds its body through `provider-anthropic`'s
   `checked_body_of`.
 
 The refusal is shared: `anthropic_dialect::refuse_declared_forced_tool`, with the message `Dialect::refuse_forced_tool`
-gives. `anthropic_dialect_v1` pins every Claude-serving family (all three Anthropic-wire packages, `kiro` and the
-seven OpenAI-compatible families) on a declared and an undeclared model. The families left out cannot serve a Claude
-model by their wire: `gemini` and `vertex-ai` speak `generateContent`, and the three `provider-openai-responses`
-families speak the OpenAI Responses API, which serves OpenAI models. This last point is argued from the wire and has
-not been measured against every deployment (for example `bedrock-mantle`).
+gives. `anthropic_dialect_v1` pins every provider family of every provider package on a declared and an undeclared
+model.
 
 The refusal moves from the host to the component unchanged in meaning; one client-visible difference is left to the
 host: the error code changes from the host's `tool_choice_unsupported` to the component's capability error, both
@@ -183,16 +188,17 @@ declares nothing.
 | `provider-openai-compatible` | `openai-compatible` | `anthropic.tool_choice.auto_only` (§5), `reasoning_content`, `reasoning_effort` | — |
 | `provider-openai-compatible` | the other six families | `anthropic.tool_choice.auto_only` (§5), `reasoning_effort` (MP-Q3) | — |
 | `provider-kiro` | `kiro` | `anthropic.tool_choice.auto_only` (§5) | — |
-| `provider-openai-responses` | all three families | `reasoning_effort`, `reasoning_replay.openai.v1` | — |
+| `provider-openai-responses` | all three families | `anthropic.tool_choice.auto_only` (§5), `reasoning_effort`, `reasoning_replay.openai.v1` | — |
+| `provider-gemini`, `provider-vertex` | `gemini`, `vertex-ai` | `anthropic.tool_choice.auto_only` (§5) | — |
 
 Declaring `reasoning_content` only on `openai-compatible` keeps H3 byte-identical. Two deliberate changes follow from
 the table, both registered:
 
 - **MP-D2.** The six other `provider-openai-compatible` families and the three `provider-openai-responses` families
-  declare `reasoning_effort`. Under §2 item 4 they now receive a model capability where H3 gave them none. **Resolved,
-  no request changes:** `reasoning_effort_allowed` (`reference.rs:570-580`) answers a missing entry with
-  `!thinking_requested` and an entry without words with `contains(..) || (!thinking_requested && is_empty())`,
-  which is the same value; `family_model_parameters_v1` pins the built request equal.
+  declare `reasoning_effort`. **No request changes, because a host builds no new capability for them (§2 item 4).**
+  The first draft let every declaring family get one, and argued it changed nothing because
+  `reasoning_effort_allowed` (`reference.rs:570-580`) answers a missing and an empty entry alike. That holds for
+  `reasoning_effort` but not for `reasoning_content`. The host found that on 2026-10-18, and §2 item 4 was corrected.
 - **MP-D1.** See §2 item 5.
 
 ## 7. Compatibility, versioning, tests
@@ -201,14 +207,16 @@ the table, both registered:
   `immutable_request_headers` (0.67.0).
 - **Runtime.** `ComponentManifestV1` is `deny_unknown_fields`, so a runtime before the release that ships the fields
   refuses a package that declares them. A host on an older south fails closed. Following the 0.60.0 and 0.67.0
-  precedent, the feature PR leaves `south_runtime` as it is, and the release commit raises it on the seven declaring
+  precedent, the feature PR leaves `south_runtime` as it is, and the release commit raises it on the nine declaring
   packages together with `shipped_packages_v1::declared_runtime_now`.
 - **Q47.** `south-provider-api` 0.61.0 → 0.62.0 (minor: two public fields, a public struct, two `ManifestErrorV1`
   variants, three constants). `south-component-conformance` 0.72.0 → 0.73.0 (the exported word lists, the shared
-  refusal, the `kiro` and OpenAI-compatible refusals). Every package's `component.wasm` re-identifies. The seven
-  declaring packages take a minor (`provider-anthropic` 1.4.0, `provider-anthropic-bedrock-invoke`,
-  `provider-bedrock-converse`, `provider-bedrock-converse-bearer` and `provider-kiro` 1.2.0,
-  `provider-openai-compatible` 2.12.0, `provider-openai-responses` 1.5.0), the other 34 a patch.
+  refusal, and the refusals in `kiro`, OpenAI-compatible, Gemini, Vertex and OpenAI Responses). Every package's
+  `component.wasm` re-identifies. All nine provider packages declare and take a minor (`provider-anthropic` 1.4.0,
+  `provider-anthropic-bedrock-invoke`, `provider-bedrock-converse`, `provider-bedrock-converse-bearer`,
+  `provider-kiro` and `provider-vertex` 1.2.0, `provider-gemini` 1.5.0, `provider-openai-compatible` 2.12.0,
+  `provider-openai-responses` 1.5.0). The section attributes record makes `task-gmi-image-v2` 0.36.0 in the same
+  release, and the other 31 packages take a patch.
 - **Release.** 0.74.0.
 - **Tests.**
   - `south-provider-api` `tests/model_parameters_v1.rs`: absent is omitted, round-trip, an unknown key inside a
@@ -275,3 +283,10 @@ the table, both registered:
   user). Status accepted. Per MP-Q3, the follow-ups each get their own change with a measurement: `claude-code`,
   `claude-code-setup-token` and `anthropic-bedrock-invoke` into `drops_unsigned_thinking`; `reasoning_content` for
   `glm-coding` and `kimi-code`.
+- 2026-10-18 (after review by the host): the following changes, relayed by token-station-server-14 and confirmed by
+  the user.
+  - §2 item 4 and MP-D2 corrected: a missing and an empty capability differ on `deepseek…` models.
+  - §5: lv ruled that `gemini`, `vertex-ai` and the three `provider-openai-responses` families refuse a forced choice
+    too, in this release; `provider-gemini` and `provider-vertex` therefore take a minor.
+  - lv accepted that reserved namespaces and exclusive groups come only from loaded packages, and that the whole
+    `bedrock.` namespace is reserved by the cache-point words.
