@@ -1,6 +1,6 @@
 # Family model parameters and unsigned thinking: provider-world manifest declarations
 
-Status: proposed. Requested by lv on 2026-10-18 (host dialect de-hardcoding record, DH-Q2 = A: "south adds the
+Status: accepted (every open point ruled by lv on 2026-10-18; §9). Requested by lv on 2026-10-18 (host dialect de-hardcoding record, DH-Q2 = A: "south adds the
 manifest fields, releases them, the host consumes them, south writes its own English record"). Rulings relayed from lv on 2026-10-18 (by token-station-server-14, confirmed by the user) are marked in §9; open
 points remain there.
 
@@ -38,13 +38,20 @@ Each family's words that its component reads from `ProviderConfig.models[].suppo
 
 ```json
 "model_parameters": {
-  "anthropic": ["anthropic.effort.xhigh", "anthropic.sampling.exclusive", "anthropic.sampling.none",
-                "anthropic.thinking.adaptive", "anthropic.thinking.budget", "anthropic.tool_choice.auto_only",
-                "reasoning_replay.claude.v1"]
+  "anthropic": {
+    "words": ["anthropic.effort.xhigh", "anthropic.sampling.exclusive", "anthropic.sampling.none",
+              "anthropic.thinking.adaptive", "anthropic.thinking.budget", "anthropic.tool_choice.auto_only",
+              "reasoning_replay.claude.v1"],
+    "exclusive": [["anthropic.thinking.adaptive", "anthropic.thinking.budget"]]
+  }
 }
 ```
 
-`ComponentManifestV1::model_parameters: BTreeMap<String, Vec<String>>`, `#[serde(default)]`, omitted when empty.
+`ComponentManifestV1::model_parameters: BTreeMap<String, ModelParametersV1>`, `#[serde(default)]`, omitted when
+empty. `ModelParametersV1 { words: Vec<String>, exclusive: Vec<Vec<String>> }`, `deny_unknown_fields`; `exclusive`
+defaults to empty and is omitted when empty. The object form (rather than a bare word list) carries MP-Q5's ruling:
+the host keeps its save-time check that a model declares at most one word of each exclusive group, read from here
+instead of from a dialect name.
 
 | Property | Rule | Precedent |
 |---|---|---|
@@ -52,6 +59,7 @@ Each family's words that its component reads from `ProviderConfig.models[].suppo
 | Worlds | provider world only (`WorldSchemaV1::request_declarations`); elsewhere gate ① refuses it | `immutable_request_headers` |
 | Word syntax | 1 to 64 bytes of `[a-z0-9_]` segments joined by `.`; no empty segment | — |
 | Order and repeats | sorted, no repeats (so a manifest has one spelling) | — |
+| `exclusive` | each group 2 or more distinct words, each in `words`, sorted; groups sorted, disjoint; at most 16 groups | — |
 | Count | at most 64 words per family | `MAX_IMMUTABLE_REQUEST_HEADERS` |
 | Gate ① error | `ManifestErrorV1::InvalidModelParameters { family, detail }` | `InvalidImmutableRequestHeaders` |
 | Public helper | `are_model_parameters(&[String]) -> bool`, `MAX_MODEL_PARAMETERS`, `MAX_MODEL_PARAMETER_BYTES` | `are_immutable_request_headers` |
@@ -81,7 +89,9 @@ Semantics, for a host:
    because the family does not declare the OpenAI word. Elsewhere it refuses one misconfiguration earlier, as
    incompatible rather than as a component capability error: a model on, say, an `openai-compatible` row that declares
    `reasoning_replay.claude.v1`. **Difference registered as MP-D1.**
-6. Declaring a word changes nothing a component builds. The component reads `supported_parameters` exactly as before.
+6. **Exclusive groups.** A model's `supported_parameters` holding two words of one declared group is refused at save
+   time. The component still refuses the combination at request time (`Dialect::of`).
+7. Declaring a word changes nothing a component builds. The component reads `supported_parameters` exactly as before.
 
 ## 3. Declaration 2: `drops_unsigned_thinking`
 
@@ -207,27 +217,27 @@ the table, both registered:
    then skipped at run time by the existing immutable-header skip.
 6. Add the `InvalidModelParameters` arm; struct literals gain the two fields.
 
-## 9. Open points
+## 9. Rulings
 
 - **MP-Q1** Unsigned thinking: (a) the `drops_unsigned_thinking` declaration, which is byte-identical, or (b)
   `provider-anthropic` drops unsigned thinking itself, so no field is needed but the requests change on every
-  surface. **Recommended: (a)**; (b) can follow after measurement.
+  surface. **Recommended, and ruled by lv on 2026-10-18: (a)**; (b) can follow after measurement.
 - **MP-Q2** Should the host apply `drops_unsigned_thinking` on Chat and Messages too? **Ruled (lv, 2026-10-18): no.**
   Responses only, as today; only the family name is replaced by the declaration.
 - **MP-Q3** Identity versus intent for `claude-code`, `claude-code-setup-token` and `anthropic-bedrock-invoke`.
   Today they are not in H2's strip, and only `openai-compatible` gets `reasoning_content` in H3, not `glm-coding` or
-  `kimi-code`. **Recommended:** ship the byte-identical table now, and widen each list in its own change with a
+  `kimi-code`. **Recommended, and ruled by lv on 2026-10-18:** ship the byte-identical table now, and widen each list in its own change with a
   measurement.
-- **MP-Q4** `speech.` words stay a `south-contracts` vocabulary. **Recommended: yes**; they are not dialect words.
+- **MP-Q4** `speech.` words stay a `south-contracts` vocabulary. **Recommended, and ruled by lv on 2026-10-18: yes**; they are not dialect words.
 - **MP-Q5** The adaptive/budget mutual exclusion is a Claude rule the host checks at save time. **Ruled (lv,
   2026-10-18): keep the save-time check**, judged by declared words rather than a dialect name. South therefore
   exports the exclusive pairs as data the host can read without naming `anthropic` (exact form left to the
   implementation; the simplest is a per-family `exclusive` list in `model_parameters`, which would change §2's shape,
   so it is settled before code).
 - **MP-Q7** `provider-kiro` and `provider-openai-compatible` take only the forced-tool refusal (§5), not the other
-  Claude words. **Recommended: yes**; the other words reshape requests and need their own measurement. The
+  Claude words. **Recommended, and ruled by lv on 2026-10-18: yes**; the other words reshape requests and need their own measurement. The
   alternative is DH-Q4 option B, a declared `refuses` rule, but that is a second field for one word.
-- **MP-Q6** Field names. **Recommended:** `model_parameters` and `drops_unsigned_thinking`. The DH record's working
+- **MP-Q6** Field names. **Recommended, and ruled by lv on 2026-10-18:** `model_parameters` and `drops_unsigned_thinking`. The DH record's working
   name `reasoning_replay` is not used, because the replay carriers are covered by `model_parameters` (§2 item 5).
 
 ## Revision note
@@ -239,3 +249,7 @@ the table, both registered:
   host keeps its pre-refusal until it re-pins to the release in which every family that may serve a Claude model
   refuses a forced choice itself; that work joins this release (§5). MP-Q2: Responses only. MP-Q5: keep the save-time
   exclusivity check, judged by declared words.
+- 2026-10-18: §2 takes the object form `{words, exclusive}` for MP-Q5 (still one field). lv ruled MP-Q1, Q3, Q4, Q6 and Q7 as recommended (relayed by token-station-server-14, confirmed by the
+  user). Status accepted. Per MP-Q3, the follow-ups each get their own change with a measurement: `claude-code`,
+  `claude-code-setup-token` and `anthropic-bedrock-invoke` into `drops_unsigned_thinking`; `reasoning_content` for
+  `glm-coding` and `kimi-code`.
