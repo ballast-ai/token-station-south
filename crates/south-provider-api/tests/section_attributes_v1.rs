@@ -47,7 +47,7 @@ fn refused(section: &Value) -> String {
 fn a_section_exports_a_stored_field_without_a_recipe() {
     let manifest = with("image-openai-compatible", &stored_key_section()).unwrap();
     let section = manifest.credentials.as_ref().unwrap();
-    assert_eq!(section.attribute_names(), ["organization_id"].into_iter().collect());
+    assert_eq!(section.attribute_names(), std::iter::once("organization_id").collect());
     assert_eq!(section.admits_attribute("organization_id", "org-123"), Some(true));
     assert_eq!(section.admits_attribute("organization_id", "line\nbreak"), Some(false));
     assert_eq!(section.admits_attribute("project_id", "p"), None);

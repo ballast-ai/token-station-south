@@ -125,5 +125,5 @@ fn the_gmi_package_declares_its_organization_id_as_a_section_attribute() {
             }
         })
     );
-    assert_eq!(manifest.declared_keys("gmi-image"), ["organization_id"].into_iter().collect());
+    assert_eq!(manifest.declared_keys("gmi-image"), std::iter::once("organization_id").collect());
 }

@@ -56,7 +56,7 @@ pub mod family {
     pub const OPENAI_COMPATIBLE_OTHER: [&str; 2] =
         ["anthropic.tool_choice.auto_only", "reasoning_effort"];
     /// Every `provider-openai-responses` family: the forced-tool refusal (lv, 2026-10-18), the
-    /// effort and the OpenAI replay carrier.
+    /// effort and the `OpenAI` replay carrier.
     pub const OPENAI_RESPONSES: [&str; 3] =
         ["anthropic.tool_choice.auto_only", "reasoning_effort", "reasoning_replay.openai.v1"];
     /// `gemini` and `vertex-ai`: the forced-tool refusal only (lv, 2026-10-18: no family is

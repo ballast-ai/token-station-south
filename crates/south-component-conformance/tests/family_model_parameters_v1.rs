@@ -113,7 +113,7 @@ fn the_anthropic_family_protects_anthropic_version() {
 
 /// §2 item 4 and MP-D2: a missing and an empty model capability are not the same input. The
 /// OpenAI-compatible component builds the same request for both in general, but on a model whose
-/// name starts with `deepseek` a missing entry keeps the DeepSeek heuristic (`reasoning_content`
+/// name starts with `deepseek` a missing entry keeps the `deepseek` name heuristic (`reasoning_content`
 /// sent) and an empty one is a declared "no". So a host builds a capability only for a family that
 /// declares a host-derived word, as it did before (`openai-compatible` alone, MP-Q3); building
 /// one for every declaring family would drop the field on, say, `DeepSeek-R1` behind

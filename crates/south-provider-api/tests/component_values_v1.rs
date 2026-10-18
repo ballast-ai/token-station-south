@@ -395,17 +395,11 @@ fn the_embeddings_world_holds_its_values_to_the_provider_rules() {
 /// (§3, SA-Q2), as [`credential_attributes_are_refused_in_task_v1_and_admitted_in_task_v2`] shows.
 #[test]
 fn task_v1_still_refuses_config_keys() {
-    for package in ["task-kling"] {
-        let mut task = shipped(package);
-        task["config_schema"] = json!({
-            "kling": { "region": { "syntax": "aws_region", "description": "A region." } }
-        });
-        assert_eq!(
-            parse(task).validate(),
-            Err(ManifestErrorV1::EndpointIsAProviderWorldDeclaration),
-            "{package}"
-        );
-    }
+    let mut task = shipped("task-kling");
+    task["config_schema"] = json!({
+        "kling": { "region": { "syntax": "aws_region", "description": "A region." } }
+    });
+    assert_eq!(parse(task).validate(), Err(ManifestErrorV1::EndpointIsAProviderWorldDeclaration));
 }
 
 /// [`embeddings_with_values`] moved to the image world: what a Vertex-shaped image family declares
