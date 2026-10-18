@@ -231,8 +231,10 @@ fn the_manifest_declares_the_two_families_with_the_native_values() {
     assert_eq!(manifest.version, "1.4.0");
     // `immutable_request_headers` needed 0.67.0 (`ComponentManifestV1` refuses unknown fields); from
     // 1.3.0 `north_request_passthrough` `messages` and `forwarded_client_headers` need 0.73.0
-    // (record `2026-10-17-messages-passthrough-and-count-tokens.md` §8.1), which shipped them.
-    assert_eq!(manifest.compatibility.south_runtime, "0.73.0");
+    // (record `2026-10-17-messages-passthrough-and-count-tokens.md` §8.1); from 1.4.0
+    // `model_parameters` and `drops_unsigned_thinking` need 0.74.0 (record
+    // `2026-10-18-family-model-parameters.md` §7), which shipped them.
+    assert_eq!(manifest.compatibility.south_runtime, "0.74.0");
 }
 
 /// Protected request headers record (`docs/design/2026-10-15-immutable-request-headers.md`,

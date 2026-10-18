@@ -714,5 +714,6 @@ fn the_t9_families_retire_the_patch_identity() {
     // (`family_model_parameters_retires_every_published_0731_package_identity`).
     assert_eq!(manifest.version, "2.12.0");
     assert_eq!(OpenAiCompatibleReferenceV1.metadata().version, manifest.version);
-    assert_eq!(manifest.compatibility.south_runtime, "0.60.0");
+    // 2.12.0 declares `model_parameters` (record `2026-10-18-family-model-parameters.md` §7), first parsed by 0.74.0.
+    assert_eq!(manifest.compatibility.south_runtime, "0.74.0");
 }

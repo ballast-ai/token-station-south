@@ -1,6 +1,6 @@
 # Family model parameters and unsigned thinking: provider-world manifest declarations
 
-Status: accepted (every open point ruled by lv on 2026-10-18; §9). Requested by lv on 2026-10-18 (host dialect de-hardcoding record, DH-Q2 = A: "south adds the
+Status: accepted (every open point ruled by lv on 2026-10-18; §9). Implemented (#272); released in 0.74.0. Requested by lv on 2026-10-18 (host dialect de-hardcoding record, DH-Q2 = A: "south adds the
 manifest fields, releases them, the host consumes them, south writes its own English record"). Rulings relayed from lv on 2026-10-18 (by token-station-server-14, confirmed by the user) are marked in §9; open
 points remain there.
 
