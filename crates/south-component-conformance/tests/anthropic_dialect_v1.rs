@@ -5,9 +5,12 @@
 
 use serde_json::{Value, json};
 use south_component_conformance::{
-    ProviderComponentV1, anthropic_dialect, reference_anthropic::AnthropicReferenceV1,
-    reference_bedrock_converse::BedrockConverseReferenceV1,
+    ProviderComponentV1, anthropic_dialect, reference::OpenAiCompatibleReferenceV1,
+    reference_anthropic::AnthropicReferenceV1,
+    reference_anthropic_bedrock_invoke::AnthropicBedrockInvokeReferenceV1,
+    reference_bedrock_converse::BedrockConverseReferenceV1, reference_kiro::KiroReferenceV1,
 };
+use south_provider_api::HOST_VALUE_ATTEMPT_ID;
 use token_station_protocol::{ChatRequest, ErrorCode, ProviderConfig};
 
 const MODEL: &str = "claude-x";
@@ -29,6 +32,37 @@ fn converse(words: &[&str]) -> ProviderConfig {
     config("bedrock", "https://bedrock-runtime.us-east-1.amazonaws.com", words)
 }
 
+/// Every component that may serve a Claude model, with a row of each of its families (the family
+/// model parameters record §5, DH-Q4 revisited: each refuses a forced tool itself before the host
+/// deletes its pre-refusal).
+fn claude_serving(words: &[&str]) -> Vec<(&'static dyn ProviderComponentV1, ProviderConfig)> {
+    let mut rows: Vec<(&'static dyn ProviderComponentV1, ProviderConfig)> = vec![
+        (&AnthropicReferenceV1, anthropic(words)),
+        (&BedrockConverseReferenceV1, converse(words)),
+        (
+            &AnthropicBedrockInvokeReferenceV1,
+            config(
+                "anthropic-bedrock-invoke",
+                "https://bedrock-runtime.us-east-1.amazonaws.com",
+                words,
+            ),
+        ),
+        (&KiroReferenceV1, config("kiro", "https://q.us-east-1.amazonaws.com", words)),
+    ];
+    for family in [
+        "openai-compatible",
+        "azure-openai-v1",
+        "github-copilot",
+        "gemini-openai-compatible",
+        "azure-openai-dated",
+        "glm-coding",
+        "kimi-code",
+    ] {
+        rows.push((&OpenAiCompatibleReferenceV1, config(family, "https://example.test/v1", words)));
+    }
+    rows
+}
+
 fn request(extra: &Value) -> ChatRequest {
     let mut value = json!({
         "model": MODEL,
@@ -42,26 +76,40 @@ fn request(extra: &Value) -> ChatRequest {
     serde_json::from_value(value).unwrap()
 }
 
+/// `request` as the host fills it for `config`'s package: `provider-kiro` declares the attempt id.
+fn filled(config: &ProviderConfig, request: &ChatRequest) -> ChatRequest {
+    let mut request = request.clone();
+    if config.provider == "kiro" {
+        request
+            .host_values
+            .insert(
+                HOST_VALUE_ATTEMPT_ID.to_owned(),
+                "0e9d8c7b-6a5f-4e3d-8c1b-0a9f8e7d6c5b".to_owned(),
+            )
+            .unwrap();
+    }
+    request
+}
+
 fn refused(component: &dyn ProviderComponentV1, config: &ProviderConfig, request: &ChatRequest) {
+    let request = &filled(config, request);
     let error = component.build_http_request(request, config).expect_err("must be refused");
     assert_eq!(error.code, ErrorCode::Capability, "{error:?}");
     assert_eq!(error.http_status, 400, "{error:?}");
 }
 
 fn accepted(component: &dyn ProviderComponentV1, config: &ProviderConfig, request: &ChatRequest) {
+    let request = &filled(config, request);
     component.build_http_request(request, config).expect("must be accepted");
 }
 
 #[test]
-fn a_forced_tool_is_refused_on_an_auto_only_model_by_both_components() {
+fn a_forced_tool_is_refused_on_an_auto_only_model_by_every_claude_serving_component() {
     let auto_only = [anthropic_dialect::TOOL_CHOICE_AUTO_ONLY];
     let required = request(&json!({"tool_choice": "required"}));
     let named = request(&json!({"tool_choice": {"type": "function", "function": {"name": "t"}}}));
     let auto = request(&json!({"tool_choice": "auto"}));
-    for (component, config) in [
-        (&AnthropicReferenceV1 as &dyn ProviderComponentV1, anthropic(&auto_only)),
-        (&BedrockConverseReferenceV1 as &dyn ProviderComponentV1, converse(&auto_only)),
-    ] {
+    for (component, config) in claude_serving(&auto_only) {
         refused(component, &config, &required);
         refused(component, &config, &named);
         accepted(component, &config, &auto);
@@ -71,8 +119,9 @@ fn a_forced_tool_is_refused_on_an_auto_only_model_by_both_components() {
 #[test]
 fn a_forced_tool_still_reaches_a_model_that_did_not_declare_auto_only() {
     let required = request(&json!({"tool_choice": "required"}));
-    accepted(&AnthropicReferenceV1, &anthropic(&[]), &required);
-    accepted(&BedrockConverseReferenceV1, &converse(&[]), &required);
+    for (component, config) in claude_serving(&[]) {
+        accepted(component, &config, &required);
+    }
 }
 
 #[test]

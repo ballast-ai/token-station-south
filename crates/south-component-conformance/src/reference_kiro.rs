@@ -45,7 +45,7 @@ use crate::reference_bedrock_converse::exception_name;
 pub const NAME: &str = "provider-kiro";
 
 /// The package version.
-pub const VERSION: &str = "1.1.8";
+pub const VERSION: &str = "1.2.0";
 
 /// The family this package serves.
 pub const FAMILY: &str = "kiro";
@@ -358,8 +358,7 @@ fn with_system(system: &str, content: &Value) -> Value {
 /// `none` withholds them, as the native first hop does. `required` and a named tool have no slot on
 /// this wire: the native first hop writes them into its intermediate body and the second hop never
 /// reads them, so the declarations are sent as for `auto` (KR4, aligned 2026-10-14). A model row
-/// declaring `anthropic.tool_choice.auto_only` is refused by the host before any component, for
-/// either arm.
+/// declaring `anthropic.tool_choice.auto_only` is refused before this, in `build_http_request`.
 fn tools_of(request: &ChatRequest) -> Option<Value> {
     if request.tool_choice == Some(ToolChoice::None) || request.tools.is_empty() {
         return None;
@@ -635,6 +634,9 @@ impl ProviderComponentV1 for KiroReferenceV1 {
         if config.provider != FAMILY {
             return Err(capability(format!("unsupported provider dialect `{}`", config.provider)));
         }
+        // A forced choice has no slot on this wire, so a model that refuses one is refused here
+        // (the family model parameters record §5).
+        crate::anthropic_dialect::refuse_declared_forced_tool(request, config)?;
         let body = body_of(request, config)?;
         // The wire has no stream switch (`request_facts.stream: "none"`): the request is the same
         // for both modes, and the upstream always answers with an event stream.

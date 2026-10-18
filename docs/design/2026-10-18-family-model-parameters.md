@@ -62,14 +62,16 @@ instead of from a dialect name.
 | `exclusive` | each group 2 or more distinct words, each in `words`, sorted; groups sorted, disjoint; at most 16 groups | — |
 | Count | at most 64 words per family | `MAX_IMMUTABLE_REQUEST_HEADERS` |
 | Gate ① error | `ManifestErrorV1::InvalidModelParameters { family, detail }` | `InvalidImmutableRequestHeaders` |
-| Public helper | `are_model_parameters(&[String]) -> bool`, `MAX_MODEL_PARAMETERS`, `MAX_MODEL_PARAMETER_BYTES` | `are_immutable_request_headers` |
+| Public helper | `ModelParametersV1::is_valid`, `MAX_MODEL_PARAMETERS`, `MAX_MODEL_PARAMETER_BYTES`, `MAX_MODEL_PARAMETER_GROUPS` | `are_immutable_request_headers` |
 
 Semantics, for a host:
 
 1. **The words are complete for what they name.** The list holds every `supported_parameters` word the family's
    component reads, whether dotted (`anthropic.thinking.adaptive`, `bedrock.converse.cache_point`,
    `reasoning_replay.claude.v1`) or bare (`reasoning_content`, `reasoning_effort`). A component that reads a word it
-   does not declare is a package bug; the package tests pin it (§7).
+   does not declare is a package bug; the package tests pin it (§7). One deliberate exception, for byte identity
+   (MP-Q3): `provider-openai-compatible` reads `reasoning_content` on every family, but only `openai-compatible`
+   declares it, so a host keeps deriving it for that family alone.
 2. **Reserved namespaces come from the declarations.** A dotted word's namespace is its first segment. A host treats
    the namespace of every declared dotted word of every loaded package as reserved: a model word in a reserved
    namespace must be declared by some loaded package, or it is refused at save time. This keeps today's typo
@@ -82,7 +84,9 @@ Semantics, for a host:
 4. **A family that declares the field gets a model capability.** A host builds the `ModelCapability` for the target
    model of every row whose family declares at least one word. For a family that declares none, it builds one only
    as today. The two components that read capabilities by model lookup (`Dialect::of`, `reference.rs:320-331`) treat a
-   missing entry and an entry with no words alike. **Unverified**; a test pins it (§7).
+   missing entry and an entry with no words alike. `family_model_parameters_v1` pins this for the OpenAI-compatible
+   component (with and without a thinking request); `Dialect::of` returns the default dialect for both by
+   construction.
 5. **Replay carriers follow the declaration.** A family accepts a carrier only when it declares that carrier's model
    word: an OpenAI opaque item needs `reasoning_replay.openai.v1`, a Claude carrier needs `reasoning_replay.claude.v1`.
    The model must still declare the word as well. This replaces H1's family name. On `anthropic` it is byte-identical,
@@ -150,6 +154,15 @@ a test, or this record says why a model declaring the word cannot route to it. K
   `anthropic_dialect` uses. Its `model_parameters` gains the word.
 - `provider-openai-compatible`: the same, on every family. **Unverified** whether any of its families should honor
   the other five Claude words; this record adds only the refusal (MP-Q7).
+- `provider-anthropic-bedrock-invoke` already refuses: it builds its body through `provider-anthropic`'s
+  `checked_body_of`.
+
+The refusal is shared: `anthropic_dialect::refuse_declared_forced_tool`, with the message `Dialect::refuse_forced_tool`
+gives. `anthropic_dialect_v1` pins every Claude-serving family (all three Anthropic-wire packages, `kiro` and the
+seven OpenAI-compatible families) on a declared and an undeclared model. The families left out cannot serve a Claude
+model by their wire: `gemini` and `vertex-ai` speak `generateContent`, and the three `provider-openai-responses`
+families speak the OpenAI Responses API, which serves OpenAI models. This last point is argued from the wire and has
+not been measured against every deployment (for example `bedrock-mantle`).
 
 The refusal moves from the host to the component unchanged in meaning; one client-visible difference is left to the
 host: the error code changes from the host's `tool_choice_unsupported` to the component's capability error, both
@@ -166,7 +179,7 @@ declares nothing.
 | `provider-anthropic` | `anthropic`, `claude-code`, `claude-code-setup-token` | the six `anthropic.*` words, `reasoning_replay.claude.v1` | `anthropic` only (MP-Q3) |
 | `provider-bedrock-converse` | `bedrock` | the six `anthropic.*` words, the three `bedrock.converse.cache_point*` words, `reasoning_replay.claude.v1` | — |
 | `provider-bedrock-converse-bearer` | `bedrock-bearer` | as `bedrock` | — |
-| `provider-anthropic-bedrock-invoke` | `anthropic-bedrock-invoke` | **unverified**: the words its reference reads (its record says the dialect applies as in `provider-anthropic`) | — |
+| `provider-anthropic-bedrock-invoke` | `anthropic-bedrock-invoke` | as `anthropic` (it builds through `provider-anthropic`'s `checked_body_of`) | — |
 | `provider-openai-compatible` | `openai-compatible` | `anthropic.tool_choice.auto_only` (§5), `reasoning_content`, `reasoning_effort` | — |
 | `provider-openai-compatible` | the other six families | `anthropic.tool_choice.auto_only` (§5), `reasoning_effort` (MP-Q3) | — |
 | `provider-kiro` | `kiro` | `anthropic.tool_choice.auto_only` (§5) | — |
@@ -176,10 +189,10 @@ Declaring `reasoning_content` only on `openai-compatible` keeps H3 byte-identica
 the table, both registered:
 
 - **MP-D2.** The six other `provider-openai-compatible` families and the three `provider-openai-responses` families
-  declare `reasoning_effort`. Under §2 item 4 they now receive a model capability where H3 gave them none. The
-  components treat a missing entry and an entry without that word differently (`reference.rs:577-578`: an empty
-  capability lets `reasoning_effort` through). **Unverified** whether any shipped request changes. If one does,
-  those families declare nothing until it is measured.
+  declare `reasoning_effort`. Under §2 item 4 they now receive a model capability where H3 gave them none. **Resolved,
+  no request changes:** `reasoning_effort_allowed` (`reference.rs:570-580`) answers a missing entry with
+  `!thinking_requested` and an entry without words with `contains(..) || (!thinking_requested && is_empty())`,
+  which is the same value; `family_model_parameters_v1` pins the built request equal.
 - **MP-D1.** See §2 item 5.
 
 ## 7. Compatibility, versioning, tests
@@ -188,19 +201,27 @@ the table, both registered:
   `immutable_request_headers` (0.67.0).
 - **Runtime.** `ComponentManifestV1` is `deny_unknown_fields`, so a runtime before the release that ships the fields
   refuses a package that declares them. A host on an older south fails closed. Following the 0.60.0 and 0.67.0
-  precedent, the feature PR leaves `south_runtime` as it is, and the release commit raises it on the five declaring
+  precedent, the feature PR leaves `south_runtime` as it is, and the release commit raises it on the seven declaring
   packages together with `shipped_packages_v1::declared_runtime_now`.
-- **Q47.** `south-provider-api` 0.61.0 → 0.62.0 (minor: two public fields, a `ManifestErrorV1` variant, a function, two
-  constants). `south-component-conformance` changes too (the exported word lists). Every package's `component.wasm`
-  re-identifies. Packages that declare a field take a minor, the rest a patch.
+- **Q47.** `south-provider-api` 0.61.0 → 0.62.0 (minor: two public fields, a public struct, two `ManifestErrorV1`
+  variants, three constants). `south-component-conformance` 0.72.0 → 0.73.0 (the exported word lists, the shared
+  refusal, the `kiro` and OpenAI-compatible refusals). Every package's `component.wasm` re-identifies. The seven
+  declaring packages take a minor (`provider-anthropic` 1.4.0, `provider-anthropic-bedrock-invoke`,
+  `provider-bedrock-converse`, `provider-bedrock-converse-bearer` and `provider-kiro` 1.2.0,
+  `provider-openai-compatible` 2.12.0, `provider-openai-responses` 1.5.0), the other 34 a patch.
 - **Release.** 0.74.0.
 - **Tests.**
-  - `south-provider-api`: absent is omitted, round-trip, undeclared family refused by name, the word grammar and
-    bounds at and past the limit, unsorted and repeated refused; the field is refused outside the provider world.
-  - `south-component-conformance`: each shipped list equals a constant its reference module exports. Each word that
-    module reads is in its list, checked by a request per word that changes the descriptor when the word is
-    declared. A missing model entry and an empty entry build identical descriptors (§2 item 4).
-  - `shipped_packages_v1`: the declarations above.
+  - `south-provider-api` `tests/model_parameters_v1.rs`: absent is omitted, round-trip, an unknown key inside a
+    declaration refused, undeclared families refused by name (both fields), the word grammar and bounds at and past
+    the limit, unsorted and repeated words refused, the exclusive-group rules and bound; both fields refused outside
+    the provider world (embeddings, task, image and speech).
+  - `south-component-conformance`: `declared_parameters::family` holds each family's list, unit-tested against the
+    constants of the modules that read the words (`anthropic_dialect`, `CACHE_POINT_PARAMETERS`,
+    `responses_vocabulary`). `tests/family_model_parameters_v1.rs` pins every provider manifest to those lists, only
+    `anthropic` in `drops_unsigned_thinking`, `anthropic`'s `anthropic-version`, and a missing and an empty model
+    entry building the same request (§2 item 4). `tests/anthropic_dialect_v1.rs` pins the forced-tool refusal on
+    every Claude-serving family (§5). A test that every word a module reads is declared is not written: reading is
+    not observable generically, so completeness rests on the per-module constants and review.
 
 ## 8. Host checklist (after re-pinning to 0.74.0)
 
@@ -249,7 +270,8 @@ the table, both registered:
   host keeps its pre-refusal until it re-pins to the release in which every family that may serve a Claude model
   refuses a forced choice itself; that work joins this release (§5). MP-Q2: Responses only. MP-Q5: keep the save-time
   exclusivity check, judged by declared words.
-- 2026-10-18: §2 takes the object form `{words, exclusive}` for MP-Q5 (still one field). lv ruled MP-Q1, Q3, Q4, Q6 and Q7 as recommended (relayed by token-station-server-14, confirmed by the
+- 2026-10-18: §2 takes the object form `{words, exclusive}` for MP-Q5 (still one field); lv adopted the shape the same
+  day (relayed by token-station-server-14, confirmed by the user). lv ruled MP-Q1, Q3, Q4, Q6 and Q7 as recommended (relayed by token-station-server-14, confirmed by the
   user). Status accepted. Per MP-Q3, the follow-ups each get their own change with a measurement: `claude-code`,
   `claude-code-setup-token` and `anthropic-bedrock-invoke` into `drops_unsigned_thinking`; `reasoning_content` for
   `glm-coding` and `kimi-code`.

@@ -1,6 +1,6 @@
 {
   "name": "provider-openai-compatible",
-  "version": "2.11.1",
+  "version": "2.12.0",
   "api_version": "provider-adapter-v2",
   "providers": [
     "openai-compatible",
@@ -197,6 +197,51 @@
     "glm-coding",
     "kimi-code"
   ],
+  "model_parameters": {
+    "azure-openai-dated": {
+      "words": [
+        "anthropic.tool_choice.auto_only",
+        "reasoning_effort"
+      ]
+    },
+    "azure-openai-v1": {
+      "words": [
+        "anthropic.tool_choice.auto_only",
+        "reasoning_effort"
+      ]
+    },
+    "gemini-openai-compatible": {
+      "words": [
+        "anthropic.tool_choice.auto_only",
+        "reasoning_effort"
+      ]
+    },
+    "github-copilot": {
+      "words": [
+        "anthropic.tool_choice.auto_only",
+        "reasoning_effort"
+      ]
+    },
+    "glm-coding": {
+      "words": [
+        "anthropic.tool_choice.auto_only",
+        "reasoning_effort"
+      ]
+    },
+    "kimi-code": {
+      "words": [
+        "anthropic.tool_choice.auto_only",
+        "reasoning_effort"
+      ]
+    },
+    "openai-compatible": {
+      "words": [
+        "anthropic.tool_choice.auto_only",
+        "reasoning_content",
+        "reasoning_effort"
+      ]
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

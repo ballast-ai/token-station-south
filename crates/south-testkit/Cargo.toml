@@ -15,13 +15,13 @@ serde_json.workspace = true
 south-contracts = { path = "../south-contracts", version = "0.56.0" }
 south-core = { path = "../south-core", version = "0.73.1" }
 south-host-grammars = { path = "../south-host-grammars", version = "0.73.1" }
-south-provider-api = { path = "../south-provider-api", version = "0.61.0" }
+south-provider-api = { path = "../south-provider-api", version = "0.62.0" }
 south-provider-conformance = { path = "../south-provider-conformance", version = "0.73.1" }
 tokio = { workspace = true, features = ["macros", "sync", "time"] }
 tokio-util = { workspace = true, features = ["rt"] }
 
 [dev-dependencies]
-south-component-conformance = { path = "../south-component-conformance", version = "0.72.0" }
+south-component-conformance = { path = "../south-component-conformance", version = "0.73.0" }
 static_assertions.workspace = true
 tokio = { workspace = true, features = ["macros", "rt", "sync", "test-util", "time"] }
 

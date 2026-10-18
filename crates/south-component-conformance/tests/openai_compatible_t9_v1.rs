@@ -710,7 +710,9 @@ fn the_t9_families_retire_the_patch_identity() {
     assert_ne!(manifest.version, "2.10.1");
     // Published as 2.11.0 with 0.72.0; the Messages pass-through record's Q47 bump made it 2.11.1
     // (`messages_passthrough_retires_every_published_072_package_identity`).
-    assert_eq!(manifest.version, "2.11.1");
+    // Published as 2.11.1 with 0.73.1; the family model parameters record's minor made it 2.12.0
+    // (`family_model_parameters_retires_every_published_0731_package_identity`).
+    assert_eq!(manifest.version, "2.12.0");
     assert_eq!(OpenAiCompatibleReferenceV1.metadata().version, manifest.version);
     assert_eq!(manifest.compatibility.south_runtime, "0.60.0");
 }

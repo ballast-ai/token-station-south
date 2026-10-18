@@ -952,7 +952,7 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-openai-compatible".to_owned(),
-            version: "2.11.1".to_owned(),
+            version: "2.12.0".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
@@ -986,6 +986,10 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
                 "the OpenAI-compatible dialect cannot consume OpenAI reasoning replay",
             ));
         }
+        // A Claude model behind an OpenAI-compatible family that refuses a forced tool choice is
+        // refused here, as the Anthropic components refuse it (the family model parameters
+        // record §5).
+        crate::anthropic_dialect::refuse_declared_forced_tool(request, config)?;
         let copilot = config.provider == GITHUB_COPILOT;
         let url = match config.provider.as_str() {
             // Copilot serves Chat Completions straight off its root: the kernel's `resolve` would

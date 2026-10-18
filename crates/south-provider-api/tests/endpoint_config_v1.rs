@@ -226,6 +226,7 @@ fn endpoint_declarations_round_trip_and_belong_to_the_provider_world() {
     task.compatibility.wit_package = south_provider_api::TASK_WIT_PACKAGE.to_owned();
     task.capabilities = ["submit", "observe", "render"].into_iter().map(str::to_owned).collect();
     task.request_facts.clear();
+    task.model_parameters.clear();
     assert!(matches!(task.validate(), Err(ManifestErrorV1::InvalidSigning(_))));
     task.signing = None;
     assert_eq!(task.validate(), Err(ManifestErrorV1::StreamFramingIsAProviderWorldDeclaration));

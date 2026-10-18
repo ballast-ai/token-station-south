@@ -226,7 +226,9 @@ fn the_manifest_declares_the_two_families_with_the_native_values() {
     // (`shipped_packages_v1::explicit_cache_reads_retires_every_published_071_package_identity`).
     // Published as 1.2.6 with 0.72.0; the Messages pass-through record's minor made it 1.3.0
     // (`messages_passthrough_retires_every_published_072_package_identity`).
-    assert_eq!(manifest.version, "1.3.0");
+    // Published as 1.3.0 with 0.73.1; the family model parameters record's minor made it 1.4.0
+    // (`family_model_parameters_retires_every_published_0731_package_identity`).
+    assert_eq!(manifest.version, "1.4.0");
     // `immutable_request_headers` needed 0.67.0 (`ComponentManifestV1` refuses unknown fields); from
     // 1.3.0 `north_request_passthrough` `messages` and `forwarded_client_headers` need 0.73.0
     // (record `2026-10-17-messages-passthrough-and-count-tokens.md` §8.1), which shipped them.
@@ -235,8 +237,9 @@ fn the_manifest_declares_the_two_families_with_the_native_values() {
 
 /// Protected request headers record (`docs/design/2026-10-15-immutable-request-headers.md`,
 /// Q-CC3): both Claude Code families declare one list of immutable request headers, the
-/// reference's; `anthropic` declares none, as native refused header extras for `claude_code` rows
-/// only.
+/// reference's. `anthropic` declared none until the family model parameters record
+/// (`2026-10-18-family-model-parameters.md` §4) gave it `anthropic-version`, the one vendor name
+/// a host held in its own managed-header list.
 #[test]
 fn the_claude_code_families_declare_their_immutable_request_headers() {
     let manifest = shipped_manifest();
@@ -245,6 +248,7 @@ fn the_claude_code_families_declare_their_immutable_request_headers() {
     assert_eq!(
         manifest.immutable_request_headers,
         BTreeMap::from([
+            ("anthropic".to_owned(), vec!["anthropic-version".to_owned()]),
             (claude_code::FAMILY.to_owned(), declared.clone()),
             (claude_code::SETUP_TOKEN_FAMILY.to_owned(), declared),
         ])
@@ -285,7 +289,7 @@ fn the_immutable_request_headers_cover_every_header_each_family_fixes() {
         // Both presentations are protected on both forms, so an extra cannot add the other one.
         assert!(protects("authorization") && protects("x-api-key"), "{family}");
     }
-    assert!(!manifest.immutable_request_headers.contains_key("anthropic"));
+    assert_eq!(manifest.immutable_request_headers["anthropic"], ["anthropic-version"]);
 }
 
 /// Declaring the immutable request headers changes the manifest, so the identity published with
@@ -308,7 +312,9 @@ fn immutable_request_headers_retire_the_published_1_2_0_identity() {
     assert_ne!(manifest.version, "1.2.5");
     // Published as 1.2.6 with 0.72.0; the Messages pass-through record's minor made it 1.3.0
     // (`messages_passthrough_retires_every_published_072_package_identity`).
-    assert_eq!(manifest.version, "1.3.0");
+    // Published as 1.3.0 with 0.73.1; the family model parameters record's minor made it 1.4.0
+    // (`family_model_parameters_retires_every_published_0731_package_identity`).
+    assert_eq!(manifest.version, "1.4.0");
     assert_eq!(AnthropicReferenceV1.metadata().version, manifest.version);
 }
 

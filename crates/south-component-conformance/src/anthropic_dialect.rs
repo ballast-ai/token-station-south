@@ -169,6 +169,32 @@ pub fn refuses_forced_tool<'a>(
         && forces_tool(request)
 }
 
+/// Refuses a forced tool choice when the host declared [`TOOL_CHOICE_AUTO_ONLY`] for
+/// `request.model`, with the error `Dialect::refuse_forced_tool` gives.
+///
+/// For components that serve Claude models without reading the rest of this dialect
+/// (`provider-kiro`, `provider-openai-compatible`; the family model parameters record §5): the
+/// refusal moves from the host's pre-refusal into the component unchanged in meaning.
+pub(crate) fn refuse_declared_forced_tool(
+    request: &ChatRequest,
+    config: &ProviderConfig,
+) -> ComponentResultV1<()> {
+    let declared = config
+        .models
+        .iter()
+        .find(|model| model.model == request.model)
+        .into_iter()
+        .flat_map(|model| model.supported_parameters.iter().map(String::as_str));
+    if refuses_forced_tool(declared, request) {
+        return Err(capability(FORCED_TOOL_REFUSAL));
+    }
+    Ok(())
+}
+
+/// Why a forced tool choice is refused on a model declaring [`TOOL_CHOICE_AUTO_ONLY`].
+const FORCED_TOOL_REFUSAL: &str = "the target model does not support forcing a tool call \
+     (tool_choice required or a named tool); use tool_choice auto";
+
 impl Dialect {
     /// The dialect the host declared for `request.model`; the empty dialect
     /// when the model is not listed.
@@ -206,10 +232,7 @@ impl Dialect {
     /// `auto` would let the model answer without the tool the caller required.
     pub(crate) fn refuse_forced_tool(self, request: &ChatRequest) -> ComponentResultV1<()> {
         if self.auto_only && forces_tool(request) {
-            return Err(capability(
-                "the target model does not support forcing a tool call (tool_choice required or \
-                 a named tool); use tool_choice auto",
-            ));
+            return Err(capability(FORCED_TOOL_REFUSAL));
         }
         Ok(())
     }

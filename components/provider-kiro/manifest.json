@@ -1,6 +1,6 @@
 {
   "name": "provider-kiro",
-  "version": "1.1.8",
+  "version": "1.2.0",
   "api_version": "provider-adapter-v2",
   "providers": [
     "kiro"
@@ -287,6 +287,13 @@
   "subscription_quota_families": [
     "kiro"
   ],
+  "model_parameters": {
+    "kiro": {
+      "words": [
+        "anthropic.tool_choice.auto_only"
+      ]
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

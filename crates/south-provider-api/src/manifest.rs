@@ -818,6 +818,21 @@ pub struct ComponentManifestV1 {
     /// means no family is a subscription. Provider world only.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub subscription_quota_families: BTreeSet<String>,
+    /// Each family's `ProviderConfig.models[].supported_parameters` words that its component reads,
+    /// and the groups of them a model may declare at most one of (the family model parameters
+    /// record, `docs/design/2026-10-18-family-model-parameters.md` §2). A host derives its reserved
+    /// namespaces and save-time checks from these, and passes a host-derived word only to a family
+    /// that declares it. It changes nothing a component builds. Absent means the family declares no
+    /// words. Provider world only.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub model_parameters: BTreeMap<String, ModelParametersV1>,
+    /// Families whose upstream refuses an unsigned thinking block in an earlier assistant turn: a
+    /// host removes thinking and redacted-thinking parts from every assistant turn without a replay
+    /// marker before the IR reaches the component (the family model parameters record §3). A plain
+    /// fact about the family; it changes nothing a component builds. Absent means none. Provider
+    /// world only.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub drops_unsigned_thinking: BTreeSet<String>,
     /// Response paths whose strings the host elides with the media contract's `elide_v1` before
     /// any response reaches the component, so bytes stay out of the sandbox (task contract 8,
     /// `docs/design/2026-10-01-omni-task-component.md` §6.2). RFC 6901 pointers in which a `*`
@@ -1161,6 +1176,58 @@ pub fn are_immutable_request_headers(names: &[String]) -> bool {
             .all(|(index, name)| name_ok(name) && !names[..index].contains(name))
 }
 
+/// The most words one family may declare in `model_parameters`.
+pub const MAX_MODEL_PARAMETERS: usize = 64;
+
+/// The most bytes one `model_parameters` word may have.
+pub const MAX_MODEL_PARAMETER_BYTES: usize = 64;
+
+/// The most exclusive groups one family may declare in `model_parameters`.
+pub const MAX_MODEL_PARAMETER_GROUPS: usize = 16;
+
+/// One family's `model_parameters` declaration (the family model parameters record §2).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModelParametersV1 {
+    /// Every `supported_parameters` word the family's component reads: dot-joined segments of
+    /// `[a-z0-9_]`, sorted and distinct, at most [`MAX_MODEL_PARAMETERS`] of at most
+    /// [`MAX_MODEL_PARAMETER_BYTES`] bytes. A dotted word's namespace is its first segment.
+    pub words: Vec<String>,
+    /// Groups of `words` a model may declare at most one of. Each group has two or more words,
+    /// sorted and distinct; the groups are sorted and disjoint, at most
+    /// [`MAX_MODEL_PARAMETER_GROUPS`]. Absent means none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub exclusive: Vec<Vec<String>>,
+}
+
+impl ModelParametersV1 {
+    /// Whether the declaration follows the record's grammar.
+    #[must_use]
+    pub fn is_valid(&self) -> bool {
+        let word_ok = |word: &String| {
+            word.len() <= MAX_MODEL_PARAMETER_BYTES
+                && word.split('.').all(|segment| {
+                    !segment.is_empty()
+                        && segment.bytes().all(|byte| {
+                            byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_'
+                        })
+                })
+        };
+        let sorted = |list: &[String]| list.windows(2).all(|pair| pair[0] < pair[1]);
+        let mut grouped = BTreeSet::new();
+        self.words.len() <= MAX_MODEL_PARAMETERS
+            && self.words.iter().all(word_ok)
+            && sorted(&self.words)
+            && self.exclusive.len() <= MAX_MODEL_PARAMETER_GROUPS
+            && self.exclusive.windows(2).all(|pair| pair[0] < pair[1])
+            && self.exclusive.iter().all(|group| {
+                group.len() >= 2
+                    && sorted(group)
+                    && group.iter().all(|word| self.words.contains(word) && grouped.insert(word))
+            })
+    }
+}
+
 /// Where a request names its model.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -1465,6 +1532,8 @@ impl ComponentManifestV1 {
             || !self.forwarded_client_headers.is_empty()
             || !self.count_tokens.is_empty()
             || !self.subscription_quota_families.is_empty()
+            || !self.model_parameters.is_empty()
+            || !self.drops_unsigned_thinking.is_empty()
         {
             return Err(ManifestErrorV1::DeliveryIsAProviderWorldDeclaration);
         } else if self.signing.is_some() {
@@ -1669,6 +1738,27 @@ impl ComponentManifestV1 {
             self.subscription_quota_families.iter().find(|family| !self.providers.contains(*family))
         {
             return Err(ManifestErrorV1::InvalidSubscriptionQuotaFamily(family.clone()));
+        }
+        for (family, parameters) in &self.model_parameters {
+            let invalid = |detail: &str| ManifestErrorV1::InvalidModelParameters {
+                family: family.clone(),
+                detail: detail.to_owned(),
+            };
+            if !self.providers.contains(family) {
+                return Err(invalid("names a family the manifest does not declare"));
+            }
+            if !parameters.is_valid() {
+                return Err(invalid(
+                    "words must be sorted, distinct, dot-joined [a-z0-9_] segments, at most 64 of at \
+                     most 64 bytes; each exclusive group two or more sorted declared words, groups \
+                     sorted and disjoint, at most 16",
+                ));
+            }
+        }
+        if let Some(family) =
+            self.drops_unsigned_thinking.iter().find(|family| !self.providers.contains(*family))
+        {
+            return Err(ManifestErrorV1::InvalidDropsUnsignedThinkingFamily(family.clone()));
         }
         self.validate_request_passthrough()?;
         self.validate_forwarded_client_headers()?;
@@ -2177,11 +2267,13 @@ pub enum ManifestErrorV1 {
     InvalidRequestFacts { family: String, detail: String },
     /// `immutable_body_paths`, `immutable_request_headers`, `north_passthrough`,
     /// `north_request_passthrough`, `forwarded_client_headers`, `count_tokens` or
-    /// `subscription_quota_families` in a world without request declarations.
+    /// `subscription_quota_families`, `model_parameters` or `drops_unsigned_thinking` in a world
+    /// without request declarations.
     #[error(
         "immutable_body_paths, immutable_request_headers, north_passthrough, \
-         north_request_passthrough, forwarded_client_headers, count_tokens and \
-         subscription_quota_families are provider-world declarations"
+         north_request_passthrough, forwarded_client_headers, count_tokens, \
+         subscription_quota_families, model_parameters and drops_unsigned_thinking are \
+         provider-world declarations"
     )]
     DeliveryIsAProviderWorldDeclaration,
     #[error("immutable_body_paths for family `{family}`: {detail}")]
@@ -2201,6 +2293,12 @@ pub enum ManifestErrorV1 {
     InvalidCountTokens { family: String, detail: String },
     #[error("subscription_quota_families names `{0}`, a family the manifest does not declare")]
     InvalidSubscriptionQuotaFamily(String),
+    /// New in `south-provider-api` 0.62.0: a host matching this enum exhaustively must add the arm.
+    #[error("model_parameters for family `{family}`: {detail}")]
+    InvalidModelParameters { family: String, detail: String },
+    /// New in `south-provider-api` 0.62.0: a host matching this enum exhaustively must add the arm.
+    #[error("drops_unsigned_thinking names `{0}`, a family the manifest does not declare")]
+    InvalidDropsUnsignedThinkingFamily(String),
     #[error("credentials: {0}")]
     InvalidCredentials(String),
     #[error("signing: {0}")]

@@ -1,6 +1,6 @@
 {
   "name": "provider-openai-responses",
-  "version": "1.4.7",
+  "version": "1.5.0",
   "api_version": "provider-adapter-v2",
   "providers": [
     "openai-responses",
@@ -204,6 +204,26 @@
   "subscription_quota_families": [
     "openai-codex"
   ],
+  "model_parameters": {
+    "bedrock-mantle": {
+      "words": [
+        "reasoning_effort",
+        "reasoning_replay.openai.v1"
+      ]
+    },
+    "openai-codex": {
+      "words": [
+        "reasoning_effort",
+        "reasoning_replay.openai.v1"
+      ]
+    },
+    "openai-responses": {
+      "words": [
+        "reasoning_effort",
+        "reasoning_replay.openai.v1"
+      ]
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,
