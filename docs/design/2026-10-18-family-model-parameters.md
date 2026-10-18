@@ -9,7 +9,7 @@ Date: 2026-10-18
 Baseline: south `origin/main` = `7bceecfa` (release 0.73.1). Host references carry a `server:` prefix and refer to
 token-station-server `dev-v2` = `bb3dd4f2`, read on 2026-10-18; paths are under
 `gateway/src/modules/inference/` unless they say otherwise. The host record is
-`server:docs/product-review-v2/plans/2026-10-17-南向方言去硬编码设计记录.md` (the DH record; DH3, DH4). Statements
+the server's 2026-10-17 dialect de-hardcoding plan under `server:docs/product-review-v2/plans/` (the DH record; DH3, DH4). Statements
 marked **unverified** come from reading code, not from running anything.
 
 ## 1. Problem
