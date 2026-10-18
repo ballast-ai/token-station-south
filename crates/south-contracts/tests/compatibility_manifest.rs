@@ -520,8 +520,16 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 1
                 // `NorthPassthroughProtocolV2::ALL` as
                 // `host_passes_the_north_passthrough_delivery_suite_v2`, asserting that the passed
                 // case ids equal every distinct case id of each protocol; 43 is that sum.
-                // Same pin, billing forms and matrix as v1 above.
-                ("north_passthrough_delivery_v2", "not_verified", None),
+                // Same pin, billing forms and matrix as v1 above. Messages joined in 0.73.0 and
+                // was left out of the host's run, because suite version 2 put `Done` on
+                // `message_stop` while the released parser answers it on `message_delta` (the
+                // Messages pass-through record §3.5). Verified again at v0.73.1 (suite version 3):
+                // server dev-v2 `e337caa5` runs the same test over all three protocols
+                // (Responses 22, generateContent 21, Messages 20 distinct cases; 63 is that sum)
+                // and pins the Messages table at 21 fixtures. `0b60091e` re-pins to the v0.73.1
+                // tag, and dev-v2 `65947f22` carries both, with its full local matrix of 147 legs
+                // green at `af7e72c9` (reported by the host session).
+                ("north_passthrough_delivery_v2", "verified", Some(63)),
                 // north_render (render-gaps record §8, G1) verified at v0.61.0: server `0ae71a52`
                 // (carried in dev-v2 `4ecf5526`) adds `chat_stream_render_parity_tests` in
                 // `text_admission/sender.rs`, two tests that load all eight files of
