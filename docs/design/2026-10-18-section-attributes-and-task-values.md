@@ -1,6 +1,6 @@
 # Section attributes and the task-v2 value channel
 
-Status: accepted (SA-Q1 to SA-Q5 ruled by lv on 2026-10-18 as recommended; §8). Requested by lv on 2026-10-18: the host's credential fixed-column record, CF-Q1 = A, relayed by
+Status: accepted (SA-Q1 to SA-Q5 ruled by lv on 2026-10-18 as recommended; §8). Implemented (#272); released in 0.74.0. Requested by lv on 2026-10-18: the host's credential fixed-column record, CF-Q1 = A, relayed by
 token-station-server-14 and confirmed by the user. Rulings in §8.
 
 Date: 2026-10-18

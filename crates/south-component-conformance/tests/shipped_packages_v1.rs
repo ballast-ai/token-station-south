@@ -1075,7 +1075,8 @@ fn the_invoke_package_declares_the_runtime_converse_declares() {
     // Published as 1.1.17 with 0.73.1; the family model parameters record's minor made it 1.2.0
     // (`family_model_parameters_retires_every_published_0731_package_identity`).
     assert_eq!(invoke.version, "1.2.0");
-    assert_eq!(invoke.compatibility.south_runtime, "0.57.0");
+    // 1.2.0 declares `model_parameters` (record `2026-10-18-family-model-parameters.md` §7), first parsed by 0.74.0.
+    assert_eq!(invoke.compatibility.south_runtime, "0.74.0");
     assert_eq!(invoke.compatibility, read("provider-bedrock-converse").compatibility);
 }
 
@@ -1389,7 +1390,8 @@ fn the_responses_package_declares_the_runtime_that_first_admits_its_declarations
     // Published as 1.4.7 with 0.73.1; the family model parameters record's minor made it 1.5.0
     // (`family_model_parameters_retires_every_published_0731_package_identity`).
     assert_eq!(manifest.version, "1.5.0");
-    assert_eq!(manifest.compatibility.south_runtime, "0.60.0");
+    // 1.5.0 declares `model_parameters` (record `2026-10-18-family-model-parameters.md` §7), first parsed by 0.74.0.
+    assert_eq!(manifest.compatibility.south_runtime, "0.74.0");
     assert!(!manifest.immutable_body_paths.is_empty() && !manifest.north_passthrough.is_empty());
     assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
     let mut on_053 = host_range::host_range();
@@ -1499,16 +1501,24 @@ const SPEECH_RUNTIME: &str = "0.65.0";
 /// `ComponentManifestV1` refuses unknown fields; `image-gemini` needs the first runtime with media 2.
 fn declared_runtime_now(name: &str) -> &'static str {
     match name {
-        // `provider-anthropic` from 1.2.1: the Claude Code families declare
-        // `immutable_request_headers`, which no runtime before 0.67.0 parses (record
-        // `2026-10-15-immutable-request-headers.md`); 0.67.0 shipped it, so the literal. Its 1.2.0
-        // declared 0.60.0 for `subscription_quota_families` (Claude Code record §9).
-        // `provider-anthropic` 1.3.0, `provider-gemini` 1.4.0 and `provider-vertex` 1.1.0 declare
-        // `north_request_passthrough` `messages`, `forwarded_client_headers` or `count_tokens`, which
-        // no runtime before 0.73.0 parses (record `2026-10-17-messages-passthrough-and-count-tokens.md`
-        // §8.1); 0.73.0 shipped them, so the literal, as D7's packages moved to 0.60.0 in 0.60.0.
-        "provider-anthropic" | "provider-gemini" | "provider-vertex" => "0.73.0",
-        "provider-kiro" | "provider-openai-compatible" | "provider-openai-responses" => "0.60.0",
+        // The nine provider packages declare `model_parameters` (and `provider-anthropic`
+        // `drops_unsigned_thinking`), which no runtime before 0.74.0 parses (record
+        // `2026-10-18-family-model-parameters.md` §7); `task-gmi-image-v2` 0.36.0 declares section
+        // attributes, which no runtime before 0.74.0 parses and no earlier task-v2 gate ① admits
+        // (record `2026-10-18-section-attributes-and-task-values.md` §6). 0.74.0 shipped them, so
+        // the literal. Before: `provider-anthropic`, `provider-gemini` and `provider-vertex` 0.73.0
+        // (Messages pass-through record §8.1), `provider-kiro`, `provider-openai-compatible` and
+        // `provider-openai-responses` 0.60.0, the rest 0.57.0.
+        "provider-anthropic"
+        | "provider-anthropic-bedrock-invoke"
+        | "provider-bedrock-converse"
+        | "provider-bedrock-converse-bearer"
+        | "provider-gemini"
+        | "provider-kiro"
+        | "provider-openai-compatible"
+        | "provider-openai-responses"
+        | "provider-vertex"
+        | "task-gmi-image-v2" => "0.74.0",
         "image-gemini" => "0.59.0",
         // V-Q8 (design record `2026-10-14-task-min-poll-interval.md`): the first package to declare
         // `min_poll_interval_seconds`, which no runtime before 0.63.0 parses (`ComponentManifestV1`
@@ -2143,8 +2153,9 @@ fn provider_vertex_declares_the_vertex_recipe_and_the_runtime_of_its_newest_decl
     assert_eq!(manifest.config_schema["vertex-ai"], image.config_schema["vertex-ai-image"]);
     assert!(manifest.north_request_passthrough.contains_key("vertex-ai"));
     // 1.1.0 declares `count_tokens`, first parsed by 0.73.0 (record
-    // `2026-10-17-messages-passthrough-and-count-tokens.md` §8.1).
-    assert_eq!(manifest.compatibility.south_runtime, "0.73.0");
+    // `2026-10-17-messages-passthrough-and-count-tokens.md` §8.1); 1.2.0 declares
+    // `model_parameters` (record `2026-10-18-family-model-parameters.md` §7), first parsed by 0.74.0.
+    assert_eq!(manifest.compatibility.south_runtime, "0.74.0");
     assert!(manifest.compatibility.contracts.is_empty());
     assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
     let mut on_059 = host_range::host_range();
@@ -2367,7 +2378,8 @@ fn provider_kiro_declares_the_runtime_of_its_newest_declaration() {
     assert_eq!(manifest.api_version, south_provider_api::PROVIDER_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["kiro"]);
     assert!(manifest.subscription_quota_families.contains("kiro"));
-    assert_eq!(manifest.compatibility.south_runtime, "0.60.0");
+    // 1.2.0 declares `model_parameters` (record `2026-10-18-family-model-parameters.md` §7), first parsed by 0.74.0.
+    assert_eq!(manifest.compatibility.south_runtime, "0.74.0");
     assert!(manifest.compatibility.contracts.is_empty());
     assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
     let mut on_059 = host_range::host_range();
@@ -3323,15 +3335,15 @@ fn speech_azure_openai_retires_every_published_066_package_identity() {
         ("image-stability", "1.0.7", "1.0.8", "0.57.0", &[("image", 1), ("media", 1)]),
         ("image-vertex", "1.0.3", "1.0.4", "0.59.0", &[("image", 1), ("media", 2)]),
         ("image-xai", "1.0.0", "1.0.1", "0.57.0", &[("image", 1), ("media", 1)]),
-        ("provider-anthropic", "1.2.0", "1.2.1", "0.73.0", &[]),
-        ("provider-anthropic-bedrock-invoke", "1.1.10", "1.1.11", "0.57.0", &[]),
-        ("provider-bedrock-converse", "1.1.10", "1.1.11", "0.57.0", &[]),
-        ("provider-bedrock-converse-bearer", "1.1.10", "1.1.11", "0.57.0", &[]),
-        ("provider-gemini", "1.3.10", "1.3.11", "0.73.0", &[]),
-        ("provider-kiro", "1.1.1", "1.1.2", "0.60.0", &[]),
-        ("provider-openai-compatible", "2.7.0", "2.7.1", "0.60.0", &[]),
-        ("provider-openai-responses", "1.4.0", "1.4.1", "0.60.0", &[]),
-        ("provider-vertex", "1.0.0", "1.0.1", "0.73.0", &[]),
+        ("provider-anthropic", "1.2.0", "1.2.1", "0.74.0", &[]),
+        ("provider-anthropic-bedrock-invoke", "1.1.10", "1.1.11", "0.74.0", &[]),
+        ("provider-bedrock-converse", "1.1.10", "1.1.11", "0.74.0", &[]),
+        ("provider-bedrock-converse-bearer", "1.1.10", "1.1.11", "0.74.0", &[]),
+        ("provider-gemini", "1.3.10", "1.3.11", "0.74.0", &[]),
+        ("provider-kiro", "1.1.1", "1.1.2", "0.74.0", &[]),
+        ("provider-openai-compatible", "2.7.0", "2.7.1", "0.74.0", &[]),
+        ("provider-openai-responses", "1.4.0", "1.4.1", "0.74.0", &[]),
+        ("provider-vertex", "1.0.0", "1.0.1", "0.74.0", &[]),
         ("speech-azure", "1.0.1", "1.0.2", "0.65.0", &[("media", 1), ("speech", 1)]),
         ("speech-elevenlabs", "1.0.1", "1.0.2", "0.65.0", &[("media", 3), ("speech", 1)]),
         ("speech-groq", "1.0.1", "1.0.2", "0.65.0", &[("media", 1), ("speech", 1)]),
@@ -3344,7 +3356,7 @@ fn speech_azure_openai_retires_every_published_066_package_identity() {
         ("task-bailian-v2", "0.31.24", "0.31.25", "0.57.0", &[("task", 7)]),
         ("task-byteplus-v2", "0.36.24", "0.36.25", "0.57.0", &[("task", 7)]),
         ("task-gemini-omni-v2", "0.1.4", "0.1.5", "0.62.0", &[("media", 1), ("task", 8)]),
-        ("task-gmi-image-v2", "0.35.24", "0.35.25", "0.57.0", &[("task", 7)]),
+        ("task-gmi-image-v2", "0.35.24", "0.35.25", "0.74.0", &[("task", 7)]),
         ("task-kling", "1.0.27", "1.0.28", "0.57.0", &[("task", 7)]),
         ("task-kling-v2", "0.32.25", "0.32.26", "0.57.0", &[("task", 7)]),
         ("task-minimax-v2", "0.33.2", "0.33.3", "0.63.0", &[("task", 7)]),
@@ -3458,15 +3470,15 @@ fn t9_cap_field_retires_every_published_067_package_identity() {
         ("image-stability", "1.0.8", "1.0.9", "0.57.0", &[("image", 1), ("media", 1)]),
         ("image-vertex", "1.0.4", "1.0.5", "0.59.0", &[("image", 1), ("media", 2)]),
         ("image-xai", "1.0.1", "1.0.2", "0.57.0", &[("image", 1), ("media", 1)]),
-        ("provider-anthropic", "1.2.1", "1.2.2", "0.73.0", &[]),
-        ("provider-anthropic-bedrock-invoke", "1.1.11", "1.1.12", "0.57.0", &[]),
-        ("provider-bedrock-converse", "1.1.11", "1.1.12", "0.57.0", &[]),
-        ("provider-bedrock-converse-bearer", "1.1.11", "1.1.12", "0.57.0", &[]),
-        ("provider-gemini", "1.3.11", "1.3.12", "0.73.0", &[]),
-        ("provider-kiro", "1.1.2", "1.1.3", "0.60.0", &[]),
-        ("provider-openai-compatible", "2.7.1", "2.8.0", "0.60.0", &[]),
-        ("provider-openai-responses", "1.4.1", "1.4.2", "0.60.0", &[]),
-        ("provider-vertex", "1.0.1", "1.0.2", "0.73.0", &[]),
+        ("provider-anthropic", "1.2.1", "1.2.2", "0.74.0", &[]),
+        ("provider-anthropic-bedrock-invoke", "1.1.11", "1.1.12", "0.74.0", &[]),
+        ("provider-bedrock-converse", "1.1.11", "1.1.12", "0.74.0", &[]),
+        ("provider-bedrock-converse-bearer", "1.1.11", "1.1.12", "0.74.0", &[]),
+        ("provider-gemini", "1.3.11", "1.3.12", "0.74.0", &[]),
+        ("provider-kiro", "1.1.2", "1.1.3", "0.74.0", &[]),
+        ("provider-openai-compatible", "2.7.1", "2.8.0", "0.74.0", &[]),
+        ("provider-openai-responses", "1.4.1", "1.4.2", "0.74.0", &[]),
+        ("provider-vertex", "1.0.1", "1.0.2", "0.74.0", &[]),
         ("speech-azure", "1.0.2", "1.0.3", "0.65.0", &[("media", 1), ("speech", 1)]),
         ("speech-elevenlabs", "1.0.2", "1.0.3", "0.65.0", &[("media", 3), ("speech", 1)]),
         ("speech-groq", "1.0.2", "1.0.3", "0.65.0", &[("media", 1), ("speech", 1)]),
@@ -3479,7 +3491,7 @@ fn t9_cap_field_retires_every_published_067_package_identity() {
         ("task-bailian-v2", "0.31.25", "0.31.26", "0.57.0", &[("task", 7)]),
         ("task-byteplus-v2", "0.36.25", "0.36.26", "0.57.0", &[("task", 7)]),
         ("task-gemini-omni-v2", "0.1.5", "0.1.6", "0.62.0", &[("media", 1), ("task", 8)]),
-        ("task-gmi-image-v2", "0.35.25", "0.35.26", "0.57.0", &[("task", 7)]),
+        ("task-gmi-image-v2", "0.35.25", "0.35.26", "0.74.0", &[("task", 7)]),
         ("task-kling", "1.0.28", "1.0.29", "0.57.0", &[("task", 7)]),
         ("task-kling-v2", "0.32.26", "0.32.27", "0.57.0", &[("task", 7)]),
         ("task-minimax-v2", "0.33.3", "0.33.4", "0.63.0", &[("task", 7)]),
@@ -3533,15 +3545,15 @@ fn glm_thinking_retires_every_published_068_package_identity() {
         ("image-stability", "1.0.9", "1.0.10", "0.57.0", &[("image", 1), ("media", 1)]),
         ("image-vertex", "1.0.5", "1.0.6", "0.59.0", &[("image", 1), ("media", 2)]),
         ("image-xai", "1.0.2", "1.0.3", "0.57.0", &[("image", 1), ("media", 1)]),
-        ("provider-anthropic", "1.2.2", "1.2.3", "0.73.0", &[]),
-        ("provider-anthropic-bedrock-invoke", "1.1.12", "1.1.13", "0.57.0", &[]),
-        ("provider-bedrock-converse", "1.1.12", "1.1.13", "0.57.0", &[]),
-        ("provider-bedrock-converse-bearer", "1.1.12", "1.1.13", "0.57.0", &[]),
-        ("provider-gemini", "1.3.12", "1.3.13", "0.73.0", &[]),
-        ("provider-kiro", "1.1.3", "1.1.4", "0.60.0", &[]),
-        ("provider-openai-compatible", "2.8.0", "2.9.0", "0.60.0", &[]),
-        ("provider-openai-responses", "1.4.2", "1.4.3", "0.60.0", &[]),
-        ("provider-vertex", "1.0.2", "1.0.3", "0.73.0", &[]),
+        ("provider-anthropic", "1.2.2", "1.2.3", "0.74.0", &[]),
+        ("provider-anthropic-bedrock-invoke", "1.1.12", "1.1.13", "0.74.0", &[]),
+        ("provider-bedrock-converse", "1.1.12", "1.1.13", "0.74.0", &[]),
+        ("provider-bedrock-converse-bearer", "1.1.12", "1.1.13", "0.74.0", &[]),
+        ("provider-gemini", "1.3.12", "1.3.13", "0.74.0", &[]),
+        ("provider-kiro", "1.1.3", "1.1.4", "0.74.0", &[]),
+        ("provider-openai-compatible", "2.8.0", "2.9.0", "0.74.0", &[]),
+        ("provider-openai-responses", "1.4.2", "1.4.3", "0.74.0", &[]),
+        ("provider-vertex", "1.0.2", "1.0.3", "0.74.0", &[]),
         ("speech-azure", "1.0.3", "1.0.4", "0.65.0", &[("media", 1), ("speech", 1)]),
         ("speech-elevenlabs", "1.0.3", "1.0.4", "0.65.0", &[("media", 3), ("speech", 1)]),
         ("speech-groq", "1.0.3", "1.0.4", "0.65.0", &[("media", 1), ("speech", 1)]),
@@ -3554,7 +3566,7 @@ fn glm_thinking_retires_every_published_068_package_identity() {
         ("task-bailian-v2", "0.31.26", "0.31.27", "0.57.0", &[("task", 7)]),
         ("task-byteplus-v2", "0.36.26", "0.36.27", "0.57.0", &[("task", 7)]),
         ("task-gemini-omni-v2", "0.1.6", "0.1.7", "0.62.0", &[("media", 1), ("task", 8)]),
-        ("task-gmi-image-v2", "0.35.26", "0.35.27", "0.57.0", &[("task", 7)]),
+        ("task-gmi-image-v2", "0.35.26", "0.35.27", "0.74.0", &[("task", 7)]),
         ("task-kling", "1.0.29", "1.0.30", "0.57.0", &[("task", 7)]),
         ("task-kling-v2", "0.32.27", "0.32.28", "0.57.0", &[("task", 7)]),
         ("task-minimax-v2", "0.33.4", "0.33.5", "0.63.0", &[("task", 7)]),
@@ -3607,15 +3619,15 @@ fn kimi_code_retires_every_published_069_package_identity() {
         ("image-stability", "1.0.10", "1.0.11", "0.57.0", &[("image", 1), ("media", 1)]),
         ("image-vertex", "1.0.6", "1.0.7", "0.59.0", &[("image", 1), ("media", 2)]),
         ("image-xai", "1.0.3", "1.0.4", "0.57.0", &[("image", 1), ("media", 1)]),
-        ("provider-anthropic", "1.2.3", "1.2.4", "0.73.0", &[]),
-        ("provider-anthropic-bedrock-invoke", "1.1.13", "1.1.14", "0.57.0", &[]),
-        ("provider-bedrock-converse", "1.1.13", "1.1.14", "0.57.0", &[]),
-        ("provider-bedrock-converse-bearer", "1.1.13", "1.1.14", "0.57.0", &[]),
-        ("provider-gemini", "1.3.13", "1.3.14", "0.73.0", &[]),
-        ("provider-kiro", "1.1.4", "1.1.5", "0.60.0", &[]),
-        ("provider-openai-compatible", "2.9.0", "2.10.0", "0.60.0", &[]),
-        ("provider-openai-responses", "1.4.3", "1.4.4", "0.60.0", &[]),
-        ("provider-vertex", "1.0.3", "1.0.4", "0.73.0", &[]),
+        ("provider-anthropic", "1.2.3", "1.2.4", "0.74.0", &[]),
+        ("provider-anthropic-bedrock-invoke", "1.1.13", "1.1.14", "0.74.0", &[]),
+        ("provider-bedrock-converse", "1.1.13", "1.1.14", "0.74.0", &[]),
+        ("provider-bedrock-converse-bearer", "1.1.13", "1.1.14", "0.74.0", &[]),
+        ("provider-gemini", "1.3.13", "1.3.14", "0.74.0", &[]),
+        ("provider-kiro", "1.1.4", "1.1.5", "0.74.0", &[]),
+        ("provider-openai-compatible", "2.9.0", "2.10.0", "0.74.0", &[]),
+        ("provider-openai-responses", "1.4.3", "1.4.4", "0.74.0", &[]),
+        ("provider-vertex", "1.0.3", "1.0.4", "0.74.0", &[]),
         ("speech-azure", "1.0.4", "1.0.5", "0.65.0", &[("media", 1), ("speech", 1)]),
         ("speech-elevenlabs", "1.0.4", "1.0.5", "0.65.0", &[("media", 3), ("speech", 1)]),
         ("speech-groq", "1.0.4", "1.0.5", "0.65.0", &[("media", 1), ("speech", 1)]),
@@ -3628,7 +3640,7 @@ fn kimi_code_retires_every_published_069_package_identity() {
         ("task-bailian-v2", "0.31.27", "0.31.28", "0.57.0", &[("task", 7)]),
         ("task-byteplus-v2", "0.36.27", "0.36.28", "0.57.0", &[("task", 7)]),
         ("task-gemini-omni-v2", "0.1.7", "0.1.8", "0.62.0", &[("media", 1), ("task", 8)]),
-        ("task-gmi-image-v2", "0.35.27", "0.35.28", "0.57.0", &[("task", 7)]),
+        ("task-gmi-image-v2", "0.35.27", "0.35.28", "0.74.0", &[("task", 7)]),
         ("task-kling", "1.0.30", "1.0.31", "0.57.0", &[("task", 7)]),
         ("task-kling-v2", "0.32.28", "0.32.29", "0.57.0", &[("task", 7)]),
         ("task-minimax-v2", "0.33.5", "0.33.6", "0.63.0", &[("task", 7)]),
@@ -3683,15 +3695,15 @@ fn task_vertex_credentials_retires_every_published_070_package_identity() {
         ("image-stability", "1.0.11", "1.0.12", "0.57.0", &[("image", 1), ("media", 1)]),
         ("image-vertex", "1.0.7", "1.0.8", "0.59.0", &[("image", 1), ("media", 2)]),
         ("image-xai", "1.0.4", "1.0.5", "0.57.0", &[("image", 1), ("media", 1)]),
-        ("provider-anthropic", "1.2.4", "1.2.5", "0.73.0", &[]),
-        ("provider-anthropic-bedrock-invoke", "1.1.14", "1.1.15", "0.57.0", &[]),
-        ("provider-bedrock-converse", "1.1.14", "1.1.15", "0.57.0", &[]),
-        ("provider-bedrock-converse-bearer", "1.1.14", "1.1.15", "0.57.0", &[]),
-        ("provider-gemini", "1.3.14", "1.3.15", "0.73.0", &[]),
-        ("provider-kiro", "1.1.5", "1.1.6", "0.60.0", &[]),
-        ("provider-openai-compatible", "2.10.0", "2.10.1", "0.60.0", &[]),
-        ("provider-openai-responses", "1.4.4", "1.4.5", "0.60.0", &[]),
-        ("provider-vertex", "1.0.4", "1.0.5", "0.73.0", &[]),
+        ("provider-anthropic", "1.2.4", "1.2.5", "0.74.0", &[]),
+        ("provider-anthropic-bedrock-invoke", "1.1.14", "1.1.15", "0.74.0", &[]),
+        ("provider-bedrock-converse", "1.1.14", "1.1.15", "0.74.0", &[]),
+        ("provider-bedrock-converse-bearer", "1.1.14", "1.1.15", "0.74.0", &[]),
+        ("provider-gemini", "1.3.14", "1.3.15", "0.74.0", &[]),
+        ("provider-kiro", "1.1.5", "1.1.6", "0.74.0", &[]),
+        ("provider-openai-compatible", "2.10.0", "2.10.1", "0.74.0", &[]),
+        ("provider-openai-responses", "1.4.4", "1.4.5", "0.74.0", &[]),
+        ("provider-vertex", "1.0.4", "1.0.5", "0.74.0", &[]),
         ("speech-azure", "1.0.5", "1.0.6", "0.65.0", &[("media", 1), ("speech", 1)]),
         ("speech-elevenlabs", "1.0.5", "1.0.6", "0.65.0", &[("media", 3), ("speech", 1)]),
         ("speech-groq", "1.0.5", "1.0.6", "0.65.0", &[("media", 1), ("speech", 1)]),
@@ -3704,7 +3716,7 @@ fn task_vertex_credentials_retires_every_published_070_package_identity() {
         ("task-bailian-v2", "0.31.28", "0.31.29", "0.57.0", &[("task", 7)]),
         ("task-byteplus-v2", "0.36.28", "0.36.29", "0.57.0", &[("task", 7)]),
         ("task-gemini-omni-v2", "0.1.8", "0.2.0", "0.62.0", &[("media", 1), ("task", 8)]),
-        ("task-gmi-image-v2", "0.35.28", "0.35.29", "0.57.0", &[("task", 7)]),
+        ("task-gmi-image-v2", "0.35.28", "0.35.29", "0.74.0", &[("task", 7)]),
         ("task-kling", "1.0.31", "1.0.32", "0.57.0", &[("task", 7)]),
         ("task-kling-v2", "0.32.29", "0.32.30", "0.57.0", &[("task", 7)]),
         ("task-minimax-v2", "0.33.6", "0.33.7", "0.63.0", &[("task", 7)]),
@@ -3760,15 +3772,15 @@ fn explicit_cache_reads_retires_every_published_071_package_identity() {
         ("image-stability", "1.0.12", "1.0.13", "0.57.0", &[("image", 1), ("media", 1)]),
         ("image-vertex", "1.0.8", "1.0.9", "0.59.0", &[("image", 1), ("media", 2)]),
         ("image-xai", "1.0.5", "1.0.6", "0.57.0", &[("image", 1), ("media", 1)]),
-        ("provider-anthropic", "1.2.5", "1.2.6", "0.73.0", &[]),
-        ("provider-anthropic-bedrock-invoke", "1.1.15", "1.1.16", "0.57.0", &[]),
-        ("provider-bedrock-converse", "1.1.15", "1.1.16", "0.57.0", &[]),
-        ("provider-bedrock-converse-bearer", "1.1.15", "1.1.16", "0.57.0", &[]),
-        ("provider-gemini", "1.3.15", "1.3.16", "0.73.0", &[]),
-        ("provider-kiro", "1.1.6", "1.1.7", "0.60.0", &[]),
-        ("provider-openai-compatible", "2.10.1", "2.11.0", "0.60.0", &[]),
-        ("provider-openai-responses", "1.4.5", "1.4.6", "0.60.0", &[]),
-        ("provider-vertex", "1.0.5", "1.0.6", "0.73.0", &[]),
+        ("provider-anthropic", "1.2.5", "1.2.6", "0.74.0", &[]),
+        ("provider-anthropic-bedrock-invoke", "1.1.15", "1.1.16", "0.74.0", &[]),
+        ("provider-bedrock-converse", "1.1.15", "1.1.16", "0.74.0", &[]),
+        ("provider-bedrock-converse-bearer", "1.1.15", "1.1.16", "0.74.0", &[]),
+        ("provider-gemini", "1.3.15", "1.3.16", "0.74.0", &[]),
+        ("provider-kiro", "1.1.6", "1.1.7", "0.74.0", &[]),
+        ("provider-openai-compatible", "2.10.1", "2.11.0", "0.74.0", &[]),
+        ("provider-openai-responses", "1.4.5", "1.4.6", "0.74.0", &[]),
+        ("provider-vertex", "1.0.5", "1.0.6", "0.74.0", &[]),
         ("speech-azure", "1.0.6", "1.0.7", "0.65.0", &[("media", 1), ("speech", 1)]),
         ("speech-elevenlabs", "1.0.6", "1.0.7", "0.65.0", &[("media", 3), ("speech", 1)]),
         ("speech-groq", "1.0.6", "1.0.7", "0.65.0", &[("media", 1), ("speech", 1)]),
@@ -3781,7 +3793,7 @@ fn explicit_cache_reads_retires_every_published_071_package_identity() {
         ("task-bailian-v2", "0.31.29", "0.31.30", "0.57.0", &[("task", 7)]),
         ("task-byteplus-v2", "0.36.29", "0.36.30", "0.57.0", &[("task", 7)]),
         ("task-gemini-omni-v2", "0.2.0", "0.2.1", "0.62.0", &[("media", 1), ("task", 8)]),
-        ("task-gmi-image-v2", "0.35.29", "0.35.30", "0.57.0", &[("task", 7)]),
+        ("task-gmi-image-v2", "0.35.29", "0.35.30", "0.74.0", &[("task", 7)]),
         ("task-kling", "1.0.32", "1.0.33", "0.57.0", &[("task", 7)]),
         ("task-kling-v2", "0.32.30", "0.32.31", "0.57.0", &[("task", 7)]),
         ("task-minimax-v2", "0.33.7", "0.33.8", "0.63.0", &[("task", 7)]),
@@ -3840,15 +3852,15 @@ fn messages_passthrough_retires_every_published_072_package_identity() {
         ("image-stability", "1.0.13", "1.0.14", "0.57.0", &[("image", 1), ("media", 1)]),
         ("image-vertex", "1.0.9", "1.0.10", "0.59.0", &[("image", 1), ("media", 2)]),
         ("image-xai", "1.0.6", "1.0.7", "0.57.0", &[("image", 1), ("media", 1)]),
-        ("provider-anthropic-bedrock-invoke", "1.1.16", "1.1.17", "0.57.0", &[]),
-        ("provider-anthropic", "1.2.6", "1.3.0", "0.73.0", &[]),
-        ("provider-bedrock-converse-bearer", "1.1.16", "1.1.17", "0.57.0", &[]),
-        ("provider-bedrock-converse", "1.1.16", "1.1.17", "0.57.0", &[]),
-        ("provider-gemini", "1.3.16", "1.4.0", "0.73.0", &[]),
-        ("provider-kiro", "1.1.7", "1.1.8", "0.60.0", &[]),
-        ("provider-openai-compatible", "2.11.0", "2.11.1", "0.60.0", &[]),
-        ("provider-openai-responses", "1.4.6", "1.4.7", "0.60.0", &[]),
-        ("provider-vertex", "1.0.6", "1.1.0", "0.73.0", &[]),
+        ("provider-anthropic-bedrock-invoke", "1.1.16", "1.1.17", "0.74.0", &[]),
+        ("provider-anthropic", "1.2.6", "1.3.0", "0.74.0", &[]),
+        ("provider-bedrock-converse-bearer", "1.1.16", "1.1.17", "0.74.0", &[]),
+        ("provider-bedrock-converse", "1.1.16", "1.1.17", "0.74.0", &[]),
+        ("provider-gemini", "1.3.16", "1.4.0", "0.74.0", &[]),
+        ("provider-kiro", "1.1.7", "1.1.8", "0.74.0", &[]),
+        ("provider-openai-compatible", "2.11.0", "2.11.1", "0.74.0", &[]),
+        ("provider-openai-responses", "1.4.6", "1.4.7", "0.74.0", &[]),
+        ("provider-vertex", "1.0.6", "1.1.0", "0.74.0", &[]),
         ("speech-azure", "1.0.7", "1.0.8", "0.65.0", &[("media", 1), ("speech", 1)]),
         ("speech-elevenlabs", "1.0.7", "1.0.8", "0.65.0", &[("media", 3), ("speech", 1)]),
         ("speech-groq", "1.0.7", "1.0.8", "0.65.0", &[("media", 1), ("speech", 1)]),
@@ -3861,7 +3873,7 @@ fn messages_passthrough_retires_every_published_072_package_identity() {
         ("task-bailian-v2", "0.31.30", "0.31.31", "0.57.0", &[("task", 7)]),
         ("task-byteplus-v2", "0.36.30", "0.36.31", "0.57.0", &[("task", 7)]),
         ("task-gemini-omni-v2", "0.2.1", "0.2.2", "0.62.0", &[("media", 1), ("task", 8)]),
-        ("task-gmi-image-v2", "0.35.30", "0.35.31", "0.57.0", &[("task", 7)]),
+        ("task-gmi-image-v2", "0.35.30", "0.35.31", "0.74.0", &[("task", 7)]),
         ("task-kling-v2", "0.32.31", "0.32.32", "0.57.0", &[("task", 7)]),
         ("task-kling", "1.0.33", "1.0.34", "0.57.0", &[("task", 7)]),
         ("task-minimax-v2", "0.33.8", "0.33.9", "0.63.0", &[("task", 7)]),
@@ -3928,15 +3940,15 @@ fn family_model_parameters_retires_every_published_0731_package_identity() {
         ("image-stability", "1.0.14", "1.0.15", "0.57.0", &[("image", 1), ("media", 1)]),
         ("image-vertex", "1.0.10", "1.0.11", "0.59.0", &[("image", 1), ("media", 2)]),
         ("image-xai", "1.0.7", "1.0.8", "0.57.0", &[("image", 1), ("media", 1)]),
-        ("provider-anthropic-bedrock-invoke", "1.1.17", "1.2.0", "0.57.0", &[]),
-        ("provider-anthropic", "1.3.0", "1.4.0", "0.73.0", &[]),
-        ("provider-bedrock-converse-bearer", "1.1.17", "1.2.0", "0.57.0", &[]),
-        ("provider-bedrock-converse", "1.1.17", "1.2.0", "0.57.0", &[]),
-        ("provider-gemini", "1.4.0", "1.5.0", "0.73.0", &[]),
-        ("provider-kiro", "1.1.8", "1.2.0", "0.60.0", &[]),
-        ("provider-openai-compatible", "2.11.1", "2.12.0", "0.60.0", &[]),
-        ("provider-openai-responses", "1.4.7", "1.5.0", "0.60.0", &[]),
-        ("provider-vertex", "1.1.0", "1.2.0", "0.73.0", &[]),
+        ("provider-anthropic-bedrock-invoke", "1.1.17", "1.2.0", "0.74.0", &[]),
+        ("provider-anthropic", "1.3.0", "1.4.0", "0.74.0", &[]),
+        ("provider-bedrock-converse-bearer", "1.1.17", "1.2.0", "0.74.0", &[]),
+        ("provider-bedrock-converse", "1.1.17", "1.2.0", "0.74.0", &[]),
+        ("provider-gemini", "1.4.0", "1.5.0", "0.74.0", &[]),
+        ("provider-kiro", "1.1.8", "1.2.0", "0.74.0", &[]),
+        ("provider-openai-compatible", "2.11.1", "2.12.0", "0.74.0", &[]),
+        ("provider-openai-responses", "1.4.7", "1.5.0", "0.74.0", &[]),
+        ("provider-vertex", "1.1.0", "1.2.0", "0.74.0", &[]),
         ("speech-azure", "1.0.8", "1.0.9", "0.65.0", &[("media", 1), ("speech", 1)]),
         ("speech-elevenlabs", "1.0.8", "1.0.9", "0.65.0", &[("media", 3), ("speech", 1)]),
         ("speech-groq", "1.0.8", "1.0.9", "0.65.0", &[("media", 1), ("speech", 1)]),
@@ -3949,7 +3961,7 @@ fn family_model_parameters_retires_every_published_0731_package_identity() {
         ("task-bailian-v2", "0.31.31", "0.31.32", "0.57.0", &[("task", 7)]),
         ("task-byteplus-v2", "0.36.31", "0.36.32", "0.57.0", &[("task", 7)]),
         ("task-gemini-omni-v2", "0.2.2", "0.2.3", "0.62.0", &[("media", 1), ("task", 8)]),
-        ("task-gmi-image-v2", "0.35.31", "0.36.0", "0.57.0", &[("task", 7)]),
+        ("task-gmi-image-v2", "0.35.31", "0.36.0", "0.74.0", &[("task", 7)]),
         ("task-kling-v2", "0.32.32", "0.32.33", "0.57.0", &[("task", 7)]),
         ("task-kling", "1.0.34", "1.0.35", "0.57.0", &[("task", 7)]),
         ("task-minimax-v2", "0.33.9", "0.33.10", "0.63.0", &[("task", 7)]),

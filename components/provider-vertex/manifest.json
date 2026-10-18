@@ -177,7 +177,7 @@
     "kernel_version": "0.5.0",
     "kernel_revision": "c0bca10c2d9f9a439680865feb65c9edf598fc65",
     "wit_package": "token-station:adapter@2.0.0",
-    "south_runtime": "0.73.0",
+    "south_runtime": "0.74.0",
     "runtime_abi": 1,
     "kernel_contracts": {
       "canonical_ir": 4,

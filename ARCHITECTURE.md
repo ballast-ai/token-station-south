@@ -211,7 +211,18 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.73.1; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.61.0 and 0.72.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.74.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.62.0 and 0.73.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**v0.74.0 (family model parameters, section credential attributes, task-v2 value channel)**: release record
+`docs/design/2026-10-18-release-0.74.0.md`. Design records `docs/design/2026-10-18-family-model-parameters.md` and
+`docs/design/2026-10-18-section-attributes-and-task-values.md` (lv, 2026-10-18, every open point ruled). The provider
+world gains `model_parameters` (per family, the words a package reads and its exclusive sets; the host derives
+namespaces and admitted words from loaded packages) and `drops_unsigned_thinking` (only `anthropic`);
+`provider-anthropic` protects `anthropic-version`, and every provider family refuses a forced tool choice itself.
+`CredentialsV1.attributes` exports a stored non-secret field whatever its slot's source; task v2 gains the value channel,
+and `task-gmi-image-v2` 0.36.0 reads its organization id from `declared`. The nine provider packages and
+`task-gmi-image-v2` take a minor and raise `south_runtime` to 0.74.0 in the release commit. Q47 against v0.73.1:
+`south-provider-api` 0.62.0 and `south-component-conformance` 0.73.0; every other package takes a patch. No contract
+number changes; the kernel pin is unchanged.
 **v0.73.1 (Messages pass-through delivery suite follows the parser)**: release record
 `docs/design/2026-10-18-release-0.73.1.md`. A patch release of #268, from the Messages pass-through record §3.5
 (ruled 2026-10-17): `Done` arrives on the `message_delta` that carries usage, as `provider-anthropic` reports it
