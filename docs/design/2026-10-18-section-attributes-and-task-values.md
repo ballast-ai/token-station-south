@@ -1,7 +1,7 @@
 # Section attributes and the task-v2 value channel
 
-Status: proposed. Requested by lv on 2026-10-18: the host's credential fixed-column record, CF-Q1 = A, relayed by
-token-station-server-14 and confirmed by the user. Open points in §8.
+Status: accepted (SA-Q1 to SA-Q5 ruled by lv on 2026-10-18 as recommended; §8). Requested by lv on 2026-10-18: the host's credential fixed-column record, CF-Q1 = A, relayed by
+token-station-server-14 and confirmed by the user. Rulings in §8.
 
 Date: 2026-10-18
 
@@ -130,18 +130,20 @@ splitting the flag would give `value_channel` two meanings.
 - `south-provider-conformance`: the credential recipe suite gains section-attribute cases (a stored field exported,
   absent then persisted).
 
-## 8. Open points
+## 8. Rulings
 
-- **SA-Q1** S1 shape: a section-level `attributes` (recommended), or a zero-step recipe presenting a field. The host
+- **SA-Q1** **Ruled as recommended (lv, 2026-10-18).** S1 shape: a section-level `attributes` (recommended), or a zero-step recipe presenting a field. The host
   record also recommends the section level.
-- **SA-Q2** Should task-v2 `value_channel` open `config_schema` too? Recommended: yes, one flag with one meaning; no
+- **SA-Q2** **Ruled as recommended (lv, 2026-10-18).** Should task-v2 `value_channel` open `config_schema` too? Recommended: yes, one flag with one meaning; no
   task package declares a config key until it needs one.
-- **SA-Q3** Should the GMI component fall back to `extensions.organization_id`? Recommended: yes, for 0.74.0, and
+- **SA-Q3** **Ruled as recommended (lv, 2026-10-18).** Should the GMI component fall back to `extensions.organization_id`? Recommended: yes, for 0.74.0, and
   drop the fallback in a later release once the host's CF5 has landed and stops writing the extension.
-- **SA-Q4** Leave the task contract at 7 and rely on the runtime floor? Recommended: yes.
-- **SA-Q5** The syntax of `organization_id`: `printable_ascii` of 128 bytes (recommended, since the value format is
+- **SA-Q4** **Ruled as recommended (lv, 2026-10-18).** Leave the task contract at 7 and rely on the runtime floor? Recommended: yes.
+- **SA-Q5** **Ruled as recommended (lv, 2026-10-18).** The syntax of `organization_id`: `printable_ascii` of 128 bytes (recommended, since the value format is
   not documented), or `token`.
 
 ## Revision note
 
 - 2026-10-18: first draft. Not implemented, built or tested.
+- 2026-10-18: lv ruled SA-Q1 to SA-Q5 as recommended and agreed to ship with #272 in 0.74.0 (relayed by
+  token-station-server-14, confirmed by the user). Status accepted.
