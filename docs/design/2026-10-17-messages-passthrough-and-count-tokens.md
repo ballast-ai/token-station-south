@@ -3,7 +3,7 @@
 Status: accepted (lv, 2026-10-17: Q1–Q6 all as recommended, §9; confirmed in this repository's session). Requested
 by the host (server-14 session, 2026-10-17), relaying lv's ruling of the same day that the host's native `gemini` and
 `anthropic` provider types are deleted once their families run on components. Three gaps stop that deletion; this
-record decides the south half of all three. Implemented (#266); released in 0.73.0.
+record decides the south half of all three. Implemented (#266); released in 0.73.0. The §3.5 correction (#268) is released in 0.73.1.
 
 Date: 2026-10-17
 

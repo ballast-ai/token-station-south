@@ -211,7 +211,15 @@ misread as a boundary violation.
 凭证、计价、任务/资金/outbox 原子提交和交付许可。等待显式注入时钟与取消，
 inspect 可调用共享 observe 推进一步，等待到期本身不改变任务或资金。
 
-This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.73.0; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.61.0 and 0.72.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+This library carries its own Rust version, 0.1.0. The component runtime and the workspace-versioned crates are at v0.73.1; `south-contracts`, `south-provider-api` and `south-component-conformance`, which every component links, carry versions of their own (currently 0.56.0, 0.61.0 and 0.72.0) so that a release which leaves them unchanged re-identifies no package (boundary record §13.12, §16 Q47).
+**v0.73.1 (Messages pass-through delivery suite follows the parser)**: release record
+`docs/design/2026-10-18-release-0.73.1.md`. A patch release of #268, from the Messages pass-through record §3.5
+(ruled 2026-10-17): `Done` arrives on the `message_delta` that carries usage, as `provider-anthropic` reports it
+(Anthropic record D3), and the host withholds that frame, any `ping` and `message_stop` until the settlement persists.
+Delivery suite v2 moves to suite version 3 (`compatibility.json`); the server host's `north_passthrough_delivery_v2`
+entry stays `not_verified`. Only `south-provider-conformance` and `south-testkit` changed; neither links into a
+component, the three guest-linked crates are unchanged, and no package is re-identified.
+
 **v0.73.0 (Messages pass-through, forwarded client headers, count tokens)**: release record
 `docs/design/2026-10-17-release-0.73.0.md`. Design record
 `docs/design/2026-10-17-messages-passthrough-and-count-tokens.md` (lv, 2026-10-17, Q1–Q6 as recommended). Three gaps
