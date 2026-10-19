@@ -45,7 +45,7 @@ use crate::reference_bedrock_converse::exception_name;
 pub const NAME: &str = "provider-kiro";
 
 /// The package version.
-pub const VERSION: &str = "1.2.0";
+pub const VERSION: &str = "1.3.0";
 
 /// The family this package serves.
 pub const FAMILY: &str = "kiro";
@@ -119,9 +119,58 @@ fn attempt_id(request: &ChatRequest) -> ComponentResultV1<&str> {
     }
 }
 
-/// The refusal of an image, wherever the native arm refuses one (KR1).
-fn image_refused() -> ErrorEnvelope {
-    capability("this upstream takes text and tools only; image input is refused")
+/// The `images` formats of the upstream's user input, by media type (KR1 revised, lv 2026-10-19: the
+/// production native arm took images in user turns from 2026-10-16, server `b88383cb`).
+const IMAGE_FORMATS: [(&str, &str); 4] =
+    [("image/png", "png"), ("image/jpeg", "jpeg"), ("image/gif", "gif"), ("image/webp", "webp")];
+
+/// The refusal of an image in an assistant turn: the upstream's assistant entry has no image slot.
+fn assistant_image_refused() -> ErrorEnvelope {
+    capability("this upstream takes images in user turns only; an assistant turn carries one")
+}
+
+/// One `images` entry of a user input: the base64 bytes passed through verbatim (this component
+/// never decodes them) under the format the media type names. Inline bytes only: a remote image has
+/// no representation on this wire.
+fn image_entry(media_type: &str, data: &str) -> ComponentResultV1<Value> {
+    let Some((_, format)) =
+        IMAGE_FORMATS.iter().find(|(mime, _)| mime.eq_ignore_ascii_case(media_type))
+    else {
+        return Err(capability(format!(
+            "this upstream supports png, jpeg, gif and webp images; `{media_type}` is not one"
+        )));
+    };
+    let base64 = |byte: u8| byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'/' | b'=');
+    if data.is_empty() || !data.len().is_multiple_of(4) || !data.bytes().all(base64) {
+        return Err(invalid_request("an image's bytes must be non-empty base64"));
+    }
+    Ok(json!({"format": format, "source": {"bytes": data}}))
+}
+
+/// An IR image part (`image_url`) as an `images` entry: a `data:<type>;base64,` URL only.
+fn image_url_entry(url: &str) -> ComponentResultV1<Value> {
+    let Some((media_type, data)) =
+        url.strip_prefix("data:").and_then(|rest| rest.split_once(";base64,"))
+    else {
+        return Err(capability(
+            "this upstream takes inline image bytes only; fetch the image and inline it as a \
+             base64 data URL",
+        ));
+    };
+    image_entry(media_type, data)
+}
+
+/// An unmodelled `image` block (the Messages shape the native first hop sends verbatim) as an
+/// `images` entry: a `base64` source only, as the native second hop reads it.
+fn image_block_entry(block: &Value) -> ComponentResultV1<Value> {
+    let source = block.get("source");
+    let field = |key: &str| source.and_then(|source| source.get(key)).and_then(Value::as_str);
+    if field("type") != Some("base64") {
+        return Err(capability(
+            "this upstream takes inline image bytes only; an image block's source must be base64",
+        ));
+    }
+    image_entry(field("media_type").unwrap_or_default(), field("data").unwrap_or_default())
 }
 
 /// What the native arm reads from a user or assistant message.
@@ -130,7 +179,9 @@ fn image_refused() -> ErrorEnvelope {
 /// part this crate does not model verbatim; the second hop (server `translate_kiro.rs`) then reads
 /// the blocks by their `type`: `text` blocks are the text, concatenated with no separator; `tool_use`
 /// blocks are an assistant entry's `toolUses`; `tool_result` blocks are a user entry's
-/// `toolResults`; an `image` block refuses the request; any other block is dropped. Reasoning
+/// `toolResults`; an image is a user entry's `images` entry, an image inside a `tool_result` block
+/// promoted to the turn that carries the block, and refuses the request in an assistant turn (KR1
+/// revised, lv 2026-10-19); any other block is dropped. Reasoning
 /// parts have no slot on this wire and are dropped (KR12). A part this crate does not model is read
 /// the same way, so the component sends what the native arm sends (KR2, aligned 2026-10-14).
 #[derive(Default)]
@@ -138,9 +189,31 @@ struct Read {
     text: String,
     tool_uses: Vec<Value>,
     tool_results: Vec<Value>,
+    images: Vec<Value>,
 }
 
-fn read_parts(content: Option<&Content>) -> ComponentResultV1<Read> {
+/// Which side of the conversation a message is on: only a user turn has an image slot.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Side {
+    User,
+    Assistant,
+}
+
+impl Read {
+    fn image(
+        &mut self,
+        side: Side,
+        entry: impl FnOnce() -> ComponentResultV1<Value>,
+    ) -> ComponentResultV1<()> {
+        if side == Side::Assistant {
+            return Err(assistant_image_refused());
+        }
+        self.images.push(entry()?);
+        Ok(())
+    }
+}
+
+fn read_parts(content: Option<&Content>, side: Side) -> ComponentResultV1<Read> {
     let mut read = Read::default();
     match content {
         None => {}
@@ -150,8 +223,10 @@ fn read_parts(content: Option<&Content>) -> ComponentResultV1<Read> {
                 match part {
                     ContentPart::Text { text, .. } => read.text.push_str(text),
                     ContentPart::Thinking { .. } | ContentPart::RedactedThinking { .. } => {}
-                    ContentPart::ImageUrl { .. } => return Err(image_refused()),
-                    ContentPart::Unknown(block) => read_unmodelled(block, &mut read)?,
+                    ContentPart::ImageUrl { image_url, .. } => {
+                        read.image(side, || image_url_entry(&image_url.url))?;
+                    }
+                    ContentPart::Unknown(block) => read_unmodelled(block, side, &mut read)?,
                 }
             }
         }
@@ -161,11 +236,11 @@ fn read_parts(content: Option<&Content>) -> ComponentResultV1<Read> {
 
 /// A part this crate does not model, read as the native second hop reads the block the first hop
 /// sent verbatim: by its `type`, each field defaulted as the native arm defaults it.
-fn read_unmodelled(block: &Value, read: &mut Read) -> ComponentResultV1<()> {
+fn read_unmodelled(block: &Value, side: Side, read: &mut Read) -> ComponentResultV1<()> {
     let text_of = |key: &str| block.get(key).and_then(Value::as_str);
     match text_of("type") {
         Some("text") => read.text.push_str(text_of("text").unwrap_or_default()),
-        Some("image") => return Err(image_refused()),
+        Some("image") => read.image(side, || image_block_entry(block))?,
         Some("tool_use") => read.tool_uses.push(json!({
             "toolUseId": text_of("id").unwrap_or_default(),
             "name": text_of("name").unwrap_or_default(),
@@ -182,6 +257,15 @@ fn read_unmodelled(block: &Value, read: &mut Read) -> ComponentResultV1<()> {
                 "content": [{"text": unmodelled_result_text(block.get("content"))}],
                 "status": status,
             }));
+            // The tool result has no image slot: its images go to the turn that carries it.
+            if let Some(Value::Array(inner)) = block.get("content") {
+                for image in inner
+                    .iter()
+                    .filter(|inner| inner.get("type").and_then(Value::as_str) == Some("image"))
+                {
+                    read.image(side, || image_block_entry(image))?;
+                }
+            }
         }
         _ => {}
     }
@@ -204,7 +288,9 @@ fn unmodelled_result_text(content: Option<&Value>) -> String {
 
 /// The text of a tool message, as the native first hop's `tool_result` block carries it: its text
 /// parts concatenated. Every other part is dropped there, an image and a part this crate does not
-/// model included, so the native arm sends the rest (KR1's scope, aligned 2026-10-14).
+/// model included, so the native arm sends the rest (KR1's scope, aligned 2026-10-14; an image in an
+/// IR tool message stays dropped after KR1's revision, since the north codec keeps only the text of
+/// a tool result and no image reaches this part).
 fn tool_text(content: Option<&Content>) -> String {
     match content {
         None => String::new(),
@@ -241,10 +327,13 @@ fn system_text(request: &ChatRequest) -> Option<String> {
 }
 
 /// One user-side entry: a user turn or a tool result.
-fn user_input(content: &str, tool_results: Vec<Value>) -> Map<String, Value> {
+fn user_input(content: &str, tool_results: Vec<Value>, images: Vec<Value>) -> Map<String, Value> {
     let mut entry = Map::new();
     entry.insert("content".to_owned(), json!(content));
     entry.insert("origin".to_owned(), json!(ORIGIN));
+    if !images.is_empty() {
+        entry.insert("images".to_owned(), Value::Array(images));
+    }
     if !tool_results.is_empty() {
         entry.insert(
             "userInputMessageContext".to_owned(),
@@ -301,12 +390,12 @@ enum Entry {
 fn entry_of(message: &Message) -> ComponentResultV1<Entry> {
     match message.role {
         Role::User => {
-            let read = read_parts(message.content.as_ref())?;
-            Ok(Entry::User(user_input(&read.text, read.tool_results)))
+            let read = read_parts(message.content.as_ref(), Side::User)?;
+            Ok(Entry::User(user_input(&read.text, read.tool_results, read.images)))
         }
-        Role::Tool => Ok(Entry::User(user_input("", vec![tool_result(message)?]))),
+        Role::Tool => Ok(Entry::User(user_input("", vec![tool_result(message)?], Vec::new()))),
         Role::Assistant => {
-            let read = read_parts(message.content.as_ref())?;
+            let read = read_parts(message.content.as_ref(), Side::Assistant)?;
             let mut entry = Map::new();
             entry.insert("content".to_owned(), json!(read.text));
             // Unmodelled `tool_use` blocks sit among the parts, before the calls the first hop
@@ -335,11 +424,11 @@ fn current_of(message: &Message) -> ComponentResultV1<Map<String, Value>> {
             Entry::Assistant(_) => Err(internal("a user-side message became an assistant entry")),
         },
         Role::Assistant => {
-            let read = read_parts(message.content.as_ref())?;
+            let read = read_parts(message.content.as_ref(), Side::Assistant)?;
             for call in &message.tool_calls {
                 tool_use(call)?;
             }
-            Ok(user_input(&read.text, read.tool_results))
+            Ok(user_input(&read.text, read.tool_results, read.images))
         }
         Role::System => Err(internal("a system message reached the entry mapping")),
     }

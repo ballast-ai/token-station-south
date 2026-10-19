@@ -712,7 +712,9 @@ fn the_t9_families_retire_the_patch_identity() {
     // (`messages_passthrough_retires_every_published_072_package_identity`).
     // Published as 2.11.1 with 0.73.1; the family model parameters record's minor made it 2.12.0
     // (`family_model_parameters_retires_every_published_0731_package_identity`).
-    assert_eq!(manifest.version, "2.12.0");
+    // Published as 2.12.0 with 0.74.0; the Kiro image input record's Q47 bump made it 2.12.1
+    // (`kiro_images_retires_every_published_074_package_identity`).
+    assert_eq!(manifest.version, "2.12.1");
     assert_eq!(OpenAiCompatibleReferenceV1.metadata().version, manifest.version);
     // 2.12.0 declares `model_parameters` (record `2026-10-18-family-model-parameters.md` §7), first parsed by 0.74.0.
     assert_eq!(manifest.compatibility.south_runtime, "0.74.0");

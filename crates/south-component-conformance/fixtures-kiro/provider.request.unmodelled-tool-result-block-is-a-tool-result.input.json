@@ -37,7 +37,12 @@
                 "text": "city"
               },
               {
-                "type": "image"
+                "type": "image",
+                "source": {
+                  "type": "base64",
+                  "media_type": "image/jpeg",
+                  "data": "AAAA"
+                }
               }
             ]
           },

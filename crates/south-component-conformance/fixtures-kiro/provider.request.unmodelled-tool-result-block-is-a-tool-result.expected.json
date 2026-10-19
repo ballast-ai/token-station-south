@@ -53,7 +53,15 @@
                   "toolUseId": "toolu_x"
                 }
               ]
-            }
+            },
+            "images": [
+              {
+                "format": "jpeg",
+                "source": {
+                  "bytes": "AAAA"
+                }
+              }
+            ]
           }
         },
         {

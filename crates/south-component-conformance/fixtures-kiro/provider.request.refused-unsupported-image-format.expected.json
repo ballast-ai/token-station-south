@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "capability",
+    "http_status": 400,
+    "message": "this upstream supports png, jpeg, gif and webp images; `image/bmp` is not one"
+  }
+}

@@ -1074,7 +1074,9 @@ fn the_invoke_package_declares_the_runtime_converse_declares() {
     // (`messages_passthrough_retires_every_published_072_package_identity`).
     // Published as 1.1.17 with 0.73.1; the family model parameters record's minor made it 1.2.0
     // (`family_model_parameters_retires_every_published_0731_package_identity`).
-    assert_eq!(invoke.version, "1.2.0");
+    // Published as 1.2.0 with 0.74.0; the Kiro image input record's Q47 bump made it 1.2.1
+    // (`kiro_images_retires_every_published_074_package_identity`).
+    assert_eq!(invoke.version, "1.2.1");
     // 1.2.0 declares `model_parameters` (record `2026-10-18-family-model-parameters.md` §7), first parsed by 0.74.0.
     assert_eq!(invoke.compatibility.south_runtime, "0.74.0");
     assert_eq!(invoke.compatibility, read("provider-bedrock-converse").compatibility);
@@ -1389,7 +1391,9 @@ fn the_responses_package_declares_the_runtime_that_first_admits_its_declarations
     // (`messages_passthrough_retires_every_published_072_package_identity`).
     // Published as 1.4.7 with 0.73.1; the family model parameters record's minor made it 1.5.0
     // (`family_model_parameters_retires_every_published_0731_package_identity`).
-    assert_eq!(manifest.version, "1.5.0");
+    // Published as 1.5.0 with 0.74.0; the Kiro image input record's Q47 bump made it 1.5.1
+    // (`kiro_images_retires_every_published_074_package_identity`).
+    assert_eq!(manifest.version, "1.5.1");
     // 1.5.0 declares `model_parameters` (record `2026-10-18-family-model-parameters.md` §7), first parsed by 0.74.0.
     assert_eq!(manifest.compatibility.south_runtime, "0.74.0");
     assert!(!manifest.immutable_body_paths.is_empty() && !manifest.north_passthrough.is_empty());
@@ -1854,7 +1858,9 @@ fn image_gemini_declares_media_2_which_a_media_1_host_refuses() {
     // (`messages_passthrough_retires_every_published_072_package_identity`).
     // Published as 1.0.15 with 0.73.1; the family model parameters record's Q47 bump made it 1.0.16
     // (`family_model_parameters_retires_every_published_0731_package_identity`).
-    assert_eq!(manifest.version, "1.0.16");
+    // Published as 1.0.16 with 0.74.0; the Kiro image input record's Q47 bump made it 1.0.17
+    // (`kiro_images_retires_every_published_074_package_identity`).
+    assert_eq!(manifest.version, "1.0.17");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["gemini-image"]);
     assert!(manifest.declared_keys("gemini-image").is_empty());
@@ -1910,7 +1916,9 @@ fn the_i3_1_image_packages_declare_the_runtime_and_values_of_the_record() {
         // (`messages_passthrough_retires_every_published_072_package_identity`).
         // Published as 1.0.16 with 0.73.1; the family model parameters record's Q47 bump made it 1.0.17
         // (`family_model_parameters_retires_every_published_0731_package_identity`).
-        assert_eq!(manifest.version, "1.0.17", "{name}");
+        // Published as 1.0.17 with 0.74.0; the Kiro image input record's Q47 bump made it 1.0.18
+        // (`kiro_images_retires_every_published_074_package_identity`).
+        assert_eq!(manifest.version, "1.0.18", "{name}");
         assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD, "{name}");
         assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), [family], "{name}");
         assert_eq!(manifest.compatibility.south_runtime, "0.57.0", "{name}");
@@ -1949,7 +1957,9 @@ fn image_stability_declares_media_1_and_the_runtime_of_the_record() {
     // (`messages_passthrough_retires_every_published_072_package_identity`).
     // Published as 1.0.14 with 0.73.1; the family model parameters record's Q47 bump made it 1.0.15
     // (`family_model_parameters_retires_every_published_0731_package_identity`).
-    assert_eq!(manifest.version, "1.0.15");
+    // Published as 1.0.15 with 0.74.0; the Kiro image input record's Q47 bump made it 1.0.16
+    // (`kiro_images_retires_every_published_074_package_identity`).
+    assert_eq!(manifest.version, "1.0.16");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["stability-image"]);
     assert!(manifest.declared_keys("stability-image").is_empty());
@@ -1991,7 +2001,9 @@ fn image_ideogram_declares_media_1_and_the_runtime_of_the_record() {
     // (`messages_passthrough_retires_every_published_072_package_identity`).
     // Published as 1.0.13 with 0.73.1; the family model parameters record's Q47 bump made it 1.0.14
     // (`family_model_parameters_retires_every_published_0731_package_identity`).
-    assert_eq!(manifest.version, "1.0.14");
+    // Published as 1.0.14 with 0.74.0; the Kiro image input record's Q47 bump made it 1.0.15
+    // (`kiro_images_retires_every_published_074_package_identity`).
+    assert_eq!(manifest.version, "1.0.15");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["ideogram-image"]);
     assert!(manifest.declared_keys("ideogram-image").is_empty());
@@ -2033,7 +2045,9 @@ fn image_xai_declares_media_1_bearer_and_the_runtime_of_the_record() {
     // (`messages_passthrough_retires_every_published_072_package_identity`).
     // Published as 1.0.7 with 0.73.1; the family model parameters record's Q47 bump made it 1.0.8
     // (`family_model_parameters_retires_every_published_0731_package_identity`).
-    assert_eq!(manifest.version, "1.0.8");
+    // Published as 1.0.8 with 0.74.0; the Kiro image input record's Q47 bump made it 1.0.9
+    // (`kiro_images_retires_every_published_074_package_identity`).
+    assert_eq!(manifest.version, "1.0.9");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["xai-image"]);
     assert_eq!(manifest.capabilities.iter().collect::<Vec<_>>(), ["edit", "generate"]);
@@ -2083,7 +2097,9 @@ fn image_vertex_declares_media_2_the_vertex_recipe_and_the_media_2_runtime() {
     // (`messages_passthrough_retires_every_published_072_package_identity`).
     // Published as 1.0.10 with 0.73.1; the family model parameters record's Q47 bump made it 1.0.11
     // (`family_model_parameters_retires_every_published_0731_package_identity`).
-    assert_eq!(manifest.version, "1.0.11");
+    // Published as 1.0.11 with 0.74.0; the Kiro image input record's Q47 bump made it 1.0.12
+    // (`kiro_images_retires_every_published_074_package_identity`).
+    assert_eq!(manifest.version, "1.0.12");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["vertex-ai-image"]);
     assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer"]);
@@ -2140,7 +2156,9 @@ fn provider_vertex_declares_the_vertex_recipe_and_the_runtime_of_its_newest_decl
     // (`messages_passthrough_retires_every_published_072_package_identity`).
     // Published as 1.1.0 with 0.73.1; the family model parameters record's minor made it 1.2.0
     // (`family_model_parameters_retires_every_published_0731_package_identity`).
-    assert_eq!(manifest.version, "1.2.0");
+    // Published as 1.2.0 with 0.74.0; the Kiro image input record's Q47 bump made it 1.2.1
+    // (`kiro_images_retires_every_published_074_package_identity`).
+    assert_eq!(manifest.version, "1.2.1");
     assert_eq!(manifest.api_version, south_provider_api::PROVIDER_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["vertex-ai"]);
     assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer"]);
@@ -2193,7 +2211,9 @@ fn image_reve_declares_media_1_and_the_runtime_of_the_record() {
     // (`messages_passthrough_retires_every_published_072_package_identity`).
     // Published as 1.0.7 with 0.73.1; the family model parameters record's Q47 bump made it 1.0.8
     // (`family_model_parameters_retires_every_published_0731_package_identity`).
-    assert_eq!(manifest.version, "1.0.8");
+    // Published as 1.0.8 with 0.74.0; the Kiro image input record's Q47 bump made it 1.0.9
+    // (`kiro_images_retires_every_published_074_package_identity`).
+    assert_eq!(manifest.version, "1.0.9");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["reve-image"]);
     assert!(manifest.declared_keys("reve-image").is_empty());
@@ -2238,7 +2258,9 @@ fn image_openai_compatible_declares_media_1_and_the_runtime_of_the_record() {
     // (`messages_passthrough_retires_every_published_072_package_identity`).
     // Published as 1.0.3 with 0.73.1; the family model parameters record's Q47 bump made it 1.0.4
     // (`family_model_parameters_retires_every_published_0731_package_identity`).
-    assert_eq!(manifest.version, "1.0.4");
+    // Published as 1.0.4 with 0.74.0; the Kiro image input record's Q47 bump made it 1.0.5
+    // (`kiro_images_retires_every_published_074_package_identity`).
+    assert_eq!(manifest.version, "1.0.5");
     assert_eq!(
         manifest.version,
         south_component_conformance::reference_openai_compatible_image::VERSION
@@ -2374,7 +2396,9 @@ fn provider_kiro_declares_the_runtime_of_its_newest_declaration() {
     // (`messages_passthrough_retires_every_published_072_package_identity`).
     // Published as 1.1.8 with 0.73.1; the family model parameters record's minor made it 1.2.0
     // (`family_model_parameters_retires_every_published_0731_package_identity`).
-    assert_eq!(manifest.version, "1.2.0");
+    // Published as 1.2.0 with 0.74.0; the Kiro image input record's minor made it 1.3.0
+    // (`kiro_images_retires_every_published_074_package_identity`).
+    assert_eq!(manifest.version, "1.3.0");
     assert_eq!(manifest.api_version, south_provider_api::PROVIDER_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["kiro"]);
     assert!(manifest.subscription_quota_families.contains("kiro"));
@@ -2419,7 +2443,9 @@ fn task_gemini_omni_v2_declares_task_8_which_a_task_7_host_refuses() {
     // (`messages_passthrough_retires_every_published_072_package_identity`).
     // Published as 0.2.2 with 0.73.1; the family model parameters record's Q47 bump made it 0.2.3
     // (`family_model_parameters_retires_every_published_0731_package_identity`).
-    assert_eq!(manifest.version, "0.2.3");
+    // Published as 0.2.3 with 0.74.0; the Kiro image input record's Q47 bump made it 0.2.4
+    // (`kiro_images_retires_every_published_074_package_identity`).
+    assert_eq!(manifest.version, "0.2.4");
     assert_eq!(manifest.api_version, south_provider_api::TASK_WORLD_V2);
     assert_eq!(manifest.compatibility.contracts.get("task"), Some(&8));
     assert_eq!(manifest.compatibility.contracts.get("media"), Some(&1));
@@ -2647,24 +2673,28 @@ fn s_s_1_retires_every_published_063_package_identity() {
 /// pass-through record's 1.0.8 (published 1.0.7 with 0.72.0;
 /// `messages_passthrough_retires_every_published_072_package_identity`), and the family model
 /// parameters record's 1.0.9 (published 1.0.8 with 0.73.1;
-/// `family_model_parameters_retires_every_published_0731_package_identity`).
+/// `family_model_parameters_retires_every_published_0731_package_identity`), and the Kiro image
+/// input record's 1.0.10 (published 1.0.9 with 0.74.0;
+/// `kiro_images_retires_every_published_074_package_identity`).
 /// The tests below describe the batches that defined the packages, before those releases.
 /// `speech-vertex` and `speech-openai-compatible` moved on to minors ([`speech_version`]).
-const SPEECH_VERSION: &str = "1.0.9";
+const SPEECH_VERSION: &str = "1.0.10";
 
 /// The version a speech package carries: [`SPEECH_VERSION`], except `speech-vertex`, which Q7's
 /// refusal made 1.1.0, the 0.67.0 cycle's Q47 bump 1.1.1, the T9 cap field's 1.1.2, the
 /// `glm-coding` thinking switch's 1.1.3, the `kimi-code` family's 1.1.4, the Vertex task
-/// credentials' 1.1.5, the explicit cache reads' 1.1.6, the Messages pass-through record's 1.1.7 and the family
-/// model parameters record's 1.1.8 (`speech_vertex_1_1_refuses_q7_and_retires_its_published_identity`), and
+/// credentials' 1.1.5, the explicit cache reads' 1.1.6, the Messages pass-through record's 1.1.7, the family
+/// model parameters record's 1.1.8 and the Kiro image input record's 1.1.9
+/// (`speech_vertex_1_1_refuses_q7_and_retires_its_published_identity`), and
 /// `speech-openai-compatible`, which the `azure-openai` families made 1.1.0, the T9 cap field's
 /// Q47 bump 1.1.1, the `glm-coding` thinking switch's 1.1.2, the `kimi-code` family's 1.1.3, the
 /// Vertex task credentials' 1.1.4, the explicit cache reads' 1.1.5, the Messages pass-through
-/// record's 1.1.6 and the family model parameters record's 1.1.7 (`speech_openai_compatible_1_1_adds_the_azure_openai_families`).
+/// record's 1.1.6, the family model parameters record's 1.1.7 and the Kiro image input record's 1.1.8
+/// (`speech_openai_compatible_1_1_adds_the_azure_openai_families`).
 fn speech_version(name: &str) -> &'static str {
     match name {
-        "speech-vertex" => "1.1.8",
-        "speech-openai-compatible" => "1.1.7",
+        "speech-vertex" => "1.1.9",
+        "speech-openai-compatible" => "1.1.8",
         _ => SPEECH_VERSION,
     }
 }
@@ -3117,7 +3147,9 @@ fn minimax_immutable_paths_retire_the_published_task_minimax_v2_identity() {
     // (`messages_passthrough_retires_every_published_072_package_identity`).
     // Published as 0.33.9 with 0.73.1; the family model parameters record's Q47 bump made it 0.33.10
     // (`family_model_parameters_retires_every_published_0731_package_identity`).
-    assert_eq!(manifest.version, "0.33.10");
+    // Published as 0.33.10 with 0.74.0; the Kiro image input record's Q47 bump made it 0.33.11
+    // (`kiro_images_retires_every_published_074_package_identity`).
+    assert_eq!(manifest.version, "0.33.11");
     assert_eq!(manifest.compatibility.south_runtime, declared_runtime_now("task-minimax-v2"));
     assert_eq!(manifest.compatibility.contracts.get("task"), Some(&7));
 }
@@ -3213,7 +3245,9 @@ fn speech_vertex_1_1_refuses_q7_and_retires_its_published_identity() {
     // (`messages_passthrough_retires_every_published_072_package_identity`).
     // Published as 1.1.7 with 0.73.1; the family model parameters record's Q47 bump made it 1.1.8
     // (`family_model_parameters_retires_every_published_0731_package_identity`).
-    assert_eq!(manifest.version, "1.1.8");
+    // Published as 1.1.8 with 0.74.0; the Kiro image input record's Q47 bump made it 1.1.9
+    // (`kiro_images_retires_every_published_074_package_identity`).
+    assert_eq!(manifest.version, "1.1.9");
     assert_eq!(
         manifest.version,
         south_component_conformance::reference_vertex_speech::VERSION,
@@ -3297,7 +3331,9 @@ fn task_veo_v2_gains_the_vertex_family_and_bearer() {
     // (`messages_passthrough_retires_every_published_072_package_identity`).
     // Published as 0.37.2 with 0.73.1; the family model parameters record's Q47 bump made it 0.37.3
     // (`family_model_parameters_retires_every_published_0731_package_identity`).
-    assert_eq!(manifest.version, "0.37.3");
+    // Published as 0.37.3 with 0.74.0; the Kiro image input record's Q47 bump made it 0.37.4
+    // (`kiro_images_retires_every_published_074_package_identity`).
+    assert_eq!(manifest.version, "0.37.4");
     assert_eq!(manifest.providers, ["veo-video", "vertex-veo-video"]);
     assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer", "header_secret"]);
     assert_eq!(manifest.compatibility.contracts.get("task"), Some(&7));
@@ -3421,7 +3457,9 @@ fn speech_openai_compatible_1_1_adds_the_azure_openai_families() {
     // (`messages_passthrough_retires_every_published_072_package_identity`).
     // Published as 1.1.6 with 0.73.1; the family model parameters record's Q47 bump made it 1.1.7
     // (`family_model_parameters_retires_every_published_0731_package_identity`).
-    assert_eq!(manifest.version, "1.1.7");
+    // Published as 1.1.7 with 0.74.0; the Kiro image input record's Q47 bump made it 1.1.8
+    // (`kiro_images_retires_every_published_074_package_identity`).
+    assert_eq!(manifest.version, "1.1.8");
     assert_eq!(
         manifest.version,
         south_component_conformance::reference_openai_compatible_speech::VERSION,
@@ -3984,6 +4022,83 @@ fn family_model_parameters_retires_every_published_0731_package_identity() {
         )
         .unwrap();
         assert_ne!(manifest.version, published, "{name} reused its identity published with 0.73.1");
+        assert_ne!(manifest.version, now, "{name} reused its identity published with 0.74.0");
+        assert_eq!(
+            manifest.compatibility.south_runtime, runtime,
+            "{name}: the round moves no runtime"
+        );
+        let contracts: std::collections::BTreeMap<String, u32> =
+            contracts.iter().map(|(world, version)| ((*world).to_owned(), *version)).collect();
+        assert_eq!(manifest.compatibility.contracts, contracts, "{name}");
+    }
+}
+
+/// The Kiro image input record (`2026-10-19-kiro-image-input.md`) changes
+/// `south-component-conformance` (0.73.0 → 0.74.0) after release 0.74.0, which every guest links, so
+/// every `component.wasm` changes: each identity published with 0.74.0 retires. `provider-kiro`
+/// changes what it sends and takes a minor (1.2.0 → 1.3.0: images in user turns); every other
+/// package takes the Q47 patch. No package moves its `south_runtime` or its `contracts`: the new
+/// behaviour needs nothing a 0.74.0 runtime lacks.
+#[test]
+fn kiro_images_retires_every_published_074_package_identity() {
+    let rows: [RetiredIdentity<'_>; 41] = [
+        ("embeddings-gemini", "1.1.23", "1.1.24", "0.57.0", &[("embeddings", 2)]),
+        ("embeddings-openai-compatible", "1.0.26", "1.0.27", "0.57.0", &[("embeddings", 1)]),
+        ("embeddings-vertex", "1.0.25", "1.0.26", "0.57.0", &[("embeddings", 1)]),
+        ("image-azure", "1.0.22", "1.0.23", "0.57.0", &[("image", 1), ("media", 1)]),
+        ("image-gemini", "1.0.16", "1.0.17", "0.59.0", &[("image", 1), ("media", 2)]),
+        ("image-ideogram", "1.0.14", "1.0.15", "0.57.0", &[("image", 1), ("media", 1)]),
+        ("image-minimax", "1.0.17", "1.0.18", "0.57.0", &[("image", 1), ("media", 1)]),
+        ("image-openai-compatible", "1.0.4", "1.0.5", "0.70.0", &[("image", 1), ("media", 1)]),
+        ("image-qwen", "1.0.17", "1.0.18", "0.57.0", &[("image", 1), ("media", 1)]),
+        ("image-reve", "1.0.8", "1.0.9", "0.57.0", &[("image", 1), ("media", 1)]),
+        ("image-stability", "1.0.15", "1.0.16", "0.57.0", &[("image", 1), ("media", 1)]),
+        ("image-vertex", "1.0.11", "1.0.12", "0.59.0", &[("image", 1), ("media", 2)]),
+        ("image-xai", "1.0.8", "1.0.9", "0.57.0", &[("image", 1), ("media", 1)]),
+        ("provider-anthropic-bedrock-invoke", "1.2.0", "1.2.1", "0.74.0", &[]),
+        ("provider-anthropic", "1.4.0", "1.4.1", "0.74.0", &[]),
+        ("provider-bedrock-converse-bearer", "1.2.0", "1.2.1", "0.74.0", &[]),
+        ("provider-bedrock-converse", "1.2.0", "1.2.1", "0.74.0", &[]),
+        ("provider-gemini", "1.5.0", "1.5.1", "0.74.0", &[]),
+        ("provider-kiro", "1.2.0", "1.3.0", "0.74.0", &[]),
+        ("provider-openai-compatible", "2.12.0", "2.12.1", "0.74.0", &[]),
+        ("provider-openai-responses", "1.5.0", "1.5.1", "0.74.0", &[]),
+        ("provider-vertex", "1.2.0", "1.2.1", "0.74.0", &[]),
+        ("speech-azure", "1.0.9", "1.0.10", "0.65.0", &[("media", 1), ("speech", 1)]),
+        ("speech-elevenlabs", "1.0.9", "1.0.10", "0.65.0", &[("media", 3), ("speech", 1)]),
+        ("speech-groq", "1.0.9", "1.0.10", "0.65.0", &[("media", 1), ("speech", 1)]),
+        ("speech-mimo", "1.0.9", "1.0.10", "0.65.0", &[("media", 1), ("speech", 1)]),
+        ("speech-minimax", "1.0.9", "1.0.10", "0.65.0", &[("media", 1), ("speech", 1)]),
+        ("speech-openai-compatible", "1.1.7", "1.1.8", "0.65.0", &[("media", 1), ("speech", 1)]),
+        ("speech-qwen", "1.0.9", "1.0.10", "0.65.0", &[("media", 1), ("speech", 1)]),
+        ("speech-vertex", "1.1.8", "1.1.9", "0.65.0", &[("media", 1), ("speech", 1)]),
+        ("speech-xai", "1.0.9", "1.0.10", "0.65.0", &[("media", 1), ("speech", 1)]),
+        ("task-bailian-v2", "0.31.32", "0.31.33", "0.57.0", &[("task", 7)]),
+        ("task-byteplus-v2", "0.36.32", "0.36.33", "0.57.0", &[("task", 7)]),
+        ("task-gemini-omni-v2", "0.2.3", "0.2.4", "0.62.0", &[("media", 1), ("task", 8)]),
+        ("task-gmi-image-v2", "0.36.0", "0.36.1", "0.74.0", &[("task", 7)]),
+        ("task-kling-v2", "0.32.33", "0.32.34", "0.57.0", &[("task", 7)]),
+        ("task-kling", "1.0.35", "1.0.36", "0.57.0", &[("task", 7)]),
+        ("task-minimax-v2", "0.33.10", "0.33.11", "0.63.0", &[("task", 7)]),
+        ("task-veo-v2", "0.37.3", "0.37.4", "0.57.0", &[("task", 7)]),
+        ("task-wan-image-v2", "0.35.32", "0.35.33", "0.57.0", &[("task", 7)]),
+        ("task-xai-v2", "0.35.32", "0.35.33", "0.57.0", &[("task", 7)]),
+    ];
+    let shipped: BTreeSet<&str> = rows.iter().map(|row| row.0).collect();
+    assert_eq!(
+        shipped,
+        BTreeSet::from(OFFICIAL_COMPONENTS),
+        "every official package takes the round"
+    );
+    for (name, published, now, runtime, contracts) in rows {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_ne!(manifest.version, published, "{name} reused its identity published with 0.74.0");
         assert_eq!(manifest.version, now, "{name}");
         assert_eq!(
             manifest.compatibility.south_runtime, runtime,

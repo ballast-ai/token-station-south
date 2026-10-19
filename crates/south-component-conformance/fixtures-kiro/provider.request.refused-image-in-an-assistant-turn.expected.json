@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "capability",
+    "http_status": 400,
+    "message": "this upstream takes images in user turns only; an assistant turn carries one"
+  }
+}

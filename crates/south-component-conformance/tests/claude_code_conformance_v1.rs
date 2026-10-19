@@ -228,7 +228,9 @@ fn the_manifest_declares_the_two_families_with_the_native_values() {
     // (`messages_passthrough_retires_every_published_072_package_identity`).
     // Published as 1.3.0 with 0.73.1; the family model parameters record's minor made it 1.4.0
     // (`family_model_parameters_retires_every_published_0731_package_identity`).
-    assert_eq!(manifest.version, "1.4.0");
+    // Published as 1.4.0 with 0.74.0; the Kiro image input record's Q47 bump made it 1.4.1
+    // (`kiro_images_retires_every_published_074_package_identity`).
+    assert_eq!(manifest.version, "1.4.1");
     // `immutable_request_headers` needed 0.67.0 (`ComponentManifestV1` refuses unknown fields); from
     // 1.3.0 `north_request_passthrough` `messages` and `forwarded_client_headers` need 0.73.0
     // (record `2026-10-17-messages-passthrough-and-count-tokens.md` §8.1); from 1.4.0
@@ -316,7 +318,9 @@ fn immutable_request_headers_retire_the_published_1_2_0_identity() {
     // (`messages_passthrough_retires_every_published_072_package_identity`).
     // Published as 1.3.0 with 0.73.1; the family model parameters record's minor made it 1.4.0
     // (`family_model_parameters_retires_every_published_0731_package_identity`).
-    assert_eq!(manifest.version, "1.4.0");
+    // Published as 1.4.0 with 0.74.0; the Kiro image input record's Q47 bump made it 1.4.1
+    // (`kiro_images_retires_every_published_074_package_identity`).
+    assert_eq!(manifest.version, "1.4.1");
     assert_eq!(AnthropicReferenceV1.metadata().version, manifest.version);
 }
 

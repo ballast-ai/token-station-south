@@ -1,6 +1,6 @@
 # Frozen samples: the Kiro upstream (`provider-kiro`, family `kiro`)
 
-Gate ② samples for `provider-kiro` 1.0.4, judged by `south.provider-component.v1`
+Gate ② samples for `provider-kiro` 1.0.4 (1.3.0 since the image rows of 2026-10-19), judged by `south.provider-component.v1`
 (`docs/design/2026-09-30-kiro-provider-component.md` §11.2). **No row is a capture of live traffic made for this
 record**: the real-account capture is pending (lv, 2026-10-13: implement now, test with an account later), and the
 rows marked provisional in the record's rulings (K-Q5, K-Q6, K-Q10, K-Q11, K-Q18) may change when it lands. Every
@@ -38,9 +38,10 @@ Each row's source:
   native second hop reads the block the first hop sends verbatim — `unmodelled-part-is-dropped`,
   `unmodelled-parts-beside-text-are-dropped`, `unmodelled-tool-use-block-precedes-the-calls` (fields defaulted to `""`
   and `{}`), `unmodelled-tool-result-block-is-a-tool-result` (`is_error` sets `status: "error"`, array content
-  concatenated, other content empty), `unmodelled-parts-in-system-and-tool-messages-are-dropped`, and the refusals
-  `refused-unmodelled-image-block` and `refused-unmodelled-image-block-in-an-assistant-turn` (an `image` block is
-  refused, KR1); KR3, `json-response-format-has-no-slot` and `json-schema-response-format-has-no-slot`; KR4,
+  concatenated, other content empty, a `base64` image in its content promoted to the turn since 1.3.0),
+  `unmodelled-parts-in-system-and-tool-messages-are-dropped`, `unmodelled-image-block-is-an-image` (a `base64`
+  `image` block in a user turn is an `images` entry since 1.3.0; it was refused before) and the refusal
+  `refused-unmodelled-image-block-in-an-assistant-turn` (an image in an assistant turn, KR1 as revised on 2026-10-19); KR3, `json-response-format-has-no-slot` and `json-schema-response-format-has-no-slot`; KR4,
   `required-tool-choice-sends-the-tools`, `named-tool-choice-sends-the-tools` and
   `required-tool-choice-without-tools-sends-none`; KR5, `assistant-final-turn-is-the-current-message`,
   `assistant-final-turn-drops-its-tool-calls` (reasoning dropped, text parts joined),
@@ -53,9 +54,14 @@ Each row's source:
   nothing) and `image-in-a-tool-result-is-dropped` (text parts around the image concatenated, also with prompt-cache
   markers on the parts, and an image-only remainder after a marked text part). Checked against the native composition
   like the rows above.
-- **Refused request rows**, one per numbered refusal of the record (KR1 in user and assistant messages, KR7 to
-  KR9): `refused-image`,
-  `refused-image-in-history`, `refused-empty-tool-call-id`, `refused-tool-result-without-id`, `refused-no-message`,
+- **Images in user turns** (KR1 revised, lv 2026-10-19, record `docs/design/2026-10-19-kiro-image-input.md`; the shape is
+  the production native arm's, server `b88383cb` `content_images`): `image-in-the-current-turn`, `image-in-history`
+  and `image-formats-map-to-the-upstream-names` (`image/JPEG`, `image/gif`, `image/webp` → `jpeg`, `gif`, `webp`, the
+  bytes verbatim).
+- **Refused request rows**, one per numbered refusal of the record (KR1 as revised: an image in an assistant turn, a
+  remote image, another media type, malformed bytes; KR7 to KR9): `refused-image-in-an-assistant-turn`,
+  `refused-remote-image`, `refused-unsupported-image-format`, `refused-image-without-base64-bytes`,
+  `refused-empty-tool-call-id`, `refused-tool-result-without-id`, `refused-no-message`,
   `refused-missing-attempt-id`, `refused-malformed-attempt-id`.
 - **Stream and response rows taken from the host's bytes**: `text` is server `gateway/tests/kiro_eventstream.rs`
   `normal()`; `metering-is-never-usage` is `translate_kiro.rs` `kiro_accumulate_builds_text_message_and_sums_credits`

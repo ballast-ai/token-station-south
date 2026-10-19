@@ -4,7 +4,7 @@
 # `sandbox` feature stays off).
 [package]
 name = "speech-minimax"
-version = "1.0.9"
+version = "1.0.10"
 edition = "2021"
 publish = false
 
