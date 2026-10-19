@@ -1,6 +1,6 @@
 {
   "name": "speech-openai-compatible",
-  "version": "1.1.7",
+  "version": "1.1.8",
   "api_version": "speech-adapter-v1",
   "providers": [
     "openai-compatible",

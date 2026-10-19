@@ -299,7 +299,7 @@ captures to settle it.
 | Input | Component | Native today |
 |---|---|---|
 | Image part (`ContentPart::ImageUrl`) | **Refused**: capability error, 400 before admission (*revised 2026-10-14:* in a user or assistant message; in a system message or a tool result it is dropped and the rest sent, as natively, since the first hop keeps only text there) | Refused, but late: inside prepare, after the token refresh (server:translate_kiro.rs:80-84, 163-167; Appendix D N-3) |
-| `ContentPart::Unknown` | ~~Refused~~ *Revised 2026-10-14 (§17, §18):* read as the native second hop reads the block the first hop sends verbatim — a `text` block's text is kept, a `tool_use` block is an assistant's `toolUses` entry (before the calls), a `tool_result` block is a user entry's `toolResults` entry, an `image` block is refused (KR1), anything else is dropped; dropped in a system message or a tool result | Passed to the intermediate body verbatim (reference_anthropic.rs:118-120), then dropped unless it is a `text` block (server:translate_kiro.rs:210-221) or refused if it is an `image` block |
+| `ContentPart::Unknown` | ~~Refused~~ *Revised 2026-10-14 (§17, §18):* read as the native second hop reads the block the first hop sends verbatim — a `text` block's text is kept, a `tool_use` block is an assistant's `toolUses` entry (before the calls), a `tool_result` block is a user entry's `toolResults` entry, an `image` block is refused (KR1; *revised 2026-10-19:* a `base64` `image` block in a user turn is an `images` entry, an image inside a `tool_result` block is promoted to the turn, [Kiro image input](2026-10-19-kiro-image-input.md)), anything else is dropped; dropped in a system message or a tool result | Passed to the intermediate body verbatim (reference_anthropic.rs:118-120), then dropped unless it is a `text` block (server:translate_kiro.rs:210-221) or refused if it is an `image` block |
 | `Thinking` / `RedactedThinking` parts in earlier turns | **Dropped** — the wire has no block for them; the same rule as the Converse reference for parts a dialect cannot carry out (reference_bedrock_converse.rs:109-114) | Dropped by the second hop |
 | `response_format` other than text | ~~Refused~~ *Revised 2026-10-14:* not read; the body is the one sent without it, as natively. The package still does not declare `json_schema` | Never reaches the upstream (the second hop reads only `messages`, `system`, `tools`) |
 | `tool_choice: required` or a named tool (`ToolChoice::Other`) | ~~Refused~~ *Revised 2026-10-14:* the tools are sent as for `auto`, as natively; the wire cannot force a call. A model row declaring `anthropic.tool_choice.auto_only` is refused by the host before either arm | Silently dropped |
@@ -1259,7 +1259,7 @@ native arm succeeds each carry the reason in the last column.
 
 | # | Input | Package | Native | Why it differs |
 |---|---|---|---|---|
-| KR1 | An image part (`ImageUrl`, or an unmodelled `image` block) in a user or assistant message | Capability error (400) before admission | Refused too, in the shape check before the token refresh (host K0-a) | — (*revised 2026-10-14:* an image in a system message or a tool result is dropped and the rest sent, as natively: the native first hop keeps only text there; KD15 withdrawn) |
+| KR1 | An image part (`ImageUrl`, or an unmodelled `image` block) in a user or assistant message | Capability error (400) before admission | Refused too, in the shape check before the token refresh (host K0-a) | — (*revised 2026-10-14:* an image in a system message or a tool result is dropped and the rest sent, as natively: the native first hop keeps only text there; KD15 withdrawn) (*revised 2026-10-19, lv:* only an image in an assistant turn, a remote image, another media type or malformed bytes is refused; a user turn's inline png / jpeg / gif / webp image is sent in `images`, as the production native arm sends it since server `b88383cb`; `provider-kiro` 1.3.0, [Kiro image input](2026-10-19-kiro-image-input.md)) |
 | ~~KR2~~ | A content part this crate does not model (`ContentPart::Unknown`) | Withdrawn 2026-10-14 (§17): read by its `type` as natively — `text` kept, `tool_use` a `toolUses` entry, `tool_result` a `toolResults` entry, `image` refused (KR1), anything else dropped; dropped in system and tool messages | The same | — |
 | ~~KR3~~ | `response_format` other than text | Withdrawn 2026-10-14: not read, as natively | Ignored | — |
 | ~~KR4~~ | `tool_choice` `required` or a named tool | Withdrawn 2026-10-14: the tools are sent as for `auto`, as natively | Dropped | — |
@@ -1634,3 +1634,10 @@ They matter here because a dual run pins whatever the native arm does as "correc
   `anthropic_messages_to_kiro`), and the only request rows that differ are KD1 and KR9. The review also found
   KD15 (images in system messages and tool results), which the same ruling then withdrew: such an image is dropped as
   natively, and KR1 is reworded to its native scope (user and assistant messages). The package takes a minor version, 1.1.0.
+
+## Revision note (2026-10-19)
+
+- KR1 revised on lv's ruling: a user turn's inline image is sent in `userInputMessage.images`, as the production native
+  arm sends it since server `b88383cb`; an image in an assistant turn, a remote image, another media type and malformed
+  bytes stay refused; system-message and IR tool-message images stay dropped. `provider-kiro` takes a minor, 1.3.0.
+  See [Kiro image input](2026-10-19-kiro-image-input.md).

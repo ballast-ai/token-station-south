@@ -36,7 +36,7 @@ use crate::{ComponentResultV1, ImageComponentV1, ImageOutcomeV1, ImageRenderedV1
 /// The package name this reference is published as.
 pub const NAME: &str = "image-vertex";
 /// The package version.
-pub const VERSION: &str = "1.0.11";
+pub const VERSION: &str = "1.0.12";
 /// The world this reference exports.
 pub const WORLD: &str = "image-adapter-v1";
 /// The family, as a host's image rows name it.

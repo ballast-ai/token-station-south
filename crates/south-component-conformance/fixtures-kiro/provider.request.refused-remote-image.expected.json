@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "capability",
+    "http_status": 400,
+    "message": "this upstream takes inline image bytes only; fetch the image and inline it as a base64 data URL"
+  }
+}
