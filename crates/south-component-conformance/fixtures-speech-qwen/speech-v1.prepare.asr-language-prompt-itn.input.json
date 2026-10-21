@@ -1,0 +1,58 @@
+{
+  "provider_config": {
+    "provider": "bailian-qwen-speech",
+    "base_url": "https://ws-example.ap-southeast-1.maas.aliyuncs.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "qwen3-asr-flash"
+      }
+    ]
+  },
+  "request": {
+    "multipart": {
+      "parts": [
+        {
+          "kind": "text",
+          "name": "model",
+          "value": "media/asr"
+        },
+        {
+          "kind": "file",
+          "name": "file",
+          "blob": "b0",
+          "filename": "speech.mp3",
+          "media_type": "audio/mpeg",
+          "bytes": 1024
+        },
+        {
+          "kind": "text",
+          "name": "language",
+          "value": "en"
+        },
+        {
+          "kind": "text",
+          "name": "prompt",
+          "value": "Alibaba Cloud, Qwen, DashScope"
+        },
+        {
+          "kind": "text",
+          "name": "enable_itn",
+          "value": " TRUE "
+        },
+        {
+          "kind": "text",
+          "name": "temperature",
+          "value": "0.2"
+        }
+      ]
+    }
+  },
+  "context": {
+    "upstream_model": "qwen3-asr-flash",
+    "operation": "transcribe",
+    "metering_required": [
+      "seconds"
+    ]
+  }
+}

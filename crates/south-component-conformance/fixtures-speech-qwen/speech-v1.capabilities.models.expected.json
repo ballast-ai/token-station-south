@@ -2,19 +2,23 @@
   {
     "model": "qwen3-tts-flash",
     "operations": [
-      "synthesize"
+      "synthesize",
+      "transcribe"
     ],
     "metering_forms": [
-      "characters"
+      "characters",
+      "seconds"
     ]
   },
   {
     "model": "qwen3-tts-instruct-flash",
     "operations": [
-      "synthesize"
+      "synthesize",
+      "transcribe"
     ],
     "metering_forms": [
-      "characters"
+      "characters",
+      "seconds"
     ]
   }
 ]

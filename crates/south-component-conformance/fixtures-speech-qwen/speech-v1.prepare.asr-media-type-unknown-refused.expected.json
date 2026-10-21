@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "cannot tell the audio file's format: send it with an audio media type or a file name with an audio extension"
+  }
+}

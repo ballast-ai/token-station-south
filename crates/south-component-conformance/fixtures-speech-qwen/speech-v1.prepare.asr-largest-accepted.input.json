@@ -1,0 +1,33 @@
+{
+  "provider_config": {
+    "provider": "bailian-qwen-speech",
+    "base_url": "https://ws-example.ap-southeast-1.maas.aliyuncs.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "qwen3-asr-flash"
+      }
+    ]
+  },
+  "request": {
+    "multipart": {
+      "parts": [
+        {
+          "kind": "file",
+          "name": "file",
+          "blob": "b0",
+          "filename": "a.wav",
+          "media_type": "audio/wav",
+          "bytes": 7499982
+        }
+      ]
+    }
+  },
+  "context": {
+    "upstream_model": "qwen3-asr-flash",
+    "operation": "transcribe",
+    "metering_required": [
+      "seconds"
+    ]
+  }
+}

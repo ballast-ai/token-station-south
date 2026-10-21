@@ -2695,6 +2695,7 @@ fn speech_version(name: &str) -> &'static str {
     match name {
         "speech-vertex" => "1.1.9",
         "speech-openai-compatible" => "1.1.8",
+        "speech-qwen" => "1.1.0",
         _ => SPEECH_VERSION,
     }
 }
@@ -2891,7 +2892,8 @@ fn the_v3_3_speech_packages_declare_their_operations_and_runtime() {
 /// Neither declares a query parameter. `speech-vertex` declares `image-vertex`'s
 /// configuration keys and credentials section byte for byte, so one row and one credential serve
 /// the three Vertex packages; `speech-qwen` declares neither. `speech-azure` gains `synthesize` at
-/// its unpublished 1.0.0 and keeps everything else.
+/// its unpublished 1.0.0 and keeps everything else. `speech-qwen` 1.1.0 adds `transcribe`
+/// (record `2026-10-21-speech-qwen-asr.md`) on the same runtime and contracts.
 #[test]
 fn the_v4_speech_packages_declare_their_values_and_runtime() {
     let read = |name: &str| -> ComponentManifestV1 {
@@ -2915,7 +2917,12 @@ fn the_v4_speech_packages_declare_their_values_and_runtime() {
     let mut media_1_only = host_range::host_range();
     media_1_only.contracts.insert("media".to_owned(), BTreeSet::from([1]));
     for (name, family, capabilities, keys) in [
-        ("speech-qwen", "bailian-qwen-speech", vec!["artifact_fetch", "synthesize"], vec![]),
+        (
+            "speech-qwen",
+            "bailian-qwen-speech",
+            vec!["artifact_fetch", "synthesize", "transcribe"],
+            vec![],
+        ),
         (
             "speech-vertex",
             "vertex-ai-speech",

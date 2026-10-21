@@ -1,0 +1,12 @@
+{
+  "prepare_case": "speech-v1.prepare.asr-native",
+  "response": {
+    "status": 429,
+    "content_type": "application/json",
+    "body": {
+      "code": "Throttling.RateQuota",
+      "message": "Requests rate limit exceeded, please try again later.",
+      "request_id": "r"
+    }
+  }
+}
