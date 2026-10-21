@@ -55,6 +55,14 @@ pub mod family {
     /// (MP-Q3).
     pub const OPENAI_COMPATIBLE_OTHER: [&str; 2] =
         ["anthropic.tool_choice.auto_only", "reasoning_effort"];
+    /// `bailian-openai-compatible`: the `openai-compatible` words and `thinking_budget`, which opts a
+    /// thinking model into the reasoning cap split (the Bailian thinking cap record §5).
+    pub const BAILIAN_OPENAI_COMPATIBLE: [&str; 4] = [
+        "anthropic.tool_choice.auto_only",
+        "reasoning_content",
+        "reasoning_effort",
+        "thinking_budget",
+    ];
     /// Every `provider-openai-responses` family: the forced-tool refusal (lv, 2026-10-18), the
     /// effort and the `OpenAI` replay carrier.
     pub const OPENAI_RESPONSES: [&str; 3] =
@@ -78,8 +86,9 @@ mod tests {
 
     #[test]
     fn the_family_lists_are_sorted_and_spelled_by_their_readers() {
-        let lists: [&[&str]; 7] = [
+        let lists: [&[&str]; 8] = [
             &family::GEMINI_TEXT,
+            &family::BAILIAN_OPENAI_COMPATIBLE,
             &family::CLAUDE,
             &family::BEDROCK_CONVERSE,
             &family::OPENAI_COMPATIBLE,
@@ -106,6 +115,13 @@ mod tests {
         let effort = responses_vocabulary::extension::REASONING_EFFORT;
         assert!(family::OPENAI_RESPONSES.contains(&effort));
         assert!(family::OPENAI_COMPATIBLE.contains(&effort));
+        for word in family::OPENAI_COMPATIBLE {
+            assert!(family::BAILIAN_OPENAI_COMPATIBLE.contains(&word), "{word}");
+        }
+        assert!(
+            family::BAILIAN_OPENAI_COMPATIBLE
+                .contains(&crate::reference::bailian_openai_compatible::THINKING_BUDGET_WORD)
+        );
         for list in lists {
             assert!(list.contains(&anthropic_dialect::TOOL_CHOICE_AUTO_ONLY), "{list:?}");
         }

@@ -46,6 +46,8 @@ fn gate_one_refuses_a_malformed_declaration() {
     let facts =
         |output_cap: &[&str], model: ModelLocationV1, stream: StreamLocationV1| RequestFactsV1 {
             output_cap: output_cap.iter().map(|pointer| (*pointer).to_owned()).collect(),
+            reasoning_cap: Vec::new(),
+            cap_overhead: 0,
             model,
             stream,
         };
@@ -103,9 +105,13 @@ fn request_facts_round_trip_and_stay_off_the_wire_when_absent() {
         json!({"output_cap": ["/generationConfig/maxOutputTokens"],
                "model": {"url": "/models/{model}:"}, "stream": "url"})
     );
+    // Only `bailian-openai-compatible` declares facts (the Bailian thinking cap record §4).
     let openai = serde_json::to_value(shipped("provider-openai-compatible")).unwrap();
-    assert!(openai.get("request_facts").is_none());
-    // Every family of the package, `github-copilot` included, writes the top-level fields.
+    assert_eq!(
+        openai["request_facts"].as_object().map(|facts| facts.keys().collect::<Vec<_>>()),
+        Some(vec![&"bailian-openai-compatible".to_owned()])
+    );
+    // Every other family of the package, `github-copilot` included, writes the top-level fields.
     for family in [
         "openai-compatible",
         "azure-openai-v1",
@@ -167,6 +173,10 @@ enum Rogue {
     OtherModelInUrl,
     /// Puts the size of the request's messages into the URL: a descriptor that depends on the body.
     BodyInUrl,
+    /// Raises a split request's reasoning cap by one, so the two caps overrun the IR cap.
+    SplitOverrun,
+    /// Writes a reasoning cap on a request whose IR carries no cap.
+    ReasoningCapWithoutCap,
 }
 
 struct Rogues(Rogue);
@@ -189,6 +199,16 @@ impl Rogues {
             Rogue::OtherModelInUrl => {
                 descriptor.url = descriptor.url.replace(&request.model, "another-model");
             }
+            Rogue::SplitOverrun => {
+                if let Some(budget) = body.get("thinking_budget").and_then(Value::as_u64) {
+                    body["thinking_budget"] = json!(budget + 1);
+                }
+            }
+            Rogue::ReasoningCapWithoutCap => {
+                if request.sampling.max_output_tokens.is_none() {
+                    body["thinking_budget"] = json!(7);
+                }
+            }
             Rogue::BodyInUrl => {
                 let size = serde_json::to_string(&request.messages).unwrap_or_default().len();
                 descriptor.url =
@@ -201,9 +221,11 @@ impl Rogues {
     fn inner(&self) -> &dyn ProviderComponentV1 {
         match self.0 {
             Rogue::OtherModelInUrl | Rogue::BodyInUrl => &GeminiReferenceV1,
-            Rogue::CapTwice | Rogue::OtherModelInBody | Rogue::AlwaysStream => {
-                &OpenAiCompatibleReferenceV1
-            }
+            Rogue::CapTwice
+            | Rogue::OtherModelInBody
+            | Rogue::AlwaysStream
+            | Rogue::SplitOverrun
+            | Rogue::ReasoningCapWithoutCap => &OpenAiCompatibleReferenceV1,
         }
     }
 }
@@ -248,6 +270,13 @@ fn a_rogue_request_fails_gate_two() {
         (Rogue::OtherModelInBody, "provider-openai-compatible", "fixtures", "IR model at `/model`"),
         (Rogue::AlwaysStream, "provider-openai-compatible", "fixtures", "stream flag"),
         (Rogue::OtherModelInUrl, "provider-gemini", "fixtures-gemini", "URL path"),
+        (Rogue::SplitOverrun, "provider-openai-compatible", "fixtures", "plus the overhead"),
+        (
+            Rogue::ReasoningCapWithoutCap,
+            "provider-openai-compatible",
+            "fixtures",
+            "although the IR carries no cap",
+        ),
     ] {
         let report = run_provider_component_suite_v1_for_manifest(
             &Rogues(rogue),
@@ -330,4 +359,51 @@ fn the_descriptor_must_not_depend_on_the_body_where_the_request_passes_through()
         &shipped("provider-openai-compatible"),
     );
     assert_eq!(independence(&report).0, 0, "a family that declares nothing never runs it");
+}
+
+/// The split form (the Bailian thinking cap record §4): `bailian-openai-compatible` passes gate ②
+/// with its declaration, and fails it with no declaration (the top-level fields), without the
+/// overhead, or without the reasoning cap.
+#[test]
+fn a_split_cap_passes_only_as_declared() {
+    let family = "bailian-openai-compatible";
+    let run = |manifest: &ComponentManifestV1| {
+        let report = run_provider_component_suite_v1_for_manifest(
+            &OpenAiCompatibleReferenceV1,
+            &pack("fixtures"),
+            manifest,
+        );
+        honoured_failures(&report)
+            .into_iter()
+            .filter(|failure| failure.contains("bailian-openai-compatible"))
+            .collect::<Vec<_>>()
+    };
+    let shipped = shipped("provider-openai-compatible");
+    assert_eq!(run(&shipped), Vec::<String>::new());
+
+    let mut undeclared = shipped.clone();
+    undeclared.request_facts.remove(family);
+    let failures = run(&undeclared);
+    assert!(
+        failures.iter().any(|failure| failure.contains("exactly one declared location")),
+        "{failures:#?}"
+    );
+
+    let mut no_overhead = shipped.clone();
+    no_overhead.request_facts.get_mut(family).unwrap().cap_overhead = 0;
+    let failures = run(&no_overhead);
+    assert!(
+        failures.iter().any(|failure| failure.contains("plus the overhead 0")),
+        "{failures:#?}"
+    );
+
+    let mut no_reasoning = shipped;
+    let facts = no_reasoning.request_facts.get_mut(family).unwrap();
+    facts.reasoning_cap.clear();
+    facts.cap_overhead = 0;
+    let failures = run(&no_reasoning);
+    assert!(
+        failures.iter().any(|failure| failure.contains("exactly one declared location")),
+        "{failures:#?}"
+    );
 }

@@ -979,12 +979,41 @@ pub struct RequestFactsV1 {
     /// the output cap, at most [`MAX_OUTPUT_CAP_LOCATIONS`]; empty for a wire
     /// that has no cap field. With a cap set, exactly one location holds it.
     pub output_cap: Vec<String>,
+    /// JSON Pointers where the component may write a separate reasoning (thinking) cap, at most
+    /// [`MAX_OUTPUT_CAP_LOCATIONS`], none of them an [`output_cap`](Self::output_cap) location
+    /// (the Bailian thinking cap record, `docs/design/2026-10-21-bailian-thinking-cap.md` §4).
+    /// Empty (the default, omitted when serialized) for a family whose answer cap bounds the
+    /// reasoning too.
+    ///
+    /// When a sealed request carries a value at one of these locations, its total output bound
+    /// is the answer cap plus the reasoning cap plus [`cap_overhead`](Self::cap_overhead): exactly
+    /// one `output_cap` location holds an answer cap of at least 1, exactly one `reasoning_cap`
+    /// location holds a reasoning cap of at least 1, and the sum equals the authorised cap. When
+    /// none holds a value, the answer cap alone equals the authorised cap, as without the field.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reasoning_cap: Vec<String>,
+    /// Tokens the upstream may emit beyond the answer cap and the reasoning cap together, counted
+    /// into the total output bound of a request that carries a reasoning cap. 0 (the default,
+    /// omitted when serialized) unless [`reasoning_cap`](Self::reasoning_cap) is declared; at most
+    /// [`MAX_CAP_OVERHEAD`].
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub cap_overhead: u32,
     pub model: ModelLocationV1,
     pub stream: StreamLocationV1,
 }
 
-/// The most output-cap locations one family may declare.
+#[allow(clippy::trivially_copy_pass_by_ref)] // serde's `skip_serializing_if` passes a reference.
+const fn is_zero(value: &u32) -> bool {
+    *value == 0
+}
+
+/// The most output-cap locations one family may declare; the same bound holds for its
+/// reasoning-cap locations.
 pub const MAX_OUTPUT_CAP_LOCATIONS: usize = 4;
+
+/// The largest `request_facts.cap_overhead` a family may declare: a few tokens of upstream
+/// overrun, not a second budget.
+pub const MAX_CAP_OVERHEAD: u32 = 64;
 
 /// The most immutable body paths one family may declare.
 ///
@@ -1262,6 +1291,8 @@ impl RequestFactsV1 {
     pub fn top_level() -> Self {
         Self {
             output_cap: vec!["/max_tokens".to_owned(), "/max_completion_tokens".to_owned()],
+            reasoning_cap: Vec::new(),
+            cap_overhead: 0,
             model: ModelLocationV1::Body("/model".to_owned()),
             stream: StreamLocationV1::Body("/stream".to_owned()),
         }
@@ -2001,6 +2032,29 @@ impl ComponentManifestV1 {
                 if !is_member_pointer(pointer) || !seen.insert(pointer) {
                     return Err(invalid("an output-cap location is not a distinct member pointer"));
                 }
+            }
+            if facts.reasoning_cap.len() > MAX_OUTPUT_CAP_LOCATIONS {
+                return Err(invalid("declares more than four reasoning-cap locations"));
+            }
+            let mut reasoning = BTreeSet::new();
+            for pointer in &facts.reasoning_cap {
+                if !is_member_pointer(pointer) || !reasoning.insert(pointer) {
+                    return Err(invalid(
+                        "a reasoning-cap location is not a distinct member pointer",
+                    ));
+                }
+                if seen.contains(pointer) {
+                    return Err(invalid("a reasoning-cap location is also an output-cap location"));
+                }
+            }
+            if !facts.reasoning_cap.is_empty() && facts.output_cap.is_empty() {
+                return Err(invalid("a reasoning cap needs an output-cap location beside it"));
+            }
+            if facts.cap_overhead > 0 && facts.reasoning_cap.is_empty() {
+                return Err(invalid("cap_overhead is allowed only with a reasoning cap"));
+            }
+            if facts.cap_overhead > MAX_CAP_OVERHEAD {
+                return Err(invalid("cap_overhead is larger than 64"));
             }
             match &facts.model {
                 ModelLocationV1::Body(pointer) if !is_member_pointer(pointer) => {
