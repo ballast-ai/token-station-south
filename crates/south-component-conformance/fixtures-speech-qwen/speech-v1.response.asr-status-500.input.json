@@ -1,0 +1,12 @@
+{
+  "prepare_case": "speech-v1.prepare.asr-native",
+  "response": {
+    "status": 500,
+    "content_type": "application/json",
+    "body": {
+      "code": "InternalError",
+      "message": "An internal error has occured, please try again later.",
+      "request_id": "r"
+    }
+  }
+}

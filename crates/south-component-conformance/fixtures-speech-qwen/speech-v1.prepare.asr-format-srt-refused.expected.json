@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "http_status": 400,
+    "message": "Bailian Qwen-ASR cannot return response_format='srt': its synchronous API returns no timestamps. Supported: json, text."
+  }
+}

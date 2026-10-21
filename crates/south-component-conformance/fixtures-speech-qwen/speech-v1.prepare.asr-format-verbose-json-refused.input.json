@@ -1,14 +1,11 @@
 {
   "provider_config": {
     "provider": "bailian-qwen-speech",
-    "base_url": "https://dashscope.aliyuncs.com",
+    "base_url": "https://ws-example.ap-southeast-1.maas.aliyuncs.com",
     "auth": "provider_api_key",
     "models": [
       {
-        "model": "qwen3-tts-flash"
-      },
-      {
-        "model": "qwen3-tts-instruct-flash"
+        "model": "qwen3-asr-flash"
       }
     ]
   },
@@ -19,14 +16,20 @@
           "kind": "file",
           "name": "file",
           "blob": "b0",
-          "filename": "a.wav",
-          "bytes": 9
+          "filename": "speech.mp3",
+          "media_type": "audio/mpeg",
+          "bytes": 1024
+        },
+        {
+          "kind": "text",
+          "name": "response_format",
+          "value": "verbose_json"
         }
       ]
     }
   },
   "context": {
-    "upstream_model": "qwen3-tts-flash",
+    "upstream_model": "qwen3-asr-flash",
     "operation": "transcribe",
     "metering_required": [
       "seconds"

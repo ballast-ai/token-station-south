@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "capability",
+    "http_status": 400,
+    "message": "the model 'qwen3-asr-flash' does not declare the operation translate"
+  }
+}

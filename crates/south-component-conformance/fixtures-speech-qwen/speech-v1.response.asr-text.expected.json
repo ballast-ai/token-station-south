@@ -1,0 +1,15 @@
+{
+  "outcome": "succeeded",
+  "transcript": {
+    "text": "Welcome to Alibaba Cloud.",
+    "media_type": "text/plain; charset=utf-8"
+  },
+  "metering": {
+    "characters": null,
+    "seconds": {
+      "value": 12.0,
+      "basis": "reported"
+    },
+    "tokens": null
+  }
+}

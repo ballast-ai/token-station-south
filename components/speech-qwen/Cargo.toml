@@ -1,10 +1,10 @@
-# The official Bailian Qwen-TTS component (family `bailian-qwen-speech`), compiled to a `wasm32-wasip2` component.
+# The official Bailian Qwen speech component (family `bailian-qwen-speech`: Qwen-TTS and Qwen-ASR), compiled to a `wasm32-wasip2` component.
 # Standalone (not a workspace member): the main workspace must stay buildable without a wasm
 # toolchain, and this crate must stay buildable without wasmtime (the conformance dependency's
 # `sandbox` feature stays off).
 [package]
 name = "speech-qwen"
-version = "1.0.10"
+version = "1.1.0"
 edition = "2021"
 publish = false
 

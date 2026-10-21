@@ -1,0 +1,12 @@
+{
+  "prepare_case": "speech-v1.prepare.asr-native",
+  "response": {
+    "status": 400,
+    "content_type": "application/json",
+    "body": {
+      "code": "InvalidParameter",
+      "message": "The audio is too long.",
+      "request_id": "r"
+    }
+  }
+}
