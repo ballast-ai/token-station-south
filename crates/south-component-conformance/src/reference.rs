@@ -119,9 +119,10 @@ pub mod kimi_code {
 ///
 /// Design record `docs/design/2026-10-21-bailian-thinking-cap.md`. On these models `max_tokens`
 /// bounds only the answer, while the billed `completion_tokens` include the reasoning. When a
-/// model declares [`THINKING_BUDGET_WORD`] and thinks, the family splits the authorised cap N into
-/// `thinking_budget = B` and `max_tokens = N - B - CAP_OVERHEAD`, so the measured worst case is N
-/// ([`split_bailian_cap`]); the manifest declares the split as `request_facts.reasoning_cap`.
+/// model declares [`bailian_openai_compatible::THINKING_BUDGET_WORD`] and thinks, the family splits
+/// the authorised cap N into `thinking_budget = B` and `max_tokens = N - B - CAP_OVERHEAD`, so the
+/// measured worst case is N (`split_bailian_cap`); the manifest declares the split as
+/// `request_facts.reasoning_cap`.
 pub mod bailian_openai_compatible {
     /// The family, as a host's provider rows name it.
     pub const FAMILY: &str = "bailian-openai-compatible";

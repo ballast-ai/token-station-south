@@ -132,7 +132,8 @@ the host's route and its modality check, not a list of model ids in the package.
   then these checks are expected to fail: `scripts/check_crate_versions.py --unreleased` (the crate changed without a
   version move), the release's digest-stability check (every package's `component.wasm` changes with the crate), and
   `shipped_packages_v1::kiro_images_retires_every_published_074_package_identity` (it pins `speech-qwen` at 1.0.10,
-  the 0.75.0 round).
+  the 0.75.0 round). The integration commit made the bump: `south-component-conformance` 0.74.0 → 0.75.0, every
+  other package the Q47 patch (`shipped_packages_v1::bailian_retires_every_published_075_package_identity`).
 
 ## 6. Open points and measurements
 

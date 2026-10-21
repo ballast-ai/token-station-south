@@ -147,12 +147,16 @@ After re-pinning to the release that ships these fields:
 ## 7. Versions and tests
 
 - `provider-openai-compatible` 2.12.1 → **2.13.0** (a new family), `compatibility.south_runtime` 0.74.0 → **0.76.0**
-  (it declares `reasoning_cap` / `cap_overhead`, which a 0.75.0 runtime's gate ① refuses).
+  (it declares `reasoning_cap` / `cap_overhead`, which a 0.75.0 runtime's gate ① refuses). As in the 0.74.0 cycle,
+  the feature commits keep 0.74.0 so the branch stays consistent with workspace 0.75.0; the release 0.76.0 commit
+  raises it.
 - **Q47 is deferred to the integrator.** This change touches `south-provider-api` and `south-component-conformance`,
   which every component links. Their version bumps and every other package's Q47 patch are left to the combined
   release bump, because other workstreams change the same crates in parallel. Until then
   `scripts/check_crate_versions.py`, the digest-stability check and the `shipped_packages_v1` version rows fail on
-  this branch by design.
+  this branch by design. The integration commit made the bump: `south-provider-api` 0.62.0 → 0.63.0,
+  `south-component-conformance` 0.74.0 → 0.75.0, every other package the Q47 patch
+  (`shipped_packages_v1::bailian_retires_every_published_075_package_identity`).
 - Gate ② for every component changes in two places (§4): the split form in `RequestFactsHonoured` and the
   reasoning-cap exemption in `ImmutablePathsHonoured`. No shipped package other than this one declares either field,
   so no other package's gate ② result changes.

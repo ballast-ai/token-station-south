@@ -118,7 +118,9 @@ runtime. The change edits `south-component-conformance` (source and fixtures), w
 links; per CONTRIBUTING that crate's version and every package's version must move, which is left to
 the release integration combining this with parallel workstreams. Until then
 `scripts/check_crate_versions.py`, the digest-stability check and the 0.75.0 round assertion in
-`shipped_packages_v1` are expected to fail.
+`shipped_packages_v1` are expected to fail. The integration commit made the bump: `south-component-conformance`
+0.74.0 → 0.75.0, every other package the Q47 patch
+(`shipped_packages_v1::bailian_retires_every_published_075_package_identity`).
 
 ## 8. Open points
 

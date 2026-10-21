@@ -230,7 +230,9 @@ fn the_manifest_declares_the_two_families_with_the_native_values() {
     // (`family_model_parameters_retires_every_published_0731_package_identity`).
     // Published as 1.4.0 with 0.74.0; the Kiro image input record's Q47 bump made it 1.4.1
     // (`kiro_images_retires_every_published_074_package_identity`).
-    assert_eq!(manifest.version, "1.4.1");
+    // Published as 1.4.1 with 0.75.0; the Bailian records' Q47 bump made it 1.4.2
+    // (`bailian_retires_every_published_075_package_identity`).
+    assert_eq!(manifest.version, "1.4.2");
     // `immutable_request_headers` needed 0.67.0 (`ComponentManifestV1` refuses unknown fields); from
     // 1.3.0 `north_request_passthrough` `messages` and `forwarded_client_headers` need 0.73.0
     // (record `2026-10-17-messages-passthrough-and-count-tokens.md` §8.1); from 1.4.0
@@ -320,7 +322,9 @@ fn immutable_request_headers_retire_the_published_1_2_0_identity() {
     // (`family_model_parameters_retires_every_published_0731_package_identity`).
     // Published as 1.4.0 with 0.74.0; the Kiro image input record's Q47 bump made it 1.4.1
     // (`kiro_images_retires_every_published_074_package_identity`).
-    assert_eq!(manifest.version, "1.4.1");
+    // Published as 1.4.1 with 0.75.0; the Bailian records' Q47 bump made it 1.4.2
+    // (`bailian_retires_every_published_075_package_identity`).
+    assert_eq!(manifest.version, "1.4.2");
     assert_eq!(AnthropicReferenceV1.metadata().version, manifest.version);
 }
 

@@ -314,10 +314,11 @@ fn the_manifest_declares_the_family_and_its_reasoning_cap() {
     assert!(!manifest.user_agent.contains_key(FAMILY));
     assert_eq!(manifest.credentials_for(FAMILY), None);
     assert!(!manifest.subscription_quota_families.contains(FAMILY));
-    // Record §7: a new family is a minor; the reasoning cap fields need a runtime that reads them.
+    // Record §7: a new family is a minor; the reasoning cap fields need a runtime that reads them,
+    // which the release that ships them (0.76.0) declares; until then the package keeps 0.74.0.
     assert_eq!(manifest.version, "2.13.0");
     assert_eq!(OpenAiCompatibleReferenceV1.metadata().version, manifest.version);
-    assert_eq!(manifest.compatibility.south_runtime, "0.76.0");
+    assert_eq!(manifest.compatibility.south_runtime, "0.74.0");
 }
 
 /// Record §2: the reasoning is reported inside `completion_tokens`, which is what is billed; the

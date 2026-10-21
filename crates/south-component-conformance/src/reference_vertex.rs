@@ -35,7 +35,7 @@ use crate::gemini_text;
 /// The package name this reference is published as.
 pub const NAME: &str = "provider-vertex";
 /// The package version.
-pub const VERSION: &str = "1.2.1";
+pub const VERSION: &str = "1.2.2";
 /// The family, as a host's provider rows name it (VX-Q2).
 pub const VERTEX_AI: &str = "vertex-ai";
 
