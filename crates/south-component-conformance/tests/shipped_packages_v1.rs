@@ -1517,13 +1517,17 @@ fn declared_runtime_now(name: &str) -> &'static str {
         // the literal. Before: `provider-anthropic`, `provider-gemini` and `provider-vertex` 0.73.0
         // (Messages pass-through record §8.1), `provider-kiro`, `provider-openai-compatible` and
         // `provider-openai-responses` 0.60.0, the rest 0.57.0.
+        // `provider-openai-compatible` 2.13.0 declares `request_facts.reasoning_cap` and
+        // `cap_overhead`, which no runtime before 0.76.0 parses (`RequestFactsV1` refuses unknown
+        // fields; record `2026-10-21-bailian-thinking-cap.md` §7); 0.76.0 shipped them, so the
+        // literal. Before: 0.74.0 with the eight packages below.
+        "provider-openai-compatible" => "0.76.0",
         "provider-anthropic"
         | "provider-anthropic-bedrock-invoke"
         | "provider-bedrock-converse"
         | "provider-bedrock-converse-bearer"
         | "provider-gemini"
         | "provider-kiro"
-        | "provider-openai-compatible"
         | "provider-openai-responses"
         | "provider-vertex"
         | "task-gmi-image-v2" => "0.74.0",
@@ -3419,7 +3423,7 @@ fn speech_azure_openai_retires_every_published_066_package_identity() {
         ("provider-bedrock-converse-bearer", "1.1.10", "1.1.11", "0.74.0", &[]),
         ("provider-gemini", "1.3.10", "1.3.11", "0.74.0", &[]),
         ("provider-kiro", "1.1.1", "1.1.2", "0.74.0", &[]),
-        ("provider-openai-compatible", "2.7.0", "2.7.1", "0.74.0", &[]),
+        ("provider-openai-compatible", "2.7.0", "2.7.1", "0.76.0", &[]),
         ("provider-openai-responses", "1.4.0", "1.4.1", "0.74.0", &[]),
         ("provider-vertex", "1.0.0", "1.0.1", "0.74.0", &[]),
         ("speech-azure", "1.0.1", "1.0.2", "0.65.0", &[("media", 1), ("speech", 1)]),
@@ -3558,7 +3562,7 @@ fn t9_cap_field_retires_every_published_067_package_identity() {
         ("provider-bedrock-converse-bearer", "1.1.11", "1.1.12", "0.74.0", &[]),
         ("provider-gemini", "1.3.11", "1.3.12", "0.74.0", &[]),
         ("provider-kiro", "1.1.2", "1.1.3", "0.74.0", &[]),
-        ("provider-openai-compatible", "2.7.1", "2.8.0", "0.74.0", &[]),
+        ("provider-openai-compatible", "2.7.1", "2.8.0", "0.76.0", &[]),
         ("provider-openai-responses", "1.4.1", "1.4.2", "0.74.0", &[]),
         ("provider-vertex", "1.0.1", "1.0.2", "0.74.0", &[]),
         ("speech-azure", "1.0.2", "1.0.3", "0.65.0", &[("media", 1), ("speech", 1)]),
@@ -3633,7 +3637,7 @@ fn glm_thinking_retires_every_published_068_package_identity() {
         ("provider-bedrock-converse-bearer", "1.1.12", "1.1.13", "0.74.0", &[]),
         ("provider-gemini", "1.3.12", "1.3.13", "0.74.0", &[]),
         ("provider-kiro", "1.1.3", "1.1.4", "0.74.0", &[]),
-        ("provider-openai-compatible", "2.8.0", "2.9.0", "0.74.0", &[]),
+        ("provider-openai-compatible", "2.8.0", "2.9.0", "0.76.0", &[]),
         ("provider-openai-responses", "1.4.2", "1.4.3", "0.74.0", &[]),
         ("provider-vertex", "1.0.2", "1.0.3", "0.74.0", &[]),
         ("speech-azure", "1.0.3", "1.0.4", "0.65.0", &[("media", 1), ("speech", 1)]),
@@ -3707,7 +3711,7 @@ fn kimi_code_retires_every_published_069_package_identity() {
         ("provider-bedrock-converse-bearer", "1.1.13", "1.1.14", "0.74.0", &[]),
         ("provider-gemini", "1.3.13", "1.3.14", "0.74.0", &[]),
         ("provider-kiro", "1.1.4", "1.1.5", "0.74.0", &[]),
-        ("provider-openai-compatible", "2.9.0", "2.10.0", "0.74.0", &[]),
+        ("provider-openai-compatible", "2.9.0", "2.10.0", "0.76.0", &[]),
         ("provider-openai-responses", "1.4.3", "1.4.4", "0.74.0", &[]),
         ("provider-vertex", "1.0.3", "1.0.4", "0.74.0", &[]),
         ("speech-azure", "1.0.4", "1.0.5", "0.65.0", &[("media", 1), ("speech", 1)]),
@@ -3783,7 +3787,7 @@ fn task_vertex_credentials_retires_every_published_070_package_identity() {
         ("provider-bedrock-converse-bearer", "1.1.14", "1.1.15", "0.74.0", &[]),
         ("provider-gemini", "1.3.14", "1.3.15", "0.74.0", &[]),
         ("provider-kiro", "1.1.5", "1.1.6", "0.74.0", &[]),
-        ("provider-openai-compatible", "2.10.0", "2.10.1", "0.74.0", &[]),
+        ("provider-openai-compatible", "2.10.0", "2.10.1", "0.76.0", &[]),
         ("provider-openai-responses", "1.4.4", "1.4.5", "0.74.0", &[]),
         ("provider-vertex", "1.0.4", "1.0.5", "0.74.0", &[]),
         ("speech-azure", "1.0.5", "1.0.6", "0.65.0", &[("media", 1), ("speech", 1)]),
@@ -3860,7 +3864,7 @@ fn explicit_cache_reads_retires_every_published_071_package_identity() {
         ("provider-bedrock-converse-bearer", "1.1.15", "1.1.16", "0.74.0", &[]),
         ("provider-gemini", "1.3.15", "1.3.16", "0.74.0", &[]),
         ("provider-kiro", "1.1.6", "1.1.7", "0.74.0", &[]),
-        ("provider-openai-compatible", "2.10.1", "2.11.0", "0.74.0", &[]),
+        ("provider-openai-compatible", "2.10.1", "2.11.0", "0.76.0", &[]),
         ("provider-openai-responses", "1.4.5", "1.4.6", "0.74.0", &[]),
         ("provider-vertex", "1.0.5", "1.0.6", "0.74.0", &[]),
         ("speech-azure", "1.0.6", "1.0.7", "0.65.0", &[("media", 1), ("speech", 1)]),
@@ -3940,7 +3944,7 @@ fn messages_passthrough_retires_every_published_072_package_identity() {
         ("provider-bedrock-converse", "1.1.16", "1.1.17", "0.74.0", &[]),
         ("provider-gemini", "1.3.16", "1.4.0", "0.74.0", &[]),
         ("provider-kiro", "1.1.7", "1.1.8", "0.74.0", &[]),
-        ("provider-openai-compatible", "2.11.0", "2.11.1", "0.74.0", &[]),
+        ("provider-openai-compatible", "2.11.0", "2.11.1", "0.76.0", &[]),
         ("provider-openai-responses", "1.4.6", "1.4.7", "0.74.0", &[]),
         ("provider-vertex", "1.0.6", "1.1.0", "0.74.0", &[]),
         ("speech-azure", "1.0.7", "1.0.8", "0.65.0", &[("media", 1), ("speech", 1)]),
@@ -4028,7 +4032,7 @@ fn family_model_parameters_retires_every_published_0731_package_identity() {
         ("provider-bedrock-converse", "1.1.17", "1.2.0", "0.74.0", &[]),
         ("provider-gemini", "1.4.0", "1.5.0", "0.74.0", &[]),
         ("provider-kiro", "1.1.8", "1.2.0", "0.74.0", &[]),
-        ("provider-openai-compatible", "2.11.1", "2.12.0", "0.74.0", &[]),
+        ("provider-openai-compatible", "2.11.1", "2.12.0", "0.76.0", &[]),
         ("provider-openai-responses", "1.4.7", "1.5.0", "0.74.0", &[]),
         ("provider-vertex", "1.1.0", "1.2.0", "0.74.0", &[]),
         ("speech-azure", "1.0.8", "1.0.9", "0.65.0", &[("media", 1), ("speech", 1)]),
@@ -4105,7 +4109,7 @@ fn kiro_images_retires_every_published_074_package_identity() {
         ("provider-bedrock-converse", "1.2.0", "1.2.1", "0.74.0", &[]),
         ("provider-gemini", "1.5.0", "1.5.1", "0.74.0", &[]),
         ("provider-kiro", "1.2.0", "1.3.0", "0.74.0", &[]),
-        ("provider-openai-compatible", "2.12.0", "2.12.1", "0.74.0", &[]),
+        ("provider-openai-compatible", "2.12.0", "2.12.1", "0.76.0", &[]),
         ("provider-openai-responses", "1.5.0", "1.5.1", "0.74.0", &[]),
         ("provider-vertex", "1.2.0", "1.2.1", "0.74.0", &[]),
         ("speech-azure", "1.0.9", "1.0.10", "0.65.0", &[("media", 1), ("speech", 1)]),
@@ -4162,8 +4166,8 @@ fn kiro_images_retires_every_published_074_package_identity() {
 /// `provider-openai-compatible` (2.12.1 → 2.13.0: the `bailian-openai-compatible` family),
 /// `speech-qwen` (1.0.10 → 1.1.0: `transcribe`) and `task-bailian-v2` (0.31.33 → 0.32.0: Wan
 /// `input.media[]`) take a minor; every other package takes the Q47 patch. No package moves its
-/// `contracts`; `provider-openai-compatible` keeps the runtime it declared with 0.75.0 here, and the
-/// release that ships `reasoning_cap` raises it (thinking cap record §7).
+/// `contracts`. Release 0.76.0 raises `provider-openai-compatible`'s runtime from 0.74.0 to 0.76.0,
+/// the first that parses `reasoning_cap` (thinking cap record §7); every other runtime stays.
 #[test]
 fn bailian_retires_every_published_075_package_identity() {
     let rows: [RetiredIdentity<'_>; 41] = [
@@ -4186,7 +4190,7 @@ fn bailian_retires_every_published_075_package_identity() {
         ("provider-bedrock-converse", "1.2.1", "1.2.2", "0.74.0", &[]),
         ("provider-gemini", "1.5.1", "1.5.2", "0.74.0", &[]),
         ("provider-kiro", "1.3.0", "1.3.1", "0.74.0", &[]),
-        ("provider-openai-compatible", "2.12.1", "2.13.0", "0.74.0", &[]),
+        ("provider-openai-compatible", "2.12.1", "2.13.0", "0.76.0", &[]),
         ("provider-openai-responses", "1.5.1", "1.5.2", "0.74.0", &[]),
         ("provider-vertex", "1.2.1", "1.2.2", "0.74.0", &[]),
         ("speech-azure", "1.0.10", "1.0.11", "0.65.0", &[("media", 1), ("speech", 1)]),
