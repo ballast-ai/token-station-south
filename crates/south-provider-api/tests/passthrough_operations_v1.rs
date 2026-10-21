@@ -45,6 +45,8 @@ fn messages_counting() -> CountTokensDeclarationV1 {
 fn messages_facts() -> RequestFactsV1 {
     RequestFactsV1 {
         output_cap: vec![MESSAGES_OUTPUT_CAP.to_owned()],
+        reasoning_cap: Vec::new(),
+        cap_overhead: 0,
         model: ModelLocationV1::Body("/model".to_owned()),
         stream: StreamLocationV1::Body("/stream".to_owned()),
     }
@@ -221,6 +223,8 @@ fn a_forwarded_header_may_not_be_a_declared_secret_header() {
         family.clone(),
         RequestFactsV1 {
             output_cap: vec![MESSAGES_OUTPUT_CAP.to_owned()],
+            reasoning_cap: Vec::new(),
+            cap_overhead: 0,
             model: ModelLocationV1::Body("/model".to_owned()),
             stream: StreamLocationV1::Body("/stream".to_owned()),
         },

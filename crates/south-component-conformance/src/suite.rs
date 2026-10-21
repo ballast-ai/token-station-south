@@ -249,6 +249,10 @@ fn holds_path(body: &Value, path: &str) -> bool {
 /// `ImmutablePathsHonoured` (the `OpenAI` Responses upstream record §12.2): for each family with
 /// declared paths, every request it built holds each path in the same state, present or absent.
 /// A family with paths but no built request fails, since the check then never ran.
+///
+/// A path that is also one of the family's `request_facts.reasoning_cap` locations is exempt: a
+/// reasoning cap is present exactly when the request splits its cap, and `RequestFactsHonoured`
+/// pins its value on every request instead (the Bailian thinking cap record §4).
 fn immutable_paths_honoured(
     component: &dyn ProviderComponentV1,
     pack: &FixturePackV1,
@@ -256,7 +260,12 @@ fn immutable_paths_honoured(
 ) -> Vec<OutcomeV1> {
     let check = CheckV1::ImmutablePathsHonoured;
     let mut outcomes = Vec::new();
-    for (family, paths) in &manifest.immutable_body_paths {
+    for (family, declared) in &manifest.immutable_body_paths {
+        let reasoning_cap = manifest.request_facts_for(family).reasoning_cap;
+        let paths: Vec<&String> = declared
+            .iter()
+            .filter(|path| !reasoning_cap.contains(&format!("/{}", path.replace('.', "/"))))
+            .collect();
         if paths.is_empty() {
             continue;
         }
@@ -532,18 +541,8 @@ fn request_facts_problem(
     let body = descriptor.body.clone().unwrap_or(Value::Null);
     let request = &input.chat_request;
 
-    if let Some(cap) = request.sampling.max_output_tokens
-        && !facts.output_cap.is_empty()
-    {
-        let holding: Vec<&Value> =
-            facts.output_cap.iter().filter_map(|pointer| body.pointer(pointer)).collect();
-        if holding.len() != 1 || holding[0].as_u64() != Some(u64::from(cap)) {
-            return Some(format!(
-                "the IR cap {cap} must sit in exactly one declared location ({}), and the \
-                 others must be absent",
-                facts.output_cap.join(", ")
-            ));
-        }
+    if let Some(problem) = cap_problem(request.sampling.max_output_tokens, &body, &facts) {
+        return Some(problem);
     }
     if let Some(problem) = cap_moves_only_where_declared(&input, &facts, invoke) {
         return Some(problem);
@@ -712,9 +711,64 @@ fn passthrough_operations(
     outcomes
 }
 
+/// Where the built body puts the IR cap, against the declared locations (B2, host-zero-vendor-boundary
+/// §7.2; the Bailian thinking cap record §4).
+///
+/// Without a value at a declared `reasoning_cap` location, exactly one `output_cap` location holds
+/// the IR cap N. With one, the request splits N: exactly one `output_cap` location holds an answer
+/// cap a ≥ 1, exactly one `reasoning_cap` location holds a reasoning cap b ≥ 1, and
+/// `a + b + cap_overhead == N`. A reasoning cap with no IR cap is never written.
+fn cap_problem(cap: Option<u32>, body: &Value, facts: &RequestFactsV1) -> Option<String> {
+    let reasoning: Vec<&Value> =
+        facts.reasoning_cap.iter().filter_map(|pointer| body.pointer(pointer)).collect();
+    let Some(cap) = cap else {
+        return (!reasoning.is_empty()).then(|| {
+            format!(
+                "a reasoning cap sits in {} although the IR carries no cap",
+                facts.reasoning_cap.join(", ")
+            )
+        });
+    };
+    if facts.output_cap.is_empty() {
+        return None;
+    }
+    let holding: Vec<&Value> =
+        facts.output_cap.iter().filter_map(|pointer| body.pointer(pointer)).collect();
+    if reasoning.is_empty() {
+        if holding.len() != 1 || holding[0].as_u64() != Some(u64::from(cap)) {
+            return Some(format!(
+                "the IR cap {cap} must sit in exactly one declared location ({}), and the \
+                 others must be absent",
+                facts.output_cap.join(", ")
+            ));
+        }
+        return None;
+    }
+    let positive = |values: &[&Value]| match values {
+        [value] => value.as_u64().filter(|value| *value >= 1),
+        _ => None,
+    };
+    let split = positive(&holding).zip(positive(&reasoning)).filter(|(answer, reasoning)| {
+        answer
+            .checked_add(*reasoning)
+            .and_then(|sum| sum.checked_add(u64::from(facts.cap_overhead)))
+            == Some(u64::from(cap))
+    });
+    if split.is_none() {
+        return Some(format!(
+            "a split IR cap {cap} must be one answer cap of at least 1 in {}, one reasoning cap \
+             of at least 1 in {}, and the two plus the overhead {} must equal the IR cap",
+            facts.output_cap.join(", "),
+            facts.reasoning_cap.join(", "),
+            facts.cap_overhead
+        ));
+    }
+    None
+}
+
 /// Builds the request twice through the same serialization, once with a
 /// different IR cap, and compares the bodies with the declared cap locations
-/// removed.
+/// (answer and reasoning) removed.
 fn cap_moves_only_where_declared(
     input: &RequestInput,
     facts: &RequestFactsV1,
@@ -736,7 +790,7 @@ fn cap_moves_only_where_declared(
         let descriptor: HttpRequestDescriptor =
             parse(&built).map_err(|failure| failure.detail())?;
         let mut body = descriptor.body.unwrap_or(Value::Null);
-        for pointer in &facts.output_cap {
+        for pointer in facts.output_cap.iter().chain(&facts.reasoning_cap) {
             remove_pointer(&mut body, pointer);
         }
         Ok(body)
