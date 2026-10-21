@@ -728,7 +728,6 @@ fn the_t9_families_retire_the_patch_identity() {
     assert_eq!(manifest.version, "2.13.0");
     assert_eq!(OpenAiCompatibleReferenceV1.metadata().version, manifest.version);
     // 2.13.0 declares `request_facts.reasoning_cap` and `cap_overhead` (Bailian thinking cap record
-    // §4), first parsed by 0.76.0; until that release ships them it keeps the 0.74.0 of 2.12.0
-    // (record `2026-10-18-family-model-parameters.md` §7), as the 0.74.0 cycle did.
-    assert_eq!(manifest.compatibility.south_runtime, "0.74.0");
+    // §4), first parsed by 0.76.0.
+    assert_eq!(manifest.compatibility.south_runtime, "0.76.0");
 }
