@@ -1,0 +1,4 @@
+{
+  "status": 200,
+  "body": "{\"output\":{\"task_status\":\"SUCCEEDED\",\"video_url\":\"https://media.example/video?sig=private\"},\"usage\":{\"video_count\":1,\"duration\":13.0,\"input_video_duration\":8.0,\"output_video_duration\":5.0,\"fps\":30,\"SR\":1080,\"ratio\":\"16:9\"}}"
+}

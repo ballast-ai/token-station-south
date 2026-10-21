@@ -1,0 +1,58 @@
+{
+  "descriptor": {
+    "method": "POST",
+    "url": "https://dashscope.example/api/v1/services/aigc/video-generation/video-synthesis",
+    "headers": {
+      "content-type": "application/json",
+      "x-dashscope-async": "enable"
+    },
+    "body": {
+      "model": "wan3.0-video",
+      "input": {
+        "prompt": "Video 1 holds Image 1",
+        "media": [
+          {
+            "type": "reference_image",
+            "url": "https://image.example/1"
+          },
+          {
+            "type": "reference_image",
+            "url": "https://image.example/2"
+          },
+          {
+            "type": "reference_video",
+            "url": "https://media.example/1.mp4"
+          },
+          {
+            "type": "reference_audio",
+            "url": "https://media.example/1.mp3"
+          }
+        ]
+      },
+      "parameters": {
+        "resolution": "1080P",
+        "ratio": "adaptive",
+        "duration": -1,
+        "audio": false,
+        "seed": 7
+      }
+    },
+    "auth": {
+      "scheme": "bearer",
+      "secret": "provider_api_key"
+    }
+  },
+  "locator": {
+    "schema_version": 1,
+    "route": "api/v1/tasks"
+  },
+  "request_estimate": {
+    "requested_seconds": 30.0,
+    "milliunits_per_second": null,
+    "resolution": "1080P",
+    "input_image_count": 2,
+    "tokens_per_second": null,
+    "requested_outputs": null
+  },
+  "immutable_body_paths": null
+}
