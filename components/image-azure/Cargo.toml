@@ -4,7 +4,7 @@
 # dependency's `sandbox` feature stays off).
 [package]
 name = "image-azure"
-version = "1.0.23"
+version = "1.0.24"
 edition = "2021"
 publish = false
 

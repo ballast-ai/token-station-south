@@ -105,7 +105,9 @@ fn the_gmi_package_declares_its_organization_id_as_a_section_attribute() {
     let manifest = validated(shipped_value("task-gmi-image-v2"));
     // Published as 0.36.0 with 0.74.0; the Kiro image input record's Q47 bump made it 0.36.1
     // (`kiro_images_retires_every_published_074_package_identity`).
-    assert_eq!(manifest.version, "0.36.1");
+    // Published as 0.36.1 with 0.75.0; the Bailian records' Q47 bump made it 0.36.2
+    // (`bailian_retires_every_published_075_package_identity`).
+    assert_eq!(manifest.version, "0.36.2");
     let wire = serde_json::to_value(manifest.credentials.as_ref().unwrap()).unwrap();
     assert_eq!(
         wire,

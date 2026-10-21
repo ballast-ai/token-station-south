@@ -31,7 +31,9 @@ fn paths(list: &[&str]) -> Vec<String> {
 
 #[test]
 fn absent_declarations_are_omitted_and_change_nothing() {
-    let manifest = openai();
+    // `provider-openai-compatible` declares a path for `bailian-openai-compatible` since the Bailian
+    // thinking cap record; `provider-kiro` declares neither field.
+    let manifest = shipped("provider-kiro");
     assert!(manifest.immutable_body_paths.is_empty());
     assert!(manifest.north_passthrough.is_empty());
     let wire = serde_json::to_value(&manifest).unwrap();

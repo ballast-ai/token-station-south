@@ -91,11 +91,11 @@ fn one_loaded_package_serves_every_family_it_declares() {
         .collect();
     assert_eq!(
         seams.len(),
-        7,
+        8,
         "openai-compatible, azure-openai-v1, github-copilot, gemini-openai-compatible, \
-         azure-openai-dated, glm-coding and kimi-code"
+         azure-openai-dated, glm-coding, kimi-code and bailian-openai-compatible"
     );
-    assert_eq!(std::sync::Arc::strong_count(&loaded), 8, "one instance, seven seams");
+    assert_eq!(std::sync::Arc::strong_count(&loaded), 9, "one instance, eight seams");
     for seam in &seams {
         assert_eq!(seam.metadata(), loaded.metadata());
     }

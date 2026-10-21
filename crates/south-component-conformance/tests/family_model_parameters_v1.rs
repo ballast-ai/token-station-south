@@ -52,6 +52,8 @@ fn every_provider_package_declares_the_words_its_reference_reads() {
     for (name, declared) in &compatible.model_parameters {
         let words: &[&str] = if name == "openai-compatible" {
             &family::OPENAI_COMPATIBLE
+        } else if name == "bailian-openai-compatible" {
+            &family::BAILIAN_OPENAI_COMPATIBLE
         } else {
             &family::OPENAI_COMPATIBLE_OTHER
         };

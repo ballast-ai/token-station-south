@@ -1,0 +1,54 @@
+{
+  "facts": {
+    "operation": "transcribe",
+    "metering_forms": [
+      "seconds"
+    ],
+    "reservation": {
+      "max_seconds": 300
+    }
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "api/v1/services/aigc/multimodal-generation/generation",
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "model": "qwen3-asr-flash",
+          "input": {
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "audio": {
+                      "$south.ref": {
+                        "blob": "b0",
+                        "transform": "data_url",
+                        "media_type": "audio/mpeg"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "response_body_form": "json",
+  "response_elision_paths": [],
+  "immutable_body_paths": [
+    "model",
+    "input"
+  ],
+  "state": {
+    "op": "transcribe",
+    "format": "json"
+  }
+}

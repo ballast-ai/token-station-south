@@ -1,7 +1,10 @@
 //! `south.speech-component.v1` against the `speech-qwen` native reference and its shipped pack, and
 //! the behaviours of design record `2026-10-15-speech-v4-tts.md` §2 pinned by name: the `url`
 //! artifact with SV-Q10's upgrade, the weighted `upper`, SV-Q7's character rule, the 2xx `code`,
-//! the `DashScope` error reader shared with `image-qwen`, and the `instruct` model class.
+//! the `DashScope` error reader shared with `image-qwen`, and the `instruct` model class; and of
+//! `2026-10-21-speech-qwen-asr.md` (Qwen-ASR transcription, 1.1.0): the data URL the host expands,
+//! the audio media type, the 10 MB bound, the client formats, and seconds read from `usage.seconds`
+//! with no fallback.
 
 use serde_json::{Value, json};
 use south_component_conformance::reference_qwen_speech::QwenSpeechReferenceV1;
@@ -13,11 +16,14 @@ use south_contracts::media::{ArtifactUrlV1, MediaBodyV1};
 use south_contracts::speech::{
     PreparedSpeechCallV1, SpeechArtifactFormV1, SpeechArtifactV1, SpeechCallContextV1,
     SpeechCharacterMeterV1, SpeechCharacterSourceV1, SpeechMeteringV1, SpeechModelCapabilitiesV1,
+    SpeechSecondsBasisV1, SpeechSecondsMeterV1, TranscriptDeliveryV1,
     upgrade_insecure_artifact_url_v1,
 };
 use south_provider_api::ComponentMetadataV1;
 use token_station_protocol::{ErrorCode, ProviderConfig};
 
+#[path = "support/speech_v3_3.rs"]
+mod asr;
 #[path = "support/speech_v3_1.rs"]
 mod support;
 
@@ -74,10 +80,12 @@ fn delivered(url: &str, characters: &Value) -> Value {
     json!({ "output": { "audio": { "url": url } }, "usage": { "characters": characters } })
 }
 
-/// The rows the Qwen pack must show: V3-1's synthesis rows and the second hop.
+/// The rows the Qwen pack must show: V3-1's synthesis rows, the second hop and, from 1.1.0, the
+/// missing duration of a transcription.
 fn rows() -> Vec<CheckV1> {
     let mut rows = support::APPLICABLE_ROWS.to_vec();
     rows.push(CheckV1::SecondHopArtifact);
+    rows.push(CheckV1::AbsentDurationIsNullOrUnknown);
     rows
 }
 
@@ -93,7 +101,12 @@ fn the_reference_passes_its_own_pack() {
     let failures = support::failures(&report);
     assert!(failures.is_empty(), "{failures:#?}");
     support::assert_rows_ran(&report, &rows());
-    for row in ["speech-v1.second-hop", "speech-v1.metering.characters.request"] {
+    for row in [
+        "speech-v1.second-hop",
+        "speech-v1.metering.characters.request",
+        "speech-v1.metering.seconds",
+        "speech-v1.absent.seconds",
+    ] {
         assert!(
             report.outcomes().iter().any(|outcome| outcome.case == row && !outcome.is_failure()),
             "{row} did not pass"
@@ -105,6 +118,12 @@ fn the_reference_passes_its_own_pack() {
 fn every_break_turns_its_row_red() {
     let manifest = support::manifest(PACKAGE);
     support::assert_every_break_bites(&REFERENCE, &support::pack(&manifest), &manifest);
+}
+
+#[test]
+fn every_recognition_break_turns_its_row_red() {
+    let manifest = support::manifest(PACKAGE);
+    asr::assert_every_asr_break_bites(&REFERENCE, &support::pack(&manifest), &manifest);
 }
 
 /// Record §2.2 step 4 and SV-Q10: the audio is a `url` artifact at `/output/audio/url` that asks
@@ -341,4 +360,358 @@ fn every_qwen_mutation_turns_the_pack_red() {
             && outcome.case == "speech-v1.response.native"),
         "{report}"
     );
+}
+
+// ---- Transcription (`2026-10-21-speech-qwen-asr.md`) ----
+
+const ASR_MODEL: &str = "qwen3-asr-flash";
+
+fn asr_config() -> ProviderConfig {
+    serde_json::from_value(json!({
+        "provider": "bailian-qwen-speech",
+        "base_url": "https://ws-example.ap-southeast-1.maas.aliyuncs.com",
+        "auth": "provider_api_key",
+        "models": [{ "model": ASR_MODEL }],
+    }))
+    .unwrap()
+}
+
+fn asr_context() -> SpeechCallContextV1 {
+    serde_json::from_value(json!({
+        "upstream_model": ASR_MODEL,
+        "operation": "transcribe",
+        "metering_required": ["seconds"],
+    }))
+    .unwrap()
+}
+
+/// A transcription view: the file part (file name, media type, size) and text parts.
+fn asr_request(
+    filename: Option<&str>,
+    media_type: Option<&str>,
+    bytes: u64,
+    texts: &[(&str, &str)],
+) -> Value {
+    let mut file = json!({ "kind": "file", "name": "file", "blob": "b0", "bytes": bytes });
+    if let Some(filename) = filename {
+        file["filename"] = json!(filename);
+    }
+    if let Some(media_type) = media_type {
+        file["media_type"] = json!(media_type);
+    }
+    let mut parts = vec![file];
+    for (name, value) in texts {
+        parts.push(json!({ "kind": "text", "name": name, "value": value }));
+    }
+    json!({ "multipart": { "parts": parts } })
+}
+
+fn asr_prepare(
+    request: &Value,
+) -> Result<PreparedSpeechCallV1, token_station_protocol::ErrorEnvelope> {
+    REFERENCE.prepare(&asr_config(), request, &asr_context())
+}
+
+fn asr_template(request: &Value) -> Value {
+    let prepared = asr_prepare(request).unwrap();
+    let MediaBodyV1::Json(template) = prepared.descriptor.body() else { panic!("a JSON body") };
+    serde_json::from_str(template).unwrap()
+}
+
+/// The outcome of a transcription view with this status and JSON body, in `format`.
+fn asr_answer(format: &str, status: u16, body: &Value) -> SpeechOutcomeV1 {
+    let prepared =
+        asr_prepare(&asr_request(Some("a.mp3"), None, 9, &[("response_format", format)])).unwrap();
+    let state: Value = serde_json::from_str(&prepared.state).unwrap();
+    let view = json!({ "status": status, "headers": [], "body": { "json": body } });
+    REFERENCE.parse_response(&state, &view).unwrap()
+}
+
+fn transcript_body(text: &Value, seconds: &Value) -> Value {
+    json!({
+        "output": { "choices": [{ "message": { "role": "assistant", "content": [{ "text": text }] } }] },
+        "usage": { "seconds": seconds },
+    })
+}
+
+/// The shipped manifest declares `transcribe` beside synthesis, at 1.1.0, on the runtime and
+/// contracts it already declared (`data_url` is a media contract 1 word).
+#[test]
+fn the_manifest_declares_transcription_at_1_1_0() {
+    let manifest = support::manifest(PACKAGE);
+    assert_eq!(manifest.version, "1.1.0");
+    assert_eq!(REFERENCE.metadata().version, "1.1.0");
+    assert!(manifest.capabilities.contains("transcribe"));
+    assert!(!manifest.capabilities.contains("translate"));
+    assert_eq!(manifest.compatibility.south_runtime, "0.65.0");
+    assert_eq!(
+        south_contracts::media::MediaTransformV1::DataUrl.minimum_contract_version(),
+        south_contracts::media::MEDIA_CONTRACT_VERSION
+    );
+}
+
+/// Every model declares both operations, `transcribe` metered in seconds, and never `translate`.
+#[test]
+fn every_model_transcribes_and_none_translates() {
+    let models = REFERENCE.model_capabilities(&asr_config()).unwrap();
+    let model = serde_json::to_value(&models[0]).unwrap();
+    assert_eq!(model["operations"], json!(["synthesize", "transcribe"]));
+    assert_eq!(model["metering_forms"], json!(["characters", "seconds"]));
+}
+
+/// Record §3.1: the audio reaches the upstream as a data URL the host expands from the file blob,
+/// typed by the part's media type; the call reserves at most 300 seconds.
+#[test]
+fn the_audio_is_a_data_url_the_host_expands() {
+    let prepared = asr_prepare(&asr_request(Some("a.mp3"), Some("audio/mpeg"), 3, &[])).unwrap();
+    assert_eq!(prepared.facts.reservation.and_then(|bounds| bounds.max_seconds), Some(300));
+    assert_eq!(prepared.immutable_body_paths, Some(vec!["model".to_owned(), "input".to_owned()]));
+    let MediaBodyV1::Json(template) = prepared.descriptor.body() else { panic!("a JSON body") };
+    let blobs = south_contracts::media::BlobSetV1::new([south_contracts::media::BlobV1::file(
+        south_contracts::media::BlobIdV1::parse("b0").unwrap(),
+        b"abc".to_vec(),
+    )])
+    .unwrap();
+    let body: Value = serde_json::from_str(
+        south_contracts::media::expand_json_template_v1(template, &blobs).unwrap().as_str(),
+    )
+    .unwrap();
+    assert_eq!(
+        body,
+        json!({
+            "model": ASR_MODEL,
+            "input": { "messages": [{ "role": "user", "content": [{ "audio": "data:audio/mpeg;base64,YWJj" }] }] },
+        })
+    );
+}
+
+/// Record §3.2: `language` and `enable_itn` become `asr_options`, `prompt` the system message's
+/// text; `temperature` is dropped; empty values are not sent.
+#[test]
+fn language_prompt_and_itn_map_onto_the_dashscope_body() {
+    let body = asr_template(&asr_request(
+        Some("a.mp3"),
+        None,
+        9,
+        &[("language", "zh"), ("prompt", "Qwen"), ("enable_itn", "False"), ("temperature", "1")],
+    ));
+    assert_eq!(
+        body["input"]["messages"][0],
+        json!({ "role": "system", "content": [{ "text": "Qwen" }] })
+    );
+    assert_eq!(body["input"]["messages"][1]["role"], "user");
+    assert_eq!(
+        body["parameters"],
+        json!({ "asr_options": { "language": "zh", "enable_itn": false } })
+    );
+    let bare =
+        asr_template(&asr_request(Some("a.mp3"), None, 9, &[("language", ""), ("prompt", "")]));
+    assert_eq!(bare["input"]["messages"].as_array().map(Vec::len), Some(1));
+    assert!(bare.get("parameters").is_none());
+}
+
+/// Record §3.3: the part's own audio or video media type (lower-cased), else the file name's
+/// extension when the part has none or `application/octet-stream`, else refused.
+#[test]
+fn the_media_type_comes_from_the_part_then_the_extension() {
+    let media_type = |filename: Option<&str>, part: Option<&str>| {
+        asr_prepare(&asr_request(filename, part, 9, &[])).map(|prepared| {
+            let MediaBodyV1::Json(template) = prepared.descriptor.body() else { panic!() };
+            let template: Value = serde_json::from_str(template).unwrap();
+            template["input"]["messages"][0]["content"][0]["audio"]["$south.ref"]["media_type"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        })
+    };
+    for (filename, part, expected) in [
+        (Some("x.bin"), Some("audio/x-m4a"), "audio/x-m4a"),
+        (Some("x.mp3"), Some("Audio/MPEG"), "audio/mpeg"),
+        (Some("x.mp4"), Some("video/mp4"), "video/mp4"),
+        (Some("x.MP3"), None, "audio/mpeg"),
+        (Some("x.wav"), Some("application/octet-stream"), "audio/wav"),
+        (Some("x.m4a"), None, "audio/mp4"),
+        (Some("x.aac"), None, "audio/aac"),
+        (Some("x.flac"), None, "audio/flac"),
+        (Some("x.ogg"), None, "audio/ogg"),
+        (Some("x.opus"), None, "audio/opus"),
+        (Some("x.webm"), None, "audio/webm"),
+        (Some("x.amr"), None, "audio/amr"),
+        (Some("x.mp4"), None, "video/mp4"),
+    ] {
+        assert_eq!(media_type(filename, part).as_deref(), Ok(expected), "{filename:?} {part:?}");
+    }
+    for (filename, part) in [
+        (Some("x.txt"), None),
+        (None, None),
+        (Some("mp3"), None),
+        (Some("x.mp3"), Some("image/png")),
+        (Some("x.mp3"), Some("text/plain")),
+    ] {
+        let error = media_type(filename, part).unwrap_err();
+        assert_eq!((error.code, error.http_status), (ErrorCode::InvalidRequest, 400));
+    }
+}
+
+/// Record §3.4: the data URL may be at most 10,000,000 bytes (10 MB read as the smaller, decimal
+/// unit), refused before dispatch above it.
+#[test]
+fn the_data_url_bound_is_ten_decimal_megabytes() {
+    // `data:audio/mpeg;base64,` is 23 bytes; 7_499_982 bytes encode to 9_999_976 characters
+    // (9_999_999 in all), 7_499_983 to 9_999_980 (10_000_003).
+    assert!(asr_prepare(&asr_request(Some("a.mp3"), Some("audio/mpeg"), 7_499_982, &[])).is_ok());
+    assert!(asr_prepare(&asr_request(Some("a.mp3"), Some("audio/mpeg"), 7_499_983, &[])).is_err());
+    // `data:audio/wav;base64,` is 22 bytes: 9_999_998 in all.
+    assert!(asr_prepare(&asr_request(Some("a.wav"), Some("audio/wav"), 7_499_982, &[])).is_ok());
+    let error =
+        asr_prepare(&asr_request(Some("a.wav"), Some("audio/wav"), 7_499_983, &[])).unwrap_err();
+    assert_eq!((error.code, error.http_status), (ErrorCode::InvalidRequest, 400));
+}
+
+/// Record §3.5: `json` and `text` are served; the timestamped formats and anything else are refused
+/// before dispatch, as is streaming.
+#[test]
+fn only_json_and_text_are_served() {
+    for format in ["json", "text"] {
+        assert!(
+            asr_prepare(&asr_request(Some("a.mp3"), None, 9, &[("response_format", format)]))
+                .is_ok()
+        );
+    }
+    for format in ["verbose_json", "srt", "vtt", "xml", "JSON", ""] {
+        let error =
+            asr_prepare(&asr_request(Some("a.mp3"), None, 9, &[("response_format", format)]))
+                .unwrap_err();
+        assert_eq!(error.code, ErrorCode::InvalidRequest, "{format}");
+    }
+    assert!(asr_prepare(&asr_request(Some("a.mp3"), None, 9, &[("stream", "true")])).is_err());
+}
+
+/// Record §3.6: the seconds are `usage.seconds` when it is a non-negative integer, reported; any
+/// other value, or none, is `unknown` with no fallback.
+#[test]
+fn seconds_are_the_reported_integer_or_unknown() {
+    let text = json!("hello");
+    for (seconds, expected) in [(json!(0), 0.0), (json!(1), 1.0), (json!(300), 300.0)] {
+        let SpeechOutcomeV1::Succeeded { metering, .. } =
+            asr_answer("json", 200, &transcript_body(&text, &seconds))
+        else {
+            panic!("a delivery for {seconds}")
+        };
+        assert_eq!(
+            metering.seconds,
+            Some(SpeechSecondsMeterV1 { value: expected, basis: SpeechSecondsBasisV1::Reported })
+        );
+    }
+    for seconds in [Value::Null, json!(-1), json!(1.5), json!(2.0), json!("2"), json!(true)] {
+        assert!(
+            matches!(
+                asr_answer("json", 200, &transcript_body(&text, &seconds)),
+                SpeechOutcomeV1::Unknown { error: None, .. }
+            ),
+            "{seconds}"
+        );
+    }
+    let mut no_usage = transcript_body(&text, &json!(1));
+    no_usage.as_object_mut().unwrap().remove("usage");
+    assert!(matches!(asr_answer("text", 200, &no_usage), SpeechOutcomeV1::Unknown { .. }));
+}
+
+/// Record §3.6: `json` is `{"text"}`, `text` the plain transcript; a transcript the host elided is
+/// a reference in `json` and `unknown` in `text`.
+#[test]
+fn the_transcript_is_rendered_in_the_client_format() {
+    let body = transcript_body(&json!("hello"), &json!(4));
+    let SpeechOutcomeV1::Succeeded { delivery: SpeechDeliveryV1::Transcript(json_doc), .. } =
+        asr_answer("json", 200, &body)
+    else {
+        panic!("a transcript")
+    };
+    assert_eq!(json_doc, TranscriptDeliveryV1::Json { template: r#"{"text":"hello"}"#.to_owned() });
+    let SpeechOutcomeV1::Succeeded { delivery: SpeechDeliveryV1::Transcript(text_doc), .. } =
+        asr_answer("text", 200, &body)
+    else {
+        panic!("a transcript")
+    };
+    assert_eq!(
+        text_doc,
+        TranscriptDeliveryV1::Text {
+            text: "hello".to_owned(),
+            media_type: "text/plain; charset=utf-8".to_owned()
+        }
+    );
+    let elided = json!({ "$south.blob": { "id": "r0", "bytes": 2_000_000, "head": "aaaa" } });
+    let body = transcript_body(&elided, &json!(4));
+    let SpeechOutcomeV1::Succeeded { delivery: SpeechDeliveryV1::Transcript(reference), .. } =
+        asr_answer("json", 200, &body)
+    else {
+        panic!("a transcript")
+    };
+    assert_eq!(
+        reference,
+        TranscriptDeliveryV1::Json {
+            template: r#"{"text":{"$south.ref":{"blob":"r0","transform":"as_is"}}}"#.to_owned()
+        }
+    );
+    assert!(matches!(asr_answer("text", 200, &body), SpeechOutcomeV1::Unknown { .. }));
+}
+
+/// A 2xx carrying a `DashScope` code is `unknown` with a 502 envelope, as for synthesis.
+#[test]
+fn a_transcription_2xx_carrying_a_code_is_unknown() {
+    let mut body = transcript_body(&json!("hello"), &json!(1));
+    body["code"] = json!("InvalidParameter");
+    let SpeechOutcomeV1::Unknown { error: Some(error), .. } = asr_answer("json", 200, &body) else {
+        panic!("unknown with an envelope")
+    };
+    assert_eq!((error.code, error.http_status), (ErrorCode::ProviderProtocolError, 502));
+}
+
+/// Guessing a duration for a 2xx without `usage.seconds` (a fallback the record refuses) turns the
+/// missing-duration cases red.
+#[test]
+fn a_guessed_duration_turns_the_pack_red() {
+    struct GuessSeconds;
+    impl SpeechComponentV1 for GuessSeconds {
+        fn metadata(&self) -> ComponentMetadataV1 {
+            REFERENCE.metadata()
+        }
+        fn model_capabilities(
+            &self,
+            config: &ProviderConfig,
+        ) -> ComponentResultV1<Vec<SpeechModelCapabilitiesV1>> {
+            REFERENCE.model_capabilities(config)
+        }
+        fn prepare(
+            &self,
+            config: &ProviderConfig,
+            request: &Value,
+            context: &SpeechCallContextV1,
+        ) -> ComponentResultV1<PreparedSpeechCallV1> {
+            REFERENCE.prepare(config, request, context)
+        }
+        fn parse_response(
+            &self,
+            state: &Value,
+            response: &Value,
+        ) -> ComponentResultV1<SpeechOutcomeV1> {
+            let mut response = response.clone();
+            if let Some(usage) = response.pointer_mut("/body/json/usage")
+                && usage.get("seconds").is_none_or(Value::is_null)
+            {
+                usage["seconds"] = json!(60);
+            }
+            REFERENCE.parse_response(state, &response)
+        }
+    }
+    let manifest = support::manifest(PACKAGE);
+    let report = run_speech_component_suite_v1(&GuessSeconds, &support::pack(&manifest), &manifest);
+    let failed: Vec<(CheckV1, String)> =
+        report.failures().map(|outcome| (outcome.check, outcome.case.clone())).collect();
+    for case in ["speech-v1.response.asr-seconds-missing", "speech-v1.response.asr-seconds-null"] {
+        assert!(
+            failed.contains(&(CheckV1::AbsentDurationIsNullOrUnknown, case.to_owned())),
+            "{case} stayed green: {failed:?}"
+        );
+    }
 }

@@ -49,7 +49,7 @@ use crate::{ComponentResultV1, SpeechComponentV1, SpeechOutcomeV1};
 /// The package name this reference is published as.
 pub const NAME: &str = "speech-minimax";
 /// The package version.
-pub const VERSION: &str = "1.0.10";
+pub const VERSION: &str = "1.0.11";
 /// The world this reference exports.
 pub const WORLD: &str = "speech-adapter-v1";
 /// The family, as a host's speech bindings name it.

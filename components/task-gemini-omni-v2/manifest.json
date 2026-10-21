@@ -1,6 +1,6 @@
 {
   "name": "task-gemini-omni-v2",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "api_version": "task-adapter-v2",
   "providers": [
     "gemini-interactions-video",

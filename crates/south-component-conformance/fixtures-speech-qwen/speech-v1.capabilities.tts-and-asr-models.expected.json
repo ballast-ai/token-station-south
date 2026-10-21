@@ -1,0 +1,35 @@
+[
+  {
+    "model": "qwen3-tts-flash",
+    "operations": [
+      "synthesize",
+      "transcribe"
+    ],
+    "metering_forms": [
+      "characters",
+      "seconds"
+    ]
+  },
+  {
+    "model": "qwen3-tts-instruct-flash",
+    "operations": [
+      "synthesize",
+      "transcribe"
+    ],
+    "metering_forms": [
+      "characters",
+      "seconds"
+    ]
+  },
+  {
+    "model": "qwen3-asr-flash",
+    "operations": [
+      "synthesize",
+      "transcribe"
+    ],
+    "metering_forms": [
+      "characters",
+      "seconds"
+    ]
+  }
+]

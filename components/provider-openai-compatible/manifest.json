@@ -1,6 +1,6 @@
 {
   "name": "provider-openai-compatible",
-  "version": "2.12.1",
+  "version": "2.13.0",
   "api_version": "provider-adapter-v2",
   "providers": [
     "openai-compatible",
@@ -9,7 +9,8 @@
     "gemini-openai-compatible",
     "azure-openai-dated",
     "glm-coding",
-    "kimi-code"
+    "kimi-code",
+    "bailian-openai-compatible"
   ],
   "capabilities": [
     "chat",
@@ -140,6 +141,23 @@
       }
     }
   },
+  "request_facts": {
+    "bailian-openai-compatible": {
+      "output_cap": [
+        "/max_tokens"
+      ],
+      "reasoning_cap": [
+        "/thinking_budget"
+      ],
+      "cap_overhead": 3,
+      "model": {
+        "body": "/model"
+      },
+      "stream": {
+        "body": "/stream"
+      }
+    }
+  },
   "endpoint": {
     "gemini-openai-compatible": "https://generativelanguage.googleapis.com/v1beta/openai",
     "github-copilot": "https://api.{plan}.githubcopilot.com"
@@ -197,6 +215,11 @@
     "glm-coding",
     "kimi-code"
   ],
+  "immutable_body_paths": {
+    "bailian-openai-compatible": [
+      "thinking_budget"
+    ]
+  },
   "model_parameters": {
     "azure-openai-dated": {
       "words": [
@@ -208,6 +231,14 @@
       "words": [
         "anthropic.tool_choice.auto_only",
         "reasoning_effort"
+      ]
+    },
+    "bailian-openai-compatible": {
+      "words": [
+        "anthropic.tool_choice.auto_only",
+        "reasoning_content",
+        "reasoning_effort",
+        "thinking_budget"
       ]
     },
     "gemini-openai-compatible": {

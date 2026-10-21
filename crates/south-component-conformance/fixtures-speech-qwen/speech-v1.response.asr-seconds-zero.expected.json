@@ -1,0 +1,16 @@
+{
+  "outcome": "succeeded",
+  "transcript": {
+    "json": {
+      "text": "Welcome to Alibaba Cloud."
+    }
+  },
+  "metering": {
+    "characters": null,
+    "seconds": {
+      "value": 0.0,
+      "basis": "reported"
+    },
+    "tokens": null
+  }
+}

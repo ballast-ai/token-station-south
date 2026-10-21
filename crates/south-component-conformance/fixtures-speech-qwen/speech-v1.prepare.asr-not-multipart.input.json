@@ -1,0 +1,24 @@
+{
+  "provider_config": {
+    "provider": "bailian-qwen-speech",
+    "base_url": "https://ws-example.ap-southeast-1.maas.aliyuncs.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "qwen3-asr-flash"
+      }
+    ]
+  },
+  "request": {
+    "json": {
+      "file": "x"
+    }
+  },
+  "context": {
+    "upstream_model": "qwen3-asr-flash",
+    "operation": "transcribe",
+    "metering_required": [
+      "seconds"
+    ]
+  }
+}

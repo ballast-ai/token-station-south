@@ -362,8 +362,13 @@ fn azure_families_send_the_cap_as_native_does() {
     }
     let (glm, glm_request) = parts(GLM_FIXTURES[0]);
     assert!(glm_request.sampling.max_output_tokens.is_some());
-    for family in ["openai-compatible", glm_coding::FAMILY, "gemini-openai-compatible", "kimi-code"]
-    {
+    for family in [
+        "openai-compatible",
+        glm_coding::FAMILY,
+        "gemini-openai-compatible",
+        "kimi-code",
+        "bailian-openai-compatible",
+    ] {
         let mut other = glm.clone();
         other.provider = family.to_owned();
         assert_eq!(cap_key(&build(&other, &glm_request)), Some("max_tokens"), "{family}");
@@ -391,6 +396,7 @@ fn the_cap_field_is_declared_with_the_native_default_and_refuses_other_values() 
         "gemini-openai-compatible",
         "glm-coding",
         "kimi-code",
+        "bailian-openai-compatible",
     ] {
         assert!(!manifest.declared_keys(family).contains(azure_openai_cap_field::KEY), "{family}");
     }
@@ -428,7 +434,8 @@ fn client_thinking_fields_are_forwarded_as_native_does() {
             "github-copilot",
             "azure-openai-dated",
             "glm-coding",
-            "kimi-code"
+            "kimi-code",
+            "bailian-openai-compatible"
         ]
     );
     let (base, request) = parts(GLM_FIXTURES[0]);
@@ -714,8 +721,14 @@ fn the_t9_families_retire_the_patch_identity() {
     // (`family_model_parameters_retires_every_published_0731_package_identity`).
     // Published as 2.12.0 with 0.74.0; the Kiro image input record's Q47 bump made it 2.12.1
     // (`kiro_images_retires_every_published_074_package_identity`).
-    assert_eq!(manifest.version, "2.12.1");
+    assert_ne!(manifest.version, "2.12.1");
+    // Published as 2.12.1 with 0.75.0; the `bailian-openai-compatible` family (Bailian thinking cap
+    // record §7) adds a family, so the package takes the minor 2.13.0
+    // (`bailian_retires_every_published_075_package_identity`).
+    assert_eq!(manifest.version, "2.13.0");
     assert_eq!(OpenAiCompatibleReferenceV1.metadata().version, manifest.version);
-    // 2.12.0 declares `model_parameters` (record `2026-10-18-family-model-parameters.md` §7), first parsed by 0.74.0.
+    // 2.13.0 declares `request_facts.reasoning_cap` and `cap_overhead` (Bailian thinking cap record
+    // §4), first parsed by 0.76.0; until that release ships them it keeps the 0.74.0 of 2.12.0
+    // (record `2026-10-18-family-model-parameters.md` §7), as the 0.74.0 cycle did.
     assert_eq!(manifest.compatibility.south_runtime, "0.74.0");
 }

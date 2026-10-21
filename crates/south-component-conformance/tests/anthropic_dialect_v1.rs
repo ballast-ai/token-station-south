@@ -102,6 +102,7 @@ fn claude_serving(words: &[&str]) -> Vec<(&'static dyn ProviderComponentV1, Prov
         "azure-openai-dated",
         "glm-coding",
         "kimi-code",
+        "bailian-openai-compatible",
     ] {
         rows.push((&OpenAiCompatibleReferenceV1, config(family, "https://example.test/v1", words)));
     }

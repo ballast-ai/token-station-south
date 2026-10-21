@@ -112,6 +112,38 @@ pub mod kimi_code {
     pub const NATIVE_PRESET_ENDPOINT: &str = "https://api.moonshot.cn";
 }
 
+// -- the bailian-openai-compatible family ------------------------------------
+
+/// Alibaba Bailian's (`DashScope`'s) OpenAI-compatible Chat surface, whose thinking models cap the
+/// reasoning apart from the answer.
+///
+/// Design record `docs/design/2026-10-21-bailian-thinking-cap.md`. On these models `max_tokens`
+/// bounds only the answer, while the billed `completion_tokens` include the reasoning. When a
+/// model declares [`bailian_openai_compatible::THINKING_BUDGET_WORD`] and thinks, the family splits
+/// the authorised cap N into `thinking_budget = B` and `max_tokens = N - B - CAP_OVERHEAD`, so the
+/// measured worst case is N (`split_bailian_cap`); the manifest declares the split as
+/// `request_facts.reasoning_cap`.
+pub mod bailian_openai_compatible {
+    /// The family, as a host's provider rows name it.
+    pub const FAMILY: &str = "bailian-openai-compatible";
+    /// The Chat Completions path appended to the operator's endpoint, the API root
+    /// (`https://dashscope.aliyuncs.com/compatible-mode/v1` or a regional twin).
+    pub const CHAT_PATH: &str = "/chat/completions";
+    /// The model parameter word that opts a model into the split, and the body key of the
+    /// reasoning cap (also the client's field the family consumes).
+    pub const THINKING_BUDGET_WORD: &str = "thinking_budget";
+    /// The client field that switches thinking, forwarded verbatim (`client_passthrough`).
+    pub const ENABLE_THINKING: &str = "enable_thinking";
+    /// Tokens the upstream emits beyond `thinking_budget + max_tokens` at most.
+    ///
+    /// Measured on 2026-10-21: an answer cut by `max_tokens` after thinking is `max_tokens + 3`
+    /// (record §2). The manifest declares the same value as `request_facts.cap_overhead`.
+    pub const CAP_OVERHEAD: u32 = 3;
+    /// The smallest authorised cap that holds an answer cap of 1, a reasoning cap of 1 and the
+    /// overhead.
+    pub const MIN_SPLIT_CAP: u32 = CAP_OVERHEAD + 2;
+}
+
 /// Azure `OpenAI`'s dated, deployment-addressed surface.
 ///
 /// Design record `docs/design/2026-10-15-openai-compatible-t9.md` §3.2, transcribed from the
@@ -140,15 +172,19 @@ pub mod azure_openai_dated {
 pub mod client_passthrough {
     /// The forwarded keys, each written under its own name.
     pub const FIELDS: [&str; 2] = ["thinking", "enable_thinking"];
-    /// The families that forward them. `kimi-code` joined with the family itself (Kimi Code record
-    /// §3): native sends a `kimi_code` row's client body too.
-    pub const FAMILIES: [&str; 6] = [
+    /// The families that forward them.
+    ///
+    /// `kimi-code` joined with the family itself (Kimi Code record §3): native sends a `kimi_code`
+    /// row's client body too. `bailian-openai-compatible` joined with the family itself (the
+    /// Bailian thinking cap record §5): Bailian rows were `openai-compatible` rows before.
+    pub const FAMILIES: [&str; 7] = [
         "openai-compatible",
         "azure-openai-v1",
         "github-copilot",
         super::azure_openai_dated::FAMILY,
         super::glm_coding::FAMILY,
         super::kimi_code::FAMILY,
+        super::bailian_openai_compatible::FAMILY,
     ];
 }
 
@@ -197,6 +233,77 @@ fn render_glm_thinking(request: &ChatRequest, config: &ProviderConfig, body: &mu
     {
         map.insert("thinking".to_owned(), json!({"type": kind}));
     }
+}
+
+/// Splits the authorised cap on [`bailian_openai_compatible::FAMILY`] (the Bailian thinking cap
+/// record §5); every other family is unchanged.
+///
+/// Applies only to a model that declares [`bailian_openai_compatible::THINKING_BUDGET_WORD`];
+/// another model keeps the `openai-compatible` request. Thinking is on unless the client's own
+/// `enable_thinking` (forwarded verbatim) is `false`, or the client sent none and the IR reasoning
+/// mode is `disabled`: then the body says `enable_thinking: false`, because these models think by
+/// default and would otherwise reason with no budget (BT-Q1). The client's switch wins over the IR
+/// mode, so the split always follows what the upstream receives.
+///
+/// With thinking on and a cap N, the reasoning cap B is the client's `thinking_budget`, else the
+/// IR's `reasoning.budget_tokens`, else `(N - 3) / 2`, clamped to `[1, N - 4]`; the body carries
+/// `thinking_budget = B` and `max_tokens = N - B - 3`. N below
+/// [`bailian_openai_compatible::MIN_SPLIT_CAP`] is a capability error, as is a client budget that is
+/// not a non-negative integer (`null` counts as absent). Without a cap nothing is split, and the
+/// client's budget is dropped, as on every other family.
+fn split_bailian_cap(
+    request: &ChatRequest,
+    config: &ProviderConfig,
+    body: &mut Value,
+) -> ComponentResultV1<()> {
+    use bailian_openai_compatible::{
+        CAP_OVERHEAD, ENABLE_THINKING, FAMILY, MIN_SPLIT_CAP, THINKING_BUDGET_WORD,
+    };
+    if config.provider != FAMILY
+        || !config.models.iter().any(|model| {
+            model.model == request.model
+                && model.supported_parameters.contains(THINKING_BUDGET_WORD)
+        })
+    {
+        return Ok(());
+    }
+    let Value::Object(map) = body else {
+        return Ok(());
+    };
+    let thinking = match map.get(ENABLE_THINKING) {
+        Some(Value::Bool(on)) => *on,
+        _ if request.reasoning.mode == Some(ReasoningMode::Disabled) => {
+            map.insert(ENABLE_THINKING.to_owned(), Value::Bool(false));
+            false
+        }
+        _ => true,
+    };
+    let Some(cap) = request.sampling.max_output_tokens.filter(|_| thinking) else {
+        return Ok(());
+    };
+    if cap < MIN_SPLIT_CAP {
+        return Err(capability(
+            "this model reasons by default and its upstream caps the reasoning apart from the \
+             answer; an output cap below 5 leaves no room for both",
+        ));
+    }
+    let client = match request.extensions.get(THINKING_BUDGET_WORD) {
+        None | Some(Value::Null) => None,
+        Some(budget) => Some(
+            budget
+                .as_u64()
+                .ok_or_else(|| capability("thinking_budget must be a non-negative integer"))?,
+        ),
+    };
+    let room = cap - CAP_OVERHEAD - 1;
+    let wanted = client
+        .or_else(|| request.reasoning.budget_tokens.map(u64::from))
+        .unwrap_or_else(|| u64::from((cap - CAP_OVERHEAD) / 2));
+    // Clamped into `1..=room`, so it fits a `u32`.
+    let budget = u32::try_from(wanted.clamp(1, u64::from(room))).unwrap_or(room);
+    map.insert(THINKING_BUDGET_WORD.to_owned(), json!(budget));
+    map.insert("max_tokens".to_owned(), json!(cap - CAP_OVERHEAD - budget));
+    Ok(())
 }
 
 /// The output cap key of the two Azure `OpenAI` families, `azure-openai-v1` and
@@ -952,7 +1059,7 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-openai-compatible".to_owned(),
-            version: "2.12.1".to_owned(),
+            version: "2.13.0".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
@@ -1008,6 +1115,12 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
                 config.base_url.as_str().trim_end_matches('/'),
                 kimi_code::CHAT_PATH
             ),
+            // The row's endpoint is the API root, as on an `openai-compatible` row with a path.
+            bailian_openai_compatible::FAMILY => format!(
+                "{}{}",
+                config.base_url.as_str().trim_end_matches('/'),
+                bailian_openai_compatible::CHAT_PATH
+            ),
             azure_openai_dated::FAMILY => azure_dated_url(request, config)?,
             _ => config.base_url.resolve(ProviderApi::ChatCompletions),
         };
@@ -1028,12 +1141,17 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
         }
         forward_client_fields(request, config, &mut body);
         render_glm_thinking(request, config, &mut body);
+        split_bailian_cap(request, config, &mut body)?;
         descriptor.body = Some(body);
         // The host holds the value; this names the slot and the fixed
         // presentation selected by the trusted provider dialect.
         descriptor.auth = match (config.provider.as_str(), config.auth.clone()) {
             (
-                "openai-compatible" | GITHUB_COPILOT | glm_coding::FAMILY | kimi_code::FAMILY,
+                "openai-compatible"
+                | GITHUB_COPILOT
+                | glm_coding::FAMILY
+                | kimi_code::FAMILY
+                | bailian_openai_compatible::FAMILY,
                 secret,
             ) => secret.map(Auth::bearer),
             ("azure-openai-v1" | azure_openai_dated::FAMILY, Some(secret)) => {

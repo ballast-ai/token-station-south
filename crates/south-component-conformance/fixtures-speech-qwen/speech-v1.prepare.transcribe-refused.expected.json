@@ -1,7 +1,0 @@
-{
-  "error": {
-    "code": "capability",
-    "http_status": 400,
-    "message": "the model 'qwen3-tts-flash' does not declare the operation transcribe"
-  }
-}
