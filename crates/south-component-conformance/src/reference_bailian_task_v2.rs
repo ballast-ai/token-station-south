@@ -12,7 +12,10 @@ use token_station_protocol::{
     ProviderConfig, SafeHeaders,
 };
 
+mod wan_media;
+
 const QUERY: &str = "api/v1/tasks";
+const VIDEO_SYNTHESIS: &str = "api/v1/services/aigc/video-generation/video-synthesis";
 /// Managed video dialect; no credentials, clock, price or persistence.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct BailianTaskComponentV2;
@@ -63,6 +66,30 @@ fn request(config: &ProviderConfig, method: HttpMethod, path: &str) -> HttpReque
     descriptor.auth = config.auth.clone().map(Auth::bearer);
     descriptor
 }
+/// The asynchronous submission every input shape shares: the JSON body, one
+/// `X-DashScope-Async: enable` header and the fixed query locator.
+fn prepared(
+    config: &ProviderConfig,
+    path: &str,
+    body: Value,
+    request_estimate: TaskRequestEstimateV2,
+) -> ComponentResultV1<PreparedTaskV2> {
+    let mut descriptor = request(config, HttpMethod::Post, path);
+    descriptor.headers = SafeHeaders::try_new([
+        ("content-type", "application/json"),
+        ("x-dashscope-async", "enable"),
+    ])
+    .map_err(|_| protocol("invalid Bailian headers"))?;
+    descriptor.body = Some(body);
+    Ok(PreparedTaskV2 {
+        descriptor,
+        locator: TaskLocatorV2::new(1, QUERY).map_err(|_| protocol("invalid Bailian locator"))?,
+        request_estimate,
+        // Contract 6 (D6): this family declares no immutable body paths yet, so a
+        // host must not inject extra request-body fields — same as contract 5.
+        immutable_body_paths: None,
+    })
+}
 fn checked_locator(locator: &TaskLocatorV2) -> ComponentResultV1<()> {
     if locator.route() == QUERY { Ok(()) } else { Err(invalid("unsupported Bailian locator")) }
 }
@@ -94,13 +121,13 @@ impl TaskComponentV2 for BailianTaskComponentV2 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "task-bailian-v2".into(),
-            version: "0.31.33".into(),
+            version: "0.32.0".into(),
             api_version: "task-adapter-v2".into(),
         }
     }
     #[expect(
         clippy::too_many_lines,
-        reason = "the four existing video input shapes share one request construction boundary"
+        reason = "the legacy video input shapes share one request construction boundary"
     )]
     fn build_submit_request(
         &self,
@@ -113,6 +140,13 @@ impl TaskComponentV2 for BailianTaskComponentV2 {
             .ok_or_else(|| invalid("missing Bailian model"))?;
         let shape =
             config.extensions.get("upstream_model_family").and_then(Value::as_str).unwrap_or(model);
+        if let Some(media_shape) = wan_media::MediaShape::of(shape) {
+            let media = wan_media::build(media_shape, model, body)?;
+            let request_estimate = TaskRequestEstimateV2::new(Some(media.seconds), None)
+                .and_then(|e| e.with_input_facts(Some(&media.resolution), Some(media.image_count)))
+                .map_err(|_| invalid("invalid Bailian request estimate"))?;
+            return prepared(config, VIDEO_SYNTHESIS, media.body, request_estimate);
+        }
         let prompt = field(body, "prompt").ok_or_else(|| invalid("missing Bailian prompt"))?;
         let kf = shape.contains("kf2v");
         let r2v = shape.starts_with("happyhorse") && shape.contains("r2v");
@@ -200,27 +234,14 @@ impl TaskComponentV2 for BailianTaskComponentV2 {
         let request_estimate = TaskRequestEstimateV2::new(Some(duration), None)
             .and_then(|e| e.with_input_facts(resolution.as_deref(), Some(image_count)))
             .map_err(|_| invalid("invalid Bailian request estimate"))?;
-        let path = if kf {
-            "api/v1/services/aigc/image2video/video-synthesis"
-        } else {
-            "api/v1/services/aigc/video-generation/video-synthesis"
-        };
-        let mut descriptor = request(config, HttpMethod::Post, path);
-        descriptor.headers = SafeHeaders::try_new([
-            ("content-type", "application/json"),
-            ("x-dashscope-async", "enable"),
-        ])
-        .map_err(|_| protocol("invalid Bailian headers"))?;
-        descriptor.body = Some(json!({"model":model,"input":input,"parameters":parameters}));
-        Ok(PreparedTaskV2 {
-            descriptor,
-            locator: TaskLocatorV2::new(1, QUERY)
-                .map_err(|_| protocol("invalid Bailian locator"))?,
+        let path =
+            if kf { "api/v1/services/aigc/image2video/video-synthesis" } else { VIDEO_SYNTHESIS };
+        prepared(
+            config,
+            path,
+            json!({"model":model,"input":input,"parameters":parameters}),
             request_estimate,
-            // Contract 6 (D6): this family declares no immutable body paths yet, so a
-            // host must not inject extra request-body fields — same as contract 5.
-            immutable_body_paths: None,
-        })
+        )
     }
     fn parse_submit_response(
         &self,

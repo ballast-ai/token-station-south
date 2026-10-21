@@ -50,7 +50,9 @@ fn model_shapes_preserve_legacy_wire_fields() {
         hh["input"],
         json!({"prompt":"p","media":[{"type":"first_frame","url":"https://x/a"}],"audio_url":"https://x/s"})
     );
-    let wan = prepare(&json!({"model":"wan2.7-i2v","prompt":"p","image":"https://x/a"}))
+    // wan2.6 and older image-to-video keep `input.img_url`; wan2.7-i2v takes only `input.media[]`
+    // (see `wan27_i2v_sends_the_first_frame_as_media_never_img_url`).
+    let wan = prepare(&json!({"model":"wan2.6-i2v","prompt":"p","image":"https://x/a"}))
         .unwrap()
         .descriptor
         .body
