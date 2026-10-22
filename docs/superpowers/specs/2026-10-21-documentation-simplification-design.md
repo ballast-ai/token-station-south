@@ -2,7 +2,7 @@
 
 Date: 2026-10-21
 
-Status: approved for specification review
+Status: approved
 
 ## Purpose
 
@@ -96,7 +96,8 @@ authoritative in manifests, release indexes, and `compatibility.json`.
 - Do not change public contracts, runtime behavior, manifests, compatibility status, package
   identity, or verification commands.
 - Do not add generated documentation tooling in this change.
-- Keep every existing valid document target reachable from one of the four resulting documents.
+- Keep every existing valid document target currently linked by `README.md` or `ARCHITECTURE.md`
+  directly linked from at least one of the four resulting documents.
 
 ## Verification
 
