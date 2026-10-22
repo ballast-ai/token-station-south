@@ -499,11 +499,18 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 1
                 // repository.
                 ("eventstream_framing", "verified", Some(9)),
                 ("request_signing", "verified", Some(7)),
-                // safe_fetch (image record S-I-5) is new and no host has run it. The server's
-                // `guarded_asset_client` rechecks v4-mapped addresses only (image record §11), so
-                // the v4-compatible, NAT64, 6to4 and `fec0::/10` rows are host work before it can
-                // pass.
-                ("safe_fetch", "not_verified", None),
+                // safe_fetch (image record S-I-5) verified at v0.76.0: server dev-v2 `fae77389`
+                // (2026-10-10, its P22 C6) replaced the old `guarded_asset_client` second hop with
+                // a dedicated executor (`engine/safe_fetch.rs`) whose egress check is
+                // `is_forbidden_egress_address`, so the v4-compatible, NAT64, 6to4 and
+                // `fec0::/10` rows now pass. `tests/south_adoption.rs`
+                // `host_adapter_passes_south_safe_fetch_conformance_v1` runs
+                // south.safe-fetch.v1 over all 26 cases through the production `safe_fetch`
+                // function, with only its network ports swapped for the suite's fake network,
+                // and asserts 26. Server dev-v2 `78de84c7` (pushed as `b519b682`, 2026-10-22), pinned to
+                // the v0.76.0 tag, runs it under both its balance and quota billing forms with its full
+                // local matrix of 152 legs green. The adoption record is held by that host's repository.
+                ("safe_fetch", "verified", Some(26)),
                 // north_passthrough_delivery (gate ③ of `north_passthrough`, Responses record
                 // §8.2 / §12.4, designed in the 2026-10-11 NC-1 record §3) verified at v0.61.0:
                 // server dev-v2 `ec832f0d` (2026-10-12) added the host's pass-through executor
