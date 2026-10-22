@@ -244,7 +244,8 @@
         "cases": 7
       },
       "safe_fetch": {
-        "status": "not_verified"
+        "status": "verified",
+        "cases": 26
       },
       "north_passthrough_delivery": {
         "status": "verified",

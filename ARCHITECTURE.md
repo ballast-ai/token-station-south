@@ -186,11 +186,16 @@ language controls, JSON or text output, and seconds-based usage. See the
    and error mapping.
 3. **Host integration.** Run public suites against real host executors for transport, credentials,
    signing, framing, pass-through delivery, safe fetch, and other host-owned effects.
-4. **Upstream validation.** Verify behavior against the real provider where a design record
-   requires captured traffic or staged evidence.
+4. **Runtime enforcement.** `south-provider-runtime` enforces the sandbox on every call: admitted
+   imports only, memory and payload ceilings, epoch deadlines, and stream-instance limits. This
+   gate has no fixture suite; the runtime's construction is the evidence.
 
 Passing an earlier gate does not imply a later gate passed. Recorded host status and suite versions
 come only from [compatibility.json](compatibility.json).
+
+Upstream validation is not a conformance gate. Where a design record requires captured traffic or
+staged evidence, behavior is verified against the real provider, and that evidence sits beside the
+four gates rather than replacing any of them.
 
 ## Compatibility handshake
 
@@ -244,6 +249,11 @@ Hosts that consume `south-transport-reqwest` keep its reqwest node aligned with 
 stack at the repository-pinned version. The unified feature set includes `rustls-tls` and `stream`
 and excludes `default-tls`, `native-tls`, `cookies`, and `system-proxy`. Unrelated pre-existing
 reqwest versions gain no new dependents.
+
+Recorded exception: since South moved to reqwest 0.13 (#58), `token-station-server` resolves two
+nodes, its primary stack on 0.12 and this transport on 0.13. The two use different trust roots
+(bundled roots on 0.12, the platform verifier on 0.13). That host checks that no further node
+appears and plans to move its primary stack to the pinned version; the exception ends then.
 
 During migration a kernel crate may re-export South types under legacy Rust paths, but it must not
 define duplicate nominal types. South never depends back on that compatibility layer. Production
