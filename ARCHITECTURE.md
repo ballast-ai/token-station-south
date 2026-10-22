@@ -186,11 +186,16 @@ language controls, JSON or text output, and seconds-based usage. See the
    and error mapping.
 3. **Host integration.** Run public suites against real host executors for transport, credentials,
    signing, framing, pass-through delivery, safe fetch, and other host-owned effects.
-4. **Upstream validation.** Verify behavior against the real provider where a design record
-   requires captured traffic or staged evidence.
+4. **Runtime enforcement.** `south-provider-runtime` enforces the sandbox on every call: admitted
+   imports only, memory and payload ceilings, epoch deadlines, and stream-instance limits. This
+   gate has no fixture suite; the runtime's construction is the evidence.
 
 Passing an earlier gate does not imply a later gate passed. Recorded host status and suite versions
 come only from [compatibility.json](compatibility.json).
+
+Upstream validation is not a conformance gate. Where a design record requires captured traffic or
+staged evidence, behavior is verified against the real provider, and that evidence sits beside the
+four gates rather than replacing any of them.
 
 ## Compatibility handshake
 
