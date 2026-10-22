@@ -80,6 +80,9 @@ Every build script compiles its package for `wasm32-wasip2` and emits the compon
 parity tests. Fixture README files record how expectations were derived and which uncertainties
 remain. Fixtures are evidence, not credentials or live-provider tests.
 
+The [synthetic speech fixture provenance](../crates/south-component-conformance/fixtures-speech-synthetic/README.md)
+belongs to the synthetic conformance guest, not to an official component package.
+
 Release artifacts include `south-release-index.json` with each package identity, manifest digest,
 component digest, declared runtime, contract tuple, and gate 2 report. Digest-stability checks reject
 changed package bytes under an unchanged identity. A package's `south_runtime` is its minimum

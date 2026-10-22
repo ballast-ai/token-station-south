@@ -54,10 +54,6 @@ package versions and minimum compatible `south_runtime`.
 | `south-task-core` | Candidate host-neutral task workflow sequencing with explicit effects |
 | `south-task-conformance` | Candidate atomic task-effects conformance vocabulary |
 
-The removed bootstrap placeholders `south-migration` and `south-transport-ureq` reserve no API or
-crate name. Capability-specific conformance replaced offline migration comparison, and no host has
-required a synchronous transport.
-
 ## Dependency graph
 
 This graph shows direct production dependencies plus optional-feature edges. It intentionally
