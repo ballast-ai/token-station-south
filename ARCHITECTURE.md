@@ -250,11 +250,6 @@ stack at the repository-pinned version. The unified feature set includes `rustls
 and excludes `default-tls`, `native-tls`, `cookies`, and `system-proxy`. Unrelated pre-existing
 reqwest versions gain no new dependents.
 
-Recorded exception: since South moved to reqwest 0.13 (#58), `token-station-server` resolves two
-nodes, its primary stack on 0.12 and this transport on 0.13. The two use different trust roots
-(bundled roots on 0.12, the platform verifier on 0.13). That host checks that no further node
-appears and plans to move its primary stack to the pinned version; the exception ends then.
-
 During migration a kernel crate may re-export South types under legacy Rust paths, but it must not
 define duplicate nominal types. South never depends back on that compatibility layer. Production
 double-send is not a migration strategy; hosts use fixture parity, bounded dual-run evidence, and
