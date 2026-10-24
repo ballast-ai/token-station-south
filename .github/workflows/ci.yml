@@ -200,3 +200,9 @@ jobs:
           cp fuzz/seeds/contract_parsers/* fuzz/corpus/contract_parsers/
           rustup run nightly-2026-08-15 cargo fuzz run --target x86_64-unknown-linux-gnu \
             contract_parsers -- -max_total_time=600
+      - name: Fuzz optional local write framing
+        run: |
+          mkdir -p fuzz/corpus/local_write_parser
+          cp fuzz/seeds/local_write_parser/* fuzz/corpus/local_write_parser/
+          rustup run nightly-2026-08-15 cargo fuzz run --target x86_64-unknown-linux-gnu \
+            local_write_parser -- -max_total_time=600

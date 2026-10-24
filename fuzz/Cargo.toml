@@ -34,4 +34,10 @@ name = "media_parsers"
 path = "fuzz_targets/media_parsers.rs"
 test = false
 
+[[bin]]
+doc = false
+name = "local_write_parser"
+path = "fuzz_targets/local_write_parser.rs"
+test = false
+
 [workspace]

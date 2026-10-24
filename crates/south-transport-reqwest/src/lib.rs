@@ -22,6 +22,9 @@ use south_core::{
 };
 use zeroize::Zeroizing;
 
+mod observation;
+pub use observation::TransportObserver;
+use observation::{ConnectionTracker, ObserveContext, ObservedBody};
 pub use south_contracts::MAX_TRANSPORT_TIMEOUT;
 
 /// Explicit bounded timeouts for one dedicated reqwest transport.
@@ -87,12 +90,20 @@ pub struct ReqwestTransportV1 {
     client: reqwest::Client,
     total_timeout: Duration,
     quota_headers: ProviderQuotaHeaderMapV1,
+    observer: Option<Arc<dyn TransportObserver>>,
+    connections: ConnectionTracker,
 }
 
 impl ReqwestTransportV1 {
     /// Builds one transport with proxies, redirects, retries, referers, and decoding disabled.
     pub fn new(config: ReqwestTransportConfigV1) -> Result<Self, TransportErrorV1> {
-        let client = reqwest::Client::builder()
+        Self::build_observed(config, None)
+    }
+    fn build_observed(
+        config: ReqwestTransportConfigV1,
+        observer: Option<Arc<dyn TransportObserver>>,
+    ) -> Result<Self, TransportErrorV1> {
+        let builder = reqwest::Client::builder()
             .no_proxy()
             .redirect(reqwest::redirect::Policy::none())
             .retry(reqwest::retry::never())
@@ -103,15 +114,23 @@ impl ReqwestTransportV1 {
             .no_zstd()
             .timeout(config.total)
             .connect_timeout(config.connect)
-            .read_timeout(config.read)
-            .build()
-            .map_err(|_| TransportErrorV1::ClientBuildFailed)?;
+            .read_timeout(config.read);
+        let client = builder.build().map_err(|_| TransportErrorV1::ClientBuildFailed)?;
 
         Ok(Self {
             client,
             total_timeout: config.total,
             quota_headers: ProviderQuotaHeaderMapV1::canonical(),
+            observer,
+            connections: ConnectionTracker::default(),
         })
+    }
+
+    /// Installs bounded, nonblocking host observation without replacing the client or pool.
+    #[must_use]
+    pub fn with_observer(mut self, observer: Arc<dyn TransportObserver>) -> Self {
+        self.observer = Some(observer);
+        self
     }
 
     /// Returns a transport for one package's quota header declaration (B7a).
@@ -122,7 +141,13 @@ impl ReqwestTransportV1 {
     /// `quota_headers` gets.
     #[must_use]
     pub fn with_quota_headers(&self, quota_headers: ProviderQuotaHeaderMapV1) -> Self {
-        Self { client: self.client.clone(), total_timeout: self.total_timeout, quota_headers }
+        Self {
+            client: self.client.clone(),
+            total_timeout: self.total_timeout,
+            quota_headers,
+            observer: self.observer.clone(),
+            connections: self.connections.clone(),
+        }
     }
 }
 
@@ -215,15 +240,38 @@ impl ReqwestTransportV1 {
         body_cap: usize,
     ) -> Result<BufferedPartsV1, TransportErrorV1> {
         let headers = assemble_headers(request)?;
+        let observation = self.observer.as_ref().and_then(|observer| {
+            headers
+                .get("x-request-id")
+                .and_then(|value| value.to_str().ok())
+                .filter(|value| observation::observable_id(value))
+                .map(|id| {
+                    ObserveContext::new(id.to_owned(), observer.clone())
+                        .with_tracker(self.connections.clone())
+                })
+        });
         let builder = self
             .client
             .request(request.method().clone(), request.url().clone())
             .headers(headers)
             .timeout(effective_timeout(remaining_timeout, self.total_timeout));
-        let response = attach_body(builder, request)
-            .send()
-            .await
-            .map_err(|error| classify_send_error(&error))?;
+        let builder = if let Some(context) = observation.as_ref() {
+            match request.body() {
+                Some(RequestBodyRefV1::Json(body)) => builder.body(reqwest::Body::wrap(
+                    ObservedBody::new(request_body(body.shared_owner()), context.clone()),
+                )),
+                Some(RequestBodyRefV1::Text(body)) => builder.body(reqwest::Body::wrap(
+                    ObservedBody::new(request_body(body.shared_owner()), context.clone()),
+                )),
+                Some(RequestBodyRefV1::Multipart(body)) => builder.body(reqwest::Body::wrap(
+                    ObservedBody::new(multipart_request_body(body.shared_owner()), context.clone()),
+                )),
+                None => builder,
+            }
+        } else {
+            attach_body(builder, request)
+        };
+        let response = send_observed(builder, observation.clone()).await?;
 
         if response.status().is_redirection() {
             return Err(TransportErrorV1::RedirectDenied);
@@ -249,7 +297,10 @@ impl ReqwestTransportV1 {
         // past this point the upstream's `HeaderMap` is gone.
         let response_diagnostics = response_diagnostics(response.headers())?;
         let response_transcript = response_transcript(response.headers(), request);
-        let body = read_bounded_body(response, body_cap).await?;
+        let body = match observation {
+            Some(context) => read_bounded_body_observed(response, body_cap, Some(context)).await?,
+            None => read_bounded_body(response, body_cap).await?,
+        };
 
         Ok(BufferedPartsV1 {
             status,
@@ -408,7 +459,20 @@ impl TransportPairV1 {
     /// connect timeout, and the read timeout as the idle guard. A host that needs a bounded
     /// streaming total constructs [`ReqwestStreamingTransportV1`] directly instead.
     pub fn try_new(config: ReqwestTransportConfigV1) -> Result<Self, TransportErrorV1> {
-        let buffered = ReqwestTransportV1::new(config)?;
+        Self::build_observed(config, None)
+    }
+    /// Builds one pair with explicit buffered observation and unchanged client policy.
+    pub fn try_new_observed(
+        config: ReqwestTransportConfigV1,
+        observer: Arc<dyn TransportObserver>,
+    ) -> Result<Self, TransportErrorV1> {
+        Self::build_observed(config, Some(observer))
+    }
+    fn build_observed(
+        config: ReqwestTransportConfigV1,
+        observer: Option<Arc<dyn TransportObserver>>,
+    ) -> Result<Self, TransportErrorV1> {
+        let buffered = ReqwestTransportV1::build_observed(config, observer)?;
         let stream_config = StreamTransportConfigV1::try_new(
             None,
             config.connect_timeout(),
@@ -762,18 +826,72 @@ fn optional_quota_metadata(headers: &HeaderMap, name: &str) -> Option<String> {
     value.to_str().ok().map(str::to_owned)
 }
 
+async fn send_observed(
+    builder: reqwest::RequestBuilder,
+    observation: Option<ObserveContext>,
+) -> Result<reqwest::Response, TransportErrorV1> {
+    if let Some(context) = &observation {
+        context.event("south_send_start");
+    }
+    let result = builder.send().await;
+    match result {
+        Ok(response) => {
+            if let Some(context) = &observation {
+                context.event("south_headers_ready");
+                context.event("south_upstream_boundaries_unknown");
+                context.connection(&response);
+            }
+            Ok(response)
+        }
+        Err(error) => {
+            if let Some(context) = &observation {
+                context.event("south_send_error");
+            }
+            Err(classify_send_error(&error))
+        }
+    }
+}
 async fn read_bounded_body(
-    mut response: reqwest::Response,
+    response: reqwest::Response,
     body_cap: usize,
 ) -> Result<Vec<u8>, TransportErrorV1> {
+    read_bounded_body_observed(response, body_cap, None).await
+}
+async fn read_bounded_body_observed(
+    mut response: reqwest::Response,
+    body_cap: usize,
+    observation: Option<ObserveContext>,
+) -> Result<Vec<u8>, TransportErrorV1> {
     let mut body = Vec::new();
-    while let Some(chunk) = response.chunk().await.map_err(|error| classify_read_error(&error))? {
+    let mut first = true;
+    loop {
+        let next = response.chunk().await.map_err(|error| {
+            if let Some(context) = &observation {
+                context.event("south_body_error");
+            }
+            classify_read_error(&error)
+        })?;
+        let Some(chunk) = next else {
+            break;
+        };
+        if first {
+            if let Some(context) = &observation {
+                context.event("south_body_first_chunk");
+            }
+            first = false;
+        }
         let next_length =
             body.len().checked_add(chunk.len()).ok_or(TransportErrorV1::ResponseBodyTooLarge)?;
         if next_length > body_cap {
+            if let Some(context) = &observation {
+                context.event("south_body_rejected");
+            }
             return Err(TransportErrorV1::ResponseBodyTooLarge);
         }
         body.extend_from_slice(&chunk);
+    }
+    if let Some(context) = &observation {
+        context.event("south_body_complete");
     }
     Ok(body)
 }
@@ -890,3 +1008,6 @@ mod tests {
         assert_eq!(body.as_ref(), SSML.as_bytes());
     }
 }
+
+#[cfg(test)]
+mod observer_tests;

@@ -268,3 +268,10 @@ explicit cutover decisions.
 - [Task v2 candidate](docs/design/2026-09-20-task-adapter-v2-candidate.md)
 - [Task request estimate](docs/design/2026-09-20-task-request-estimate.md)
 - [Shared task core](docs/design/2026-09-20-shared-task-core.md)
+
+
+## Explicit transport observation
+
+The reqwest transport accepts a host callback for buffered transport stages and bounded recent connection history. It owns only its I/O clock; the host owns correlation, collection, persistence and any global tracing. IDs and payloads are bounded, and credentials, bodies and socket addresses are never emitted. Tuple history is not proof of physical reuse. Upstream application receipt and queue timing remain unknown without a verified server contract.
+
+The optional local-write experiment is carried as a checksum-pinned [preparation bundle](patches/reqwest-0.13.5-local-write/README.md), not a default dependency on a private reqwest API. Preparation builds a separate, consistent South path snapshot and final-host patch roots. Default builds remain compatible with registry reqwest. Local flush is a client boundary, not upstream receipt; neither a mock nor a processing-header difference supplies the missing server clock.
