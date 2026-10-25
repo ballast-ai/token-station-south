@@ -1,0 +1,291 @@
+--- a/crates/south-transport-reqwest/src/lib.rs
++++ b/crates/south-transport-reqwest/src/lib.rs
+@@ -100 +100 @@
+-        Self::build_observed(config, None)
++        Self::build_observed(config, None, false)
+@@ -104,0 +105 @@
++        observe_writes: bool,
+@@ -117,0 +119,9 @@
++        let builder = if observe_writes {
++            if let Some(sink) = &observer {
++                builder.pilot_write_observer(Arc::new(observation::LocalWriteBridge(sink.clone())))
++            } else {
++                builder
++            }
++        } else {
++            builder
++        };
+@@ -462 +472 @@
+-        Self::build_observed(config, None)
++        Self::build_observed(config, None, false)
+@@ -469 +479,9 @@
+-        Self::build_observed(config, Some(observer))
++        Self::build_observed(config, Some(observer), false)
++    }
++    /// Builds one pair with the separately pinned HTTP client's local-write hook enabled.
++    /// The callback proves only local connection acceptance and flush, not upstream receipt.
++    pub fn try_new_local_write_observed(
++        config: ReqwestTransportConfigV1,
++        observer: Arc<dyn TransportObserver>,
++    ) -> Result<Self, TransportErrorV1> {
++        Self::build_observed(config, Some(observer), true)
+@@ -473,0 +492 @@
++        observe_writes: bool,
+@@ -475 +494 @@
+-        let buffered = ReqwestTransportV1::build_observed(config, observer)?;
++        let buffered = ReqwestTransportV1::build_observed(config, observer, observe_writes)?;
+--- a/crates/south-transport-reqwest/src/observation.rs
++++ b/crates/south-transport-reqwest/src/observation.rs
+@@ -145,0 +146,7 @@
++pub struct LocalWriteBridge(pub Arc<dyn TransportObserver>);
++impl reqwest::pilot_io::WriteObserver for LocalWriteBridge {
++    fn event(&self, id: &str, stage: &'static str, body_bytes: u64) {
++        self.0.local_write(id, stage, body_bytes);
++    }
++}
++
+--- a/crates/south-transport-reqwest/src/observer_tests.rs
++++ b/crates/south-transport-reqwest/src/observer_tests.rs
+@@ -168,0 +169,121 @@
++
++#[tokio::test]
++#[allow(clippy::too_many_lines)] // One controlled request spans independently gated server phases.
++async fn local_flush_is_not_server_body_complete_or_queue_admission() {
++    tokio::time::timeout(Duration::from_secs(3), async {
++    use std::{
++        sync::atomic::{AtomicBool, Ordering},
++        time::Instant,
++    };
++    struct WriteSink {
++        events: Mutex<Vec<(&'static str, Instant)>>,
++        notify: tokio::sync::Notify,
++    }
++    impl TransportObserver for WriteSink {
++        fn event(&self, _: &str, _: &'static str, _: Duration) {}
++        fn local_write(&self, _: &str, s: &'static str, _: u64) {
++            self.events.lock().unwrap().push((s, Instant::now()));
++            self.notify.notify_one();
++        }
++    }
++    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
++    let addr = listener.local_addr().unwrap();
++    let (headers_tx, headers_rx) = tokio::sync::oneshot::channel();
++    let (read_tx, read_rx) = tokio::sync::oneshot::channel();
++    let (body_tx, body_rx) = tokio::sync::oneshot::channel();
++    let (admit_tx, admit_rx) = tokio::sync::oneshot::channel();
++    let (admitted_tx, admitted_rx) = tokio::sync::oneshot::channel();
++    let (respond_tx, respond_rx) = tokio::sync::oneshot::channel();
++    let server_complete = Arc::new(AtomicBool::new(false));
++    let state = server_complete.clone();
++    let server = tokio::spawn(async move {
++        let (mut socket, _) = listener.accept().await.unwrap();
++        let mut h = Vec::new();
++        while !h.ends_with(b"\r\n\r\n") {
++            let mut b = [0; 1];
++            assert_eq!(socket.read(&mut b).await.unwrap(), 1);
++            h.extend_from_slice(&b);
++        }
++        let text = String::from_utf8(h).unwrap();
++        assert!(text.to_lowercase().contains("content-length: 16"));
++        assert!(!text.to_lowercase().contains("transfer-encoding"));
++        headers_tx.send(()).unwrap();
++        read_rx.await.unwrap();
++        let mut body = [0; 16];
++        socket.read_exact(&mut body).await.unwrap();
++        assert_eq!(&body, b"{\"effort\":\"low\"}");
++        let received = Instant::now();
++        state.store(true, Ordering::SeqCst);
++        body_tx.send(received).unwrap();
++        let queued = Instant::now();
++        admit_rx.await.unwrap();
++        let admitted = Instant::now();
++        admitted_tx.send((queued, admitted)).unwrap();
++        respond_rx.await.unwrap();
++        socket
++            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
++            .await
++            .unwrap();
++    });
++    let sink = Arc::new(WriteSink {
++        events: Mutex::new(Vec::new()),
++        notify: tokio::sync::Notify::new(),
++    });
++    let client = reqwest::Client::builder()
++        .no_proxy().timeout(Duration::from_secs(2))
++        .pilot_write_observer(Arc::new(observation::LocalWriteBridge(sink.clone())))
++        .build()
++        .unwrap();
++    let call = tokio::spawn(async move {
++        client
++            .post(format!("http://{addr}/mock"))
++            .header("x-request-id", "req_mock")
++            .body("{\"effort\":\"low\"}")
++            .send()
++            .await
++            .unwrap()
++            .bytes()
++            .await
++            .unwrap()
++    });
++    headers_rx.await.unwrap();
++    loop {
++        if sink
++            .events
++            .lock()
++            .unwrap()
++            .iter()
++            .any(|e| e.0 == "south_local_request_flush_complete")
++        {
++            break;
++        }
++        sink.notify.notified().await;
++    }
++    assert!(!server_complete.load(Ordering::SeqCst));
++    assert!(!call.is_finished());
++    let flushed = sink
++        .events
++        .lock()
++        .unwrap()
++        .iter()
++        .find(|e| e.0 == "south_local_request_flush_complete")
++        .unwrap()
++        .1;
++    read_tx.send(()).unwrap();
++    let received = body_rx.await.unwrap();
++    assert!(received >= flushed);
++    assert!(!call.is_finished());
++    admit_tx.send(()).unwrap();
++    let (queued, admitted) = admitted_rx.await.unwrap();
++    assert!(admitted >= queued && queued >= received);
++    assert!(!call.is_finished());
++    respond_tx.send(()).unwrap();
++    assert_eq!(call.await.unwrap(), b"ok".as_slice());
++    server.await.unwrap();
++    println!(
++        "MOCK_BOUNDARIES {{\"local_flush_before_mock_body_received\":true,\"mock_queue_separately_gated\":true,\"body_received_after_local_flush_ms\":{},\"mock_queue_wait_ms\":{},\"real_upstream_observed\":false}}",
++        received.duration_since(flushed).as_secs_f64() * 1000.0,
++        admitted.duration_since(queued).as_secs_f64() * 1000.0
++    );
++}).await.expect("mock boundary test must finish within three seconds");
++}
+--- /dev/null
++++ b/crates/south-transport-reqwest/tests/local_write_observation_v1.rs
+@@ -0,0 +1,118 @@
++//! Public construction contract for opt-in transport observation.
++use south_transport_reqwest::{ReqwestTransportConfigV1, TransportObserver, TransportPairV1};
++use std::{sync::Arc, time::Duration};
++struct Sink;
++impl TransportObserver for Sink {
++    fn event(&self, _: &str, _: &'static str, _: Duration) {}
++}
++#[test]
++fn local_write_constructor_builds_with_the_pinned_client_patch() {
++    let config = ReqwestTransportConfigV1::try_new(
++        Duration::from_secs(10),
++        Duration::from_secs(2),
++        Duration::from_secs(5),
++    )
++    .unwrap();
++    let pair = TransportPairV1::try_new_local_write_observed(config, Arc::new(Sink)).unwrap();
++    assert!(format!("{pair:?}").contains("buffered"));
++}
++
++#[derive(Default)]
++struct Capture(std::sync::Mutex<Vec<(String, &'static str)>>);
++impl TransportObserver for Capture {
++    fn local_write(&self, id: &str, stage: &'static str, _: u64) {
++        self.0.lock().unwrap().push((id.to_owned(), stage));
++    }
++    fn event(&self, id: &str, stage: &'static str, _: Duration) {
++        self.0.lock().unwrap().push((id.to_owned(), stage));
++    }
++}
++struct Resolver;
++impl south_core::CredentialResolver for Resolver {
++    fn resolve<'a>(
++        &'a self,
++        _: &'a south_contracts::CredentialSlotV1,
++    ) -> south_core::CredentialResolutionFuture<'a> {
++        Box::pin(async { Ok(south_core::SecretValue::new("fixture-secret".to_owned())) })
++    }
++}
++#[tokio::test]
++async fn patched_public_execution_observes_local_flush_and_rejects_invalid_ids() {
++    use south_contracts::{
++        BearerAuthV1, CredentialSlotV1, JsonBodyV1, JsonPostRequestV1, ProviderEndpointV1,
++        ProviderQuotaHeaderMapV1, RelativePathV1, SafeHeaders,
++    };
++    use south_core::{ProviderBindingV1, execute_provider_call_v1};
++    use tokio::io::{AsyncReadExt, AsyncWriteExt};
++    for (id, observed) in [
++        ("req_public_123".to_owned(), true),
++        ("user@example.invalid".to_owned(), false),
++        (" req_public_123".to_owned(), false),
++        ("req_public_123 ".to_owned(), false),
++        ("x".repeat(129), false),
++    ] {
++        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
++        let address = listener.local_addr().unwrap();
++        let server = tokio::spawn(async move {
++            let (mut stream, _) = listener.accept().await.unwrap();
++            let mut raw = Vec::new();
++            while !raw.ends_with(b"\r\n\r\n{}") {
++                let mut bytes = [0; 1024];
++                let n = stream.read(&mut bytes).await.unwrap();
++                assert_ne!(n, 0);
++                raw.extend_from_slice(&bytes[..n]);
++                assert!(raw.len() < 8192);
++            }
++            let wire = String::from_utf8(raw).unwrap().to_ascii_lowercase();
++            assert!(wire.contains("content-length: 2"));
++            assert!(!wire.contains("transfer-encoding"));
++            stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 11\r\nConnection: close\r\n\r\n{\"ok\":true}").await.unwrap();
++        });
++        let config = ReqwestTransportConfigV1::try_new(
++            Duration::from_secs(2),
++            Duration::from_secs(1),
++            Duration::from_secs(1),
++        )
++        .unwrap();
++        let capture = Arc::new(Capture::default());
++        let pair = TransportPairV1::try_new_local_write_observed(config, capture.clone()).unwrap();
++        let transport = pair.buffered.with_quota_headers(ProviderQuotaHeaderMapV1::canonical());
++        let slot = CredentialSlotV1::parse("primary").unwrap();
++        let request = JsonPostRequestV1::new(
++            RelativePathV1::parse("call").unwrap(),
++            SafeHeaders::try_from_iter([("x-request-id", id.as_str())]).unwrap(),
++            JsonBodyV1::parse("{}").unwrap(),
++            BearerAuthV1::new(slot.clone()),
++        );
++        let binding = ProviderBindingV1::new(
++            ProviderEndpointV1::parse(&format!("http://{address}")).unwrap(),
++            slot,
++        );
++        let result = execute_provider_call_v1(
++            &binding,
++            &request,
++            &Resolver,
++            &transport,
++            tokio::time::Instant::now() + Duration::from_secs(2),
++            &tokio_util::sync::CancellationToken::new(),
++        )
++        .await;
++        assert!(result.is_ok());
++        server.await.unwrap();
++        let events = capture.0.lock().unwrap().clone();
++        assert_eq!(!events.is_empty(), observed);
++        if observed {
++            assert!(events.iter().all(|(actual, _)| actual == &id));
++            for required in [
++                "south_send_start",
++                "south_body_handed_off",
++                "south_headers_ready",
++                "south_body_complete",
++                "south_upstream_boundaries_unknown",
++            ] {
++                assert!(events.iter().any(|(_, stage)| *stage == required));
++            }
++            assert!(events.iter().any(|(_, stage)| *stage == "south_local_request_flush_complete"));
++        }
++    }
++}

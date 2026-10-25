@@ -1,0 +1,2 @@
+# Preserve raw HTTP framing bytes in local-write fuzz seeds.
+fuzz/seeds/local_write_parser/* binary

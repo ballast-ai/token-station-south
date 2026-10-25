@@ -77,6 +77,14 @@ navigation.
 - [Host-zero-vendor boundary](docs/design/2026-09-30-host-zero-vendor-boundary.md): package,
   runtime, credential, and compatibility decisions.
 
+## Optional buffered transport observation
+
+south-transport-reqwest can report buffered send/body/header/read stages through an explicit TransportObserver and TransportPairV1::try_new_observed(config, observer). Missing or invalid x-request-id suppresses observation without altering the request. IDs are 1..128 ASCII letters, digits, underscore or hyphen, and must not contain credentials or personal data. Callbacks are synchronous and must be nonblocking and non-panicking. No global subscriber is installed.
+
+Connection IDs identify bounded recent socket-tuple history, not guaranteed physical connection reuse. History holds at most 256 entries for one minute; eviction, expiry or missing information does not prove a fresh connection. Request-body delivery does not mean upload completion, and upstream receipt/queue time remains unknown.
+
+Local connection write/flush is available only through the separately applied [pinned reqwest patch bundle](patches/reqwest-0.13.5-local-write/README.md). The default build keeps official reqwest; Cargo patches are a final-host responsibility and do not propagate. The bundle prepares a complete, separate South snapshot, validates source/patch/archive hashes and checks an independent host's public type identity. It is not a production-host migration or a released SDK. See the [design record](docs/design/2026-10-25-transport-observation.md) for boundaries and verification.
+
 ## Local verification
 
 Install the repository toolchain and the tools named by [Contributing](CONTRIBUTING.md), then run

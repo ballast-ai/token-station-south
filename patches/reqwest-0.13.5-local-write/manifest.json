@@ -1,0 +1,23 @@
+{
+  "crate_sha256": "16a1cfa75cc186dd73d5818e510e042e40927bccc9c236b061cea97e1eb08029",
+  "generated_files": {
+    "patches/reqwest-0.13.5-local-write/parser.rs": "a1bc31165a5e875cac77428691703a156582b440f8318e476eddcaeb13580534",
+    "reqwest/src/pilot_io/parser.rs": "a1bc31165a5e875cac77428691703a156582b440f8318e476eddcaeb13580534",
+    "reqwest/src/pilot_io/property_cases.rs": "a457e1d048076f7c9fc1b543bacecf58a6e394891cc726d8dee7c002151006f6"
+  },
+  "host_smoke_scope": "local_write_constructor",
+  "host_smoke_sha256": "57debc7efdc4d73a8e5fc375293fb0647b2c2d5a14e1833dfbf5bcea91e2e88e",
+  "patch_sha256": {
+    "reqwest.patch": "6c35be4043339b9235c301a498796bc168fee2127c4e0bb5b0ffd31eda4a20df",
+    "south-transport.patch": "c57fd0d1e8b603cc90a45d4d68e773f4868086d5800c06673070f45d68792d6b"
+  },
+  "reqwest_version": "0.13.5",
+  "schema_version": 1,
+  "source_files": {
+    "Cargo.toml": "b0cc636c37755101af984e8f10e848df4966039a36146cacf78e95adaf4c0f20",
+    "crates/south-transport-reqwest/src/lib.rs": "075fd3510e8c3c66213e57106d8e116bb807c1de5dbcc57e540407e607ebf169",
+    "crates/south-transport-reqwest/src/observation.rs": "f21945f67c412c83b700e46b8d31914940caf3f9492d7fb603be851a690cf12a",
+    "crates/south-transport-reqwest/src/observer_tests.rs": "cab0d430440912010945a17a9cbe9bb1be9d20af9f4668a6d1a0afc1d52f8333"
+  },
+  "south_base_revision": "49ec221b9f18db88ed0d837e29ae2ceff722e779"
+}
