@@ -302,6 +302,7 @@ fn tool_arguments_that_are_not_json_are_reported_instead_of_replaced() {
             assistant(
                 None,
                 vec![ToolCall {
+                    signature: None,
                     id: "call_1".to_owned(),
                     name: "get_weather".to_owned(),
                     arguments: "{\"city\": Beijing".to_owned(),
@@ -320,6 +321,7 @@ fn tool_arguments_that_are_not_json_are_reported_instead_of_replaced() {
             assistant(
                 None,
                 vec![ToolCall {
+                    signature: None,
                     id: "call_1".to_owned(),
                     name: "get_weather".to_owned(),
                     arguments: "{\"city\":\"Beijing\"}".to_owned(),
@@ -501,4 +503,98 @@ fn a_thinking_signature_has_no_slot_on_this_wire_and_does_not_leak() {
         !chunks[0].to_string().contains("sig-fragment"),
         "the signature must not be smuggled into another field: {chunks:?}"
     );
+}
+
+// ── tool-call provider signatures (Gemini 3 thoughtSignature, protocol 0.7.0) ──
+
+#[test]
+fn a_tool_call_signature_reaches_the_client_and_an_unsigned_call_gets_none() {
+    let mut signed = ToolCall::new("call_0", "read_file", r#"{"path":"README.md"}"#);
+    signed.signature = Some("sig-parallel".to_owned());
+    let unsigned = ToolCall::new("call_1", "read_file", r#"{"path":"Cargo.toml"}"#);
+    let rendered = openai_chat_response(
+        &response_with(assistant(None, vec![signed, unsigned]), Usage::default()),
+        &context(),
+    )
+    .expect("renders");
+    let calls = &rendered["choices"][0]["message"]["tool_calls"];
+    assert_eq!(
+        calls[0]["extra_content"],
+        json!({"google": {"thought_signature": "sig-parallel"}}),
+        "the signature rides where the Gemini OpenAI-compatibility convention puts it"
+    );
+    assert!(calls[1].get("extra_content").is_none(), "nothing is synthesized or copied");
+}
+
+#[test]
+fn a_streamed_tool_call_signature_rides_the_fragment_it_arrived_with() {
+    let mut state = stream_state();
+    let frames = openai_chat_frames(
+        &[
+            StreamEvent::ToolCallDelta {
+                index: 0,
+                id: Some("call_0".to_owned()),
+                name: Some("read_file".to_owned()),
+                arguments_delta: "{}".to_owned(),
+                signature: Some("sig-parallel".to_owned()),
+            },
+            StreamEvent::ToolCallDelta {
+                index: 1,
+                id: Some("call_1".to_owned()),
+                name: Some("read_file".to_owned()),
+                arguments_delta: "{}".to_owned(),
+                signature: None,
+            },
+        ],
+        &mut state,
+    );
+    let calls: Vec<&Value> =
+        frames.iter().filter_map(|frame| frame.pointer("/choices/0/delta/tool_calls/0")).collect();
+    assert_eq!(calls.len(), 2, "{frames:?}");
+    assert_eq!(calls[0]["extra_content"]["google"]["thought_signature"], "sig-parallel");
+    assert!(calls[1].get("extra_content").is_none());
+}
+
+#[test]
+fn a_client_carries_the_signature_back_on_the_same_call() {
+    let request = chat_request_from_openai_chat(&json!({
+        "model": "m",
+        "messages": [
+            {"role": "user", "content": "read both"},
+            {"role": "assistant", "content": null, "tool_calls": [
+                {"id": "call_0", "type": "function",
+                 "function": {"name": "read_file", "arguments": "{}"},
+                 "extra_content": {"google": {"thought_signature": "sig-parallel"}}},
+                {"id": "call_1", "type": "function",
+                 "function": {"name": "read_file", "arguments": "{}"}}
+            ]}
+        ]
+    }))
+    .expect("decodes");
+    let calls = &request.messages[1].tool_calls;
+    assert_eq!(calls[0].signature.as_deref(), Some("sig-parallel"));
+    assert_eq!(calls[1].signature, None);
+}
+
+#[test]
+fn an_empty_or_non_string_signature_is_refused_with_its_field() {
+    for bad in [json!(""), json!(42), json!({"nested": true})] {
+        let error = chat_request_from_openai_chat(&json!({
+            "model": "m",
+            "messages": [
+                {"role": "user", "content": "read"},
+                {"role": "assistant", "content": null, "tool_calls": [
+                    {"id": "call_0", "type": "function",
+                     "function": {"name": "read_file", "arguments": "{}"},
+                     "extra_content": {"google": {"thought_signature": bad}}}
+                ]}
+            ]
+        }))
+        .expect_err("refused");
+        assert_eq!(error.stable_code(), "tool_call_signature_invalid", "{bad}");
+        assert_eq!(
+            error.field(),
+            "messages[1].tool_calls[0].extra_content.google.thought_signature"
+        );
+    }
 }

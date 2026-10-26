@@ -45,7 +45,7 @@ use crate::reference_bedrock_converse::exception_name;
 pub const NAME: &str = "provider-kiro";
 
 /// The package version.
-pub const VERSION: &str = "1.3.1";
+pub const VERSION: &str = "1.3.2";
 
 /// The family this package serves.
 pub const FAMILY: &str = "kiro";
@@ -576,6 +576,7 @@ impl KiroStreamParser {
                 let index = index(self.calls.len())?;
                 self.calls.push(id.to_owned());
                 Ok(vec![StreamEvent::ToolCallDelta {
+                    signature: None,
                     index,
                     id: Some(id.to_owned()),
                     name: Some(
@@ -586,6 +587,7 @@ impl KiroStreamParser {
             }
             Some(_) if fragment.is_empty() => Ok(Vec::new()),
             Some(position) => Ok(vec![StreamEvent::ToolCallDelta {
+                signature: None,
                 index: index(position)?,
                 id: None,
                 name: None,
@@ -759,10 +761,11 @@ impl ProviderComponentV1 for KiroReferenceV1 {
         for event in events {
             match event {
                 StreamEvent::Delta { content, .. } => text.push_str(&content),
-                StreamEvent::ToolCallDelta { index, id, name, arguments_delta } => {
+                StreamEvent::ToolCallDelta { signature: _, index, id, name, arguments_delta } => {
                     let index = usize::try_from(index).map_err(internal)?;
                     if index == tool_calls.len() {
                         tool_calls.push(ToolCall {
+                            signature: None,
                             id: id.unwrap_or_default(),
                             name: name.unwrap_or_default(),
                             arguments: String::new(),

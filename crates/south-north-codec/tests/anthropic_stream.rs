@@ -51,12 +51,14 @@ fn the_frame_skeleton_is_pinned_frame_by_frame() {
             },
             StreamEvent::Delta { index: 0, content: "hi".to_owned() },
             StreamEvent::ToolCallDelta {
+                signature: None,
                 index: 0,
                 id: Some("toolu_upstream".to_owned()),
                 name: Some("get_weather".to_owned()),
                 arguments_delta: String::new(),
             },
             StreamEvent::ToolCallDelta {
+                signature: None,
                 index: 0,
                 id: None,
                 name: None,
@@ -309,18 +311,21 @@ fn usage_reported_up_front_is_announced_and_folded_rather_than_replaced() {
 fn a_tool_call_with_no_id_is_derived_so_the_same_stream_renders_identically() {
     let events = [
         StreamEvent::ToolCallDelta {
+            signature: None,
             index: 7,
             id: None,
             name: Some("f".to_owned()),
             arguments_delta: "{}".to_owned(),
         },
         StreamEvent::ToolCallDelta {
+            signature: None,
             index: 9,
             id: None,
             name: Some("g".to_owned()),
             arguments_delta: "{}".to_owned(),
         },
         StreamEvent::ToolCallDelta {
+            signature: None,
             index: 7,
             id: None,
             name: None,
@@ -353,6 +358,7 @@ fn blocks_are_closed_by_kind_rather_than_in_the_order_they_opened() {
     let frames = anthropic_frames(
         &[
             StreamEvent::ToolCallDelta {
+                signature: None,
                 index: 0,
                 id: Some("toolu_1".to_owned()),
                 name: Some("f".to_owned()),

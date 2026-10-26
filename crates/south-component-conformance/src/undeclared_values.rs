@@ -98,9 +98,9 @@ mod tests {
             "permissions": { "network": false, "filesystem": false, "secrets": ["provider_api_key"] },
             "conformance": { "required_suite": "south.speech-component.v1", "fixtures": "fixtures/" },
             "compatibility": {
-                "ir_schema_id": "token-station-protocol@0.6.0/v0.5.0",
-                "kernel_version": "0.5.0",
-                "kernel_revision": "c0bca10c2d9f9a439680865feb65c9edf598fc65",
+                "ir_schema_id": "token-station-protocol@0.7.0/v0.6.0",
+                "kernel_version": "0.6.0",
+                "kernel_revision": "a04925518b95c6557374252db7fbe7f026688bde",
                 "wit_package": "token-station:speech-adapter@1.0.0",
                 "south_runtime": "0.63.0"
             },

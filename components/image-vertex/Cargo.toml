@@ -4,7 +4,7 @@
 # dependency's `sandbox` feature stays off).
 [package]
 name = "image-vertex"
-version = "1.0.13"
+version = "1.0.14"
 edition = "2021"
 publish = false
 

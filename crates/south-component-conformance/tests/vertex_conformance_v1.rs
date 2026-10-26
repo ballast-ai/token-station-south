@@ -128,18 +128,18 @@ fn the_manifest_declares_exactly_what_the_record_decided() {
     assert_eq!(
         manifest.compatibility,
         CompatibilityDeclarationV1 {
-            ir_schema_id: "token-station-protocol@0.6.0/v0.5.0".to_owned(),
-            kernel_version: "0.5.0".to_owned(),
-            kernel_revision: "c0bca10c2d9f9a439680865feb65c9edf598fc65".to_owned(),
+            ir_schema_id: "token-station-protocol@0.7.0/v0.6.0".to_owned(),
+            kernel_version: "0.6.0".to_owned(),
+            kernel_revision: "a04925518b95c6557374252db7fbe7f026688bde".to_owned(),
             wit_package: WIT_PACKAGE.to_owned(),
             // `model_parameters` (record `2026-10-18-family-model-parameters.md` §7) is the newest
             // declaration, first parsed by 0.74.0.
             south_runtime: "0.74.0".to_owned(),
             runtime_abi: Some(south_provider_api::RUNTIME_ABI),
             kernel_contracts: std::collections::BTreeMap::from([
-                ("canonical_ir".to_owned(), 4),
+                ("canonical_ir".to_owned(), 5),
                 ("error_catalog".to_owned(), 1),
-                ("stream".to_owned(), 2),
+                ("stream".to_owned(), 3),
             ]),
             contracts: std::collections::BTreeMap::new(),
         },

@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"candidates\": [{\"content\": {\"parts\": [{\"functionCall\": {\"name\": \"get_weather\", \"args\": {\"city\": \"SF\"}}, \"thoughtSignature\": 42}]}, \"finishReason\": \"STOP\"}], \"usageMetadata\": {\"promptTokenCount\": 20, \"candidatesTokenCount\": 8, \"totalTokenCount\": 28}}"
+}

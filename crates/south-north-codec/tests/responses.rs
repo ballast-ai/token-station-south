@@ -93,21 +93,29 @@ fn community_tool_families_i07_i08_i09_i10_i21_restore_o01() {
     let mut response = response();
     response.choices[0].message.tool_calls = vec![
         ToolCall {
+            signature: None,
             id: "a".into(),
             name: "patch".into(),
             arguments: "{\"input\":\"patch text\"}".into(),
         },
         ToolCall {
+            signature: None,
             id: "b".into(),
             name: "tool_search".into(),
             arguments: "{\"query\":\"files\"}".into(),
         },
         ToolCall {
+            signature: None,
             id: "c".into(),
             name: "__token_station_responses_local_shell".into(),
             arguments: "{\"action\":{\"type\":\"exec\",\"command\":[\"pwd\"]}}".into(),
         },
-        ToolCall { id: "d".into(), name: "fs__read".into(), arguments: "{}".into() },
+        ToolCall {
+            signature: None,
+            id: "d".into(),
+            name: "fs__read".into(),
+            arguments: "{}".into(),
+        },
     ];
     let mut ctx = context(ResponsesReasoningMode::Summary);
     ctx.inbound_tools = tools;
@@ -170,18 +178,26 @@ fn stream_lifecycle_indices_usage_and_once_e01_e02_e03_e06_e07_e08() {
         },
         StreamEvent::Delta { index: 0, content: "hello".into() },
         StreamEvent::ToolCallDelta {
+            signature: None,
             index: 0,
             id: Some("a".into()),
             name: Some("f".into()),
             arguments_delta: "{".into(),
         },
         StreamEvent::ToolCallDelta {
+            signature: None,
             index: 1,
             id: Some("b".into()),
             name: Some("g".into()),
             arguments_delta: "{}".into(),
         },
-        StreamEvent::ToolCallDelta { index: 0, id: None, name: None, arguments_delta: "}".into() },
+        StreamEvent::ToolCallDelta {
+            signature: None,
+            index: 0,
+            id: None,
+            name: None,
+            arguments_delta: "}".into(),
+        },
         StreamEvent::Finish { finish_reason: Some(FinishReason::Length), stop_sequence: None },
         StreamEvent::Usage { usage: Usage { output_tokens: 4, ..Usage::default() } },
         StreamEvent::Done { finish_reason: None, stop_sequence: None },
@@ -209,6 +225,7 @@ fn raw_reasoning_closes_before_tools_and_json_state_stays_local_e04_e05_e09() {
     let events = [
         StreamEvent::ThinkingDelta { index: 0, block_index: 0, thinking_delta: "think".into() },
         StreamEvent::ToolCallDelta {
+            signature: None,
             index: 0,
             id: Some("c".into()),
             name: Some("f".into()),
@@ -322,6 +339,7 @@ fn tool_streams_restore_custom_search_shell_namespace_e04() {
     let mut events = Vec::new();
     for (index, (name, args)) in calls.iter().enumerate() {
         events.push(StreamEvent::ToolCallDelta {
+            signature: None,
             index: u32::try_from(index).unwrap(),
             id: Some(format!("c{index}")),
             name: Some((*name).into()),
@@ -342,8 +360,13 @@ fn tool_streams_restore_custom_search_shell_namespace_e04() {
 }
 #[test]
 fn missing_identity_and_signature_compatibility_are_independent_e04_o04() {
-    let fragment =
-        StreamEvent::ToolCallDelta { index: 0, id: None, name: None, arguments_delta: "{".into() };
+    let fragment = StreamEvent::ToolCallDelta {
+        signature: None,
+        index: 0,
+        id: None,
+        name: None,
+        arguments_delta: "{".into(),
+    };
     let mut strict = ResponsesSseState::new(context(ResponsesReasoningMode::Summary));
     assert!(checked_frames(std::slice::from_ref(&fragment), &mut strict).is_err());
     let mut ctx = context(ResponsesReasoningMode::Summary);
@@ -354,6 +377,7 @@ fn missing_identity_and_signature_compatibility_are_independent_e04_o04() {
         &[
             fragment,
             StreamEvent::ToolCallDelta {
+                signature: None,
                 index: 0,
                 id: None,
                 name: Some("f".into()),
@@ -435,6 +459,7 @@ fn continuation_snapshot_is_only_available_after_success_i19_e09() {
             },
             StreamEvent::Delta { index: 0, content: "answer".into() },
             StreamEvent::ToolCallDelta {
+                signature: None,
                 index: 0,
                 id: Some("c".into()),
                 name: Some("fs__read".into()),
@@ -528,6 +553,7 @@ fn malformed_local_shell_preserves_host_diagnostic_contract() {
     let error = checked_frames(
         &[
             StreamEvent::ToolCallDelta {
+                signature: None,
                 index: 0,
                 id: Some("c".into()),
                 name: Some("__token_station_responses_local_shell".into()),
@@ -664,6 +690,7 @@ fn sampling_formats_and_selection_are_preserved_i15_i16_i17() {
 fn output_items_keep_all_choices_ids_arguments_and_usage_o01_o02_o05_o06_o07() {
     let mut ir = response();
     ir.choices[0].message.tool_calls.push(ToolCall {
+        signature: None,
         id: "call_a".into(),
         name: "f".into(),
         arguments: "{ \"x\" : 1 }".into(),
@@ -728,6 +755,7 @@ fn finish_waits_for_done_and_identity_mutations_fail_e04_e06_e08() {
     let mut state = ResponsesSseState::new(context(ResponsesReasoningMode::Summary));
     checked_frames(
         &[StreamEvent::ToolCallDelta {
+            signature: None,
             index: 0,
             id: Some("a".into()),
             name: Some("f".into()),
@@ -738,6 +766,7 @@ fn finish_waits_for_done_and_identity_mutations_fail_e04_e06_e08() {
     .unwrap();
     let error = checked_frames(
         &[StreamEvent::ToolCallDelta {
+            signature: None,
             index: 0,
             id: Some("b".into()),
             name: None,
@@ -762,6 +791,7 @@ fn reasoning_block_order_and_summary_lifecycle_e01_e03_e05() {
                 thinking_delta: "second".into(),
             },
             StreamEvent::ToolCallDelta {
+                signature: None,
                 index: 0,
                 id: Some("c".into()),
                 name: Some("f".into()),
@@ -894,6 +924,7 @@ fn tool_search_parameter_events_reference_an_announced_item_e03_e04() {
     let frames = checked_frames(
         &[
             StreamEvent::ToolCallDelta {
+                signature: None,
                 index: 0,
                 id: Some("search".into()),
                 name: Some("tool_search".into()),
@@ -947,6 +978,7 @@ fn render_error_allows_one_explicit_failed_terminal_without_sequence_gaps_e08() 
             );
         }
         let malformed = StreamEvent::ToolCallDelta {
+            signature: None,
             index: 1,
             id: None,
             name: None,
@@ -1072,6 +1104,7 @@ fn empty_batch_explicitly_starts_once_and_preserves_terminal_sequence_e01_e08() 
     assert!(
         checked_frames(
             &[StreamEvent::ToolCallDelta {
+                signature: None,
                 index: 0,
                 id: None,
                 name: None,

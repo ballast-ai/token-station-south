@@ -568,9 +568,9 @@ fn compatibility_manifest_describes_the_library_slice() {
     assert_eq!(
         manifest.kernel_contracts,
         BTreeMap::from([
-            ("canonical_ir".to_owned(), 4),
+            ("canonical_ir".to_owned(), 5),
             ("error_catalog".to_owned(), 1),
-            ("stream".to_owned(), 2),
+            ("stream".to_owned(), 3),
         ])
     );
     // The release is the workspace version, which the release workflow matches against the tag.

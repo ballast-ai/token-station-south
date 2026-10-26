@@ -904,6 +904,7 @@ impl AnthropicSseParser {
                 }
             }),
             Some("input_json_delta") => vec![StreamEvent::ToolCallDelta {
+                signature: None,
                 index,
                 id: None,
                 name: None,
@@ -976,6 +977,7 @@ impl AnthropicSseParser {
                     _ => return Ok(Vec::new()),
                 }
                 Ok(vec![StreamEvent::ToolCallDelta {
+                    signature: None,
                     index,
                     id: block["id"].as_str().map(str::to_owned),
                     name: block["name"].as_str().map(str::to_owned),
@@ -1128,7 +1130,7 @@ impl ProviderComponentV1 for AnthropicReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-anthropic".to_owned(),
-            version: "1.4.2".to_owned(),
+            version: "1.4.3".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
@@ -1237,6 +1239,7 @@ impl ProviderComponentV1 for AnthropicReferenceV1 {
                     let id = block["id"].as_str().unwrap_or_default().to_owned();
                     layout.push(json!({"kind":"tool_call","call_id":id}));
                     tool_calls.push(ToolCall {
+                        signature: None,
                         id,
                         name: block["name"].as_str().unwrap_or_default().to_owned(),
                         arguments: block

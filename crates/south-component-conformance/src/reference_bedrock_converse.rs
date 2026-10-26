@@ -835,6 +835,7 @@ impl ConverseSseParser {
                     return Ok(Vec::new());
                 };
                 Ok(vec![StreamEvent::ToolCallDelta {
+                    signature: None,
                     index,
                     id: use_block["toolUseId"].as_str().map(str::to_owned),
                     name: use_block["name"].as_str().map(str::to_owned),
@@ -855,6 +856,7 @@ impl ConverseSseParser {
                     // input is an object, but the stream sends pieces of its
                     // text. IR keeps arguments as a string for exactly this.
                     return Ok(vec![StreamEvent::ToolCallDelta {
+                        signature: None,
                         index,
                         id: None,
                         name: None,
@@ -977,7 +979,7 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-bedrock-converse".to_owned(),
-            version: "1.2.2".to_owned(),
+            version: "1.2.3".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
@@ -1051,6 +1053,7 @@ impl ProviderComponentV1 for BedrockConverseReferenceV1 {
                 let id = use_block["toolUseId"].as_str().unwrap_or_default().to_owned();
                 layout.push(json!({"kind":"tool_call","call_id":id}));
                 tool_calls.push(ToolCall {
+                    signature: None,
                     id,
                     name: use_block["name"].as_str().unwrap_or_default().to_owned(),
                     arguments,
@@ -1137,7 +1140,7 @@ impl ProviderComponentV1 for BedrockConverseBearerReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-bedrock-converse-bearer".to_owned(),
-            version: "1.2.2".to_owned(),
+            version: "1.2.3".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }

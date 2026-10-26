@@ -75,11 +75,19 @@ pub fn openai_chat_response(
                         ),
                     ));
                 }
-                calls.push(json!({
+                let mut rendered = json!({
                     "id": call.id,
                     "type": "function",
                     "function": {"name": call.name, "arguments": call.arguments},
-                }));
+                });
+                // The provider's per-call signature rides where the Gemini
+                // OpenAI-compatibility convention puts it, so a client that
+                // echoes the call back returns it unchanged. A call without one
+                // gets no `extra_content`.
+                if let Some(signature) = &call.signature {
+                    rendered["extra_content"] = json!({"google": {"thought_signature": signature}});
+                }
+                calls.push(rendered);
             }
             message["tool_calls"] = Value::Array(calls);
         }

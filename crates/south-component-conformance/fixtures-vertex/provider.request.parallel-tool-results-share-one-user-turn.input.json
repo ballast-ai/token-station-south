@@ -1,0 +1,75 @@
+{
+  "provider_config": {
+    "provider": "vertex-ai",
+    "base_url": "https://us-central1-aiplatform.googleapis.com",
+    "auth": "provider_api_key",
+    "declared": {
+      "project_id": "test-project",
+      "region": "us-central1"
+    },
+    "models": [
+      {
+        "model": "gemini-2.5-flash",
+        "tool": true,
+        "vision": true,
+        "json_schema": true,
+        "context_window": 1048576,
+        "supported_parameters": [
+          "stop",
+          "temperature",
+          "top_p"
+        ]
+      }
+    ]
+  },
+  "chat_request": {
+    "model": "gemini-2.5-flash",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Weather in Beijing and Paris?"
+      },
+      {
+        "role": "assistant",
+        "tool_calls": [
+          {
+            "id": "call_0_get_weather",
+            "name": "get_weather",
+            "arguments": "{\"city\":\"Beijing\"}",
+            "signature": "sig-parallel"
+          },
+          {
+            "id": "call_1_get_weather",
+            "name": "get_weather",
+            "arguments": "{\"city\":\"Paris\"}"
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_0_get_weather",
+        "content": "18C"
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_1_get_weather",
+        "content": "21C"
+      }
+    ],
+    "tools": [
+      {
+        "name": "get_weather",
+        "description": "Look up weather",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "city": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    ],
+    "tool_choice": "auto"
+  }
+}

@@ -21,9 +21,9 @@ fn task_manifest() -> ComponentManifestV1 {
           "permissions": {"network": false, "filesystem": false, "secrets": ["provider_api_key"]},
           "conformance": {"required_suite": "south.task-component.v2", "fixtures": "fixtures/"},
           "compatibility": {
-            "ir_schema_id": "token-station-protocol@0.6.0/v0.5.0",
-            "kernel_version": "0.5.0",
-            "kernel_revision": "c0bca10c2d9f9a439680865feb65c9edf598fc65",
+            "ir_schema_id": "token-station-protocol@0.7.0/v0.6.0",
+            "kernel_version": "0.6.0",
+            "kernel_revision": "a04925518b95c6557374252db7fbe7f026688bde",
             "wit_package": "token-station:task-adapter@2.0.0",
             "south_runtime": "0.61.0",
             "contracts": {"task": 7}

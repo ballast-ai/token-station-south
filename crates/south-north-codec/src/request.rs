@@ -103,7 +103,7 @@ pub fn chat_request_from_openai_chat(body: &Value) -> Result<ChatRequest, CodecE
                     {
                         prepend_thinking(&mut assistant, reasoning);
                     }
-                    assistant.tool_calls = tool_calls_from_wire(raw.get("tool_calls"));
+                    assistant.tool_calls = tool_calls_from_wire(raw.get("tool_calls"), index)?;
                     messages.push(assistant);
                 }
                 "tool" => {
@@ -309,15 +309,40 @@ fn part_from_wire(part: &Value, path: &str) -> Result<ContentPart, CodecError> {
     })
 }
 
-fn tool_calls_from_wire(tool_calls: Option<&Value>) -> Vec<ToolCall> {
-    tool_calls
-        .and_then(Value::as_array)
-        .map(|array| {
+/// The provider signature a Chat client carries back on a tool call
+/// (`extra_content.google.thought_signature`, the Gemini OpenAI-compatibility
+/// convention). Absent or `null` is `None`; anything but a non-empty string is
+/// refused.
+fn tool_call_signature_from_wire(
+    call: &Value,
+    message: usize,
+    position: usize,
+) -> Result<Option<String>, CodecError> {
+    match call.pointer("/extra_content/google/thought_signature") {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(signature)) if !signature.is_empty() => Ok(Some(signature.clone())),
+        Some(_) => Err(CodecError::ToolCallSignatureInvalid {
+            field: format!(
+                "messages[{message}].tool_calls[{position}].extra_content.google.thought_signature"
+            ),
+        }),
+    }
+}
+
+fn tool_calls_from_wire(
+    tool_calls: Option<&Value>,
+    message: usize,
+) -> Result<Vec<ToolCall>, CodecError> {
+    tool_calls.and_then(Value::as_array).map_or_else(
+        || Ok(Vec::new()),
+        |array| {
             array
                 .iter()
-                .map(|call| {
+                .enumerate()
+                .map(|(position, call)| {
                     let source = call.get("function").unwrap_or(call);
-                    ToolCall {
+                    Ok(ToolCall {
+                        signature: tool_call_signature_from_wire(call, message, position)?,
                         id: call.get("id").and_then(Value::as_str).unwrap_or_default().to_owned(),
                         name: source
                             .get("name")
@@ -332,9 +357,9 @@ fn tool_calls_from_wire(tool_calls: Option<&Value>) -> Vec<ToolCall> {
                             .and_then(Value::as_str)
                             .unwrap_or_default()
                             .to_owned(),
-                    }
+                    })
                 })
                 .collect()
-        })
-        .unwrap_or_default()
+        },
+    )
 }

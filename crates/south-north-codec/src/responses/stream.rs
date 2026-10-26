@@ -115,6 +115,7 @@ impl ResponsesSseState {
                 });
                 if slot.kind == 2 {
                     message.tool_calls.push(ToolCall {
+                        signature: None,
                         id: slot.call_id.clone(),
                         name: slot.name.clone(),
                         arguments: slot.text.clone(),
@@ -197,6 +198,7 @@ impl ResponsesSseState {
                         let slot = self.slots.get(position)?;
                         layout.push(json!({"kind":"tool_call","call_id":slot.call_id}));
                         tool_calls.push(ToolCall {
+                            signature: None,
                             id: slot.call_id.clone(),
                             name: slot.name.clone(),
                             arguments: slot.text.clone(),
@@ -603,7 +605,7 @@ fn render(
             StreamEvent::RedactedThinking { index, block_index, data } => {
                 render_redacted(state, *index, *block_index, data, &mut out)?;
             }
-            StreamEvent::ToolCallDelta { index, id, name, arguments_delta } => {
+            StreamEvent::ToolCallDelta { signature: _, index, id, name, arguments_delta } => {
                 render_tool(state, *index, id.as_ref(), name.as_ref(), arguments_delta, &mut out)?;
             }
             StreamEvent::Usage { usage } => state.usage.absorb(*usage),

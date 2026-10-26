@@ -151,6 +151,7 @@ fn sample_events() -> Vec<StreamEvent> {
         StreamEvent::ThinkingDelta { index: 0, block_index: 0, thinking_delta: "Hmm.".to_owned() },
         StreamEvent::Delta { index: 0, content: "Hi".to_owned() },
         StreamEvent::ToolCallDelta {
+            signature: None,
             index: 0,
             id: Some("call_1".to_owned()),
             name: Some("f".to_owned()),
@@ -217,6 +218,7 @@ fn the_codec_s_items_parts_and_incomplete_reasons_are_the_component_s() {
             ContentPart::text("Hi".to_owned()),
         ])),
         tool_calls: vec![ToolCall {
+            signature: None,
             id: "call_1".to_owned(),
             name: "f".to_owned(),
             arguments: "{}".to_owned(),
@@ -374,7 +376,7 @@ fn a_parsed_stream_survives_the_north_codec_and_back() {
         for event in events {
             match event {
                 StreamEvent::Delta { content, .. } => text.push_str(content),
-                StreamEvent::ToolCallDelta { index, id, name, arguments_delta } => {
+                StreamEvent::ToolCallDelta { signature: _, index, id, name, arguments_delta } => {
                     let call = calls.entry(*index).or_default();
                     if id.is_some() {
                         call.0.clone_from(id);
