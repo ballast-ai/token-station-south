@@ -4,6 +4,19 @@ all-features = true
 [advisories]
 unmaintained = "workspace"
 yanked = "deny"
+# zstd reaches the graph only through wasmtime 49's compilation cache (wasmtime-internal-cache),
+# which pins zstd ^0.13 with default features off and calls only `zstd::decode_all` and
+# `zstd::encode_all` on its own cache files. The fixed releases (zstd 0.14.3, zstd-safe 8.2.0)
+# are reachable only through wasmtime 50, which needs rustc 1.97; the toolchain is 1.96. Remove
+# these three entries when wasmtime moves to 50 (the same list is in `.cargo/audit.toml`).
+ignore = [
+  # `with_context` stream constructors; `decode_all` and `encode_all` build a fresh context.
+  { id = "RUSTSEC-2026-0391", reason = "not reachable: wasmtime's cache never reuses a zstd context" },
+  # `Seekable::decompress`; the `seekable` feature is not enabled.
+  { id = "RUSTSEC-2026-0398", reason = "not reachable: zstd-safe is built without `seekable`" },
+  # Legacy (v0.4 to v0.7) frames; the `legacy` feature is not enabled, so they are not decoded.
+  { id = "RUSTSEC-2026-0403", reason = "not reachable: zstd is built without `legacy`" },
+]
 
 [licenses]
 allow = [
