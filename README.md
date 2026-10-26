@@ -21,9 +21,10 @@ pricing, billing, persistence, settlement, delivery authorization, and product b
 does not discover configuration or perform hidden environment, filesystem, clock, randomness,
 network, or secret-store access. Operational capabilities are injected explicitly.
 
-The current release is `0.76.0`. It supports provider chat and streaming, asynchronous tasks,
+The current release is `0.77.0`. It supports provider chat and streaming, asynchronous tasks,
 embeddings, image generation and editing, and speech synthesis and recognition. Current additions
-include Kiro image input, bounded Bailian reasoning caps, Qwen ASR, and Wan media tasks.
+include Gemini 3 tool-call signatures carried through the canonical IR and the Chat Completions
+wire, and parallel Gemini tool results sent in one turn.
 
 ## Library map
 

@@ -240,7 +240,7 @@ fn the_manifest_declares_the_two_families_with_the_native_values() {
     // (record `2026-10-17-messages-passthrough-and-count-tokens.md` §8.1); from 1.4.0
     // `model_parameters` and `drops_unsigned_thinking` need 0.74.0 (record
     // `2026-10-18-family-model-parameters.md` §7), which shipped them.
-    assert_eq!(manifest.compatibility.south_runtime, "0.74.0");
+    assert_eq!(manifest.compatibility.south_runtime, "0.77.0"); // release 0.77.0 raised every package (canonical_ir 5)
 }
 
 /// Protected request headers record (`docs/design/2026-10-15-immutable-request-headers.md`,

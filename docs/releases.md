@@ -4,13 +4,14 @@ This page is the concise index from repository releases to their authoritative d
 Release records preserve historical detail; [compatibility.json](../compatibility.json), not a tag
 or this index, is the authority for host adoption and verification status.
 
-The current repository release is `0.76.0`. Records may describe a prepared but unpublished tag;
+The current repository release is `0.77.0`. Records may describe a prepared but unpublished tag;
 their status line remains authoritative for publication state.
 
 ## Current releases
 
 | Release | Current capability | Records |
 |---|---|---|
+| `0.77.0` | Gemini 3 tool-call signatures through the canonical IR (kernel protocol 0.7.0) and the Chat Completions wire, and parallel Gemini tool results in one turn; prepared as recorded, with publication and host re-pin separate | [release](design/2026-10-26-release-0.77.0.md), [design](design/2026-10-26-gemini-tool-call-signatures.md) |
 | `0.76.0` | Bailian bounded reasoning caps, Qwen ASR, and Wan media tasks; prepared as recorded, with publication and host re-pin separate | [release](design/2026-10-21-release-0.76.0.md), [reasoning cap](design/2026-10-21-bailian-thinking-cap.md), [Qwen ASR](design/2026-10-21-speech-qwen-asr.md), [Wan media](design/2026-10-21-bailian-wan-media.md) |
 | `0.75.0` | Kiro inline image input; publication and host re-pin remain separate as recorded | [release](design/2026-10-19-release-0.75.0.md), [design](design/2026-10-19-kiro-image-input.md) |
 | `0.74.0` | Family model parameters, credential attributes, and the task-v2 value channel | [release](design/2026-10-18-release-0.74.0.md), [model parameters](design/2026-10-18-family-model-parameters.md), [value channel](design/2026-10-18-section-attributes-and-task-values.md) |

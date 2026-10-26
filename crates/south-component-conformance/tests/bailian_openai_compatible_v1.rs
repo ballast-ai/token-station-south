@@ -319,7 +319,7 @@ fn the_manifest_declares_the_family_and_its_reasoning_cap() {
     // (`gemini_signatures_retires_every_published_076_package_identity`).
     assert_eq!(manifest.version, "2.13.1");
     assert_eq!(OpenAiCompatibleReferenceV1.metadata().version, manifest.version);
-    assert_eq!(manifest.compatibility.south_runtime, "0.76.0");
+    assert_eq!(manifest.compatibility.south_runtime, "0.77.0"); // release 0.77.0 raised every package (canonical_ir 5)
 }
 
 /// Record §2: the reasoning is reported inside `completion_tokens`, which is what is billed; the
