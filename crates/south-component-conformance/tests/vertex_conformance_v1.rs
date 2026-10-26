@@ -134,7 +134,7 @@ fn the_manifest_declares_exactly_what_the_record_decided() {
             wit_package: WIT_PACKAGE.to_owned(),
             // `model_parameters` (record `2026-10-18-family-model-parameters.md` §7) is the newest
             // declaration, first parsed by 0.74.0.
-            south_runtime: "0.74.0".to_owned(),
+            south_runtime: "0.77.0".to_owned(),
             runtime_abi: Some(south_provider_api::RUNTIME_ABI),
             kernel_contracts: std::collections::BTreeMap::from([
                 ("canonical_ir".to_owned(), 5),
