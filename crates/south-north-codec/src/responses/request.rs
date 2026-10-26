@@ -312,7 +312,12 @@ fn input_item(
                     (LOCAL_SHELL.into(), json!({"action":item["action"]}).to_string())
                 }
             };
-            message.tool_calls.push(ToolCall { id: id.to_owned(), name, arguments });
+            message.tool_calls.push(ToolCall {
+                signature: None,
+                id: id.to_owned(),
+                name,
+                arguments,
+            });
         }
         Some(
             "function_call_output"
@@ -730,6 +735,7 @@ fn message_input(
                 .enumerate()
             {
                 message.tool_calls.push(ToolCall {
+                    signature: None,
                     id: required_str(&c["id"], &format!("{path}.tool_calls[{i}].id"))?.to_owned(),
                     name: required_str(
                         &c["function"]["name"],

@@ -76,7 +76,7 @@ pub fn openai_chat_frames(events: &[StreamEvent], state: &mut OpenAiChatSseState
                 flush_pending(state, &mut chunks);
                 chunks.push(delta(*index, &json!({"content": content})));
             }
-            StreamEvent::ToolCallDelta { index, id, name, arguments_delta } => {
+            StreamEvent::ToolCallDelta { signature, index, id, name, arguments_delta } => {
                 flush_pending(state, &mut chunks);
                 let mut function = json!({"arguments": arguments_delta});
                 if let Some(name) = name {
@@ -85,6 +85,11 @@ pub fn openai_chat_frames(events: &[StreamEvent], state: &mut OpenAiChatSseState
                 let mut call = json!({"index": index, "function": function});
                 if let Some(id) = id {
                     call["id"] = json!(id);
+                }
+                // Same slot as the non-streaming message (see `response.rs`), on
+                // the fragment the provider sent the signature with.
+                if let Some(signature) = signature {
+                    call["extra_content"] = json!({"google": {"thought_signature": signature}});
                 }
                 chunks.push(delta(0, &json!({"tool_calls": [call]})));
             }

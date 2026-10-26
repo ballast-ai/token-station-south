@@ -79,7 +79,7 @@ pub const MANTLE_FAMILY: &str = mantle::FAMILY;
 pub const NAME: &str = "provider-openai-responses";
 
 /// The package's version.
-pub const VERSION: &str = "1.5.2";
+pub const VERSION: &str = "1.5.3";
 
 /// The reference component. Stateless; each stream gets its own parser.
 #[derive(Debug, Default, Clone, Copy)]
@@ -742,6 +742,7 @@ fn response_of(raw: &Value) -> ComponentResultV1<ChatResponse> {
                     return Err(protocol("the upstream function call has no arguments"));
                 };
                 tool_calls.push(ToolCall {
+                    signature: None,
                     id: call_id.to_owned(),
                     name: name.to_owned(),
                     arguments: arguments.to_owned(),
@@ -948,6 +949,7 @@ impl ResponsesStreamParser {
             ));
         };
         let event = (!rest.is_empty()).then(|| StreamEvent::ToolCallDelta {
+            signature: None,
             index: call.ordinal,
             id: None,
             name: None,
@@ -1015,6 +1017,7 @@ impl ResponsesStreamParser {
             },
         );
         Ok(vec![StreamEvent::ToolCallDelta {
+            signature: None,
             index: ordinal,
             id: Some(call_id.to_owned()),
             name: Some(name.to_owned()),
@@ -1086,6 +1089,7 @@ impl ResponsesStreamParser {
         }
         call.emitted.push_str(payload);
         Ok(vec![StreamEvent::ToolCallDelta {
+            signature: None,
             index: call.ordinal,
             id: None,
             name: None,

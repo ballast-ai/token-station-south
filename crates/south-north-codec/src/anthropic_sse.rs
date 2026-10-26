@@ -247,7 +247,7 @@ pub fn anthropic_frames(
                 let index = state.text_block(&mut frames);
                 frames.push(block_delta(index, &json!({"type": "text_delta", "text": content})));
             }
-            StreamEvent::ToolCallDelta { index, id, name, arguments_delta } => {
+            StreamEvent::ToolCallDelta { signature: _, index, id, name, arguments_delta } => {
                 let block = state.tool_block(*index, id.as_deref(), name.as_deref(), &mut frames);
                 // An empty fragment is the call announcing itself; the block
                 // start already carried the id and name, and an empty

@@ -1078,7 +1078,9 @@ fn the_invoke_package_declares_the_runtime_converse_declares() {
     // (`kiro_images_retires_every_published_074_package_identity`).
     // Published as 1.2.1 with 0.75.0; the Bailian records' Q47 bump made it 1.2.2
     // (`bailian_retires_every_published_075_package_identity`).
-    assert_eq!(invoke.version, "1.2.2");
+    // Published as 1.2.2 with 0.76.0; the Gemini signatures re-pin made it 1.2.3
+    // (`gemini_signatures_retires_every_published_076_package_identity`).
+    assert_eq!(invoke.version, "1.2.3");
     // 1.2.0 declares `model_parameters` (record `2026-10-18-family-model-parameters.md` §7), first parsed by 0.74.0.
     assert_eq!(invoke.compatibility.south_runtime, "0.74.0");
     assert_eq!(invoke.compatibility, read("provider-bedrock-converse").compatibility);
@@ -1254,14 +1256,14 @@ fn every_shipped_package_declares_the_kernel_the_workspace_pins() {
 }
 
 /// A host that records the previous `canonical_ir` refuses every shipped package, through the
-/// contract number whichever runtime it claims to be; a host that records 3 admits them. This is
+/// contract number whichever runtime it claims to be; a host that records 5 admits them. This is
 /// the one-way flag day of a kernel re-pin (design record section 13.7).
 #[test]
 fn a_host_recording_the_old_kernel_contract_refuses_every_shipped_package() {
     let this_release = host_range::host_range();
-    assert_eq!(this_release.kernel_contracts.get("canonical_ir"), Some(&4));
+    assert_eq!(this_release.kernel_contracts.get("canonical_ir"), Some(&5));
     let mut previous = this_release.clone();
-    previous.kernel_contracts.insert("canonical_ir".to_owned(), 3);
+    previous.kernel_contracts.insert("canonical_ir".to_owned(), 4);
     let mut seen = 0;
     for package in shipped_packages() {
         let manifest: ComponentManifestV1 =
@@ -1273,8 +1275,8 @@ fn a_host_recording_the_old_kernel_contract_refuses_every_shipped_package() {
                 compatibility_admits(&manifest, &previous),
                 Err(CompatibilityMismatchV2::KernelContract {
                     ref name,
-                    declared: Some(4),
-                    expected: Some(3),
+                    declared: Some(5),
+                    expected: Some(4),
                 }) if name == "canonical_ir"
             ),
             "{}",
@@ -1397,7 +1399,9 @@ fn the_responses_package_declares_the_runtime_that_first_admits_its_declarations
     // (`kiro_images_retires_every_published_074_package_identity`).
     // Published as 1.5.1 with 0.75.0; the Bailian records' Q47 bump made it 1.5.2
     // (`bailian_retires_every_published_075_package_identity`).
-    assert_eq!(manifest.version, "1.5.2");
+    // Published as 1.5.2 with 0.76.0; the Gemini signatures re-pin made it 1.5.3
+    // (`gemini_signatures_retires_every_published_076_package_identity`).
+    assert_eq!(manifest.version, "1.5.3");
     // 1.5.0 declares `model_parameters` (record `2026-10-18-family-model-parameters.md` §7), first parsed by 0.74.0.
     assert_eq!(manifest.compatibility.south_runtime, "0.74.0");
     assert!(!manifest.immutable_body_paths.is_empty() && !manifest.north_passthrough.is_empty());
@@ -1553,7 +1557,9 @@ fn declared_runtime_now(name: &str) -> &'static str {
 /// `canonical_ir` 4, which no runtime before 0.57.0 records, so under the declared-runtime
 /// discipline each declares `south_runtime` 0.57.0 (record §2.4), as the 0.46.0 re-pin did.
 /// The identity each package took in KC1 is no longer pinned: I3-1 gave every package one more
-/// (`i3_1_retires_every_published_057_package_identity`); the kernel tuple still holds.
+/// (`i3_1_retires_every_published_057_package_identity`). Neither is the kernel tuple: the Gemini
+/// signatures re-pin moved it to mirror `v0.6.0` (protocol 0.7.0, `canonical_ir` 5, `stream` 3),
+/// which `gemini_signatures_retires_every_published_076_package_identity` pins.
 #[test]
 fn kc1_retires_every_r3_package_identity() {
     for (name, r3) in [
@@ -1586,25 +1592,7 @@ fn kc1_retires_every_r3_package_identity() {
         )
         .unwrap();
         assert_ne!(manifest.version, r3, "{name} reused its R3 identity");
-        assert_eq!(
-            manifest.compatibility.kernel_contracts.get("canonical_ir"),
-            Some(&4),
-            "{name}: built against protocol 0.6.0"
-        );
-        assert_eq!(
-            manifest.compatibility.ir_schema_id, "token-station-protocol@0.6.0/v0.5.0",
-            "{name}"
-        );
-        assert_eq!(manifest.compatibility.kernel_version, "0.5.0", "{name}");
-        assert_eq!(
-            manifest.compatibility.south_runtime,
-            declared_runtime_now(name),
-            "{name}: needs canonical_ir 4, which 0.57.0 is the first runtime to record"
-        );
-        assert_eq!(
-            manifest.compatibility.kernel_revision, "c0bca10c2d9f9a439680865feb65c9edf598fc65",
-            "{name}: the upstream kernel-v0.6.0 commit the mirror records"
-        );
+        assert_eq!(manifest.compatibility.south_runtime, declared_runtime_now(name), "{name}");
     }
 }
 
@@ -1654,7 +1642,7 @@ fn i3_1_retires_every_published_057_package_identity() {
             "{name}: no runtime moves in that release"
         );
         assert_eq!(
-            manifest.compatibility.ir_schema_id, "token-station-protocol@0.6.0/v0.5.0",
+            manifest.compatibility.ir_schema_id, "token-station-protocol@0.7.0/v0.6.0",
             "{name}"
         );
     }
@@ -1713,7 +1701,7 @@ fn i3_2_retires_every_published_058_package_identity() {
             assert_eq!(manifest.compatibility.contracts.get("media"), Some(&1), "{name}");
         }
         assert_eq!(
-            manifest.compatibility.ir_schema_id, "token-station-protocol@0.6.0/v0.5.0",
+            manifest.compatibility.ir_schema_id, "token-station-protocol@0.7.0/v0.6.0",
             "{name}"
         );
     }
@@ -1771,7 +1759,7 @@ fn i3_4_retires_every_published_059_package_identity() {
             assert_eq!(manifest.compatibility.contracts.get("media"), Some(&media), "{name}");
         }
         assert_eq!(
-            manifest.compatibility.ir_schema_id, "token-station-protocol@0.6.0/v0.5.0",
+            manifest.compatibility.ir_schema_id, "token-station-protocol@0.7.0/v0.6.0",
             "{name}"
         );
     }
@@ -1831,7 +1819,7 @@ fn i3_5_retires_every_published_060_package_identity() {
             assert_eq!(manifest.compatibility.contracts.get("media"), Some(&media), "{name}");
         }
         assert_eq!(
-            manifest.compatibility.ir_schema_id, "token-station-protocol@0.6.0/v0.5.0",
+            manifest.compatibility.ir_schema_id, "token-station-protocol@0.7.0/v0.6.0",
             "{name}"
         );
     }
@@ -1870,7 +1858,9 @@ fn image_gemini_declares_media_2_which_a_media_1_host_refuses() {
     // (`kiro_images_retires_every_published_074_package_identity`).
     // Published as 1.0.17 with 0.75.0; the Bailian records' Q47 bump made it 1.0.18
     // (`bailian_retires_every_published_075_package_identity`).
-    assert_eq!(manifest.version, "1.0.18");
+    // Published as 1.0.18 with 0.76.0; the Gemini signatures re-pin made it 1.0.19
+    // (`gemini_signatures_retires_every_published_076_package_identity`).
+    assert_eq!(manifest.version, "1.0.19");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["gemini-image"]);
     assert!(manifest.declared_keys("gemini-image").is_empty());
@@ -1930,7 +1920,9 @@ fn the_i3_1_image_packages_declare_the_runtime_and_values_of_the_record() {
         // (`kiro_images_retires_every_published_074_package_identity`).
         // Published as 1.0.18 with 0.75.0; the Bailian records' Q47 bump made it 1.0.19
         // (`bailian_retires_every_published_075_package_identity`).
-        assert_eq!(manifest.version, "1.0.19", "{name}");
+        // Published as 1.0.19 with 0.76.0; the Gemini signatures re-pin made it 1.0.20
+        // (`gemini_signatures_retires_every_published_076_package_identity`).
+        assert_eq!(manifest.version, "1.0.20", "{name}");
         assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD, "{name}");
         assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), [family], "{name}");
         assert_eq!(manifest.compatibility.south_runtime, "0.57.0", "{name}");
@@ -1973,7 +1965,9 @@ fn image_stability_declares_media_1_and_the_runtime_of_the_record() {
     // (`kiro_images_retires_every_published_074_package_identity`).
     // Published as 1.0.16 with 0.75.0; the Bailian records' Q47 bump made it 1.0.17
     // (`bailian_retires_every_published_075_package_identity`).
-    assert_eq!(manifest.version, "1.0.17");
+    // Published as 1.0.17 with 0.76.0; the Gemini signatures re-pin made it 1.0.18
+    // (`gemini_signatures_retires_every_published_076_package_identity`).
+    assert_eq!(manifest.version, "1.0.18");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["stability-image"]);
     assert!(manifest.declared_keys("stability-image").is_empty());
@@ -2019,7 +2013,9 @@ fn image_ideogram_declares_media_1_and_the_runtime_of_the_record() {
     // (`kiro_images_retires_every_published_074_package_identity`).
     // Published as 1.0.15 with 0.75.0; the Bailian records' Q47 bump made it 1.0.16
     // (`bailian_retires_every_published_075_package_identity`).
-    assert_eq!(manifest.version, "1.0.16");
+    // Published as 1.0.16 with 0.76.0; the Gemini signatures re-pin made it 1.0.17
+    // (`gemini_signatures_retires_every_published_076_package_identity`).
+    assert_eq!(manifest.version, "1.0.17");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["ideogram-image"]);
     assert!(manifest.declared_keys("ideogram-image").is_empty());
@@ -2065,7 +2061,9 @@ fn image_xai_declares_media_1_bearer_and_the_runtime_of_the_record() {
     // (`kiro_images_retires_every_published_074_package_identity`).
     // Published as 1.0.9 with 0.75.0; the Bailian records' Q47 bump made it 1.0.10
     // (`bailian_retires_every_published_075_package_identity`).
-    assert_eq!(manifest.version, "1.0.10");
+    // Published as 1.0.10 with 0.76.0; the Gemini signatures re-pin made it 1.0.11
+    // (`gemini_signatures_retires_every_published_076_package_identity`).
+    assert_eq!(manifest.version, "1.0.11");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["xai-image"]);
     assert_eq!(manifest.capabilities.iter().collect::<Vec<_>>(), ["edit", "generate"]);
@@ -2119,7 +2117,9 @@ fn image_vertex_declares_media_2_the_vertex_recipe_and_the_media_2_runtime() {
     // (`kiro_images_retires_every_published_074_package_identity`).
     // Published as 1.0.12 with 0.75.0; the Bailian records' Q47 bump made it 1.0.13
     // (`bailian_retires_every_published_075_package_identity`).
-    assert_eq!(manifest.version, "1.0.13");
+    // Published as 1.0.13 with 0.76.0; the Gemini signatures re-pin made it 1.0.14
+    // (`gemini_signatures_retires_every_published_076_package_identity`).
+    assert_eq!(manifest.version, "1.0.14");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["vertex-ai-image"]);
     assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer"]);
@@ -2180,7 +2180,9 @@ fn provider_vertex_declares_the_vertex_recipe_and_the_runtime_of_its_newest_decl
     // (`kiro_images_retires_every_published_074_package_identity`).
     // Published as 1.2.1 with 0.75.0; the Bailian records' Q47 bump made it 1.2.2
     // (`bailian_retires_every_published_075_package_identity`).
-    assert_eq!(manifest.version, "1.2.2");
+    // Published as 1.2.2 with 0.76.0; the Gemini signatures re-pin made it 1.3.0
+    // (`gemini_signatures_retires_every_published_076_package_identity`).
+    assert_eq!(manifest.version, "1.3.0");
     assert_eq!(manifest.api_version, south_provider_api::PROVIDER_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["vertex-ai"]);
     assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer"]);
@@ -2237,7 +2239,9 @@ fn image_reve_declares_media_1_and_the_runtime_of_the_record() {
     // (`kiro_images_retires_every_published_074_package_identity`).
     // Published as 1.0.9 with 0.75.0; the Bailian records' Q47 bump made it 1.0.10
     // (`bailian_retires_every_published_075_package_identity`).
-    assert_eq!(manifest.version, "1.0.10");
+    // Published as 1.0.10 with 0.76.0; the Gemini signatures re-pin made it 1.0.11
+    // (`gemini_signatures_retires_every_published_076_package_identity`).
+    assert_eq!(manifest.version, "1.0.11");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["reve-image"]);
     assert!(manifest.declared_keys("reve-image").is_empty());
@@ -2286,7 +2290,9 @@ fn image_openai_compatible_declares_media_1_and_the_runtime_of_the_record() {
     // (`kiro_images_retires_every_published_074_package_identity`).
     // Published as 1.0.5 with 0.75.0; the Bailian records' Q47 bump made it 1.0.6
     // (`bailian_retires_every_published_075_package_identity`).
-    assert_eq!(manifest.version, "1.0.6");
+    // Published as 1.0.6 with 0.76.0; the Gemini signatures re-pin made it 1.0.7
+    // (`gemini_signatures_retires_every_published_076_package_identity`).
+    assert_eq!(manifest.version, "1.0.7");
     assert_eq!(
         manifest.version,
         south_component_conformance::reference_openai_compatible_image::VERSION
@@ -2388,7 +2394,7 @@ fn kiro_retires_every_published_061_package_identity() {
             assert_eq!(manifest.compatibility.contracts.get("media"), Some(&media), "{name}");
         }
         assert_eq!(
-            manifest.compatibility.ir_schema_id, "token-station-protocol@0.6.0/v0.5.0",
+            manifest.compatibility.ir_schema_id, "token-station-protocol@0.7.0/v0.6.0",
             "{name}"
         );
     }
@@ -2426,7 +2432,9 @@ fn provider_kiro_declares_the_runtime_of_its_newest_declaration() {
     // (`kiro_images_retires_every_published_074_package_identity`).
     // Published as 1.3.0 with 0.75.0; the Bailian records' Q47 bump made it 1.3.1
     // (`bailian_retires_every_published_075_package_identity`).
-    assert_eq!(manifest.version, "1.3.1");
+    // Published as 1.3.1 with 0.76.0; the Gemini signatures re-pin made it 1.3.2
+    // (`gemini_signatures_retires_every_published_076_package_identity`).
+    assert_eq!(manifest.version, "1.3.2");
     assert_eq!(manifest.api_version, south_provider_api::PROVIDER_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["kiro"]);
     assert!(manifest.subscription_quota_families.contains("kiro"));
@@ -2475,7 +2483,9 @@ fn task_gemini_omni_v2_declares_task_8_which_a_task_7_host_refuses() {
     // (`kiro_images_retires_every_published_074_package_identity`).
     // Published as 0.2.4 with 0.75.0; the Bailian records' Q47 bump made it 0.2.5
     // (`bailian_retires_every_published_075_package_identity`).
-    assert_eq!(manifest.version, "0.2.5");
+    // Published as 0.2.5 with 0.76.0; the Gemini signatures re-pin made it 0.2.6
+    // (`gemini_signatures_retires_every_published_076_package_identity`).
+    assert_eq!(manifest.version, "0.2.6");
     assert_eq!(manifest.api_version, south_provider_api::TASK_WORLD_V2);
     assert_eq!(manifest.compatibility.contracts.get("task"), Some(&8));
     assert_eq!(manifest.compatibility.contracts.get("media"), Some(&1));
@@ -2706,10 +2716,12 @@ fn s_s_1_retires_every_published_063_package_identity() {
 /// `family_model_parameters_retires_every_published_0731_package_identity`), and the Kiro image
 /// input record's 1.0.10 (published 1.0.9 with 0.74.0;
 /// `kiro_images_retires_every_published_074_package_identity`), and the Bailian records' 1.0.11
-/// (published 1.0.10 with 0.75.0; `bailian_retires_every_published_075_package_identity`).
+/// (published 1.0.10 with 0.75.0; `bailian_retires_every_published_075_package_identity`), and the
+/// Gemini signatures re-pin's 1.0.12 (published 1.0.11 with 0.76.0;
+/// `gemini_signatures_retires_every_published_076_package_identity`).
 /// The tests below describe the batches that defined the packages, before those releases.
 /// `speech-vertex`, `speech-openai-compatible` and `speech-qwen` moved on to minors ([`speech_version`]).
-const SPEECH_VERSION: &str = "1.0.11";
+const SPEECH_VERSION: &str = "1.0.12";
 
 /// The version a speech package carries: [`SPEECH_VERSION`], except `speech-vertex`, which Q7's
 /// refusal made 1.1.0, the 0.67.0 cycle's Q47 bump 1.1.1, the T9 cap field's 1.1.2, the
@@ -2726,9 +2738,9 @@ const SPEECH_VERSION: &str = "1.0.11";
 /// `bailian_retires_every_published_075_package_identity`).
 fn speech_version(name: &str) -> &'static str {
     match name {
-        "speech-vertex" => "1.1.10",
-        "speech-openai-compatible" => "1.1.9",
-        "speech-qwen" => "1.1.0",
+        "speech-vertex" => "1.1.11",
+        "speech-openai-compatible" => "1.1.10",
+        "speech-qwen" => "1.1.1",
         _ => SPEECH_VERSION,
     }
 }
@@ -3191,7 +3203,9 @@ fn minimax_immutable_paths_retire_the_published_task_minimax_v2_identity() {
     // (`kiro_images_retires_every_published_074_package_identity`).
     // Published as 0.33.11 with 0.75.0; the Bailian records' Q47 bump made it 0.33.12
     // (`bailian_retires_every_published_075_package_identity`).
-    assert_eq!(manifest.version, "0.33.12");
+    // Published as 0.33.12 with 0.76.0; the Gemini signatures re-pin made it 0.33.13
+    // (`gemini_signatures_retires_every_published_076_package_identity`).
+    assert_eq!(manifest.version, "0.33.13");
     assert_eq!(manifest.compatibility.south_runtime, declared_runtime_now("task-minimax-v2"));
     assert_eq!(manifest.compatibility.contracts.get("task"), Some(&7));
 }
@@ -3291,7 +3305,9 @@ fn speech_vertex_1_1_refuses_q7_and_retires_its_published_identity() {
     // (`kiro_images_retires_every_published_074_package_identity`).
     // Published as 1.1.9 with 0.75.0; the Bailian records' Q47 bump made it 1.1.10
     // (`bailian_retires_every_published_075_package_identity`).
-    assert_eq!(manifest.version, "1.1.10");
+    // Published as 1.1.10 with 0.76.0; the Gemini signatures re-pin made it 1.1.11
+    // (`gemini_signatures_retires_every_published_076_package_identity`).
+    assert_eq!(manifest.version, "1.1.11");
     assert_eq!(
         manifest.version,
         south_component_conformance::reference_vertex_speech::VERSION,
@@ -3379,7 +3395,9 @@ fn task_veo_v2_gains_the_vertex_family_and_bearer() {
     // (`kiro_images_retires_every_published_074_package_identity`).
     // Published as 0.37.4 with 0.75.0; the Bailian records' Q47 bump made it 0.37.5
     // (`bailian_retires_every_published_075_package_identity`).
-    assert_eq!(manifest.version, "0.37.5");
+    // Published as 0.37.5 with 0.76.0; the Gemini signatures re-pin made it 0.37.6
+    // (`gemini_signatures_retires_every_published_076_package_identity`).
+    assert_eq!(manifest.version, "0.37.6");
     assert_eq!(manifest.providers, ["veo-video", "vertex-veo-video"]);
     assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer", "header_secret"]);
     assert_eq!(manifest.compatibility.contracts.get("task"), Some(&7));
@@ -3507,7 +3525,9 @@ fn speech_openai_compatible_1_1_adds_the_azure_openai_families() {
     // (`kiro_images_retires_every_published_074_package_identity`).
     // Published as 1.1.8 with 0.75.0; the Bailian records' Q47 bump made it 1.1.9
     // (`bailian_retires_every_published_075_package_identity`).
-    assert_eq!(manifest.version, "1.1.9");
+    // Published as 1.1.9 with 0.76.0; the Gemini signatures re-pin made it 1.1.10
+    // (`gemini_signatures_retires_every_published_076_package_identity`).
+    assert_eq!(manifest.version, "1.1.10");
     assert_eq!(
         manifest.version,
         south_component_conformance::reference_openai_compatible_speech::VERSION,
@@ -4228,6 +4248,86 @@ fn bailian_retires_every_published_075_package_identity() {
         )
         .unwrap();
         assert_ne!(manifest.version, published, "{name} reused its identity published with 0.75.0");
+        assert_ne!(manifest.version, now, "{name} reused its identity published with 0.76.0");
+        assert_eq!(
+            manifest.compatibility.south_runtime, runtime,
+            "{name}: the round moves no runtime"
+        );
+        let contracts: std::collections::BTreeMap<String, u32> =
+            contracts.iter().map(|(world, version)| ((*world).to_owned(), *version)).collect();
+        assert_eq!(manifest.compatibility.contracts, contracts, "{name}");
+    }
+}
+
+/// The Gemini 3 tool-call signatures record (`2026-10-26-gemini-tool-call-signatures.md`) re-pins
+/// the kernel to mirror `v0.6.0` (protocol 0.7.0, `canonical_ir` 5, `stream` 3: `ToolCall` and
+/// `ToolCallDelta` carry a per-call signature) and changes `south-component-conformance` (0.75.0 →
+/// 0.76.0: `gemini_text.rs` carries the signature and merges parallel tool results). The kernel
+/// tuple is package content and every guest links the conformance crate, so every `component.wasm`
+/// changes: each identity published with 0.76.0 retires. `provider-gemini` (1.5.2 → 1.6.0) and
+/// `provider-vertex` (1.2.2 → 1.3.0) change behaviour and take a minor; every other package takes the
+/// Q47 patch. No package moves its `contracts`; the release that ships this record raises every
+/// runtime to the first that records `canonical_ir` 5 (record §5).
+#[test]
+fn gemini_signatures_retires_every_published_076_package_identity() {
+    let rows: [RetiredIdentity<'_>; 41] = [
+        ("embeddings-gemini", "1.1.25", "1.1.26", "0.57.0", &[("embeddings", 2)]),
+        ("embeddings-openai-compatible", "1.0.28", "1.0.29", "0.57.0", &[("embeddings", 1)]),
+        ("embeddings-vertex", "1.0.27", "1.0.28", "0.57.0", &[("embeddings", 1)]),
+        ("image-azure", "1.0.24", "1.0.25", "0.57.0", &[("image", 1), ("media", 1)]),
+        ("image-gemini", "1.0.18", "1.0.19", "0.59.0", &[("image", 1), ("media", 2)]),
+        ("image-ideogram", "1.0.16", "1.0.17", "0.57.0", &[("image", 1), ("media", 1)]),
+        ("image-minimax", "1.0.19", "1.0.20", "0.57.0", &[("image", 1), ("media", 1)]),
+        ("image-openai-compatible", "1.0.6", "1.0.7", "0.70.0", &[("image", 1), ("media", 1)]),
+        ("image-qwen", "1.0.19", "1.0.20", "0.57.0", &[("image", 1), ("media", 1)]),
+        ("image-reve", "1.0.10", "1.0.11", "0.57.0", &[("image", 1), ("media", 1)]),
+        ("image-stability", "1.0.17", "1.0.18", "0.57.0", &[("image", 1), ("media", 1)]),
+        ("image-vertex", "1.0.13", "1.0.14", "0.59.0", &[("image", 1), ("media", 2)]),
+        ("image-xai", "1.0.10", "1.0.11", "0.57.0", &[("image", 1), ("media", 1)]),
+        ("provider-anthropic-bedrock-invoke", "1.2.2", "1.2.3", "0.74.0", &[]),
+        ("provider-anthropic", "1.4.2", "1.4.3", "0.74.0", &[]),
+        ("provider-bedrock-converse-bearer", "1.2.2", "1.2.3", "0.74.0", &[]),
+        ("provider-bedrock-converse", "1.2.2", "1.2.3", "0.74.0", &[]),
+        ("provider-gemini", "1.5.2", "1.6.0", "0.74.0", &[]),
+        ("provider-kiro", "1.3.1", "1.3.2", "0.74.0", &[]),
+        ("provider-openai-compatible", "2.13.0", "2.13.1", "0.76.0", &[]),
+        ("provider-openai-responses", "1.5.2", "1.5.3", "0.74.0", &[]),
+        ("provider-vertex", "1.2.2", "1.3.0", "0.74.0", &[]),
+        ("speech-azure", "1.0.11", "1.0.12", "0.65.0", &[("media", 1), ("speech", 1)]),
+        ("speech-elevenlabs", "1.0.11", "1.0.12", "0.65.0", &[("media", 3), ("speech", 1)]),
+        ("speech-groq", "1.0.11", "1.0.12", "0.65.0", &[("media", 1), ("speech", 1)]),
+        ("speech-mimo", "1.0.11", "1.0.12", "0.65.0", &[("media", 1), ("speech", 1)]),
+        ("speech-minimax", "1.0.11", "1.0.12", "0.65.0", &[("media", 1), ("speech", 1)]),
+        ("speech-openai-compatible", "1.1.9", "1.1.10", "0.65.0", &[("media", 1), ("speech", 1)]),
+        ("speech-qwen", "1.1.0", "1.1.1", "0.65.0", &[("media", 1), ("speech", 1)]),
+        ("speech-vertex", "1.1.10", "1.1.11", "0.65.0", &[("media", 1), ("speech", 1)]),
+        ("speech-xai", "1.0.11", "1.0.12", "0.65.0", &[("media", 1), ("speech", 1)]),
+        ("task-bailian-v2", "0.32.0", "0.32.1", "0.57.0", &[("task", 7)]),
+        ("task-byteplus-v2", "0.36.34", "0.36.35", "0.57.0", &[("task", 7)]),
+        ("task-gemini-omni-v2", "0.2.5", "0.2.6", "0.62.0", &[("media", 1), ("task", 8)]),
+        ("task-gmi-image-v2", "0.36.2", "0.36.3", "0.74.0", &[("task", 7)]),
+        ("task-kling-v2", "0.32.35", "0.32.36", "0.57.0", &[("task", 7)]),
+        ("task-kling", "1.0.37", "1.0.38", "0.57.0", &[("task", 7)]),
+        ("task-minimax-v2", "0.33.12", "0.33.13", "0.63.0", &[("task", 7)]),
+        ("task-veo-v2", "0.37.5", "0.37.6", "0.57.0", &[("task", 7)]),
+        ("task-wan-image-v2", "0.35.34", "0.35.35", "0.57.0", &[("task", 7)]),
+        ("task-xai-v2", "0.35.34", "0.35.35", "0.57.0", &[("task", 7)]),
+    ];
+    let shipped: BTreeSet<&str> = rows.iter().map(|row| row.0).collect();
+    assert_eq!(
+        shipped,
+        BTreeSet::from(OFFICIAL_COMPONENTS),
+        "every official package takes the round"
+    );
+    for (name, published, now, runtime, contracts) in rows {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_ne!(manifest.version, published, "{name} reused its identity published with 0.76.0");
         assert_eq!(manifest.version, now, "{name}");
         assert_eq!(
             manifest.compatibility.south_runtime, runtime,
@@ -4236,5 +4336,20 @@ fn bailian_retires_every_published_075_package_identity() {
         let contracts: std::collections::BTreeMap<String, u32> =
             contracts.iter().map(|(world, version)| ((*world).to_owned(), *version)).collect();
         assert_eq!(manifest.compatibility.contracts, contracts, "{name}");
+        assert_eq!(
+            manifest.compatibility.ir_schema_id, "token-station-protocol@0.7.0/v0.6.0",
+            "{name}"
+        );
+        assert_eq!(manifest.compatibility.kernel_version, "0.6.0", "{name}");
+        assert_eq!(
+            manifest.compatibility.kernel_revision, "a04925518b95c6557374252db7fbe7f026688bde",
+            "{name}: the upstream kernel-v0.7.0 commit the mirror records"
+        );
+        assert_eq!(
+            manifest.compatibility.kernel_contracts.get("canonical_ir"),
+            Some(&5),
+            "{name}: built against protocol 0.7.0"
+        );
+        assert_eq!(manifest.compatibility.kernel_contracts.get("stream"), Some(&3), "{name}");
     }
 }

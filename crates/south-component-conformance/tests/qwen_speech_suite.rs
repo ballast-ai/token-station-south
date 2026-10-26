@@ -439,8 +439,10 @@ fn transcript_body(text: &Value, seconds: &Value) -> Value {
 #[test]
 fn the_manifest_declares_transcription_at_1_1_0() {
     let manifest = support::manifest(PACKAGE);
-    assert_eq!(manifest.version, "1.1.0");
-    assert_eq!(REFERENCE.metadata().version, "1.1.0");
+    // Published as 1.1.0 with 0.76.0; the Gemini signatures re-pin made it 1.1.1
+    // (`gemini_signatures_retires_every_published_076_package_identity`).
+    assert_eq!(manifest.version, "1.1.1");
+    assert_eq!(REFERENCE.metadata().version, "1.1.1");
     assert!(manifest.capabilities.contains("transcribe"));
     assert!(!manifest.capabilities.contains("translate"));
     assert_eq!(manifest.compatibility.south_runtime, "0.65.0");

@@ -5,7 +5,7 @@
 # dependency's `sandbox` feature stays off).
 [package]
 name = "image-openai-compatible"
-version = "1.0.6"
+version = "1.0.7"
 edition = "2021"
 publish = false
 

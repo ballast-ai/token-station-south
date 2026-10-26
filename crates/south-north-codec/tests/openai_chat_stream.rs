@@ -76,6 +76,7 @@ fn every_frame_carries_the_context_identity() {
         text(0, "hel"),
         StreamEvent::ThinkingDelta { index: 0, block_index: 0, thinking_delta: "t".to_owned() },
         StreamEvent::ToolCallDelta {
+            signature: None,
             index: 0,
             id: Some("call_1".to_owned()),
             name: Some("f".to_owned()),
@@ -158,12 +159,14 @@ fn the_role_goes_on_the_first_delta_frame_whatever_it_carries() {
 
     let tool = render(&[
         StreamEvent::ToolCallDelta {
+            signature: None,
             index: 0,
             id: Some("call_1".to_owned()),
             name: Some("f".to_owned()),
             arguments_delta: "{\"a\"".to_owned(),
         },
         StreamEvent::ToolCallDelta {
+            signature: None,
             index: 0,
             id: None,
             name: None,
@@ -367,6 +370,7 @@ fn event_strategy() -> impl Strategy<Value = StreamEvent> {
         }),
         (0u32..2, proptest::option::of("[a-z]{1,3}"), "[a-z]{0,4}").prop_map(
             |(index, name, arguments_delta)| StreamEvent::ToolCallDelta {
+                signature: None,
                 index,
                 id: name.clone(),
                 name,

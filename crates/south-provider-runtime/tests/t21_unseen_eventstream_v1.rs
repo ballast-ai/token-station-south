@@ -98,13 +98,13 @@ fn manifest() -> Value {
         "permissions": { "network": false, "filesystem": false, "secrets": [] },
         "conformance": { "required_suite": "south.provider-component.v1", "fixtures": "fixtures/" },
         "compatibility": {
-            "ir_schema_id": "token-station-protocol@0.6.0/v0.5.0",
-            "kernel_version": "0.5.0",
-            "kernel_revision": "c0bca10c2d9f9a439680865feb65c9edf598fc65",
+            "ir_schema_id": "token-station-protocol@0.7.0/v0.6.0",
+            "kernel_version": "0.6.0",
+            "kernel_revision": "a04925518b95c6557374252db7fbe7f026688bde",
             "wit_package": "token-station:adapter@2.0.0",
             "south_runtime": env!("CARGO_PKG_VERSION"),
             "runtime_abi": 1,
-            "kernel_contracts": { "canonical_ir": 4, "error_catalog": 1, "stream": 2 },
+            "kernel_contracts": { "canonical_ir": 5, "error_catalog": 1, "stream": 3 },
         },
     })
 }

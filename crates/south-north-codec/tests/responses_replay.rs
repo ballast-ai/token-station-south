@@ -248,6 +248,7 @@ fn c1_output_requires_a_bijection_over_content_and_tool_references() {
                         ContentPart::text("two"),
                     ])),
                     tool_calls: vec![token_station_protocol::ToolCall {
+                        signature: None,
                         id: "call_1".into(),
                         name: "lookup".into(),
                         arguments: "{}".into(),
@@ -382,6 +383,7 @@ fn x5_stream_preserves_interleaved_layout_and_reuses_the_completed_carrier() {
             StreamEvent::Delta { index: 0, content: "answer".into() },
             StreamEvent::RedactedThinking { index: 0, block_index: 2, data: "opaque".into() },
             StreamEvent::ToolCallDelta {
+                signature: None,
                 index: 0,
                 id: Some("call_1".into()),
                 name: Some("lookup".into()),

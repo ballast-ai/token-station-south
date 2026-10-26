@@ -202,7 +202,7 @@ fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<Cow<'_, str>
                             "an assistant tool call has no name; Gemini keys a call by its name",
                         ));
                     }
-                    parts.push(json!({
+                    let mut part = json!({
                         "functionCall": {
                             "name": call.name,
                             // The IR keeps arguments as the exact string the
@@ -216,7 +216,18 @@ fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<Cow<'_, str>
                                 .filter(Value::is_object)
                                 .unwrap_or_else(|| json!({})),
                         }
-                    }));
+                    });
+                    // Gemini 3 wants the call's signature back on the same part,
+                    // not as a part of its own.
+                    if let Some(signature) = &call.signature {
+                        if signature.is_empty() {
+                            return Err(capability(
+                                "an assistant tool call carries an empty signature",
+                            ));
+                        }
+                        part["thoughtSignature"] = Value::String(signature.clone());
+                    }
+                    parts.push(part);
                 }
                 if parts.is_empty() {
                     continue;
@@ -246,12 +257,19 @@ fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<Cow<'_, str>
                         .concat(),
                     None => String::new(),
                 };
-                contents.push(json!({
-                    "role": "user",
-                    "parts": [{
-                        "functionResponse": {"name": name, "response": {"content": text}}
-                    }]
-                }));
+                let part = json!({
+                    "functionResponse": {"name": name, "response": {"content": text}}
+                });
+                // The results of one parallel batch go back in a single user
+                // turn; a turn that already carries anything else stays apart.
+                match contents.last_mut() {
+                    Some(last) if is_function_response_turn(last) => {
+                        if let Some(parts) = last["parts"].as_array_mut() {
+                            parts.push(part);
+                        }
+                    }
+                    _ => contents.push(json!({"role": "user", "parts": [part]})),
+                }
             }
         }
     }
@@ -434,6 +452,35 @@ fn synthetic_call_id(position: usize, name: &str) -> String {
     format!("call_{position}_{name}")
 }
 
+/// The `thoughtSignature` a `functionCall` part carries (Gemini 3). The
+/// signature belongs to that one call and must come back on it, unchanged, when
+/// the conversation is replayed; a call without one stays without one (in a
+/// parallel batch only the first call is signed). A signature that is present
+/// but not a non-empty string is a protocol error, not something to drop.
+fn call_signature(part: &Value) -> ComponentResultV1<Option<String>> {
+    match part.get("thoughtSignature") {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(signature)) if !signature.is_empty() => Ok(Some(signature.clone())),
+        Some(_) => Err(provider_protocol_error(
+            "the upstream sent a functionCall whose thoughtSignature is not a non-empty string",
+        )),
+    }
+}
+
+/// Whether `content` is a `user` turn made only of `functionResponse` parts —
+/// the turn the results of one parallel tool-call batch share.
+fn is_function_response_turn(content: &Value) -> bool {
+    content["role"] == "user"
+        && content["parts"].as_array().is_some_and(|parts| {
+            !parts.is_empty()
+                && parts.iter().all(|part| {
+                    part.as_object().is_some_and(|object| {
+                        object.len() == 1 && object.contains_key("functionResponse")
+                    })
+                })
+        })
+}
+
 // -- stream ------------------------------------------------------------------
 
 /// The `usageMetadata` counts a stream is held to across chunks, in the order a
@@ -554,6 +601,7 @@ impl GeminiSseParser {
                         arguments_delta: call
                             .get("args")
                             .map_or_else(|| "{}".to_owned(), std::string::ToString::to_string),
+                        signature: call_signature(part)?,
                     });
                     self.tool_calls_seen += 1;
                     produced_call = true;
@@ -653,6 +701,7 @@ pub fn parse_response(parts: &HttpResponseParts) -> ComponentResultV1<ChatRespon
                     arguments: call
                         .get("args")
                         .map_or_else(|| "{}".to_owned(), std::string::ToString::to_string),
+                    signature: call_signature(part)?,
                 });
                 continue;
             }

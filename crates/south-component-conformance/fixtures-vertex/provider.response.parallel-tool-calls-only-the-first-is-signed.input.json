@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"candidates\": [{\"content\": {\"parts\": [{\"functionCall\": {\"name\": \"get_weather\", \"args\": {\"city\": \"Beijing\"}}, \"thoughtSignature\": \"sig-parallel\"}, {\"functionCall\": {\"name\": \"get_weather\", \"args\": {\"city\": \"Paris\"}}}]}, \"finishReason\": \"STOP\"}], \"modelVersion\": \"gemini-2.5-flash\", \"usageMetadata\": {\"promptTokenCount\": 20, \"candidatesTokenCount\": 8, \"totalTokenCount\": 28}}"
+}

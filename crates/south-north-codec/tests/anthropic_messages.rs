@@ -187,6 +187,7 @@ fn the_message_envelope_is_pinned_block_by_block() {
                     ContentPart::text("checking now".to_owned()),
                 ])),
                 vec![ToolCall {
+                    signature: None,
                     id: "toolu_upstream".to_owned(),
                     name: "get_weather".to_owned(),
                     arguments: "{\"city\":\"Beijing\"}".to_owned(),
@@ -251,16 +252,19 @@ fn a_missing_tool_id_is_derived_so_the_same_response_renders_identically() {
                     None,
                     vec![
                         ToolCall {
+                            signature: None,
                             id: String::new(),
                             name: "f".to_owned(),
                             arguments: "{}".to_owned(),
                         },
                         ToolCall {
+                            signature: None,
                             id: "toolu_kept".to_owned(),
                             name: "g".to_owned(),
                             arguments: "{}".to_owned(),
                         },
                         ToolCall {
+                            signature: None,
                             id: String::new(),
                             name: "h".to_owned(),
                             arguments: "{}".to_owned(),
@@ -292,6 +296,7 @@ fn unparseable_tool_arguments_are_refused_rather_than_rendered_as_an_empty_objec
             vec![choice(
                 None,
                 vec![ToolCall {
+                    signature: None,
                     id: "toolu_1".to_owned(),
                     name: "get_weather".to_owned(),
                     arguments: "{\"city\": Beijing".to_owned(),

@@ -27,9 +27,9 @@ fn host() -> HostRangeV1 {
         south_runtime_min: "0.43.0".to_owned(),
         south_runtime: "0.45.0".to_owned(),
         kernel_contracts: BTreeMap::from([
-            ("canonical_ir".to_owned(), 4),
+            ("canonical_ir".to_owned(), 5),
             ("error_catalog".to_owned(), 1),
-            ("stream".to_owned(), 2),
+            ("stream".to_owned(), 3),
         ]),
         contracts: BTreeMap::from([("task".to_owned(), BTreeSet::from([6, 7]))]),
     }
@@ -88,7 +88,7 @@ fn every_bound_refuses_on_its_own_side() {
 #[test]
 fn kernel_contracts_must_match_exactly_in_both_directions() {
     let differs = refused(|m, _| {
-        m.compatibility.kernel_contracts.insert("stream".to_owned(), 3);
+        m.compatibility.kernel_contracts.insert("stream".to_owned(), 2);
     });
     assert!(
         matches!(differs, CompatibilityMismatchV2::KernelContract { ref name, .. } if name == "stream")

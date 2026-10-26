@@ -1,6 +1,6 @@
 {
   "name": "provider-openai-responses",
-  "version": "1.5.2",
+  "version": "1.5.3",
   "api_version": "provider-adapter-v2",
   "providers": [
     "openai-responses",
@@ -239,16 +239,16 @@
     "fixtures": "fixtures-openai-responses/"
   },
   "compatibility": {
-    "ir_schema_id": "token-station-protocol@0.6.0/v0.5.0",
-    "kernel_version": "0.5.0",
-    "kernel_revision": "c0bca10c2d9f9a439680865feb65c9edf598fc65",
+    "ir_schema_id": "token-station-protocol@0.7.0/v0.6.0",
+    "kernel_version": "0.6.0",
+    "kernel_revision": "a04925518b95c6557374252db7fbe7f026688bde",
     "wit_package": "token-station:adapter@2.0.0",
     "south_runtime": "0.74.0",
     "runtime_abi": 1,
     "kernel_contracts": {
-      "canonical_ir": 4,
+      "canonical_ir": 5,
       "error_catalog": 1,
-      "stream": 2
+      "stream": 3
     }
   }
 }

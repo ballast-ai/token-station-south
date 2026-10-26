@@ -951,6 +951,7 @@ fn events_of_frame(
         }
         for call in delta["tool_calls"].as_array().into_iter().flatten() {
             events.push(StreamEvent::ToolCallDelta {
+                signature: None,
                 // The tool call's own index, not the choice's: a single
                 // choice may stream several calls at once.
                 index: index_of(&call["index"]),
@@ -1059,7 +1060,7 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-openai-compatible".to_owned(),
-            version: "2.13.0".to_owned(),
+            version: "2.13.1".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
@@ -1194,6 +1195,7 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
                 .into_iter()
                 .flatten()
                 .map(|call| ToolCall {
+                    signature: None,
                     id: call["id"].as_str().unwrap_or_default().to_owned(),
                     name: call["function"]["name"].as_str().unwrap_or_default().to_owned(),
                     arguments: call["function"]["arguments"]

@@ -89,6 +89,14 @@ pub enum CodecError {
     /// answer that is not what the model produced.
     #[error("{field}: {detail}")]
     Unrenderable { field: String, detail: String },
+    /// A tool call's provider signature (`extra_content.google.thought_signature`
+    /// on a Chat `tool_calls` entry) that is present but not a non-empty string.
+    ///
+    /// Refused rather than dropped: the provider requires the signature back on
+    /// the same call, and a dropped one surfaces later as an upstream 400 with
+    /// no pointer to the field the client got wrong.
+    #[error("{field}: a tool call signature must be a non-empty string")]
+    ToolCallSignatureInvalid { field: String },
 }
 
 impl CodecError {
@@ -100,6 +108,7 @@ impl CodecError {
             Self::UnknownValue { .. } => "unknown_value",
             Self::OutOfRange { .. } => "out_of_range",
             Self::Unrenderable { .. } => "unrenderable",
+            Self::ToolCallSignatureInvalid { .. } => "tool_call_signature_invalid",
         }
     }
 
@@ -130,7 +139,8 @@ impl CodecError {
             Self::ReasoningReplayInvalid { field }
             | Self::UnknownValue { field, .. }
             | Self::OutOfRange { field, .. }
-            | Self::Unrenderable { field, .. } => field,
+            | Self::Unrenderable { field, .. }
+            | Self::ToolCallSignatureInvalid { field } => field,
         }
     }
 }

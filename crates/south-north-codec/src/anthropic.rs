@@ -391,6 +391,7 @@ fn assistant_from_blocks(parts: &[Value], index: usize) -> Result<Message, Codec
         }
         match kind {
             Some("tool_use") => tool_calls.push(ToolCall {
+                signature: None,
                 id: part.get("id").and_then(Value::as_str).unwrap_or_default().to_owned(),
                 name: part.get("name").and_then(Value::as_str).unwrap_or_default().to_owned(),
                 // The IR keeps arguments as the string a tool receives; this

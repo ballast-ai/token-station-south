@@ -61,9 +61,9 @@ fn embeddings_guest_wasm() -> &'static Path {
 fn compatibility(wit_package: &str, contracts: &Value) -> Value {
     let host = host_range::host_range();
     json!({
-        "ir_schema_id": "token-station-protocol@0.6.0/v0.5.0",
-        "kernel_version": "0.5.0",
-        "kernel_revision": "c0bca10c2d9f9a439680865feb65c9edf598fc65",
+        "ir_schema_id": "token-station-protocol@0.7.0/v0.6.0",
+        "kernel_version": "0.6.0",
+        "kernel_revision": "a04925518b95c6557374252db7fbe7f026688bde",
         "wit_package": wit_package,
         "south_runtime": env!("CARGO_PKG_VERSION"),
         "runtime_abi": host.runtime_abi,

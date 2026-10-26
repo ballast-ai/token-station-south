@@ -46,12 +46,12 @@ fn guest_wasm(release: bool) -> PathBuf {
 
 fn manifest(south_runtime: &str, runtime_abi: Option<u32>) -> String {
     let mut compatibility = json!({
-        "ir_schema_id": "token-station-protocol@0.6.0/v0.5.0",
-        "kernel_version": "0.5.0",
-        "kernel_revision": "c0bca10c2d9f9a439680865feb65c9edf598fc65",
+        "ir_schema_id": "token-station-protocol@0.7.0/v0.6.0",
+        "kernel_version": "0.6.0",
+        "kernel_revision": "a04925518b95c6557374252db7fbe7f026688bde",
         "wit_package": "token-station:adapter@2.0.0",
         "south_runtime": south_runtime,
-        "kernel_contracts": { "canonical_ir": 4, "error_catalog": 1, "stream": 2 },
+        "kernel_contracts": { "canonical_ir": 5, "error_catalog": 1, "stream": 3 },
     });
     if let Some(abi) = runtime_abi {
         compatibility["runtime_abi"] = json!(abi);
@@ -76,9 +76,9 @@ fn host() -> HostRangeV1 {
         south_runtime_min: "0.43.0".to_owned(),
         south_runtime: "0.45.0".to_owned(),
         kernel_contracts: BTreeMap::from([
-            ("canonical_ir".to_owned(), 4),
+            ("canonical_ir".to_owned(), 5),
             ("error_catalog".to_owned(), 1),
-            ("stream".to_owned(), 2),
+            ("stream".to_owned(), 3),
         ]),
         contracts: BTreeMap::from([("task".to_owned(), BTreeSet::from([7]))]),
     }

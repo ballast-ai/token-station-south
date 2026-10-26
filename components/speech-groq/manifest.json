@@ -1,6 +1,6 @@
 {
   "name": "speech-groq",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "api_version": "speech-adapter-v1",
   "providers": [
     "groq-speech"
@@ -23,16 +23,16 @@
     "fixtures": "fixtures-speech-groq/"
   },
   "compatibility": {
-    "ir_schema_id": "token-station-protocol@0.6.0/v0.5.0",
-    "kernel_version": "0.5.0",
-    "kernel_revision": "c0bca10c2d9f9a439680865feb65c9edf598fc65",
+    "ir_schema_id": "token-station-protocol@0.7.0/v0.6.0",
+    "kernel_version": "0.6.0",
+    "kernel_revision": "a04925518b95c6557374252db7fbe7f026688bde",
     "wit_package": "token-station:speech-adapter@1.0.0",
     "south_runtime": "0.65.0",
     "runtime_abi": 1,
     "kernel_contracts": {
-      "canonical_ir": 4,
+      "canonical_ir": 5,
       "error_catalog": 1,
-      "stream": 2
+      "stream": 3
     },
     "contracts": {
       "media": 1,
