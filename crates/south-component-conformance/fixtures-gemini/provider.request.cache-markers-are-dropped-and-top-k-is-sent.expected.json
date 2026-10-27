@@ -36,7 +36,8 @@
               "args": {
                 "city": "Beijing"
               }
-            }
+            },
+            "thoughtSignature": "skip_thought_signature_validator"
           }
         ]
       },
