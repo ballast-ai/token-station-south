@@ -317,7 +317,9 @@ fn the_manifest_declares_the_family_and_its_reasoning_cap() {
     // Record §7: a new family is a minor; the reasoning cap fields need a runtime that reads them.
     // Published as 2.13.0 with 0.76.0; the Gemini signatures re-pin made it 2.13.1
     // (`gemini_signatures_retires_every_published_076_package_identity`).
-    assert_eq!(manifest.version, "2.13.1");
+    // Published as 2.13.1 with 0.77.0; the Gemini placeholder signature round made it 2.13.2
+    // (`gemini_placeholder_retires_every_published_077_package_identity`).
+    assert_eq!(manifest.version, "2.13.2");
     assert_eq!(OpenAiCompatibleReferenceV1.metadata().version, manifest.version);
     assert_eq!(manifest.compatibility.south_runtime, "0.77.0"); // release 0.77.0 raised every package (canonical_ir 5)
 }

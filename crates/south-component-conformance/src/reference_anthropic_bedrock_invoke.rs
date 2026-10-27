@@ -153,7 +153,7 @@ impl ProviderComponentV1 for AnthropicBedrockInvokeReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-anthropic-bedrock-invoke".to_owned(),
-            version: "1.2.3".to_owned(),
+            version: "1.2.4".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
