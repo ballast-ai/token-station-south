@@ -86,7 +86,7 @@ use crate::{ComponentResultV1, SpeechComponentV1, SpeechOutcomeV1};
 /// The package name this reference is published as.
 pub const NAME: &str = "speech-openai-compatible";
 /// The package version.
-pub const VERSION: &str = "1.1.10";
+pub const VERSION: &str = "1.1.11";
 /// The world this reference exports.
 pub const WORLD: &str = "speech-adapter-v1";
 /// The family, the provider and embeddings worlds' name.

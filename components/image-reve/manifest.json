@@ -1,6 +1,6 @@
 {
   "name": "image-reve",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "api_version": "image-adapter-v1",
   "providers": [
     "reve-image"

@@ -1,6 +1,6 @@
 {
   "name": "speech-minimax",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "api_version": "speech-adapter-v1",
   "providers": [
     "minimax-speech"

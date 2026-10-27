@@ -29,6 +29,12 @@ use token_station_protocol::{
 
 use crate::component::{ComponentResultV1, StreamParserV1};
 
+/// The signature written on a replayed turn's first call when no call of the turn carries one.
+/// It is the value Google documents for a call the model did not sign in this conversation; the
+/// upstream accepts it in place of a real signature (design record
+/// `docs/design/2026-10-27-gemini-placeholder-signature.md`).
+const PLACEHOLDER_CALL_SIGNATURE: &str = "skip_thought_signature_validator";
+
 fn internal(detail: impl std::fmt::Display) -> ErrorEnvelope {
     ErrorEnvelope::new(ErrorCode::Internal, 500, detail.to_string())
 }
@@ -196,6 +202,9 @@ fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<Cow<'_, str>
             Role::System => system.extend(system_text_of(message.content.as_ref())),
             Role::User | Role::Assistant => {
                 let mut parts = content_to_parts(message.content.as_ref())?;
+                // Where the turn's first `functionCall` part sits, and whether any call is signed.
+                let mut first_call_at: Option<usize> = None;
+                let mut any_signed = false;
                 for call in &message.tool_calls {
                     if call.name.is_empty() {
                         return Err(capability(
@@ -226,8 +235,21 @@ fn conversation_of(request: &ChatRequest) -> ComponentResultV1<(Vec<Cow<'_, str>
                             ));
                         }
                         part["thoughtSignature"] = Value::String(signature.clone());
+                        any_signed = true;
                     }
+                    first_call_at.get_or_insert(parts.len());
                     parts.push(part);
+                }
+                // Gemini 3 refuses a replayed turn whose calls carry no signature at all. A
+                // client on the Messages or Responses surface cannot carry one, nor can a
+                // history that began on another model, so the turn's first call gets Google's
+                // documented placeholder; a turn with any real signature is left as it is.
+                if message.role == Role::Assistant
+                    && !any_signed
+                    && let Some(at) = first_call_at
+                {
+                    parts[at]["thoughtSignature"] =
+                        Value::String(PLACEHOLDER_CALL_SIGNATURE.to_owned());
                 }
                 if parts.is_empty() {
                     continue;

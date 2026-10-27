@@ -1,6 +1,6 @@
 {
   "name": "task-veo-v2",
-  "version": "0.37.6",
+  "version": "0.37.7",
   "api_version": "task-adapter-v2",
   "providers": [
     "veo-video",

@@ -4,7 +4,7 @@
 # `sandbox` feature stays off).
 [package]
 name = "speech-vertex"
-version = "1.1.11"
+version = "1.1.12"
 edition = "2021"
 publish = false
 
