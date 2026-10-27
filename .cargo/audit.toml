@@ -1,5 +1,5 @@
 # The same three zstd advisories `deny.toml` ignores, with the reasons recorded there: zstd reaches
-# the graph only through wasmtime 49's compilation cache, and the fixed releases need wasmtime 50
-# (rustc 1.97). Remove them when wasmtime moves to 50.
+# the graph only through wasmtime 49's compilation cache, and the fixed releases need wasmtime 51
+# (wasmtime 50 still requires zstd ^0.13; rustc 1.97). Remove them when wasmtime moves to 51.
 [advisories]
 ignore = ["RUSTSEC-2026-0391", "RUSTSEC-2026-0398", "RUSTSEC-2026-0403"]
