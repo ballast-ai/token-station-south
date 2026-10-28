@@ -12,6 +12,16 @@
   "auth_arms": [
     "header_secret"
   ],
+  "served_models": {
+    "gemini-image": {
+      "prefixes": [
+        "gemini-2.5-flash-image",
+        "gemini-3-pro-image",
+        "gemini-3.1-flash-image",
+        "gemini-3.1-flash-lite-image"
+      ]
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

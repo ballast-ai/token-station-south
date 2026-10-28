@@ -25,6 +25,17 @@
       }
     }
   },
+  "served_models": {
+    "azure-openai-dated": {
+      "any": true
+    },
+    "azure-openai-v1": {
+      "any": true
+    },
+    "openai-compatible": {
+      "any": true
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

@@ -13,6 +13,14 @@
   "auth_arms": [
     "bearer"
   ],
+  "served_models": {
+    "bailian": {
+      "prefixes": [
+        "happyhorse",
+        "wan"
+      ]
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

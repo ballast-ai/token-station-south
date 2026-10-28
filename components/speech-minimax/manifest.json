@@ -19,6 +19,13 @@
       }
     }
   },
+  "served_models": {
+    "minimax-speech": {
+      "prefixes": [
+        "speech-"
+      ]
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

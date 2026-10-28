@@ -5,8 +5,8 @@ use serde_json::{Value, json};
 use south_contracts::image::ArtifactEncodingV1;
 use south_contracts::{
     MAX_ARTIFACT_REF_BYTES, MAX_JSON_REQUEST_BODY_BYTES, TaskArtifactRefV2, TaskArtifactRoleV2,
-    TaskArtifactV2, TaskFailureKindV1, TaskInlineArtifactV2, TaskLocatorV2, TaskObservationV2,
-    TaskRenderContextV2, TaskRequestEstimateV2, TaskScalarV2, TaskTokenBucketV2,
+    TaskArtifactV2, TaskFailureCategoryV1, TaskFailureKindV1, TaskInlineArtifactV2, TaskLocatorV2,
+    TaskObservationV2, TaskRenderContextV2, TaskRequestEstimateV2, TaskScalarV2, TaskTokenBucketV2,
     TaskTokenBucketsV2, TaskUsageFactsV2,
 };
 use std::collections::BTreeMap;
@@ -202,10 +202,25 @@ fn buckets_json(buckets: &TaskTokenBucketsV2) -> Value {
 #[derive(Deserialize)]
 #[serde(tag = "state", rename_all = "kebab-case", deny_unknown_fields)]
 enum ObservationWire {
-    Progress { running: bool, status_word: String },
-    Succeeded { artifacts: ArtifactsWire, usage: UsageWire },
-    Failed { kind: String, code: Option<String>, message: Option<String> },
-    Unknown { reason: String },
+    Progress {
+        running: bool,
+        status_word: String,
+    },
+    Succeeded {
+        artifacts: ArtifactsWire,
+        usage: UsageWire,
+    },
+    Failed {
+        kind: String,
+        code: Option<String>,
+        message: Option<String>,
+        // Contract 9: absent and `null` both read as no category.
+        #[serde(default)]
+        category: Option<String>,
+    },
+    Unknown {
+        reason: String,
+    },
 }
 impl ObservationWire {
     fn build(self) -> Result<TaskObservationV2, String> {
@@ -217,12 +232,20 @@ impl ObservationWire {
                 artifacts: artifacts.build()?,
                 usage: usage.build()?,
             },
-            Self::Failed { kind, code, message } => {
+            Self::Failed { kind, code, message, category } => {
                 let kind = TaskFailureKindV1::ALL
                     .into_iter()
                     .find(|candidate| candidate.word() == kind)
                     .ok_or("invalid task failure kind")?;
-                TaskObservationV2::Failed { kind, code, message }
+                let category = category
+                    .map(|word| {
+                        TaskFailureCategoryV1::ALL
+                            .into_iter()
+                            .find(|candidate| candidate.word() == word)
+                            .ok_or("invalid task failure category")
+                    })
+                    .transpose()?;
+                TaskObservationV2::Failed { kind, code, message, category }
             }
             Self::Unknown { reason } => TaskObservationV2::Unknown { reason },
         };
@@ -242,8 +265,15 @@ pub fn observation_json(observation: &TaskObservationV2) -> Result<Value, String
             json!({"state":"progress","running":running,"status_word":status_word})
         }
         TaskObservationV2::Unknown { reason } => json!({"state":"unknown","reason":reason}),
-        TaskObservationV2::Failed { kind, code, message } => {
-            json!({"state":"failed","kind":kind.word(),"code":code,"message":message})
+        TaskObservationV2::Failed { kind, code, message, category } => {
+            let mut failed =
+                json!({"state":"failed","kind":kind.word(),"code":code,"message":message});
+            // Contract 9's key is written only when present, so an earlier value re-encodes byte
+            // for byte and a decoder before contract 9 still reads it.
+            if let Some(category) = category {
+                failed["category"] = json!(category.word());
+            }
+            failed
         }
         TaskObservationV2::Succeeded { artifacts, usage } => {
             let artifacts = match artifacts {

@@ -11,6 +11,17 @@
   "auth_arms": [
     "bearer"
   ],
+  "served_models": {
+    "stability-image": {
+      "ids": [
+        "sd3.5-large",
+        "sd3.5-large-turbo",
+        "sd3.5-medium",
+        "stable-image-core",
+        "stable-image-ultra"
+      ]
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

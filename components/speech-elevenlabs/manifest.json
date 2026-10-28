@@ -12,6 +12,14 @@
   "auth_arms": [
     "header_secret"
   ],
+  "served_models": {
+    "elevenlabs-speech": {
+      "prefixes": [
+        "eleven_",
+        "scribe_"
+      ]
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

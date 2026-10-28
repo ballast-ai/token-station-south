@@ -243,7 +243,62 @@ pub fn run_task_component_suite_v2_for_manifest(
     if !manifest.response_blob_paths.is_empty() || !manifest.token_buckets.is_empty() {
         outcomes.extend(contract_8_checks(component, pack, manifest));
     }
+    outcomes.extend(failure_category_declared(component, pack, manifest));
     ReportV1::new(TASK_COMPONENT_SUITE_V2, outcomes)
+}
+
+/// The first task contract whose failed observation may carry a `category`.
+const TASK_FAILURE_CATEGORY_CONTRACT: u32 = 9;
+
+/// `FailureCategoryDeclared` (the served models record §4–§5): every fixture failure that carries
+/// a category needs task contract 9, and a package declaring 9 shows one.
+fn failure_category_declared(
+    component: &dyn TaskComponentV2,
+    pack: &TaskFixturePackV2,
+    manifest: &ComponentManifestV1,
+) -> Vec<OutcomeV1> {
+    let declares = manifest
+        .compatibility
+        .contracts
+        .get("task")
+        .is_some_and(|contract| *contract >= TASK_FAILURE_CATEGORY_CONTRACT);
+    let mut outcomes = Vec::new();
+    for case in pack.cases() {
+        let Ok(parts) = parse::<HttpResponseParts>(&case.input) else { continue };
+        let observation = match case.family {
+            TaskFamilyV2::Observation => component.parse_observation(&parts).ok(),
+            TaskFamilyV2::Created => match component.parse_submit_response(&parts) {
+                Ok(crate::SubmitOutcomeV2::AcceptedTerminal(observation)) => Some(observation),
+                _ => None,
+            },
+            _ => None,
+        };
+        let Some(TaskObservationV2::Failed { category: Some(category), .. }) = observation else {
+            continue;
+        };
+        outcomes.push(if declares {
+            OutcomeV1::passed(CheckV1::FailureCategoryDeclared, &case.name)
+        } else {
+            OutcomeV1::failed(
+                CheckV1::FailureCategoryDeclared,
+                &case.name,
+                format!(
+                    "reports category `{}` but declares task contract {:?}, not \
+                     {TASK_FAILURE_CATEGORY_CONTRACT}",
+                    category.word(),
+                    manifest.compatibility.contracts.get("task")
+                ),
+            )
+        });
+    }
+    if declares && outcomes.is_empty() {
+        outcomes.push(OutcomeV1::failed(
+            CheckV1::FailureCategoryDeclared,
+            TASK_COMPONENT_SUITE_V2,
+            "declares task contract 9 but no fixture failure carries a category",
+        ));
+    }
+    outcomes
 }
 
 /// The checks that bind every task contract 8 package (docs/design/2026-10-01-omni-task-component.md

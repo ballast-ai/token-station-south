@@ -265,11 +265,13 @@ impl TaskComponentV2 for XaiTaskComponentV2 {
                 kind: TaskFailureKindV1::Failed,
                 code: None,
                 message: field(&body, "error").and_then(bounded),
+                category: None,
             },
             Some("expired") => TaskObservationV2::Failed {
                 kind: TaskFailureKindV1::ProviderExpired,
                 code: None,
                 message: None,
+                category: None,
             },
             Some(_) => unknown("xai unrecognized status"),
         })

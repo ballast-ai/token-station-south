@@ -43,6 +43,11 @@
       }
     }
   },
+  "served_models": {
+    "gmi-image": {
+      "any": true
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

@@ -71,8 +71,9 @@
 use crate::{ComponentResultV1, PreparedTaskV2, SubmitOutcomeV2, TaskComponentV2};
 use serde_json::{Value, json};
 use south_contracts::{
-    HostMintedValuesV1, TaskArtifactRefV2, TaskArtifactV2, TaskFailureKindV1, TaskLocatorV2,
-    TaskObservationV2, TaskRenderContextV2, TaskRequestEstimateV2, TaskScalarV2, TaskUsageFactsV2,
+    HostMintedValuesV1, TaskArtifactRefV2, TaskArtifactV2, TaskFailureCategoryV1,
+    TaskFailureKindV1, TaskLocatorV2, TaskObservationV2, TaskRenderContextV2,
+    TaskRequestEstimateV2, TaskScalarV2, TaskUsageFactsV2,
 };
 use south_provider_api::ComponentMetadataV1;
 use token_station_protocol::{
@@ -250,6 +251,7 @@ fn observe_operation(body: &Value) -> TaskObservationV2 {
             kind: TaskFailureKindV1::Failed,
             code: bounded(error.get("code").map(Value::to_string)),
             message: bounded(field(error, "message").map(str::to_owned)),
+            category: None,
         };
     }
     let response = body
@@ -293,6 +295,7 @@ fn observe_operation(body: &Value) -> TaskObservationV2 {
             message: bounded(
                 generated.and_then(|r| r.get("raiMediaFilteredReasons")).map(Value::to_string),
             ),
+            category: Some(TaskFailureCategoryV1::ContentPolicy),
         };
     }
     unknown("veo done without samples, error, or RAI filter count")

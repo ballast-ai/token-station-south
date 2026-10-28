@@ -12,6 +12,15 @@
   "auth_arms": [
     "header_secret"
   ],
+  "served_models": {
+    "azure-speech": {
+      "prefixes": [
+        "MAI-Voice-",
+        "fast-transcription",
+        "mai-transcribe-"
+      ]
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

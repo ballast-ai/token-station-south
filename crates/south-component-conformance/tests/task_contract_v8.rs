@@ -47,9 +47,10 @@ fn video(pointer: &str) -> TaskInlineArtifactV2 {
 }
 
 #[test]
-fn the_contract_version_is_eight_and_seven_still_decodes() {
-    assert_eq!(TASK_CONTRACT_VERSION, 8);
-    assert_eq!(TASK_CONTRACT_VERSIONS, [7, 8]);
+fn contract_eight_is_admitted_and_seven_still_decodes() {
+    // Contract 9 (the failure category) is the current version since 0.81.0; eight stays admitted.
+    assert_eq!(TASK_CONTRACT_VERSION, 9);
+    assert_eq!(TASK_CONTRACT_VERSIONS, [7, 8, 9]);
 }
 
 #[test]

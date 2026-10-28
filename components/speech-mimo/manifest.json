@@ -11,6 +11,13 @@
   "auth_arms": [
     "bearer"
   ],
+  "served_models": {
+    "mimo-speech": {
+      "prefixes": [
+        "mimo-"
+      ]
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

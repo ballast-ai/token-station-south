@@ -114,6 +114,34 @@
       }
     }
   },
+  "served_models": {
+    "veo-video": {
+      "prefixes": [
+        "veo-"
+      ]
+    },
+    "vertex-veo-video": {
+      "prefixes": [
+        "veo-"
+      ]
+    }
+  },
+  "required_prefetch": {
+    "veo-video": [
+      "image",
+      "image_url",
+      "last_frame",
+      "last_frame_url",
+      "reference_images"
+    ],
+    "vertex-veo-video": [
+      "image",
+      "image_url",
+      "last_frame",
+      "last_frame_url",
+      "reference_images"
+    ]
+  },
   "permissions": {
     "network": false,
     "filesystem": false,
@@ -138,7 +166,7 @@
       "stream": 3
     },
     "contracts": {
-      "task": 7
+      "task": 9
     }
   }
 }

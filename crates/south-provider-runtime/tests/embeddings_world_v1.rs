@@ -247,6 +247,7 @@ fn embeddings_bytes_cannot_claim_another_world_or_a_different_identity() {
 
     let mut task = embeddings_manifest_value();
     task["api_version"] = "task-adapter-v2".into();
+    task["served_models"] = json!({ "test": { "any": true } });
     task["capabilities"] = json!(["submit", "observe", "render"]);
     task["compatibility"]["wit_package"] = "token-station:task-adapter@2.0.0".into();
     task["compatibility"]["contracts"] = json!({});

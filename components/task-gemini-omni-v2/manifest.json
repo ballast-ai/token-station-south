@@ -114,6 +114,26 @@
       }
     }
   },
+  "served_models": {
+    "gemini-interactions-video": {
+      "prefixes": [
+        "gemini-omni-"
+      ]
+    },
+    "vertex-interactions-video": {
+      "prefixes": [
+        "gemini-omni-"
+      ]
+    }
+  },
+  "required_prefetch": {
+    "vertex-interactions-video": [
+      "first_frame",
+      "image",
+      "image_url",
+      "reference_images"
+    ]
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

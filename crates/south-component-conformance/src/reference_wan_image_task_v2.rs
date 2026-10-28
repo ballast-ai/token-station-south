@@ -235,6 +235,7 @@ impl TaskComponentV2 for WanImageTaskComponentV2 {
             kind,
             code: bounded(field(output, "code")),
             message: bounded(field(output, "message")),
+            category: None,
         };
         Ok(match field(output, "task_status") {
             None => unknown("bailian poll body has no output.task_status"),
@@ -248,6 +249,7 @@ impl TaskComponentV2 for WanImageTaskComponentV2 {
                         kind: TaskFailureKindV1::Failed,
                         code: Some("empty_result".into()),
                         message: Some("bailian SUCCEEDED but delivered no image urls".into()),
+                        category: None,
                     });
                 }
                 let billed = billed_count(&body, urls.len());

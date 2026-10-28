@@ -12,6 +12,11 @@
   "auth_arms": [
     "bearer"
   ],
+  "served_models": {
+    "reve-image": {
+      "any": true
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

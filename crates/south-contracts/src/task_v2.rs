@@ -611,6 +611,35 @@ impl fmt::Debug for TaskArtifactRefV2 {
     }
 }
 
+/// Why a task failed, as its upstream said it (task contract 9, the served models record,
+/// `docs/design/2026-10-28-served-models-prefetch-and-failure-category.md` §4).
+///
+/// Set only from an explicit upstream signal, the discipline of
+/// [`TaskFailureKindV1::ProviderExpired`]: nothing is inferred from a message text. The words are
+/// the host's `error.reason` words they map to. Whether the host could fetch a succeeded task's
+/// artifacts is the host's own fact, so `artifact_unavailable` is not a category (FC-Q2).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TaskFailureCategoryV1 {
+    /// The upstream refused or filtered the output for its content.
+    ContentPolicy,
+    /// The upstream says the task timed out.
+    UpstreamTimeout,
+}
+
+impl TaskFailureCategoryV1 {
+    /// Every category, in declaration order.
+    pub const ALL: [Self; 2] = [Self::ContentPolicy, Self::UpstreamTimeout];
+
+    /// Returns the frozen vocabulary word for this category.
+    #[must_use]
+    pub const fn word(self) -> &'static str {
+        match self {
+            Self::ContentPolicy => "content_policy",
+            Self::UpstreamTimeout => "upstream_timeout",
+        }
+    }
+}
+
 /// The upstream's execution facts, independent of host billing and delivery.
 #[derive(Clone, Debug, PartialEq)]
 #[expect(
@@ -623,8 +652,15 @@ pub enum TaskObservationV2 {
     Progress { running: bool, status_word: String },
     /// Execution succeeded, carrying every available metering dimension.
     Succeeded { artifacts: TaskArtifactRefV2, usage: TaskUsageFactsV2 },
-    /// Explicit upstream terminal failure; no timeout synthesized by a clock.
-    Failed { kind: TaskFailureKindV1, code: Option<String>, message: Option<String> },
+    /// Explicit upstream terminal failure; no timeout synthesized by a clock. `category` (task
+    /// contract 9) says why, only from an explicit upstream signal; absent keeps the host's own
+    /// mapping.
+    Failed {
+        kind: TaskFailureKindV1,
+        code: Option<String>,
+        message: Option<String>,
+        category: Option<TaskFailureCategoryV1>,
+    },
     /// The observation was unavailable or unrecognized.
     Unknown { reason: String },
 }

@@ -412,6 +412,12 @@ fn image_with_values() -> Value {
     manifest["conformance"]["required_suite"] = json!("south.image-component.v1");
     manifest["compatibility"]["wit_package"] = json!("token-station:image-adapter@1.0.0");
     manifest["compatibility"]["contracts"] = json!({ "media": 1, "image": 1 });
+    // A media world requires every family's served models (the served models record §2, SM-Q2).
+    let families = manifest["providers"].as_array().unwrap().clone();
+    manifest["served_models"] = families
+        .iter()
+        .map(|family| (family.as_str().unwrap().to_owned(), json!({"any": true})))
+        .collect();
     manifest
 }
 

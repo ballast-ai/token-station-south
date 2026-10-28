@@ -263,6 +263,13 @@ pub enum CheckV1 {
     /// The host verifies the bytes before it settles; a `succeeded` with nothing to deliver would
     /// ask it to settle a call it cannot deliver.
     EmptyAudioIsUnknown,
+    /// A task package whose fixtures produce a failed observation with a `category` declares task
+    /// contract 9, and a package declaring 9 has such a fixture (the served models record,
+    /// `docs/design/2026-10-28-served-models-prefetch-and-failure-category.md` §4–§5, FC-Q1).
+    ///
+    /// A decoder before contract 9 refuses the key, so a package that emits it under an older
+    /// declaration would be admitted by a host that then cannot read its failures.
+    FailureCategoryDeclared,
 }
 
 impl CheckV1 {
@@ -304,6 +311,7 @@ impl CheckV1 {
             Self::SsmlEscaping => "ssml_escaping",
             Self::SecondHopArtifact => "second_hop_artifact",
             Self::EmptyAudioIsUnknown => "empty_audio_is_unknown",
+            Self::FailureCategoryDeclared => "failure_category_declared",
         }
     }
 }

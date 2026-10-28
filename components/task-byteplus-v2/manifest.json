@@ -13,6 +13,15 @@
   "auth_arms": [
     "bearer"
   ],
+  "served_models": {
+    "byteplus-video": {
+      "prefixes": [
+        "doubao-seedance-",
+        "dreamina-seedance-",
+        "seedance-"
+      ]
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

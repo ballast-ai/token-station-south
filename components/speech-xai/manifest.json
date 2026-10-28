@@ -12,6 +12,14 @@
   "auth_arms": [
     "bearer"
   ],
+  "served_models": {
+    "xai-speech": {
+      "ids": [
+        "grok-stt",
+        "grok-tts"
+      ]
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

@@ -679,13 +679,17 @@ fn every_shipped_package_declares_the_range_handshake() {
             // The one task package on contract 8: inline artifacts are named by pointers into
             // a view elided with the media vocabulary (the Omni record §13).
             [
-                ("task".to_owned(), u32::from(south_contracts::TASK_CONTRACT_VERSION)),
+                ("task".to_owned(), u32::from(south_contracts::TASK_CONTRACT_VERSION_V8)),
                 ("media".to_owned(), u32::from(south_contracts::media::MEDIA_CONTRACT_VERSION)),
             ]
             .into()
+        } else if manifest.name == "task-veo-v2" {
+            // The one package that reports a failure category, so the one on contract 9 (the
+            // served models record §4, FC-Q1).
+            [("task".to_owned(), u32::from(south_contracts::TASK_CONTRACT_VERSION))].into()
         } else if manifest.api_version.starts_with("task") {
-            // Contract 8 is additive, so every other task package stays at the contract 7 it
-            // was published with.
+            // Contracts 8 and 9 are additive, so every other task package stays at the contract
+            // 7 it was published with.
             [("task".to_owned(), u32::from(south_contracts::TASK_CONTRACT_VERSION_V7))].into()
         } else if manifest.api_version == south_provider_api::EMBEDDINGS_WORLD {
             // Only a package that accepts media speaks contract 2 (embeddings record §17.4);
@@ -2558,11 +2562,13 @@ fn task_gemini_omni_v2_declares_task_8_which_a_task_7_host_refuses() {
     let mut task_7_only = this_release;
     task_7_only.contracts.insert("task".to_owned(), [7].into());
     assert!(compatibility_admits(&manifest, &task_7_only).is_err());
-    let veo: ComponentManifestV1 = serde_json::from_str(
-        &std::fs::read_to_string(repo_root().join("components/task-veo-v2/manifest.json")).unwrap(),
+    // `task-veo-v2` moved to contract 9 with the served models round, so a contract 7 package.
+    let kling: ComponentManifestV1 = serde_json::from_str(
+        &std::fs::read_to_string(repo_root().join("components/task-kling-v2/manifest.json"))
+            .unwrap(),
     )
     .unwrap();
-    assert_eq!(compatibility_admits(&veo, &task_7_only), Ok(()));
+    assert_eq!(compatibility_admits(&kling, &task_7_only), Ok(()));
 }
 
 /// Task contract 8 (the Omni record §13) changes `south-contracts` (0.53.0 → 0.54.0) and
@@ -2619,7 +2625,9 @@ fn task_contract_8_retires_every_kiro_step_package_identity() {
             );
         }
         if manifest.api_version.starts_with("task") {
-            assert_eq!(manifest.compatibility.contracts.get("task"), Some(&7), "{name}");
+            // `task-veo-v2` reports a failure category since the served models round (contract 9).
+            let task = if name == "task-veo-v2" { 9 } else { 7 };
+            assert_eq!(manifest.compatibility.contracts.get("task"), Some(&task), "{name}");
         }
     }
 }
@@ -2674,7 +2682,12 @@ fn i3_3_retires_every_published_062_package_identity() {
         let runtime = declared_runtime_now(name);
         assert_eq!(manifest.compatibility.south_runtime, runtime, "{name}: I3-3 moves no runtime");
         if manifest.api_version.starts_with("task") {
-            let task = if name == "task-gemini-omni-v2" { 8 } else { 7 };
+            let task = match name {
+                "task-gemini-omni-v2" => 8,
+                // A failure category since the served models round (contract 9).
+                "task-veo-v2" => 9,
+                _ => 7,
+            };
             assert_eq!(manifest.compatibility.contracts.get("task"), Some(&task), "{name}");
         }
         if manifest.api_version == south_provider_api::IMAGE_WORLD {
@@ -2737,7 +2750,12 @@ fn s_s_1_retires_every_published_063_package_identity() {
         let runtime = declared_runtime_now(name);
         assert_eq!(manifest.compatibility.south_runtime, runtime, "{name}: S-S-1 moves no runtime");
         if manifest.api_version.starts_with("task") {
-            let task = if name == "task-gemini-omni-v2" { 8 } else { 7 };
+            let task = match name {
+                "task-gemini-omni-v2" => 8,
+                // A failure category since the served models round (contract 9).
+                "task-veo-v2" => 9,
+                _ => 7,
+            };
             assert_eq!(manifest.compatibility.contracts.get("task"), Some(&task), "{name}");
         }
         if manifest.api_version == south_provider_api::IMAGE_WORLD {
@@ -3113,7 +3131,12 @@ fn v3_1_retires_every_published_064_package_identity() {
         let runtime = declared_runtime_now(name);
         assert_eq!(manifest.compatibility.south_runtime, runtime, "{name}: V3-1 moves no runtime");
         if manifest.api_version.starts_with("task") {
-            let task = if name == "task-gemini-omni-v2" { 8 } else { 7 };
+            let task = match name {
+                "task-gemini-omni-v2" => 8,
+                // A failure category since the served models round (contract 9).
+                "task-veo-v2" => 9,
+                _ => 7,
+            };
             assert_eq!(manifest.compatibility.contracts.get("task"), Some(&task), "{name}");
         }
         if manifest.api_version == south_provider_api::IMAGE_WORLD {
@@ -3192,7 +3215,12 @@ fn provider_vertex_retires_every_published_065_package_identity() {
             "{name}: provider-vertex moves no runtime"
         );
         if manifest.api_version.starts_with("task") {
-            let task = if name == "task-gemini-omni-v2" { 8 } else { 7 };
+            let task = match name {
+                "task-gemini-omni-v2" => 8,
+                // A failure category since the served models round (contract 9).
+                "task-veo-v2" => 9,
+                _ => 7,
+            };
             assert_eq!(manifest.compatibility.contracts.get("task"), Some(&task), "{name}");
         }
         if manifest.api_version == south_provider_api::IMAGE_WORLD {
@@ -3467,13 +3495,19 @@ fn task_veo_v2_gains_the_vertex_family_and_bearer() {
     assert_eq!(manifest.version, "0.38.0");
     assert_eq!(manifest.providers, ["veo-video", "vertex-veo-video"]);
     assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer", "header_secret"]);
-    assert_eq!(manifest.compatibility.contracts.get("task"), Some(&7));
+    assert_eq!(
+        manifest.compatibility.contracts.get("task"),
+        Some(&9),
+        "a failure category (contract 9)"
+    );
     assert_eq!(manifest.compatibility.south_runtime, declared_runtime_now("task-veo-v2"));
     assert_task_vertex_credentials(&manifest, "vertex-veo-video", "veo-video");
     assert!(manifest.declared_keys("vertex-veo-video").is_empty(), "no config_schema (record §2)");
-    let mut task_7_only = host_range::host_range();
-    task_7_only.contracts.insert("task".to_owned(), [7].into());
-    assert_eq!(compatibility_admits(&manifest, &task_7_only), Ok(()));
+    // Contract 9 since the served models round: a host whose range stops at 8 refuses it.
+    let mut task_7_and_8 = host_range::host_range();
+    task_7_and_8.contracts.insert("task".to_owned(), [7, 8].into());
+    assert!(compatibility_admits(&manifest, &task_7_and_8).is_err());
+    assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()));
 }
 
 /// The speech `azure-openai` families (design record `2026-10-15-speech-azure-openai.md` §8) change
@@ -3527,7 +3561,7 @@ fn speech_azure_openai_retires_every_published_066_package_identity() {
         ("task-kling", "1.0.27", "1.0.28", "0.77.0", &[("task", 7)]),
         ("task-kling-v2", "0.32.25", "0.32.26", "0.77.0", &[("task", 7)]),
         ("task-minimax-v2", "0.33.2", "0.33.3", "0.77.0", &[("task", 7)]),
-        ("task-veo-v2", "0.36.0", "0.36.1", "0.77.0", &[("task", 7)]),
+        ("task-veo-v2", "0.36.0", "0.36.1", "0.77.0", &[("task", 9)]),
         ("task-wan-image-v2", "0.35.24", "0.35.25", "0.77.0", &[("task", 7)]),
         ("task-xai-v2", "0.35.24", "0.35.25", "0.77.0", &[("task", 7)]),
     ];
@@ -3674,7 +3708,7 @@ fn t9_cap_field_retires_every_published_067_package_identity() {
         ("task-kling", "1.0.28", "1.0.29", "0.77.0", &[("task", 7)]),
         ("task-kling-v2", "0.32.26", "0.32.27", "0.77.0", &[("task", 7)]),
         ("task-minimax-v2", "0.33.3", "0.33.4", "0.77.0", &[("task", 7)]),
-        ("task-veo-v2", "0.36.1", "0.36.2", "0.77.0", &[("task", 7)]),
+        ("task-veo-v2", "0.36.1", "0.36.2", "0.77.0", &[("task", 9)]),
         ("task-wan-image-v2", "0.35.25", "0.35.26", "0.77.0", &[("task", 7)]),
         ("task-xai-v2", "0.35.25", "0.35.26", "0.77.0", &[("task", 7)]),
     ];
@@ -3749,7 +3783,7 @@ fn glm_thinking_retires_every_published_068_package_identity() {
         ("task-kling", "1.0.29", "1.0.30", "0.77.0", &[("task", 7)]),
         ("task-kling-v2", "0.32.27", "0.32.28", "0.77.0", &[("task", 7)]),
         ("task-minimax-v2", "0.33.4", "0.33.5", "0.77.0", &[("task", 7)]),
-        ("task-veo-v2", "0.36.2", "0.36.3", "0.77.0", &[("task", 7)]),
+        ("task-veo-v2", "0.36.2", "0.36.3", "0.77.0", &[("task", 9)]),
         ("task-wan-image-v2", "0.35.26", "0.35.27", "0.77.0", &[("task", 7)]),
         ("task-xai-v2", "0.35.26", "0.35.27", "0.77.0", &[("task", 7)]),
     ];
@@ -3823,7 +3857,7 @@ fn kimi_code_retires_every_published_069_package_identity() {
         ("task-kling", "1.0.30", "1.0.31", "0.77.0", &[("task", 7)]),
         ("task-kling-v2", "0.32.28", "0.32.29", "0.77.0", &[("task", 7)]),
         ("task-minimax-v2", "0.33.5", "0.33.6", "0.77.0", &[("task", 7)]),
-        ("task-veo-v2", "0.36.3", "0.36.4", "0.77.0", &[("task", 7)]),
+        ("task-veo-v2", "0.36.3", "0.36.4", "0.77.0", &[("task", 9)]),
         ("task-wan-image-v2", "0.35.27", "0.35.28", "0.77.0", &[("task", 7)]),
         ("task-xai-v2", "0.35.27", "0.35.28", "0.77.0", &[("task", 7)]),
     ];
@@ -3899,7 +3933,7 @@ fn task_vertex_credentials_retires_every_published_070_package_identity() {
         ("task-kling", "1.0.31", "1.0.32", "0.77.0", &[("task", 7)]),
         ("task-kling-v2", "0.32.29", "0.32.30", "0.77.0", &[("task", 7)]),
         ("task-minimax-v2", "0.33.6", "0.33.7", "0.77.0", &[("task", 7)]),
-        ("task-veo-v2", "0.36.4", "0.37.0", "0.77.0", &[("task", 7)]),
+        ("task-veo-v2", "0.36.4", "0.37.0", "0.77.0", &[("task", 9)]),
         ("task-wan-image-v2", "0.35.28", "0.35.29", "0.77.0", &[("task", 7)]),
         ("task-xai-v2", "0.35.28", "0.35.29", "0.77.0", &[("task", 7)]),
     ];
@@ -3976,7 +4010,7 @@ fn explicit_cache_reads_retires_every_published_071_package_identity() {
         ("task-kling", "1.0.32", "1.0.33", "0.77.0", &[("task", 7)]),
         ("task-kling-v2", "0.32.30", "0.32.31", "0.77.0", &[("task", 7)]),
         ("task-minimax-v2", "0.33.7", "0.33.8", "0.77.0", &[("task", 7)]),
-        ("task-veo-v2", "0.37.0", "0.37.1", "0.77.0", &[("task", 7)]),
+        ("task-veo-v2", "0.37.0", "0.37.1", "0.77.0", &[("task", 9)]),
         ("task-wan-image-v2", "0.35.29", "0.35.30", "0.77.0", &[("task", 7)]),
         ("task-xai-v2", "0.35.29", "0.35.30", "0.77.0", &[("task", 7)]),
     ];
@@ -4056,7 +4090,7 @@ fn messages_passthrough_retires_every_published_072_package_identity() {
         ("task-kling-v2", "0.32.31", "0.32.32", "0.77.0", &[("task", 7)]),
         ("task-kling", "1.0.33", "1.0.34", "0.77.0", &[("task", 7)]),
         ("task-minimax-v2", "0.33.8", "0.33.9", "0.77.0", &[("task", 7)]),
-        ("task-veo-v2", "0.37.1", "0.37.2", "0.77.0", &[("task", 7)]),
+        ("task-veo-v2", "0.37.1", "0.37.2", "0.77.0", &[("task", 9)]),
         ("task-wan-image-v2", "0.35.30", "0.35.31", "0.77.0", &[("task", 7)]),
         ("task-xai-v2", "0.35.30", "0.35.31", "0.77.0", &[("task", 7)]),
     ];
@@ -4144,7 +4178,7 @@ fn family_model_parameters_retires_every_published_0731_package_identity() {
         ("task-kling-v2", "0.32.32", "0.32.33", "0.77.0", &[("task", 7)]),
         ("task-kling", "1.0.34", "1.0.35", "0.77.0", &[("task", 7)]),
         ("task-minimax-v2", "0.33.9", "0.33.10", "0.77.0", &[("task", 7)]),
-        ("task-veo-v2", "0.37.2", "0.37.3", "0.77.0", &[("task", 7)]),
+        ("task-veo-v2", "0.37.2", "0.37.3", "0.77.0", &[("task", 9)]),
         ("task-wan-image-v2", "0.35.31", "0.35.32", "0.77.0", &[("task", 7)]),
         ("task-xai-v2", "0.35.31", "0.35.32", "0.77.0", &[("task", 7)]),
     ];
@@ -4221,7 +4255,7 @@ fn kiro_images_retires_every_published_074_package_identity() {
         ("task-kling-v2", "0.32.33", "0.32.34", "0.77.0", &[("task", 7)]),
         ("task-kling", "1.0.35", "1.0.36", "0.77.0", &[("task", 7)]),
         ("task-minimax-v2", "0.33.10", "0.33.11", "0.77.0", &[("task", 7)]),
-        ("task-veo-v2", "0.37.3", "0.37.4", "0.77.0", &[("task", 7)]),
+        ("task-veo-v2", "0.37.3", "0.37.4", "0.77.0", &[("task", 9)]),
         ("task-wan-image-v2", "0.35.32", "0.35.33", "0.77.0", &[("task", 7)]),
         ("task-xai-v2", "0.35.32", "0.35.33", "0.77.0", &[("task", 7)]),
     ];
@@ -4302,7 +4336,7 @@ fn bailian_retires_every_published_075_package_identity() {
         ("task-kling-v2", "0.32.34", "0.32.35", "0.77.0", &[("task", 7)]),
         ("task-kling", "1.0.36", "1.0.37", "0.77.0", &[("task", 7)]),
         ("task-minimax-v2", "0.33.11", "0.33.12", "0.77.0", &[("task", 7)]),
-        ("task-veo-v2", "0.37.4", "0.37.5", "0.77.0", &[("task", 7)]),
+        ("task-veo-v2", "0.37.4", "0.37.5", "0.77.0", &[("task", 9)]),
         ("task-wan-image-v2", "0.35.33", "0.35.34", "0.77.0", &[("task", 7)]),
         ("task-xai-v2", "0.35.33", "0.35.34", "0.77.0", &[("task", 7)]),
     ];
@@ -4382,7 +4416,7 @@ fn gemini_signatures_retires_every_published_076_package_identity() {
         ("task-kling-v2", "0.32.35", "0.32.36", "0.77.0", &[("task", 7)]),
         ("task-kling", "1.0.37", "1.0.38", "0.77.0", &[("task", 7)]),
         ("task-minimax-v2", "0.33.12", "0.33.13", "0.77.0", &[("task", 7)]),
-        ("task-veo-v2", "0.37.5", "0.37.6", "0.77.0", &[("task", 7)]),
+        ("task-veo-v2", "0.37.5", "0.37.6", "0.77.0", &[("task", 9)]),
         ("task-wan-image-v2", "0.35.34", "0.35.35", "0.77.0", &[("task", 7)]),
         ("task-xai-v2", "0.35.34", "0.35.35", "0.77.0", &[("task", 7)]),
     ];
@@ -4475,7 +4509,7 @@ fn gemini_placeholder_retires_every_published_077_package_identity() {
         ("task-kling-v2", "0.32.36", "0.32.37", "0.77.0", &[("task", 7)]),
         ("task-kling", "1.0.38", "1.0.39", "0.77.0", &[("task", 7)]),
         ("task-minimax-v2", "0.33.13", "0.33.14", "0.77.0", &[("task", 7)]),
-        ("task-veo-v2", "0.37.6", "0.37.7", "0.77.0", &[("task", 7)]),
+        ("task-veo-v2", "0.37.6", "0.37.7", "0.77.0", &[("task", 9)]),
         ("task-wan-image-v2", "0.35.35", "0.35.36", "0.77.0", &[("task", 7)]),
         ("task-xai-v2", "0.35.35", "0.35.36", "0.77.0", &[("task", 7)]),
     ];
@@ -4568,7 +4602,7 @@ fn qwen_tier_and_responses_stop_retires_every_published_078_package_identity() {
         ("task-kling-v2", "0.32.37", "0.32.38", "0.77.0", &[("task", 7)]),
         ("task-kling", "1.0.39", "1.0.40", "0.77.0", &[("task", 7)]),
         ("task-minimax-v2", "0.33.14", "0.33.15", "0.77.0", &[("task", 7)]),
-        ("task-veo-v2", "0.37.7", "0.37.8", "0.77.0", &[("task", 7)]),
+        ("task-veo-v2", "0.37.7", "0.37.8", "0.77.0", &[("task", 9)]),
         ("task-wan-image-v2", "0.35.36", "0.35.37", "0.77.0", &[("task", 7)]),
         ("task-xai-v2", "0.35.36", "0.35.37", "0.77.0", &[("task", 7)]),
     ];
@@ -4661,7 +4695,7 @@ fn veo_spelling_and_durationless_asr_retire_every_published_079_package_identity
         ("task-kling-v2", "0.32.38", "0.32.39", "0.77.0", &[("task", 7)]),
         ("task-kling", "1.0.40", "1.0.41", "0.77.0", &[("task", 7)]),
         ("task-minimax-v2", "0.33.15", "0.33.16", "0.77.0", &[("task", 7)]),
-        ("task-veo-v2", "0.37.8", "0.38.0", "0.77.0", &[("task", 7)]),
+        ("task-veo-v2", "0.37.8", "0.38.0", "0.77.0", &[("task", 9)]),
         ("task-wan-image-v2", "0.35.37", "0.35.38", "0.77.0", &[("task", 7)]),
         ("task-xai-v2", "0.35.37", "0.35.38", "0.77.0", &[("task", 7)]),
     ];

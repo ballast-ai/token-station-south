@@ -135,6 +135,8 @@ fn reference_manifest() -> ComponentManifestV1 {
         token_buckets: Vec::new(),
         required_token_buckets: Vec::new(),
         min_poll_interval_seconds: None,
+        served_models: std::collections::BTreeMap::new(),
+        required_prefetch: std::collections::BTreeMap::new(),
         permissions: ComponentPermissionsV1 {
             network: false,
             filesystem: false,
@@ -773,6 +775,15 @@ fn task_manifest() -> ComponentManifestV1 {
         token_buckets: Vec::new(),
         required_token_buckets: Vec::new(),
         min_poll_interval_seconds: None,
+        served_models: [(
+            "kling".to_owned(),
+            south_provider_api::ServedModelsV1 {
+                prefixes: Some(vec!["kling-".to_owned()]),
+                ..Default::default()
+            },
+        )]
+        .into(),
+        required_prefetch: std::collections::BTreeMap::new(),
         permissions: ComponentPermissionsV1 {
             network: false,
             filesystem: false,
@@ -944,6 +955,7 @@ fn embeddings_manifest() -> ComponentManifestV1 {
         name: "embeddings-openai-compatible".to_owned(),
         api_version: EMBEDDINGS_WORLD.to_owned(),
         providers: vec!["openai-compatible".to_owned()],
+        served_models: std::collections::BTreeMap::new(),
         capabilities: ["embed", "batch", "dimensions"].into_iter().map(str::to_owned).collect(),
         auth_arms: BTreeSet::from(["bearer".to_owned()]),
         emits: Vec::new(),
@@ -1268,6 +1280,11 @@ fn image_manifest() -> ComponentManifestV1 {
         name: "image-azure".to_owned(),
         api_version: IMAGE_WORLD.to_owned(),
         providers: vec!["azure-foundry".to_owned()],
+        served_models: [(
+            "azure-foundry".to_owned(),
+            south_provider_api::ServedModelsV1 { any: Some(true), ..Default::default() },
+        )]
+        .into(),
         capabilities: ["generate", "edit"].into_iter().map(str::to_owned).collect(),
         auth_arms: BTreeSet::from(["header_secret".to_owned()]),
         emits: Vec::new(),
@@ -1634,6 +1651,11 @@ fn speech_manifest() -> ComponentManifestV1 {
         name: "speech-elevenlabs".to_owned(),
         api_version: SPEECH_WORLD.to_owned(),
         providers: vec!["elevenlabs".to_owned()],
+        served_models: [(
+            "elevenlabs".to_owned(),
+            south_provider_api::ServedModelsV1 { any: Some(true), ..Default::default() },
+        )]
+        .into(),
         capabilities: ["synthesize", "transcribe", "translate", "artifact_fetch"]
             .into_iter()
             .map(str::to_owned)

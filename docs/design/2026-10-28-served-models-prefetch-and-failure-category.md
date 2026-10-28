@@ -1,6 +1,7 @@
 # Served models, required prefetch and failure categories: three family declarations
 
-Status: **proposed**, for review by the host owner (lv). Nothing is implemented. Issues #299 and #302.
+Status: **accepted** 2026-10-29 (lv: all seven questions as recommended). Implemented on branch
+`design-served-models-failure-category` (§8). Not released. Issues #299 and #302.
 
 Date: 2026-10-28
 
@@ -161,3 +162,77 @@ Other families set it when someone captures their wire signal; until then their 
 - **FC-Q3** `upstream_timeout` as a category: no reference reads an explicit upstream timeout signal today, so it would
   ship unused. Recommended: keep the word so the vocabulary matches the host's, and set it only when a capture shows
   a signal.
+
+## 8. Implementation (2026-10-29)
+
+Ruled by lv on 2026-10-29: SM-Q1, SM-Q2, SM-Q3, RP-Q1, FC-Q1, FC-Q2 and FC-Q3 as recommended.
+
+**Contract crates.**
+- `south-provider-api`: `ServedModelsV1` (permissive struct, `is_valid` for the one-form rule, `serves` for the match),
+  `ComponentManifestV1::{served_models, required_prefetch}`, the world property `WorldSchemaV1::served_models` (task
+  v1 and v2, image, speech), and five `ManifestErrorV1` variants (`ServedModelsIsAMediaWorldDeclaration`,
+  `InvalidServedModels`, `ServedModelsRequired`, `RequiredPrefetchIsATaskV2Declaration`, `InvalidRequiredPrefetch`).
+  A host that matches the enum exhaustively adds the arms on re-pin.
+- Grammar: a list is non-empty, sorted and distinct, at most 256 entries of 1 to 128 visible ASCII bytes; `any`
+  must be `true`. `required_prefetch` lists are 1 to 16 sorted, distinct `[A-Za-z0-9_-]` names of at most 64 bytes,
+  never `model` (the host route's `fetch_images` grammar).
+- `south-contracts`: `TaskFailureCategoryV1` (`content_policy`, `upstream_timeout`, the host's `error.reason`
+  spelling), `TaskObservationV2::Failed::category`, `TASK_CONTRACT_VERSION` 9, `TASK_CONTRACT_VERSION_V8`,
+  `TASK_CONTRACT_VERSIONS` `[7, 8, 9]`. The JSON codec writes `category` only when present, so an earlier value
+  re-encodes byte for byte.
+- Gate ②: `CheckV1::FailureCategoryDeclared`. A fixture failure with a category needs task contract 9, and a package
+  declaring 9 needs such a fixture.
+
+**Interpretations, made while implementing.**
+- **I-1 Alias rows.** `task-minimax-v2` and `task-bailian-v2` read the request shape from the row's
+  `upstream_model_family` when it is set (the reseller aliases, V-Q9); the upstream id is then whatever the reseller
+  calls the model. The host already has the shape id: `ModelConfig::shape_model()` (the alias when set, else the
+  upstream id). **A host checks `served_models` against the shape id**, so an alias row is checked against the
+  family it claims and the measured mis-route is still caught. Declaring `any` for these families instead would
+  have given up the check for every row.
+- **I-2 Contains rules.** Several native selectors were *contains* rules (Groq `orpheus`, Qwen and Vertex `tts`).
+  They are declared as prefixes that cover every id the code, fixtures and records name; a family that needs a
+  wider set gets a package update. No fourth form was added (SM-Q1).
+- **I-3 Known ids as prefixes.** Where the component passes ids through and the upstream adds dated or `-preview`
+  variants (Gemini and Vertex image), the known ids are declared as prefixes, so `gemini-3-pro-image-preview` is
+  served and a text model id is not.
+- **I-4 Omni prefetch.** Only `vertex-interactions-video` declares `required_prefetch`
+  (`image`, `image_url`, `first_frame`, `reference_images`: the keys passed to `image_part`). The Gemini API family
+  refuses every visual key outright (`GEMINI_VISUAL_KEYS`), so prefetching would not help it.
+- **I-5 MiniMax category.** Not shipped. A failed Hailuo query with a nonzero `base_resp` ends `unknown`, the Hailuo
+  failure body carries no code, and the H3 failure fixture's `error.code` `1026` is not a capture (§4's condition).
+  This round only `task-veo-v2` reports a category and declares contract 9 (FC-Q1).
+
+**Shipped values.** Sources are in `crates/south-component-conformance/src/`. **Unverified** means no code table,
+record or capture states the set; reviewing these rows is part of reviewing this change.
+
+| Package | Family | Declared | Source | Verified |
+|---|---|---|---|---|
+| task-bailian-v2 | bailian | prefixes `happyhorse`, `wan` | `wan_media.rs` shape by prefix; `reference_bailian_task_v2.rs` | partly (scheme from code) |
+| task-byteplus-v2 | byteplus-video | prefixes `doubao-seedance-`, `dreamina-seedance-`, `seedance-` | fixtures; server tests use `dreamina-seedance-2-0-260128` | **unverified** (`doubao-` is the Volcengine spelling) |
+| task-gemini-omni-v2 | both families | prefixes `gemini-omni-` | Omni record §2 | yes |
+| task-gmi-image-v2 | gmi-image | `any` | GMI is a media hub; no record names its set | **unverified** |
+| task-kling, task-kling-v2 | kling | prefixes `kling-` | rate table `reference_kling_task_v2.rs`; fixtures | partly |
+| task-minimax-v2 | minimax | ids `MiniMax-H3`, `MiniMax-H3-Max`, `MiniMax-Hailuo-02`, `MiniMax-Hailuo-2.3`, `MiniMax-Hailuo-2.3-Fast` | the component refuses others (`prepare`) | yes (I-1 for aliases) |
+| task-veo-v2 | both families | prefixes `veo-` | fixtures and catalog | partly |
+| task-wan-image-v2 | wan-image | prefixes `wan` | header "Bailian Wan 2.7 image"; catalog `wan2.7-image`; fixtures `wan2.7-t2i-plus` | partly: also admits Wan video ids |
+| task-xai-v2 | xai-video | prefixes `grok-imagine-video` | catalog, fixtures | partly |
+| image-azure | azure-mai | prefixes `MAI-Image-` | `reference_azure_image.rs`; image world record | **unverified** whether Foundry's `model` is a deployment name |
+| image-gemini, image-vertex | gemini-image, vertex-ai-image | prefixes `gemini-2.5-flash-image`, `gemini-3-pro-image`, `gemini-3.1-flash-image`, `gemini-3.1-flash-lite-image` | I3-2 record, I3-3 record (I-3) | yes (the lite id on Vertex is unverified there) |
+| image-ideogram | ideogram-image | ids `ideogram-v4`, `ideogram-v4-quality`, `ideogram-v4-turbo` | `MODELS`; the component refuses others | yes |
+| image-minimax | minimax-image | prefixes `image-01` | catalog, fixtures | partly |
+| image-openai-compatible | all four families | `any` | the fallback serves any id; Azure ids are deployments | yes |
+| image-qwen | bailian-qwen-image | prefixes `qwen-image` | header `qwen-image-edit*`; catalog | yes |
+| image-reve | reve-image | `any` | Reve versions are open-ended (I3-6 record) | yes |
+| image-stability | stability-image | ids `sd3.5-large`, `sd3.5-large-turbo`, `sd3.5-medium`, `stable-image-core`, `stable-image-ultra` | `MODELS`; the component refuses others | yes |
+| image-xai | xai-image | ids `grok-imagine-image`, `-2.0`, `-pro`, `-quality`, `-quality-20260403`, `-quality-latest` | `serves_model`; the component refuses others | yes |
+| speech-azure | azure-speech | prefixes `MAI-Voice-`, `fast-transcription`, `mai-transcribe-` | V4 record; fixtures | **unverified** |
+| speech-elevenlabs | elevenlabs-speech | prefixes `eleven_`, `scribe_` | V3-1 record (`eleven_`); ASR fixture `scribe_v1` | partly |
+| speech-groq | groq-speech | prefixes `canopylabs/orpheus-` | V3-1 record (I-2) | partly |
+| speech-mimo | mimo-speech | prefixes `mimo-` | fixtures | **unverified** |
+| speech-minimax | minimax-speech | prefixes `speech-` | V3-2 record | yes |
+| speech-openai-compatible | all three families | `any` | router and Azure deployments | yes |
+| speech-qwen | bailian-qwen-speech | prefixes `qwen-tts`, `qwen3-asr-`, `qwen3-tts-` | V4 record (I-2); Qwen ASR record | partly |
+| speech-vertex | vertex-ai-speech | prefixes `gemini-2.5-flash-preview-tts`, `gemini-2.5-flash-tts`, `gemini-2.5-pro-preview-tts`, `gemini-2.5-pro-tts` | V4 record (I-2); fixtures | **unverified** (the non-preview ids) |
+| speech-xai | xai-speech | ids `grok-stt`, `grok-tts` | fixtures | partly |
+

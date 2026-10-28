@@ -11,6 +11,13 @@
   "auth_arms": [
     "bearer"
   ],
+  "served_models": {
+    "groq-speech": {
+      "prefixes": [
+        "canopylabs/orpheus-"
+      ]
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

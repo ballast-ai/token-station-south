@@ -309,11 +309,13 @@ impl TaskComponentV2 for BytePlusTaskComponentV2 {
                 kind: TaskFailureKindV1::Failed,
                 code: error("code"),
                 message: error("message"),
+                category: None,
             },
             Some("expired") => TaskObservationV2::Failed {
                 kind: TaskFailureKindV1::ProviderExpired,
                 code: error("code"),
                 message: error("message"),
+                category: None,
             },
             Some(_) => unknown("byteplus unrecognized status"),
         })

@@ -19,6 +19,13 @@
       }
     }
   },
+  "served_models": {
+    "minimax-image": {
+      "prefixes": [
+        "image-01"
+      ]
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

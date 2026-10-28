@@ -13,6 +13,13 @@
   "auth_arms": [
     "bearer"
   ],
+  "served_models": {
+    "kling": {
+      "prefixes": [
+        "kling-"
+      ]
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

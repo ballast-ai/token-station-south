@@ -11,6 +11,13 @@
   "auth_arms": [
     "bearer"
   ],
+  "served_models": {
+    "bailian-qwen-image": {
+      "prefixes": [
+        "qwen-image"
+      ]
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

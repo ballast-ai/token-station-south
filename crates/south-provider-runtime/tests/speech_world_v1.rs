@@ -87,6 +87,7 @@ fn speech_manifest_value() -> Value {
         "version": "1.0.0",
         "api_version": "speech-adapter-v1",
         "providers": ["test"],
+        "served_models": { "test": { "any": true } },
         "capabilities": ["synthesize", "transcribe", "translate"],
         "auth_arms": ["bearer"],
         "permissions": { "network": false, "filesystem": false, "secrets": ["provider_api_key"] },
@@ -105,6 +106,7 @@ fn image_manifest() -> String {
         "version": "1.0.0",
         "api_version": "image-adapter-v1",
         "providers": ["test"],
+        "served_models": { "test": { "any": true } },
         "capabilities": ["generate", "edit"],
         "auth_arms": ["bearer"],
         "permissions": { "network": false, "filesystem": false, "secrets": ["provider_api_key"] },
@@ -319,6 +321,7 @@ fn speech_bytes_cannot_claim_another_world_or_a_different_identity() {
 
     let mut embeddings = speech_manifest_value();
     embeddings["api_version"] = "embeddings-adapter-v1".into();
+    embeddings.as_object_mut().unwrap().remove("served_models");
     embeddings["capabilities"] = json!(["embed"]);
     embeddings["compatibility"]["wit_package"] = "token-station:embeddings-adapter@1.0.0".into();
     embeddings["compatibility"]["contracts"] = json!({ "embeddings": 1 });

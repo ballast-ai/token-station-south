@@ -12,6 +12,13 @@
   "auth_arms": [
     "header_secret"
   ],
+  "served_models": {
+    "azure-mai": {
+      "prefixes": [
+        "MAI-Image-"
+      ]
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

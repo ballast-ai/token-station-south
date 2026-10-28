@@ -13,6 +13,13 @@
   "auth_arms": [
     "bearer"
   ],
+  "served_models": {
+    "wan-image": {
+      "prefixes": [
+        "wan"
+      ]
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

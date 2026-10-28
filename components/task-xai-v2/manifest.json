@@ -13,6 +13,13 @@
   "auth_arms": [
     "bearer"
   ],
+  "served_models": {
+    "xai-video": {
+      "prefixes": [
+        "grok-imagine-video"
+      ]
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

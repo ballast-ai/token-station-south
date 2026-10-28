@@ -13,6 +13,15 @@
   "auth_arms": [
     "bearer"
   ],
+  "served_models": {
+    "bailian-qwen-speech": {
+      "prefixes": [
+        "qwen-tts",
+        "qwen3-asr-",
+        "qwen3-tts-"
+      ]
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

@@ -137,6 +137,8 @@ fn reference_manifest() -> ComponentManifestV1 {
         token_buckets: Vec::new(),
         required_token_buckets: Vec::new(),
         min_poll_interval_seconds: None,
+        served_models: std::collections::BTreeMap::new(),
+        required_prefetch: std::collections::BTreeMap::new(),
         permissions: ComponentPermissionsV1 {
             network: false,
             filesystem: false,

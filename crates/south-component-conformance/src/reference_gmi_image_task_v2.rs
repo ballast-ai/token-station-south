@@ -128,11 +128,13 @@ fn observe(body: &Value) -> TaskObservationV2 {
             kind: TaskFailureKindV1::Failed,
             code: Some("empty_result".into()),
             message: Some(format!("gmi reported '{status}' but delivered no media urls")),
+            category: None,
         },
         "failed" | "cancelled" | "canceled" | "error" => TaskObservationV2::Failed {
             kind: TaskFailureKindV1::Failed,
             code: Some(status.into()),
             message: bounded(field(body, "message").or_else(|| field(body, "error"))),
+            category: None,
         },
         "" => TaskObservationV2::Progress { running: true, status_word: "unreported".into() },
         other => bounded(Some(other)).map_or_else(

@@ -11,6 +11,15 @@
   "auth_arms": [
     "header_secret"
   ],
+  "served_models": {
+    "ideogram-image": {
+      "ids": [
+        "ideogram-v4",
+        "ideogram-v4-quality",
+        "ideogram-v4-turbo"
+      ]
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,
