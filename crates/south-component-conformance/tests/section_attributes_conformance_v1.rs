@@ -111,7 +111,9 @@ fn the_gmi_package_declares_its_organization_id_as_a_section_attribute() {
     // (`gemini_signatures_retires_every_published_076_package_identity`).
     // Published as 0.36.3 with 0.77.0; the Gemini placeholder signature round made it 0.36.4
     // (`gemini_placeholder_retires_every_published_077_package_identity`).
-    assert_eq!(manifest.version, "0.36.4");
+    // Published as 0.36.4 with 0.78.0; the 0.79.0 round made it 0.36.5
+    // (`qwen_tier_and_responses_stop_retires_every_published_078_package_identity`).
+    assert_eq!(manifest.version, "0.36.5");
     let wire = serde_json::to_value(manifest.credentials.as_ref().unwrap()).unwrap();
     assert_eq!(
         wire,

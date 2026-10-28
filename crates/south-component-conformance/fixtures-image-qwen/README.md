@@ -9,6 +9,7 @@ the reference ran; the others were produced by the reference and reviewed agains
 
 Rows: every pre-dispatch refusal (prompt missing or elided; `n` zero, seven, fractional; `image_url` of the wrong
 type, as an object and in an array; a `tokens` metering requirement); every forwarded parameter and the dropped fields;
-`size` as `WxH`, as `W*H` and as a word (no fact); `qwen-image-edit-plus` with three images, two of them elided; images
+`size` as `WxH`, as `W*H` and as a word (no fact); the resolution tier word (0.79.0, south #297) by pixel count on
+either side of 2048 × 1024 and as a size word (`2k`, and `4K`, which the card does not price); `qwen-image-edit-plus` with three images, two of them elided; images
 flattened across choices with empty ones skipped; a 2xx carrying a DashScope `code`; non-2xx answers including content
 moderation; `images_reported` equal to, one above and far above the delivered count, and absent.

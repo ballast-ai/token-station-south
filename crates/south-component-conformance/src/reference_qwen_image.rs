@@ -21,7 +21,12 @@
 //! - **Facts**: `requested_outputs` is `n` (1 when absent), `inputs.input_image` the number of
 //!   `image_url` entries, and `size` only when the client sent one (`WxH` or `W*H`): the host
 //!   prices tiers from the requested size, and the upstream's default would move an unsized
-//!   request into another tier.
+//!   request into another tier. `tier.resolution` always (south #297, server 03 #142), in the
+//!   price card's spelling: a size word such as `2k` as `2K` (`4K` too, which the card does not
+//!   price, so the host refuses it); a `WxH` / `W*H` size `2K` when it has more than 2048 × 1024
+//!   pixels and `1K` otherwise; `1K` for an unsized request or any other size.
+//!   With the word the host prices the model's tier price table, `input_each` × input images
+//!   included; before 0.79.0 the package reported no tier and every input image went unbilled.
 //! - **Response**: a non-2xx maps `DashScope`'s `code` / `message`, `rejected` for a 4xx other than
 //!   408 and `unknown` otherwise; a 2xx carrying a `code` failed in the body and is `unknown` (the
 //!   native arm does not detect it, record §6 item 4). Every non-empty
@@ -39,7 +44,7 @@ use south_contracts::image::{
     ImageArtifactV1, ImageCallContextV1, ImageFactsV1, ImageInputRoleV1, ImageInputsV1,
     ImageMeteringV1, ImageModelCapabilitiesV1, ImageOperationV1, ImageRenderContextV1,
     ImageResponseFormatV1, ImageSizeV1, ImageTierV1, InputRoleKeyV1, MAX_IMAGE_EDGE,
-    MAX_IMAGE_INPUTS_PER_ROLE, MeteringFormV1, PreparedImageCallV1,
+    MAX_IMAGE_INPUTS_PER_ROLE, MeteringFormV1, PreparedImageCallV1, TierDimensionV1, TierWordV1,
 };
 use south_contracts::media::{
     MediaLimitsV1, MediaRequestDescriptorV1, PathPatternV1, ResponseBodyFormV1,
@@ -59,7 +64,7 @@ use crate::{ComponentResultV1, ImageComponentV1, ImageOutcomeV1, ImageRenderedV1
 /// The package name this reference is published as.
 pub const NAME: &str = "image-qwen";
 /// The package version.
-pub const VERSION: &str = "1.0.21";
+pub const VERSION: &str = "1.1.0";
 /// The world this reference exports.
 pub const WORLD: &str = "image-adapter-v1";
 /// The family, as a host's image rows name it.
@@ -72,6 +77,13 @@ const IMMUTABLE_BODY_PATHS: [&str; 4] = ["model", "input", "parameters.n", "para
 const MAX_IMAGES: u64 = 6;
 /// Request-side elision: the input images, which are usually data URLs.
 const REQUEST_ELISION_PATHS: [&str; 2] = ["/image_url", "/image_url/*"];
+/// The pixel count above which a `WxH` size is the price card's `2K` tier. The card names `1K` and
+/// `2K` without a pixel boundary. This is the geometric mean of 1024² and 2048², so a size lands
+/// in the nominal tier its area is nearer to; a long-edge rule would put Qwen-Image's own 16:9 1K
+/// size (1664*928) in 2K.
+const TIER_2K_ABOVE_PIXELS: u64 = 2048 * 1024;
+/// The tier of an unsized request: the upstream's default size is a 1K size.
+const DEFAULT_TIER: &str = "1K";
 
 /// The reference component. Stateless.
 #[derive(Debug, Default, Clone, Copy)]
@@ -88,6 +100,31 @@ fn size_fact(size: &str) -> Option<ImageSizeV1> {
             .filter(|edge| (1..=MAX_IMAGE_EDGE).contains(edge))
     };
     Some(ImageSizeV1 { width: edge(width)?, height: edge(height)? })
+}
+
+/// The resolution tier a request's `size` asks for (south #297): a size word such as `1k` or `2K`
+/// in the card's spelling (upper-case `K`), else the long edge of a `WxH` / `W*H` size, else
+/// [`DEFAULT_TIER`]. A word the card does not price (`4K`) is still reported, so the host refuses
+/// it before dispatch instead of billing it at another tier.
+fn resolution_word(size: Option<&Value>) -> String {
+    let Some(size) = size.and_then(Value::as_str).map(str::trim) else {
+        return DEFAULT_TIER.to_owned();
+    };
+    if let Some(digits) = size.strip_suffix(['k', 'K'])
+        && !digits.is_empty()
+        && digits.len() <= 3
+        && digits.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return format!("{digits}K");
+    }
+    match size_fact(size) {
+        Some(ImageSizeV1 { width, height })
+            if u64::from(width) * u64::from(height) > TIER_2K_ABOVE_PIXELS =>
+        {
+            "2K".to_owned()
+        }
+        _ => DEFAULT_TIER.to_owned(),
+    }
 }
 
 /// Whether a 2xx body names a `DashScope` error code.
@@ -130,7 +167,7 @@ impl ImageComponentV1 for QwenImageReferenceV1 {
                 response_formats: vec![ImageResponseFormatV1::Url],
                 metering_forms: vec![MeteringFormV1::Images],
                 token_buckets: Vec::new(),
-                tier_dimensions: Vec::new(),
+                tier_dimensions: vec![TierDimensionV1::Resolution],
                 repeat: false,
                 request_elision_paths: request_elision_paths.clone(),
             })
@@ -203,7 +240,13 @@ impl ImageComponentV1 for QwenImageReferenceV1 {
                 inputs: ImageInputsV1 { input_image: input_images, ..ImageInputsV1::default() },
                 requested_outputs: u32::try_from(n).unwrap_or(1),
                 size: size.and_then(Value::as_str).and_then(size_fact),
-                tier: ImageTierV1::default(),
+                tier: ImageTierV1 {
+                    resolution: Some(
+                        TierWordV1::parse(&resolution_word(size))
+                            .map_err(|_| internal("invalid tier word"))?,
+                    ),
+                    quality: None,
+                },
                 tier_candidates: None,
                 metering_forms: forms,
                 bounds: None,

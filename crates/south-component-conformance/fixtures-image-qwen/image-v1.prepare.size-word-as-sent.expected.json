@@ -40,7 +40,9 @@
     ],
     "operation": "generate",
     "requested_outputs": 1,
-    "tier": {}
+    "tier": {
+      "resolution": "1K"
+    }
   },
   "immutable_body_paths": [
     "model",

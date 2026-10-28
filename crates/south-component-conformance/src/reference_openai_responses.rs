@@ -79,7 +79,7 @@ pub const MANTLE_FAMILY: &str = mantle::FAMILY;
 pub const NAME: &str = "provider-openai-responses";
 
 /// The package's version.
-pub const VERSION: &str = "1.5.4";
+pub const VERSION: &str = "1.6.0";
 
 /// The reference component. Stateless; each stream gets its own parser.
 #[derive(Debug, Default, Clone, Copy)]
@@ -495,7 +495,14 @@ fn body_of(
     if declares_openai_replay(request, config) {
         body.insert("include".to_owned(), json!([replay::INCLUDE_ENCRYPTED_CONTENT]));
     }
-    // `sampling.stop` is dropped: the wire has no stop field (record §4.1).
+    // Record §4.1: the wire has no stop field. A non-empty `sampling.stop` is refused rather than
+    // dropped (south #298), so a client that bounds its output with stop sequences learns that
+    // this upstream ignores them instead of paying for an answer that was never cut.
+    if !request.sampling.stop.is_empty() {
+        return Err(capability(
+            "OpenAI Responses does not support stop sequences; remove `stop` from the request",
+        ));
+    }
     if request.stream {
         body.insert("stream".to_owned(), json!(true));
     }

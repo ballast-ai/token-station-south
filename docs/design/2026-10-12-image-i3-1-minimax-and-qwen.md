@@ -7,6 +7,17 @@ built.
 
 Date: 2026-10-12
 
+Revised: 2026-10-28 (south #297, server 03 #142; released in 0.79.0): `image-qwen` declares the `resolution` tier
+dimension and reports a tier word on every request, in the price card's spelling. A size word is reported upper-cased
+(`2k` → `2K`; `4K`, which the card does not price, is reported too so the host refuses it). A `WxH` / `W*H` size is
+`2K` when it has more than 2048 × 1024 pixels (the geometric mean of 1024² and 2048²) and `1K` otherwise, so the
+upstream's 16:9 default 1664×928 is `1K`. An unsized request, or any other size, is `1K`. The host then prices the
+model's tier price table, including `input_each` × input images. Before this, the empty `tier_dimensions` meant the
+host priced plain per-image, and every input image of an image-to-image or edit request went unbilled. The card
+gives no pixel boundary; the boundary is inferred (**unverified** against a real bill). A host model without a tier
+price table serves only its catalog default resolution, so an operator writes the table before routing a Qwen-Image
+model to 0.79.0.
+
 Baseline: south `origin/main` = `116cf13` (release 0.57.0, canonical IR 4). Host references carry a `server:` prefix and
 refer to token-station-server `origin/dev-v2` `baa957d6` (`server:…/` abbreviates
 `server:gateway/src/modules/inference/`). Statements marked **unverified** are conclusions from reading code, not from

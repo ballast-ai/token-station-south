@@ -7,6 +7,7 @@ Status: accepted (lv, 2026-10-10: the remaining S-tagged questions ruled, §16) 
 Date: 2026-09-30
 
 Revised: 2026-10-01 after independent review (see the revision note at the end).
+Revised: 2026-10-28: a non-empty `sampling.stop` is refused instead of dropped (south #298; §4.1, released in 0.79.0).
 
 Predecessors: `2026-09-30-host-zero-vendor-boundary.md` (the umbrella; this record expands the first row of its §11
 and depends on its §3 credential recipe, §4 descriptor auth admission, §5 `stream_framing`, §6 usage discipline, §7
@@ -256,7 +257,7 @@ measurement of R-Q5 (§4.3). Two fields are **proposals of this record**, not in
 | `extensions.responses_reasoning_summary` | not sent in v1 | The north codec carries it (request.rs:74-76), but acting on it would be a new use of an `extensions` key (below); the upstream's default summary setting applies |
 | `sampling.temperature`, `sampling.top_p` | `temperature`, `top_p` | Dropped for `openai-codex` as §4.3 says |
 | `sampling.max_output_tokens` | `max_output_tokens` | Not sent for `openai-codex` (§4.3) |
-| `sampling.stop` | dropped | The host's converter does not forward it either (leaf:translate_responses.rs:489-493). Dropping follows the kernel `Sampling` contract (kernel:chat.rs:130-145) |
+| `sampling.stop` | none: a non-empty `stop` is refused (`capability`, 400), an empty one is accepted | The wire has no stop field. Until 0.79.0 the package dropped it, as the host's converter did (leaf:translate_responses.rs:489-493); a client bounding its output with stop sequences then got a 200 with an uncut answer and paid for the extra tokens. Since 0.79.0 it is refused before any upstream call (south #298, lv 2026-10-27; server 03 #62) |
 | `stream` | `stream: true` when set, otherwise omitted | |
 | — | `store: false`, always | §4.4 |
 
@@ -933,7 +934,8 @@ boundary's B1 work, which gives fixtures an expected-error form.
 | `request.text`, `request.instructions-and-history`, `request.tool-result-turn`, `request.image-input` | Canonical body of §4.1–§4.2, URL, `store: false` |
 | `request.tools-and-tool-choice`, `request.structured-output` | Tool flattening, `strict`, the three `tool_choice` forms, `text.format` |
 | `request.reasoning-effort`, `request.reasoning-effort-withheld` | The per-model gate |
-| `request.stop-is-dropped`, `request.thinking-is-not-replayed` | The two documented drops |
+| `request.stop-is-rejected`, `request.empty-stop-is-accepted` | A non-empty `stop` is a capability error; an empty one sends the canonical body (0.79.0; until then `request.stop-is-dropped` pinned the drop) |
+| `request.thinking-is-not-replayed` | The documented drop |
 | `request.refused-claude-carrier`, `request.refused-unmappable-part`, `request.refused-unknown-tool-choice`, `request.refused-input-file`, `request.refused-file-id` | Capability errors |
 | `request.codex-stream` | No cap, no `temperature`, default `instructions`, `stream: true`, account header from the attribute, Codex URL |
 | `request.codex-without-account`, `request.codex-non-stream-refused` | Header omitted; capability error |

@@ -729,7 +729,9 @@ fn the_t9_families_retire_the_patch_identity() {
     // (`gemini_signatures_retires_every_published_076_package_identity`).
     // Published as 2.13.1 with 0.77.0; the Gemini placeholder signature round made it 2.13.2
     // (`gemini_placeholder_retires_every_published_077_package_identity`).
-    assert_eq!(manifest.version, "2.13.2");
+    // Published as 2.13.2 with 0.78.0; the 0.79.0 round made it 2.13.3
+    // (`qwen_tier_and_responses_stop_retires_every_published_078_package_identity`).
+    assert_eq!(manifest.version, "2.13.3");
     assert_eq!(OpenAiCompatibleReferenceV1.metadata().version, manifest.version);
     // 2.13.0 declares `request_facts.reasoning_cap` and `cap_overhead` (Bailian thinking cap record
     // §4), first parsed by 0.76.0.
