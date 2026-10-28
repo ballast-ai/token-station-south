@@ -82,6 +82,40 @@ fn the_size_fact_exists_only_when_the_client_sent_a_size() {
     assert!(prepare(&json!({"prompt": "x", "size": "1K"}))["facts"].get("size").is_none());
 }
 
+/// South #297 (server 03 #142): a resolution tier word on every request, in the card's spelling,
+/// so the host prices the model's tier price table and its `input_each` per input image.
+#[test]
+fn every_request_reports_a_resolution_tier_word() {
+    let cases = [
+        (None, "1K"),
+        (Some("1328*1328"), "1K"),
+        (Some("1664*928"), "1K"),
+        (Some("2048x1024"), "1K"),
+        (Some("2048*1152"), "2K"),
+        (Some("2048*2048"), "2K"),
+        (Some("1k"), "1K"),
+        (Some("2k"), "2K"),
+        (Some("2K"), "2K"),
+        (Some("4K"), "4K"),
+        (Some("large"), "1K"),
+    ];
+    for (size, word) in cases {
+        let mut body = json!({"prompt": "x", "image_url": ["https://example.com/a.png"]});
+        if let Some(size) = size {
+            body["size"] = json!(size);
+        }
+        let facts = &prepare(&body)["facts"];
+        assert_eq!(facts["tier"], json!({"resolution": word}), "{size:?}");
+        assert_eq!(facts["inputs"]["input_image"], json!(1), "{size:?}");
+    }
+    let capabilities = QwenImageReferenceV1.model_capabilities(&config()).unwrap();
+    let declared: Vec<Value> = capabilities
+        .iter()
+        .map(|model| serde_json::to_value(&model.tier_dimensions).unwrap())
+        .collect();
+    assert!(declared.iter().all(|dimensions| *dimensions == json!(["resolution"])), "{declared:?}");
+}
+
 /// §3: the synchronous endpoint, never the asynchronous header the Wan task package sends.
 #[test]
 fn the_request_is_synchronous() {

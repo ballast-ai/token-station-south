@@ -1,0 +1,57 @@
+{
+  "descriptor": {
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "input": {
+            "messages": [
+              {
+                "content": [
+                  {
+                    "text": "a red panda"
+                  }
+                ],
+                "role": "user"
+              }
+            ]
+          },
+          "model": "qwen-image-plus",
+          "parameters": {
+            "size": "2k"
+          }
+        }
+      }
+    },
+    "method": "POST",
+    "path": "api/v1/services/aigc/multimodal-generation/generation"
+  },
+  "facts": {
+    "inputs": {
+      "input_image": 0,
+      "mask": 0,
+      "reference_image": 0
+    },
+    "metering_forms": [
+      "images"
+    ],
+    "operation": "generate",
+    "requested_outputs": 1,
+    "tier": {
+      "resolution": "2K"
+    }
+  },
+  "immutable_body_paths": [
+    "model",
+    "input",
+    "parameters.n",
+    "parameters.size"
+  ],
+  "repeat": 1,
+  "response_body_form": "json",
+  "response_elision_paths": [],
+  "state": {}
+}

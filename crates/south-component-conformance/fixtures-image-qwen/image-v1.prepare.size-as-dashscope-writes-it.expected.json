@@ -44,7 +44,9 @@
       "height": 928,
       "width": 1664
     },
-    "tier": {}
+    "tier": {
+      "resolution": "1K"
+    }
   },
   "immutable_body_paths": [
     "model",
