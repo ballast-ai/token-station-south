@@ -4,13 +4,14 @@ This page is the concise index from repository releases to their authoritative d
 Release records preserve historical detail; [compatibility.json](../compatibility.json), not a tag
 or this index, is the authority for host adoption and verification status.
 
-The current repository release is `0.78.0`. Records may describe a prepared but unpublished tag;
+The current repository release is `0.79.0`. Records may describe a prepared but unpublished tag;
 their status line remains authoritative for publication state.
 
 ## Current releases
 
 | Release | Current capability | Records |
 |---|---|---|
+| `0.79.0` | `image-qwen` reports a resolution tier word so the host prices Qwen-Image input images from the tier price table, and `provider-openai-responses` refuses a non-empty `stop` instead of dropping it; prepared as recorded, with publication and host re-pin separate | [release](design/2026-10-28-release-0.79.0.md) |
 | `0.78.0` | A placeholder signature on a replayed Gemini tool call that carries none, so clients that cannot carry the signature still work on Gemini 3; prepared as recorded, with publication and host re-pin separate | [release](design/2026-10-27-release-0.78.0.md), [design](design/2026-10-27-gemini-placeholder-signature.md) |
 | `0.77.0` | Gemini 3 tool-call signatures through the canonical IR (kernel protocol 0.7.0) and the Chat Completions wire, and parallel Gemini tool results in one turn; prepared as recorded, with publication and host re-pin separate | [release](design/2026-10-26-release-0.77.0.md), [design](design/2026-10-26-gemini-tool-call-signatures.md) |
 | `0.76.0` | Bailian bounded reasoning caps, Qwen ASR, and Wan media tasks; prepared as recorded, with publication and host re-pin separate | [release](design/2026-10-21-release-0.76.0.md), [reasoning cap](design/2026-10-21-bailian-thinking-cap.md), [Qwen ASR](design/2026-10-21-speech-qwen-asr.md), [Wan media](design/2026-10-21-bailian-wan-media.md) |
