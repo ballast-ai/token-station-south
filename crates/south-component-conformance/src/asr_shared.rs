@@ -691,7 +691,12 @@ pub fn prepare_openai(
     let forms = recognition_forms(config, context, protocol.translates)?;
     let parts = request_parts(request)?;
     let format = openai_format(parts)?;
-    let verbose = verbose_row(config, protocol.upstream_model)?;
+    // A client format that carries no duration (`text`, `srt`, `vtt`) is always asked of the upstream
+    // as `verbose_json` and rendered here, as a `speech.verbose_json` row is (#293, lv 2026-10-28):
+    // otherwise the answer has no duration and the host can only estimate the seconds it bills.
+    // `json` and `verbose_json` are asked as sent; their answers carry the duration themselves.
+    let verbose =
+        verbose_row(config, protocol.upstream_model)? || matches!(format, "text" | "srt" | "vtt");
     let mut plan = PartPlan::default();
     if protocol.drops_model {
         plan.dropped_text = &["model"];
@@ -732,8 +737,10 @@ pub fn openai_outcome(state: &Value, response: &Value, usage_seconds: bool) -> S
         return verbose_outcome(format, response);
     }
     if !matches!(format, "json" | "verbose_json") {
-        // The upstream answered the client's own text format: delivered unchanged, and no text
-        // format carries a duration (record §9 case 1).
+        // `prepare_openai` no longer prepares this state (#293: a text format is always asked as
+        // `verbose_json`). Should a state still name a text format without `verbose`, the upstream
+        // answered that format itself: delivered unchanged, and no text format carries a duration
+        // (record §9 case 1).
         return succeeded(
             TranscriptDeliveryV1::Passthrough {
                 media_type: passthrough_text_media_type(response, format),

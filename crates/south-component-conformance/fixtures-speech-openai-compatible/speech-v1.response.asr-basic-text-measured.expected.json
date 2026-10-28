@@ -1,0 +1,15 @@
+{
+  "outcome": "succeeded",
+  "transcript": {
+    "text": "Hello there. Good morning.",
+    "media_type": "text/plain; charset=utf-8"
+  },
+  "metering": {
+    "characters": null,
+    "seconds": {
+      "value": 3.52,
+      "basis": "reported"
+    },
+    "tokens": null
+  }
+}

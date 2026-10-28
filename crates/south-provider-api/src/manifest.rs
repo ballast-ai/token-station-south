@@ -684,11 +684,14 @@ pub struct ComponentManifestV1 {
     /// credential (unauthenticated upstreams).
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub auth_arms: BTreeSet<String>,
-    /// The headers a `host_signed` component promises its host's finalizer
-    /// will emit — the allow-list South diffs the finalizer's output against,
-    /// in both directions. Required non-empty with the `host_signed` arm,
-    /// refused without it. A `Vec`, not a set, so a duplicate is refused by
-    /// name rather than silently collapsed.
+    /// The headers a `host_signed` component allows its host's finalizer to
+    /// emit. A ceiling, not the exact per-request set (#122, 2026-10-28): the
+    /// host declares per request the set its finalizer emits for the credential
+    /// at hand (SigV4 adds `x-amz-security-token` only for a temporary
+    /// credential), never wider than this, and South diffs the finalizer's
+    /// output against that per-request set in both directions. Required
+    /// non-empty with the `host_signed` arm, refused without it. A `Vec`, not a
+    /// set, so a duplicate is refused by name rather than silently collapsed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub emits: Vec<String>,
     /// Secret-bearing header names this package's descriptors may present under

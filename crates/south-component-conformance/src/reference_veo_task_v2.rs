@@ -381,7 +381,10 @@ impl TaskComponentV2 for VeoTaskComponentV2 {
                 .ok_or_else(|| invalid("'n' must be a positive whole number of videos"))?,
         };
         parameters["sampleCount"] = json!(samples);
-        let resolution_fact = resolution.map(str::to_ascii_uppercase).filter(|r| {
+        // Reported in the client's (and Google's) spelling, `1080p` stays `1080p`: tier words are
+        // matched exactly (R-2), and the model catalog lists Veo's resolutions in lower case. This
+        // used to upper-case the word, so a per-resolution price row could never match it (#294).
+        let resolution_fact = resolution.map(str::to_owned).filter(|r| {
             !r.is_empty() && r.len() <= 32 && r.bytes().all(|b| b.is_ascii_alphanumeric())
         });
         #[expect(clippy::cast_precision_loss, reason = "Veo durations are small whole seconds")]

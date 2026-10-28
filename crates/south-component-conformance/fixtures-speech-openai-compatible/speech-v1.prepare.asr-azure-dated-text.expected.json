@@ -28,7 +28,7 @@
           },
           {
             "name": "response_format",
-            "value": "text"
+            "value": "verbose_json"
           },
           {
             "name": "file",
@@ -41,7 +41,7 @@
       }
     }
   },
-  "response_body_form": "text",
+  "response_body_form": "json",
   "response_elision_paths": [],
   "immutable_form_fields": [
     "model",
@@ -52,6 +52,6 @@
   "state": {
     "op": "transcribe",
     "format": "text",
-    "verbose": false
+    "verbose": true
   }
 }
