@@ -687,7 +687,7 @@ pub struct ComponentManifestV1 {
     /// The headers a `host_signed` component allows its host's finalizer to
     /// emit. A ceiling, not the exact per-request set (#122, 2026-10-28): the
     /// host declares per request the set its finalizer emits for the credential
-    /// at hand (SigV4 adds `x-amz-security-token` only for a temporary
+    /// at hand (`SigV4` adds `x-amz-security-token` only for a temporary
     /// credential), never wider than this, and South diffs the finalizer's
     /// output against that per-request set in both directions. Required
     /// non-empty with the `host_signed` arm, refused without it. A `Vec`, not a

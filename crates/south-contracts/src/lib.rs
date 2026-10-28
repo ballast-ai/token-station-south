@@ -1266,7 +1266,7 @@ pub enum SignedHeaderSetErrorV1 {
 /// host cannot widen it at finalise time.
 ///
 /// The package manifest's `emits` is the **ceiling** of this set, not its value (#122, 2026-10-28).
-/// Some signatures depend on the credential: SigV4 adds `x-amz-security-token` only for a temporary
+/// Some signatures depend on the credential: `SigV4` adds `x-amz-security-token` only for a temporary
 /// credential, so no single constant set is exact for every credential a deployment may hold. The
 /// host therefore declares, per request, the set its finalizer will emit *for the credential at
 /// hand*; that set may be narrower than `emits` but never wider, and the both-ways diff above is
