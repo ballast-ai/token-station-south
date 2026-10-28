@@ -443,8 +443,10 @@ fn the_manifest_declares_transcription_at_1_1_0() {
     // (`gemini_signatures_retires_every_published_076_package_identity`).
     // Published as 1.1.1 with 0.77.0; the Gemini placeholder signature round made it 1.1.2
     // (`gemini_placeholder_retires_every_published_077_package_identity`).
-    assert_eq!(manifest.version, "1.1.2");
-    assert_eq!(REFERENCE.metadata().version, "1.1.2");
+    // Published as 1.1.2 with 0.78.0; the 0.79.0 round made it 1.1.3
+    // (`qwen_tier_and_responses_stop_retires_every_published_078_package_identity`).
+    assert_eq!(manifest.version, "1.1.3");
+    assert_eq!(REFERENCE.metadata().version, "1.1.3");
     assert!(manifest.capabilities.contains("transcribe"));
     assert!(!manifest.capabilities.contains("translate"));
     assert_eq!(manifest.compatibility.south_runtime, "0.77.0"); // release 0.77.0 raised every package (canonical_ir 5)
