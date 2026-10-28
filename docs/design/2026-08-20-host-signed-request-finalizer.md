@@ -14,6 +14,16 @@ Predecessors: `2026-08-16-minimal-provider-call.md` (assemble / transport split)
 this slice reuses), `2026-08-20-host-prelude.md` (D2: `RawAuthV1` and `ProviderAuthV1` become
 `#[non_exhaustive]` in 0.7.0 so this slice is additive).
 
+> **Revision 2026-10-28 (#122).** The manifest's `emits` is the **ceiling** of the signed header set,
+> not its exact value. SigV4 adds `x-amz-security-token` only for a temporary credential, so no
+> constant set is exact for both credential shapes a deployment may hold (`provider-bedrock-converse`
+> declares the four-header superset). The host declares per request the set its finalizer emits for
+> the credential at hand, never wider than `emits`, and the both-ways diff of `SignedHeaderSetV1` is
+> judged against that per-request set. Decided by the host owner (lv) on 2026-10-28 over the two
+> alternatives #122 listed: splitting the declaration into "always" and "conditionally" emitted
+> headers, or judging the allow-list as a superset only. Documentation only: no type or check
+> changes, and every shipped manifest already declares its ceiling.
+
 ## 1. Problem
 
 The auth contract knows two shapes, and both share one property: the credential is a value that

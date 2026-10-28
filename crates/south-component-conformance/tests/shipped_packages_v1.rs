@@ -1084,7 +1084,9 @@ fn the_invoke_package_declares_the_runtime_converse_declares() {
     // (`gemini_placeholder_retires_every_published_077_package_identity`).
     // Published as 1.2.4 with 0.78.0; the 0.79.0 round made it 1.2.5
     // (`qwen_tier_and_responses_stop_retires_every_published_078_package_identity`).
-    assert_eq!(invoke.version, "1.2.5");
+    // Published as 1.2.5 with 0.79.0; the 0.80.0 round made it 1.2.6
+    // (`veo_spelling_and_durationless_asr_retire_every_published_079_package_identity`).
+    assert_eq!(invoke.version, "1.2.6");
     // 1.2.0 declares `model_parameters` (record `2026-10-18-family-model-parameters.md` §7), first parsed by 0.74.0.
     assert_eq!(invoke.compatibility.south_runtime, "0.77.0");
     assert_eq!(invoke.compatibility, read("provider-bedrock-converse").compatibility);
@@ -1409,7 +1411,9 @@ fn the_responses_package_declares_the_runtime_that_first_admits_its_declarations
     // (`gemini_placeholder_retires_every_published_077_package_identity`).
     // Published as 1.5.4 with 0.78.0; the 0.79.0 round made it 1.6.0
     // (`qwen_tier_and_responses_stop_retires_every_published_078_package_identity`).
-    assert_eq!(manifest.version, "1.6.0");
+    // Published as 1.6.0 with 0.79.0; the 0.80.0 round made it 1.6.1
+    // (`veo_spelling_and_durationless_asr_retire_every_published_079_package_identity`).
+    assert_eq!(manifest.version, "1.6.1");
     // 1.5.0 declares `model_parameters` (record `2026-10-18-family-model-parameters.md` §7), first parsed by 0.74.0.
     assert_eq!(manifest.compatibility.south_runtime, "0.77.0");
     assert!(!manifest.immutable_body_paths.is_empty() && !manifest.north_passthrough.is_empty());
@@ -1846,7 +1850,9 @@ fn image_gemini_declares_media_2_which_a_media_1_host_refuses() {
     // (`gemini_placeholder_retires_every_published_077_package_identity`).
     // Published as 1.0.20 with 0.78.0; the 0.79.0 round made it 1.0.21
     // (`qwen_tier_and_responses_stop_retires_every_published_078_package_identity`).
-    assert_eq!(manifest.version, "1.0.21");
+    // Published as 1.0.21 with 0.79.0; the 0.80.0 round made it 1.0.22
+    // (`veo_spelling_and_durationless_asr_retire_every_published_079_package_identity`).
+    assert_eq!(manifest.version, "1.0.22");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["gemini-image"]);
     assert!(manifest.declared_keys("gemini-image").is_empty());
@@ -1913,7 +1919,9 @@ fn the_i3_1_image_packages_declare_the_runtime_and_values_of_the_record() {
         // Published as 1.0.21 with 0.78.0; the 0.79.0 round made `image-minimax` 1.0.22 (Q47) and
         // `image-qwen` 1.1.0, which reports a resolution tier word (south #297)
         // (`qwen_tier_and_responses_stop_retires_every_published_078_package_identity`).
-        let version = if name == "image-qwen" { "1.1.0" } else { "1.0.22" };
+        // Published as 1.0.22 and 1.1.0 with 0.79.0; the 0.80.0 round made them 1.0.23 and 1.1.1
+        // (`veo_spelling_and_durationless_asr_retire_every_published_079_package_identity`).
+        let version = if name == "image-qwen" { "1.1.1" } else { "1.0.23" };
         assert_eq!(manifest.version, version, "{name}");
         assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD, "{name}");
         assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), [family], "{name}");
@@ -1963,7 +1971,9 @@ fn image_stability_declares_media_1_and_the_runtime_of_the_record() {
     // (`gemini_placeholder_retires_every_published_077_package_identity`).
     // Published as 1.0.19 with 0.78.0; the 0.79.0 round made it 1.0.20
     // (`qwen_tier_and_responses_stop_retires_every_published_078_package_identity`).
-    assert_eq!(manifest.version, "1.0.20");
+    // Published as 1.0.20 with 0.79.0; the 0.80.0 round made it 1.0.21
+    // (`veo_spelling_and_durationless_asr_retire_every_published_079_package_identity`).
+    assert_eq!(manifest.version, "1.0.21");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["stability-image"]);
     assert!(manifest.declared_keys("stability-image").is_empty());
@@ -2015,7 +2025,9 @@ fn image_ideogram_declares_media_1_and_the_runtime_of_the_record() {
     // (`gemini_placeholder_retires_every_published_077_package_identity`).
     // Published as 1.0.18 with 0.78.0; the 0.79.0 round made it 1.0.19
     // (`qwen_tier_and_responses_stop_retires_every_published_078_package_identity`).
-    assert_eq!(manifest.version, "1.0.19");
+    // Published as 1.0.19 with 0.79.0; the 0.80.0 round made it 1.0.20
+    // (`veo_spelling_and_durationless_asr_retire_every_published_079_package_identity`).
+    assert_eq!(manifest.version, "1.0.20");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["ideogram-image"]);
     assert!(manifest.declared_keys("ideogram-image").is_empty());
@@ -2067,7 +2079,9 @@ fn image_xai_declares_media_1_bearer_and_the_runtime_of_the_record() {
     // (`gemini_placeholder_retires_every_published_077_package_identity`).
     // Published as 1.0.12 with 0.78.0; the 0.79.0 round made it 1.0.13
     // (`qwen_tier_and_responses_stop_retires_every_published_078_package_identity`).
-    assert_eq!(manifest.version, "1.0.13");
+    // Published as 1.0.13 with 0.79.0; the 0.80.0 round made it 1.0.14
+    // (`veo_spelling_and_durationless_asr_retire_every_published_079_package_identity`).
+    assert_eq!(manifest.version, "1.0.14");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["xai-image"]);
     assert_eq!(manifest.capabilities.iter().collect::<Vec<_>>(), ["edit", "generate"]);
@@ -2127,7 +2141,9 @@ fn image_vertex_declares_media_2_the_vertex_recipe_and_the_media_2_runtime() {
     // (`gemini_placeholder_retires_every_published_077_package_identity`).
     // Published as 1.0.15 with 0.78.0; the 0.79.0 round made it 1.0.16
     // (`qwen_tier_and_responses_stop_retires_every_published_078_package_identity`).
-    assert_eq!(manifest.version, "1.0.16");
+    // Published as 1.0.16 with 0.79.0; the 0.80.0 round made it 1.0.17
+    // (`veo_spelling_and_durationless_asr_retire_every_published_079_package_identity`).
+    assert_eq!(manifest.version, "1.0.17");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["vertex-ai-image"]);
     assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer"]);
@@ -2194,7 +2210,9 @@ fn provider_vertex_declares_the_vertex_recipe_and_the_runtime_of_its_newest_decl
     // (`gemini_placeholder_retires_every_published_077_package_identity`).
     // Published as 1.4.0 with 0.78.0; the 0.79.0 round made it 1.4.1
     // (`qwen_tier_and_responses_stop_retires_every_published_078_package_identity`).
-    assert_eq!(manifest.version, "1.4.1");
+    // Published as 1.4.1 with 0.79.0; the 0.80.0 round made it 1.4.2
+    // (`veo_spelling_and_durationless_asr_retire_every_published_079_package_identity`).
+    assert_eq!(manifest.version, "1.4.2");
     assert_eq!(manifest.api_version, south_provider_api::PROVIDER_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["vertex-ai"]);
     assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer"]);
@@ -2257,7 +2275,9 @@ fn image_reve_declares_media_1_and_the_runtime_of_the_record() {
     // (`gemini_placeholder_retires_every_published_077_package_identity`).
     // Published as 1.0.12 with 0.78.0; the 0.79.0 round made it 1.0.13
     // (`qwen_tier_and_responses_stop_retires_every_published_078_package_identity`).
-    assert_eq!(manifest.version, "1.0.13");
+    // Published as 1.0.13 with 0.79.0; the 0.80.0 round made it 1.0.14
+    // (`veo_spelling_and_durationless_asr_retire_every_published_079_package_identity`).
+    assert_eq!(manifest.version, "1.0.14");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["reve-image"]);
     assert!(manifest.declared_keys("reve-image").is_empty());
@@ -2312,7 +2332,9 @@ fn image_openai_compatible_declares_media_1_and_the_runtime_of_the_record() {
     // (`gemini_placeholder_retires_every_published_077_package_identity`).
     // Published as 1.0.8 with 0.78.0; the 0.79.0 round made it 1.0.9
     // (`qwen_tier_and_responses_stop_retires_every_published_078_package_identity`).
-    assert_eq!(manifest.version, "1.0.9");
+    // Published as 1.0.9 with 0.79.0; the 0.80.0 round made it 1.0.10
+    // (`veo_spelling_and_durationless_asr_retire_every_published_079_package_identity`).
+    assert_eq!(manifest.version, "1.0.10");
     assert_eq!(
         manifest.version,
         south_component_conformance::reference_openai_compatible_image::VERSION
@@ -2458,7 +2480,9 @@ fn provider_kiro_declares_the_runtime_of_its_newest_declaration() {
     // (`gemini_placeholder_retires_every_published_077_package_identity`).
     // Published as 1.3.3 with 0.78.0; the 0.79.0 round made it 1.3.4
     // (`qwen_tier_and_responses_stop_retires_every_published_078_package_identity`).
-    assert_eq!(manifest.version, "1.3.4");
+    // Published as 1.3.4 with 0.79.0; the 0.80.0 round made it 1.3.5
+    // (`veo_spelling_and_durationless_asr_retire_every_published_079_package_identity`).
+    assert_eq!(manifest.version, "1.3.5");
     assert_eq!(manifest.api_version, south_provider_api::PROVIDER_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["kiro"]);
     assert!(manifest.subscription_quota_families.contains("kiro"));
@@ -2513,7 +2537,9 @@ fn task_gemini_omni_v2_declares_task_8_which_a_task_7_host_refuses() {
     // (`gemini_placeholder_retires_every_published_077_package_identity`).
     // Published as 0.2.7 with 0.78.0; the 0.79.0 round made it 0.2.8
     // (`qwen_tier_and_responses_stop_retires_every_published_078_package_identity`).
-    assert_eq!(manifest.version, "0.2.8");
+    // Published as 0.2.8 with 0.79.0; the 0.80.0 round made it 0.2.9
+    // (`veo_spelling_and_durationless_asr_retire_every_published_079_package_identity`).
+    assert_eq!(manifest.version, "0.2.9");
     assert_eq!(manifest.api_version, south_provider_api::TASK_WORLD_V2);
     assert_eq!(manifest.compatibility.contracts.get("task"), Some(&8));
     assert_eq!(manifest.compatibility.contracts.get("media"), Some(&1));
@@ -2745,10 +2771,13 @@ fn s_s_1_retires_every_published_063_package_identity() {
 /// signature round's 1.0.13 (published 1.0.12 with 0.77.0;
 /// `gemini_placeholder_retires_every_published_077_package_identity`), and the 0.79.0 round's
 /// 1.0.14 (published 1.0.13 with 0.78.0;
-/// `qwen_tier_and_responses_stop_retires_every_published_078_package_identity`).
+/// `qwen_tier_and_responses_stop_retires_every_published_078_package_identity`), and the 0.80.0 round's
+/// 1.0.15 (published 1.0.14 with 0.79.0;
+/// `veo_spelling_and_durationless_asr_retire_every_published_079_package_identity`).
 /// The tests below describe the batches that defined the packages, before those releases.
-/// `speech-vertex`, `speech-openai-compatible` and `speech-qwen` moved on to minors ([`speech_version`]).
-const SPEECH_VERSION: &str = "1.0.14";
+/// `speech-vertex`, `speech-openai-compatible`, `speech-qwen` and `speech-xai` moved on to minors
+/// ([`speech_version`]).
+const SPEECH_VERSION: &str = "1.0.15";
 
 /// The version a speech package carries: [`SPEECH_VERSION`], except `speech-vertex`, which Q7's
 /// refusal made 1.1.0, the 0.67.0 cycle's Q47 bump 1.1.1, the T9 cap field's 1.1.2, the
@@ -2765,9 +2794,12 @@ const SPEECH_VERSION: &str = "1.0.14";
 /// `bailian_retires_every_published_075_package_identity`).
 fn speech_version(name: &str) -> &'static str {
     match name {
-        "speech-vertex" => "1.1.13",
-        "speech-openai-compatible" => "1.1.12",
-        "speech-qwen" => "1.1.3",
+        "speech-vertex" => "1.1.14",
+        // 1.1.12 and 1.0.14 with 0.79.0: the 0.80.0 round's minors, a durationless transcription format is
+        // asked for as `verbose_json` (south #293; `veo_spelling_and_durationless_asr_retire_every_published_079_package_identity`).
+        "speech-openai-compatible" => "1.2.0",
+        "speech-xai" => "1.1.0",
+        "speech-qwen" => "1.1.4",
         _ => SPEECH_VERSION,
     }
 }
@@ -3226,7 +3258,9 @@ fn minimax_immutable_paths_retire_the_published_task_minimax_v2_identity() {
     // (`gemini_placeholder_retires_every_published_077_package_identity`).
     // Published as 0.33.14 with 0.78.0; the 0.79.0 round made it 0.33.15
     // (`qwen_tier_and_responses_stop_retires_every_published_078_package_identity`).
-    assert_eq!(manifest.version, "0.33.15");
+    // Published as 0.33.15 with 0.79.0; the 0.80.0 round made it 0.33.16
+    // (`veo_spelling_and_durationless_asr_retire_every_published_079_package_identity`).
+    assert_eq!(manifest.version, "0.33.16");
     assert_eq!(manifest.compatibility.south_runtime, declared_runtime_now("task-minimax-v2"));
     assert_eq!(manifest.compatibility.contracts.get("task"), Some(&7));
 }
@@ -3332,7 +3366,9 @@ fn speech_vertex_1_1_refuses_q7_and_retires_its_published_identity() {
     // (`gemini_placeholder_retires_every_published_077_package_identity`).
     // Published as 1.1.12 with 0.78.0; the 0.79.0 round made it 1.1.13
     // (`qwen_tier_and_responses_stop_retires_every_published_078_package_identity`).
-    assert_eq!(manifest.version, "1.1.13");
+    // Published as 1.1.13 with 0.79.0; the 0.80.0 round made it 1.1.14
+    // (`veo_spelling_and_durationless_asr_retire_every_published_079_package_identity`).
+    assert_eq!(manifest.version, "1.1.14");
     assert_eq!(
         manifest.version,
         south_component_conformance::reference_vertex_speech::VERSION,
@@ -3426,7 +3462,9 @@ fn task_veo_v2_gains_the_vertex_family_and_bearer() {
     // (`gemini_placeholder_retires_every_published_077_package_identity`).
     // Published as 0.37.7 with 0.78.0; the 0.79.0 round made it 0.37.8
     // (`qwen_tier_and_responses_stop_retires_every_published_078_package_identity`).
-    assert_eq!(manifest.version, "0.37.8");
+    // Published as 0.37.8 with 0.79.0; the 0.80.0 round made it 0.38.0
+    // (`veo_spelling_and_durationless_asr_retire_every_published_079_package_identity`).
+    assert_eq!(manifest.version, "0.38.0");
     assert_eq!(manifest.providers, ["veo-video", "vertex-veo-video"]);
     assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer", "header_secret"]);
     assert_eq!(manifest.compatibility.contracts.get("task"), Some(&7));
@@ -3560,7 +3598,9 @@ fn speech_openai_compatible_1_1_adds_the_azure_openai_families() {
     // (`gemini_placeholder_retires_every_published_077_package_identity`).
     // Published as 1.1.11 with 0.78.0; the 0.79.0 round made it 1.1.12
     // (`qwen_tier_and_responses_stop_retires_every_published_078_package_identity`).
-    assert_eq!(manifest.version, "1.1.12");
+    // Published as 1.1.12 with 0.79.0; the 0.80.0 round made it 1.2.0
+    // (`veo_spelling_and_durationless_asr_retire_every_published_079_package_identity`).
+    assert_eq!(manifest.version, "1.2.0");
     assert_eq!(
         manifest.version,
         south_component_conformance::reference_openai_compatible_speech::VERSION,
@@ -4547,6 +4587,99 @@ fn qwen_tier_and_responses_stop_retires_every_published_078_package_identity() {
         )
         .unwrap();
         assert_ne!(manifest.version, published, "{name} reused its identity published with 0.78.0");
+        assert_ne!(manifest.version, now, "{name} reused its identity published with 0.79.0");
+        assert_eq!(
+            manifest.compatibility.south_runtime, runtime,
+            "{name}: the round moves no runtime"
+        );
+        let contracts: std::collections::BTreeMap<String, u32> =
+            contracts.iter().map(|(world, version)| ((*world).to_owned(), *version)).collect();
+        assert_eq!(manifest.compatibility.contracts, contracts, "{name}");
+        assert_eq!(
+            manifest.compatibility.ir_schema_id, "token-station-protocol@0.7.0/v0.6.0",
+            "{name}"
+        );
+        assert_eq!(manifest.compatibility.kernel_version, "0.6.0", "{name}");
+        assert_eq!(
+            manifest.compatibility.kernel_revision, "a04925518b95c6557374252db7fbe7f026688bde",
+            "{name}: the upstream kernel-v0.7.0 commit the mirror records"
+        );
+        assert_eq!(
+            manifest.compatibility.kernel_contracts.get("canonical_ir"),
+            Some(&5),
+            "{name}: built against protocol 0.7.0"
+        );
+        assert_eq!(manifest.compatibility.kernel_contracts.get("stream"), Some(&3), "{name}");
+    }
+}
+
+/// The 0.80.0 round (south #294 and #293) changes `reference_veo_task_v2.rs` (the `resolution` fact
+/// in the client's spelling) and `asr_shared.rs` (a durationless transcription format is asked for as
+/// `verbose_json`), and moves `south-component-conformance` 0.77.0 → 0.78.0. Every guest links that
+/// crate, so every `component.wasm` changes: each identity published with 0.79.0 retires.
+/// `task-veo-v2` (0.37.8 → 0.38.0), `speech-openai-compatible` (1.1.12 → 1.2.0) and `speech-xai`
+/// (1.0.14 → 1.1.0) change behaviour and take a minor; every other package takes the Q47 patch. The
+/// round moves no runtime, no contract and no kernel tuple.
+#[test]
+fn veo_spelling_and_durationless_asr_retire_every_published_079_package_identity() {
+    let rows: [RetiredIdentity<'_>; 41] = [
+        ("embeddings-gemini", "1.1.28", "1.1.29", "0.77.0", &[("embeddings", 2)]),
+        ("embeddings-openai-compatible", "1.0.31", "1.0.32", "0.77.0", &[("embeddings", 1)]),
+        ("embeddings-vertex", "1.0.30", "1.0.31", "0.77.0", &[("embeddings", 1)]),
+        ("image-azure", "1.0.27", "1.0.28", "0.77.0", &[("image", 1), ("media", 1)]),
+        ("image-gemini", "1.0.21", "1.0.22", "0.77.0", &[("image", 1), ("media", 2)]),
+        ("image-ideogram", "1.0.19", "1.0.20", "0.77.0", &[("image", 1), ("media", 1)]),
+        ("image-minimax", "1.0.22", "1.0.23", "0.77.0", &[("image", 1), ("media", 1)]),
+        ("image-openai-compatible", "1.0.9", "1.0.10", "0.77.0", &[("image", 1), ("media", 1)]),
+        ("image-qwen", "1.1.0", "1.1.1", "0.77.0", &[("image", 1), ("media", 1)]),
+        ("image-reve", "1.0.13", "1.0.14", "0.77.0", &[("image", 1), ("media", 1)]),
+        ("image-stability", "1.0.20", "1.0.21", "0.77.0", &[("image", 1), ("media", 1)]),
+        ("image-vertex", "1.0.16", "1.0.17", "0.77.0", &[("image", 1), ("media", 2)]),
+        ("image-xai", "1.0.13", "1.0.14", "0.77.0", &[("image", 1), ("media", 1)]),
+        ("provider-anthropic-bedrock-invoke", "1.2.5", "1.2.6", "0.77.0", &[]),
+        ("provider-anthropic", "1.4.5", "1.4.6", "0.77.0", &[]),
+        ("provider-bedrock-converse-bearer", "1.2.5", "1.2.6", "0.77.0", &[]),
+        ("provider-bedrock-converse", "1.2.5", "1.2.6", "0.77.0", &[]),
+        ("provider-gemini", "1.7.1", "1.7.2", "0.77.0", &[]),
+        ("provider-kiro", "1.3.4", "1.3.5", "0.77.0", &[]),
+        ("provider-openai-compatible", "2.13.3", "2.13.4", "0.77.0", &[]),
+        ("provider-openai-responses", "1.6.0", "1.6.1", "0.77.0", &[]),
+        ("provider-vertex", "1.4.1", "1.4.2", "0.77.0", &[]),
+        ("speech-azure", "1.0.14", "1.0.15", "0.77.0", &[("media", 1), ("speech", 1)]),
+        ("speech-elevenlabs", "1.0.14", "1.0.15", "0.77.0", &[("media", 3), ("speech", 1)]),
+        ("speech-groq", "1.0.14", "1.0.15", "0.77.0", &[("media", 1), ("speech", 1)]),
+        ("speech-mimo", "1.0.14", "1.0.15", "0.77.0", &[("media", 1), ("speech", 1)]),
+        ("speech-minimax", "1.0.14", "1.0.15", "0.77.0", &[("media", 1), ("speech", 1)]),
+        ("speech-openai-compatible", "1.1.12", "1.2.0", "0.77.0", &[("media", 1), ("speech", 1)]),
+        ("speech-qwen", "1.1.3", "1.1.4", "0.77.0", &[("media", 1), ("speech", 1)]),
+        ("speech-vertex", "1.1.13", "1.1.14", "0.77.0", &[("media", 1), ("speech", 1)]),
+        ("speech-xai", "1.0.14", "1.1.0", "0.77.0", &[("media", 1), ("speech", 1)]),
+        ("task-bailian-v2", "0.32.3", "0.32.4", "0.77.0", &[("task", 7)]),
+        ("task-byteplus-v2", "0.36.37", "0.36.38", "0.77.0", &[("task", 7)]),
+        ("task-gemini-omni-v2", "0.2.8", "0.2.9", "0.77.0", &[("media", 1), ("task", 8)]),
+        ("task-gmi-image-v2", "0.36.5", "0.36.6", "0.77.0", &[("task", 7)]),
+        ("task-kling-v2", "0.32.38", "0.32.39", "0.77.0", &[("task", 7)]),
+        ("task-kling", "1.0.40", "1.0.41", "0.77.0", &[("task", 7)]),
+        ("task-minimax-v2", "0.33.15", "0.33.16", "0.77.0", &[("task", 7)]),
+        ("task-veo-v2", "0.37.8", "0.38.0", "0.77.0", &[("task", 7)]),
+        ("task-wan-image-v2", "0.35.37", "0.35.38", "0.77.0", &[("task", 7)]),
+        ("task-xai-v2", "0.35.37", "0.35.38", "0.77.0", &[("task", 7)]),
+    ];
+    let shipped: BTreeSet<&str> = rows.iter().map(|row| row.0).collect();
+    assert_eq!(
+        shipped,
+        BTreeSet::from(OFFICIAL_COMPONENTS),
+        "every official package takes the round"
+    );
+    for (name, published, now, runtime, contracts) in rows {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_ne!(manifest.version, published, "{name} reused its identity published with 0.79.0");
         assert_eq!(manifest.version, now, "{name}");
         assert_eq!(
             manifest.compatibility.south_runtime, runtime,

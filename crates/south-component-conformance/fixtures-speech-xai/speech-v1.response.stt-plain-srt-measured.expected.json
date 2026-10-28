@@ -1,0 +1,15 @@
+{
+  "outcome": "succeeded",
+  "transcript": {
+    "text": "1\n00:00:00,000 --> 00:00:01,250\nHi there.\n\n2\n00:00:01,250 --> 00:00:02,000\nBye.\n\n",
+    "media_type": "application/x-subrip"
+  },
+  "metering": {
+    "characters": null,
+    "seconds": {
+      "value": 2.0,
+      "basis": "reported"
+    },
+    "tokens": null
+  }
+}

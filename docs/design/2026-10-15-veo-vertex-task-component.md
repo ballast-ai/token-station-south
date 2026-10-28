@@ -5,6 +5,12 @@ Implemented ("Implementation"); released in 0.66.0.
 
 Date: 2026-10-15
 
+> **Revision 2026-10-28 (#294).** Both Veo families now report the `resolution` fact in the client's
+> spelling (`1080p` stays `1080p`) instead of upper-casing it. Tier words are matched exactly (R-2) and
+> the model catalog lists Veo's resolutions in lower case, so the upper-cased word could never find a
+> per-resolution price row; the host has matched video resolutions case-insensitively since 2026-10-27,
+> so nothing was blocked. The two `all-parameters` fixtures follow.
+
 Baseline: south `origin/main` = `0caa22f` (release 0.65.0 plus the accepted `provider-vertex` record). Host references
 carry a `server:` prefix and refer to token-station-server `origin/dev-v2` = `dcfaf26d`; `server:…/` abbreviates
 `server:gateway/src/modules/inference/`. Statements marked **unverified** come from reading code or Google's

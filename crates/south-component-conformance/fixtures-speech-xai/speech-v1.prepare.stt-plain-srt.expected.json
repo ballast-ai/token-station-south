@@ -24,13 +24,13 @@
           },
           {
             "name": "response_format",
-            "value": "srt"
+            "value": "verbose_json"
           }
         ]
       }
     }
   },
-  "response_body_form": "text",
+  "response_body_form": "json",
   "response_elision_paths": [],
   "immutable_form_fields": [
     "model",
@@ -41,6 +41,6 @@
   "state": {
     "op": "transcribe",
     "format": "srt",
-    "verbose": false
+    "verbose": true
   }
 }

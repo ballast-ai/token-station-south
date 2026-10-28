@@ -1264,6 +1264,14 @@ pub enum SignedHeaderSetErrorV1 {
 /// one fewer header, it is a request that will be rejected upstream for reasons the log will not
 /// explain. Being part of the request declaration, it is fixed before finalisation runs and the
 /// host cannot widen it at finalise time.
+///
+/// The package manifest's `emits` is the **ceiling** of this set, not its value (#122, 2026-10-28).
+/// Some signatures depend on the credential: `SigV4` adds `x-amz-security-token` only for a temporary
+/// credential, so no single constant set is exact for every credential a deployment may hold. The
+/// host therefore declares, per request, the set its finalizer will emit *for the credential at
+/// hand*; that set may be narrower than `emits` but never wider, and the both-ways diff above is
+/// judged against it. A host that declares a name `emits` does not list exceeds the package's
+/// declaration, exactly as an undeclared emitted header would.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SignedHeaderSetV1 {
     headers: Vec<SignedHeaderV1>,
