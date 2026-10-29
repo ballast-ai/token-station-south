@@ -158,7 +158,7 @@
     "kernel_version": "0.6.0",
     "kernel_revision": "a04925518b95c6557374252db7fbe7f026688bde",
     "wit_package": "token-station:task-adapter@2.0.0",
-    "south_runtime": "0.77.0",
+    "south_runtime": "0.81.0",
     "runtime_abi": 1,
     "kernel_contracts": {
       "canonical_ir": 5,

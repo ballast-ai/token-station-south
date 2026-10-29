@@ -21,13 +21,14 @@ pricing, billing, persistence, settlement, delivery authorization, and product b
 does not discover configuration or perform hidden environment, filesystem, clock, randomness,
 network, or secret-store access. Operational capabilities are injected explicitly.
 
-The current release is `0.80.0`. It supports provider chat and streaming, asynchronous tasks,
+The current release is `0.81.0`. It supports provider chat and streaming, asynchronous tasks,
 embeddings, image generation and editing, and speech synthesis and recognition. Current additions
 include Gemini 3 tool-call signatures carried through the canonical IR and the Chat Completions
 wire, parallel Gemini tool results sent in one turn, a placeholder signature on a replayed Gemini
-tool call that carries none, a resolution tier word on every Qwen-Image request, a refusal of stop
-sequences on the OpenAI Responses families, and a measured duration on every transcription format
-of the OpenAI-compatible and xAI speech families.
+tool call that carries none, a measured duration on every transcription format of the
+OpenAI-compatible and xAI speech families, the upstream models every media family serves, the
+request fields a task family needs pre-fetched, and a content-policy category on a filtered Veo
+task.
 
 ## Library map
 

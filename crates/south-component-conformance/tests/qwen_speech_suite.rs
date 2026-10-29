@@ -457,7 +457,7 @@ fn the_manifest_declares_transcription_at_1_1_0() {
     assert_eq!(REFERENCE.metadata().version, "1.2.0");
     assert!(manifest.capabilities.contains("transcribe"));
     assert!(!manifest.capabilities.contains("translate"));
-    assert_eq!(manifest.compatibility.south_runtime, "0.77.0"); // release 0.77.0 raised every package (canonical_ir 5)
+    assert_eq!(manifest.compatibility.south_runtime, "0.81.0"); // release 0.81.0 raised every speech package (served_models)
     assert_eq!(
         south_contracts::media::MediaTransformV1::DataUrl.minimum_contract_version(),
         south_contracts::media::MEDIA_CONTRACT_VERSION
