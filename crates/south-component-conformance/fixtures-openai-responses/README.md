@@ -3,8 +3,9 @@
 Gate ② samples for `provider-openai-responses` (family `openai-responses`), judged by `south.provider-component.v1`
 (`docs/design/2026-09-30-openai-responses-upstream-component.md` §12.1, step R1). This is **OpenAI's own pack** (R-Q16):
 no row is a capture of real traffic, and no row stands for another upstream. A third-party Responses upstream (Groq,
-xAI, Bailian, Azure, Bedrock's OpenAI-shaped endpoint) is admitted only by a pack of its own captured traffic, added in a
-later release (record §3.3). Bedrock Mantle is the exception lv's 2026-10-15 directive made: its family `bedrock-mantle`
+xAI, Bailian, Azure, Bedrock's OpenAI-shaped endpoint) is admitted only as a family of its own with a pack of its own
+captured traffic, added in a later release (record §3.3; R-Q16 as amended 2026-10-29,
+`docs/design/2026-10-29-family-upstream-coverage.md`). Bedrock Mantle is the exception lv's 2026-10-15 directive made: its family `bedrock-mantle`
 has a pack transcribed from the host's native arm, `fixtures-bedrock-mantle/` (`docs/design/2026-10-15-bedrock-mantle.md`). The Codex rows and the `credential.*` rows of §12.1 are step R3's, in
 `fixtures-openai-codex/`.
 

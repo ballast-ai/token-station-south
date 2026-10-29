@@ -8,6 +8,9 @@ Date: 2026-09-30
 
 Revised: 2026-10-01 after independent review (see the revision note at the end).
 Revised: 2026-10-28: a non-empty `sampling.stop` is refused instead of dropped (south #298; §4.1, released in 0.79.0).
+Revised: 2026-10-29: R-Q16 amended: every third-party Responses upstream gets its own family with its own captured
+pack, and `openai-responses` is pinned to OpenAI's API root by an `endpoint` template
+(`2026-10-29-family-upstream-coverage.md`, accepted; the template ships when UQ-4 there allows).
 
 Predecessors: `2026-09-30-host-zero-vendor-boundary.md` (the umbrella; this record expands the first row of its §11
 and depends on its §3 credential recipe, §4 descriptor auth admission, §5 `stream_framing`, §6 usage discipline, §7
@@ -172,7 +175,9 @@ leaf:translate_responses.rs:556-557). If such an upstream reported, say, `output
 - An upstream whose wire, event list or usage convention differs gets a family of its own in this package (a
   package-layer change), not a dialect word, for the reason in §3.1.
 
-Which of the two routes is the default is R-Q16.
+Which of the two routes is the default is R-Q16. **Amended 2026-10-29** (`2026-10-29-family-upstream-coverage.md`
+§3.2, UQ-2): every third-party upstream gets a family of its own, whether or not its wire matches OpenAI's, and
+`openai-responses` declares the `endpoint` template `https://api.openai.com/v1` (§3.1 there).
 
 Upstreams the host's native leg also serves today, and how each is covered:
 
@@ -1280,6 +1285,9 @@ failure frames) and R-Q2 (`content_filter`).
   **Ruled (lv, 2026-10-10): admitted to `openai-responses`, each with its own captured-traffic fixture pack**, while
   its wire and usage match OpenAI's; an upstream that departs from them gets its own family. No upstream is routed
   without its own evidence.
+  **Amended (lv, 2026-10-29)**: every third-party upstream is admitted as its own family in this package, with its own
+  captured pack and `endpoint` template; `openai-responses` is pinned to OpenAI's API root
+  (`2026-10-29-family-upstream-coverage.md`, UQ-1 to UQ-6 as recommended).
 
 ## 17. Implementation of R1 (2026-10-10)
 
