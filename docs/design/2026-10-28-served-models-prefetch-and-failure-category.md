@@ -236,3 +236,13 @@ record or capture states the set; reviewing these rows is part of reviewing this
 | speech-vertex | vertex-ai-speech | prefixes `gemini-2.5-flash-preview-tts`, `gemini-2.5-flash-tts`, `gemini-2.5-pro-preview-tts`, `gemini-2.5-pro-tts` | V4 record (I-2); fixtures | **unverified** (the non-preview ids) |
 | speech-xai | xai-speech | ids `grok-stt`, `grok-tts` | fixtures | partly |
 
+**Ruling on the unverified rows (lv, 2026-10-29).** The rows marked unverified ship as they are and are checked
+against the real upstream after cutover, like the other post-cutover checks. The asymmetry makes this safe: a set
+that is too narrow fails loudly when the operator saves the route (a 400 that names the family, the package and
+the set), never at request time and never with money involved; a set that is too wide (`any`) only gives up the
+check, which is where every family stood before 0.81.0. A real upstream id that a family refuses is fixed by a
+package patch that widens the set; the host runbook tells operators not to work around the refusal.
+
+The host has no `artifact_unavailable` producer yet: a task whose artifacts the host fails to store stays in manual
+review and reads `running` (lv, 2026-10-29: not now). FC-Q2 stands; the word is reserved for that host fact.
+
