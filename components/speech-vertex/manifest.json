@@ -1,6 +1,6 @@
 {
   "name": "speech-vertex",
-  "version": "1.1.14",
+  "version": "1.2.0",
   "api_version": "speech-adapter-v1",
   "providers": [
     "vertex-ai-speech"
@@ -124,6 +124,16 @@
           }
         }
       }
+    }
+  },
+  "served_models": {
+    "vertex-ai-speech": {
+      "prefixes": [
+        "gemini-2.5-flash-preview-tts",
+        "gemini-2.5-flash-tts",
+        "gemini-2.5-pro-preview-tts",
+        "gemini-2.5-pro-tts"
+      ]
     }
   },
   "permissions": {

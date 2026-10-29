@@ -1,6 +1,6 @@
 {
   "name": "task-gemini-omni-v2",
-  "version": "0.2.9",
+  "version": "0.3.0",
   "api_version": "task-adapter-v2",
   "providers": [
     "gemini-interactions-video",
@@ -113,6 +113,26 @@
         "min_ttl_seconds": 301
       }
     }
+  },
+  "served_models": {
+    "gemini-interactions-video": {
+      "prefixes": [
+        "gemini-omni-"
+      ]
+    },
+    "vertex-interactions-video": {
+      "prefixes": [
+        "gemini-omni-"
+      ]
+    }
+  },
+  "required_prefetch": {
+    "vertex-interactions-video": [
+      "first_frame",
+      "image",
+      "image_url",
+      "reference_images"
+    ]
   },
   "permissions": {
     "network": false,

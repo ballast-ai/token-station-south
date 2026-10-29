@@ -1,6 +1,6 @@
 {
   "name": "speech-mimo",
-  "version": "1.0.15",
+  "version": "1.1.0",
   "api_version": "speech-adapter-v1",
   "providers": [
     "mimo-speech"
@@ -11,6 +11,13 @@
   "auth_arms": [
     "bearer"
   ],
+  "served_models": {
+    "mimo-speech": {
+      "prefixes": [
+        "mimo-"
+      ]
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

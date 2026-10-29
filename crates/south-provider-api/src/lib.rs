@@ -98,6 +98,12 @@ pub use manifest::{
     validate_secret_header_name,
 };
 
+// Served models and required prefetch (docs/design/2026-10-28-served-models-prefetch-and-failure-category.md).
+pub use manifest::{
+    MAX_REQUIRED_PREFETCH_FIELD_BYTES, MAX_REQUIRED_PREFETCH_FIELDS, MAX_SERVED_MODEL_BYTES,
+    MAX_SERVED_MODELS, ServedModelsV1, are_required_prefetch_fields,
+};
+
 /// The component ABI, as WIT source.
 ///
 /// Embedded so hosts and component authors can hand it to `wit-bindgen`

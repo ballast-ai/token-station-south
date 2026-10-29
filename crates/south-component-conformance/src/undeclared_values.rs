@@ -104,7 +104,8 @@ mod tests {
                 "wit_package": "token-station:speech-adapter@1.0.0",
                 "south_runtime": "0.63.0"
             },
-            "config_schema": { "vertex-tts": keys }
+            "config_schema": { "vertex-tts": keys },
+            "served_models": { "vertex-tts": { "any": true } }
         }))
         .expect("the manifest parses");
         manifest.validate().expect("the speech world admits the value channel");

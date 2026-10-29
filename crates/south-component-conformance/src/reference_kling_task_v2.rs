@@ -288,7 +288,7 @@ impl TaskComponentV2 for KlingTaskReferenceV2 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "task-kling-v2".into(),
-            version: "0.32.39".into(),
+            version: "0.33.0".into(),
             api_version: "task-adapter-v2".into(),
         }
     }
@@ -389,6 +389,7 @@ impl TaskComponentV2 for KlingTaskReferenceV2 {
                 kind: TaskFailureKindV1::Failed,
                 code: None,
                 message: field(data, "task_status_msg").map(str::to_owned),
+                category: None,
             },
             _ => unknown("kling task status is unrecognized"),
         };

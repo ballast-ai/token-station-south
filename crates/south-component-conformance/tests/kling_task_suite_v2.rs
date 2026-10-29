@@ -111,6 +111,7 @@ impl TaskComponentV2 for Mutant {
                     kind: south_contracts::TaskFailureKindV1::Failed,
                     code: None,
                     message: None,
+                    category: None,
                 });
             }
             KlingTaskReferenceV2.parse_observation(p)

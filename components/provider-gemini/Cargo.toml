@@ -5,7 +5,7 @@
 # feature stays off).
 [package]
 name = "provider-gemini"
-version = "1.7.2"
+version = "1.7.3"
 edition = "2021"
 publish = false
 

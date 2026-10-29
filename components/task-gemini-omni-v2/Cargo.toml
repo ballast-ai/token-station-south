@@ -4,7 +4,7 @@
 # without wasmtime (the conformance dependency's `sandbox` feature stays off).
 [package]
 name = "task-gemini-omni-v2"
-version = "0.2.9"
+version = "0.3.0"
 edition = "2021"
 publish = false
 

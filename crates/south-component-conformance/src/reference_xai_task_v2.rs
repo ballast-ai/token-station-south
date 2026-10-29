@@ -112,7 +112,7 @@ impl TaskComponentV2 for XaiTaskComponentV2 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "task-xai-v2".into(),
-            version: "0.35.38".into(),
+            version: "0.36.0".into(),
             api_version: "task-adapter-v2".into(),
         }
     }
@@ -265,11 +265,13 @@ impl TaskComponentV2 for XaiTaskComponentV2 {
                 kind: TaskFailureKindV1::Failed,
                 code: None,
                 message: field(&body, "error").and_then(bounded),
+                category: None,
             },
             Some("expired") => TaskObservationV2::Failed {
                 kind: TaskFailureKindV1::ProviderExpired,
                 code: None,
                 message: None,
+                category: None,
             },
             Some(_) => unknown("xai unrecognized status"),
         })

@@ -1,6 +1,6 @@
 {
   "name": "image-ideogram",
-  "version": "1.0.20",
+  "version": "1.1.0",
   "api_version": "image-adapter-v1",
   "providers": [
     "ideogram-image"
@@ -11,6 +11,15 @@
   "auth_arms": [
     "header_secret"
   ],
+  "served_models": {
+    "ideogram-image": {
+      "ids": [
+        "ideogram-v4",
+        "ideogram-v4-quality",
+        "ideogram-v4-turbo"
+      ]
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

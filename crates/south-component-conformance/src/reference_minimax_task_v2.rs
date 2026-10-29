@@ -312,6 +312,7 @@ fn observe_h3(task: &Value) -> TaskObservationV2 {
                 },
                 code,
                 message: Some("MiniMax video generation failed".into()),
+                category: None,
             };
             if observation.validate().is_ok() {
                 observation
@@ -336,7 +337,7 @@ impl TaskComponentV2 for MiniMaxTaskReferenceV2 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "task-minimax-v2".into(),
-            version: "0.33.16".into(),
+            version: "0.34.0".into(),
             api_version: "task-adapter-v2".into(),
         }
     }
@@ -503,6 +504,7 @@ impl TaskComponentV2 for MiniMaxTaskReferenceV2 {
                 kind: TaskFailureKindV1::Failed,
                 code: None,
                 message: Some("MiniMax video generation failed".into()),
+                category: None,
             },
             _ => unknown("MiniMax task status is unrecognized"),
         })

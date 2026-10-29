@@ -81,6 +81,7 @@ fn image_manifest_value() -> Value {
         "version": "1.0.0",
         "api_version": "image-adapter-v1",
         "providers": ["test"],
+        "served_models": { "test": { "any": true } },
         "capabilities": ["generate", "edit"],
         "auth_arms": ["bearer"],
         "permissions": { "network": false, "filesystem": false, "secrets": ["provider_api_key"] },
@@ -288,6 +289,7 @@ fn image_bytes_cannot_claim_another_world_or_a_different_identity() {
 
     let mut embeddings = image_manifest_value();
     embeddings["api_version"] = "embeddings-adapter-v1".into();
+    embeddings.as_object_mut().unwrap().remove("served_models");
     embeddings["capabilities"] = json!(["embed"]);
     embeddings["compatibility"]["wit_package"] = "token-station:embeddings-adapter@1.0.0".into();
     embeddings["compatibility"]["contracts"] = json!({ "embeddings": 1 });
@@ -300,6 +302,7 @@ fn image_bytes_cannot_claim_another_world_or_a_different_identity() {
 
     let mut provider = image_manifest_value();
     provider["api_version"] = "provider-adapter-v2".into();
+    provider.as_object_mut().unwrap().remove("served_models");
     provider["capabilities"] = json!(["chat"]);
     provider["compatibility"]["wit_package"] = "token-station:adapter@2.0.0".into();
     provider["conformance"]["required_suite"] = "south.provider-component.v1".into();

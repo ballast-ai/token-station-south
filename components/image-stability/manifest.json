@@ -1,6 +1,6 @@
 {
   "name": "image-stability",
-  "version": "1.0.21",
+  "version": "1.1.0",
   "api_version": "image-adapter-v1",
   "providers": [
     "stability-image"
@@ -11,6 +11,17 @@
   "auth_arms": [
     "bearer"
   ],
+  "served_models": {
+    "stability-image": {
+      "ids": [
+        "sd3.5-large",
+        "sd3.5-large-turbo",
+        "sd3.5-medium",
+        "stable-image-core",
+        "stable-image-ultra"
+      ]
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

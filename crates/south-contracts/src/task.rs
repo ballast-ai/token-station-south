@@ -37,16 +37,24 @@ use thiserror::Error;
 /// (docs/design/2026-09-28-task-contract-v7-artifact-role.md). Version eight adds, additively,
 /// inline artifacts whose bytes the host holds and declared token buckets in usage and in the
 /// request estimate (docs/design/2026-10-01-omni-task-component.md §6, §7, §13): every new key is
-/// optional, so a version seven value decodes unchanged. Every v1 type remains unchanged.
-pub const TASK_CONTRACT_VERSION: u16 = 8;
+/// optional, so a version seven value decodes unchanged. Version nine adds an optional failure
+/// category to a failed observation (`docs/design/2026-10-28-served-models-prefetch-and-failure-category.md`
+/// §4); an earlier decoder refuses the unknown key, so only a package that emits it declares nine
+/// (FC-Q1). Every v1 type remains unchanged.
+pub const TASK_CONTRACT_VERSION: u16 = 9;
+
+/// The inline-artifact contract, which a package with `response_blob_paths` or `token_buckets`
+/// declares at least.
+pub const TASK_CONTRACT_VERSION_V8: u16 = 8;
 
 /// The oldest task contract this release decodes: version seven made `role` a required key, so a
-/// version six value is refused, while version eight only adds optional keys.
+/// version six value is refused, while versions eight and nine only add optional keys.
 pub const TASK_CONTRACT_VERSION_V7: u16 = 7;
 
 /// The task contracts a release decodes, for a host's range (as `EMBEDDINGS_CONTRACT_VERSIONS`):
-/// a package declaring 7 keeps working on a host that also admits 8.
-pub const TASK_CONTRACT_VERSIONS: [u16; 2] = [TASK_CONTRACT_VERSION_V7, TASK_CONTRACT_VERSION];
+/// a package declaring 7 or 8 keeps working on a host that also admits 9.
+pub const TASK_CONTRACT_VERSIONS: [u16; 3] =
+    [TASK_CONTRACT_VERSION_V7, TASK_CONTRACT_VERSION_V8, TASK_CONTRACT_VERSION];
 
 /// The maximum byte length of a host-minted task identifier.
 pub const MAX_TASK_ID_BYTES: usize = 128;

@@ -110,6 +110,11 @@ fn a_task_guest_declaring_the_chat_world_is_refused() {
         .replace("token-station:task-adapter@1.0.0", "token-station:adapter@2.0.0")
         .replace("south.task-component.v1", "south.provider-component.v1")
         .replace("\"submit\",\n    \"observe\",\n    \"render\"", "\"chat\"");
+    // A chat manifest declares no served models, so gate ① would refuse the mislabel for that
+    // before instantiation could notice the world.
+    let mut mislabelled: serde_json::Value = serde_json::from_str(&mislabelled).unwrap();
+    mislabelled.as_object_mut().unwrap().remove("served_models");
+    let mislabelled = mislabelled.to_string();
     let dir = package("mislabelled", &mislabelled, task_guest_wasm());
     let error = LoadedComponentV1::load(&runtime(), &dir, &host_range::host_range(), FixedSigner)
         .expect_err("bytes and manifest must agree about the world");

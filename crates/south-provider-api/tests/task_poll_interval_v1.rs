@@ -27,6 +27,7 @@ fn task_manifest_json() -> Value {
       "version": "0.1.0",
       "api_version": "task-adapter-v2",
       "providers": ["example-video"],
+      "served_models": {"example-video": {"prefixes": ["example-"]}},
       "capabilities": ["submit", "observe", "render"],
       "auth_arms": ["bearer"],
       "permissions": {"network": false, "filesystem": false, "secrets": ["provider_api_key"]},

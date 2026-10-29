@@ -1,6 +1,6 @@
 {
   "name": "image-minimax",
-  "version": "1.0.23",
+  "version": "1.1.0",
   "api_version": "image-adapter-v1",
   "providers": [
     "minimax-image"
@@ -17,6 +17,13 @@
         "syntax": "digits",
         "description": "The MiniMax account's GroupId, appended to the request as ?GroupId= when set."
       }
+    }
+  },
+  "served_models": {
+    "minimax-image": {
+      "prefixes": [
+        "image-01"
+      ]
     }
   },
   "permissions": {

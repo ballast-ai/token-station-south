@@ -1,6 +1,6 @@
 {
   "name": "image-openai-compatible",
-  "version": "1.0.10",
+  "version": "1.1.0",
   "api_version": "image-adapter-v1",
   "providers": [
     "openai-compatible",
@@ -27,6 +27,20 @@
   },
   "user_agent": {
     "glm-coding": "opencode/1.15.6"
+  },
+  "served_models": {
+    "azure-openai-dated": {
+      "any": true
+    },
+    "azure-openai-v1": {
+      "any": true
+    },
+    "glm-coding": {
+      "any": true
+    },
+    "openai-compatible": {
+      "any": true
+    }
   },
   "permissions": {
     "network": false,

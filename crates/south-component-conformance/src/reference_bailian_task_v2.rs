@@ -121,7 +121,7 @@ impl TaskComponentV2 for BailianTaskComponentV2 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "task-bailian-v2".into(),
-            version: "0.32.4".into(),
+            version: "0.33.0".into(),
             api_version: "task-adapter-v2".into(),
         }
     }
@@ -325,6 +325,7 @@ impl TaskComponentV2 for BailianTaskComponentV2 {
                 },
                 code: bounded_field(output, "code"),
                 message: bounded_field(output, "message"),
+                category: None,
             },
             _ => unknown("Bailian task observation is unavailable"),
         })
@@ -363,7 +364,7 @@ impl TaskComponentV2 for BailianTaskComponentV2 {
         observation: &TaskObservationV2,
     ) -> ComponentResultV1<ErrorEnvelope> {
         observation.validate().map_err(|_| protocol("invalid Bailian observation"))?;
-        let TaskObservationV2::Failed { kind, code, message } = observation else {
+        let TaskObservationV2::Failed { kind, code, message, .. } = observation else {
             return Err(protocol("Bailian failure mapping requires failed observation"));
         };
         let status = if *kind == TaskFailureKindV1::Cancelled { "CANCELED" } else { "FAILED" };

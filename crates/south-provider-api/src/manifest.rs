@@ -155,6 +155,12 @@ pub struct WorldSchemaV1 {
     /// `quota_headers`, `user_agent`; §10) the world admits. Gate ① refuses
     /// each one it does not as a provider-world declaration.
     pub instance_declarations: InstanceDeclarationsV1,
+    /// Whether every family of the world's packages must declare the upstream models it serves
+    /// in `served_models` (the served models record,
+    /// `docs/design/2026-10-28-served-models-prefetch-and-failure-category.md` §2, SM-Q2). Gate ①
+    /// refuses a manifest of such a world that leaves a family undeclared, and refuses the
+    /// declaration in any other world. The task, image and speech worlds.
+    pub served_models: bool,
 }
 
 /// Which B7a instance declarations (host-zero-vendor-boundary §10) a world
@@ -351,6 +357,7 @@ pub const PROVIDER_WORLD_SCHEMA: WorldSchemaV1 = WorldSchemaV1 {
     value_channel: true,
     request_declarations: true,
     instance_declarations: InstanceDeclarationsV1::All,
+    served_models: false,
 };
 
 /// The task world's capability vocabulary.
@@ -430,6 +437,7 @@ pub const TASK_WORLD_SCHEMA: WorldSchemaV1 = WorldSchemaV1 {
     value_channel: false,
     request_declarations: false,
     instance_declarations: InstanceDeclarationsV1::None,
+    served_models: true,
 };
 
 /// Task-v2 currently admits the two validated descriptor credential arms.
@@ -445,6 +453,7 @@ pub const TASK_WORLD_SCHEMA_V2: WorldSchemaV1 = WorldSchemaV1 {
     value_channel: true,
     request_declarations: false,
     instance_declarations: InstanceDeclarationsV1::None,
+    served_models: true,
 };
 
 /// The embeddings world's capability vocabulary, for contracts 1 and 2.
@@ -488,6 +497,7 @@ pub const EMBEDDINGS_WORLD_SCHEMA: WorldSchemaV1 = WorldSchemaV1 {
     value_channel: true,
     request_declarations: false,
     instance_declarations: InstanceDeclarationsV1::None,
+    served_models: false,
 };
 
 /// The image world's capability vocabulary: one word per operation, closed.
@@ -522,6 +532,7 @@ pub const IMAGE_WORLD_SCHEMA: WorldSchemaV1 = WorldSchemaV1 {
     value_channel: true,
     request_declarations: false,
     instance_declarations: InstanceDeclarationsV1::UserAgent,
+    served_models: true,
 };
 
 /// The speech world's capability vocabulary, closed.
@@ -573,6 +584,7 @@ pub const SPEECH_WORLD_SCHEMA: WorldSchemaV1 = WorldSchemaV1 {
     value_channel: true,
     request_declarations: false,
     instance_declarations: InstanceDeclarationsV1::QueryParameters,
+    served_models: true,
 };
 
 /// Every world this South can admit.
@@ -864,6 +876,22 @@ pub struct ComponentManifestV1 {
     /// worlds only; absent means the host's own default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub min_poll_interval_seconds: Option<u32>,
+    /// Each family's upstream model ids, keyed by family (the served models record,
+    /// `docs/design/2026-10-28-served-models-prefetch-and-failure-category.md` §2). Required for
+    /// every declared family in a world with [`WorldSchemaV1::served_models`] (task, image and
+    /// speech; SM-Q2), refused in any other. A host refuses a model route whose upstream id the
+    /// routed family does not serve ([`ServedModelsV1::serves`]); "not declared" never means
+    /// "accepts everything", which only [`ServedModelsV1::any`] says.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub served_models: BTreeMap<String, ServedModelsV1>,
+    /// Each family's request fields whose client URLs the package cannot accept, so a host must
+    /// have replaced them with `data:` URIs before `prepare` (the served models record §3). Field
+    /// names are top-level request field names under the host route's `fetch_images` grammar
+    /// (`[A-Za-z0-9_-]`, at most [`MAX_REQUIRED_PREFETCH_FIELD_BYTES`] bytes, never `model`),
+    /// sorted and distinct, at most [`MAX_REQUIRED_PREFETCH_FIELDS`]. Declared only where the
+    /// package refuses a plain URL (RP-Q1). Task-v2 world only; absent means none.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub required_prefetch: BTreeMap<String, Vec<String>>,
     pub permissions: ComponentPermissionsV1,
     pub conformance: ConformanceSpecV1,
     pub compatibility: CompatibilityDeclarationV1,
@@ -1208,6 +1236,98 @@ pub fn are_immutable_request_headers(names: &[String]) -> bool {
             .iter()
             .enumerate()
             .all(|(index, name)| name_ok(name) && !names[..index].contains(name))
+}
+
+/// The most ids or prefixes one family's `served_models` may list.
+pub const MAX_SERVED_MODELS: usize = 256;
+
+/// The most bytes one `served_models` id or prefix may have.
+pub const MAX_SERVED_MODEL_BYTES: usize = 128;
+
+/// The most fields one family's `required_prefetch` may list.
+pub const MAX_REQUIRED_PREFETCH_FIELDS: usize = 16;
+
+/// The most bytes one `required_prefetch` field name may have: the host route's pinned-field bound.
+pub const MAX_REQUIRED_PREFETCH_FIELD_BYTES: usize = 64;
+
+/// One family's `served_models` declaration (the served models record §2): exactly one of the
+/// three forms (SM-Q1).
+///
+/// Parsed permissively and checked by [`ServedModelsV1::is_valid`], so gate ① refuses a manifest
+/// that names two forms, none, or `any: false` with a reason rather than a serde error.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ServedModelsV1 {
+    /// The upstream model ids the family accepts, sorted and distinct.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ids: Option<Vec<String>>,
+    /// Upstream id prefixes, for a family whose upstream adds models under a stable naming
+    /// scheme. Sorted and distinct.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prefixes: Option<Vec<String>>,
+    /// `true`: the family accepts any id (a router, where the operator chooses the upstream
+    /// model). A deliberate statement, reviewed like the other two forms.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub any: Option<bool>,
+}
+
+impl ServedModelsV1 {
+    /// Whether the declaration follows the record's grammar: exactly one form; `any` is `true`;
+    /// a list is non-empty, sorted and distinct, at most [`MAX_SERVED_MODELS`] entries of 1 to
+    /// [`MAX_SERVED_MODEL_BYTES`] visible ASCII bytes.
+    #[must_use]
+    pub fn is_valid(&self) -> bool {
+        let list_ok = |list: &[String]| {
+            !list.is_empty()
+                && list.len() <= MAX_SERVED_MODELS
+                && list.windows(2).all(|pair| pair[0] < pair[1])
+                && list.iter().all(|entry| {
+                    !entry.is_empty()
+                        && entry.len() <= MAX_SERVED_MODEL_BYTES
+                        && entry.bytes().all(|byte| byte.is_ascii_graphic())
+                })
+        };
+        match (&self.ids, &self.prefixes, self.any) {
+            (Some(ids), None, None) => list_ok(ids),
+            (None, Some(prefixes), None) => list_ok(prefixes),
+            (None, None, Some(any)) => any,
+            _ => false,
+        }
+    }
+
+    /// Whether the family serves `upstream_model`: an exact id, a declared prefix, or `any`.
+    /// Case-sensitive, as upstream ids are. An invalid declaration serves nothing.
+    #[must_use]
+    pub fn serves(&self, upstream_model: &str) -> bool {
+        if !self.is_valid() {
+            return false;
+        }
+        match (&self.ids, &self.prefixes) {
+            (Some(ids), _) => ids.iter().any(|id| id == upstream_model),
+            (_, Some(prefixes)) => {
+                prefixes.iter().any(|prefix| upstream_model.starts_with(prefix.as_str()))
+            }
+            _ => true,
+        }
+    }
+}
+
+/// Whether one family's `required_prefetch` list follows the served models record's grammar (§3).
+///
+/// Sorted and distinct, at most [`MAX_REQUIRED_PREFETCH_FIELDS`] top-level field names of 1 to
+/// [`MAX_REQUIRED_PREFETCH_FIELD_BYTES`] `[A-Za-z0-9_-]` bytes, never `model` (which a host
+/// writes itself).
+#[must_use]
+pub fn are_required_prefetch_fields(fields: &[String]) -> bool {
+    !fields.is_empty()
+        && fields.len() <= MAX_REQUIRED_PREFETCH_FIELDS
+        && fields.windows(2).all(|pair| pair[0] < pair[1])
+        && fields.iter().all(|field| {
+            !field.is_empty()
+                && field.len() <= MAX_REQUIRED_PREFETCH_FIELD_BYTES
+                && field != "model"
+                && field.bytes().all(|byte| byte.is_ascii_alphanumeric() || b"_-".contains(&byte))
+        })
 }
 
 /// The most words one family may declare in `model_parameters`.
@@ -1632,6 +1752,10 @@ impl ComponentManifestV1 {
         if world.world == SPEECH_WORLD {
             self.validate_speech_role()?;
         }
+        // After each world's own role rules, so a manifest without a family is refused for that
+        // and not for a served-models entry naming a family it no longer declares.
+        self.validate_served_models(world)?;
+        self.validate_required_prefetch(world)?;
         // The value channel (embeddings record §16, image record §18.3): a family's non-secret
         // keys reach the component in `ProviderConfig.declared`, under the provider world's key
         // rules. A world with request declarations checked them with its endpoints above; with no
@@ -1722,6 +1846,67 @@ impl ComponentManifestV1 {
         }
         if !(MIN_TASK_POLL_INTERVAL_SECONDS..=MAX_TASK_POLL_INTERVAL_SECONDS).contains(&seconds) {
             return Err(ManifestErrorV1::MinPollIntervalOutOfBounds(seconds));
+        }
+        Ok(())
+    }
+
+    /// `served_models` (the served models record §2): in a world with
+    /// [`WorldSchemaV1::served_models`], every declared family has a valid declaration and no
+    /// other family has one (SM-Q2); in any other world, none.
+    fn validate_served_models(&self, world: &WorldSchemaV1) -> Result<(), ManifestErrorV1> {
+        if !world.served_models {
+            if self.served_models.is_empty() {
+                return Ok(());
+            }
+            return Err(ManifestErrorV1::ServedModelsIsAMediaWorldDeclaration);
+        }
+        let invalid = |family: &str, detail: &str| ManifestErrorV1::InvalidServedModels {
+            family: family.to_owned(),
+            detail: detail.to_owned(),
+        };
+        for (family, served) in &self.served_models {
+            if !self.providers.contains(family) {
+                return Err(invalid(family, "names a family the manifest does not declare"));
+            }
+            if !served.is_valid() {
+                return Err(invalid(
+                    family,
+                    "exactly one of ids, prefixes or any: true; a list is non-empty, sorted and \
+                     distinct, at most 256 entries of 1 to 128 visible ASCII bytes",
+                ));
+            }
+        }
+        if let Some(family) =
+            self.providers.iter().find(|family| !self.served_models.contains_key(*family))
+        {
+            return Err(ManifestErrorV1::ServedModelsRequired(family.clone()));
+        }
+        Ok(())
+    }
+
+    /// `required_prefetch` (the served models record §3): task-v2 world only, each family one
+    /// the manifest declares, each list under the host route's `fetch_images` field grammar.
+    fn validate_required_prefetch(&self, world: &WorldSchemaV1) -> Result<(), ManifestErrorV1> {
+        if self.required_prefetch.is_empty() {
+            return Ok(());
+        }
+        if world.world != TASK_WORLD_V2 {
+            return Err(ManifestErrorV1::RequiredPrefetchIsATaskV2Declaration);
+        }
+        for (family, fields) in &self.required_prefetch {
+            let invalid = |detail: &str| ManifestErrorV1::InvalidRequiredPrefetch {
+                family: family.clone(),
+                detail: detail.to_owned(),
+            };
+            if !self.providers.contains(family) {
+                return Err(invalid("names a family the manifest does not declare"));
+            }
+            if !are_required_prefetch_fields(fields) {
+                return Err(invalid(
+                    "1 to 16 sorted, distinct top-level field names of 1 to 64 [A-Za-z0-9_-] \
+                     bytes, never `model`",
+                ));
+            }
         }
         Ok(())
     }
@@ -2441,6 +2626,21 @@ pub enum ManifestErrorV1 {
          {MAX_TASK_POLL_INTERVAL_SECONDS}"
     )]
     MinPollIntervalOutOfBounds(u32),
+    // The served models record (docs/design/2026-10-28-served-models-prefetch-and-failure-category.md
+    // §2–§3). Added with the fields: a host that matches this enum exhaustively must add the arms
+    // on re-pin.
+    #[error("served_models is a task, image and speech world declaration")]
+    ServedModelsIsAMediaWorldDeclaration,
+    #[error("served_models for family `{family}`: {detail}")]
+    InvalidServedModels { family: String, detail: String },
+    #[error(
+        "family `{0}` declares no served_models; `any: true` is the explicit form for a router"
+    )]
+    ServedModelsRequired(String),
+    #[error("required_prefetch is a task-v2 world declaration")]
+    RequiredPrefetchIsATaskV2Declaration,
+    #[error("required_prefetch for family `{family}`: {detail}")]
+    InvalidRequiredPrefetch { family: String, detail: String },
 }
 
 // -- compatibility admission -------------------------------------------------

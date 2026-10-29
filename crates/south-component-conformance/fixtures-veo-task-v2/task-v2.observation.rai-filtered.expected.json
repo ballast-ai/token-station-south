@@ -2,5 +2,6 @@
   "state": "failed",
   "kind": "failed",
   "code": "rai_media_filtered",
-  "message": "[\"child safety\"]"
+  "message": "[\"child safety\"]",
+  "category": "content_policy"
 }

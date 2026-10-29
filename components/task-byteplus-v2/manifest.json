@@ -1,6 +1,6 @@
 {
   "name": "task-byteplus-v2",
-  "version": "0.36.38",
+  "version": "0.37.0",
   "api_version": "task-adapter-v2",
   "providers": [
     "byteplus-video"
@@ -13,6 +13,15 @@
   "auth_arms": [
     "bearer"
   ],
+  "served_models": {
+    "byteplus-video": {
+      "prefixes": [
+        "doubao-seedance-",
+        "dreamina-seedance-",
+        "seedance-"
+      ]
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

@@ -126,7 +126,7 @@ impl TaskComponentV2 for BytePlusTaskComponentV2 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "task-byteplus-v2".into(),
-            version: "0.36.38".into(),
+            version: "0.37.0".into(),
             api_version: "task-adapter-v2".into(),
         }
     }
@@ -309,11 +309,13 @@ impl TaskComponentV2 for BytePlusTaskComponentV2 {
                 kind: TaskFailureKindV1::Failed,
                 code: error("code"),
                 message: error("message"),
+                category: None,
             },
             Some("expired") => TaskObservationV2::Failed {
                 kind: TaskFailureKindV1::ProviderExpired,
                 code: error("code"),
                 message: error("message"),
+                category: None,
             },
             Some(_) => unknown("byteplus unrecognized status"),
         })

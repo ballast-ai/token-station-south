@@ -1,6 +1,6 @@
 {
   "name": "task-minimax-v2",
-  "version": "0.33.16",
+  "version": "0.34.0",
   "api_version": "task-adapter-v2",
   "providers": [
     "minimax"
@@ -15,6 +15,17 @@
     "bearer"
   ],
   "min_poll_interval_seconds": 12,
+  "served_models": {
+    "minimax": {
+      "ids": [
+        "MiniMax-H3",
+        "MiniMax-H3-Max",
+        "MiniMax-Hailuo-02",
+        "MiniMax-Hailuo-2.3",
+        "MiniMax-Hailuo-2.3-Fast"
+      ]
+    }
+  },
   "permissions": {
     "network": false,
     "filesystem": false,

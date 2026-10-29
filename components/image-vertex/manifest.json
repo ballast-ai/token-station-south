@@ -1,6 +1,6 @@
 {
   "name": "image-vertex",
-  "version": "1.0.17",
+  "version": "1.1.0",
   "api_version": "image-adapter-v1",
   "providers": [
     "vertex-ai-image"
@@ -124,6 +124,16 @@
           }
         }
       }
+    }
+  },
+  "served_models": {
+    "vertex-ai-image": {
+      "prefixes": [
+        "gemini-2.5-flash-image",
+        "gemini-3-pro-image",
+        "gemini-3.1-flash-image",
+        "gemini-3.1-flash-lite-image"
+      ]
     }
   },
   "permissions": {
