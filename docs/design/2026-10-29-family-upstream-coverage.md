@@ -1,6 +1,8 @@
 # Which upstreams a text family covers: the `openai-responses` endpoint and one family per Responses upstream
 
-Status: **proposed** 2026-10-29. Requested by lv for the server requirement R5 below. No code changes yet.
+Status: **accepted** 2026-10-29 (lv: UQ-1 to UQ-6 as recommended). Requested by lv for the server requirement R5 below.
+No code changes yet: under UQ-4 the `openai-responses` template (§3.1) waits until the incident's upstream is
+identified. R-Q16 in the Responses record is amended accordingly (UQ-2).
 
 Date: 2026-10-29
 
