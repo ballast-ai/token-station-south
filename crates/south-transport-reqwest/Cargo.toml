@@ -14,7 +14,7 @@ http.workspace = true
 http-body.workspace = true
 hyper-util.workspace = true
 reqwest.workspace = true
-south-contracts = { path = "../south-contracts", version = "0.56.1" }
+south-contracts = { path = "../south-contracts", version = "0.57.0" }
 south-core = { path = "../south-core", version = "0.80.0" }
 zeroize.workspace = true
 

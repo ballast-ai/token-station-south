@@ -126,7 +126,7 @@ impl TaskComponentV2 for BytePlusTaskComponentV2 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "task-byteplus-v2".into(),
-            version: "0.36.38".into(),
+            version: "0.37.0".into(),
             api_version: "task-adapter-v2".into(),
         }
     }
