@@ -10,7 +10,7 @@ from running anything or capturing traffic.
 
 ## 1. Problem
 
-The server requirement `server:docs/plans/2026-10-29-文本上游协议适配与South正式支持闭环需求.md` comes from a
+The server requirement (the 2026-10-29 text upstream protocol plan in `server:docs/plans/`) comes from a
 deployment where one text model failed only when the request carried function tools. Its row was bound to a Chat
 Completions family; the upstream wanted the Responses wire for that combination. Rebinding the model to a row of the
 `openai-responses` family made the requests succeed. The requirement's §8 (R1, the coverage check against 0.81.0) found
