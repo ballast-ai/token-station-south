@@ -73,6 +73,7 @@ navigation.
 
 - [Architecture](ARCHITECTURE.md): current ownership, runtime layers, gates, and invariants.
 - [Component catalog](docs/components.md): all official packages and fixture provenance.
+- [Upstream notes](docs/upstreams/README.md): vendor facts behind the packages, with check dates.
 - [Release index](docs/releases.md): release records and the historical design index.
 - [Compatibility manifest](compatibility.json): machine-readable contract and adoption authority.
 - [Security policy](SECURITY.md): vulnerability reporting and security expectations.
