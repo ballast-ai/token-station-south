@@ -1,4 +1,4 @@
-# MiniMax (video)
+# MiniMax
 
 Upstream facts for the video families of [`task-minimax-v2`](../../components/task-minimax-v2/manifest.json).
 Moved from the token-station-server host documentation on 2026-10-30. The MiniMax design records
@@ -15,6 +15,14 @@ Keys are platform-scoped: a key from one platform is refused (code 2049) on the 
 The international platform is `api.minimax.io` (card in USD); China is `api.minimaxi.com` for the v1
 API and `api.minimax.cn` for the v2 API (card in CNY). The two cards are separate tables, not an FX
 conversion of each other: the USD/CNY ratio varies per tier (0.14–0.17 on the Hailuo card).
+
+## 1a. Chat and speech billing facts
+
+- The M2 chat family publishes cache read and write prices, but the chat usage object reports no cache buckets
+  (probed 2026-06-11 on the China platform: `prompt_tokens` / `completion_tokens` only, with the same 2.6K-token
+  prefix sent twice).
+- Speech synthesis reports `extra_info.usage_characters`, priced per character. Rates come from the official
+  China pay-as-you-go card (`platform.minimaxi.com/docs/guides/pricing-paygo`) in CNY.
 
 ## 2. Hailuo (v1 API)
 

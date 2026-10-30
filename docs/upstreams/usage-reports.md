@@ -60,3 +60,13 @@ cache split.
 - **Codex cache metadata** outside the usage object — `response.prompt_cache_key` (a UUID) and
   `response.prompt_cache_retention` (typically `"24h"`) — are not token counts; the cached subset is still
   `response.usage.input_tokens_details.cached_tokens`.
+
+## 4. OpenAI image and speech usage
+
+- **`gpt-image-*`** reports `usage.input_tokens_details.{text_tokens, image_tokens, cached_tokens}` and
+  `usage.output_tokens`. The price card splits cached input into cached text and cached image rates, but the
+  response has one undifferentiated `cached_tokens` bucket.
+- **`gpt-4o-mini-tts`**: the binary `/v1/audio/speech` response has no usage object. With
+  `stream_format: "sse"` the audio arrives as `speech.audio.delta` events and `speech.audio.done` carries the
+  usage (`input_tokens` priced at the text rate, `output_tokens` at the audio-output rate). `tts-1` and
+  `tts-1-hd` are priced per million characters.
