@@ -88,6 +88,9 @@ component digest, declared runtime, contract tuple, and gate 2 report. Digest-st
 changed package bytes under an unchanged identity. A package's `south_runtime` is its minimum
 runtime, not necessarily the repository release in which the package appears.
 
+Upstream facts that no design record repeats (deployments, field quirks, failure modes, list
+prices with the date they were checked) are collected per upstream in [upstream notes](upstreams/README.md).
+
 The model catalog is a separate signed release artifact read by the host runtime. It does not alter
 component identity or grant a package new capabilities. Host adoption, suite status, and supported
 ranges remain authoritative in [compatibility.json](../compatibility.json).
