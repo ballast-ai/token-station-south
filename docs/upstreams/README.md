@@ -19,3 +19,4 @@ surrounding facts that no record repeats, and point to the records instead of re
 | [Anthropic](anthropic.md) | `provider-anthropic`, `provider-anthropic-bedrock-invoke` |
 | [Subscription backends: OpenAI Codex and GitHub Copilot](subscription-backends.md) | `provider-openai-responses` (`openai-codex`), `provider-openai-compatible` (`github-copilot`) |
 | [Kling AI (video)](kling.md) | `task-kling-v2` |
+| [How upstreams report token usage](usage-reports.md) (cross-vendor) | every package that parses usage into the IR |

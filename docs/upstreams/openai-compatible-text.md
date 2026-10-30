@@ -40,3 +40,18 @@ uses as its endpoint.
   purchases"). Free quota is 5M tokens per day per account (up to 120M after submitting feedback),
   resetting at midnight Beijing time with no carry-over; exhausting it answers 429. No cache or
   reasoning usage fields are documented.
+
+## Replaying `reasoning_content` in tool loops
+
+Thinking models on OpenAI-compatible wires disagree on whether a replayed assistant turn may carry
+`reasoning_content`, so a host must opt in per model, never as a blanket rule:
+
+- **Moonshot Kimi** (`kimi-k2.7-code` always thinks; `kimi-k2.6` / `kimi-k2.5` think by default) rejects a
+  history whose assistant tool-call messages lack it: 400 "thinking is enabled but reasoning_content is
+  missing in assistant tool call message at index N".
+- **DeepSeek v4 thinking** has the same requirement ("The reasoning_content in the thinking mode must be
+  passed back to the API"). The retired `deepseek-reasoner` was the opposite: it answered 400 when the field
+  was present in input.
+- Both document the requirement for assistant messages that carry `tool_calls` only; some upstreams reject the
+  field on plain completed turns. Groq's gpt-oss models stream `reasoning`, and whether they accept it echoed
+  back is unknown.
