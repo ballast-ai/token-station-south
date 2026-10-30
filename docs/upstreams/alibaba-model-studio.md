@@ -77,6 +77,12 @@ Related records:
   How the package reports the two kinds of read is in the
   [explicit cache record](../design/2026-10-17-explicit-cache-reads.md).
 
+- **Cache prices** (relative to input): implicit-cache reads 20%, explicit-cache reads 10%, explicit-cache
+  writes 125%.
+- **Thinking-mode output rates** differ from non-thinking on some models (qwen-turbo: ¥3/M thinking against
+  ¥0.6/M non-thinking); a response is in thinking mode when it reports `reasoning_tokens` > 0 or carries
+  `reasoning_content`, streaming deltas included.
+
 ## 5. Managed video
 
 Submission is `POST /api/v1/services/aigc/video-generation/video-synthesis` with
