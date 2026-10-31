@@ -74,6 +74,24 @@ and release artifacts. See the [architecture](../ARCHITECTURE.md) for admission 
 | [`speech-qwen`](../components/speech-qwen/manifest.json) | Bailian Qwen synthesis, Qwen ASR, and declared artifact fetch | `bash scripts/build-speech-qwen-component.sh` | [fixtures](../crates/south-component-conformance/fixtures-speech-qwen/README.md) |
 | [`speech-vertex`](../components/speech-vertex/manifest.json) | Vertex AI Gemini synthesis | `bash scripts/build-speech-vertex-component.sh` | [fixtures](../crates/south-component-conformance/fixtures-speech-vertex/README.md) |
 
+## Registered host funds differences
+
+Funds policy belongs to the host. The image, speech, and embeddings worlds return an outcome the host
+may consult; a host that settles differently on some answers registers the difference here.
+
+- **token-station-server releases non-2xx answers on a status allow-list, not on the component's
+  outcome.** On the first round of an image call (synchronous or held), and on a speech or embeddings
+  call, when the upstream answers non-2xx and the component reports neither success nor a charged
+  failure, the host releases the reservation with zero usage if the status is 400, 403, 404, 410, or
+  429, and parks the request for manual review otherwise (401 and every 5xx included). It does not
+  read the component's `rejected` or `unknown` on these answers, so a component `unknown` under an
+  allow-listed status is still released. The world records' rule "`unknown` → manual review" holds
+  on 2xx answers and on statuses outside the allow-list. Later rounds of a repeated image call are
+  never released. The host ruled this deliberately (its P22 Q2 and P29 rulings; IM-Q2 in the
+  [MiniMax and Qwen image record](design/2026-10-12-image-i3-1-minimax-and-qwen.md) records the same
+  rule); it is implemented in `server:gateway/src/modules/inference/handler/images/component/mod.rs`
+  (`Verdict::Refused`) and the speech and embeddings executors next to it.
+
 ## Package and evidence rules
 
 Every build script compiles its package for `wasm32-wasip2` and emits the component used by gate 2
