@@ -84,7 +84,7 @@ pub const NORTH_PASSTHROUGH_TERMINAL_TYPES_V1: [&str; 2] =
     ["response.completed", "response.incomplete"];
 
 /// The pass-through delivery conformance suite version, parameterised by protocol.
-pub const NORTH_PASSTHROUGH_DELIVERY_SUITE_V2_VERSION: u32 = 3;
+pub const NORTH_PASSTHROUGH_DELIVERY_SUITE_V2_VERSION: u32 = 4;
 
 /// The stable identifier for pass-through delivery conformance version two.
 pub const NORTH_PASSTHROUGH_DELIVERY_SUITE_V2_ID: &str = "south.north-passthrough-delivery.v2";
@@ -1057,15 +1057,21 @@ const GEMINI_BUFFERED_429: &str = "{\"error\":{\"code\":429,\"message\":\"Resour
 exhausted (e.g. check quota).\",\"status\":\"RESOURCE_EXHAUSTED\"}}";
 
 /// The first two frames of the mixed-framing body, before `Done`.
+///
+/// The second frame is CR-framed with its `data` split over two lines. Suite version 4 made it a
+/// `ping` (south 0.82.0 round): it was a `content_block_delta` for a block never opened, which a
+/// faithful Anthropic parser refuses. Before 0.82.0 `provider-anthropic` did not see a lone-CR
+/// frame end, merged this frame into the next and so never read it (record
+/// `2026-10-17-messages-passthrough-and-count-tokens.md` §3.5).
 const MESSAGES_MIXED_OPENING: &[u8] = b"\xEF\xBB\xBF: keep-alive\r\n\
 event: message_start\r\n\
 data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_mixed\",\"type\":\"message\",\
 \"role\":\"assistant\",\"model\":\"claude-sonnet-4-5\",\"content\":[],\"stop_reason\":null,\
 \"usage\":{\"input_tokens\":12,\"output_tokens\":1}}}\r\n\
 \r\n\
-event: content_block_delta\r\
-data: {\"type\":\"content_block_delta\",\"index\":0,\r\
-data: \"delta\":{\"type\":\"text_delta\",\"text\":\"and sunny.\"}}\r\
+event: ping\r\
+data: {\"type\":\r\
+data: \"ping\"}\r\
 \r";
 
 /// The mixed-framing body's `message_delta`, on which the component answers `Done` (§3.5).

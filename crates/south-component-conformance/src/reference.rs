@@ -23,6 +23,7 @@ use token_station_protocol::{
 
 use crate::component::{ComponentResultV1, ProviderComponentV1, StreamParserV1};
 use crate::responses_vocabulary::extension;
+use crate::sse_split::{SseFrameV1, SseSplitErrorV1, SseSplitterV1};
 
 /// The reference component. Stateless; each stream gets its own parser.
 #[derive(Debug, Default, Clone, Copy)]
@@ -983,74 +984,55 @@ fn events_of_frame(
     Ok(events)
 }
 
-/// Finds the earliest SSE frame separator in a **byte** buffer.
-fn sse_frame_boundary(buffer: &[u8]) -> Option<(usize, usize)> {
-    let lf = buffer.windows(2).position(|window| window == b"\n\n");
-    let crlf = buffer.windows(4).position(|window| window == b"\r\n\r\n");
-    match (lf, crlf) {
-        (Some(left), Some(right)) if left <= right => Some((left, 2)),
-        (_, Some(right)) => Some((right, 4)),
-        (Some(left), None) => Some((left, 2)),
-        (None, None) => None,
-    }
-}
-
-/// One stream's parser: an unparsed byte tail and the held finish state.
+/// One stream's parser: the shared event-stream splitter and the held finish state.
+///
+/// Frames are cut by [`SseSplitterV1`], the same WHATWG rules the host's `SseDecoderV1` reads
+/// (LF, CR and CRLF line ends, mixable), so a frame the host cut on a lone-CR blank line is a frame
+/// here too. A splitter that knew only `\n\n` and `\r\n\r\n` held such a frame forever and dropped
+/// it at the end of the stream.
 #[derive(Default)]
 struct OpenAiSseParser {
-    tail: Vec<u8>,
+    splitter: SseSplitterV1,
     pending_finish: PendingFinish,
+}
+
+impl OpenAiSseParser {
+    fn split_error(error: SseSplitErrorV1) -> ErrorEnvelope {
+        provider_protocol_error(match error {
+            SseSplitErrorV1::NotUtf8 => "the upstream emitted a non-UTF-8 SSE frame",
+            SseSplitErrorV1::TooLarge => {
+                "the upstream emitted an SSE line or event over the size bound"
+            }
+        })
+    }
+
+    fn frame(&mut self, frame: &SseFrameV1) -> ComponentResultV1<Vec<StreamEvent>> {
+        if frame.event == "error" {
+            return Ok(vec![StreamEvent::Error {
+                error: provider_protocol_error("the upstream emitted an SSE error event"),
+            }]);
+        }
+        if frame.data == "[DONE]" {
+            return Ok(self.pending_finish.finish_marker());
+        }
+        events_of_frame(&frame.data, &mut self.pending_finish)
+    }
 }
 
 impl StreamParserV1 for OpenAiSseParser {
     fn parse_chunk(&mut self, chunk: &[u8]) -> ComponentResultV1<Vec<StreamEvent>> {
-        if chunk.is_empty() {
-            return Ok(self.pending_finish.flush_pending_finish());
-        }
-        self.tail.extend_from_slice(chunk);
-
         let mut events = Vec::new();
-        while let Some((end, separator)) = sse_frame_boundary(&self.tail) {
-            // A complete frame must be UTF-8; a split mid-sequence never gets
-            // here because the separator search would not have matched yet.
-            let frame = match std::str::from_utf8(&self.tail[..end]) {
-                Ok(frame) => frame.replace("\r\n", "\n"),
-                Err(_) => {
-                    return Err(provider_protocol_error(
-                        "the upstream emitted a non-UTF-8 SSE frame",
-                    ));
-                }
-            };
-            self.tail.drain(..end + separator);
-
-            let mut event_name = None;
-            let mut data_lines = Vec::new();
-            for line in frame.lines() {
-                if line.starts_with(':') {
-                    continue;
-                }
-                if let Some(value) = line.strip_prefix("event:") {
-                    event_name = Some(value.strip_prefix(' ').unwrap_or(value));
-                }
-                if let Some(value) = line.strip_prefix("data:") {
-                    data_lines.push(value.strip_prefix(' ').unwrap_or(value));
-                }
+        if chunk.is_empty() {
+            // The end of input: an event the splitter still holds is dispatched as the decoder
+            // would, then the held finish is flushed.
+            if let Some(frame) = self.splitter.finish().map_err(Self::split_error)? {
+                events.extend(self.frame(&frame)?);
             }
-            if event_name == Some("error") {
-                events.push(StreamEvent::Error {
-                    error: provider_protocol_error("the upstream emitted an SSE error event"),
-                });
-                continue;
-            }
-            if data_lines.is_empty() {
-                continue;
-            }
-            let payload = data_lines.join("\n");
-            if payload == "[DONE]" {
-                events.extend(self.pending_finish.finish_marker());
-                continue;
-            }
-            events.extend(events_of_frame(&payload, &mut self.pending_finish)?);
+            events.extend(self.pending_finish.flush_pending_finish());
+            return Ok(events);
+        }
+        for frame in self.splitter.push(chunk).map_err(Self::split_error)? {
+            events.extend(self.frame(&frame)?);
         }
         Ok(events)
     }
@@ -1060,7 +1042,7 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-openai-compatible".to_owned(),
-            version: "2.13.5".to_owned(),
+            version: "2.13.6".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }

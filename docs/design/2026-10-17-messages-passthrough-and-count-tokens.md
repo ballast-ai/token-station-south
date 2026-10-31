@@ -158,6 +158,12 @@ the frame after it. Its answers still match the scripts, because `Done` stays on
 Anthropic API frames with LF, so nothing on the wire is affected today. A fix changes a component and re-identifies
 every package (Q47), so it waits for a release that has another reason to.
 
+*Revision (0.82.0 round):* the SSE-bodied provider parsers (`provider-openai-compatible`, `provider-anthropic`,
+`provider-gemini`, `provider-vertex`) now split with `SseSplitterV1`, the decoder's line-end rules, so the CR-framed
+frame is read on its own. It was a `content_block_delta` for a block never opened, which the parser then refuses, so
+suite version 4 makes that frame a `ping` with the same framing (CR line ends, `data` split over two lines). Frame
+count, scripts and case count are unchanged; a host re-runs v2 against suite version 4.
+
 The host's v2 entry in `compatibility.json` stays `not_verified`. The host re-runs v2 against suite version 3.
 
 ## 4. M2: forwarded client headers

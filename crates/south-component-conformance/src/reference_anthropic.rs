@@ -48,6 +48,7 @@ use token_station_protocol::{
 use crate::anthropic_dialect::Dialect;
 use crate::component::{ComponentResultV1, ProviderComponentV1, StreamParserV1};
 use crate::reasoning_replay::{ReplayRef, validated_layout};
+use crate::sse_split::{SseFrameV1, SseSplitErrorV1, SseSplitterV1};
 
 /// The version of the Messages API this component speaks. A wire-protocol
 /// constant of the dialect, not an operator setting (design record D5).
@@ -780,7 +781,11 @@ fn usage_of(raw: &Value) -> ComponentResultV1<Usage> {
 /// carries usage, or at EOF (design record D3).
 #[derive(Debug, Default)]
 pub(crate) struct AnthropicSseParser {
-    tail: Vec<u8>,
+    /// The shared event-stream splitter: the WHATWG rules the host's `SseDecoderV1` reads (LF, CR
+    /// and CRLF line ends, mixable), so a frame the host cut on a lone-CR blank line is a frame
+    /// here too. Only this package's own SSE body uses it; the eventstream packages that share
+    /// this state machine read the host's canonical re-encoding through [`sse_frame_boundary`].
+    splitter: SseSplitterV1,
     /// Whether the upstream reported a failure in-band: nothing follows it.
     closed: bool,
     saw_finish: bool,
@@ -795,6 +800,10 @@ pub(crate) struct AnthropicSseParser {
 
 /// The end of the first complete SSE frame in `buffer`, as
 /// `(payload_end, frame_end)`.
+///
+/// For the host's canonical re-encoding of an AWS eventstream (`provider-kiro`,
+/// `provider-anthropic-bedrock-invoke`), which only ever separates frames with `\n\n`. An
+/// upstream SSE body goes through [`SseSplitterV1`] instead.
 pub(crate) fn sse_frame_boundary(buffer: &[u8]) -> Option<(usize, usize)> {
     let newline = buffer.windows(2).position(|pair| pair == b"\n\n").map(|at| (at, at + 2));
     let crlf = buffer.windows(4).position(|quad| quad == b"\r\n\r\n").map(|at| (at, at + 4));
@@ -1054,29 +1063,43 @@ fn text_event(raw: Option<&str>, build: impl FnOnce(String) -> StreamEvent) -> V
     raw.filter(|text| !text.is_empty()).map_or_else(Vec::new, |text| vec![build(text.to_owned())])
 }
 
+fn split_error(error: SseSplitErrorV1) -> ErrorEnvelope {
+    provider_protocol_error(match error {
+        SseSplitErrorV1::NotUtf8 => "the upstream sent a stream frame that is not UTF-8",
+        SseSplitErrorV1::TooLarge => "the upstream sent a stream line or event over the size bound",
+    })
+}
+
+impl AnthropicSseParser {
+    /// One dispatched event. A frame that names no event type (the splitter reports it as
+    /// `message`, a name this wire never uses) carries nothing this dialect reads, as before.
+    fn frame(&mut self, frame: &SseFrameV1) -> ComponentResultV1<Vec<StreamEvent>> {
+        if frame.event == "message" {
+            return Ok(Vec::new());
+        }
+        let parsed: Value = serde_json::from_str(&frame.data).map_err(|_| {
+            provider_protocol_error("the upstream sent a stream frame with invalid JSON")
+        })?;
+        self.events_of(&frame.event, &parsed)
+    }
+}
+
 impl StreamParserV1 for AnthropicSseParser {
     fn parse_chunk(&mut self, chunk: &[u8]) -> ComponentResultV1<Vec<StreamEvent>> {
         // The runtime spells a clean transport EOF as an empty fragment, which
         // a successful socket read can never produce (design record D3).
-        if chunk.is_empty() {
-            return Ok(self.end_of_stream());
-        }
-
-        self.tail.extend_from_slice(chunk);
         let mut events = Vec::new();
-        while let Some((payload_end, frame_end)) = sse_frame_boundary(&self.tail) {
-            let frame = self.tail.drain(..frame_end).collect::<Vec<u8>>();
-            let frame = std::str::from_utf8(&frame[..payload_end]).map_err(|_| {
-                provider_protocol_error("the upstream sent a stream frame that is not UTF-8")
-            })?;
-            let (event, data) = frame_fields(frame);
-            let (Some(event), Some(data)) = (event, data) else {
-                continue;
-            };
-            let parsed: Value = serde_json::from_str(data).map_err(|_| {
-                provider_protocol_error("the upstream sent a stream frame with invalid JSON")
-            })?;
-            events.extend(self.events_of(event, &parsed)?);
+        if chunk.is_empty() {
+            // An event the splitter still holds is dispatched as the decoder would, then the
+            // stream settles.
+            if let Some(frame) = self.splitter.finish().map_err(split_error)? {
+                events.extend(self.frame(&frame)?);
+            }
+            events.extend(self.end_of_stream());
+            return Ok(events);
+        }
+        for frame in self.splitter.push(chunk).map_err(split_error)? {
+            events.extend(self.frame(&frame)?);
         }
         Ok(events)
     }
@@ -1130,7 +1153,7 @@ impl ProviderComponentV1 for AnthropicReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-anthropic".to_owned(),
-            version: "1.4.7".to_owned(),
+            version: "1.4.8".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
