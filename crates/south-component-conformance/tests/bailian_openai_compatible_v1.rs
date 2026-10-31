@@ -327,8 +327,12 @@ fn the_manifest_declares_the_family_and_its_reasoning_cap() {
     // (`served_models_retires_every_published_080_package_identity`).
     // Published as 2.13.5 with 0.81.0; the 0.82.0 round made it 2.13.6
     // (`sse_line_ends_retire_every_published_081_package_identity`).
-    assert_eq!(manifest.version, "2.13.6");
+    // Published as 2.13.6 with 0.82.0; the 0.83.0 round made it 2.14.0
+    // (`client_policy_headers_retire_every_published_082_package_identity`).
+    assert_eq!(manifest.version, "2.14.0");
     assert_eq!(OpenAiCompatibleReferenceV1.metadata().version, manifest.version);
+    // `forwarded_client_policy_headers` needs a runtime that reads it, which the release that ships
+    // it (0.83.0) declares; until then the package keeps 0.77.0.
     assert_eq!(manifest.compatibility.south_runtime, "0.77.0"); // release 0.77.0 raised every package (canonical_ir 5)
 }
 

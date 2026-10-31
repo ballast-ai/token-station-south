@@ -113,7 +113,8 @@ pub enum CheckV1 {
     /// The host keeps the probe's descriptor and sends the client's own body; a component that put
     /// anything from the body into the URL or a header would send a request the host never sealed.
     DescriptorIndependentOfBody,
-    /// For a family that declares `forwarded_client_headers`, neither the fixture request's
+    /// For a family that declares `forwarded_client_headers` or
+    /// `forwarded_client_policy_headers`, neither the fixture request's
     /// descriptor nor the probe IR's, for either stream flag, carries a forwarded header (the
     /// Messages pass-through record, `docs/design/2026-10-17-messages-passthrough-and-count-tokens.md`
     /// §4.3, §6).

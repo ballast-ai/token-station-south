@@ -148,8 +148,8 @@ pub struct WorldSchemaV1 {
     /// `endpoint`, `host_values`, `signing`, `stream_framing`,
     /// `usage_evidence`, `request_facts`, `immutable_body_paths`,
     /// `immutable_request_headers`, `north_passthrough`, `north_request_passthrough`,
-    /// `forwarded_client_headers` and `count_tokens`. Without it gate ① refuses each as a
-    /// provider-world declaration.
+    /// `forwarded_client_headers`, `forwarded_client_policy_headers` and `count_tokens`. Without
+    /// it gate ① refuses each as a provider-world declaration.
     pub request_declarations: bool,
     /// Which of the B7a instance declarations (`query_parameters`,
     /// `quota_headers`, `user_agent`; §10) the world admits. Gate ① refuses
@@ -820,6 +820,15 @@ pub struct ComponentManifestV1 {
     /// component's. Absent means no client header is forwarded. Provider world only.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub forwarded_client_headers: BTreeMap<String, Vec<String>>,
+    /// Each family's client request headers whose meaning does not depend on the request body, so
+    /// a host copies them unchanged onto every request of that family, rebuilt from the IR or not
+    /// (`docs/design/2026-10-31-client-policy-headers.md`). Same name rules as
+    /// [`Self::forwarded_client_headers`], except that the family need not pass requests through
+    /// and that one name is not declared in both fields. Gate ② requires that the component's
+    /// probe descriptor carries none of them. Declaring a header says that it may travel, not who
+    /// may send it: a package cannot see tenants. Absent means none. Provider world only.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub forwarded_client_policy_headers: BTreeMap<String, Vec<String>>,
     /// Each family that serves its client protocol's token-counting endpoint, and where its
     /// counting URL is relative to its generation URL (the Messages pass-through record §5). A host
     /// builds the probe descriptor with `stream: false`, rewrites its path with
@@ -1686,6 +1695,7 @@ impl ComponentManifestV1 {
             || !self.north_passthrough.is_empty()
             || !self.north_request_passthrough.is_empty()
             || !self.forwarded_client_headers.is_empty()
+            || !self.forwarded_client_policy_headers.is_empty()
             || !self.count_tokens.is_empty()
             || !self.subscription_quota_families.is_empty()
             || !self.model_parameters.is_empty()
@@ -1983,6 +1993,7 @@ impl ComponentManifestV1 {
         }
         self.validate_request_passthrough()?;
         self.validate_forwarded_client_headers()?;
+        self.validate_forwarded_client_policy_headers()?;
         self.validate_count_tokens()
     }
 
@@ -2044,46 +2055,74 @@ impl ComponentManifestV1 {
     /// host reserves, the package presents a secret in, or the family protects from extras.
     fn validate_forwarded_client_headers(&self) -> Result<(), ManifestErrorV1> {
         for (family, names) in &self.forwarded_client_headers {
-            let invalid = |detail: &str| ManifestErrorV1::InvalidForwardedClientHeaders {
+            let invalid = |detail: String| ManifestErrorV1::InvalidForwardedClientHeaders {
                 family: family.clone(),
-                detail: detail.to_owned(),
+                detail,
             };
             if !self.providers.contains(family) {
-                return Err(invalid("names a family the manifest does not declare"));
+                return Err(invalid("names a family the manifest does not declare".to_owned()));
             }
             if !self.north_request_passthrough.contains_key(family) {
                 return Err(invalid(
                     "only a request pass-through family may forward client headers: declare \
-                     north_request_passthrough",
+                     north_request_passthrough"
+                        .to_owned(),
                 ));
             }
-            if names.len() > MAX_FORWARDED_CLIENT_HEADERS || !are_immutable_request_headers(names) {
-                return Err(invalid(
-                    "each name must be distinct lowercase RFC 9110 tchar, at most 16 names of at \
-                     most 64 bytes",
-                ));
+            self.forwarding_name_problem(family, names)
+                .map_or(Ok(()), |detail| Err(invalid(detail)))?;
+        }
+        Ok(())
+    }
+
+    /// `forwarded_client_policy_headers` (the client policy headers record §3): the rules of
+    /// [`Self::validate_forwarded_client_headers`] without the pass-through condition, and one
+    /// header has one meaning, so a name is not in both fields of a family.
+    fn validate_forwarded_client_policy_headers(&self) -> Result<(), ManifestErrorV1> {
+        for (family, names) in &self.forwarded_client_policy_headers {
+            let invalid = |detail: String| ManifestErrorV1::InvalidForwardedClientPolicyHeaders {
+                family: family.clone(),
+                detail,
+            };
+            if !self.providers.contains(family) {
+                return Err(invalid("names a family the manifest does not declare".to_owned()));
             }
-            for name in names {
-                if FORWARDING_REFUSED_HEADERS.contains(&name.as_str()) {
-                    return Err(invalid(&format!("`{name}` is reserved by the host")));
-                }
-                if self.secret_headers.contains(name) {
-                    return Err(invalid(&format!(
-                        "`{name}` is one of the package's secret_headers"
-                    )));
-                }
-                if self
-                    .immutable_request_headers
-                    .get(family)
-                    .is_some_and(|fixed| fixed.contains(name))
-                {
-                    return Err(invalid(&format!(
-                        "`{name}` is one of the family's immutable_request_headers"
-                    )));
-                }
+            self.forwarding_name_problem(family, names)
+                .map_or(Ok(()), |detail| Err(invalid(detail)))?;
+            let forwarded = self.forwarded_client_headers.get(family);
+            if let Some(name) =
+                names.iter().find(|name| forwarded.is_some_and(|f| f.contains(name)))
+            {
+                return Err(invalid(format!("`{name}` is also in forwarded_client_headers")));
             }
         }
         Ok(())
+    }
+
+    /// What is wrong with a family's list of client headers to forward, shared by both fields.
+    fn forwarding_name_problem(&self, family: &str, names: &[String]) -> Option<String> {
+        if names.len() > MAX_FORWARDED_CLIENT_HEADERS || !are_immutable_request_headers(names) {
+            return Some(
+                "each name must be distinct lowercase RFC 9110 tchar, at most 16 names of at most \
+                 64 bytes"
+                    .to_owned(),
+            );
+        }
+        names.iter().find_map(|name| {
+            if FORWARDING_REFUSED_HEADERS.contains(&name.as_str()) {
+                Some(format!("`{name}` is reserved by the host"))
+            } else if self.secret_headers.contains(name) {
+                Some(format!("`{name}` is one of the package's secret_headers"))
+            } else if self
+                .immutable_request_headers
+                .get(family)
+                .is_some_and(|fixed| fixed.contains(name))
+            {
+                Some(format!("`{name}` is one of the family's immutable_request_headers"))
+            } else {
+                None
+            }
+        })
     }
 
     /// `count_tokens` (the Messages pass-through record §5.1): a declared family that passes the
@@ -2510,12 +2549,14 @@ pub enum ManifestErrorV1 {
     #[error("request_facts for family `{family}`: {detail}")]
     InvalidRequestFacts { family: String, detail: String },
     /// `immutable_body_paths`, `immutable_request_headers`, `north_passthrough`,
-    /// `north_request_passthrough`, `forwarded_client_headers`, `count_tokens` or
+    /// `north_request_passthrough`, `forwarded_client_headers`,
+    /// `forwarded_client_policy_headers`, `count_tokens` or
     /// `subscription_quota_families`, `model_parameters` or `drops_unsigned_thinking` in a world
     /// without request declarations.
     #[error(
         "immutable_body_paths, immutable_request_headers, north_passthrough, \
-         north_request_passthrough, forwarded_client_headers, count_tokens, \
+         north_request_passthrough, forwarded_client_headers, \
+         forwarded_client_policy_headers, count_tokens, \
          subscription_quota_families, model_parameters and drops_unsigned_thinking are \
          provider-world declarations"
     )]
@@ -2530,6 +2571,13 @@ pub enum ManifestErrorV1 {
     #[error("north_request_passthrough for family `{family}`: {detail}")]
     InvalidNorthRequestPassthrough { family: String, detail: String },
     /// New in `south-provider-api` 0.61.0: a host matching this enum exhaustively must add the arm.
+    #[error("forwarded_client_policy_headers for family `{family}`: {detail}")]
+    InvalidForwardedClientPolicyHeaders {
+        /// The family the entry names.
+        family: String,
+        /// Why the entry is refused.
+        detail: String,
+    },
     #[error("forwarded_client_headers for family `{family}`: {detail}")]
     InvalidForwardedClientHeaders { family: String, detail: String },
     /// New in `south-provider-api` 0.61.0: a host matching this enum exhaustively must add the arm.

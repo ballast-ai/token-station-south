@@ -1,6 +1,6 @@
 {
   "name": "provider-openai-compatible",
-  "version": "2.13.6",
+  "version": "2.14.0",
   "api_version": "provider-adapter-v2",
   "providers": [
     "openai-compatible",
@@ -215,6 +215,11 @@
     "glm-coding",
     "kimi-code"
   ],
+  "forwarded_client_policy_headers": {
+    "bailian-openai-compatible": [
+      "x-dashscope-datainspection"
+    ]
+  },
   "immutable_body_paths": {
     "bailian-openai-compatible": [
       "thinking_budget"

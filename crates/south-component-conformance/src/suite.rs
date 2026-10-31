@@ -647,7 +647,8 @@ fn probe_input(input: &RequestInput, stream: bool) -> Value {
 }
 
 /// `ForwardedHeadersAbsent` and `CountTokensPath` (the Messages pass-through record §6), for a
-/// family declaring `forwarded_client_headers` or `count_tokens`: the fixture's descriptor and the
+/// family declaring `forwarded_client_headers`, `forwarded_client_policy_headers` or
+/// `count_tokens`: the fixture's descriptor and the
 /// probe's for both stream flags carry none of the forwarded headers, so a host never merges a
 /// client value into the component's; and the non-stream probe's descriptor is a `POST` whose
 /// path [`rewrite_count_tokens_path`] rewrites. Empty for a family that declares neither.
@@ -667,7 +668,14 @@ fn passthrough_operations(
         parse(built).map_err(|failure| failure.detail())
     };
     let mut outcomes = Vec::new();
-    if let Some(forwarded) = manifest.forwarded_client_headers.get(family) {
+    let forwarded: Vec<&String> = manifest
+        .forwarded_client_headers
+        .get(family)
+        .into_iter()
+        .chain(manifest.forwarded_client_policy_headers.get(family))
+        .flatten()
+        .collect();
+    if !forwarded.is_empty() {
         let check = CheckV1::ForwardedHeadersAbsent;
         let built = [
             ("the request", descriptor(built)),
@@ -676,11 +684,12 @@ fn passthrough_operations(
         ];
         let problem = built.iter().find_map(|(which, descriptor)| match descriptor {
             Err(problem) => Some(format!("{which}: {problem}")),
-            Ok(descriptor) => {
-                forwarded.iter().find(|name| descriptor.headers.get(name).is_some()).map(|name| {
+            Ok(descriptor) => forwarded
+                .iter()
+                .find(|name| descriptor.headers.get(name.as_str()).is_some())
+                .map(|name| {
                     format!("{which} sets `{name}`, which the host forwards from the client")
-                })
-            }
+                }),
         });
         outcomes.push(problem.map_or_else(
             || OutcomeV1::passed(check, &case.name),

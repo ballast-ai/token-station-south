@@ -1153,7 +1153,7 @@ impl ProviderComponentV1 for AnthropicReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-anthropic".to_owned(),
-            version: "1.4.8".to_owned(),
+            version: "1.4.9".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }
