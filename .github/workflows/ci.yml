@@ -37,7 +37,7 @@ jobs:
           # The runtime tests and the sandbox parity test build real
           # wasm32-wasip2 guest components as child cargo invocations.
           targets: wasm32-wasip2
-      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2
+      - uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2
         with:
           tool: cargo-nextest,cargo-deny,cargo-audit,cargo-machete
       # Without a cache every run compiles wasmtime and the other dependencies from scratch, in
@@ -186,7 +186,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: nightly-2026-08-15
-      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2
+      - uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2
         with:
           tool: cargo-fuzz
       # The cargo-fuzz binary that install-action fetches is built for musl, and cargo-fuzz
