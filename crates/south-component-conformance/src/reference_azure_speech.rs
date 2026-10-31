@@ -84,7 +84,7 @@ use crate::{ComponentResultV1, SpeechComponentV1, SpeechOutcomeV1};
 /// The package name this reference is published as.
 pub const NAME: &str = "speech-azure";
 /// The package version.
-pub const VERSION: &str = "1.1.0";
+pub const VERSION: &str = "1.1.1";
 /// The world this reference exports.
 pub const WORLD: &str = "speech-adapter-v1";
 /// The family, the provider type's word.

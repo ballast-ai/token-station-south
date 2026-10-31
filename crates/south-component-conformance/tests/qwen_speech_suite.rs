@@ -449,12 +449,16 @@ fn the_manifest_declares_transcription_at_1_1_0() {
     // (`veo_spelling_and_durationless_asr_retire_every_published_079_package_identity`).
     // Published as 1.1.4 with 0.80.0; the 0.81.0 round made it 1.2.0
     // (`served_models_retires_every_published_080_package_identity`).
-    assert_eq!(manifest.version, "1.2.0");
+    // Published as 1.2.0 with 0.81.0; the 0.82.0 round made it 1.2.1
+    // (`sse_line_ends_retire_every_published_081_package_identity`).
+    assert_eq!(manifest.version, "1.2.1");
     // Published as 1.1.3 with 0.79.0; the 0.80.0 round made it 1.1.4
     // (`veo_spelling_and_durationless_asr_retire_every_published_079_package_identity`).
     // Published as 1.1.4 with 0.80.0; the 0.81.0 round made it 1.2.0
     // (`served_models_retires_every_published_080_package_identity`).
-    assert_eq!(REFERENCE.metadata().version, "1.2.0");
+    // Published as 1.2.0 with 0.81.0; the 0.82.0 round made it 1.2.1
+    // (`sse_line_ends_retire_every_published_081_package_identity`).
+    assert_eq!(REFERENCE.metadata().version, "1.2.1");
     assert!(manifest.capabilities.contains("transcribe"));
     assert!(!manifest.capabilities.contains("translate"));
     assert_eq!(manifest.compatibility.south_runtime, "0.81.0"); // release 0.81.0 raised every speech package (served_models)

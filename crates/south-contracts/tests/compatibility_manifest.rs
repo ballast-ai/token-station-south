@@ -732,7 +732,7 @@ fn compatibility_manifest_describes_the_library_slice() {
         manifest.conformance.north_passthrough_delivery_v2_suite_id,
         "south.north-passthrough-delivery.v2"
     );
-    assert_eq!(manifest.conformance.north_passthrough_delivery_v2_suite, 3);
+    assert_eq!(manifest.conformance.north_passthrough_delivery_v2_suite, 4);
     assert_eq!(manifest.conformance.provider_component_suite_id, "south.provider-component.v1");
     assert_eq!(manifest.conformance.provider_component_suite, 1);
     assert_eq!(manifest.conformance.task_component_v1_suite_id, "south.task-component.v1");

@@ -117,7 +117,9 @@ fn the_gmi_package_declares_its_organization_id_as_a_section_attribute() {
     // (`veo_spelling_and_durationless_asr_retire_every_published_079_package_identity`).
     // Published as 0.36.6 with 0.80.0; the 0.81.0 round made it 0.37.0
     // (`served_models_retires_every_published_080_package_identity`).
-    assert_eq!(manifest.version, "0.37.0");
+    // Published as 0.37.0 with 0.81.0; the 0.82.0 round made it 0.37.1
+    // (`sse_line_ends_retire_every_published_081_package_identity`).
+    assert_eq!(manifest.version, "0.37.1");
     let wire = serde_json::to_value(manifest.credentials.as_ref().unwrap()).unwrap();
     assert_eq!(
         wire,

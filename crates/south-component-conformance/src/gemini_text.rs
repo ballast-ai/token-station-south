@@ -28,6 +28,7 @@ use token_station_protocol::{
 };
 
 use crate::component::{ComponentResultV1, StreamParserV1};
+use crate::sse_split::{SseSplitErrorV1, SseSplitterV1};
 
 /// The signature written on a replayed turn's first call when no call of the turn carries one.
 /// It is the value Google documents for a call the model did not sign in this conversation; the
@@ -546,20 +547,21 @@ const STREAM_USAGE_COUNTS: [&str; 6] = [
 /// component and the host agree on which chunk is the evidence.
 #[derive(Debug, Default)]
 struct GeminiSseParser {
-    tail: Vec<u8>,
+    /// The shared event-stream splitter: the WHATWG rules the host's `SseDecoderV1` reads (LF, CR
+    /// and CRLF line ends, mixable), so a frame the host cut on a lone-CR blank line is a frame
+    /// here too.
+    splitter: SseSplitterV1,
     tool_calls_seen: usize,
     /// The highest value seen so far of each of [`STREAM_USAGE_COUNTS`].
     counts_seen: [u64; STREAM_USAGE_COUNTS.len()],
     terminated: bool,
 }
 
-fn sse_frame_boundary(buffer: &[u8]) -> Option<(usize, usize)> {
-    let newline = buffer.windows(2).position(|pair| pair == b"\n\n").map(|at| (at, at + 2));
-    let crlf = buffer.windows(4).position(|quad| quad == b"\r\n\r\n").map(|at| (at, at + 4));
-    match (newline, crlf) {
-        (Some(newline), Some(crlf)) => Some(if newline.0 <= crlf.0 { newline } else { crlf }),
-        (found, None) | (None, found) => found,
-    }
+fn split_error(error: SseSplitErrorV1) -> ErrorEnvelope {
+    provider_protocol_error(match error {
+        SseSplitErrorV1::NotUtf8 => "the upstream sent a stream frame that is not UTF-8",
+        SseSplitErrorV1::TooLarge => "the upstream sent a stream line or event over the size bound",
+    })
 }
 
 /// The finish reason of a terminal chunk: any candidate with a non-null
@@ -671,21 +673,17 @@ impl GeminiSseParser {
 
 impl StreamParserV1 for GeminiSseParser {
     fn parse_chunk(&mut self, chunk: &[u8]) -> ComponentResultV1<Vec<StreamEvent>> {
-        // EOF adds nothing: the terminal chunk already closed the stream, and a
-        // stream that never sent one gets no synthetic terminal.
-        self.tail.extend_from_slice(chunk);
+        // EOF adds no terminal: the terminal chunk already closed the stream, and a stream that
+        // never sent one gets no synthetic terminal. An event the splitter still holds at EOF is
+        // dispatched as the decoder would.
+        let frames = if chunk.is_empty() {
+            self.splitter.finish().map_err(split_error)?.into_iter().collect()
+        } else {
+            self.splitter.push(chunk).map_err(split_error)?
+        };
         let mut events = Vec::new();
-        while let Some((payload_end, frame_end)) = sse_frame_boundary(&self.tail) {
-            let frame = self.tail.drain(..frame_end).collect::<Vec<u8>>();
-            let frame = std::str::from_utf8(&frame[..payload_end]).map_err(|_| {
-                provider_protocol_error("the upstream sent a stream frame that is not UTF-8")
-            })?;
-            let Some(data) =
-                frame.lines().find_map(|line| line.strip_prefix("data:")).map(str::trim)
-            else {
-                continue;
-            };
-            let parsed: Value = serde_json::from_str(data).map_err(|_| {
+        for frame in frames {
+            let parsed: Value = serde_json::from_str(&frame.data).map_err(|_| {
                 provider_protocol_error("the upstream sent a stream frame with invalid JSON")
             })?;
             events.extend(self.events_of(&parsed)?);

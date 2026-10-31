@@ -80,7 +80,7 @@ fn north_passthrough_v2_identity_and_canonical_case_order_are_frozen() {
     assert_eq!(NORTH_PASSTHROUGH_DELIVERY_SUITE_V2_ID, "south.north-passthrough-delivery.v2");
     // Version 3: the `messages` scripts answer `Done` on `message_delta` (record
     // `docs/design/2026-10-17-messages-passthrough-and-count-tokens.md` §3.5).
-    assert_eq!(NORTH_PASSTHROUGH_DELIVERY_SUITE_V2_VERSION, 3);
+    assert_eq!(NORTH_PASSTHROUGH_DELIVERY_SUITE_V2_VERSION, 4);
     assert_eq!(
         case_ids(&north_passthrough_fixtures_v2(Protocol::GenerateContent)),
         EVERY_GENERATE_CONTENT_CASE
