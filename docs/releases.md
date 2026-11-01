@@ -4,13 +4,14 @@ This page is the concise index from repository releases to their authoritative d
 Release records preserve historical detail; [compatibility.json](../compatibility.json), not a tag
 or this index, is the authority for host adoption and verification status.
 
-The current repository release is `0.82.0`. Records may describe a prepared but unpublished tag;
+The current repository release is `0.83.0`. Records may describe a prepared but unpublished tag;
 their status line remains authoritative for publication state.
 
 ## Current releases
 
 | Release | Current capability | Records |
 |---|---|---|
+| `0.83.0` | A family can declare client headers whose meaning does not depend on the body (`forwarded_client_policy_headers`), so a host forwards them on rebuilt requests too; `bailian-openai-compatible` declares its content inspection header; prepared as recorded, with publication and host re-pin not recorded here | [Release 0.83.0](design/2026-11-01-release-0.83.0.md), [client policy headers](design/2026-10-31-client-policy-headers.md) |
 | `0.82.0` | The SSE-bodied provider parsers (`provider-openai-compatible`, `provider-anthropic`, `provider-gemini`, `provider-vertex`) split frames with `SseSplitterV1`, so a frame closed on a lone-CR blank line is read at once instead of dropped at the end of the stream; the messages pass-through suite moves to version 4; prepared as recorded, with publication and host re-pin separate | [release](design/2026-10-31-release-0.82.0.md) |
 | `0.81.0` | Every task, image and speech family declares the upstream models it serves (`served_models`), the Veo and Vertex Omni families the request fields a host must pre-fetch (`required_prefetch`), and `task-veo-v2` reports a `content_policy` failure category (task contract 9); prepared as recorded, with publication and host re-pin separate | [release](design/2026-10-29-release-0.81.0.md), [design](design/2026-10-28-served-models-prefetch-and-failure-category.md) |
 | `0.80.0` | `task-veo-v2` reports the client's resolution spelling, `speech-openai-compatible` and `speech-xai` ask for `verbose_json` on durationless transcription formats so the host bills measured seconds, and `host_signed` `emits` is documented as a ceiling; prepared as recorded, with publication and host re-pin separate | [release](design/2026-10-28-release-0.80.0.md) |

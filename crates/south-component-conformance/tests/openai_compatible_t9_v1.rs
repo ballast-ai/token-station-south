@@ -743,5 +743,5 @@ fn the_t9_families_retire_the_patch_identity() {
     assert_eq!(OpenAiCompatibleReferenceV1.metadata().version, manifest.version);
     // 2.13.0 declares `request_facts.reasoning_cap` and `cap_overhead` (Bailian thinking cap record
     // §4), first parsed by 0.76.0.
-    assert_eq!(manifest.compatibility.south_runtime, "0.77.0"); // release 0.77.0 raised every package (canonical_ir 5)
+    assert_eq!(manifest.compatibility.south_runtime, "0.83.0"); // `forwarded_client_policy_headers`
 }
