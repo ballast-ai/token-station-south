@@ -1,7 +1,7 @@
 # Client policy headers: forwarding a header whose meaning does not depend on the body
 
 Status: **accepted** 2026-10-31 (lv: the client decides, and the header is forwarded only when the client sends it). The
-upstream facts in §7 are **unverified**.
+upstream facts in §7 are partly measured; see §7.
 
 Date: 2026-10-31
 
@@ -65,6 +65,9 @@ pass-through requests and counting requests.
 - A value that breaks the descriptor's header rules is refused with `invalid_request`, never truncated.
 - The host forwards no other client header and writes no vendor name.
 - A request that moves to another target is decided again from that target's family.
+- A 401 or 403 on a request that carried a forwarded header does not count against the credential. The caller chose the
+  value, and §7's upstream answers 403 to a value the account may not use. A host that counts it lets any caller suspend a
+  shared credential. token-station-server found this against a real upstream and fixed it in `a0acc4da2`.
 
 ## 6. What this does not decide
 
@@ -81,10 +84,12 @@ stored lowercase, and HTTP header names are case-insensitive, so a client's `X-D
 It stays off `openai-compatible`: that family serves any upstream with an OpenAI-compatible API, and the header would
 reach all of them.
 
-The following is **unverified**. Public material describes the value `{"input":"cip","output":"cip"}` as enabling an
-optional guardrail that needs authorisation on the platform. A community report describes
-`{"input":"disable","output":"disable"}` and says it needs an allow-list from the vendor. No test captured real traffic.
-The field makes forwarding possible; it does not promise that an upstream honours a value.
+Measured 2026-11-02 on one account, recorded in [the upstream notes](../upstreams/alibaba-model-studio.md): the upstream
+reads the header, answers 200 to `{"input":"disable","output":"disable"}`, 403 to `{"input":"cip","output":"cip"}` and 400
+to a value it cannot parse.
+
+Still **unverified**: whether `disable` turns inspection off. The field makes forwarding possible; it does not promise that
+an upstream honours a value.
 
 ## 8. Alternatives considered
 

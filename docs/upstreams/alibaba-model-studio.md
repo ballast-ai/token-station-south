@@ -92,10 +92,22 @@ Related records:
 - `data_inspection_failed` (`DataInspectionFailed`) means the upstream's inspection refused the input
   or output. Secondary sources summarise the error-code page as asking the caller to change the
   content and retry (checked 2026-10-30; the official page could not be read directly).
-- **Unverified.** Public material describes the value `{"input":"cip","output":"cip"}` as enabling an
-  optional guardrail that needs authorisation in the console. A community report describes
-  `{"input":"disable","output":"disable"}` and says it needs a vendor allow-list. Neither value was
-  tested against a real account, and no captured traffic backs this section.
+- **Measured 2026-11-02** on one international-site account, through the released package and the
+  `bailian-openai-compatible` family, on `/compatible-mode/v1/chat/completions`:
+
+  | Header value | Answer |
+  |---|---|
+  | absent | 200 |
+  | `{"input":"disable","output":"disable"}` | 200 |
+  | `{"input":"cip","output":"cip"}` | 403 `access_denied`, `Header "x-dashscope-datainspection" authentication failed.` |
+  | `not-a-json-value` | 400 `invalid_parameter_error`, `Invalid header "x-dashscope-datainspection" provided in your request.` |
+
+  The upstream reads the header, and a value the account may not use answers 403, which looks like a
+  refused credential. The 403 fits public material describing `cip` as an optional guardrail that needs
+  authorisation.
+- **Unverified.** A 200 with `disable` shows that this account accepts the value, not that inspection was
+  turned off. That needs content that fails inspection without the header, which no test has used. A
+  community report says the value needs a vendor allow-list; this account was not checked for one.
 
 ## 5. Managed video
 
