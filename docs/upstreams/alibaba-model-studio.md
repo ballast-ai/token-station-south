@@ -105,9 +105,10 @@ Related records:
   The upstream reads the header, and a value the account may not use answers 403, which looks like a
   refused credential. The 403 fits public material describing `cip` as an optional guardrail that needs
   authorisation.
-- **Unverified.** A 200 with `disable` shows that this account accepts the value, not that inspection was
-  turned off. That needs content that fails inspection without the header, which no test has used. A
-  community report says the value needs a vendor allow-list; this account was not checked for one.
+- **`disable` turns the upstream's inspection off** on this account, measured the same day with one prompt
+  on a politically sensitive topic: absent 400 `data_inspection_failed`, `disable` 200, absent again 400. No
+  allow-list was requested for this account. The model can still refuse in its own words inside the 200.
+- **Unverified.** Whether other accounts or regions behave the same.
 
 ## 5. Managed video
 

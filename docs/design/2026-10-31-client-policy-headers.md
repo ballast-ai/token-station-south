@@ -71,10 +71,14 @@ pass-through requests and counting requests.
 
 ## 6. What this does not decide
 
-The field says a header **may** travel. It does not decide who may use it: every caller that reaches a declaring family
-can send the header. A package has no view of tenants, so any such control belongs to the host. An operator that serves
-callers who should not choose the upstream's policy must not bind those models to a declaring family until the host has
-that control.
+The field says a header **may** travel. It does not decide who may use it. A package has no view of tenants, so that
+control belongs to the host. §7's header can turn off an upstream's inspection on the operator's account, so a host should
+not forward a declared header until its operator opts in.
+
+token-station-server forwards only on provider rows listed in `[south] client_policy_header_rows`, empty by default. An
+operator gives an approved caller a dedicated row of the same family, which keeps the family's request facts, and limits
+that row's models with model permissions. Moving ordinary models to `openai-compatible` instead would lose the thinking cap
+split, which only `bailian-openai-compatible` declares.
 
 ## 7. `bailian-openai-compatible`
 
@@ -88,8 +92,9 @@ Measured 2026-11-02 on one account, recorded in [the upstream notes](../upstream
 reads the header, answers 200 to `{"input":"disable","output":"disable"}`, 403 to `{"input":"cip","output":"cip"}` and 400
 to a value it cannot parse.
 
-Still **unverified**: whether `disable` turns inspection off. The field makes forwarding possible; it does not promise that
-an upstream honours a value.
+`disable` turned inspection off on that account: one prompt answered 400 `data_inspection_failed` without the header, 200
+with it and 400 again without it. Other accounts and regions are **unverified**. The field makes forwarding possible; it
+does not promise that an upstream honours a value.
 
 ## 8. Alternatives considered
 
@@ -110,5 +115,5 @@ an upstream honours a value.
 
 ## 10. Questions
 
-- **Q1.** Should a host be required to offer per-caller control before using the field? Recommended: no; south cannot
-  see tenants, so §6 states the consequence and leaves the control to the host.
+- **Q1.** Should a host be required to offer per-caller control before using the field? Answered: a host decides, and
+  token-station-server opts in per provider row (§6).
