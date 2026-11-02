@@ -117,7 +117,6 @@ fn a_family_that_declares_neither_never_runs_them() {
         &pack("fixtures"),
         &shipped("provider-openai-compatible"),
     );
-    assert_eq!(outcomes_of(&report, CheckV1::ForwardedHeadersAbsent).0, 0);
     assert_eq!(outcomes_of(&report, CheckV1::CountTokensPath).0, 0);
 }
 
@@ -127,6 +126,22 @@ enum Rogue {
     SetsAForwardedHeader,
     /// Sends the non-stream request to `:generate` instead of `:generateContent`.
     OtherGenerationPath,
+    /// Sets the policy header `bailian-openai-compatible` forwards from the client.
+    SetsAPolicyHeader,
+}
+
+fn with_header(
+    mut descriptor: HttpRequestDescriptor,
+    name: &str,
+    value: &str,
+) -> HttpRequestDescriptor {
+    let headers = descriptor
+        .headers
+        .iter()
+        .map(|(name, value)| (name.clone(), value.clone()))
+        .chain([(name.to_owned(), value.to_owned())]);
+    descriptor.headers = SafeHeaders::try_new(headers).unwrap();
+    descriptor
 }
 
 struct Rogues(Rogue);
@@ -136,18 +151,19 @@ impl Rogues {
         match self.0 {
             Rogue::SetsAForwardedHeader => &AnthropicReferenceV1,
             Rogue::OtherGenerationPath => &GeminiReferenceV1,
+            Rogue::SetsAPolicyHeader => {
+                &south_component_conformance::reference::OpenAiCompatibleReferenceV1
+            }
         }
     }
 
     fn bend(&self, mut descriptor: HttpRequestDescriptor) -> HttpRequestDescriptor {
         match self.0 {
             Rogue::SetsAForwardedHeader => {
-                let headers = descriptor
-                    .headers
-                    .iter()
-                    .map(|(name, value)| (name.clone(), value.clone()))
-                    .chain([("anthropic-beta".to_owned(), "a-beta-2026-01-01".to_owned())]);
-                descriptor.headers = SafeHeaders::try_new(headers).unwrap();
+                descriptor = with_header(descriptor, "anthropic-beta", "a-beta-2026-01-01");
+            }
+            Rogue::SetsAPolicyHeader => {
+                descriptor = with_header(descriptor, "x-dashscope-datainspection", "a-value");
             }
             Rogue::OtherGenerationPath => {
                 descriptor.url = descriptor.url.replace(":generateContent", ":generate");
@@ -208,6 +224,30 @@ fn a_rogue_component_fails_the_new_rows() {
     let (_, failed) = outcomes_of(&report, CheckV1::CountTokensPath);
     assert!(
         failed.iter().any(|failure| failure.contains("does not end with `:generateContent`")),
+        "{failed:#?}"
+    );
+}
+
+/// The client policy headers record §4: gate ② covers `forwarded_client_policy_headers` too.
+#[test]
+fn a_policy_header_a_component_sets_itself_fails_the_gate() {
+    let honest = run_provider_component_suite_v1_for_manifest(
+        &south_component_conformance::reference::OpenAiCompatibleReferenceV1,
+        &pack("fixtures"),
+        &shipped("provider-openai-compatible"),
+    );
+    let (ran, failed) = outcomes_of(&honest, CheckV1::ForwardedHeadersAbsent);
+    assert!(ran > 0, "{honest}");
+    assert!(failed.is_empty(), "{failed:#?}");
+
+    let report = run_provider_component_suite_v1_for_manifest(
+        &Rogues(Rogue::SetsAPolicyHeader),
+        &pack("fixtures"),
+        &shipped("provider-openai-compatible"),
+    );
+    let (_, failed) = outcomes_of(&report, CheckV1::ForwardedHeadersAbsent);
+    assert!(
+        failed.iter().any(|failure| failure.contains("sets `x-dashscope-datainspection`")),
         "{failed:#?}"
     );
 }

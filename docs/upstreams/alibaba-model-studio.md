@@ -83,6 +83,20 @@ Related records:
   ¥0.6/M non-thinking); a response is in thinking mode when it reports `reasoning_tokens` > 0 or carries
   `reasoning_content`, streaming deltas included.
 
+### Content inspection header
+
+- `bailian-openai-compatible` forwards the client's `X-DashScope-DataInspection` request header
+  unchanged when the client sends it, and adds nothing otherwise
+  ([client policy headers record](../design/2026-10-31-client-policy-headers.md)). The
+  `openai-compatible` family does not forward it.
+- `data_inspection_failed` (`DataInspectionFailed`) means the upstream's inspection refused the input
+  or output. Secondary sources summarise the error-code page as asking the caller to change the
+  content and retry (checked 2026-10-30; the official page could not be read directly).
+- **Unverified.** Public material describes the value `{"input":"cip","output":"cip"}` as enabling an
+  optional guardrail that needs authorisation in the console. A community report describes
+  `{"input":"disable","output":"disable"}` and says it needs a vendor allow-list. Neither value was
+  tested against a real account, and no captured traffic backs this section.
+
 ## 5. Managed video
 
 Submission is `POST /api/v1/services/aigc/video-generation/video-synthesis` with

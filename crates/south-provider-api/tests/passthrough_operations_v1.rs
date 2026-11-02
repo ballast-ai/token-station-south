@@ -365,6 +365,128 @@ fn other_worlds_refuse_forwarding_and_counting() {
     }
 }
 
+// `forwarded_client_policy_headers` (`docs/design/2026-10-31-client-policy-headers.md` §3).
+
+const POLICY_FAMILY: &str = "bailian-openai-compatible";
+const POLICY_HEADER: &str = "x-dashscope-datainspection";
+
+/// `provider-openai-compatible` without the declaration, so each test adds what it needs.
+fn policy_bare() -> ComponentManifestV1 {
+    let mut manifest = shipped("provider-openai-compatible");
+    manifest.forwarded_client_policy_headers.clear();
+    manifest
+}
+
+#[test]
+fn absent_policy_headers_are_omitted_from_the_wire() {
+    let manifest = policy_bare();
+    let wire = serde_json::to_value(&manifest).unwrap();
+    assert!(wire.get("forwarded_client_policy_headers").is_none());
+    assert_eq!(manifest.validate(), Ok(()));
+}
+
+#[test]
+fn a_family_that_rebuilds_every_request_may_declare_a_policy_header() {
+    let mut manifest = policy_bare();
+    assert!(!manifest.north_request_passthrough.contains_key(POLICY_FAMILY));
+    manifest
+        .forwarded_client_policy_headers
+        .insert(POLICY_FAMILY.to_owned(), names(&[POLICY_HEADER]));
+    assert_eq!(manifest.validate(), Ok(()));
+    let wire = serde_json::to_value(&manifest).unwrap();
+    assert_eq!(wire["forwarded_client_policy_headers"], json!({POLICY_FAMILY: [POLICY_HEADER]}));
+    let back: ComponentManifestV1 = serde_json::from_value(wire).unwrap();
+    assert_eq!(back, manifest);
+}
+
+#[test]
+fn the_shipped_package_declares_the_policy_header_for_its_bailian_family_only() {
+    let manifest = shipped("provider-openai-compatible");
+    assert_eq!(manifest.forwarded_client_policy_headers.len(), 1);
+    assert_eq!(manifest.forwarded_client_policy_headers[POLICY_FAMILY], [POLICY_HEADER]);
+    assert_eq!(manifest.validate(), Ok(()));
+}
+
+#[test]
+fn a_policy_header_is_refused_unless_every_condition_holds() {
+    let refused = |edit: &dyn Fn(&mut ComponentManifestV1), needle: &str| {
+        let mut manifest = policy_bare();
+        edit(&mut manifest);
+        let detail = match manifest.validate() {
+            Err(ManifestErrorV1::InvalidForwardedClientPolicyHeaders { detail, .. }) => detail,
+            other => panic!("{needle}: {other:?}"),
+        };
+        assert!(detail.contains(needle), "{needle}: {detail}");
+    };
+    let declare = |list: Vec<String>| {
+        move |m: &mut ComponentManifestV1| {
+            m.forwarded_client_policy_headers.insert(POLICY_FAMILY.to_owned(), list.clone());
+        }
+    };
+    refused(
+        &|m| {
+            m.forwarded_client_policy_headers.insert("other".to_owned(), names(&[POLICY_HEADER]));
+        },
+        "does not declare",
+    );
+    for bad in [
+        names(&["X-DashScope-DataInspection"]),
+        names(&[""]),
+        names(&["data inspection"]),
+        names(&[POLICY_HEADER, POLICY_HEADER]),
+        (0..=MAX_FORWARDED_CLIENT_HEADERS).map(|index| format!("x-policy-{index}")).collect(),
+        vec!["a".repeat(65)],
+    ] {
+        refused(&declare(bad), "distinct lowercase RFC 9110 tchar");
+    }
+    for reserved in FORWARDING_REFUSED_HEADERS {
+        refused(&declare(names(&[*reserved])), "reserved");
+    }
+    refused(
+        &|m| {
+            declare(names(&[POLICY_HEADER]))(m);
+            m.immutable_request_headers.insert(POLICY_FAMILY.to_owned(), names(&[POLICY_HEADER]));
+        },
+        "immutable_request_headers",
+    );
+    refused(
+        &|m| {
+            declare(names(&[POLICY_HEADER]))(m);
+            m.auth_arms.insert("header_secret".to_owned());
+            m.secret_headers = names(&[POLICY_HEADER]);
+        },
+        "secret_headers",
+    );
+}
+
+#[test]
+fn one_header_is_not_declared_in_both_forwarding_fields() {
+    let mut manifest = shipped("provider-anthropic");
+    manifest
+        .forwarded_client_policy_headers
+        .insert("anthropic".to_owned(), names(&["anthropic-beta"]));
+    match manifest.validate() {
+        Err(ManifestErrorV1::InvalidForwardedClientPolicyHeaders { detail, .. }) => {
+            assert!(detail.contains("forwarded_client_headers"), "{detail}");
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn other_worlds_refuse_policy_headers() {
+    for package in ["embeddings-openai-compatible", "task-kling-v2", "image-azure"] {
+        let mut manifest = shipped(package);
+        let family = manifest.providers[0].clone();
+        manifest.forwarded_client_policy_headers.insert(family, names(&[POLICY_HEADER]));
+        assert_eq!(
+            manifest.validate(),
+            Err(ManifestErrorV1::DeliveryIsAProviderWorldDeclaration),
+            "{package}"
+        );
+    }
+}
+
 // The shared rewrite (§5.2 step 2).
 
 #[test]
