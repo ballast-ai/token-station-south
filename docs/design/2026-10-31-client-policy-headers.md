@@ -75,10 +75,10 @@ The field says a header **may** travel. It does not decide who may use it. A pac
 control belongs to the host. §7's header can turn off an upstream's inspection on the operator's account, so a host should
 not forward a declared header until its operator opts in.
 
-token-station-server forwards only on provider rows listed in `[south] client_policy_header_rows`, empty by default. An
-operator gives an approved caller a dedicated row of the same family, which keeps the family's request facts, and limits
-that row's models with model permissions. Moving ordinary models to `openai-compatible` instead would lose the thinking cap
-split, which only `bailian-openai-compatible` declares.
+token-station-server forwards only for callers whose team is listed in `[south] client_policy_header_teams`, empty by
+default. It first listed provider rows, and replaced that in `9c8330675`: a row list keeps other callers off a row only
+through model permissions, and a caller with no team and no policy is allowed every model. A listed team uses its ordinary
+models, so nothing moves off `bailian-openai-compatible` and the thinking cap split stays.
 
 ## 7. `bailian-openai-compatible`
 
@@ -116,4 +116,4 @@ does not promise that an upstream honours a value.
 ## 10. Questions
 
 - **Q1.** Should a host be required to offer per-caller control before using the field? Answered: a host decides, and
-  token-station-server opts in per provider row (§6).
+  token-station-server opts in per calling team (§6).
