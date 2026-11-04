@@ -1,6 +1,7 @@
 # CI: documentation-only pull requests skip the Rust steps, and component tests run in their own job
 
-Status: **proposed** 2026-10-29, for lv's review (§8). No workflow change yet.
+Status: **accepted** 2026-11-04 (lv: CQ-1 to CQ-4 as recommended, §8). Implemented in the same pull request (#330):
+`scripts/ci_scope.py`, `scripts/test_ci_scope.py`, `.github/workflows/ci.yml` and the README's verification list.
 
 Date: 2026-10-29
 
@@ -74,10 +75,11 @@ The rule only ever removes work whose answer is known; every failure to decide r
 root (crate, component and fixture READMEs) do not qualify, because a future `include_str!` of one would make it
 compiled input.
 
-When `scope` is `docs`, `quality` runs only the steps that read documentation or need no Rust build: checkout, the
-dependency boundaries check, and the release tooling tests. The toolchain install, the cache restore, Format, Clippy,
-the tests, the doctests, the no-default-features steps, the fuzz compile check, Documentation, MSRV, cargo deny,
-cargo audit and cargo machete are skipped. `language` is unchanged and runs on every event.
+When `scope` is `docs`, the `quality` job (and the `components` job of C2) is skipped as a whole. None of its steps
+reads a file under `docs/` or a root-level Markdown file: the dependency boundaries check reads Cargo metadata, and no
+release tooling script or test refers to `docs/` (checked with a search of `scripts/`). A documentation-only change
+also cannot change those scripts. `language` is unchanged and runs on every event, so the English gate still checks
+the change. The jobs compare the output against `docs`, so an empty or missing output runs in full.
 
 cargo deny and cargo audit read only the lockfiles and the advisory database. A documentation-only change cannot touch
 the lockfiles, and advisory drift is caught by the next push to `main` and by the weekly run.
@@ -126,7 +128,7 @@ All figures are **estimates** from the baseline run.
 
 | Case | Today | With C1 and C2 |
 |---|---|---|
-| Documentation-only pull request into `main` (31 of 176 in October) | ~10.4 min | ~1 min (`scope` plus a `quality` without Rust steps) |
+| Documentation-only pull request into `main` (31 of 176 in October) | ~10.4 min | under 1 min (`scope` and `language`) |
 | Any other pull request into `main`, wall time | ~10.4 min | ~7 min: `quality` ~7.0 min (its Test step ~90 s compile plus ~75 s of tests), `components` ~4.5 to 6.5 min, plus ~15 s for `scope` |
 | Any other pull request into `main`, runner time | ~10.4 min | ~13 min (+25%: a second job setup and the duplicate compile) |
 
@@ -171,6 +173,8 @@ of standard-library Python with unit tests, like the other CI scripts. Not propo
 
 ## 8. Questions for lv
 
+Ruled by lv on 2026-11-04: every question as recommended.
+
 - **CQ-1.** Adopt C1: a pull request that changes only `docs/` and root-level Markdown skips the Rust steps of
   `quality`? Recommended: **yes**.
 - **CQ-2.** Also skip the component job when a change is outside the components' dependency closure (§7)? Recommended:
@@ -189,12 +193,19 @@ of standard-library Python with unit tests, like the other CI scripts. Not propo
 
 ## 10. Tests
 
-Written first and failing, in `scripts/test_ci_scope.py`, run by the Release tooling step:
+Written first and failing (the module did not exist, then the workflow and the README did not run the two commands),
+in `scripts/test_ci_scope.py`, run by the Release tooling step:
 
 - Scope: a push and a scheduled event are `full`; a `release/*` head is `full`; only `docs/` paths are `docs`; only a
   root-level Markdown file is `docs`; `docs/` plus any other path is `full`; a crate README alone is `full`; an empty
   diff is `full`; a failing `git` command is `full`.
 - Filter: `--component-filter` prints exactly the setup script's `filter` from `.config/nextest.toml`.
+- Changed paths: the paths of the checked-out commit against its first parent, non-ASCII names intact; a rename
+  lists both sides, so a file moved into `docs/` still names its old path; no parent commit and a directory outside
+  git give no answer.
 - Coverage: every test file under `crates/*/tests/` that names `wasm32-wasip2`, `SOUTH_COMPONENTS_PREBUILT` or a
-  component build script, directly or through a `support` module it declares, belongs to a binary the filter matches.
-- README: if CQ-3 is ruled as recommended, both CI test commands appear verbatim in the README's full list.
+  component build script, directly or through a `#[path]` support module it includes, belongs to a binary the filter
+  matches; every binary the filter matches is in one of the two packages the `components` job runs; every filter term
+  matches at least one binary.
+- README (CQ-3): both CI test commands appear verbatim in `ci.yml` and in the README's full list, and the single
+  `cargo nextest run --workspace --all-features` line is gone.

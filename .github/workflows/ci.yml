@@ -26,7 +26,31 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # How much of this workflow the run needs (CI scoped-runs record C1,
+  # docs/design/2026-10-29-ci-scoped-runs-and-component-job.md). A pull request whose merge
+  # commit changes only `docs/` or root-level Markdown is `docs`: no crate embeds or reads those
+  # files, so `quality` and `components` are skipped and only `language` checks the change.
+  # Every other event, every release pull request and every case the script cannot decide is
+  # `full`. The other jobs compare against `docs`, so an empty output also runs in full.
+  scope:
+    runs-on: ubuntu-latest
+    outputs:
+      scope: ${{ steps.decide.outputs.scope }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The merge commit and its first parent, the base branch.
+          fetch-depth: 2
+      - name: Decide the scope
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: python3 scripts/ci_scope.py --event "${EVENT}" --head-ref "${HEAD_REF}" >> "${GITHUB_OUTPUT}"
+
   quality:
+    needs: scope
+    if: needs.scope.outputs.scope != 'docs'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -34,34 +58,23 @@ jobs:
         with:
           toolchain: 1.96.0
           components: clippy, rustfmt
-          # The runtime tests and the sandbox parity test build real
-          # wasm32-wasip2 guest components as child cargo invocations.
+          # No test this job runs builds a component; the target is installed so that a test
+          # that does anyway builds and is then named by the last step, instead of failing on a
+          # missing target.
           targets: wasm32-wasip2
       - uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2
         with:
           tool: cargo-nextest,cargo-deny,cargo-audit,cargo-machete
       # Without a cache every run compiles wasmtime and the other dependencies from scratch, in
-      # the lint, test, no-default-features and doc steps alike. The root workspace, the fuzz
-      # workspace and every runtime-test guest are separate cargo workspaces with their own
-      # `target/`, so each is listed. The component packages are separate workspaces too, but
-      # `scripts/component-build.sh` builds them all in the root's `target/components`, which the
-      # root entry covers. Only main saves the cache: a pull request restores main's, and never
-      # evicts it with a cache of its own.
+      # the lint, test, no-default-features and doc steps alike. The root workspace and the fuzz
+      # workspace are separate cargo workspaces with their own `target/`, so each is listed; the
+      # runtime-test guests are built only by the `components` job and cached there. Only main
+      # saves the cache: a pull request restores main's, and never evicts it with a cache of its
+      # own.
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: |
             .
-            crates/south-component-conformance/tests/guests/synthetic-speech
-            crates/south-provider-runtime/tests/guests/t03-canary-provider
-            crates/south-provider-runtime/tests/guests/t09-canary-task
-            crates/south-provider-runtime/tests/guests/t21-unseen-eventstream
-            crates/south-provider-runtime/tests/guests/image-canary
-            crates/south-provider-runtime/tests/guests/speech-canary
-            crates/south-provider-runtime/tests/guests/embeddings-canary
-            crates/south-provider-runtime/tests/guests/test-embeddings
-            crates/south-provider-runtime/tests/guests/test-image
-            crates/south-provider-runtime/tests/guests/test-speech
-            crates/south-provider-runtime/tests/guests/test-provider
             fuzz
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Format
@@ -72,26 +85,12 @@ jobs:
       # them here; a pull request into main, a push to main and the weekly schedule run them.
       # Clippy above still compiles every test target, so a test that no longer builds fails
       # early pull requests too. The same condition guards the other two steps that run tests.
+      # Every test except those that load real components, which the `components` job runs; the
+      # filter lives in `.config/nextest.toml`, and the prebuild setup script does not run here
+      # because no selected test matches it.
       - name: Test
         if: github.event_name != 'pull_request' || github.base_ref == 'main'
-        run: cargo nextest run --workspace --all-features
-      # The declared-runtime discipline (boundary record §13.6): every package's
-      # south_runtime is the oldest runtime it needs, and each package is loaded under
-      # exactly that runtime's release tag. release.yml runs the same check on the
-      # archives it publishes; running it on the release pull request as well catches
-      # a wrong declaration before the tag exists. Only release branches pay for it:
-      # it builds one older runtime per distinct declaration. It is a step here rather
-      # than its own job because the Test step's nextest setup script has just built
-      # every component, so the build scripts below are no-ops instead of a second
-      # build of every component on another runner.
-      - name: Declared runtimes admit their packages
-        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/')
-        run: |
-          set -euo pipefail
-          for script in scripts/build-*-component.sh; do
-            bash "${script}"
-          done
-          scripts/check-declared-runtime.sh --build
+        run: cargo nextest run --workspace --all-features -E "not ($(python3 scripts/ci_scope.py --component-filter))"
       - name: Doctest
         if: github.event_name != 'pull_request' || github.base_ref == 'main'
         run: cargo test --workspace --doc --all-features
@@ -135,6 +134,80 @@ jobs:
         run: |
           cargo machete
           (cd fuzz && cargo machete)
+      # `scripts/component-build.sh` is the only writer of `components/<package>/target/`, and no
+      # cache entry holds it, so its presence means a test outside the component filter built a
+      # package here. `scripts/test_ci_scope.py` catches that case statically; this catches what
+      # its marker search misses.
+      - name: No component was built
+        run: |
+          set -euo pipefail
+          built=$(find components -mindepth 2 -maxdepth 2 -type d -name target | sort)
+          if [ -n "${built}" ]; then
+            echo "::error::a test outside the component filter built these packages; add it to the prebuild-components filter in .config/nextest.toml:"
+            echo "${built}"
+            exit 1
+          fi
+
+  # The tests that load real wasm32-wasip2 components, run in parallel with `quality`
+  # (record C2): the prebuild of every package and runtime-test guest, the component tests
+  # selected by the prebuild filter, and on release branches the declared-runtime check. It runs
+  # when `quality`'s Test step would, and on every release branch, whatever its base.
+  components:
+    needs: scope
+    if: >-
+      needs.scope.outputs.scope != 'docs' && (github.event_name != 'pull_request' ||
+      github.base_ref == 'main' || startsWith(github.head_ref, 'release/'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: 1.96.0
+          # The runtime tests and the sandbox parity tests build real
+          # wasm32-wasip2 guest components as child cargo invocations.
+          targets: wasm32-wasip2
+      - uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2
+        with:
+          tool: cargo-nextest
+      # The root workspace (which holds `target/components`, where every package is built) and
+      # every runtime-test guest, each a separate cargo workspace with its own `target/`. This
+      # job's cache key differs from `quality`'s, so the two never evict each other.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: |
+            .
+            crates/south-component-conformance/tests/guests/synthetic-speech
+            crates/south-provider-runtime/tests/guests/t03-canary-provider
+            crates/south-provider-runtime/tests/guests/t09-canary-task
+            crates/south-provider-runtime/tests/guests/t21-unseen-eventstream
+            crates/south-provider-runtime/tests/guests/image-canary
+            crates/south-provider-runtime/tests/guests/speech-canary
+            crates/south-provider-runtime/tests/guests/embeddings-canary
+            crates/south-provider-runtime/tests/guests/test-embeddings
+            crates/south-provider-runtime/tests/guests/test-image
+            crates/south-provider-runtime/tests/guests/test-speech
+            crates/south-provider-runtime/tests/guests/test-provider
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Component tests
+        if: github.event_name != 'pull_request' || github.base_ref == 'main'
+        run: cargo nextest run -p south-component-conformance -p south-provider-runtime --all-features -E "$(python3 scripts/ci_scope.py --component-filter)"
+      # The declared-runtime discipline (boundary record §13.6): every package's
+      # south_runtime is the oldest runtime it needs, and each package is loaded under
+      # exactly that runtime's release tag. release.yml runs the same check on the
+      # archives it publishes; running it on the release pull request as well catches
+      # a wrong declaration before the tag exists. Only release branches pay for it:
+      # it builds one older runtime per distinct declaration. It is a step of this job
+      # because the Component tests step's nextest setup script has just built every
+      # component, so the build scripts below are no-ops instead of a second build of
+      # every component on another runner.
+      - name: Declared runtimes admit their packages
+        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/')
+        run: |
+          set -euo pipefail
+          for script in scripts/build-*-component.sh; do
+            bash "${script}"
+          done
+          scripts/check-declared-runtime.sh --build
 
   # English-only, enforced rather than requested. CONTRIBUTING.md and AGENTS.md
   # have both stated the rule from the start; it still drifted to ~1175 CJK lines

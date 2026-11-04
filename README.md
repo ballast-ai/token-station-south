@@ -102,7 +102,9 @@ to be English.
 rustup target add wasm32-wasip2  # once; guest components build as child cargo invocations
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo nextest run --workspace --all-features
+# The two test commands of CI (`quality` and `components`); together they run every test.
+cargo nextest run --workspace --all-features -E "not ($(python3 scripts/ci_scope.py --component-filter))"
+cargo nextest run -p south-component-conformance -p south-provider-runtime --all-features -E "$(python3 scripts/ci_scope.py --component-filter)"
 cargo test --workspace --doc --all-features
 cargo check --workspace --all-targets --no-default-features
 cargo test -p south-component-conformance --no-default-features  # the only crate with a feature
