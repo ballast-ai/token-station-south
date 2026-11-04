@@ -676,10 +676,14 @@ impl StreamParserV1 for GeminiSseParser {
         // EOF adds no terminal: the terminal chunk already closed the stream, and a stream that
         // never sent one gets no synthetic terminal. An event the splitter still holds at EOF is
         // dispatched as the decoder would.
-        let frames = if chunk.is_empty() {
-            self.splitter.finish().map_err(split_error)?.into_iter().collect()
+        // Events the splitter completed before a refusal come first in the stream, so they are
+        // judged first and the reported error is the first one in byte order (first-error record
+        // F2).
+        let (frames, refused) = if chunk.is_empty() {
+            (self.splitter.finish().map_err(split_error)?.into_iter().collect(), None)
         } else {
-            self.splitter.push(chunk).map_err(split_error)?
+            let push = self.splitter.push(chunk);
+            (push.frames, push.error)
         };
         let mut events = Vec::new();
         for frame in frames {
@@ -687,6 +691,9 @@ impl StreamParserV1 for GeminiSseParser {
                 provider_protocol_error("the upstream sent a stream frame with invalid JSON")
             })?;
             events.extend(self.events_of(&parsed)?);
+        }
+        if let Some(error) = refused {
+            return Err(split_error(error));
         }
         Ok(events)
     }

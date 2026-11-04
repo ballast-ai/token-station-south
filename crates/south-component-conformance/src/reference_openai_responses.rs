@@ -79,7 +79,7 @@ pub const MANTLE_FAMILY: &str = mantle::FAMILY;
 pub const NAME: &str = "provider-openai-responses";
 
 /// The package's version.
-pub const VERSION: &str = "1.6.4";
+pub const VERSION: &str = "1.6.5";
 
 /// The reference component. Stateless; each stream gets its own parser.
 #[derive(Debug, Default, Clone, Copy)]
@@ -1309,10 +1309,16 @@ impl StreamParserV1 for ResponsesStreamParser {
             ));
         }
         self.received = true;
-        let frames = self.splitter.push(chunk).map_err(Self::split_error)?;
+        // Events the splitter completed before a refusal come first in the stream, so they are
+        // judged first and the reported error is the first one in byte order (first-error record
+        // F2).
+        let push = self.splitter.push(chunk);
         let mut events = Vec::new();
-        for frame in &frames {
+        for frame in &push.frames {
             events.extend(self.frame(frame)?);
+        }
+        if let Some(error) = push.error {
+            return Err(Self::split_error(error));
         }
         Ok(events)
     }

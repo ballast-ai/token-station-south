@@ -143,7 +143,7 @@ fn fuzz_eventstream(data: &[u8]) {
 /// changes the parser's events or its first error. The same bytes as a 2xx body never panic.
 fn fuzz_responses_stream(data: &[u8]) {
     let mut splitter = SseSplitterV1::new();
-    let split = splitter.push(data).and_then(|mut frames| {
+    let split = splitter.push(data).into_result().and_then(|mut frames| {
         frames.extend(splitter.finish()?);
         Ok(frames)
     });
@@ -258,7 +258,8 @@ fn base64_standard(bytes: &[u8]) -> String {
 /// The Bedrock `InvokeModel` Anthropic stream parser (B6-2): the `chunk` envelope's strict base64
 /// decoding and the shared Messages state machine under it, fed upstream bytes. Fed raw, the input
 /// exercises the frame splitter and the envelope; wrapped as one `chunk`'s payload, it reaches the
-/// decoded-event path. Chunking never changes the events or the first error.
+/// decoded-event path. Chunking never changes the events of a stream that succeeds, or the first
+/// error of one that fails.
 fn fuzz_invoke_stream(data: &[u8]) {
     let run = |body: &[u8], stride: usize| {
         let mut parser = AnthropicBedrockInvokeReferenceV1.stream_parser();
@@ -266,12 +267,14 @@ fn fuzz_invoke_stream(data: &[u8]) {
         for piece in body.chunks(stride) {
             match parser.parse_chunk(piece) {
                 Ok(more) => events.extend(more),
-                Err(error) => return format!("{events:?} {error:?}"),
+                // An error discards the events of its own call, so only the error is compared
+                // (stream parser first-error record F1).
+                Err(error) => return format!("{error:?}"),
             }
         }
         match parser.finish() {
             Ok(more) => events.extend(more),
-            Err(error) => return format!("{events:?} {error:?}"),
+            Err(error) => return format!("{error:?}"),
         }
         format!("{events:?}")
     };
@@ -427,8 +430,8 @@ fn fuzz_embeddings(input: &str) {
 }
 
 /// The Kiro stream parser (`provider-kiro`): the canonical re-encoding of the upstream's
-/// eventstream messages, fed upstream bytes. Chunking never changes the events or the first
-/// error, the package never reports usage (`usage_evidence: absent`), and the buffered path folds
+/// eventstream messages, fed upstream bytes. Chunking never changes the events of a stream that
+/// succeeds or the first error of one that fails, the package never reports usage (`usage_evidence: absent`), and the buffered path folds
 /// the same body to a response exactly when the stream ends without an error (a body with no frame
 /// is an empty answer there, and emits no `Done` on the stream path).
 fn fuzz_kiro_stream(data: &[u8]) {
@@ -447,9 +450,16 @@ fn fuzz_kiro_stream(data: &[u8]) {
         }
         (events, None)
     };
+    // An error discards the events of its own call, so only the error is compared when there is
+    // one (stream parser first-error record F1).
+    let observed = |(events, error): &(Vec<_>, Option<_>)| match error {
+        Some(error) => format!("{error:?}"),
+        None => format!("{events:?}"),
+    };
     let stride = usize::from(data.first().copied().unwrap_or(0) % 17) + 1;
-    let (events, error) = run(data.len().max(1));
-    assert_eq!(format!("{:?}", run(stride)), format!("{:?}", (&events, &error)));
+    let whole = run(data.len().max(1));
+    assert_eq!(observed(&run(stride)), observed(&whole));
+    let (events, error) = whole;
     let kinds: Vec<String> = events
         .iter()
         .map(|event| {

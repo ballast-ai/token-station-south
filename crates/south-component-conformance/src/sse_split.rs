@@ -16,6 +16,10 @@
 //! cut the same events.
 //!
 //! Memory is bounded: a line or an event longer than [`MAX_SSE_SPLIT_BYTES`] is refused.
+//!
+//! A refusal does not drop the events completed before it in the same chunk ([`SsePushV1`], stream
+//! parser first-error record 2026-11-04): a parser judges those events first, so the error it
+//! reports is the first one in byte order, whatever the chunking.
 
 /// The most bytes one line, or one event's joined data, may hold: 16 MiB, the decoder's own
 /// bound for each.
@@ -28,6 +32,33 @@ const BOM: &[u8] = b"\xEF\xBB\xBF";
 pub struct SseFrameV1 {
     pub event: String,
     pub data: String,
+}
+
+/// What one [`SseSplitterV1::push`] produced: the events it completed, and any refusal.
+///
+/// The events come first in the stream, so a caller judges them before it reports the refusal;
+/// after a refusal the splitter is unusable and the caller ends the stream.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SsePushV1 {
+    /// Every event completed before the first refused line, in order.
+    pub frames: Vec<SseFrameV1>,
+    /// The refusal that stopped the push, if any.
+    pub error: Option<SseSplitErrorV1>,
+}
+
+impl SsePushV1 {
+    /// The events, or the refusal alone. For a caller that refuses its whole input on any refusal
+    /// (a gate suite, a test); a stream parser judges [`SsePushV1::frames`] first instead.
+    ///
+    /// # Errors
+    ///
+    /// The refusal, when the push stopped at one; the events completed before it are dropped.
+    pub fn into_result(self) -> Result<Vec<SseFrameV1>, SseSplitErrorV1> {
+        match self.error {
+            Some(error) => Err(error),
+            None => Ok(self.frames),
+        }
+    }
 }
 
 /// Why the splitter refused the stream.
@@ -66,13 +97,20 @@ impl SseSplitterV1 {
         self.tail.is_empty() && !self.has_data && self.event.is_empty()
     }
 
-    /// Appends `chunk` and returns every event it completed, in order.
-    ///
-    /// # Errors
-    ///
-    /// The first line that is not UTF-8, or a line or event over the bound. The splitter is then
-    /// unusable; a caller ends the stream.
-    pub fn push(&mut self, chunk: &[u8]) -> Result<Vec<SseFrameV1>, SseSplitErrorV1> {
+    /// Appends `chunk` and returns every event it completed, in order, with the refusal that
+    /// stopped it: the first line that is not UTF-8, or a line or event over the bound. After a
+    /// refusal the splitter is unusable; a caller judges the returned events, then ends the stream.
+    pub fn push(&mut self, chunk: &[u8]) -> SsePushV1 {
+        let mut frames = Vec::new();
+        let error = self.push_into(chunk, &mut frames).err();
+        SsePushV1 { frames, error }
+    }
+
+    fn push_into(
+        &mut self,
+        chunk: &[u8],
+        frames: &mut Vec<SseFrameV1>,
+    ) -> Result<(), SseSplitErrorV1> {
         let mut chunk = chunk;
         if self.after_cr && !chunk.is_empty() {
             self.after_cr = false;
@@ -83,14 +121,13 @@ impl SseSplitterV1 {
         self.tail.extend_from_slice(chunk);
         if !self.bom_settled {
             if self.tail.len() < BOM.len() && BOM.starts_with(&self.tail) {
-                return Ok(Vec::new());
+                return Ok(());
             }
             if self.tail.starts_with(BOM) {
                 self.tail.drain(..BOM.len());
             }
             self.bom_settled = true;
         }
-        let mut frames = Vec::new();
         let mut start = 0;
         while let Some(offset) = self.tail[start..].iter().position(|b| matches!(b, b'\r' | b'\n'))
         {
@@ -115,7 +152,7 @@ impl SseSplitterV1 {
         if self.tail.len() > MAX_SSE_SPLIT_BYTES {
             return Err(SseSplitErrorV1::TooLarge);
         }
-        Ok(frames)
+        Ok(())
     }
 
     /// The end of input: reads an unterminated last line, then dispatches the pending event, as
