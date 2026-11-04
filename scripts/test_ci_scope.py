@@ -89,9 +89,9 @@ class ChangedPathsTest(unittest.TestCase):
 
     def test_lists_the_paths_of_the_last_commit(self) -> None:
         self.write("docs/old.md", "new\n")
-        self.write("docs/新文件.md", "new\n")
+        self.write("docs/café.md", "new\n")
         self.commit("second")
-        self.assertEqual(sorted(ci_scope.changed_paths(self.repo)), ["docs/old.md", "docs/新文件.md"])
+        self.assertEqual(sorted(ci_scope.changed_paths(self.repo)), ["docs/old.md", "docs/café.md"])
 
     def test_a_rename_lists_both_sides(self) -> None:
         self.git("mv", "crates/a/src/lib.rs", "docs/lib.rs")
