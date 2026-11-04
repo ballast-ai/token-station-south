@@ -1031,8 +1031,15 @@ impl StreamParserV1 for OpenAiSseParser {
             events.extend(self.pending_finish.flush_pending_finish());
             return Ok(events);
         }
-        for frame in self.splitter.push(chunk).map_err(Self::split_error)? {
-            events.extend(self.frame(&frame)?);
+        // Events the splitter completed before a refusal come first in the stream, so they are
+        // judged first and the reported error is the first one in byte order (first-error record
+        // F2).
+        let push = self.splitter.push(chunk);
+        for frame in &push.frames {
+            events.extend(self.frame(frame)?);
+        }
+        if let Some(error) = push.error {
+            return Err(Self::split_error(error));
         }
         Ok(events)
     }
@@ -1042,7 +1049,7 @@ impl ProviderComponentV1 for OpenAiCompatibleReferenceV1 {
     fn metadata(&self) -> ComponentMetadataV1 {
         ComponentMetadataV1 {
             name: "provider-openai-compatible".to_owned(),
-            version: "2.14.0".to_owned(),
+            version: "2.14.1".to_owned(),
             api_version: PROVIDER_WORLD.to_owned(),
         }
     }

@@ -1,6 +1,7 @@
 # Stream parsers: the first error does not depend on chunking, and a failing scheduled run is visible
 
-Status: **proposed** 2026-11-04, for lv's review (§7). No code change yet.
+Status: **accepted** 2026-11-04 (lv: FQ-1 to FQ-5 as recommended, §7). Implemented on branch `design-stream-first-error`
+(pull request #331); F2 ships in release 0.83.1.
 
 Date: 2026-11-04
 
@@ -130,9 +131,11 @@ The scheduled run gets a final job that runs only when an earlier job of that ru
 
 ### F4. The fuzz job reports every crash it finds
 
-Each fuzz step runs libFuzzer with `-fork=1 -ignore_crashes=1` for the same 600 s and fails at the end if any crash
-artifact was written. One week then reports every distinct finding instead of one. The artifacts are uploaded with the
-run, so a finding can be reproduced without rerunning the fuzzer.
+Each fuzz step runs libFuzzer through `scripts/fuzz-target.sh` with `-fork=1 -ignore_crashes=1` for the same 600 s,
+and fails at the end if any finding was written. One week then reports every distinct finding instead of one. Each
+finding is printed into the log as base64, so it can be reproduced without rerunning the fuzzer. Uploading the files
+as a run artifact would need a new third-party action, which this repository pins by commit and does not yet use, so
+the log carries them instead. The second and third fuzz steps run even when an earlier step found something.
 
 ## 4. What does not change
 
@@ -164,6 +167,8 @@ does not call `SseSplitterV1` (`server:gateway/tests/text_stream_sse_framing.rs`
 re-pin needs no host code change.
 
 ## 7. Questions for lv
+
+Ruled by lv on 2026-11-04: every question as recommended.
 
 - **FQ-1.** Adopt F1, which fixes the fuzz checks to the contract's promise? Recommended: **yes**.
 - **FQ-2.** Adopt F2 and change the return type of `SseSplitterV1::push`, rather than add a second method?

@@ -146,7 +146,7 @@ fn host_unknown(reason: &str) -> SpeechOutcomeV1 {
 /// An `sse` body split into events as a host's `decode_sse_v1` would.
 fn sse_events(body: &[u8]) -> Result<Vec<(String, String)>, String> {
     let mut splitter = SseSplitterV1::new();
-    let mut frames = splitter.push(body).map_err(|error| format!("{error:?}"))?;
+    let mut frames = splitter.push(body).into_result().map_err(|error| format!("{error:?}"))?;
     frames.extend(splitter.finish().map_err(|error| format!("{error:?}"))?);
     Ok(frames.into_iter().map(|frame| (frame.event, frame.data)).collect())
 }

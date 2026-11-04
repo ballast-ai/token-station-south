@@ -48,7 +48,7 @@ fn each_sse_body_decodes_to_its_events_and_its_view() {
         assert_eq!(decoded, expected, "{name}: decode_sse_v1");
 
         let mut splitter = SseSplitterV1::new();
-        let mut split = splitter.push(body).expect("splits");
+        let mut split = splitter.push(body).into_result().expect("splits");
         split.extend(splitter.finish().expect("finishes"));
         let split: Vec<(String, String)> =
             split.into_iter().map(|frame| (frame.event, frame.data)).collect();

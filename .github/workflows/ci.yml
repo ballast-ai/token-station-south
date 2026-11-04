@@ -262,23 +262,51 @@ jobs:
       - uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2
         with:
           tool: cargo-fuzz
-      # The cargo-fuzz binary that install-action fetches is built for musl, and cargo-fuzz
-      # defaults `--target` to its own build target. The address sanitizer cannot link against
-      # a statically linked libc, so every scheduled run since that binary changed failed before
-      # fuzzing. Name the runner's own target explicitly.
+      # `scripts/fuzz-target.sh` runs each target for 600 s in fork mode, so one run reports every
+      # finding instead of the first, fails the step when there is any, and prints each finding as
+      # base64 (stream parser first-error record F4). It also names the runner's own target: the
+      # cargo-fuzz binary install-action fetches is built for musl, and the address sanitizer
+      # cannot link against a statically linked libc. Each step runs even when an earlier one
+      # found something, so one run covers all three targets.
       - name: Fuzz untrusted headers
-        run: >-
-          rustup run nightly-2026-08-15 cargo fuzz run --target x86_64-unknown-linux-gnu
-          safe_headers -- -max_total_time=600
+        run: bash scripts/fuzz-target.sh safe_headers 600
       - name: Fuzz untrusted contract parsers
-        run: |
-          mkdir -p fuzz/corpus/contract_parsers
-          cp fuzz/seeds/contract_parsers/* fuzz/corpus/contract_parsers/
-          rustup run nightly-2026-08-15 cargo fuzz run --target x86_64-unknown-linux-gnu \
-            contract_parsers -- -max_total_time=600
+        if: ${{ !cancelled() }}
+        run: bash scripts/fuzz-target.sh contract_parsers 600
       - name: Fuzz optional local write framing
+        if: ${{ !cancelled() }}
+        run: bash scripts/fuzz-target.sh local_write_parser 600
+
+  # A failed scheduled run notifies only the account that last changed the schedule, so the weekly
+  # fuzz job failed five weeks running unseen (record F3). This job comments on the open issue
+  # titled "Scheduled CI failed", or opens one, naming the failing jobs and steps. It is the only
+  # job with write access, and only to issues.
+  scheduled-failure:
+    needs: [scope, quality, components, language, fuzz]
+    if: github.event_name == 'schedule' && failure()
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Report the failed run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SHA: ${{ github.sha }}
         run: |
-          mkdir -p fuzz/corpus/local_write_parser
-          cp fuzz/seeds/local_write_parser/* fuzz/corpus/local_write_parser/
-          rustup run nightly-2026-08-15 cargo fuzz run --target x86_64-unknown-linux-gnu \
-            local_write_parser -- -max_total_time=600
+          set -euo pipefail
+          title=$(python3 -B -c 'import sys; sys.path.insert(0, "scripts"); import scheduled_failure; print(scheduled_failure.TITLE)')
+          gh api "repos/${REPOSITORY}/actions/runs/${RUN_ID}/jobs" > "${RUNNER_TEMP}/jobs.json"
+          python3 scripts/scheduled_failure.py "${RUNNER_TEMP}/jobs.json" "${RUN_URL}" "${SHA}" > "${RUNNER_TEMP}/body.md"
+          open=$(gh issue list --repo "${REPOSITORY}" --state open --search "in:title \"${title}\"" \
+            --json number,title --jq "map(select(.title == \"${title}\")) | .[0].number // empty")
+          if [ -n "${open}" ]; then
+            gh issue comment "${open}" --repo "${REPOSITORY}" --body-file "${RUNNER_TEMP}/body.md"
+          else
+            gh issue create --repo "${REPOSITORY}" --title "${title}" --body-file "${RUNNER_TEMP}/body.md"
+          fi

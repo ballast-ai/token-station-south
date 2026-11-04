@@ -420,7 +420,7 @@ fn split_all(chunks: &[&[u8]]) -> Result<Vec<(String, String)>, SseSplitErrorV1>
     let mut splitter = SseSplitterV1::new();
     let mut frames = Vec::new();
     for chunk in chunks {
-        frames.extend(splitter.push(chunk)?);
+        frames.extend(splitter.push(chunk).into_result()?);
     }
     frames.extend(splitter.finish()?);
     Ok(frames.into_iter().map(|SseFrameV1 { event, data }| (event, data)).collect())
@@ -514,7 +514,7 @@ fn frames_cut_at_decoder_positions_are_whole_frames_for_the_component() {
         let mut splitter = SseSplitterV1::new();
         let mut start = 0;
         for (end, event) in cuts {
-            let frames = splitter.push(&body[start..end]).unwrap();
+            let frames = splitter.push(&body[start..end]).into_result().unwrap();
             assert_eq!(
                 frames,
                 [SseFrameV1 { event: event.event().to_owned(), data: event.data().to_owned() }],
@@ -605,7 +605,7 @@ mod properties {
         let mut splitter = SseSplitterV1::new();
         let mut frames = Vec::new();
         for chunk in chunks {
-            frames.extend(splitter.push(chunk)?);
+            frames.extend(splitter.push(chunk).into_result()?);
         }
         frames.extend(splitter.finish()?);
         Ok(frames.into_iter().map(|frame| (frame.event, frame.data)).collect())
