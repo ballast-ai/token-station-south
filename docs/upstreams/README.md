@@ -22,3 +22,5 @@ surrounding facts that no record repeats, and point to the records instead of re
 | [How upstreams report token usage](usage-reports.md) (cross-vendor) | every package that parses usage into the IR |
 | [BytePlus (Seedance video)](byteplus.md) | `task-byteplus-v2` |
 | [Reve (images)](reve.md) | `image-reve` |
+| [AWS Bedrock](aws-bedrock.md) | `provider-bedrock-converse`, `provider-bedrock-converse-bearer`, `provider-anthropic-bedrock-invoke`, `provider-openai-responses` (`bedrock-mantle`) |
+| [Z.AI GLM Coding Plan](zai-glm-coding.md) | `provider-openai-compatible` (`glm-coding`), `image-openai-compatible` (`glm-coding`) |
