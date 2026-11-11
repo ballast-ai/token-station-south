@@ -5,7 +5,7 @@ Status: proposed. The decisions in §5 are not ruled yet.
 Date: 2026-11-10
 
 Issue: #337. Baseline: south `origin/main` = `a9795fb9`. The host requirement is token-station-server
-`docs/plans/2026-11-10-TTS组件族扩展需求.md` §7, at `origin/dev-v2` = `056910b0d`.
+TTS component family extension requirement (`docs/plans/`, dated 2026-11-10) §7, at `origin/dev-v2` = `056910b0d`.
 
 Parent records: [`2026-09-30-speech-world.md`](2026-09-30-speech-world.md) ("the record"),
 [`2026-10-15-speech-v4-tts.md`](2026-10-15-speech-v4-tts.md) ("V4": `speech-qwen`) and
@@ -199,7 +199,7 @@ These go into `docs/upstreams/alibaba-model-studio.md` with the implementation.
 ## 7. Host work after release
 
 - Repin.
-- Add both families to the host speech family table (`组件族参考-语音.md`) and the preflight `FAMILY_TABLE`.
+- Add both families to the host speech family table (the speech family reference under `docs/runbook/`) and the preflight `FAMILY_TABLE`.
 - Ops then binds and routes the rows (one binding per family on each Model Studio row), smoke-tests each region, and
   delists `sambert-zhide-v1`.
 
