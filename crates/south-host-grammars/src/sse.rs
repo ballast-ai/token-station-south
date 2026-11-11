@@ -225,7 +225,10 @@ fn terminator(bytes: &[u8]) -> Option<usize> {
 /// is the end of the frame that dispatched it: the stream offset just past the blank line's
 /// terminator. A host that forwards the upstream's own bytes (`north_passthrough`) cuts the
 /// stream there, so each forwarded slice is one whole frame and decodes on its own to exactly
-/// that event. To know whether a CR is the first half of a CRLF the decoder needs the byte after
+/// that event, with one exception: a decoder drops a byte order mark only at the start of a
+/// stream, so a frame after the first that begins with one reads differently on its own (the mark
+/// is dropped) than in the stream (the mark is part of its first field name). The forwarded
+/// stream as a whole decodes as the upstream's did. To know whether a CR is the first half of a CRLF the decoder needs the byte after
 /// it, so a line ended by a CR is read only once that byte arrives (or at `finish`).
 ///
 /// Errors are sticky: after the first one, every later call returns it again and pushed bytes are

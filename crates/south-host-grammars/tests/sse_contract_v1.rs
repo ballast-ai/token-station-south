@@ -328,6 +328,24 @@ fn positions_cut_the_stream_into_self_contained_frames() {
     }
 }
 
+/// The one exception to self-contained frames (issue #336): a later frame that begins with a byte
+/// order mark keeps it in the stream, where it is part of the first field name, but a decoder
+/// reading that frame alone drops it as a stream-start mark.
+#[test]
+fn a_later_frame_that_begins_with_a_bom_reads_differently_on_its_own() {
+    let input = b"data: 1\n\n\xef\xbb\xbfevent: a\ndata: 2\n\n";
+    let expected = [
+        (SseEventV1::new("message", "1"), 0..9),
+        (SseEventV1::new("message", "2"), 9..input.len()),
+    ];
+    for chunk in 1..=input.len() {
+        assert_eq!(frames(input, chunk).expect("valid"), expected, "chunk size {chunk}");
+    }
+    assert_eq!(decode_sse_v1(&input[9..]), Ok(vec![SseEventV1::new("a", "2")]));
+    let in_stream = [&b"\xef\xbb\xbf"[..], &input[9..]].concat();
+    assert_eq!(decode_sse_v1(&in_stream), Ok(vec![SseEventV1::new("message", "2")]));
+}
+
 #[test]
 fn a_bom_split_across_chunks_is_still_dropped() {
     assert_eq!(
