@@ -1,5 +1,8 @@
 #![no_main]
 
+use std::collections::BTreeSet;
+use std::sync::{Mutex, PoisonError};
+
 use libfuzzer_sys::fuzz_target;
 use south_component_conformance::embeddings_json::{
     embeddings_parsed_json, parse_embeddings_parsed_json, parse_prepared_embeddings_json,
@@ -45,6 +48,10 @@ const QUOTA_FIELDS: [ProviderQuotaMetadataFieldV1; 9] = [
     ProviderQuotaMetadataFieldV1::AnthropicRateLimitUnifiedRemaining,
     ProviderQuotaMetadataFieldV1::AnthropicRateLimitUnifiedReset,
 ];
+
+/// The `'static` copies of accepted user-agent values, one per distinct value. Kept reachable
+/// from here so the leak sanitizer does not report each input's copy as a leak (issue #336).
+static STATIC_USER_AGENTS: Mutex<BTreeSet<&'static str>> = Mutex::new(BTreeSet::new());
 
 /// Bitwise CRC32 (IEEE), so constructed frames reach the header and payload grammar instead of
 /// stopping at the checksums, which random bytes almost never satisfy.
@@ -185,6 +192,9 @@ fn fuzz_responses_stream(data: &[u8]) {
     }
 }
 
+/// The UTF-8 byte order mark (U+FEFF).
+const BOM: &[u8] = "\u{feff}".as_bytes();
+
 fn fuzz_sse(data: &[u8]) {
     let whole = decode_sse_v1(data);
     let stride = usize::from(data.last().copied().unwrap_or(0) % 13) + 1;
@@ -221,12 +231,17 @@ fn fuzz_sse(data: &[u8]) {
         Ok(expected) => {
             assert_eq!(outcome, Ok(()));
             assert_eq!(events.iter().map(|(event, _)| event).collect::<Vec<_>>(), expected.iter().collect::<Vec<_>>());
-            // The positions cut the stream into frames that each decode alone to their event.
+            // The positions cut the stream into frames that each decode alone to their event. A
+            // frame after the first is read with a byte order mark in front: a decoder drops one
+            // only at the start of a stream, so a frame that itself begins with one keeps it as
+            // part of its first field name in the stream (issue #336).
             let mut start = 0;
             for (event, end) in events {
                 assert!(!event.event().is_empty());
                 assert!(!event.event().contains(['\r', '\n']));
-                assert_eq!(decode_sse_v1(&data[start..end]), Ok(vec![event]));
+                let frame = &data[start..end];
+                let alone = if start == 0 { frame.to_vec() } else { [BOM, frame].concat() };
+                assert_eq!(decode_sse_v1(&alone), Ok(vec![event]));
                 start = end;
             }
         }
@@ -292,7 +307,15 @@ fn fuzz_declared_instances(input: &str) {
         assert!(!input.is_empty() && input.len() <= MAX_USER_AGENT_BYTES);
         assert!(input.bytes().all(|byte| (0x20..=0x7e).contains(&byte)));
         assert!(!input.starts_with(' ') && !input.ends_with(' '));
-        let literal: &'static str = Box::leak(input.to_owned().into_boxed_str());
+        let mut literals = STATIC_USER_AGENTS.lock().unwrap_or_else(PoisonError::into_inner);
+        let literal = match literals.get(input) {
+            Some(literal) => *literal,
+            None => {
+                let literal: &'static str = Box::leak(input.to_owned().into_boxed_str());
+                literals.insert(literal);
+                literal
+            }
+        };
         assert!(ControlledUserAgentV1::try_from_static(literal).is_ok());
     }
 
