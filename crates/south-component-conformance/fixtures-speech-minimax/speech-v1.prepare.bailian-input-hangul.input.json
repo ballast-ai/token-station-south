@@ -1,0 +1,27 @@
+{
+  "provider_config": {
+    "provider": "bailian-minimax-speech",
+    "base_url": "https://dashscope.aliyuncs.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "MiniMax/speech-2.8-hd"
+      },
+      {
+        "model": "MiniMax/speech-2.8-turbo"
+      }
+    ]
+  },
+  "request": {
+    "json": {
+      "input": "안녕하세요 world"
+    }
+  },
+  "context": {
+    "upstream_model": "MiniMax/speech-2.8-hd",
+    "operation": "synthesize",
+    "metering_required": [
+      "characters"
+    ]
+  }
+}

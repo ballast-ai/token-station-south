@@ -1,0 +1,31 @@
+{
+  "provider_config": {
+    "provider": "bailian-speech-synthesizer",
+    "base_url": "https://dashscope.aliyuncs.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "cosyvoice-v3.5-plus"
+      },
+      {
+        "model": "qwen-audio-3.1-tts-plus"
+      }
+    ]
+  },
+  "request": {
+    "json": {
+      "input": "hello world",
+      "voice": "Cherry",
+      "response_format": "wav",
+      "speed": 1,
+      "instructions": "Speak slowly and warmly."
+    }
+  },
+  "context": {
+    "upstream_model": "qwen-audio-3.1-tts-plus",
+    "operation": "synthesize",
+    "metering_required": [
+      "characters"
+    ]
+  }
+}

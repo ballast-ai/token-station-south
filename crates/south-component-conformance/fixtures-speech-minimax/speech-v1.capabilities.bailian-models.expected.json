@@ -1,0 +1,20 @@
+[
+  {
+    "model": "MiniMax/speech-2.8-hd",
+    "operations": [
+      "synthesize"
+    ],
+    "metering_forms": [
+      "characters"
+    ]
+  },
+  {
+    "model": "MiniMax/speech-2.8-turbo",
+    "operations": [
+      "synthesize"
+    ],
+    "metering_forms": [
+      "characters"
+    ]
+  }
+]

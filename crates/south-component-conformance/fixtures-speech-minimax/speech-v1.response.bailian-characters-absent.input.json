@@ -1,0 +1,23 @@
+{
+  "prepare_case": "speech-v1.prepare.bailian-input-hangul",
+  "response": {
+    "status": 200,
+    "body": {
+      "output": {
+        "data": {
+          "audio": "415544494f",
+          "status": 2
+        },
+        "extra_info": {
+          "audio_format": "mp3"
+        },
+        "base_resp": {
+          "status_code": 0,
+          "status_msg": "success"
+        }
+      },
+      "request_id": "req-hosted"
+    },
+    "content_type": "application/json"
+  }
+}

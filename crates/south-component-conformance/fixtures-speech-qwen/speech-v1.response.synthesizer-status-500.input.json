@@ -1,0 +1,10 @@
+{
+  "prepare_case": "speech-v1.prepare.synthesizer-native",
+  "response": {
+    "status": 500,
+    "body": {
+      "code": "InternalError",
+      "message": "try again later"
+    }
+  }
+}

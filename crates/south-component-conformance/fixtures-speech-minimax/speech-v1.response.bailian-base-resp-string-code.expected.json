@@ -1,0 +1,5 @@
+{
+  "outcome": "unknown",
+  "reason": "a malformed base_resp.status_code",
+  "error": null
+}

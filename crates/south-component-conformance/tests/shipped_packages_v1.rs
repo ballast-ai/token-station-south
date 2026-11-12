@@ -2931,7 +2931,9 @@ const SPEECH_VERSION: &str = "1.1.3";
 /// record's 1.1.6, the family model parameters record's 1.1.7, the Kiro image input record's 1.1.8
 /// and the Bailian records' 1.1.9 (`speech_openai_compatible_1_1_adds_the_azure_openai_families`),
 /// and `speech-qwen`, which Qwen-ASR transcription made 1.1.0 (record `2026-10-21-speech-qwen-asr.md`;
-/// `bailian_retires_every_published_075_package_identity`).
+/// `bailian_retires_every_published_075_package_identity`). The Model Studio speech families (record
+/// `2026-11-10-speech-bailian-synthesizer-and-minimax.md`) made `speech-qwen` 1.3.0 and
+/// `speech-minimax` 1.2.0 (`the_model_studio_speech_families_join_their_packages`).
 fn speech_version(name: &str) -> &'static str {
     match name {
         // Every speech package took a minor in the 0.81.0 round: it declares its served models
@@ -2940,7 +2942,9 @@ fn speech_version(name: &str) -> &'static str {
         // and the 0.83.0 round again
         // (`client_policy_headers_retire_every_published_082_package_identity`), and the 0.83.1
         // round again (`first_error_retires_every_published_083_package_identity`).
-        "speech-vertex" | "speech-xai" | "speech-qwen" => "1.2.3",
+        "speech-vertex" | "speech-xai" => "1.2.3",
+        "speech-qwen" => "1.3.0",
+        "speech-minimax" => "1.2.0",
         "speech-openai-compatible" => "1.3.3",
         _ => SPEECH_VERSION,
     }
@@ -3048,7 +3052,13 @@ fn the_v3_2_speech_packages_declare_their_runtime_and_values() {
         let manifest = read(name);
         assert_eq!(manifest.version, speech_version(name), "{name}");
         assert_eq!(manifest.api_version, south_provider_api::SPEECH_WORLD, "{name}");
-        assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), [family], "{name}");
+        // `speech-minimax` 1.2.0 adds the Model Studio-hosted family after its own
+        // (`the_model_studio_speech_families_join_their_packages`).
+        let families: Vec<&str> = match name {
+            "speech-minimax" => vec![family, "bailian-minimax-speech"],
+            _ => vec![family],
+        };
+        assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), families, "{name}");
         assert_eq!(manifest.capabilities.iter().collect::<Vec<_>>(), ["synthesize"], "{name}");
         assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer"], "{name}");
         assert!(manifest.query_parameters.is_empty(), "{name}");
@@ -3179,7 +3189,13 @@ fn the_v4_speech_packages_declare_their_values_and_runtime() {
         let manifest = read(name);
         assert_eq!(manifest.version, speech_version(name), "{name}");
         assert_eq!(manifest.api_version, south_provider_api::SPEECH_WORLD, "{name}");
-        assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), [family], "{name}");
+        // `speech-qwen` 1.3.0 adds the `SpeechSynthesizer` family after its own
+        // (`the_model_studio_speech_families_join_their_packages`).
+        let families: Vec<&str> = match name {
+            "speech-qwen" => vec![family, "bailian-speech-synthesizer"],
+            _ => vec![family],
+        };
+        assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), families, "{name}");
         assert_eq!(manifest.capabilities.iter().collect::<Vec<_>>(), capabilities, "{name}");
         assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer"], "{name}");
         assert_eq!(manifest.declared_keys(family), keys.into_iter().collect(), "{name}");
@@ -5246,6 +5262,13 @@ fn first_error_retires_every_published_083_package_identity() {
         )
         .unwrap();
         assert_ne!(manifest.version, published, "{name} reused its identity published with 0.83.0");
+        // The Model Studio speech families moved two packages on to minors after the round
+        // (`the_model_studio_speech_families_join_their_packages`).
+        let now = match name {
+            "speech-qwen" => "1.3.0",
+            "speech-minimax" => "1.2.0",
+            _ => now,
+        };
         assert_eq!(manifest.version, now, "{name}");
         assert_eq!(
             manifest.compatibility.south_runtime, runtime,

@@ -69,9 +69,9 @@ and release artifacts. See the [architecture](../ARCHITECTURE.md) for admission 
 | [`speech-groq`](../components/speech-groq/manifest.json) | Groq synthesis | `bash scripts/build-speech-groq-component.sh` | [fixtures](../crates/south-component-conformance/fixtures-speech-groq/README.md) |
 | [`speech-elevenlabs`](../components/speech-elevenlabs/manifest.json) | ElevenLabs synthesis and transcription | `bash scripts/build-speech-elevenlabs-component.sh` | [fixtures](../crates/south-component-conformance/fixtures-speech-elevenlabs/README.md) |
 | [`speech-mimo`](../components/speech-mimo/manifest.json) | Xiaomi MiMo synthesis | `bash scripts/build-speech-mimo-component.sh` | [fixtures](../crates/south-component-conformance/fixtures-speech-mimo/README.md) |
-| [`speech-minimax`](../components/speech-minimax/manifest.json) | MiniMax synthesis | `bash scripts/build-speech-minimax-component.sh` | [fixtures](../crates/south-component-conformance/fixtures-speech-minimax/README.md) |
+| [`speech-minimax`](../components/speech-minimax/manifest.json) | MiniMax synthesis, direct and hosted by Model Studio | `bash scripts/build-speech-minimax-component.sh` | [fixtures](../crates/south-component-conformance/fixtures-speech-minimax/README.md) |
 | [`speech-azure`](../components/speech-azure/manifest.json) | Azure fast transcription and SSML synthesis | `bash scripts/build-speech-azure-component.sh` | [fixtures](../crates/south-component-conformance/fixtures-speech-azure/README.md) |
-| [`speech-qwen`](../components/speech-qwen/manifest.json) | Bailian Qwen synthesis, Qwen ASR, and declared artifact fetch | `bash scripts/build-speech-qwen-component.sh` | [fixtures](../crates/south-component-conformance/fixtures-speech-qwen/README.md) |
+| [`speech-qwen`](../components/speech-qwen/manifest.json) | Bailian Qwen synthesis, Qwen ASR, Qwen-Audio-TTS and CosyVoice synthesis, and declared artifact fetch | `bash scripts/build-speech-qwen-component.sh` | [fixtures](../crates/south-component-conformance/fixtures-speech-qwen/README.md) |
 | [`speech-vertex`](../components/speech-vertex/manifest.json) | Vertex AI Gemini synthesis | `bash scripts/build-speech-vertex-component.sh` | [fixtures](../crates/south-component-conformance/fixtures-speech-vertex/README.md) |
 
 ## Registered host funds differences

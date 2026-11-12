@@ -1,0 +1,35 @@
+{
+  "provider_config": {
+    "provider": "bailian-speech-synthesizer",
+    "base_url": "https://dashscope.aliyuncs.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "cosyvoice-v3.5-plus"
+      },
+      {
+        "model": "qwen-audio-3.1-tts-plus"
+      }
+    ]
+  },
+  "request": {
+    "json": {
+      "input": "hello world",
+      "voice": "longanyang",
+      "instructions": {
+        "$south.blob": {
+          "id": "b0",
+          "bytes": 1048577,
+          "head": "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv"
+        }
+      }
+    }
+  },
+  "context": {
+    "upstream_model": "cosyvoice-v3.5-plus",
+    "operation": "synthesize",
+    "metering_required": [
+      "characters"
+    ]
+  }
+}

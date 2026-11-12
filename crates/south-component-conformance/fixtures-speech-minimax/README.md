@@ -31,3 +31,19 @@ reference first ran:
   object (`unknown`, SV-Q7); empty, missing, `null` and non-string audio, `data` not an object, a non-object body and a
   body that is not JSON; 401, 403, 404, 408, 429, 500 and 302, whose provider message is `base_resp.status_msg`, else
   the body text.
+
+The Model Studio-hosted family (1.2.0, family `bailian-minimax-speech`,
+`docs/design/2026-11-10-speech-bailian-synthesizer-and-minimax.md` §3) adds the `bailian-*` cases. The family has no
+native arm: every expectation was written by hand from the record, which reads Model Studio's published MiniMax page
+(2026-11-10), before the reference first ran. No traffic has been captured (record §6).
+
+- `prepare.bailian-*`: `POST api/v1/services/aigc/multimodal-generation/generation` with `bearer`, no `?GroupId=`, and
+  MiniMax's body under `input` without `stream`; `voice_setting`, `audio_setting`, the voice and the format follow the
+  `minimax-speech` rules unchanged (`settings-passthrough`, `speed-explicit-wins`, the four formats, `opus` refused);
+  `/output/data/audio` is elided. `capabilities.bailian-models`: `synthesize` only, billed by characters.
+- Responses (record §3.3): the hex audio in three formats; characters from `usage.characters`, else
+  `output.extra_info.usage_characters`, else the request's count, the first one present judged (`0` and a string are
+  `unknown`; a malformed later one is never read); `usage.count`, a cloned voice's unlock fee, not read (SV-Q15); a 2xx
+  `code`; `output.base_resp` (1004 refused, 1026 `unknown`, a string code, absent, and judged before the characters),
+  while a top-level `base_resp` is not read; empty, missing and `null` audio; a non-object body; 400 with
+  `DataInspection`, 401, 429 and 500 read with the `DashScope` reader.

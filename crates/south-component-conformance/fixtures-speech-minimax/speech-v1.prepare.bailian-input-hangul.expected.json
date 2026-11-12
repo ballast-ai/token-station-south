@@ -1,0 +1,54 @@
+{
+  "facts": {
+    "operation": "synthesize",
+    "characters": {
+      "count": 11,
+      "upper": 16
+    },
+    "metering_forms": [
+      "characters"
+    ],
+    "output_media_type": "audio/mpeg"
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "api/v1/services/aigc/multimodal-generation/generation",
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "model": "MiniMax/speech-2.8-hd",
+          "input": {
+            "text": "안녕하세요 world",
+            "output_format": "hex",
+            "voice_setting": {
+              "voice_id": "Wise_Woman"
+            },
+            "audio_setting": {
+              "format": "mp3"
+            }
+          }
+        }
+      }
+    }
+  },
+  "response_body_form": "json",
+  "response_elision_paths": [
+    "/output/data/audio"
+  ],
+  "immutable_body_paths": [
+    "model",
+    "input.text",
+    "input.output_format",
+    "input.audio_setting.format",
+    "input.voice_setting.voice_id"
+  ],
+  "state": {
+    "family": "bailian-minimax-speech",
+    "format": "mp3",
+    "characters": 11
+  }
+}

@@ -1,0 +1,20 @@
+[
+  {
+    "model": "cosyvoice-v3.5-plus",
+    "operations": [
+      "synthesize"
+    ],
+    "metering_forms": [
+      "characters"
+    ]
+  },
+  {
+    "model": "qwen-audio-3.1-tts-plus",
+    "operations": [
+      "synthesize"
+    ],
+    "metering_forms": [
+      "characters"
+    ]
+  }
+]

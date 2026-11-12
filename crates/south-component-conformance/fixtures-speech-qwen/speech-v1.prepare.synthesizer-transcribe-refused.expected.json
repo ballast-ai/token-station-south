@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "capability",
+    "http_status": 400,
+    "message": "the model 'cosyvoice-v3.5-plus' does not declare the operation transcribe"
+  }
+}

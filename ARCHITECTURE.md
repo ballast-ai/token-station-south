@@ -173,8 +173,10 @@ inline or URL artifacts. Hosts execute safe artifact fetches and enforce deliver
 
 Speech components translate synthesis, transcription, translation, and declared artifact fetches.
 Qwen currently supports ASR for `qwen3-asr-flash`, with bounded data-URL audio, optional prompt and
-language controls, JSON or text output, and seconds-based usage. See the
-[Qwen ASR design](docs/design/2026-10-21-speech-qwen-asr.md) and
+language controls, JSON or text output, and seconds-based usage. Model Studio's SpeechSynthesizer
+API (Qwen-Audio-TTS and CosyVoice) and its hosted MiniMax synthesis are families of `speech-qwen`
+and `speech-minimax`. See the [Qwen ASR design](docs/design/2026-10-21-speech-qwen-asr.md),
+[Model Studio speech design](docs/design/2026-11-10-speech-bailian-synthesizer-and-minimax.md) and
 [speech-world design](docs/design/2026-09-30-speech-world.md).
 
 ## Four conformance gates
