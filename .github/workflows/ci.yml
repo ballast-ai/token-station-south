@@ -62,7 +62,7 @@ jobs:
           # that does anyway builds and is then named by the last step, instead of failing on a
           # missing target.
           targets: wasm32-wasip2
-      - uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2
+      - uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2
         with:
           tool: cargo-nextest,cargo-deny,cargo-audit,cargo-machete
       # Without a cache every run compiles wasmtime and the other dependencies from scratch, in
@@ -166,7 +166,7 @@ jobs:
           # The runtime tests and the sandbox parity tests build real
           # wasm32-wasip2 guest components as child cargo invocations.
           targets: wasm32-wasip2
-      - uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2
+      - uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2
         with:
           tool: cargo-nextest
       # The root workspace (which holds `target/components`, where every package is built) and
@@ -259,7 +259,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: nightly-2026-08-15
-      - uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2
+      - uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2
         with:
           tool: cargo-fuzz
       # `scripts/fuzz-target.sh` runs each target for 600 s in fork mode, so one run reports every
