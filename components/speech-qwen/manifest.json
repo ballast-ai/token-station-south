@@ -1,9 +1,10 @@
 {
   "name": "speech-qwen",
-  "version": "1.2.3",
+  "version": "1.3.0",
   "api_version": "speech-adapter-v1",
   "providers": [
-    "bailian-qwen-speech"
+    "bailian-qwen-speech",
+    "bailian-speech-synthesizer"
   ],
   "capabilities": [
     "synthesize",
@@ -19,6 +20,18 @@
         "qwen-tts",
         "qwen3-asr-",
         "qwen3-tts-"
+      ]
+    },
+    "bailian-speech-synthesizer": {
+      "ids": [
+        "cosyvoice-v2",
+        "cosyvoice-v3-flash",
+        "cosyvoice-v3-plus",
+        "cosyvoice-v3.5-flash",
+        "cosyvoice-v3.5-plus",
+        "qwen-audio-3.0-tts-flash",
+        "qwen-audio-3.0-tts-plus",
+        "qwen-audio-3.1-tts-plus"
       ]
     }
   },

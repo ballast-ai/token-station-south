@@ -1,0 +1,17 @@
+{
+  "outcome": "succeeded",
+  "artifact": {
+    "form": "url",
+    "pointer": "/output/audio/url",
+    "upgrade_insecure": true,
+    "media_type": "audio/wav"
+  },
+  "metering": {
+    "characters": {
+      "value": 11,
+      "source": "request"
+    },
+    "seconds": null,
+    "tokens": null
+  }
+}

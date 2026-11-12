@@ -1,0 +1,47 @@
+{
+  "facts": {
+    "operation": "synthesize",
+    "characters": {
+      "count": 11,
+      "upper": 11
+    },
+    "metering_forms": [
+      "characters"
+    ],
+    "output_media_type": "audio/mpeg"
+  },
+  "descriptor": {
+    "method": "POST",
+    "path": "api/v1/services/audio/tts/SpeechSynthesizer",
+    "auth": {
+      "arm": "bearer",
+      "slot": "provider_api_key"
+    },
+    "body": {
+      "json": {
+        "template": {
+          "model": "cosyvoice-v3.5-plus",
+          "input": {
+            "text": "hello world",
+            "voice": "longanyang",
+            "format": "mp3",
+            "rate": 4.0
+          }
+        }
+      }
+    }
+  },
+  "response_body_form": "json",
+  "response_elision_paths": [],
+  "immutable_body_paths": [
+    "model",
+    "input.text",
+    "input.format",
+    "input.voice"
+  ],
+  "state": {
+    "family": "bailian-speech-synthesizer",
+    "format": "mp3",
+    "characters": 11
+  }
+}

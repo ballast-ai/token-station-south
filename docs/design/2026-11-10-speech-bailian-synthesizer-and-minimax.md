@@ -1,6 +1,7 @@
 # Speech: the Model Studio SpeechSynthesizer family and Model Studio-hosted MiniMax TTS
 
-Status: proposed. The decisions in §5 are not ruled yet.
+Status: accepted. lv merged this record (#338) on 2026-11-12, which rules SV-Q12 to SV-Q15 as proposed. Implemented
+in `speech-qwen` 1.3.0 and `speech-minimax` 1.2.0; not yet released.
 
 Date: 2026-11-10
 
@@ -143,8 +144,9 @@ A non-2xx reads the DashScope `{"code", "message"}` answer.
 
 ## 4. Fixtures and tests
 
-- Conformance fixtures, one directory per family:
-  - `fixtures-speech-bailian-synthesizer/` and `fixtures-speech-bailian-minimax/`;
+- Conformance fixtures, in each package's own pack, because a manifest names one pack (the precedent of
+  `speech-openai-compatible`'s Azure families):
+  - the `synthesizer-*` cases in `fixtures-speech-qwen/` and the `bailian-*` cases in `fixtures-speech-minimax/`;
   - the prepare cases above, refusals included;
   - every response branch in §2.4 and §3.3;
   - the cases are written from the pages, not from traffic.
@@ -156,7 +158,7 @@ A non-2xx reads the DashScope `{"code", "message"}` answer.
 
 ## 5. Decisions
 
-Proposed. Defaults apply unless lv objects.
+Ruled as proposed (2026-11-12).
 
 - **SV-Q12 Placement.** Both families are added to existing packages (§1), not to a new `speech-bailian` package. One
   binding serves one family, so the Model Studio row needs one binding per family whichever package holds them.
@@ -202,5 +204,3 @@ These go into `docs/upstreams/alibaba-model-studio.md` with the implementation.
 - Add both families to the host speech family table (the speech family reference under `docs/runbook/`) and the preflight `FAMILY_TABLE`.
 - Ops then binds and routes the rows (one binding per family on each Model Studio row), smoke-tests each region, and
   delists `sambert-zhide-v1`.
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)

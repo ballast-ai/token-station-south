@@ -51,6 +51,12 @@
 //!   non-negative integer (`reported`), `unknown` when absent, `null` or anything else, never a
 //!   fallback. Transcript: `output.choices[0].message.content[0].text`, a string (`""` included),
 //!   else `unknown`; delivered as `{"text"}` or plain text.
+//!
+//! **`SpeechSynthesizer`** (1.3.0, design record
+//! `docs/design/2026-11-10-speech-bailian-synthesizer-and-minimax.md` §2): the second family,
+//! `bailian-speech-synthesizer`, serves Qwen-Audio-TTS and `CosyVoice` through Model Studio's HTTP
+//! `SpeechSynthesizer` API (module `speech_synthesizer`). Its 2xx reading is the Qwen-TTS one above, the
+//! artifact typed by the format it asked for.
 
 use serde_json::{Map, Value, json};
 use south_contracts::media::ResponseBodyFormV1;
@@ -66,22 +72,26 @@ use crate::asr_shared::{
     Transcript, first_text, malformed_duration, no_transcript, not_an_object, plain_text,
     recognition_forms, request_parts, succeeded, text_only_json, unreported_duration,
 };
-use crate::bailian_image::dashscope_error;
+use crate::bailian_image::{carries_dashscope_code, dashscope_error};
 use crate::speech_shared::{
-    BLOB_KEY, bearer, descriptor, facts, input, internal, invalid, is_blob, json_body, json_object,
-    non_2xx_with, prepared, required_forms, scalar_count, serves, state_characters, status_code,
-    unknown, url_outcome, view_status, with_refs,
+    BLOB_KEY, bearer, capability, descriptor, facts, input, internal, invalid, is_blob, json_body,
+    json_object, non_2xx_with, prepared, required_forms, scalar_count, state_characters,
+    status_code, unknown, url_outcome, view_status, with_refs,
 };
 use crate::{ComponentResultV1, SpeechComponentV1, SpeechOutcomeV1};
 
 /// The package name this reference is published as.
 pub const NAME: &str = "speech-qwen";
 /// The package version.
-pub const VERSION: &str = "1.2.3";
+pub const VERSION: &str = "1.3.0";
 /// The world this reference exports.
 pub const WORLD: &str = "speech-adapter-v1";
 /// The family, as a host's speech bindings name it.
 pub const BAILIAN_QWEN_SPEECH: &str = "bailian-qwen-speech";
+/// The `SpeechSynthesizer` family (1.3.0): Qwen-Audio-TTS and `CosyVoice`.
+pub const BAILIAN_SPEECH_SYNTHESIZER: &str = "bailian-speech-synthesizer";
+
+mod speech_synthesizer;
 
 const FORMS: [SpeechMeteringFormV1; 1] = [SpeechMeteringFormV1::Characters];
 /// The synchronous multimodal-generation path (native `tts.rs:545`).
@@ -123,6 +133,26 @@ const TRANSCRIPT_POINTER: &str = "/choices/0/message/content/0/text";
 /// The reference component. Stateless.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct QwenSpeechReferenceV1;
+
+/// The family a configuration names, when this package serves it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Family {
+    QwenSpeech,
+    SpeechSynthesizer,
+}
+
+impl Family {
+    fn of(config: &ProviderConfig) -> ComponentResultV1<Self> {
+        match config.provider.as_str() {
+            BAILIAN_QWEN_SPEECH => Ok(Self::QwenSpeech),
+            BAILIAN_SPEECH_SYNTHESIZER => Ok(Self::SpeechSynthesizer),
+            _ => Err(capability(format!(
+                "this package serves the {BAILIAN_QWEN_SPEECH} and {BAILIAN_SPEECH_SYNTHESIZER} \
+                 families"
+            ))),
+        }
+    }
+}
 
 /// `qwen_tts_audio_format`: absent, `wav` and `mp3` are served (as WAV); any other string is
 /// refused naming the lower-cased value; a non-string is absent (native `as_str`).
@@ -170,11 +200,6 @@ fn string_member(raw: Option<&Value>) -> Option<Value> {
 /// the bound of Bailian's reservation, `tts.rs:300-303`, `:805-806`).
 fn weighted_count(text: &str) -> u64 {
     text.chars().map(|character| if character.is_ascii() { 1 } else { 2 }).sum()
-}
-
-/// Whether a 2xx body names a `DashScope` error code: a non-empty string `code` (record §2.2 step 2).
-fn carries_code(body: &Map<String, Value>) -> bool {
-    body.get("code").and_then(Value::as_str).is_some_and(|code| !code.is_empty())
 }
 
 /// `usage.characters` (record §2.2 step 3, SV-Q7): `Ok(None)` when absent or `null`, the count when
@@ -359,7 +384,14 @@ impl SpeechComponentV1 for QwenSpeechReferenceV1 {
         &self,
         config: &ProviderConfig,
     ) -> ComponentResultV1<Vec<SpeechModelCapabilitiesV1>> {
-        crate::asr_shared::capabilities(config, BAILIAN_QWEN_SPEECH, &FORMS, false)
+        match Family::of(config)? {
+            Family::QwenSpeech => {
+                crate::asr_shared::capabilities(config, BAILIAN_QWEN_SPEECH, &FORMS, false)
+            }
+            Family::SpeechSynthesizer => {
+                crate::speech_shared::capabilities(config, BAILIAN_SPEECH_SYNTHESIZER, &FORMS)
+            }
+        }
     }
 
     fn prepare(
@@ -368,7 +400,9 @@ impl SpeechComponentV1 for QwenSpeechReferenceV1 {
         request: &Value,
         context: &SpeechCallContextV1,
     ) -> ComponentResultV1<PreparedSpeechCallV1> {
-        serves(config, BAILIAN_QWEN_SPEECH)?;
+        if Family::of(config)? == Family::SpeechSynthesizer {
+            return speech_synthesizer::prepare(config, request, context);
+        }
         if context.operation != SpeechOperationV1::Synthesize {
             return prepare_transcription(config, request, context);
         }
@@ -423,7 +457,7 @@ impl SpeechComponentV1 for QwenSpeechReferenceV1 {
                 unknown("a 2xx without a JSON object body")
             });
         };
-        if carries_code(body) {
+        if carries_dashscope_code(body) {
             return Ok(SpeechOutcomeV1::Unknown {
                 reason: "a 2xx carrying a DashScope error code".to_owned(),
                 error: Some(dashscope_error(502, ErrorCode::ProviderProtocolError, json)),
@@ -442,6 +476,14 @@ impl SpeechComponentV1 for QwenSpeechReferenceV1 {
         if json.pointer(AUDIO_URL_POINTER).and_then(Value::as_str).is_none_or(str::is_empty) {
             return Ok(unknown("a 2xx without audio"));
         }
-        url_outcome(AUDIO_URL_POINTER, MEDIA_TYPE, true, characters)
+        let media_type = if state["family"] == BAILIAN_SPEECH_SYNTHESIZER {
+            let format = state["format"]
+                .as_str()
+                .ok_or_else(|| internal("the state has no audio format"))?;
+            speech_synthesizer::media_type(format)
+        } else {
+            MEDIA_TYPE
+        };
+        url_outcome(AUDIO_URL_POINTER, media_type, true, characters)
     }
 }

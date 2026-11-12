@@ -5,7 +5,9 @@ Upstream facts for the packages that serve Alibaba Cloud Model Studio: the Baili
 [`task-bailian-v2`](../../components/task-bailian-v2/manifest.json) (managed video),
 [`task-wan-image-v2`](../../components/task-wan-image-v2/manifest.json) (Wan image),
 [`image-qwen`](../../components/image-qwen/manifest.json) (Qwen-Image) and
-[`speech-qwen`](../../components/speech-qwen/manifest.json) (Qwen TTS and ASR).
+[`speech-qwen`](../../components/speech-qwen/manifest.json) (Qwen TTS and ASR; Qwen-Audio-TTS and
+CosyVoice through the SpeechSynthesizer API) and the Model Studio-hosted family of
+[`speech-minimax`](../../components/speech-minimax/manifest.json).
 
 These notes were moved here from the token-station-server host documentation on 2026-10-30, under
 the rule that a host keeps only generic mechanisms and vendor facts live with the packages. Each fact
@@ -20,6 +22,7 @@ Related records:
 - [Image I3-1: MiniMax and Qwen](../design/2026-10-12-image-i3-1-minimax-and-qwen.md)
 - [Explicit cache reads](../design/2026-10-17-explicit-cache-reads.md)
 - [Qwen ASR](../design/2026-10-21-speech-qwen-asr.md) and [speech V4 TTS](../design/2026-10-15-speech-v4-tts.md)
+- [SpeechSynthesizer and hosted MiniMax TTS](../design/2026-11-10-speech-bailian-synthesizer-and-minimax.md)
 
 ## 1. Deployments, keys and list prices
 
@@ -159,3 +162,31 @@ records do not repeat.
 - As of 2026-05-21 the public pricing page listed no Wan 2.7 per-image price (only Wan 2.6 at
   $0.028671 per image, mainland). Any Wan 2.7 image price in use before it is published is an
   operator estimate, not a list price.
+
+## 7. Speech: SpeechSynthesizer and hosted MiniMax
+
+Read from Model Studio's published pages on 2026-11-10; no traffic has been captured, so every item
+below is unverified until the check after cutover (record
+[§6](../design/2026-11-10-speech-bailian-synthesizer-and-minimax.md)). Sources:
+`help.aliyun.com/zh/model-studio/non-realtime-tts-user-guide`,
+`help.aliyun.com/zh/model-studio/qwen-audio-tts-http-api`,
+`help.aliyun.com/zh/model-studio/cosyvoice-tts-http-api` and
+`help.aliyun.com/zh/model-studio/minimax-synchronous-speech-synthesis-api`.
+
+- **Qwen-Audio-TTS and CosyVoice** answer `POST api/v1/services/audio/tts/SpeechSynthesizer`. Without
+  `X-DashScope-SSE` the answer is one JSON object with the audio behind `output.audio.url`. The body is
+  `{"model", "input": {"text", "voice", "format", "sample_rate"?, "rate"?, "instruction"?}}`; `rate`
+  ranges over [0.5, 2.0]; the pages give no default voice, and voices differ by series. The pages bill
+  "effective characters" and report `usage.characters`; `qwen-audio-3.1-*` also lists
+  `usage.input_tokens` / `output_tokens`, and `qwen-audio-3.1-tts-flash` is billed by tokens.
+- **MiniMax hosted by Model Studio** answers multimodal generation with MiniMax's own body under
+  `input` (`text`, `output_format`, `voice_setting`, `audio_setting`); the hex audio is at
+  `output.data.audio`, and the page shows `base_resp` under `output`. A cloned voice's first use
+  carries a one-off unlock charge reported as `usage.count`.
+- **Open items** (record §6): whether the generic DashScope origin serves these paths or only the
+  workspace host `{WorkspaceId}.cn-beijing.maas.aliyuncs.com` does (`endpoint_host_observed`); the
+  character weighting (`character_weighting_observed`); the audio URL scheme and port
+  (`audio_url_shape_observed`); whether `opus` arrives in an Ogg container (`opus_media_type_observed`);
+  the error body of either API (`error_body_shape_observed`); where `base_resp` sits
+  (`minimax_base_resp_location_observed`); and whether Singapore serves CosyVoice and MiniMax, which
+  the guide lists in Beijing only (`singapore_availability_observed`).

@@ -10,7 +10,7 @@
 //! joined in speech world batch V4 (design record `docs/design/2026-10-15-speech-v4-tts.md` §2.2,
 //! §5 decision 2), when `speech-qwen` started reading the same answers as `image-qwen`.
 
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 use token_station_protocol::{ErrorCode, ErrorEnvelope};
 
 use crate::image_shared::{capped, code_message};
@@ -103,6 +103,13 @@ pub fn result_images(body: &Value) -> Vec<(String, &str)> {
         }
     }
     images
+}
+
+/// Whether a 2xx body names a `DashScope` error code: a non-empty string `code` (speech world batch V4
+/// §2.2 step 2). `speech-qwen`'s two families and `speech-minimax`'s Model Studio-hosted family read
+/// one copy (`docs/design/2026-11-10-speech-bailian-synthesizer-and-minimax.md` §2.4, §3.3).
+pub fn carries_dashscope_code(body: &Map<String, Value>) -> bool {
+    body.get("code").and_then(Value::as_str).is_some_and(|code| !code.is_empty())
 }
 
 /// A `DashScope` error answer as an envelope: content moderation is a policy refusal, anything else

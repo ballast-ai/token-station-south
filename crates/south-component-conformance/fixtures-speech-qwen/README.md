@@ -66,3 +66,27 @@ Measurements still to make (record §11 item 1): one capture of a success (the U
 Transcription measurements still to make (ASR record §6): one captured success (is `usage.seconds` always present, and how
 is a sub-second clip rounded), one captured error body, the exact size bound (MB or MiB, and whether it counts the
 `data:` prefix), and the effect of a system message built from `prompt`.
+
+The SpeechSynthesizer family (1.3.0, family `bailian-speech-synthesizer`,
+`docs/design/2026-11-10-speech-bailian-synthesizer-and-minimax.md` §2) adds the `synthesizer-*` cases. The family has
+no native arm: every expectation was written by hand from the record, which reads Model Studio's published
+Qwen-Audio-TTS and CosyVoice pages (2026-11-10), before the reference first ran. No traffic has been captured
+(record §6).
+
+- `prepare.synthesizer-native` and `prepare.synthesizer-qwen-audio`: `POST api/v1/services/audio/tts/SpeechSynthesizer`
+  with `bearer`, `{"model", "input": {"text", "voice", "format", "rate"?, "instruction"?}}`; `speed` sent as the float
+  `rate`, `instructions` as `instruction`.
+- `prepare.synthesizer-format-*`: `mp3` (absent or not a string), `wav`, `pcm` and `opus`, lower-cased; `aac`, `flac`
+  and any other string refused naming the four; an elided format refused.
+- `prepare.synthesizer-voice-*` (SV-Q14): absent, `""`, a non-string and the `OpenAI` names in any case refused; `" "`
+  and any other string sent as is; an elided voice forwarded as an `as_is` reference.
+- `prepare.synthesizer-speed-*`, `synthesizer-instructions-*`, `synthesizer-extra-members-dropped`: out-of-range speeds
+  sent, a non-number dropped, a non-string `instructions` dropped, every other member dropped.
+- `prepare.synthesizer-input-*`, `synthesizer-tokens-refused`, `synthesizer-transcribe-refused`: the shared input,
+  metering and operation refusals; the weighted `upper` as for Qwen-TTS. `capabilities.synthesizer-models`: `synthesize`
+  only, billed by characters.
+- Responses (record §2.4): the `url` artifact typed by the requested format with SV-Q10's upgrade (`http://` and
+  `https://` links); `usage.characters` positive (upstream), absent or `null` (the request's count), `0`, negative,
+  fractional and a string (`unknown`), judged before the URL; token usage not read; a 2xx `code`; a missing or empty
+  URL (sidecar `audio`); a non-object body; 400 (with and without `DataInspection`), 401 and 500 read with the
+  `DashScope` reader.

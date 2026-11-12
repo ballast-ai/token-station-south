@@ -1,0 +1,15 @@
+{
+  "provider_config": {
+    "provider": "bailian-speech-synthesizer",
+    "base_url": "https://dashscope.aliyuncs.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "cosyvoice-v3.5-plus"
+      },
+      {
+        "model": "qwen-audio-3.1-tts-plus"
+      }
+    ]
+  }
+}

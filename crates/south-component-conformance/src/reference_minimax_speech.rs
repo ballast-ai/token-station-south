@@ -26,6 +26,11 @@
 //!   `extra_info.usage_characters`: a positive integer is the upstream's count, absent or `null` is
 //!   the request's, `0` or anything else is `unknown` (SV-Q7). A non-2xx carries
 //!   `base_resp.status_msg`.
+//!
+//! **Model Studio-hosted `MiniMax`** (1.2.0, design record
+//! `docs/design/2026-11-10-speech-bailian-synthesizer-and-minimax.md` §3): the second family,
+//! `bailian-minimax-speech`, sends the same `voice_setting` and `audio_setting` under `input` of a
+//! `DashScope` multimodal-generation call and reads `base_resp` under `output` (module `bailian`).
 
 use serde_json::{Map, Value, json};
 use south_contracts::media::ResponseBodyFormV1;
@@ -40,22 +45,26 @@ use crate::minimax_shared::{
     BaseRespV1, MALFORMED_STATUS_CODE, base_resp, failure_reason, status_msg,
 };
 use crate::speech_shared::{
-    bearer, capabilities, descriptor, facts, holds_audio, inline_outcome, input, internal, invalid,
-    is_blob, json_body, non_2xx, prepared, required_forms, scalar_count, serves, state_characters,
-    unknown, view_status, with_refs,
+    bearer, capabilities, capability, descriptor, facts, holds_audio, inline_outcome, input,
+    internal, invalid, is_blob, json_body, non_2xx, prepared, required_forms, scalar_count,
+    state_characters, unknown, view_status, with_refs,
 };
 use crate::{ComponentResultV1, SpeechComponentV1, SpeechOutcomeV1};
 
 /// The package name this reference is published as.
 pub const NAME: &str = "speech-minimax";
 /// The package version.
-pub const VERSION: &str = "1.1.3";
+pub const VERSION: &str = "1.2.0";
 /// The world this reference exports.
 pub const WORLD: &str = "speech-adapter-v1";
 /// The family, as a host's speech bindings name it.
 pub const MINIMAX_SPEECH: &str = "minimax-speech";
 /// The family's one config key: the account's group id, sent as `?GroupId=` when set (IM-Q3).
 pub const GROUP_ID: &str = "group_id";
+/// The Model Studio-hosted family (1.2.0).
+pub const BAILIAN_MINIMAX_SPEECH: &str = "bailian-minimax-speech";
+
+mod bailian;
 
 const FORMS: [SpeechMeteringFormV1; 1] = [SpeechMeteringFormV1::Characters];
 /// The native arm's `body_rules` (`tts.rs:67-74`).
@@ -70,6 +79,32 @@ const SUPPORTED: &str = "Supported: mp3, wav, flac, pcm.";
 /// The reference component. Stateless.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct MiniMaxSpeechReferenceV1;
+
+/// The family a configuration names, when this package serves it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Family {
+    MiniMax,
+    ModelStudio,
+}
+
+impl Family {
+    fn of(config: &ProviderConfig) -> ComponentResultV1<Self> {
+        match config.provider.as_str() {
+            MINIMAX_SPEECH => Ok(Self::MiniMax),
+            BAILIAN_MINIMAX_SPEECH => Ok(Self::ModelStudio),
+            _ => Err(capability(format!(
+                "this package serves the {MINIMAX_SPEECH} and {BAILIAN_MINIMAX_SPEECH} families"
+            ))),
+        }
+    }
+
+    const fn name(self) -> &'static str {
+        match self {
+            Self::MiniMax => MINIMAX_SPEECH,
+            Self::ModelStudio => BAILIAN_MINIMAX_SPEECH,
+        }
+    }
+}
 
 /// `minimax_tts_audio_format`: the upstream format word for a lower-cased client format.
 fn format_word(format: &str) -> ComponentResultV1<&'static str> {
@@ -182,7 +217,7 @@ impl SpeechComponentV1 for MiniMaxSpeechReferenceV1 {
         &self,
         config: &ProviderConfig,
     ) -> ComponentResultV1<Vec<SpeechModelCapabilitiesV1>> {
-        capabilities(config, MINIMAX_SPEECH, &FORMS)
+        capabilities(config, Family::of(config)?.name(), &FORMS)
     }
 
     fn prepare(
@@ -191,7 +226,9 @@ impl SpeechComponentV1 for MiniMaxSpeechReferenceV1 {
         request: &Value,
         context: &SpeechCallContextV1,
     ) -> ComponentResultV1<PreparedSpeechCallV1> {
-        serves(config, MINIMAX_SPEECH)?;
+        if Family::of(config)? == Family::ModelStudio {
+            return bailian::prepare(config, request, context);
+        }
         let forms = required_forms(context, &FORMS)?;
         let body = json_body(request)?;
         let text = input(body)?;
@@ -230,6 +267,9 @@ impl SpeechComponentV1 for MiniMaxSpeechReferenceV1 {
         response: &Value,
     ) -> ComponentResultV1<SpeechOutcomeV1> {
         let status = view_status(response);
+        if state["family"] == BAILIAN_MINIMAX_SPEECH {
+            return bailian::parse_response(state, response, status);
+        }
         if !(200..300).contains(&status) {
             return Ok(non_2xx(status, response, status_msg));
         }

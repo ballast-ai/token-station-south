@@ -1,0 +1,28 @@
+{
+  "provider_config": {
+    "provider": "bailian-speech-synthesizer",
+    "base_url": "https://dashscope.aliyuncs.com",
+    "auth": "provider_api_key",
+    "models": [
+      {
+        "model": "cosyvoice-v3.5-plus"
+      },
+      {
+        "model": "qwen-audio-3.1-tts-plus"
+      }
+    ]
+  },
+  "request": {
+    "json": {
+      "input": "hello world",
+      "voice": "Ballad"
+    }
+  },
+  "context": {
+    "upstream_model": "cosyvoice-v3.5-plus",
+    "operation": "synthesize",
+    "metering_required": [
+      "characters"
+    ]
+  }
+}
