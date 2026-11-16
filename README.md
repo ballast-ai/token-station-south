@@ -37,7 +37,7 @@ and CosyVoice) and hosted MiniMax synthesis.
 
 | Area | Crates | Purpose |
 |---|---|---|
-| Contracts and orchestration | `south-contracts`, `south-core` | Bounded requests, authentication, responses, cancellation, and host call seams |
+| Contracts and orchestration | `south-contracts`, `south-core` | Bounded requests, authentication, responses, cancellation, host call seams, and quota metadata normalization |
 | Transport and grammars | `south-transport-reqwest`, `south-host-grammars` | Hardened reqwest execution and pure SSE/event-stream parsing |
 | Provider conformance | `south-provider-conformance`, `south-testkit` | Frozen public suites and reusable host harnesses |
 | Component platform | `south-provider-api`, `south-component-conformance`, `south-provider-runtime` | WIT and manifest schema, package gates, references, and the Wasmtime sandbox |

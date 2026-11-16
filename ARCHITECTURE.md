@@ -42,7 +42,7 @@ package versions and minimum compatible `south_runtime`.
 | Crate | Current responsibility |
 |---|---|
 | `south-contracts` | Bounded HTTP, authentication, response, error, streaming, quota, media, and speech contracts |
-| `south-core` | Endpoint binding, explicit credential resolution, deadlines, cancellation, and raw-call wrappers |
+| `south-core` | Endpoint binding, explicit credential resolution, deadlines, cancellation, raw-call wrappers, and quota metadata normalization |
 | `south-host-grammars` | Pure bounded host-only SSE and event-stream grammars; no component may link it |
 | `south-transport-reqwest` | Hardened buffered and streaming execution with explicit headers, caps, and redaction |
 | `south-provider-conformance` | Immutable public provider and host-integration fixture suites |

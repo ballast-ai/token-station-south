@@ -2,7 +2,10 @@
 
 //! Host-neutral provider call orchestration boundaries.
 
+mod quota;
 pub mod raw;
+
+pub use quota::{NormalizedQuotaV1, normalize_provider_quota_v1};
 
 use std::{fmt, future::Future, pin::Pin, time::Duration};
 

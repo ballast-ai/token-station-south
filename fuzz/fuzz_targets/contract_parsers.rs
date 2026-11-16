@@ -3,6 +3,7 @@
 use std::collections::BTreeSet;
 use std::sync::{Mutex, PoisonError};
 
+use chrono::{DateTime, TimeZone, Utc};
 use libfuzzer_sys::fuzz_target;
 use south_component_conformance::embeddings_json::{
     embeddings_parsed_json, parse_embeddings_parsed_json, parse_prepared_embeddings_json,
@@ -35,6 +36,7 @@ use south_contracts::{
     extract_vectors_v1, parse_embeddings_request_v1, parse_embeddings_request_v2,
     reencode_eventstream_v1, render_vectors_v1,
 };
+use south_core::normalize_provider_quota_v1;
 use south_host_grammars::{SseDecoderV1, decode_sse_v1};
 
 const QUOTA_FIELDS: [ProviderQuotaMetadataFieldV1; 9] = [
@@ -48,6 +50,26 @@ const QUOTA_FIELDS: [ProviderQuotaMetadataFieldV1; 9] = [
     ProviderQuotaMetadataFieldV1::AnthropicRateLimitUnifiedRemaining,
     ProviderQuotaMetadataFieldV1::AnthropicRateLimitUnifiedReset,
 ];
+
+/// Normalizing any accepted quota metadata never panics, at an ordinary `now` and at both ends of
+/// the representable range, and a duration-valued reset always lies after `now`.
+fn fuzz_quota_normalization(metadata: &ProviderQuotaMetadataV1) {
+    let duration_family = [
+        ProviderQuotaMetadataFieldV1::AnthropicRateLimitUnifiedReset,
+        ProviderQuotaMetadataFieldV1::AnthropicRateLimitUnifiedLimit,
+        ProviderQuotaMetadataFieldV1::AnthropicRateLimitTokensReset,
+        ProviderQuotaMetadataFieldV1::AnthropicRateLimitTokensLimit,
+    ]
+    .into_iter()
+    .all(|field| metadata.value(field).is_none());
+    let ordinary = Utc.with_ymd_and_hms(2026, 9, 9, 12, 0, 0).single();
+    for now in ordinary.into_iter().chain([DateTime::<Utc>::MIN_UTC, DateTime::<Utc>::MAX_UTC]) {
+        let quota = normalize_provider_quota_v1(metadata, now);
+        if duration_family && let Some(reset_at) = quota.reset_at {
+            assert!(reset_at > now);
+        }
+    }
+}
 
 /// The `'static` copies of accepted user-agent values, one per distinct value. Kept reachable
 /// from here so the leak sanitizer does not report each input's copy as a leak (issue #336).
@@ -698,7 +720,8 @@ fuzz_target!(|data: &[u8]| {
         let rebuilt = ProviderQuotaMetadataV1::try_from_iter(
             present.into_iter().map(|(field, value)| (field, value.to_owned())),
         );
-        assert_eq!(rebuilt, Ok(metadata));
+        assert_eq!(rebuilt.as_ref(), Ok(&metadata));
+        fuzz_quota_normalization(&metadata);
     }
 
     let diagnostic_fields = input
