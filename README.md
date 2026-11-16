@@ -21,7 +21,7 @@ pricing, billing, persistence, settlement, delivery authorization, and product b
 does not discover configuration or perform hidden environment, filesystem, clock, randomness,
 network, or secret-store access. Operational capabilities are injected explicitly.
 
-The current release is `0.84.0`. It supports provider chat and streaming, asynchronous tasks,
+The current release is `0.85.0`. It supports provider chat and streaming, asynchronous tasks,
 embeddings, image generation and editing, and speech synthesis and recognition. Current additions
 include Gemini 3 tool-call signatures carried through the canonical IR and the Chat Completions
 wire, parallel Gemini tool results sent in one turn, a placeholder signature on a replayed Gemini
@@ -30,8 +30,9 @@ OpenAI-compatible and xAI speech families, the upstream models every media famil
 request fields a task family needs pre-fetched, a content-policy category on a filtered Veo task,
 SSE frames split under every line end the host's decoder accepts,
 a declared client header forwarded on requests rebuilt from the IR, a stream's first error
-reported in byte order whatever the chunking, and Model Studio's SpeechSynthesizer (Qwen-Audio-TTS
-and CosyVoice) and hosted MiniMax synthesis.
+reported in byte order whatever the chunking, Model Studio's SpeechSynthesizer (Qwen-Audio-TTS
+and CosyVoice) and hosted MiniMax synthesis, and provider quota metadata normalized for hosts in
+`south-core`.
 
 ## Library map
 

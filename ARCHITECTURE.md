@@ -23,11 +23,11 @@ The dependency direction is one way: hosts consume South. South never depends on
 
 ## Current versions
 
-The current repository release is `0.84.0`.
+The current repository release is `0.85.0`.
 
 | Version line | Packages |
 |---|---|
-| `0.84.0` | Workspace-versioned runtime and host-facing crates |
+| `0.85.0` | Workspace-versioned runtime and host-facing crates |
 | `0.57.0` | `south-contracts` |
 | `0.65.0` | `south-provider-api` |
 | `0.81.0` | `south-component-conformance` |
