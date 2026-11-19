@@ -5,12 +5,24 @@ updates:
     schedule:
       interval: weekly
     groups:
-      # wasmtime and wasmtime-wasi share a lockstep major version; bumping
-      # one without the other never builds.
+      # wasmtime, wasmtime-wasi and wasmtime-wasi-io share a lockstep major
+      # version; bumping one without the others never builds.
       wasmtime:
         patterns:
           - wasmtime
           - wasmtime-wasi
+          - wasmtime-wasi-io
+    # wasmtime 50 pulls Cranelift 0.137, which requires rustc 1.97; the pinned
+    # toolchain is 1.96.0 (CONTRIBUTING.md). A bump past 49 cannot build until
+    # the toolchain moves, so it waits for that change. Remove these entries
+    # with the toolchain bump.
+    ignore:
+      - dependency-name: wasmtime
+        versions: [">= 50"]
+      - dependency-name: wasmtime-wasi
+        versions: [">= 50"]
+      - dependency-name: wasmtime-wasi-io
+        versions: [">= 50"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
