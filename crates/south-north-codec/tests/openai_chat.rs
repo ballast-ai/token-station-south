@@ -339,6 +339,41 @@ fn tool_arguments_that_are_not_json_are_reported_instead_of_replaced() {
     );
 }
 
+/// A tool call cut off by the output cap is delivered as `OpenAI` delivers it: the partial
+/// arguments, unchanged, under `finish_reason: "length"`. The finish reason is what tells the
+/// client the model, not the gateway, stopped mid-call, so the well-formedness check above has
+/// nothing left to protect. Only `length` relaxes it.
+#[test]
+fn tool_arguments_cut_off_by_the_output_cap_are_delivered_under_length() {
+    let truncated = |finish_reason| {
+        let mut choice = assistant(
+            None,
+            vec![ToolCall {
+                signature: None,
+                id: "call_1".to_owned(),
+                name: "final_result".to_owned(),
+                arguments: "{\"summary\":\"The first half".to_owned(),
+            }],
+        );
+        choice.finish_reason = Some(finish_reason);
+        openai_chat_response(&response_with(choice, Usage::default()), &context())
+    };
+
+    let rendered = truncated(FinishReason::Length).expect("a capped tool call renders");
+    let choice = &rendered["choices"][0];
+    assert_eq!(choice["finish_reason"], "length");
+    assert_eq!(
+        choice["message"]["tool_calls"][0]["function"]["arguments"],
+        "{\"summary\":\"The first half",
+        "the partial arguments reach the client byte for byte"
+    );
+
+    for finish_reason in [FinishReason::ToolCalls, FinishReason::Stop] {
+        let refused = truncated(finish_reason.clone()).expect_err("only length relaxes the check");
+        assert!(matches!(refused, CodecError::Unrenderable { .. }), "{finish_reason:?}");
+    }
+}
+
 // ── outbound, streaming ────────────────────────────────────────────────────
 
 fn stream_state() -> OpenAiChatSseState {
