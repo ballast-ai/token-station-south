@@ -18,6 +18,12 @@ ignore = [
   { id = "RUSTSEC-2026-0398", reason = "not reachable: zstd-safe is built without `seekable`" },
   # Legacy (v0.4 to v0.7) frames; the `legacy` feature is not enabled, so they are not decoded.
   { id = "RUSTSEC-2026-0403", reason = "not reachable: zstd is built without `legacy`" },
+  # chrono is registered as unmaintained (2026-11-17; every version, no upgrade). It is not a
+  # vulnerability and names no defect. `south-core` depends on it directly for provider quota
+  # normalization (0.85.0, without the `clock` feature). The server host ignores the same advisory
+  # and schedules replacing chrono in both repositories; remove this entry once `south-core` no
+  # longer depends on it.
+  { id = "RUSTSEC-2026-0543", reason = "unmaintained, not a vulnerability; chrono's replacement is scheduled with the server host" },
 ]
 
 [licenses]
