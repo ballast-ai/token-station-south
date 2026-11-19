@@ -85,3 +85,16 @@ Added with `docs/design/2026-10-12-responses-r3-codex-and-request-fields.md` §4
   `invalid_request` (400).
 
 Every other row is unchanged: a request without the four fields builds the same body as before.
+
+## Truncated tool-call rows (1.7.0)
+
+Added with `docs/design/2026-11-19-truncated-tool-call-arguments.md`. Hand-written in the reference shape, like every
+other row of this pack; neither is captured traffic.
+
+- **`response.incomplete-mid-tool-call`**: `response.tool-call` with `status: "incomplete"`,
+  `incomplete_details.reason: "max_output_tokens"`, a reasoning item ahead of the call (a reasoning model spends most
+  of its cap there), and one function call whose item is `incomplete` with the arguments `{"city":"Bei`. Expected:
+  the partial arguments unchanged under finish reason `length`.
+- **`stream.incomplete-mid-tool-call`**: `stream.tool-call` cut the same way. The second argument delta is `"Bei`, the
+  `done` events and the item carry the partial arguments, and the terminal is `response.incomplete` with
+  `max_output_tokens`. Expected: the same deltas, then finish reason `length`.

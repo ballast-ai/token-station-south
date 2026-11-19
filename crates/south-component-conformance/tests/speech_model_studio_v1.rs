@@ -98,8 +98,10 @@ fn synthesize(voice: &Value) -> Result<Value, ErrorCode> {
 #[test]
 fn the_model_studio_speech_families_join_their_packages() {
     let qwen = raw_manifest("speech-qwen");
-    assert_eq!(qwen["version"], "1.3.0");
-    assert_eq!(QwenSpeechReferenceV1.metadata().version, "1.3.0");
+    // Published as 1.3.0 with 0.85.0; the 0.85.1 round made it 1.3.1
+    // (`truncated_tool_calls_retire_every_published_085_package_identity`).
+    assert_eq!(qwen["version"], "1.3.1");
+    assert_eq!(QwenSpeechReferenceV1.metadata().version, "1.3.1");
     assert_eq!(qwen["providers"], json!([BAILIAN_QWEN_SPEECH, BAILIAN_SPEECH_SYNTHESIZER]));
     assert_eq!(
         qwen["served_models"][BAILIAN_SPEECH_SYNTHESIZER],
@@ -113,8 +115,10 @@ fn the_model_studio_speech_families_join_their_packages() {
     assert!(!SYNTHESIZER_IDS.contains(&"qwen-audio-3.1-tts-flash"));
 
     let minimax = raw_manifest("speech-minimax");
-    assert_eq!(minimax["version"], "1.2.0");
-    assert_eq!(MiniMaxSpeechReferenceV1.metadata().version, "1.2.0");
+    // Published as 1.2.0 with 0.85.0; the 0.85.1 round made it 1.2.1
+    // (`truncated_tool_calls_retire_every_published_085_package_identity`).
+    assert_eq!(minimax["version"], "1.2.1");
+    assert_eq!(MiniMaxSpeechReferenceV1.metadata().version, "1.2.1");
     assert_eq!(minimax["providers"], json!([MINIMAX_SPEECH, BAILIAN_MINIMAX_SPEECH]));
     assert_eq!(
         minimax["served_models"][BAILIAN_MINIMAX_SPEECH],
