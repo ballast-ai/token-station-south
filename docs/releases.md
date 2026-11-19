@@ -4,13 +4,14 @@ This page is the concise index from repository releases to their authoritative d
 Release records preserve historical detail; [compatibility.json](../compatibility.json), not a tag
 or this index, is the authority for host adoption and verification status.
 
-The current repository release is `0.85.0`. Records may describe a prepared but unpublished tag;
+The current repository release is `0.85.1`. Records may describe a prepared but unpublished tag;
 their status line remains authoritative for publication state.
 
 ## Current releases
 
 | Release | Current capability | Records |
 |---|---|---|
+| `0.85.1` | A tool call the output cap cut off reaches a Chat client with its partial arguments under `length`: the Chat codec renders them only under that reason, and `provider-openai-responses` 1.7.0 keeps `length` on an `incomplete` answer; every other package takes the Q47 patch | [release](design/2026-11-19-release-0.85.1.md), [design](design/2026-11-19-truncated-tool-call-arguments.md) |
 | `0.85.0` | Host-side provider quota metadata normalization: `south-core` turns a package's quota metadata into limit, remaining and reset instant (`normalize_provider_quota_v1`); no package changes identity | [release](design/2026-11-16-release-0.85.0.md), [design](design/2026-11-16-provider-quota-normalization.md) |
 | `0.84.0` | Model Studio speech: `speech-qwen` 1.3.0 adds the SpeechSynthesizer family (Qwen-Audio-TTS and CosyVoice) and `speech-minimax` 1.2.0 the Model Studio-hosted MiniMax family; it also carries 0.83.1, which was never tagged | [release](design/2026-11-12-release-0.84.0.md), [design](design/2026-11-10-speech-bailian-synthesizer-and-minimax.md) |
 | `0.83.1` | The SSE stream parsers (`provider-openai-compatible`, `provider-anthropic`, `provider-gemini`, `provider-vertex`, `provider-openai-responses`) report the first error of a stream in byte order, whatever the chunking (`SseSplitterV1::push` returns the frames before a refusal); the fuzz job reports every finding and a failing scheduled run opens an issue; merged but never tagged; carried by 0.84.0 | [Release 0.83.1](design/2026-11-04-release-0.83.1.md), [stream parser first error](design/2026-11-04-stream-parser-first-error.md) |

@@ -1,7 +1,7 @@
 # Tool-call arguments cut off by the output cap
 
-Status: accepted (lv chose option A on 2026-11-19). Not released. The release bump and the host re-pin are separate
-steps.
+Status: accepted (lv chose option A on 2026-11-19), merged (#346); ships in
+[release 0.85.1](2026-11-19-release-0.85.1.md). The host re-pin is a separate step.
 
 Date: 2026-11-19
 
