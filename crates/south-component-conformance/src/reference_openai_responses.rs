@@ -79,7 +79,7 @@ pub const MANTLE_FAMILY: &str = mantle::FAMILY;
 pub const NAME: &str = "provider-openai-responses";
 
 /// The package's version.
-pub const VERSION: &str = "1.6.5";
+pub const VERSION: &str = "1.7.0";
 
 /// The reference component. Stateless; each stream gets its own parser.
 #[derive(Debug, Default, Clone, Copy)]
@@ -773,7 +773,14 @@ fn response_of(raw: &Value) -> ComponentResultV1<ChatResponse> {
         }
         Some(Content::Parts(parts))
     };
-    let finish_reason = if tool_calls.is_empty() { status } else { FinishReason::ToolCalls };
+    // A call turns a completed answer into a tool turn. An `incomplete` answer keeps its reason:
+    // under `length` a call may have been cut off mid-arguments, and the reason is what tells the
+    // client so (2026-11-19 truncated tool-call arguments record).
+    let finish_reason = if tool_calls.is_empty() || status != FinishReason::Stop {
+        status
+    } else {
+        FinishReason::ToolCalls
+    };
     Ok(ChatResponse {
         id: raw.get("id").and_then(Value::as_str).unwrap_or_default().to_owned(),
         model: raw.get("model").and_then(Value::as_str).unwrap_or_default().to_owned(),

@@ -7,7 +7,7 @@
 //! envelope instead of masking the parts that move.
 
 use serde_json::{Value, json};
-use token_station_protocol::{ChatResponse, Content, ContentPart};
+use token_station_protocol::{ChatResponse, Content, ContentPart, FinishReason};
 
 use crate::CodecError;
 
@@ -66,7 +66,12 @@ pub fn openai_chat_response(
                 // or the gateway produced the garbage — and a codec that
                 // substitutes `{}` to make the shape valid hands the client a
                 // tool call the model never made.
-                if serde_json::from_str::<Value>(&call.arguments).is_err() {
+                //
+                // Under `length` the client can tell: the output cap stopped
+                // the model mid-call, and `OpenAI` itself delivers the partial
+                // arguments under that reason. So they pass unchanged there.
+                let capped = choice.finish_reason == Some(FinishReason::Length);
+                if !capped && serde_json::from_str::<Value>(&call.arguments).is_err() {
                     return Err(CodecError::unrenderable(
                         format!("choices[{index}].message.tool_calls[{}].arguments", calls.len()),
                         format!(
