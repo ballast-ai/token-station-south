@@ -21,6 +21,13 @@
 //!   the scalar count, `upper` the weighted count (ASCII 1, other scalars 2), as for Qwen-TTS.
 //! - **Response**: `json`, nothing elided. The 2xx reading is the Qwen-TTS one, typed by the
 //!   requested format; a non-2xx reads the `DashScope` `{"code", "message"}` answer.
+//! - **Metering per model** (1.4.0, south #357 round): `qwen-audio-3.1-tts-flash` is billed by input
+//!   and output tokens (Model Studio's HTTP API page: "qwen-audio-3.1-tts-flash 按输入和输出 Token
+//!   计费"), so it reports `tokens` only, from `usage.input_tokens` / `usage.output_tokens` (each a
+//!   positive integer; absent, `null`, zero or not an integer is `unknown`). Every other model of
+//!   the family is billed by characters and reports `characters` only. The forms are declared per
+//!   model in `model-capabilities`, so a host that prices one by the other unit is refused before
+//!   admission. The token fields are documented without a captured example (unverified).
 
 use serde_json::{Map, Value, json};
 use south_contracts::media::ResponseBodyFormV1;
@@ -97,12 +104,22 @@ fn voice(raw: Option<&Value>) -> ComponentResultV1<Value> {
 }
 
 /// `prepare` of the `bailian-speech-synthesizer` family (record §2.2, §2.3).
+/// The models of this family Model Studio bills by input and output tokens.
+const TOKEN_PRICED: [&str; 1] = ["qwen-audio-3.1-tts-flash"];
+
+/// The metering forms `model` can report: tokens for a token-priced model, characters otherwise.
+pub(super) fn forms_for(model: &str) -> &'static [SpeechMeteringFormV1] {
+    if TOKEN_PRICED.contains(&model) { &[SpeechMeteringFormV1::Tokens] } else { &FORMS }
+}
+
 pub(super) fn prepare(
     config: &ProviderConfig,
     request: &Value,
     context: &SpeechCallContextV1,
 ) -> ComponentResultV1<PreparedSpeechCallV1> {
-    let forms: Vec<SpeechMeteringFormV1> = required_forms(context, &FORMS)?;
+    let forms: Vec<SpeechMeteringFormV1> =
+        required_forms(context, forms_for(&context.upstream_model))?;
+    let tokens = forms.contains(&SpeechMeteringFormV1::Tokens);
     let body = json_body(request)?;
     let text = input(body)?;
     let format = format_word(body)?;
@@ -133,6 +150,11 @@ pub(super) fn prepare(
         ResponseBodyFormV1::Json,
         &[],
         &IMMUTABLE_BODY_PATHS,
-        &json!({ "family": super::BAILIAN_SPEECH_SYNTHESIZER, "format": format, "characters": count }),
+        &json!({
+            "family": super::BAILIAN_SPEECH_SYNTHESIZER,
+            "format": format,
+            "characters": count,
+            "tokens": tokens,
+        }),
     )
 }

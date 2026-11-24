@@ -10,7 +10,7 @@
 use std::collections::BTreeSet;
 
 use serde_json::{Value, json};
-use south_component_conformance::SpeechComponentV1;
+use south_component_conformance::{SpeechComponentV1, SpeechOutcomeV1};
 use south_component_conformance::reference_minimax_speech::{
     BAILIAN_MINIMAX_SPEECH, MINIMAX_SPEECH, MiniMaxSpeechReferenceV1,
 };
@@ -25,8 +25,9 @@ use token_station_protocol::{ErrorCode, ProviderConfig};
 mod support;
 
 const ENDPOINT: &str = "https://dashscope.aliyuncs.com";
-/// Record §2.1: the character-billed ids on the `CosyVoice` and Qwen-Audio-TTS pages.
-const SYNTHESIZER_IDS: [&str; 8] = [
+/// Record §2.1: the ids on the `CosyVoice` and Qwen-Audio-TTS pages. All are character-billed but
+/// `qwen-audio-3.1-tts-flash`, which bills tokens and joins in 1.4.0 (south #357 round).
+const SYNTHESIZER_IDS: [&str; 9] = [
     "cosyvoice-v2",
     "cosyvoice-v3-flash",
     "cosyvoice-v3-plus",
@@ -34,8 +35,11 @@ const SYNTHESIZER_IDS: [&str; 8] = [
     "cosyvoice-v3.5-plus",
     "qwen-audio-3.0-tts-flash",
     "qwen-audio-3.0-tts-plus",
+    "qwen-audio-3.1-tts-flash",
     "qwen-audio-3.1-tts-plus",
 ];
+/// The token-billed id of the family.
+const FLASH: &str = "qwen-audio-3.1-tts-flash";
 /// The `OpenAI` voice names, which name no `SpeechSynthesizer` voice (SV-Q14).
 const OPENAI_VOICES: [&str; 11] = [
     "alloy", "echo", "fable", "onyx", "nova", "shimmer", "ash", "sage", "coral", "ballad", "verse",
@@ -93,15 +97,16 @@ fn synthesize(voice: &Value) -> Result<Value, ErrorCode> {
 }
 
 /// Record §1: each package gains one family after its own, the minor that says so, and the served
-/// models of §2.1 and §3.1. `qwen-audio-3.1-tts-flash`, which bills tokens, is not served (SV-Q13).
+/// models of §2.1 and §3.1. `qwen-audio-3.1-tts-flash`, which bills tokens, was not served (SV-Q13)
+/// until 1.4.0. The first family excludes Model Studio's `*-realtime` ids, which speak `WebSocket`.
 /// The hosted `MiniMax` family declares no configuration key: no `?GroupId=` (§3.2).
 #[test]
 fn the_model_studio_speech_families_join_their_packages() {
     let qwen = raw_manifest("speech-qwen");
-    // Published as 1.3.0 with 0.85.0; the 0.85.1 round made it 1.3.1
-    // (`truncated_tool_calls_retire_every_published_085_package_identity`).
-    assert_eq!(qwen["version"], "1.3.1");
-    assert_eq!(QwenSpeechReferenceV1.metadata().version, "1.3.1");
+    // Published as 1.3.0 with 0.85.0 and 1.3.1 with 0.85.1; 1.4.0 serves the token-billed flash
+    // and excludes the Realtime ids (south #357 round).
+    assert_eq!(qwen["version"], "1.4.0");
+    assert_eq!(QwenSpeechReferenceV1.metadata().version, "1.4.0");
     assert_eq!(qwen["providers"], json!([BAILIAN_QWEN_SPEECH, BAILIAN_SPEECH_SYNTHESIZER]));
     assert_eq!(
         qwen["served_models"][BAILIAN_SPEECH_SYNTHESIZER],
@@ -109,10 +114,17 @@ fn the_model_studio_speech_families_join_their_packages() {
     );
     assert_eq!(
         qwen["served_models"][BAILIAN_QWEN_SPEECH],
-        json!({ "prefixes": ["qwen-tts", "qwen3-asr-", "qwen3-tts-"] }),
-        "the first family's models are unchanged"
+        json!({
+            "prefixes": ["qwen-tts", "qwen3-asr-", "qwen3-tts-"],
+            "exclude_suffixes": ["-realtime"],
+        }),
+        "the first family's prefixes are unchanged; the Realtime ids are excluded"
     );
-    assert!(!SYNTHESIZER_IDS.contains(&"qwen-audio-3.1-tts-flash"));
+    let served = support::manifest("speech-qwen");
+    let first = &served.served_models[BAILIAN_QWEN_SPEECH];
+    assert!(first.serves("qwen3-tts-flash"));
+    assert!(!first.serves("qwen3-tts-flash-realtime"));
+    assert!(!first.serves("qwen3-asr-flash-realtime"));
 
     let minimax = raw_manifest("speech-minimax");
     // Published as 1.2.0 with 0.85.0; the 0.85.1 round made it 1.2.1
@@ -168,6 +180,94 @@ fn each_pack_carries_its_new_family() {
             assert_eq!(model["operations"], json!(["synthesize"]));
             assert_eq!(model["metering_forms"], json!(["characters"]));
         }
+    }
+}
+
+fn flash_config() -> ProviderConfig {
+    serde_json::from_value(json!({
+        "provider": BAILIAN_SPEECH_SYNTHESIZER,
+        "base_url": ENDPOINT,
+        "auth": "provider_api_key",
+        "models": [{ "model": FLASH }, { "model": "qwen-audio-3.1-tts-plus" }],
+    }))
+    .expect("the configuration parses")
+}
+
+fn flash_context(form: &str) -> SpeechCallContextV1 {
+    serde_json::from_value(json!({
+        "upstream_model": FLASH,
+        "operation": "synthesize",
+        "metering_required": [form],
+    }))
+    .expect("the context parses")
+}
+
+/// The outcome of a flash call answered with `usage`.
+fn flash_answer(usage: &Value) -> SpeechOutcomeV1 {
+    let prepared = QwenSpeechReferenceV1
+        .prepare(
+            &flash_config(),
+            &json!({ "json": { "input": "hello", "voice": "longanlingxin_v3.1" } }),
+            &flash_context("tokens"),
+        )
+        .expect("prepared");
+    let state: Value = serde_json::from_str(&prepared.state).unwrap();
+    let body = json!({
+        "output": { "finish_reason": "stop", "audio": { "url": "https://result.example/a.mp3" } },
+        "usage": usage,
+    });
+    let view = json!({ "status": 200, "headers": [], "body": { "json": body } });
+    QwenSpeechReferenceV1.parse_response(&state, &view).unwrap()
+}
+
+/// 1.4.0: `qwen-audio-3.1-tts-flash` reports tokens only; the rest of the family characters only.
+/// A host that prices flash by characters, or a plus model by tokens, is refused before admission.
+#[test]
+fn the_flash_model_is_metered_by_tokens_and_only_by_tokens() {
+    let models = serde_json::to_value(
+        QwenSpeechReferenceV1.model_capabilities(&flash_config()).expect("served"),
+    )
+    .unwrap();
+    assert_eq!(models[0]["model"], FLASH);
+    assert_eq!(models[0]["metering_forms"], json!(["tokens"]));
+    assert_eq!(models[1]["metering_forms"], json!(["characters"]));
+
+    let refused = QwenSpeechReferenceV1
+        .prepare(
+            &flash_config(),
+            &json!({ "json": { "input": "hello", "voice": "v" } }),
+            &flash_context("characters"),
+        )
+        .expect_err("flash cannot report characters");
+    assert_eq!(refused.code, ErrorCode::Capability);
+    let plus: SpeechCallContextV1 = serde_json::from_value(json!({
+        "upstream_model": "qwen-audio-3.1-tts-plus",
+        "operation": "synthesize",
+        "metering_required": ["tokens"],
+    }))
+    .unwrap();
+    let refused = QwenSpeechReferenceV1
+        .prepare(&flash_config(), &json!({ "json": { "input": "hello", "voice": "v" } }), &plus)
+        .expect_err("plus cannot report tokens");
+    assert_eq!(refused.code, ErrorCode::Capability);
+}
+
+#[test]
+fn a_flash_answer_bills_the_reported_input_and_output_tokens() {
+    let outcome =
+        flash_answer(&json!({ "input_tokens": 12, "output_tokens": 340, "total_tokens": 352 }));
+    let SpeechOutcomeV1::Succeeded { metering, .. } = outcome else { panic!("{outcome:?}") };
+    let tokens = metering.tokens.expect("tokens reported");
+    assert_eq!((tokens.input, tokens.output), (Some(12), Some(340)));
+    for usage in [
+        json!({ "characters": 5 }),
+        json!({ "input_tokens": 12 }),
+        json!({ "input_tokens": 0, "output_tokens": 340 }),
+        json!({ "input_tokens": 12, "output_tokens": null }),
+        json!({ "input_tokens": "12", "output_tokens": 340 }),
+    ] {
+        let outcome = flash_answer(&usage);
+        assert!(matches!(outcome, SpeechOutcomeV1::Unknown { .. }), "{usage}: {outcome:?}");
     }
 }
 
