@@ -2,9 +2,16 @@
 
 //! Host-neutral provider call orchestration boundaries.
 
+mod family_catalog;
 mod quota;
 pub mod raw;
 
+pub use family_catalog::{
+    DeclaredFamilyV1, FAMILY_CATALOG_LANGUAGES_V1, FAMILY_CATALOG_MODALITY_WORLD_V1,
+    FAMILY_CATALOG_REQUIRED_WORLDS_V1, FAMILY_CATALOG_SCHEMA_V1, FamilyCatalogCoverageErrorV1,
+    FamilyCatalogErrorV1, FamilyCatalogV1, FamilyEntryV1, FamilyGroupV1, FamilyModalityV1,
+    LocalizedTextV1, declared_families_v1,
+};
 pub use quota::{NormalizedQuotaV1, normalize_provider_quota_v1};
 
 use std::{fmt, future::Future, pin::Pin, time::Duration};

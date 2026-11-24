@@ -1,0 +1,624 @@
+{
+  "schema": "south.family-catalog.v1",
+  "groups": [
+    {
+      "id": "generic",
+      "display_name": {
+        "zh-CN": "通用协议",
+        "en": "Generic protocols"
+      }
+    },
+    {
+      "id": "cloud",
+      "display_name": {
+        "zh-CN": "云平台",
+        "en": "Cloud platforms"
+      }
+    },
+    {
+      "id": "subscription",
+      "display_name": {
+        "zh-CN": "订阅账号",
+        "en": "Subscription accounts"
+      }
+    },
+    {
+      "id": "coding-plan",
+      "display_name": {
+        "zh-CN": "编程套餐",
+        "en": "Coding plans"
+      }
+    }
+  ],
+  "entries": [
+    {
+      "world": "provider-adapter-v2",
+      "family": "openai-compatible",
+      "group": "generic",
+      "display_name": {
+        "zh-CN": "OpenAI 兼容接口",
+        "en": "OpenAI-compatible API"
+      },
+      "description": {
+        "zh-CN": "任何讲 OpenAI Chat Completions 协议的上游。服务商地址写到 API 根（如 https://api.example.com/v1），凭证是一个 API Key。",
+        "en": "Any upstream that speaks the OpenAI Chat Completions wire. The provider endpoint is the API root (such as https://api.example.com/v1); the credential is one API key."
+      }
+    },
+    {
+      "world": "provider-adapter-v2",
+      "family": "openai-responses",
+      "group": "generic",
+      "display_name": {
+        "zh-CN": "OpenAI 官方（Responses 接口）",
+        "en": "OpenAI (Responses API)"
+      },
+      "description": {
+        "zh-CN": "OpenAI 官方 API，经 Responses 接口调用；对话、Messages 与 Responses 三个入口都发往 /responses。凭证是一个 API Key。",
+        "en": "The official OpenAI API through the Responses API; the Chat, Messages and Responses surfaces all call /responses. The credential is one API key."
+      }
+    },
+    {
+      "world": "provider-adapter-v2",
+      "family": "anthropic",
+      "group": "generic",
+      "display_name": {
+        "zh-CN": "Anthropic 官方",
+        "en": "Anthropic"
+      },
+      "description": {
+        "zh-CN": "Anthropic 官方 Messages 接口（api.anthropic.com）。凭证是一个 API Key。",
+        "en": "The official Anthropic Messages API (api.anthropic.com). The credential is one API key."
+      }
+    },
+    {
+      "world": "provider-adapter-v2",
+      "family": "gemini",
+      "group": "generic",
+      "display_name": {
+        "zh-CN": "Google Gemini 官方",
+        "en": "Google Gemini API"
+      },
+      "description": {
+        "zh-CN": "Google Gemini API 的 generateContent 接口（generativelanguage.googleapis.com）。凭证是一个 API Key。",
+        "en": "The Google Gemini API's generateContent (generativelanguage.googleapis.com). The credential is one API key."
+      }
+    },
+    {
+      "world": "provider-adapter-v2",
+      "family": "gemini-openai-compatible",
+      "group": "generic",
+      "display_name": {
+        "zh-CN": "Google Gemini · OpenAI 兼容",
+        "en": "Google Gemini · OpenAI-compatible"
+      },
+      "description": {
+        "zh-CN": "Gemini API 提供的 OpenAI 兼容接口（/v1beta/openai）。凭证是 Gemini API Key。",
+        "en": "The OpenAI-compatible surface of the Gemini API (/v1beta/openai). The credential is a Gemini API key."
+      }
+    },
+    {
+      "world": "provider-adapter-v2",
+      "family": "azure-openai-v1",
+      "group": "cloud",
+      "display_name": {
+        "zh-CN": "Azure OpenAI · v1",
+        "en": "Azure OpenAI · v1"
+      },
+      "description": {
+        "zh-CN": "Azure OpenAI 不带版本号的 v1 接口。服务商地址写到 {资源}/openai/v1，凭证是资源的 API Key。",
+        "en": "Azure OpenAI's unversioned v1 surface. The provider endpoint is {resource}/openai/v1; the credential is the resource's API key."
+      },
+      "config_keys": {
+        "max_tokens_field": {
+          "zh-CN": "输出上限放在请求体的哪个键里：缺省 max_completion_tokens；只认旧键的部署选 max_tokens。",
+          "en": "The body key the output cap is sent under: max_completion_tokens by default, or max_tokens for a deployment that accepts only the legacy key."
+        }
+      }
+    },
+    {
+      "world": "provider-adapter-v2",
+      "family": "azure-openai-dated",
+      "group": "cloud",
+      "display_name": {
+        "zh-CN": "Azure OpenAI · 按日期版本",
+        "en": "Azure OpenAI · dated versions"
+      },
+      "description": {
+        "zh-CN": "Azure OpenAI 按部署寻址、带 ?api-version= 日期版本的接口。服务商地址写资源根，凭证是资源的 API Key。",
+        "en": "Azure OpenAI addressed by deployment with a dated ?api-version=. The provider endpoint is the resource root; the credential is the resource's API key."
+      },
+      "config_keys": {
+        "api_version": {
+          "zh-CN": "以 ?api-version= 发送的 API 版本，日期形式，可带 -preview 后缀（如 2025-04-01-preview），缺省 2024-10-21。用不带版本号的 v1 接口时改选「Azure OpenAI · v1」。",
+          "en": "The API version sent as ?api-version=, a date with an optional -preview suffix such as 2025-04-01-preview; defaults to 2024-10-21. For the unversioned v1 surface use Azure OpenAI · v1 instead."
+        },
+        "max_tokens_field": {
+          "zh-CN": "输出上限放在请求体的哪个键里：缺省 max_completion_tokens；只认旧键的部署选 max_tokens。",
+          "en": "The body key the output cap is sent under: max_completion_tokens by default, or max_tokens for a deployment that accepts only the legacy key."
+        }
+      }
+    },
+    {
+      "world": "provider-adapter-v2",
+      "family": "bedrock",
+      "group": "cloud",
+      "display_name": {
+        "zh-CN": "AWS Bedrock · Converse",
+        "en": "AWS Bedrock · Converse"
+      },
+      "description": {
+        "zh-CN": "AWS Bedrock 的 Converse 接口，网关用 IAM 访问密钥按 SigV4 签名。",
+        "en": "AWS Bedrock's Converse API, signed by the gateway with SigV4 from IAM access keys."
+      },
+      "config_keys": {
+        "region": {
+          "zh-CN": "调用 Bedrock 运行时的 AWS 区域，例如 us-east-1。",
+          "en": "The AWS region the Bedrock runtime is called in, such as us-east-1."
+        }
+      },
+      "credential_fields": {
+        "access_key_id": {
+          "zh-CN": "用于签名请求的 IAM 主体的 AWS 访问密钥 ID。",
+          "en": "The AWS access key ID of the IAM principal the requests are signed as."
+        },
+        "secret_access_key": {
+          "zh-CN": "与访问密钥 ID 配对的 AWS 秘密访问密钥。",
+          "en": "The AWS secret access key paired with the access key ID."
+        },
+        "session_token": {
+          "zh-CN": "AWS 会话令牌，只有 AWS STS 签发的临时凭证才需要。",
+          "en": "The AWS session token, only for temporary credentials from AWS STS."
+        }
+      }
+    },
+    {
+      "world": "provider-adapter-v2",
+      "family": "bedrock-bearer",
+      "group": "cloud",
+      "display_name": {
+        "zh-CN": "AWS Bedrock · Converse（API Key）",
+        "en": "AWS Bedrock · Converse (API key)"
+      },
+      "description": {
+        "zh-CN": "AWS Bedrock 的 Converse 接口，用 Bedrock API Key（Bearer）认证，不签名。",
+        "en": "AWS Bedrock's Converse API, authenticated with a Bedrock API key (bearer) instead of signing."
+      },
+      "config_keys": {
+        "region": {
+          "zh-CN": "调用 Bedrock 运行时的 AWS 区域，例如 us-east-1。",
+          "en": "The AWS region the Bedrock runtime is called in, such as us-east-1."
+        }
+      }
+    },
+    {
+      "world": "provider-adapter-v2",
+      "family": "anthropic-bedrock-invoke",
+      "group": "cloud",
+      "display_name": {
+        "zh-CN": "AWS Bedrock · Claude 原生调用",
+        "en": "AWS Bedrock · Claude InvokeModel"
+      },
+      "description": {
+        "zh-CN": "经 AWS Bedrock 的 InvokeModel 以 Anthropic Messages 原生格式调用 Claude，网关用 IAM 访问密钥按 SigV4 签名。",
+        "en": "Claude in the Anthropic Messages format through AWS Bedrock InvokeModel, signed by the gateway with SigV4 from IAM access keys."
+      },
+      "config_keys": {
+        "region": {
+          "zh-CN": "调用 Bedrock 运行时的 AWS 区域，例如 us-east-1。",
+          "en": "The AWS region the Bedrock runtime is called in, such as us-east-1."
+        }
+      },
+      "credential_fields": {
+        "access_key_id": {
+          "zh-CN": "用于签名请求的 IAM 主体的 AWS 访问密钥 ID。",
+          "en": "The AWS access key ID of the IAM principal the requests are signed as."
+        },
+        "secret_access_key": {
+          "zh-CN": "与访问密钥 ID 配对的 AWS 秘密访问密钥。",
+          "en": "The AWS secret access key paired with the access key ID."
+        },
+        "session_token": {
+          "zh-CN": "AWS 会话令牌，只有 AWS STS 签发的临时凭证才需要。",
+          "en": "The AWS session token, only for temporary credentials from AWS STS."
+        }
+      }
+    },
+    {
+      "world": "provider-adapter-v2",
+      "family": "bedrock-mantle",
+      "group": "cloud",
+      "display_name": {
+        "zh-CN": "AWS Bedrock · OpenAI 兼容",
+        "en": "AWS Bedrock · OpenAI-compatible (Mantle)"
+      },
+      "description": {
+        "zh-CN": "AWS Bedrock 的 OpenAI 兼容接口（bedrock-mantle），经 Responses 接口调用；凭证是 Bedrock API Key。",
+        "en": "AWS Bedrock's OpenAI-compatible surface (bedrock-mantle), called through the Responses API; the credential is a Bedrock API key."
+      },
+      "config_keys": {
+        "region": {
+          "zh-CN": "提供模型的 bedrock-mantle 主机所在的 AWS 区域，例如 us-east-1；网关用它填出服务商地址。",
+          "en": "The AWS region whose bedrock-mantle host serves the models, such as us-east-1; the gateway fills the endpoint with it."
+        }
+      }
+    },
+    {
+      "world": "provider-adapter-v2",
+      "family": "vertex-ai",
+      "group": "cloud",
+      "display_name": {
+        "zh-CN": "Google Vertex AI",
+        "en": "Google Vertex AI"
+      },
+      "description": {
+        "zh-CN": "Google Vertex AI 上的 Gemini 文本模型，凭证是服务账号密钥，网关用它签发访问令牌。",
+        "en": "Gemini text models on Google Vertex AI; the credential is a service account key the gateway mints access tokens from."
+      },
+      "config_keys": {
+        "region": {
+          "zh-CN": "Vertex AI 的区域，例如 us-central1，或 global。",
+          "en": "The Vertex AI location, such as us-central1, or global."
+        },
+        "project": {
+          "zh-CN": "要调用的 Google Cloud 项目，与服务账号所属项目不同时才填。",
+          "en": "The Google Cloud project to call, when it is not the service account's own."
+        }
+      },
+      "credential_fields": {
+        "service_account": {
+          "zh-CN": "用来签发访问令牌的服务账号密钥文件（JSON）。",
+          "en": "The service account key file (JSON) access tokens are minted with."
+        },
+        "project_id": {
+          "zh-CN": "服务账号所属的 Google Cloud 项目。",
+          "en": "The Google Cloud project the service account belongs to."
+        }
+      }
+    },
+    {
+      "world": "provider-adapter-v2",
+      "family": "bailian-openai-compatible",
+      "group": "cloud",
+      "display_name": {
+        "zh-CN": "阿里云百炼 · OpenAI 兼容",
+        "en": "Alibaba Cloud Model Studio · OpenAI-compatible"
+      },
+      "description": {
+        "zh-CN": "阿里云百炼（Model Studio）的 OpenAI 兼容对话接口；支持思考预算的型号会把输出上限拆成思考与回答两部分。凭证是百炼 API Key。",
+        "en": "The OpenAI-compatible chat surface of Alibaba Cloud Model Studio; for models with a thinking budget the output cap is split between thinking and answer. The credential is a Model Studio API key."
+      }
+    },
+    {
+      "world": "provider-adapter-v2",
+      "family": "claude-code",
+      "group": "subscription",
+      "display_name": {
+        "zh-CN": "Claude Code 订阅",
+        "en": "Claude Code subscription"
+      },
+      "description": {
+        "zh-CN": "用 Claude 订阅账号的 Claude Code 登录凭证调用；网关用刷新令牌换取访问令牌，并写回轮换后的刷新令牌。",
+        "en": "A Claude subscription through the Claude Code sign-in; the gateway exchanges the refresh token for access tokens and writes back the rotated refresh token."
+      },
+      "credential_fields": {
+        "refresh_token": {
+          "zh-CN": "Claude Code 刷新令牌，即 CLI 的 .credentials.json 里的 claudeAiOauth.refreshToken；每次刷新都会轮换并写回。没有刷新令牌的是长期令牌，改选「Claude Code 订阅（长期令牌）」。",
+          "en": "The Claude Code refresh token, claudeAiOauth.refreshToken in the CLI's .credentials.json; rotated on every refresh and written back. A token without one is a setup token: use Claude Code subscription (setup token)."
+        }
+      }
+    },
+    {
+      "world": "provider-adapter-v2",
+      "family": "claude-code-setup-token",
+      "group": "subscription",
+      "display_name": {
+        "zh-CN": "Claude Code 订阅（长期令牌）",
+        "en": "Claude Code subscription (setup token)"
+      },
+      "description": {
+        "zh-CN": "用 claude setup-token 生成的长期令牌调用 Claude 订阅；凭证就是这个令牌，不需要刷新。",
+        "en": "A Claude subscription through a long-lived token made with claude setup-token; the credential is that token and is not refreshed."
+      }
+    },
+    {
+      "world": "provider-adapter-v2",
+      "family": "openai-codex",
+      "group": "subscription",
+      "display_name": {
+        "zh-CN": "OpenAI Codex 订阅",
+        "en": "OpenAI Codex subscription"
+      },
+      "description": {
+        "zh-CN": "用 ChatGPT 订阅账号的 Codex CLI 登录凭证调用；网关用刷新令牌换取访问令牌，并写回轮换后的刷新令牌。",
+        "en": "A ChatGPT subscription through the Codex CLI sign-in; the gateway exchanges the refresh token for access tokens and writes back the rotated refresh token."
+      },
+      "credential_fields": {
+        "access_token": {
+          "zh-CN": "Codex 访问令牌，如 Codex CLI 的 auth.json 里的 tokens.access_token；没存刷新令牌时直接使用。",
+          "en": "A Codex access token, such as tokens.access_token in the Codex CLI's auth.json; used as is when no refresh token is stored."
+        },
+        "refresh_token": {
+          "zh-CN": "Codex 刷新令牌，如 auth.json 里的 tokens.refresh_token；每次刷新都会轮换并写回。",
+          "en": "The Codex refresh token, such as tokens.refresh_token in auth.json; rotated on every refresh and written back."
+        },
+        "account_id": {
+          "zh-CN": "ChatGPT 账号 ID，如 auth.json 里的 tokens.account_id；作为 chatgpt-account-id 发送，刷新到别的账号会被拒绝。",
+          "en": "The ChatGPT account id, such as tokens.account_id in auth.json; sent as chatgpt-account-id, and a refresh naming another account is refused."
+        }
+      }
+    },
+    {
+      "world": "provider-adapter-v2",
+      "family": "github-copilot",
+      "group": "subscription",
+      "display_name": {
+        "zh-CN": "GitHub Copilot 订阅",
+        "en": "GitHub Copilot subscription"
+      },
+      "description": {
+        "zh-CN": "用有 Copilot 席位的 GitHub 账号调用；网关用 GitHub OAuth 令牌换取 Copilot 令牌。",
+        "en": "A GitHub account with a Copilot seat; the gateway exchanges its GitHub OAuth token for Copilot tokens."
+      },
+      "config_keys": {
+        "plan": {
+          "zh-CN": "账号的 Copilot 套餐，决定调用哪个 GitHub 对话主机：individual（Pro 与 Pro+）、business 或 enterprise。必填：Business / Enterprise 账号配成 individual 只会在上游拒绝时才暴露。",
+          "en": "The account's Copilot plan, which selects GitHub's chat API host: individual (Pro and Pro+), business or enterprise. Required: a Business or Enterprise account set to individual fails only when the upstream refuses it."
+        }
+      },
+      "credential_fields": {
+        "github_token": {
+          "zh-CN": "有 Copilot 席位的账号的 GitHub OAuth 令牌，如编辑器 github-copilot/apps.json 或 hosts.json 里的 oauth_token。",
+          "en": "A GitHub OAuth token from an account with a Copilot seat, such as the oauth_token in the editor's github-copilot/apps.json or hosts.json."
+        }
+      }
+    },
+    {
+      "world": "provider-adapter-v2",
+      "family": "kiro",
+      "group": "subscription",
+      "display_name": {
+        "zh-CN": "Kiro 订阅",
+        "en": "Kiro subscription"
+      },
+      "description": {
+        "zh-CN": "用 Kiro 登录凭证（kiro-auth-token.json）调用；网关用刷新令牌换取访问令牌并写回轮换后的刷新令牌。上游不报 token 用量。",
+        "en": "A Kiro sign-in (kiro-auth-token.json); the gateway exchanges the refresh token for access tokens and writes back the rotated refresh token. The upstream reports no token usage."
+      },
+      "credential_fields": {
+        "refresh_token": {
+          "zh-CN": "Kiro 刷新令牌，即 kiro-auth-token.json 里的 refreshToken；只能用一次，每次刷新都会轮换并写回。",
+          "en": "The Kiro refresh token, refreshToken in kiro-auth-token.json; single use, rotated on every refresh and written back."
+        },
+        "client_id": {
+          "zh-CN": "IAM Identity Center 客户端 ID，即 kiro-auth-token.json 里的 clientId；只有企业版与 Identity Center 登录才有。",
+          "en": "The IAM Identity Center client id, clientId in kiro-auth-token.json; only enterprise and Identity Center sign-ins have one."
+        },
+        "client_secret": {
+          "zh-CN": "IAM Identity Center 客户端密钥，即 kiro-auth-token.json 里的 clientSecret；只有企业版与 Identity Center 登录才有。",
+          "en": "The IAM Identity Center client secret, clientSecret in kiro-auth-token.json; only enterprise and Identity Center sign-ins have one."
+        },
+        "auth_method": {
+          "zh-CN": "登录方式，即 kiro-auth-token.json 里的 authMethod：IdC、enterprise 或 iam_identity_center 经 Identity Center 刷新，其他值经 Kiro 登录服务刷新；不填时，有客户端 ID 与密钥的凭证经 Identity Center 刷新。",
+          "en": "The sign-in method, authMethod in kiro-auth-token.json: IdC, enterprise or iam_identity_center refresh through Identity Center, any other value through the Kiro sign-in service; without it, a credential with a client id and secret refreshes through Identity Center."
+        },
+        "auth_region": {
+          "zh-CN": "刷新令牌所在的区域，即 kiro-auth-token.json 里的 idcRegion，没有则取 region。",
+          "en": "The region the token is refreshed in, idcRegion or else region in kiro-auth-token.json."
+        },
+        "profile_arn": {
+          "zh-CN": "CodeWhisperer 配置 ARN，即 kiro-auth-token.json 里的 profileArn；有就随每个请求发送。",
+          "en": "The CodeWhisperer profile ARN, profileArn in kiro-auth-token.json; sent with every request when present."
+        }
+      }
+    },
+    {
+      "world": "provider-adapter-v2",
+      "family": "glm-coding",
+      "group": "coding-plan",
+      "display_name": {
+        "zh-CN": "智谱 GLM 编程套餐",
+        "en": "Z.AI GLM Coding Plan"
+      },
+      "description": {
+        "zh-CN": "智谱 / Z.AI GLM 编程套餐（Coding Plan）的 OpenAI 兼容接口。服务商地址写套餐的 API 根，凭证是 Z.AI 控制台的 API Key（不刷新）。",
+        "en": "The OpenAI-compatible API of the Z.AI GLM Coding Plan. The provider endpoint is the plan's API root; the credential is an API key from the Z.AI dashboard (not refreshed)."
+      }
+    },
+    {
+      "world": "provider-adapter-v2",
+      "family": "kimi-code",
+      "group": "coding-plan",
+      "display_name": {
+        "zh-CN": "Kimi 编程套餐",
+        "en": "Kimi Code"
+      },
+      "description": {
+        "zh-CN": "Kimi 编程套餐（Kimi Code）的 OpenAI 兼容接口。服务商地址写套餐的 API 根，凭证是套餐的 API Key。",
+        "en": "The OpenAI-compatible API of the Kimi Code plan. The provider endpoint is the plan's API root; the credential is the plan's API key."
+      }
+    },
+    {
+      "world": "task-adapter-v2",
+      "family": "kling",
+      "display_name": {
+        "zh-CN": "可灵 Kling",
+        "en": "Kling"
+      },
+      "description": {
+        "zh-CN": "可灵（Kling）视频生成任务。凭证是可灵开放平台的 Access Key 与 Secret Key，网关用它们签 JWT。",
+        "en": "Kling video generation tasks. The credential is the Kling open platform's access key and secret key, which the gateway signs a JWT with."
+      },
+      "modality": "video",
+      "credential_fields": {
+        "access_key": {
+          "zh-CN": "可灵开放平台的 Access Key。",
+          "en": "The Kling open platform access key."
+        },
+        "secret_key": {
+          "zh-CN": "与 Access Key 配对的 Secret Key，用来签 JWT。",
+          "en": "The secret key paired with the access key, used to sign the JWT."
+        }
+      }
+    },
+    {
+      "world": "task-adapter-v2",
+      "family": "minimax",
+      "display_name": {
+        "zh-CN": "MiniMax 海螺视频",
+        "en": "MiniMax Hailuo video"
+      },
+      "description": {
+        "zh-CN": "MiniMax 海螺（Hailuo）与 H3 视频生成任务。凭证是 MiniMax API Key。",
+        "en": "MiniMax Hailuo and H3 video generation tasks. The credential is a MiniMax API key."
+      },
+      "modality": "video"
+    },
+    {
+      "world": "task-adapter-v2",
+      "family": "bailian",
+      "display_name": {
+        "zh-CN": "阿里云百炼 · 万相视频",
+        "en": "Alibaba Cloud Model Studio · Wan video"
+      },
+      "description": {
+        "zh-CN": "阿里云百炼（Model Studio）上的万相等视频生成任务。凭证是百炼 API Key。",
+        "en": "Wan and other video generation tasks on Alibaba Cloud Model Studio. The credential is a Model Studio API key."
+      },
+      "modality": "video"
+    },
+    {
+      "world": "task-adapter-v2",
+      "family": "byteplus-video",
+      "display_name": {
+        "zh-CN": "BytePlus Seedance 视频",
+        "en": "BytePlus Seedance video"
+      },
+      "description": {
+        "zh-CN": "BytePlus 上的 Seedance 视频生成任务。凭证是 BytePlus API Key。",
+        "en": "Seedance video generation tasks on BytePlus. The credential is a BytePlus API key."
+      },
+      "modality": "video"
+    },
+    {
+      "world": "task-adapter-v2",
+      "family": "xai-video",
+      "display_name": {
+        "zh-CN": "xAI Grok Imagine 视频",
+        "en": "xAI Grok Imagine video"
+      },
+      "description": {
+        "zh-CN": "xAI Grok Imagine 视频生成任务。凭证是 xAI API Key。",
+        "en": "xAI Grok Imagine video generation tasks. The credential is an xAI API key."
+      },
+      "modality": "video"
+    },
+    {
+      "world": "task-adapter-v2",
+      "family": "veo-video",
+      "display_name": {
+        "zh-CN": "Google Veo · Gemini API",
+        "en": "Google Veo · Gemini API"
+      },
+      "description": {
+        "zh-CN": "经 Gemini API 调用的 Veo 视频生成任务。凭证是 Gemini API Key。",
+        "en": "Veo video generation tasks through the Gemini API. The credential is a Gemini API key."
+      },
+      "modality": "video"
+    },
+    {
+      "world": "task-adapter-v2",
+      "family": "vertex-veo-video",
+      "display_name": {
+        "zh-CN": "Google Veo · Vertex AI",
+        "en": "Google Veo · Vertex AI"
+      },
+      "description": {
+        "zh-CN": "经 Vertex AI 调用的 Veo 视频生成任务。服务商地址写到 location 前缀，凭证是服务账号密钥。",
+        "en": "Veo video generation tasks through Vertex AI. The provider endpoint includes the location prefix; the credential is a service account key."
+      },
+      "modality": "video",
+      "credential_fields": {
+        "service_account": {
+          "zh-CN": "用来签发访问令牌的服务账号密钥文件（JSON）。",
+          "en": "The service account key file (JSON) access tokens are minted with."
+        },
+        "project_id": {
+          "zh-CN": "服务账号所属的 Google Cloud 项目。",
+          "en": "The Google Cloud project the service account belongs to."
+        }
+      }
+    },
+    {
+      "world": "task-adapter-v2",
+      "family": "gemini-interactions-video",
+      "display_name": {
+        "zh-CN": "Gemini Omni 视频 · Gemini API",
+        "en": "Gemini Omni video · Gemini API"
+      },
+      "description": {
+        "zh-CN": "经 Gemini API 的 Interactions 接口调用的 Gemini Omni 视频生成任务。凭证是 Gemini API Key。",
+        "en": "Gemini Omni video generation tasks through the Gemini API's Interactions API. The credential is a Gemini API key."
+      },
+      "modality": "video"
+    },
+    {
+      "world": "task-adapter-v2",
+      "family": "vertex-interactions-video",
+      "display_name": {
+        "zh-CN": "Gemini Omni 视频 · Vertex AI",
+        "en": "Gemini Omni video · Vertex AI"
+      },
+      "description": {
+        "zh-CN": "经 Vertex AI 的 Interactions 接口调用的 Gemini Omni 视频生成任务。服务商地址写到 location 前缀，凭证是服务账号密钥。",
+        "en": "Gemini Omni video generation tasks through Vertex AI's Interactions API. The provider endpoint includes the location prefix; the credential is a service account key."
+      },
+      "modality": "video",
+      "credential_fields": {
+        "service_account": {
+          "zh-CN": "用来签发访问令牌的服务账号密钥文件（JSON）。",
+          "en": "The service account key file (JSON) access tokens are minted with."
+        },
+        "project_id": {
+          "zh-CN": "服务账号所属的 Google Cloud 项目。",
+          "en": "The Google Cloud project the service account belongs to."
+        }
+      }
+    },
+    {
+      "world": "task-adapter-v2",
+      "family": "wan-image",
+      "display_name": {
+        "zh-CN": "万相图像",
+        "en": "Wan image"
+      },
+      "description": {
+        "zh-CN": "阿里云百炼上的万相图像生成任务（经图像入口按型号路由）。凭证是百炼 API Key。",
+        "en": "Wan image generation tasks on Alibaba Cloud Model Studio, routed per model from the image surface. The credential is a Model Studio API key."
+      },
+      "modality": "image"
+    },
+    {
+      "world": "task-adapter-v2",
+      "family": "gmi-image",
+      "display_name": {
+        "zh-CN": "GMI 图像",
+        "en": "GMI image"
+      },
+      "description": {
+        "zh-CN": "GMI Cloud 的图像生成任务（经图像入口按型号路由）。",
+        "en": "GMI Cloud image generation tasks, routed per model from the image surface."
+      },
+      "modality": "image",
+      "credential_fields": {
+        "api_key": {
+          "zh-CN": "GMI Cloud 的 API Key。",
+          "en": "The GMI Cloud API key."
+        },
+        "organization_id": {
+          "zh-CN": "GMI Cloud 组织 ID；填了就作为 X-Organization-ID 发送。",
+          "en": "The GMI Cloud organization id, sent as X-Organization-ID when set."
+        }
+      }
+    }
+  ]
+}

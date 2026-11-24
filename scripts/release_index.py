@@ -43,7 +43,14 @@ RANGE_HANDSHAKE_RUNTIME = (0, 43, 0)
 # Catalog data (boundary record §7.5, §13.11). A catalog is listed by the schema id its document
 # declares; the release refuses a schema it does not know, so a new catalog format is a deliberate
 # change here and in the design record, never a file dropped into catalogs/.
-KNOWN_CATALOG_SCHEMAS = frozenset({"south.model-catalog.v1"})
+KNOWN_CATALOG_SCHEMAS = frozenset({"south.model-catalog.v1", "south.family-catalog.v1"})
+# The family catalog (docs/design/2026-11-24-family-catalog.md) is also checked against the packages of
+# the release: every family of these worlds needs an entry, and no entry may describe a family, config
+# key or credential field the packages do not declare. The Rust reader (south_core::FamilyCatalogV1)
+# owns the document's full shape; the test suite runs it over the same source file.
+FAMILY_CATALOG_SCHEMA = "south.family-catalog.v1"
+FAMILY_CATALOG_REQUIRED_WORLDS = ("provider-adapter-v2", "task-adapter-v2")
+FAMILY_CATALOG_MODALITY_WORLD = "task-adapter-v2"
 # A schema listed here may be absent from a release although the previous release published it.
 # Retiring one is a breaking change for hosts that load it (they lose the data, §13.11), so it
 # takes an entry here, made in the same change as its design record.
@@ -212,7 +219,7 @@ def catalog_entries(catalogs: Path, dist: Path, tag: str) -> tuple[list[dict], s
     """The index's `catalogs` list, and the dist file names it consumed.
 
     Each catalogs/<stem>.json must be published verbatim as <stem>-<tag>.json. Only the document's
-    `schema` is read here: the full shape check is the Rust contract (`south_contracts::ModelCatalogV1`)
+    `schema` is read here: the full shape check is the Rust reader (`ModelCatalogV1`, `south_core::FamilyCatalogV1`)
     run by the test suite over the same source file, and the byte comparison below ties the published
     file to that source.
     """
@@ -249,6 +256,68 @@ def catalog_entries(catalogs: Path, dist: Path, tag: str) -> tuple[list[dict], s
     return entries, consumed
 
 
+def declared_families(manifest: dict) -> dict[tuple[str, str], tuple[set[str], set[str]]]:
+    """(world, family) -> (config keys, credential fields) a manifest declares for each family.
+
+    Mirrors south_core::declared_families_v1: credentials.fields apply to every family unless
+    credentials.families names a subset.
+    """
+    world = manifest.get("api_version")
+    if not isinstance(world, str):
+        return {}
+    credentials = manifest.get("credentials") if isinstance(manifest.get("credentials"), dict) else {}
+    fields = set(credentials.get("fields", {})) if isinstance(credentials.get("fields"), dict) else set()
+    narrowed = credentials.get("families") if isinstance(credentials.get("families"), list) else None
+    schema = manifest.get("config_schema") if isinstance(manifest.get("config_schema"), dict) else {}
+    declared = {}
+    for family in manifest.get("providers", []) or []:
+        if not isinstance(family, str):
+            continue
+        keys = set(schema.get(family, {})) if isinstance(schema.get(family), dict) else set()
+        credential_fields = fields if narrowed is None or family in narrowed else set()
+        old_keys, old_fields = declared.get((world, family), (set(), set()))
+        declared[(world, family)] = (old_keys | keys, old_fields | credential_fields)
+    return declared
+
+
+def family_catalog_violations(document: dict, manifests: list[dict]) -> list[str]:
+    """Why the family catalog does not match the release's packages; empty when it does."""
+    declared: dict[tuple[str, str], tuple[set[str], set[str]]] = {}
+    for manifest in manifests:
+        for key, (keys, fields) in declared_families(manifest).items():
+            old_keys, old_fields = declared.get(key, (set(), set()))
+            declared[key] = (old_keys | keys, old_fields | fields)
+    groups = {group.get("id") for group in document.get("groups", []) if isinstance(group, dict)}
+    entries = [entry for entry in document.get("entries", []) if isinstance(entry, dict)]
+    described = {(entry.get("world"), entry.get("family")) for entry in entries}
+    violations = [
+        f"no entry for {world} / {family}"
+        for world, family in sorted(declared)
+        if world in FAMILY_CATALOG_REQUIRED_WORLDS and (world, family) not in described
+    ]
+    for entry in entries:
+        world, family = entry.get("world"), entry.get("family")
+        if (world, family) not in declared:
+            violations.append(f"entry {world} / {family}: no package declares it")
+            continue
+        keys, fields = declared[(world, family)]
+        violations += [
+            f"entry {world} / {family}: config key {key} is not declared by the package"
+            for key in sorted(set(entry.get("config_keys", {})) - keys)
+        ]
+        violations += [
+            f"entry {world} / {family}: credential field {field} is not declared by the package"
+            for field in sorted(set(entry.get("credential_fields", {})) - fields)
+        ]
+        if "group" in entry and entry["group"] not in groups:
+            violations.append(f"entry {world} / {family}: group {entry['group']} does not exist")
+        if (world == FAMILY_CATALOG_MODALITY_WORLD) != ("modality" in entry):
+            violations.append(
+                f"entry {world} / {family}: a modality is required on {FAMILY_CATALOG_MODALITY_WORLD} entries and only there"
+            )
+    return violations
+
+
 def generate(
     dist: Path,
     components: Path,
@@ -283,6 +352,15 @@ def generate(
     stray = sorted(path.name for path in dist.glob(f"*-{tag}.json") if path.name not in catalog_files)
     if stray:
         raise ReleaseIndexError(f"catalog files with no catalogs/<name>.json: {stray}")
+    for catalog in catalog_list:
+        if catalog["schema"] == FAMILY_CATALOG_SCHEMA:
+            document = json.loads((dist / catalog["file"]).read_bytes())
+            manifests = [json.loads((path / "manifest.json").read_bytes()) for path in component_dirs]
+            violations = family_catalog_violations(document, manifests)
+            if violations:
+                raise ReleaseIndexError(
+                    f"{catalog['file']} does not match the release's packages: " + "; ".join(violations)
+                )
 
     packages.sort(key=lambda entry: entry["name"])
     return {

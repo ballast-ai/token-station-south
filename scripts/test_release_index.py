@@ -406,15 +406,113 @@ class CatalogGenerateTest(unittest.TestCase):
         written = json.loads((root / "dist" / "south-release-index.json").read_text(encoding="utf-8"))
         self.assertEqual([catalog["schema"] for catalog in written["catalogs"]], ["south.model-catalog.v1"])
 
-    def test_the_repository_catalog_is_listed(self) -> None:
-        # The real catalogs/ directory: every file in it declares a known schema.
+    def test_the_repository_catalogs_are_listed(self) -> None:
+        # The real catalogs/ directory: every file in it declares a known schema. (The family catalog's
+        # agreement with the real packages is FamilyCatalogTest.test_the_repository_family_catalog_matches.)
         repository = Path(__file__).resolve().parent.parent / "catalogs"
         for source in sorted(repository.glob("*.json")):
             published = self.ws.dist / release_index.catalog_name(source.stem, TAG)
             published.write_bytes(source.read_bytes())
-        entries = self.ws.generate(catalogs=repository)["catalogs"]
-        self.assertEqual([entry["schema"] for entry in entries], ["south.model-catalog.v1"])
-        self.assertEqual(entries[0]["file"], f"model-catalog-{TAG}.json")
+        entries, _ = release_index.catalog_entries(repository, self.ws.dist, TAG)
+        self.assertEqual(
+            [(entry["schema"], entry["file"]) for entry in entries],
+            [
+                ("south.family-catalog.v1", f"family-catalog-{TAG}.json"),
+                ("south.model-catalog.v1", f"model-catalog-{TAG}.json"),
+            ],
+        )
+
+
+def text(word: str) -> dict:
+    return {"zh-CN": word, "en": word}
+
+
+def family_entry(world: str, family: str, **extra) -> dict:
+    entry = {"world": world, "family": family, "display_name": text(family), "description": text(family)}
+    entry.update(extra)
+    return entry
+
+
+class FamilyCatalogTest(unittest.TestCase):
+    """docs/design/2026-11-24-family-catalog.md: the release refuses a family catalog that disagrees with its packages."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.ws = Workspace(Path(self.tmp.name))
+        self.ws.add(
+            provider_manifest(
+                config_schema={"gemini": {"region": {}}},
+                credentials={"families": ["gemini"], "fields": {"token": {}}},
+            )
+        )
+        self.ws.add(task_manifest())
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def catalog(self, *entries: dict, groups: list | None = None) -> dict:
+        return {
+            "schema": "south.family-catalog.v1",
+            "groups": groups if groups is not None else [{"id": "cloud", "display_name": text("Cloud")}],
+            "entries": list(entries) or [
+                family_entry(
+                    "provider-adapter-v2",
+                    "gemini",
+                    group="cloud",
+                    config_keys={"region": text("region")},
+                    credential_fields={"token": text("token")},
+                ),
+                family_entry("task-adapter-v2", "veo", modality="video"),
+            ],
+        }
+
+    def refused(self, document: dict, message: str) -> None:
+        self.ws.add_catalog("family-catalog", document=document)
+        with self.assertRaisesRegex(release_index.ReleaseIndexError, message):
+            self.ws.generate()
+
+    def test_a_matching_family_catalog_is_listed(self) -> None:
+        self.ws.add_catalog("family-catalog", document=self.catalog())
+        self.assertEqual(
+            [entry["schema"] for entry in self.ws.generate()["catalogs"]], ["south.family-catalog.v1"]
+        )
+
+    def test_a_missing_entry_is_refused(self) -> None:
+        self.refused(
+            self.catalog(family_entry("provider-adapter-v2", "gemini")),
+            "no entry for task-adapter-v2 / veo",
+        )
+
+    def test_an_entry_no_package_declares_is_refused(self) -> None:
+        document = self.catalog()
+        document["entries"].append(family_entry("provider-adapter-v2", "ghost"))
+        self.refused(document, "provider-adapter-v2 / ghost: no package declares it")
+
+    def test_an_undeclared_config_key_is_refused(self) -> None:
+        document = self.catalog()
+        document["entries"][0]["config_keys"]["project"] = text("project")
+        self.refused(document, "config key project is not declared")
+
+    def test_an_undeclared_credential_field_is_refused(self) -> None:
+        document = self.catalog()
+        document["entries"][1]["credential_fields"] = {"token": text("token")}
+        self.refused(document, "task-adapter-v2 / veo: credential field token is not declared")
+
+    def test_a_bad_group_reference_is_refused(self) -> None:
+        document = self.catalog()
+        document["entries"][0]["group"] = "subscription"
+        self.refused(document, "group subscription does not exist")
+
+    def test_a_modality_outside_task_v2_is_refused(self) -> None:
+        document = self.catalog()
+        document["entries"][0]["modality"] = "video"
+        self.refused(document, "provider-adapter-v2 / gemini: a modality is required")
+
+    def test_the_repository_family_catalog_matches(self) -> None:
+        root = Path(__file__).resolve().parent.parent
+        document = json.loads((root / "catalogs" / "family-catalog.json").read_bytes())
+        manifests = [json.loads(path.read_bytes()) for path in sorted((root / "components").glob("*/manifest.json"))]
+        self.assertEqual(release_index.family_catalog_violations(document, manifests), [])
 
 
 def index_of(*packages: tuple[str, ...]) -> dict:
