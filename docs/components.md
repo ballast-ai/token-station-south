@@ -109,6 +109,10 @@ runtime, not necessarily the repository release in which the package appears.
 Upstream facts that no design record repeats (deployments, field quirks, failure modes, list
 prices with the date they were checked) are collected per upstream in [upstream notes](upstreams/README.md).
 
+The [family catalog](design/2026-11-24-family-catalog.md) (`catalogs/family-catalog.json`) names and describes
+every provider and task family for host pickers, keyed by world and family; the release refuses a catalog that misses
+a family or describes one no package declares.
+
 The model catalog is a separate signed release artifact read by the host runtime. It does not alter
 component identity or grant a package new capabilities. Host adoption, suite status, and supported
 ranges remain authoritative in [compatibility.json](../compatibility.json).

@@ -448,6 +448,7 @@ version = "0.85.1"
 dependencies = [
  "chrono",
  "http",
+ "serde_json",
  "south-contracts",
  "thiserror",
  "tokio",
