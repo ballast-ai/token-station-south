@@ -22,8 +22,8 @@
 //! - **Response**: `json`, nothing elided. The 2xx reading is the Qwen-TTS one, typed by the
 //!   requested format; a non-2xx reads the `DashScope` `{"code", "message"}` answer.
 //! - **Metering per model** (1.4.0, south #357 round): `qwen-audio-3.1-tts-flash` is billed by input
-//!   and output tokens (Model Studio's HTTP API page: "qwen-audio-3.1-tts-flash 按输入和输出 Token
-//!   计费"), so it reports `tokens` only, from `usage.input_tokens` / `usage.output_tokens` (each a
+//!   and output tokens (Model Studio's HTTP API page bills `qwen-audio-3.1-tts-flash` "by input
+//!   and output tokens"), so it reports `tokens` only, from `usage.input_tokens` / `usage.output_tokens` (each a
 //!   positive integer; absent, `null`, zero or not an integer is `unknown`). Every other model of
 //!   the family is billed by characters and reports `characters` only. The forms are declared per
 //!   model in `model-capabilities`, so a host that prices one by the other unit is refused before
