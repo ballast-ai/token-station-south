@@ -28,6 +28,13 @@
         "zh-CN": "编程套餐",
         "en": "Coding plans"
       }
+    },
+    {
+      "id": "vendor-api",
+      "display_name": {
+        "zh-CN": "厂商官方接口",
+        "en": "Vendor APIs"
+      }
     }
   ],
   "entries": [
@@ -618,6 +625,207 @@
           "zh-CN": "GMI Cloud 组织 ID；填了就作为 X-Organization-ID 发送。",
           "en": "The GMI Cloud organization id, sent as X-Organization-ID when set."
         }
+      }
+    },
+    {
+      "world": "speech-adapter-v1",
+      "family": "openai-compatible",
+      "group": "generic",
+      "display_name": {
+        "zh-CN": "OpenAI 兼容语音接口",
+        "en": "OpenAI-compatible speech"
+      },
+      "description": {
+        "zh-CN": "讲 OpenAI `/audio/speech` 与 `/audio/transcriptions` 协议的上游：语音合成、识别与翻译。服务商地址写到 API 根，凭证是一个 API Key。",
+        "en": "Any upstream that speaks OpenAI's `/audio/speech` and `/audio/transcriptions`: synthesis, recognition and translation. The provider endpoint is the API root; the credential is one API key."
+      }
+    },
+    {
+      "world": "speech-adapter-v1",
+      "family": "azure-openai-v1",
+      "group": "cloud",
+      "display_name": {
+        "zh-CN": "Azure OpenAI 语音 · v1",
+        "en": "Azure OpenAI speech · v1"
+      },
+      "description": {
+        "zh-CN": "Azure OpenAI 不带版本号的 v1 语音接口（合成、识别、翻译）。服务商地址写到 {资源}/openai/v1，凭证是资源的 API Key。",
+        "en": "Azure OpenAI's unversioned v1 speech surface (synthesis, recognition, translation). The provider endpoint is {resource}/openai/v1; the credential is the resource's API key."
+      }
+    },
+    {
+      "world": "speech-adapter-v1",
+      "family": "azure-openai-dated",
+      "group": "cloud",
+      "display_name": {
+        "zh-CN": "Azure OpenAI 语音 · 按日期版本",
+        "en": "Azure OpenAI speech · dated versions"
+      },
+      "description": {
+        "zh-CN": "Azure OpenAI 按部署寻址、带 ?api-version= 日期版本的语音接口。服务商地址写资源根，凭证是资源的 API Key。",
+        "en": "Azure OpenAI speech addressed by deployment with a dated ?api-version=. The provider endpoint is the resource root; the credential is the resource's API key."
+      },
+      "config_keys": {
+        "api_version": {
+          "zh-CN": "以 ?api-version= 发送的 API 版本，日期形式，可带 -preview 后缀，缺省 2024-10-21。",
+          "en": "The API version sent as ?api-version=, a date with an optional -preview suffix; defaults to 2024-10-21."
+        }
+      }
+    },
+    {
+      "world": "speech-adapter-v1",
+      "family": "azure-speech",
+      "group": "cloud",
+      "display_name": {
+        "zh-CN": "Azure AI 语音服务",
+        "en": "Azure AI Speech"
+      },
+      "description": {
+        "zh-CN": "Azure AI 语音服务：快速转写识别与 SSML 语音合成。凭证是语音资源的密钥。",
+        "en": "Azure AI Speech: fast transcription and SSML synthesis. The credential is the Speech resource key."
+      }
+    },
+    {
+      "world": "speech-adapter-v1",
+      "family": "vertex-ai-speech",
+      "group": "cloud",
+      "display_name": {
+        "zh-CN": "Google Vertex AI · Gemini 语音合成",
+        "en": "Google Vertex AI · Gemini TTS"
+      },
+      "description": {
+        "zh-CN": "Vertex AI 上的 Gemini TTS 语音合成，凭证是服务账号密钥，网关用它签发访问令牌。",
+        "en": "Gemini TTS synthesis on Vertex AI; the credential is a service account key the gateway mints access tokens from."
+      },
+      "config_keys": {
+        "region": {
+          "zh-CN": "Vertex AI 的位置，例如 us-central1、global，或多区域 us / eu。",
+          "en": "The Vertex AI location, such as us-central1, global, or the us / eu multi-regions."
+        },
+        "project": {
+          "zh-CN": "要调用的 Google Cloud 项目，与服务账号所属项目不同时才填。",
+          "en": "The Google Cloud project to call, when it is not the service account's own."
+        }
+      },
+      "credential_fields": {
+        "service_account": {
+          "zh-CN": "用来签发访问令牌的服务账号密钥文件（JSON）。",
+          "en": "The service account key file (JSON) access tokens are minted with."
+        },
+        "project_id": {
+          "zh-CN": "服务账号所属的 Google Cloud 项目。",
+          "en": "The Google Cloud project the service account belongs to."
+        }
+      }
+    },
+    {
+      "world": "speech-adapter-v1",
+      "family": "bailian-qwen-speech",
+      "group": "cloud",
+      "display_name": {
+        "zh-CN": "阿里云百炼 · 千问语音",
+        "en": "Alibaba Cloud Model Studio · Qwen speech"
+      },
+      "description": {
+        "zh-CN": "百炼上的千问 TTS 合成与千问 ASR 识别（HTTP 单次请求；Realtime 型号不在服务范围）。凭证是百炼 API Key。",
+        "en": "Qwen TTS synthesis and Qwen ASR recognition on Model Studio (one-shot HTTP; Realtime models are not served). The credential is a Model Studio API key."
+      }
+    },
+    {
+      "world": "speech-adapter-v1",
+      "family": "bailian-speech-synthesizer",
+      "group": "cloud",
+      "display_name": {
+        "zh-CN": "阿里云百炼 · SpeechSynthesizer",
+        "en": "Alibaba Cloud Model Studio · SpeechSynthesizer"
+      },
+      "description": {
+        "zh-CN": "百炼 SpeechSynthesizer 接口上的 Qwen-Audio-TTS 与 CosyVoice 合成；没有缺省音色，须给对应系列的有效音色。凭证是百炼 API Key。",
+        "en": "Qwen-Audio-TTS and CosyVoice synthesis through Model Studio's SpeechSynthesizer API; there is no default voice, so a valid voice of the series is required. The credential is a Model Studio API key."
+      }
+    },
+    {
+      "world": "speech-adapter-v1",
+      "family": "bailian-minimax-speech",
+      "group": "cloud",
+      "display_name": {
+        "zh-CN": "阿里云百炼 · MiniMax 语音合成",
+        "en": "Alibaba Cloud Model Studio · MiniMax speech"
+      },
+      "description": {
+        "zh-CN": "百炼托管的 MiniMax 语音合成（型号 ID 形如 MiniMax/speech-*）。凭证是百炼 API Key。",
+        "en": "MiniMax synthesis hosted by Model Studio (model ids like MiniMax/speech-*). The credential is a Model Studio API key."
+      }
+    },
+    {
+      "world": "speech-adapter-v1",
+      "family": "minimax-speech",
+      "group": "vendor-api",
+      "display_name": {
+        "zh-CN": "MiniMax 语音合成",
+        "en": "MiniMax speech"
+      },
+      "description": {
+        "zh-CN": "MiniMax 官方语音合成接口。凭证是 MiniMax API Key；中国站账号可另填 GroupId。",
+        "en": "MiniMax's own speech synthesis API. The credential is a MiniMax API key; a China-site account may also set its GroupId."
+      },
+      "config_keys": {
+        "group_id": {
+          "zh-CN": "MiniMax 账号的 GroupId，填了就以 ?GroupId= 附在请求上。",
+          "en": "The MiniMax account's GroupId, appended to the request as ?GroupId= when set."
+        }
+      }
+    },
+    {
+      "world": "speech-adapter-v1",
+      "family": "elevenlabs-speech",
+      "group": "vendor-api",
+      "display_name": {
+        "zh-CN": "ElevenLabs",
+        "en": "ElevenLabs"
+      },
+      "description": {
+        "zh-CN": "ElevenLabs 语音合成与识别。凭证是 ElevenLabs API Key（xi-api-key）。",
+        "en": "ElevenLabs synthesis and recognition. The credential is an ElevenLabs API key (xi-api-key)."
+      }
+    },
+    {
+      "world": "speech-adapter-v1",
+      "family": "groq-speech",
+      "group": "vendor-api",
+      "display_name": {
+        "zh-CN": "Groq 语音合成",
+        "en": "Groq speech"
+      },
+      "description": {
+        "zh-CN": "Groq 的语音合成接口。凭证是 Groq API Key。",
+        "en": "Groq's speech synthesis API. The credential is a Groq API key."
+      }
+    },
+    {
+      "world": "speech-adapter-v1",
+      "family": "mimo-speech",
+      "group": "vendor-api",
+      "display_name": {
+        "zh-CN": "小米 MiMo 语音合成",
+        "en": "Xiaomi MiMo speech"
+      },
+      "description": {
+        "zh-CN": "小米 MiMo 的语音合成接口。凭证是 MiMo API Key。",
+        "en": "Xiaomi MiMo's speech synthesis API. The credential is a MiMo API key."
+      }
+    },
+    {
+      "world": "speech-adapter-v1",
+      "family": "xai-speech",
+      "group": "vendor-api",
+      "display_name": {
+        "zh-CN": "xAI 语音",
+        "en": "xAI speech"
+      },
+      "description": {
+        "zh-CN": "xAI 的语音合成与识别接口。凭证是 xAI API Key。",
+        "en": "xAI's speech synthesis and recognition API. The credential is an xAI API key."
       }
     }
   ]
