@@ -142,6 +142,10 @@ pub(super) fn prepare(
     }
     let template = json!({ "model": context.upstream_model, "input": upstream_input });
     let count = scalar_count(text);
+    let mut state = json!({ "family": super::BAILIAN_SPEECH_SYNTHESIZER, "format": format, "characters": count });
+    if tokens {
+        state["tokens"] = json!(true);
+    }
     let mut call_facts = facts(count, &forms, media_type(format));
     call_facts.characters = Some(SpeechCharactersV1 { count, upper: Some(weighted_count(text)) });
     prepared(
@@ -150,11 +154,6 @@ pub(super) fn prepare(
         ResponseBodyFormV1::Json,
         &[],
         &IMMUTABLE_BODY_PATHS,
-        &json!({
-            "family": super::BAILIAN_SPEECH_SYNTHESIZER,
-            "format": format,
-            "characters": count,
-            "tokens": tokens,
-        }),
+        &state,
     )
 }

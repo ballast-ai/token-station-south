@@ -520,7 +520,8 @@ impl SpeechComponentV1 for QwenSpeechReferenceV1 {
             MEDIA_TYPE
         };
         let mut outcome = url_outcome(AUDIO_URL_POINTER, media_type, true, characters)?;
-        if let (Some(tokens), SpeechOutcomeV1::Succeeded { metering, .. }) = (tokens, &mut outcome) {
+        if let (Some(tokens), SpeechOutcomeV1::Succeeded { metering, .. }) = (tokens, &mut outcome)
+        {
             metering.tokens = Some(tokens);
         }
         Ok(outcome)

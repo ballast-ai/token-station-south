@@ -10,13 +10,13 @@
 use std::collections::BTreeSet;
 
 use serde_json::{Value, json};
-use south_component_conformance::{SpeechComponentV1, SpeechOutcomeV1};
 use south_component_conformance::reference_minimax_speech::{
     BAILIAN_MINIMAX_SPEECH, MINIMAX_SPEECH, MiniMaxSpeechReferenceV1,
 };
 use south_component_conformance::reference_qwen_speech::{
     BAILIAN_QWEN_SPEECH, BAILIAN_SPEECH_SYNTHESIZER, QwenSpeechReferenceV1,
 };
+use south_component_conformance::{SpeechComponentV1, SpeechOutcomeV1};
 use south_contracts::media::MediaBodyV1;
 use south_contracts::speech::SpeechCallContextV1;
 use token_station_protocol::{ErrorCode, ProviderConfig};

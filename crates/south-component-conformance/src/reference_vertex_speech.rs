@@ -34,12 +34,24 @@
 //!   `promptFeedback.blockReason` is `rejected` and a candidate `finishReason` in the I3-2 policy
 //!   table is `unknown`, both with a `content_policy` envelope; anything else is `unknown`. A
 //!   non-2xx reads Google's `{"error": {"message"}}` (`gemini_image`), else the body text.
+//! - **Gemini 3.8** (1.3.0, south #357 round; `gemini-3.8-flash-tts`, `gemini-3.8-flash-lite-tts`,
+//!   from Google's "Generate speech with Gemini TTS" page): the voice goes in
+//!   `speechConfig.voiceConfig.voice` (the 3.8 shape; the page does not mention
+//!   `prebuiltVoiceConfig`), and the request asks for raw PCM with `generationConfig.responseFormat:
+//!   [{"audio": {"mimeType": "AUDIO_L16"}}]`, because a 3.8 unary answer is a whole WAV file by
+//!   default; the delivery is then the 2.5 one. An answer whose `inlineData.mimeType` still says
+//!   WAV is delivered as that WAV for `wav` and is `unknown` for `pcm`, never wrapped twice. The
+//!   locations are `global`, `us` and `eu` (the multi-region hosts are in `vertex_location`). Billed
+//!   by characters or by tokens, as the host prices the model: tokens from
+//!   `usageMetadata.promptTokenCount` / `candidatesTokenCount`, each a positive integer, else
+//!   `unknown`. 2.5 keeps characters only. Nothing about 3.8 has been called against the upstream
+//!   (unverified), and its usage fields are documented by the Gemini API, not by the 3.8 page.
 
 use serde_json::{Map, Value, json};
 use south_contracts::media::ResponseBodyFormV1;
 use south_contracts::speech::{
     PreparedSpeechCallV1, SpeechCallContextV1, SpeechContainerV1, SpeechEncodingV1,
-    SpeechMeteringFormV1, SpeechModelCapabilitiesV1,
+    SpeechMeteringFormV1, SpeechModelCapabilitiesV1, SpeechTokensV1,
 };
 use south_provider_api::ComponentMetadataV1;
 use token_station_protocol::ProviderConfig;
@@ -55,15 +67,28 @@ use crate::{ComponentResultV1, SpeechComponentV1, SpeechDeliveryV1, SpeechOutcom
 /// The package name this reference is published as.
 pub const NAME: &str = "speech-vertex";
 /// The package version.
-pub const VERSION: &str = "1.2.4";
+pub const VERSION: &str = "1.3.0";
 /// The world this reference exports.
 pub const WORLD: &str = "speech-adapter-v1";
 /// The family, as a host's speech bindings name it.
 pub const VERTEX_AI_SPEECH: &str = "vertex-ai-speech";
 
 const FORMS: [SpeechMeteringFormV1; 1] = [SpeechMeteringFormV1::Characters];
+/// The forms a Gemini 3.8 model can report.
+const FORMS_38: [SpeechMeteringFormV1; 2] =
+    [SpeechMeteringFormV1::Characters, SpeechMeteringFormV1::Tokens];
+/// The id prefix of the 3.8 generation, whose request shape differs from 2.5.
+const GEMINI_38: &str = "gemini-3.8-";
+
+/// The metering forms `model` can report.
+fn forms_for(model: &str) -> &'static [SpeechMeteringFormV1] {
+    if model.starts_with(GEMINI_38) { &FORMS_38 } else { &FORMS }
+}
 /// The native arm's `body_rules` (`tts.rs:63`).
 const IMMUTABLE_BODY_PATHS: [&str; 2] = ["contents", "generationConfig.responseModalities"];
+/// A 3.8 request adds `generationConfig.responseFormat` (1.3.0): the raw PCM the delivery assumes.
+const IMMUTABLE_BODY_PATHS_38: [&str; 3] =
+    ["contents", "generationConfig.responseFormat", "generationConfig.responseModalities"];
 /// Every inline payload the upstream returns, so the audio never enters the sandbox.
 const RESPONSE_ELISION_PATH: &str = "/candidates/*/content/parts/*/inlineData/data";
 /// The voice the folded names and an absent voice resolve to.
@@ -130,6 +155,24 @@ fn audio_part(body: &Value) -> Option<(usize, &Value)> {
         .find_map(|(index, part)| part.get("inlineData")?.get("data").map(|data| (index, data)))
 }
 
+/// `usageMetadata.promptTokenCount` / `candidatesTokenCount` of a token-priced call: both positive
+/// integers, else the reason the answer is `unknown`.
+fn usage_tokens(body: &Value) -> Result<SpeechTokensV1, &'static str> {
+    let usage = body.get("usageMetadata").ok_or("a token-priced answer without usageMetadata")?;
+    let count = |field: &str| usage.get(field).and_then(Value::as_u64).filter(|count| *count > 0);
+    match (count("promptTokenCount"), count("candidatesTokenCount")) {
+        (Some(input), Some(output)) => Ok(SpeechTokensV1 {
+            input: Some(input),
+            output: Some(output),
+            input_text: None,
+            input_audio: None,
+        }),
+        _ => {
+            Err("a token-priced answer without positive promptTokenCount and candidatesTokenCount")
+        }
+    }
+}
+
 /// A 2xx without audio (record §3.3 step 3, I3-2 GI-Q5).
 fn without_audio(body: &Value) -> SpeechOutcomeV1 {
     if let Some(reason) = body
@@ -166,7 +209,11 @@ impl SpeechComponentV1 for VertexSpeechReferenceV1 {
         &self,
         config: &ProviderConfig,
     ) -> ComponentResultV1<Vec<SpeechModelCapabilitiesV1>> {
-        capabilities(config, VERTEX_AI_SPEECH, &FORMS)
+        let mut models = capabilities(config, VERTEX_AI_SPEECH, &FORMS)?;
+        for model in &mut models {
+            model.metering_forms = forms_for(&model.model).to_vec();
+        }
+        Ok(models)
     }
 
     fn prepare(
@@ -183,29 +230,51 @@ impl SpeechComponentV1 for VertexSpeechReferenceV1 {
             &context.upstream_model,
             "generateContent",
         )?;
-        let forms = required_forms(context, &FORMS)?;
+        let forms = required_forms(context, forms_for(&context.upstream_model))?;
+        let tokens = forms.contains(&SpeechMeteringFormV1::Tokens);
         let body = json_body(request)?;
         let text = input(body)?;
         let format = format_word(body)?;
-        let template = json!({
-            "contents": [{ "role": "user", "parts": [{ "text": text }] }],
-            "generationConfig": {
-                "responseModalities": ["AUDIO"],
-                "speechConfig": {
-                    "voiceConfig": { "prebuiltVoiceConfig": { "voiceName": voice(body.get("voice")) } }
+        let template = if context.upstream_model.starts_with(GEMINI_38) {
+            json!({
+                "contents": [{ "role": "user", "parts": [{ "text": text }] }],
+                "generationConfig": {
+                    "responseModalities": ["AUDIO"],
+                    "speechConfig": { "voiceConfig": { "voice": voice(body.get("voice")) } },
+                    "responseFormat": [{ "audio": { "mimeType": "AUDIO_L16" } }]
                 }
-            }
-        });
+            })
+        } else {
+            json!({
+                "contents": [{ "role": "user", "parts": [{ "text": text }] }],
+                "generationConfig": {
+                    "responseModalities": ["AUDIO"],
+                    "speechConfig": {
+                        "voiceConfig": {
+                            "prebuiltVoiceConfig": { "voiceName": voice(body.get("voice")) }
+                        }
+                    }
+                }
+            })
+        };
         let auth =
             config.auth.as_ref().map(|slot| json!({ "arm": "bearer", "slot": slot.as_str() }));
         let count = scalar_count(text);
+        let mut state = json!({ "format": format, "characters": count });
+        if tokens {
+            state["tokens"] = json!(true);
+        }
         prepared(
             facts(count, &forms, media_type(format)),
             descriptor(&path, None, auth, &template, &[])?,
             ResponseBodyFormV1::Json,
             &[RESPONSE_ELISION_PATH],
-            &IMMUTABLE_BODY_PATHS,
-            &json!({ "format": format, "characters": count }),
+            if context.upstream_model.starts_with(GEMINI_38) {
+                &IMMUTABLE_BODY_PATHS_38
+            } else {
+                &IMMUTABLE_BODY_PATHS
+            },
+            &state,
         )
     }
 
@@ -234,19 +303,39 @@ impl SpeechComponentV1 for VertexSpeechReferenceV1 {
         };
         let format =
             state["format"].as_str().ok_or_else(|| internal("the state has no audio format"))?;
+        // A 3.8 answer that ignored `AUDIO_L16` is already a WAV file: deliver it as such for `wav`,
+        // never wrap it twice; for `pcm` it is not what was asked.
+        let already_wav = json
+            .pointer(&format!("/candidates/0/content/parts/{audio}/inlineData/mimeType"))
+            .and_then(Value::as_str)
+            .is_some_and(|mime| mime.to_ascii_lowercase().contains("wav"));
+        if already_wav && format == "pcm" {
+            return Ok(unknown("a WAV answer where raw PCM was asked"));
+        }
+        let tokens = if state["tokens"] == true {
+            match usage_tokens(json) {
+                Ok(tokens) => Some(tokens),
+                Err(reason) => return Ok(unknown(reason)),
+            }
+        } else {
+            None
+        };
         let mut outcome = inline_outcome(
             &format!("/candidates/0/content/parts/{audio}/inlineData/data"),
             SpeechEncodingV1::Base64,
             media_type(format),
             state_characters(state)?,
         )?;
-        if format == "wav"
-            && let SpeechOutcomeV1::Succeeded {
-                delivery: SpeechDeliveryV1::Audio(artifact), ..
-            } = &mut outcome
+        if let SpeechOutcomeV1::Succeeded {
+            delivery: SpeechDeliveryV1::Audio(artifact),
+            metering,
+        } = &mut outcome
         {
-            artifact.container =
-                Some(SpeechContainerV1::WavPcmS16le { sample_rate: SAMPLE_RATE, channels: 1 });
+            if format == "wav" && !already_wav {
+                artifact.container =
+                    Some(SpeechContainerV1::WavPcmS16le { sample_rate: SAMPLE_RATE, channels: 1 });
+            }
+            metering.tokens = tokens;
         }
         Ok(outcome)
     }
