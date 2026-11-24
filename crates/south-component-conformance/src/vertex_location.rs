@@ -9,8 +9,10 @@
 //! operator set that override, else the `project_id` the credential exports. `base_url` is the
 //! location's API origin; when it is a Vertex AI API origin it must be the one the region selects:
 //! `https://{region}-aiplatform.googleapis.com`, except `https://aiplatform.googleapis.com` for
-//! `global`, whose prefixed host answers 404. Any other base URL (a proxy, a test server) is used
-//! as given. A missing value is a 500 naming the key, before any request refusal.
+//! `global`, whose prefixed host answers 404, and `https://aiplatform.{us,eu}.rep.googleapis.com` for
+//! the `us` and `eu` multi-regions (0.87.0; the locations Gemini 3.8 TTS lists besides `global`).
+//! Any other base URL (a proxy, a test server) is used as given. A missing value is a 500 naming the
+//! key, before any request refusal.
 //!
 //! One module, so the references cannot drift.
 
@@ -33,10 +35,17 @@ fn internal(detail: impl std::fmt::Display) -> ErrorEnvelope {
     ErrorEnvelope::new(ErrorCode::Internal, 500, detail.to_string())
 }
 
+/// The multi-region locations, whose API host is `aiplatform.{location}.rep.googleapis.com`.
+const MULTI_REGIONS: [&str; 2] = ["eu", "us"];
+/// The suffix of a multi-region API host.
+const REP_DOMAIN: &str = "rep.googleapis.com";
+
 /// The API origin a location selects.
 fn origin_of(region: &str) -> String {
     if region == GLOBAL {
         format!("https://{API_DOMAIN}")
+    } else if MULTI_REGIONS.contains(&region) {
+        format!("https://aiplatform.{region}.{REP_DOMAIN}")
     } else {
         format!("https://{region}-{API_DOMAIN}")
     }
@@ -49,7 +58,9 @@ pub fn base_of(config: &ProviderConfig, region: &str) -> ComponentResultV1<Strin
     let base = base.trim_end_matches('/');
     let authority = base.split_once("://").map_or(base, |(_, rest)| rest);
     let host = authority.split(['/', ':']).next().unwrap_or_default();
-    let is_vertex_host = host == API_DOMAIN || host.ends_with(&format!("-{API_DOMAIN}"));
+    let is_vertex_host = host == API_DOMAIN
+        || host.ends_with(&format!("-{API_DOMAIN}"))
+        || (host.starts_with("aiplatform.") && host.ends_with(&format!(".{REP_DOMAIN}")));
     let expected = origin_of(region);
     if is_vertex_host && base != expected {
         return Err(internal(format!(

@@ -1278,12 +1278,19 @@ pub struct ServedModelsV1 {
     /// model). A deliberate statement, reviewed like the other two forms.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub any: Option<bool>,
+    /// Id suffixes that `prefixes` does not cover (0.87.0, south #357): an id a prefix matches but
+    /// that ends with one of these is not served. Only with `prefixes`; sorted and distinct, the
+    /// same list grammar. For an upstream that names a family it cannot serve under the same
+    /// prefix (Model Studio's `*-realtime` models speak `WebSocket`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exclude_suffixes: Option<Vec<String>>,
 }
 
 impl ServedModelsV1 {
     /// Whether the declaration follows the record's grammar: exactly one form; `any` is `true`;
     /// a list is non-empty, sorted and distinct, at most [`MAX_SERVED_MODELS`] entries of 1 to
-    /// [`MAX_SERVED_MODEL_BYTES`] visible ASCII bytes.
+    /// [`MAX_SERVED_MODEL_BYTES`] visible ASCII bytes; `exclude_suffixes`, when present, only with
+    /// `prefixes` and under the same list grammar.
     #[must_use]
     pub fn is_valid(&self) -> bool {
         let list_ok = |list: &[String]| {
@@ -1296,16 +1303,23 @@ impl ServedModelsV1 {
                         && entry.bytes().all(|byte| byte.is_ascii_graphic())
                 })
         };
-        match (&self.ids, &self.prefixes, self.any) {
-            (Some(ids), None, None) => list_ok(ids),
-            (None, Some(prefixes), None) => list_ok(prefixes),
-            (None, None, Some(any)) => any,
-            _ => false,
-        }
+        let excludes_ok = match (&self.exclude_suffixes, &self.prefixes) {
+            (None, _) => true,
+            (Some(suffixes), Some(_)) => list_ok(suffixes),
+            (Some(_), None) => false,
+        };
+        excludes_ok
+            && match (&self.ids, &self.prefixes, self.any) {
+                (Some(ids), None, None) => list_ok(ids),
+                (None, Some(prefixes), None) => list_ok(prefixes),
+                (None, None, Some(any)) => any,
+                _ => false,
+            }
     }
 
-    /// Whether the family serves `upstream_model`: an exact id, a declared prefix, or `any`.
-    /// Case-sensitive, as upstream ids are. An invalid declaration serves nothing.
+    /// Whether the family serves `upstream_model`: an exact id, a declared prefix (unless the id
+    /// ends with an excluded suffix), or `any`. Case-sensitive, as upstream ids are. An invalid
+    /// declaration serves nothing.
     #[must_use]
     pub fn serves(&self, upstream_model: &str) -> bool {
         if !self.is_valid() {
@@ -1315,6 +1329,11 @@ impl ServedModelsV1 {
             (Some(ids), _) => ids.iter().any(|id| id == upstream_model),
             (_, Some(prefixes)) => {
                 prefixes.iter().any(|prefix| upstream_model.starts_with(prefix.as_str()))
+                    && !self
+                        .exclude_suffixes
+                        .iter()
+                        .flatten()
+                        .any(|suffix| upstream_model.ends_with(suffix.as_str()))
             }
             _ => true,
         }
@@ -1881,8 +1900,9 @@ impl ComponentManifestV1 {
             if !served.is_valid() {
                 return Err(invalid(
                     family,
-                    "exactly one of ids, prefixes or any: true; a list is non-empty, sorted and \
-                     distinct, at most 256 entries of 1 to 128 visible ASCII bytes",
+                    "exactly one of ids, prefixes or any: true; exclude_suffixes only with \
+                     prefixes; a list is non-empty, sorted and distinct, at most 256 entries of 1 \
+                     to 128 visible ASCII bytes",
                 ));
             }
         }

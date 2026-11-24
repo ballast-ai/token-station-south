@@ -743,7 +743,9 @@ fn the_t9_families_retire_the_patch_identity() {
     // (`first_error_retires_every_published_083_package_identity`).
     // Published as 2.14.1 with 0.85.0; the 0.85.1 round made it 2.14.2
     // (`truncated_tool_calls_retire_every_published_085_package_identity`).
-    assert_eq!(manifest.version, "2.14.2");
+    // Published as 2.14.2 with 0.85.1; the 0.87.0 round made it 2.14.3
+    // (`served_model_exclusions_retire_every_published_086_package_identity`).
+    assert_eq!(manifest.version, "2.14.3");
     assert_eq!(OpenAiCompatibleReferenceV1.metadata().version, manifest.version);
     // 2.13.0 declares `request_facts.reasoning_cap` and `cap_overhead` (Bailian thinking cap record
     // §4), first parsed by 0.76.0.

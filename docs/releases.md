@@ -4,13 +4,14 @@ This page is the concise index from repository releases to their authoritative d
 Release records preserve historical detail; [compatibility.json](../compatibility.json), not a tag
 or this index, is the authority for host adoption and verification status.
 
-The current repository release is `0.86.0`. Records may describe a prepared but unpublished tag;
+The current repository release is `0.87.0`. Records may describe a prepared but unpublished tag;
 their status line remains authoritative for publication state.
 
 ## Current releases
 
 | Release | Current capability | Records |
 |---|---|---|
+| `0.87.0` | `served_models` takes `exclude_suffixes` (`south-provider-api` 0.66.0) and `speech-qwen` 1.4.0 excludes Model Studio's `*-realtime` ids; `speech-qwen` serves `qwen-audio-3.1-tts-flash` billed by tokens; `speech-vertex` 1.3.0 serves Gemini 3.8 Flash and Flash-Lite TTS and the `us` / `eu` multi-region hosts; every other package takes the Q47 patch; component lockfiles take `url` 2.5.9 | [release](design/2026-11-24-release-0.87.0.md), [design](design/2026-11-24-tts-flash-gemini38-exclusions.md) |
 | `0.86.0` | The family catalog (`south.family-catalog.v1`, `family-catalog-<tag>.json`): a zh-CN / en display name, description, group and (task families) modality for every provider and task v2 family, read by `south_core::FamilyCatalogV1`; the release refuses a catalog that disagrees with its packages; no package changes identity | [release](design/2026-11-24-release-0.86.0.md), [design](design/2026-11-24-family-catalog.md) |
 | `0.85.1` | A tool call the output cap cut off reaches a Chat client with its partial arguments under `length`: the Chat codec renders them only under that reason, and `provider-openai-responses` 1.7.0 keeps `length` on an `incomplete` answer; every other package takes the Q47 patch | [release](design/2026-11-19-release-0.85.1.md), [design](design/2026-11-19-truncated-tool-call-arguments.md) |
 | `0.85.0` | Host-side provider quota metadata normalization: `south-core` turns a package's quota metadata into limit, remaining and reset instant (`normalize_provider_quota_v1`); no package changes identity | [release](design/2026-11-16-release-0.85.0.md), [design](design/2026-11-16-provider-quota-normalization.md) |

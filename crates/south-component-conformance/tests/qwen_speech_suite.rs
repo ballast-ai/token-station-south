@@ -458,7 +458,9 @@ fn the_manifest_declares_transcription_at_1_1_0() {
     // made it 1.3.0 (`2026-11-10-speech-bailian-synthesizer-and-minimax.md`).
     // Published as 1.3.0 with 0.85.0; the 0.85.1 round made it 1.3.1
     // (`truncated_tool_calls_retire_every_published_085_package_identity`).
-    assert_eq!(manifest.version, "1.3.1");
+    // Published as 1.3.1 with 0.85.1; the 0.87.0 round made it 1.4.0 (token-billed flash, Realtime
+    // ids excluded; south #357).
+    assert_eq!(manifest.version, "1.4.0");
     // Published as 1.1.3 with 0.79.0; the 0.80.0 round made it 1.1.4
     // (`veo_spelling_and_durationless_asr_retire_every_published_079_package_identity`).
     // Published as 1.1.4 with 0.80.0; the 0.81.0 round made it 1.2.0
@@ -472,10 +474,13 @@ fn the_manifest_declares_transcription_at_1_1_0() {
     // made it 1.3.0.
     // Published as 1.3.0 with 0.85.0; the 0.85.1 round made it 1.3.1
     // (`truncated_tool_calls_retire_every_published_085_package_identity`).
-    assert_eq!(REFERENCE.metadata().version, "1.3.1");
+    // Published as 1.3.1 with 0.85.1; the 0.87.0 round made it 1.4.0.
+    assert_eq!(REFERENCE.metadata().version, "1.4.0");
     assert!(manifest.capabilities.contains("transcribe"));
     assert!(!manifest.capabilities.contains("translate"));
-    assert_eq!(manifest.compatibility.south_runtime, "0.81.0"); // release 0.81.0 raised every speech package (served_models)
+    // Release 0.81.0 raised every speech package (served_models); 0.87.0 raised this one
+    // (served_models exclude_suffixes).
+    assert_eq!(manifest.compatibility.south_runtime, "0.87.0");
     assert_eq!(
         south_contracts::media::MediaTransformV1::DataUrl.minimum_contract_version(),
         south_contracts::media::MEDIA_CONTRACT_VERSION
