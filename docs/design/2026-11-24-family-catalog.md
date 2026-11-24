@@ -33,13 +33,13 @@ Source `catalogs/family-catalog.json`, published verbatim as `family-catalog-<ta
 ```json
 {
   "schema": "south.family-catalog.v1",
-  "groups": [{ "id": "cloud", "display_name": { "zh-CN": "云平台", "en": "Cloud platforms" } }],
+  "groups": [{ "id": "cloud", "display_name": { "zh-CN": "…", "en": "Cloud platforms" } }],
   "entries": [
     {
       "world": "provider-adapter-v2",
       "family": "bedrock",
       "group": "cloud",
-      "display_name": { "zh-CN": "AWS Bedrock · Converse", "en": "AWS Bedrock · Converse" },
+      "display_name": { "zh-CN": "…", "en": "AWS Bedrock · Converse" },
       "description": { "zh-CN": "…", "en": "…" },
       "config_keys": { "region": { "zh-CN": "…", "en": "…" } },
       "credential_fields": { "access_key_id": { "zh-CN": "…", "en": "…" } }
@@ -47,7 +47,7 @@ Source `catalogs/family-catalog.json`, published verbatim as `family-catalog-<ta
     {
       "world": "task-adapter-v2",
       "family": "wan-image",
-      "display_name": { "zh-CN": "万相图像", "en": "Wan image" },
+      "display_name": { "zh-CN": "…", "en": "Wan image" },
       "description": { "zh-CN": "…", "en": "…" },
       "modality": "image"
     }
@@ -101,6 +101,10 @@ published family catalog against the release's manifests (`family_catalog_violat
 modality references). A disagreement fails the release. The full shape check stays with the Rust reader, which the
 test suite runs over the same source file (`crates/south-core/tests/family_catalog_v1.rs`), as for the model
 catalog.
+
+The catalog is the one data file allowed to carry CJK: `scripts/check-language.sh` lists
+`catalogs/family-catalog.json` in its data allowlist, because the format requires a `zh-CN` text everywhere. Code,
+tests and this record stay English.
 
 ## 7. Initial data
 

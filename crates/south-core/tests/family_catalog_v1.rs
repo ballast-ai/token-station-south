@@ -42,7 +42,7 @@ fn declared() -> Vec<DeclaredFamilyV1> {
 }
 
 fn text(word: &str) -> Value {
-    json!({ "zh-CN": format!("{word}（中文)"), "en": word })
+    json!({ "zh-CN": format!("{word} (zh)"), "en": word })
 }
 
 fn minimal() -> Value {
@@ -143,7 +143,7 @@ fn a_lookup_is_by_world_and_family() {
     let task = catalog.entry("task-adapter-v2", "alpha").unwrap();
     assert_eq!(provider.display_name().en(), "Alpha");
     assert_eq!(task.display_name().en(), "Alpha video");
-    assert_eq!(provider.display_name().get("zh-CN"), Some("Alpha（中文)"));
+    assert_eq!(provider.display_name().get("zh-CN"), Some("Alpha (zh)"));
     assert_eq!(provider.display_name().get("fr"), None);
     assert_eq!(provider.group(), Some("cloud"));
     assert_eq!(catalog.group("cloud").unwrap().display_name().en(), "Cloud");
@@ -202,7 +202,7 @@ fn every_text_needs_both_languages_and_nothing_else() {
     assert!(malformed(&missing).contains("has no `zh-CN`"));
 
     let mut extra = minimal();
-    extra["entries"][0]["description"]["ja"] = json!("アルファ");
+    extra["entries"][0]["description"]["ja"] = json!("alpha");
     assert!(malformed(&extra).contains("unknown field `ja`"));
 
     let mut blank = minimal();

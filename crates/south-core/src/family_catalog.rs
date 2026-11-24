@@ -11,12 +11,12 @@
 //! ```json
 //! {
 //!   "schema": "south.family-catalog.v1",
-//!   "groups": [{ "id": "cloud", "display_name": { "zh-CN": "云平台", "en": "Cloud platforms" } }],
+//!   "groups": [{ "id": "cloud", "display_name": { "zh-CN": "…", "en": "Cloud platforms" } }],
 //!   "entries": [
 //!     {
 //!       "world": "task-adapter-v2",
 //!       "family": "kling",
-//!       "display_name": { "zh-CN": "可灵", "en": "Kling" },
+//!       "display_name": { "zh-CN": "…", "en": "Kling" },
 //!       "description": { "zh-CN": "…", "en": "…" },
 //!       "modality": "video",
 //!       "credential_fields": { "access_key": { "zh-CN": "…", "en": "…" } }
