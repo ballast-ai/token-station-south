@@ -14,6 +14,7 @@ surrounding facts that no record repeats, and point to the records instead of re
 | [Stability AI](stability.md) | `image-stability` |
 | [MiniMax](minimax.md) | `task-minimax-v2` (video); chat and speech billing facts |
 | [OpenAI-compatible text upstreams](openai-compatible-text.md) (Xiaomi MiMo, DeepSeek, Meituan LongCat) | `provider-openai-compatible` |
+| [常见文本供应商及可导入配置](common-chat-providers.md) | `provider-openai-compatible`、`provider-anthropic`（现有协议和 API Key） |
 | [Google Gemini API and Vertex AI](google-gemini.md) | `provider-gemini`, `provider-vertex`, `task-veo-v2`, `image-gemini`, `image-vertex`, `embeddings-gemini`, `embeddings-vertex` |
 | [xAI (video)](xai.md) | `task-xai-v2` |
 | [Anthropic](anthropic.md) | `provider-anthropic`, `provider-anthropic-bedrock-invoke` |

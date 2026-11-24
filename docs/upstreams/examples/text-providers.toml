@@ -1,0 +1,109 @@
+# 常见文本供应商的目录元数据，核实于 2026-11-25。
+# 普通 Chat 项使用 openai-compatible 族；Anthropic 使用已有 anthropic 族。
+# 只包含供应商，不包含凭证、型号、价格或能力声明。
+# 新库可作为首启目录片段；存量部署须经管理 API 显式创建缺项。
+# 管理 API 创建时默认停用，不覆盖同名既有配置，不自动启用。
+# 认证由各族组件处理；API Key 在既有凭证功能录入，不在此文件填写。
+# 账户、站点、型号、价格和真实调用需分别验收，详见 ../common-chat-providers.md。
+
+# OpenRouter
+[[providers]]
+name = "openrouter"
+endpoint = "https://openrouter.ai/api/v1"
+south_dialect = "openai-compatible"
+
+# Together AI
+[[providers]]
+name = "together"
+endpoint = "https://api.together.ai/v1"
+south_dialect = "openai-compatible"
+
+# Fireworks AI
+[[providers]]
+name = "fireworks"
+endpoint = "https://api.fireworks.ai/inference/v1"
+south_dialect = "openai-compatible"
+
+# Cerebras
+[[providers]]
+name = "cerebras"
+endpoint = "https://api.cerebras.ai/v1"
+south_dialect = "openai-compatible"
+
+# SambaNova Cloud
+[[providers]]
+name = "sambanova"
+endpoint = "https://api.sambanova.ai/v1"
+south_dialect = "openai-compatible"
+
+# SiliconFlow 中国站
+[[providers]]
+name = "siliconflow-cn"
+endpoint = "https://api.siliconflow.cn/v1"
+south_dialect = "openai-compatible"
+
+# 火山方舟
+[[providers]]
+name = "volcengine-ark"
+endpoint = "https://ark.cn-beijing.volces.com/api/v3"
+south_dialect = "openai-compatible"
+
+# 百度千帆 V2
+[[providers]]
+name = "baidu-qianfan"
+endpoint = "https://qianfan.baidubce.com/v2"
+south_dialect = "openai-compatible"
+
+# StepFun 中国站
+[[providers]]
+name = "stepfun-cn"
+endpoint = "https://api.stepfun.com/v1"
+south_dialect = "openai-compatible"
+
+# 腾讯 TokenHub 广州
+[[providers]]
+name = "tencent-tokenhub-cn"
+endpoint = "https://tokenhub.tencentmaas.com/v1"
+south_dialect = "openai-compatible"
+
+# DeepSeek
+[[providers]]
+name = "deepseek"
+endpoint = "https://api.deepseek.com"
+south_dialect = "openai-compatible"
+
+# Groq
+[[providers]]
+name = "groq"
+endpoint = "https://api.groq.com/openai/v1"
+south_dialect = "openai-compatible"
+
+# Mistral
+[[providers]]
+name = "mistral"
+endpoint = "https://api.mistral.ai/v1"
+south_dialect = "openai-compatible"
+
+# Kimi 中国站
+[[providers]]
+name = "kimi"
+endpoint = "https://api.moonshot.cn/v1"
+south_dialect = "openai-compatible"
+
+# MiniMax 中国站普通文本
+[[providers]]
+name = "minimax"
+endpoint = "https://api.minimax.cn/v1"
+south_dialect = "openai-compatible"
+
+# NVIDIA 托管 NIM
+[[providers]]
+name = "nvidia-nim"
+endpoint = "https://integrate.api.nvidia.com/v1"
+south_dialect = "openai-compatible"
+
+# Anthropic 官方，使用绑定单 workspace 的 API Key
+[[providers]]
+name = "anthropic"
+endpoint = "https://api.anthropic.com"
+south_dialect = "anthropic"
