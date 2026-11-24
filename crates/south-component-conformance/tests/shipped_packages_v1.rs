@@ -1100,7 +1100,9 @@ fn the_invoke_package_declares_the_runtime_converse_declares() {
     // (`first_error_retires_every_published_083_package_identity`).
     // Published as 1.2.10 with 0.85.0; the 0.85.1 round made it 1.2.11
     // (`truncated_tool_calls_retire_every_published_085_package_identity`).
-    assert_eq!(invoke.version, "1.2.11");
+    // Published as 1.2.11 with 0.85.1; the 0.87.0 round made it 1.2.12
+    // (`served_model_exclusions_retire_every_published_086_package_identity`).
+    assert_eq!(invoke.version, "1.2.12");
     // 1.2.0 declares `model_parameters` (record `2026-10-18-family-model-parameters.md` §7), first parsed by 0.74.0.
     assert_eq!(invoke.compatibility.south_runtime, "0.77.0");
     assert_eq!(invoke.compatibility, read("provider-bedrock-converse").compatibility);
@@ -1437,7 +1439,9 @@ fn the_responses_package_declares_the_runtime_that_first_admits_its_declarations
     // (`first_error_retires_every_published_083_package_identity`).
     // Published as 1.6.5 with 0.85.0; the 0.85.1 round made it 1.7.0
     // (`truncated_tool_calls_retire_every_published_085_package_identity`).
-    assert_eq!(manifest.version, "1.7.0");
+    // Published as 1.7.0 with 0.85.1; the 0.87.0 round made it 1.7.1
+    // (`served_model_exclusions_retire_every_published_086_package_identity`).
+    assert_eq!(manifest.version, "1.7.1");
     // 1.5.0 declares `model_parameters` (record `2026-10-18-family-model-parameters.md` §7), first parsed by 0.74.0.
     assert_eq!(manifest.compatibility.south_runtime, "0.77.0");
     assert!(!manifest.immutable_body_paths.is_empty() && !manifest.north_passthrough.is_empty());
@@ -1563,6 +1567,10 @@ fn declared_runtime_now(name: &str) -> &'static str {
         // Release 0.83.0: it declares `forwarded_client_policy_headers`, which no runtime before
         // 0.83.0 parses (record `2026-10-31-client-policy-headers.md` §9).
         "0.83.0"
+    } else if name == "speech-qwen" {
+        // Release 0.87.0: its first family declares `exclude_suffixes`, which no runtime before
+        // 0.87.0 parses (south #357).
+        "0.87.0"
     } else if ["task-", "image-", "speech-"].iter().any(|world| name.starts_with(world)) {
         "0.81.0"
     } else {
@@ -1898,7 +1906,9 @@ fn image_gemini_declares_media_2_which_a_media_1_host_refuses() {
     // (`first_error_retires_every_published_083_package_identity`).
     // Published as 1.1.3 with 0.85.0; the 0.85.1 round made it 1.1.4
     // (`truncated_tool_calls_retire_every_published_085_package_identity`).
-    assert_eq!(manifest.version, "1.1.4");
+    // Published as 1.1.4 with 0.85.1; the 0.87.0 round made it 1.1.5
+    // (`served_model_exclusions_retire_every_published_086_package_identity`).
+    assert_eq!(manifest.version, "1.1.5");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["gemini-image"]);
     assert!(manifest.declared_keys("gemini-image").is_empty());
@@ -1977,7 +1987,9 @@ fn the_i3_1_image_packages_declare_the_runtime_and_values_of_the_record() {
         // (`first_error_retires_every_published_083_package_identity`).
         // Published as 1.1.3 and 1.2.3 with 0.85.0; the 0.85.1 round made them 1.1.4 and 1.2.4
         // (`truncated_tool_calls_retire_every_published_085_package_identity`).
-        let version = if name == "image-qwen" { "1.2.4" } else { "1.1.4" };
+        // Published as 1.1.4 and 1.2.4 with 0.85.1; the 0.87.0 round made them 1.1.5 and 1.2.5
+        // (`served_model_exclusions_retire_every_published_086_package_identity`).
+        let version = if name == "image-qwen" { "1.2.5" } else { "1.1.5" };
         assert_eq!(manifest.version, version, "{name}");
         assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD, "{name}");
         assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), [family], "{name}");
@@ -2039,7 +2051,9 @@ fn image_stability_declares_media_1_and_the_runtime_of_the_record() {
     // (`first_error_retires_every_published_083_package_identity`).
     // Published as 1.1.3 with 0.85.0; the 0.85.1 round made it 1.1.4
     // (`truncated_tool_calls_retire_every_published_085_package_identity`).
-    assert_eq!(manifest.version, "1.1.4");
+    // Published as 1.1.4 with 0.85.1; the 0.87.0 round made it 1.1.5
+    // (`served_model_exclusions_retire_every_published_086_package_identity`).
+    assert_eq!(manifest.version, "1.1.5");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["stability-image"]);
     assert!(manifest.declared_keys("stability-image").is_empty());
@@ -2103,7 +2117,9 @@ fn image_ideogram_declares_media_1_and_the_runtime_of_the_record() {
     // (`first_error_retires_every_published_083_package_identity`).
     // Published as 1.1.3 with 0.85.0; the 0.85.1 round made it 1.1.4
     // (`truncated_tool_calls_retire_every_published_085_package_identity`).
-    assert_eq!(manifest.version, "1.1.4");
+    // Published as 1.1.4 with 0.85.1; the 0.87.0 round made it 1.1.5
+    // (`served_model_exclusions_retire_every_published_086_package_identity`).
+    assert_eq!(manifest.version, "1.1.5");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["ideogram-image"]);
     assert!(manifest.declared_keys("ideogram-image").is_empty());
@@ -2167,7 +2183,9 @@ fn image_xai_declares_media_1_bearer_and_the_runtime_of_the_record() {
     // (`first_error_retires_every_published_083_package_identity`).
     // Published as 1.1.3 with 0.85.0; the 0.85.1 round made it 1.1.4
     // (`truncated_tool_calls_retire_every_published_085_package_identity`).
-    assert_eq!(manifest.version, "1.1.4");
+    // Published as 1.1.4 with 0.85.1; the 0.87.0 round made it 1.1.5
+    // (`served_model_exclusions_retire_every_published_086_package_identity`).
+    assert_eq!(manifest.version, "1.1.5");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["xai-image"]);
     assert_eq!(manifest.capabilities.iter().collect::<Vec<_>>(), ["edit", "generate"]);
@@ -2239,7 +2257,9 @@ fn image_vertex_declares_media_2_the_vertex_recipe_and_the_media_2_runtime() {
     // (`first_error_retires_every_published_083_package_identity`).
     // Published as 1.1.3 with 0.85.0; the 0.85.1 round made it 1.1.4
     // (`truncated_tool_calls_retire_every_published_085_package_identity`).
-    assert_eq!(manifest.version, "1.1.4");
+    // Published as 1.1.4 with 0.85.1; the 0.87.0 round made it 1.1.5
+    // (`served_model_exclusions_retire_every_published_086_package_identity`).
+    assert_eq!(manifest.version, "1.1.5");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["vertex-ai-image"]);
     assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer"]);
@@ -2318,7 +2338,9 @@ fn provider_vertex_declares_the_vertex_recipe_and_the_runtime_of_its_newest_decl
     // (`first_error_retires_every_published_083_package_identity`).
     // Published as 1.4.6 with 0.85.0; the 0.85.1 round made it 1.4.7
     // (`truncated_tool_calls_retire_every_published_085_package_identity`).
-    assert_eq!(manifest.version, "1.4.7");
+    // Published as 1.4.7 with 0.85.1; the 0.87.0 round made it 1.4.8
+    // (`served_model_exclusions_retire_every_published_086_package_identity`).
+    assert_eq!(manifest.version, "1.4.8");
     assert_eq!(manifest.api_version, south_provider_api::PROVIDER_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["vertex-ai"]);
     assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer"]);
@@ -2393,7 +2415,9 @@ fn image_reve_declares_media_1_and_the_runtime_of_the_record() {
     // (`first_error_retires_every_published_083_package_identity`).
     // Published as 1.1.3 with 0.85.0; the 0.85.1 round made it 1.1.4
     // (`truncated_tool_calls_retire_every_published_085_package_identity`).
-    assert_eq!(manifest.version, "1.1.4");
+    // Published as 1.1.4 with 0.85.1; the 0.87.0 round made it 1.1.5
+    // (`served_model_exclusions_retire_every_published_086_package_identity`).
+    assert_eq!(manifest.version, "1.1.5");
     assert_eq!(manifest.api_version, south_provider_api::IMAGE_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["reve-image"]);
     assert!(manifest.declared_keys("reve-image").is_empty());
@@ -2460,7 +2484,9 @@ fn image_openai_compatible_declares_media_1_and_the_runtime_of_the_record() {
     // (`first_error_retires_every_published_083_package_identity`).
     // Published as 1.1.3 with 0.85.0; the 0.85.1 round made it 1.1.4
     // (`truncated_tool_calls_retire_every_published_085_package_identity`).
-    assert_eq!(manifest.version, "1.1.4");
+    // Published as 1.1.4 with 0.85.1; the 0.87.0 round made it 1.1.5
+    // (`served_model_exclusions_retire_every_published_086_package_identity`).
+    assert_eq!(manifest.version, "1.1.5");
     assert_eq!(
         manifest.version,
         south_component_conformance::reference_openai_compatible_image::VERSION
@@ -2618,7 +2644,9 @@ fn provider_kiro_declares_the_runtime_of_its_newest_declaration() {
     // (`first_error_retires_every_published_083_package_identity`).
     // Published as 1.3.9 with 0.85.0; the 0.85.1 round made it 1.3.10
     // (`truncated_tool_calls_retire_every_published_085_package_identity`).
-    assert_eq!(manifest.version, "1.3.10");
+    // Published as 1.3.10 with 0.85.1; the 0.87.0 round made it 1.3.11
+    // (`served_model_exclusions_retire_every_published_086_package_identity`).
+    assert_eq!(manifest.version, "1.3.11");
     assert_eq!(manifest.api_version, south_provider_api::PROVIDER_WORLD);
     assert_eq!(manifest.providers.iter().collect::<Vec<_>>(), ["kiro"]);
     assert!(manifest.subscription_quota_families.contains("kiro"));
@@ -2685,7 +2713,9 @@ fn task_gemini_omni_v2_declares_task_8_which_a_task_7_host_refuses() {
     // (`first_error_retires_every_published_083_package_identity`).
     // Published as 0.3.3 with 0.85.0; the 0.85.1 round made it 0.3.4
     // (`truncated_tool_calls_retire_every_published_085_package_identity`).
-    assert_eq!(manifest.version, "0.3.4");
+    // Published as 0.3.4 with 0.85.1; the 0.87.0 round made it 0.3.5
+    // (`served_model_exclusions_retire_every_published_086_package_identity`).
+    assert_eq!(manifest.version, "0.3.5");
     assert_eq!(manifest.api_version, south_provider_api::TASK_WORLD_V2);
     assert_eq!(manifest.compatibility.contracts.get("task"), Some(&8));
     assert_eq!(manifest.compatibility.contracts.get("media"), Some(&1));
@@ -2941,11 +2971,13 @@ fn s_s_1_retires_every_published_063_package_identity() {
 /// `client_policy_headers_retire_every_published_082_package_identity`), and the 0.83.1 round's
 /// 1.1.3 (published 1.1.2 with 0.83.0; `first_error_retires_every_published_083_package_identity`),
 /// and the 0.85.1 round's 1.1.4 (published 1.1.3 with 0.85.0;
-/// `truncated_tool_calls_retire_every_published_085_package_identity`).
+/// `truncated_tool_calls_retire_every_published_085_package_identity`), and the 0.87.0 round's
+/// 1.1.5 (published 1.1.4 with 0.85.1;
+/// `served_model_exclusions_retire_every_published_086_package_identity`).
 /// The tests below describe the batches that defined the packages, before those releases.
 /// `speech-vertex`, `speech-openai-compatible`, `speech-qwen` and `speech-xai` moved on to minors
 /// ([`speech_version`]).
-const SPEECH_VERSION: &str = "1.1.4";
+const SPEECH_VERSION: &str = "1.1.5";
 
 /// The version a speech package carries: [`SPEECH_VERSION`], except `speech-vertex`, which Q7's
 /// refusal made 1.1.0, the 0.67.0 cycle's Q47 bump 1.1.1, the T9 cap field's 1.1.2, the
@@ -2961,7 +2993,9 @@ const SPEECH_VERSION: &str = "1.1.4";
 /// and `speech-qwen`, which Qwen-ASR transcription made 1.1.0 (record `2026-10-21-speech-qwen-asr.md`;
 /// `bailian_retires_every_published_075_package_identity`). The Model Studio speech families (record
 /// `2026-11-10-speech-bailian-synthesizer-and-minimax.md`) made `speech-qwen` 1.3.0 and
-/// `speech-minimax` 1.2.0 (`the_model_studio_speech_families_join_their_packages`).
+/// `speech-minimax` 1.2.0 (`the_model_studio_speech_families_join_their_packages`). The 0.87.0 round
+/// made `speech-qwen` 1.4.0 (the token-billed `qwen-audio-3.1-tts-flash` and the excluded Realtime
+/// ids, south #357) and `speech-vertex` 1.3.0 (Gemini 3.8 speech generation).
 fn speech_version(name: &str) -> &'static str {
     match name {
         // Every speech package took a minor in the 0.81.0 round: it declares its served models
@@ -2970,11 +3004,14 @@ fn speech_version(name: &str) -> &'static str {
         // and the 0.83.0 round again
         // (`client_policy_headers_retire_every_published_082_package_identity`), and the 0.83.1
         // round again (`first_error_retires_every_published_083_package_identity`), and the 0.85.1
-        // round again (`truncated_tool_calls_retire_every_published_085_package_identity`).
-        "speech-vertex" | "speech-xai" => "1.2.4",
-        "speech-qwen" => "1.3.1",
-        "speech-minimax" => "1.2.1",
-        "speech-openai-compatible" => "1.3.4",
+        // round again (`truncated_tool_calls_retire_every_published_085_package_identity`), and the
+        // 0.87.0 round again (`served_model_exclusions_retire_every_published_086_package_identity`),
+        // except the two packages that took a minor in it.
+        "speech-vertex" => "1.3.0",
+        "speech-xai" => "1.2.5",
+        "speech-qwen" => "1.4.0",
+        "speech-minimax" => "1.2.2",
+        "speech-openai-compatible" => "1.3.5",
         _ => SPEECH_VERSION,
     }
 }
@@ -3229,7 +3266,7 @@ fn the_v4_speech_packages_declare_their_values_and_runtime() {
         assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer"], "{name}");
         assert_eq!(manifest.declared_keys(family), keys.into_iter().collect(), "{name}");
         assert!(manifest.query_parameters.is_empty(), "{name}");
-        assert_eq!(manifest.compatibility.south_runtime, SPEECH_RUNTIME, "{name}");
+        assert_eq!(manifest.compatibility.south_runtime, declared_runtime_now(name), "{name}");
         assert_eq!(
             manifest.compatibility.contracts,
             std::collections::BTreeMap::from([("media".to_owned(), 1), ("speech".to_owned(), 1)]),
@@ -3467,7 +3504,9 @@ fn minimax_immutable_paths_retire_the_published_task_minimax_v2_identity() {
     // (`first_error_retires_every_published_083_package_identity`).
     // Published as 0.34.3 with 0.85.0; the 0.85.1 round made it 0.34.4
     // (`truncated_tool_calls_retire_every_published_085_package_identity`).
-    assert_eq!(manifest.version, "0.34.4");
+    // Published as 0.34.4 with 0.85.1; the 0.87.0 round made it 0.34.5
+    // (`served_model_exclusions_retire_every_published_086_package_identity`).
+    assert_eq!(manifest.version, "0.34.5");
     assert_eq!(manifest.compatibility.south_runtime, declared_runtime_now("task-minimax-v2"));
     assert_eq!(manifest.compatibility.contracts.get("task"), Some(&7));
 }
@@ -3501,8 +3540,9 @@ fn the_speech_packages_declare_contracts_speech_1_and_this_release() {
         assert_eq!(manifest.version, speech_version(&name), "{name}");
         assert_eq!(manifest.compatibility.contracts.get("speech"), Some(&speech), "{name}");
         assert_eq!(
-            manifest.compatibility.south_runtime, SPEECH_RUNTIME,
-            "{name}: declares 0.65.0, the first runtime that records contracts.speech"
+            manifest.compatibility.south_runtime,
+            declared_runtime_now(&name),
+            "{name}: declares 0.65.0, the first runtime that records contracts.speech, or later"
         );
         assert_eq!(compatibility_admits(&manifest, &host_range::host_range()), Ok(()), "{name}");
         for refusing in [&without_speech, &speech_2_only] {
@@ -3585,7 +3625,9 @@ fn speech_vertex_1_1_refuses_q7_and_retires_its_published_identity() {
     // (`first_error_retires_every_published_083_package_identity`).
     // Published as 1.2.3 with 0.85.0; the 0.85.1 round made it 1.2.4
     // (`truncated_tool_calls_retire_every_published_085_package_identity`).
-    assert_eq!(manifest.version, "1.2.4");
+    // Published as 1.2.4 with 0.85.1; the 0.87.0 round made it 1.3.0
+    // (`served_model_exclusions_retire_every_published_086_package_identity`).
+    assert_eq!(manifest.version, "1.3.0");
     assert_eq!(
         manifest.version,
         south_component_conformance::reference_vertex_speech::VERSION,
@@ -3691,7 +3733,9 @@ fn task_veo_v2_gains_the_vertex_family_and_bearer() {
     // (`first_error_retires_every_published_083_package_identity`).
     // Published as 0.39.3 with 0.85.0; the 0.85.1 round made it 0.39.4
     // (`truncated_tool_calls_retire_every_published_085_package_identity`).
-    assert_eq!(manifest.version, "0.39.4");
+    // Published as 0.39.4 with 0.85.1; the 0.87.0 round made it 0.39.5
+    // (`served_model_exclusions_retire_every_published_086_package_identity`).
+    assert_eq!(manifest.version, "0.39.5");
     assert_eq!(manifest.providers, ["veo-video", "vertex-veo-video"]);
     assert_eq!(manifest.auth_arms.iter().collect::<Vec<_>>(), ["bearer", "header_secret"]);
     assert_eq!(
@@ -3750,7 +3794,7 @@ fn speech_azure_openai_retires_every_published_066_package_identity() {
         ("speech-mimo", "1.0.1", "1.0.2", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-minimax", "1.0.1", "1.0.2", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-openai-compatible", "1.0.1", "1.1.0", "0.81.0", &[("media", 1), ("speech", 1)]),
-        ("speech-qwen", "1.0.1", "1.0.2", "0.81.0", &[("media", 1), ("speech", 1)]),
+        ("speech-qwen", "1.0.1", "1.0.2", "0.87.0", &[("media", 1), ("speech", 1)]),
         ("speech-vertex", "1.1.0", "1.1.1", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-xai", "1.0.1", "1.0.2", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("task-bailian-v2", "0.31.24", "0.31.25", "0.81.0", &[("task", 7)]),
@@ -3843,7 +3887,9 @@ fn speech_openai_compatible_1_1_adds_the_azure_openai_families() {
     // (`first_error_retires_every_published_083_package_identity`).
     // Published as 1.3.3 with 0.85.0; the 0.85.1 round made it 1.3.4
     // (`truncated_tool_calls_retire_every_published_085_package_identity`).
-    assert_eq!(manifest.version, "1.3.4");
+    // Published as 1.3.4 with 0.85.1; the 0.87.0 round made it 1.3.5
+    // (`served_model_exclusions_retire_every_published_086_package_identity`).
+    assert_eq!(manifest.version, "1.3.5");
     assert_eq!(
         manifest.version,
         south_component_conformance::reference_openai_compatible_speech::VERSION,
@@ -3907,7 +3953,7 @@ fn t9_cap_field_retires_every_published_067_package_identity() {
         ("speech-mimo", "1.0.2", "1.0.3", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-minimax", "1.0.2", "1.0.3", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-openai-compatible", "1.1.0", "1.1.1", "0.81.0", &[("media", 1), ("speech", 1)]),
-        ("speech-qwen", "1.0.2", "1.0.3", "0.81.0", &[("media", 1), ("speech", 1)]),
+        ("speech-qwen", "1.0.2", "1.0.3", "0.87.0", &[("media", 1), ("speech", 1)]),
         ("speech-vertex", "1.1.1", "1.1.2", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-xai", "1.0.2", "1.0.3", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("task-bailian-v2", "0.31.25", "0.31.26", "0.81.0", &[("task", 7)]),
@@ -3982,7 +4028,7 @@ fn glm_thinking_retires_every_published_068_package_identity() {
         ("speech-mimo", "1.0.3", "1.0.4", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-minimax", "1.0.3", "1.0.4", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-openai-compatible", "1.1.1", "1.1.2", "0.81.0", &[("media", 1), ("speech", 1)]),
-        ("speech-qwen", "1.0.3", "1.0.4", "0.81.0", &[("media", 1), ("speech", 1)]),
+        ("speech-qwen", "1.0.3", "1.0.4", "0.87.0", &[("media", 1), ("speech", 1)]),
         ("speech-vertex", "1.1.2", "1.1.3", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-xai", "1.0.3", "1.0.4", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("task-bailian-v2", "0.31.26", "0.31.27", "0.81.0", &[("task", 7)]),
@@ -4056,7 +4102,7 @@ fn kimi_code_retires_every_published_069_package_identity() {
         ("speech-mimo", "1.0.4", "1.0.5", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-minimax", "1.0.4", "1.0.5", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-openai-compatible", "1.1.2", "1.1.3", "0.81.0", &[("media", 1), ("speech", 1)]),
-        ("speech-qwen", "1.0.4", "1.0.5", "0.81.0", &[("media", 1), ("speech", 1)]),
+        ("speech-qwen", "1.0.4", "1.0.5", "0.87.0", &[("media", 1), ("speech", 1)]),
         ("speech-vertex", "1.1.3", "1.1.4", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-xai", "1.0.4", "1.0.5", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("task-bailian-v2", "0.31.27", "0.31.28", "0.81.0", &[("task", 7)]),
@@ -4132,7 +4178,7 @@ fn task_vertex_credentials_retires_every_published_070_package_identity() {
         ("speech-mimo", "1.0.5", "1.0.6", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-minimax", "1.0.5", "1.0.6", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-openai-compatible", "1.1.3", "1.1.4", "0.81.0", &[("media", 1), ("speech", 1)]),
-        ("speech-qwen", "1.0.5", "1.0.6", "0.81.0", &[("media", 1), ("speech", 1)]),
+        ("speech-qwen", "1.0.5", "1.0.6", "0.87.0", &[("media", 1), ("speech", 1)]),
         ("speech-vertex", "1.1.4", "1.1.5", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-xai", "1.0.5", "1.0.6", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("task-bailian-v2", "0.31.28", "0.31.29", "0.81.0", &[("task", 7)]),
@@ -4209,7 +4255,7 @@ fn explicit_cache_reads_retires_every_published_071_package_identity() {
         ("speech-mimo", "1.0.6", "1.0.7", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-minimax", "1.0.6", "1.0.7", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-openai-compatible", "1.1.4", "1.1.5", "0.81.0", &[("media", 1), ("speech", 1)]),
-        ("speech-qwen", "1.0.6", "1.0.7", "0.81.0", &[("media", 1), ("speech", 1)]),
+        ("speech-qwen", "1.0.6", "1.0.7", "0.87.0", &[("media", 1), ("speech", 1)]),
         ("speech-vertex", "1.1.5", "1.1.6", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-xai", "1.0.6", "1.0.7", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("task-bailian-v2", "0.31.29", "0.31.30", "0.81.0", &[("task", 7)]),
@@ -4289,7 +4335,7 @@ fn messages_passthrough_retires_every_published_072_package_identity() {
         ("speech-mimo", "1.0.7", "1.0.8", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-minimax", "1.0.7", "1.0.8", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-openai-compatible", "1.1.5", "1.1.6", "0.81.0", &[("media", 1), ("speech", 1)]),
-        ("speech-qwen", "1.0.7", "1.0.8", "0.81.0", &[("media", 1), ("speech", 1)]),
+        ("speech-qwen", "1.0.7", "1.0.8", "0.87.0", &[("media", 1), ("speech", 1)]),
         ("speech-vertex", "1.1.6", "1.1.7", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-xai", "1.0.7", "1.0.8", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("task-bailian-v2", "0.31.30", "0.31.31", "0.81.0", &[("task", 7)]),
@@ -4377,7 +4423,7 @@ fn family_model_parameters_retires_every_published_0731_package_identity() {
         ("speech-mimo", "1.0.8", "1.0.9", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-minimax", "1.0.8", "1.0.9", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-openai-compatible", "1.1.6", "1.1.7", "0.81.0", &[("media", 1), ("speech", 1)]),
-        ("speech-qwen", "1.0.8", "1.0.9", "0.81.0", &[("media", 1), ("speech", 1)]),
+        ("speech-qwen", "1.0.8", "1.0.9", "0.87.0", &[("media", 1), ("speech", 1)]),
         ("speech-vertex", "1.1.7", "1.1.8", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-xai", "1.0.8", "1.0.9", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("task-bailian-v2", "0.31.31", "0.31.32", "0.81.0", &[("task", 7)]),
@@ -4454,7 +4500,7 @@ fn kiro_images_retires_every_published_074_package_identity() {
         ("speech-mimo", "1.0.9", "1.0.10", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-minimax", "1.0.9", "1.0.10", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-openai-compatible", "1.1.7", "1.1.8", "0.81.0", &[("media", 1), ("speech", 1)]),
-        ("speech-qwen", "1.0.9", "1.0.10", "0.81.0", &[("media", 1), ("speech", 1)]),
+        ("speech-qwen", "1.0.9", "1.0.10", "0.87.0", &[("media", 1), ("speech", 1)]),
         ("speech-vertex", "1.1.8", "1.1.9", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-xai", "1.0.9", "1.0.10", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("task-bailian-v2", "0.31.32", "0.31.33", "0.81.0", &[("task", 7)]),
@@ -4535,7 +4581,7 @@ fn bailian_retires_every_published_075_package_identity() {
         ("speech-mimo", "1.0.10", "1.0.11", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-minimax", "1.0.10", "1.0.11", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-openai-compatible", "1.1.8", "1.1.9", "0.81.0", &[("media", 1), ("speech", 1)]),
-        ("speech-qwen", "1.0.10", "1.1.0", "0.81.0", &[("media", 1), ("speech", 1)]),
+        ("speech-qwen", "1.0.10", "1.1.0", "0.87.0", &[("media", 1), ("speech", 1)]),
         ("speech-vertex", "1.1.9", "1.1.10", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-xai", "1.0.10", "1.0.11", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("task-bailian-v2", "0.31.33", "0.32.0", "0.81.0", &[("task", 7)]),
@@ -4615,7 +4661,7 @@ fn gemini_signatures_retires_every_published_076_package_identity() {
         ("speech-mimo", "1.0.11", "1.0.12", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-minimax", "1.0.11", "1.0.12", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-openai-compatible", "1.1.9", "1.1.10", "0.81.0", &[("media", 1), ("speech", 1)]),
-        ("speech-qwen", "1.1.0", "1.1.1", "0.81.0", &[("media", 1), ("speech", 1)]),
+        ("speech-qwen", "1.1.0", "1.1.1", "0.87.0", &[("media", 1), ("speech", 1)]),
         ("speech-vertex", "1.1.10", "1.1.11", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-xai", "1.0.11", "1.0.12", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("task-bailian-v2", "0.32.0", "0.32.1", "0.81.0", &[("task", 7)]),
@@ -4708,7 +4754,7 @@ fn gemini_placeholder_retires_every_published_077_package_identity() {
         ("speech-mimo", "1.0.12", "1.0.13", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-minimax", "1.0.12", "1.0.13", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-openai-compatible", "1.1.10", "1.1.11", "0.81.0", &[("media", 1), ("speech", 1)]),
-        ("speech-qwen", "1.1.1", "1.1.2", "0.81.0", &[("media", 1), ("speech", 1)]),
+        ("speech-qwen", "1.1.1", "1.1.2", "0.87.0", &[("media", 1), ("speech", 1)]),
         ("speech-vertex", "1.1.11", "1.1.12", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-xai", "1.0.12", "1.0.13", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("task-bailian-v2", "0.32.1", "0.32.2", "0.81.0", &[("task", 7)]),
@@ -4801,7 +4847,7 @@ fn qwen_tier_and_responses_stop_retires_every_published_078_package_identity() {
         ("speech-mimo", "1.0.13", "1.0.14", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-minimax", "1.0.13", "1.0.14", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-openai-compatible", "1.1.11", "1.1.12", "0.81.0", &[("media", 1), ("speech", 1)]),
-        ("speech-qwen", "1.1.2", "1.1.3", "0.81.0", &[("media", 1), ("speech", 1)]),
+        ("speech-qwen", "1.1.2", "1.1.3", "0.87.0", &[("media", 1), ("speech", 1)]),
         ("speech-vertex", "1.1.12", "1.1.13", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-xai", "1.0.13", "1.0.14", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("task-bailian-v2", "0.32.2", "0.32.3", "0.81.0", &[("task", 7)]),
@@ -4894,7 +4940,7 @@ fn veo_spelling_and_durationless_asr_retire_every_published_079_package_identity
         ("speech-mimo", "1.0.14", "1.0.15", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-minimax", "1.0.14", "1.0.15", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-openai-compatible", "1.1.12", "1.2.0", "0.81.0", &[("media", 1), ("speech", 1)]),
-        ("speech-qwen", "1.1.3", "1.1.4", "0.81.0", &[("media", 1), ("speech", 1)]),
+        ("speech-qwen", "1.1.3", "1.1.4", "0.87.0", &[("media", 1), ("speech", 1)]),
         ("speech-vertex", "1.1.13", "1.1.14", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-xai", "1.0.14", "1.1.0", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("task-bailian-v2", "0.32.3", "0.32.4", "0.81.0", &[("task", 7)]),
@@ -4989,7 +5035,7 @@ fn served_models_retires_every_published_080_package_identity() {
         ("speech-mimo", "1.0.15", "1.1.0", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-minimax", "1.0.15", "1.1.0", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-openai-compatible", "1.2.0", "1.3.0", "0.81.0", &[("media", 1), ("speech", 1)]),
-        ("speech-qwen", "1.1.4", "1.2.0", "0.81.0", &[("media", 1), ("speech", 1)]),
+        ("speech-qwen", "1.1.4", "1.2.0", "0.87.0", &[("media", 1), ("speech", 1)]),
         ("speech-vertex", "1.1.14", "1.2.0", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-xai", "1.1.0", "1.2.0", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("task-bailian-v2", "0.32.4", "0.33.0", "0.81.0", &[("task", 7)]),
@@ -5082,7 +5128,7 @@ fn sse_line_ends_retire_every_published_081_package_identity() {
         ("speech-mimo", "1.1.0", "1.1.1", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-minimax", "1.1.0", "1.1.1", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-openai-compatible", "1.3.0", "1.3.1", "0.81.0", &[("media", 1), ("speech", 1)]),
-        ("speech-qwen", "1.2.0", "1.2.1", "0.81.0", &[("media", 1), ("speech", 1)]),
+        ("speech-qwen", "1.2.0", "1.2.1", "0.87.0", &[("media", 1), ("speech", 1)]),
         ("speech-vertex", "1.2.0", "1.2.1", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-xai", "1.2.0", "1.2.1", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("task-bailian-v2", "0.33.0", "0.33.1", "0.81.0", &[("task", 7)]),
@@ -5177,7 +5223,7 @@ fn client_policy_headers_retire_every_published_082_package_identity() {
         ("speech-mimo", "1.1.1", "1.1.2", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-minimax", "1.1.1", "1.1.2", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-openai-compatible", "1.3.1", "1.3.2", "0.81.0", &[("media", 1), ("speech", 1)]),
-        ("speech-qwen", "1.2.1", "1.2.2", "0.81.0", &[("media", 1), ("speech", 1)]),
+        ("speech-qwen", "1.2.1", "1.2.2", "0.87.0", &[("media", 1), ("speech", 1)]),
         ("speech-vertex", "1.2.1", "1.2.2", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-xai", "1.2.1", "1.2.2", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("task-bailian-v2", "0.33.1", "0.33.2", "0.81.0", &[("task", 7)]),
@@ -5270,7 +5316,7 @@ fn first_error_retires_every_published_083_package_identity() {
         ("speech-mimo", "1.1.2", "1.1.3", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-minimax", "1.1.2", "1.1.3", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-openai-compatible", "1.3.2", "1.3.3", "0.81.0", &[("media", 1), ("speech", 1)]),
-        ("speech-qwen", "1.2.2", "1.2.3", "0.81.0", &[("media", 1), ("speech", 1)]),
+        ("speech-qwen", "1.2.2", "1.2.3", "0.87.0", &[("media", 1), ("speech", 1)]),
         ("speech-vertex", "1.2.2", "1.2.3", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-xai", "1.2.2", "1.2.3", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("task-bailian-v2", "0.33.2", "0.33.3", "0.81.0", &[("task", 7)]),
@@ -5362,7 +5408,7 @@ fn truncated_tool_calls_retire_every_published_085_package_identity() {
         ("speech-mimo", "1.1.3", "1.1.4", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-minimax", "1.2.0", "1.2.1", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-openai-compatible", "1.3.3", "1.3.4", "0.81.0", &[("media", 1), ("speech", 1)]),
-        ("speech-qwen", "1.3.0", "1.3.1", "0.81.0", &[("media", 1), ("speech", 1)]),
+        ("speech-qwen", "1.3.0", "1.3.1", "0.87.0", &[("media", 1), ("speech", 1)]),
         ("speech-vertex", "1.2.3", "1.2.4", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("speech-xai", "1.2.3", "1.2.4", "0.81.0", &[("media", 1), ("speech", 1)]),
         ("task-bailian-v2", "0.33.3", "0.33.4", "0.81.0", &[("task", 7)]),
@@ -5391,10 +5437,108 @@ fn truncated_tool_calls_retire_every_published_085_package_identity() {
         )
         .unwrap();
         assert_ne!(manifest.version, published, "{name} reused its identity published with 0.85.0");
-        assert_eq!(manifest.version, now, "{name}");
+        assert_ne!(manifest.version, now, "{name} reused its identity published with 0.85.1");
         assert_eq!(
             manifest.compatibility.south_runtime, runtime,
             "{name}: the round moves no runtime; the release commit does"
+        );
+        let contracts: std::collections::BTreeMap<String, u32> =
+            contracts.iter().map(|(world, version)| ((*world).to_owned(), *version)).collect();
+        assert_eq!(manifest.compatibility.contracts, contracts, "{name}");
+        assert_eq!(
+            manifest.compatibility.ir_schema_id, "token-station-protocol@0.7.0/v0.6.0",
+            "{name}"
+        );
+        assert_eq!(manifest.compatibility.kernel_version, "0.6.0", "{name}");
+        assert_eq!(
+            manifest.compatibility.kernel_revision, "a04925518b95c6557374252db7fbe7f026688bde",
+            "{name}: the upstream kernel-v0.7.0 commit the mirror records"
+        );
+        assert_eq!(
+            manifest.compatibility.kernel_contracts.get("canonical_ir"),
+            Some(&5),
+            "{name}: built against protocol 0.7.0"
+        );
+        assert_eq!(manifest.compatibility.kernel_contracts.get("stream"), Some(&3), "{name}");
+    }
+}
+
+/// The 0.87.0 round (south #357) adds `exclude_suffixes` to a served-models declaration, so a
+/// `prefixes` family can leave out the ids that end in a suffix, and moves `south-provider-api`
+/// (0.65.0 → 0.66.0) and `south-component-conformance` (0.81.1 → 0.82.0). Every guest links them, so
+/// each identity published with 0.85.1, and again unchanged with 0.86.0, retires: `speech-qwen`
+/// takes the minor 1.4.0 (it serves the token-billed `qwen-audio-3.1-tts-flash` and excludes Model
+/// Studio's `*-realtime` ids), `speech-vertex` the minor 1.3.0 (Gemini 3.8 speech generation), and
+/// every other package the Q47 patch. Each component lockfile also takes `url` 2.5.9
+/// (RUSTSEC-2026-0592). The round moves no contract or kernel tuple, and no runtime but
+/// `speech-qwen`'s: `exclude_suffixes` is first parsed by 0.87.0.
+#[test]
+fn served_model_exclusions_retire_every_published_086_package_identity() {
+    let rows: [RetiredIdentity<'_>; 41] = [
+        ("embeddings-gemini", "1.1.34", "1.1.35", "0.77.0", &[("embeddings", 2)]),
+        ("embeddings-openai-compatible", "1.0.37", "1.0.38", "0.77.0", &[("embeddings", 1)]),
+        ("embeddings-vertex", "1.0.36", "1.0.37", "0.77.0", &[("embeddings", 1)]),
+        ("image-azure", "1.1.4", "1.1.5", "0.81.0", &[("image", 1), ("media", 1)]),
+        ("image-gemini", "1.1.4", "1.1.5", "0.81.0", &[("image", 1), ("media", 2)]),
+        ("image-ideogram", "1.1.4", "1.1.5", "0.81.0", &[("image", 1), ("media", 1)]),
+        ("image-minimax", "1.1.4", "1.1.5", "0.81.0", &[("image", 1), ("media", 1)]),
+        ("image-openai-compatible", "1.1.4", "1.1.5", "0.81.0", &[("image", 1), ("media", 1)]),
+        ("image-qwen", "1.2.4", "1.2.5", "0.81.0", &[("image", 1), ("media", 1)]),
+        ("image-reve", "1.1.4", "1.1.5", "0.81.0", &[("image", 1), ("media", 1)]),
+        ("image-stability", "1.1.4", "1.1.5", "0.81.0", &[("image", 1), ("media", 1)]),
+        ("image-vertex", "1.1.4", "1.1.5", "0.81.0", &[("image", 1), ("media", 2)]),
+        ("image-xai", "1.1.4", "1.1.5", "0.81.0", &[("image", 1), ("media", 1)]),
+        ("provider-anthropic-bedrock-invoke", "1.2.11", "1.2.12", "0.77.0", &[]),
+        ("provider-anthropic", "1.4.11", "1.4.12", "0.77.0", &[]),
+        ("provider-bedrock-converse-bearer", "1.2.11", "1.2.12", "0.77.0", &[]),
+        ("provider-bedrock-converse", "1.2.11", "1.2.12", "0.77.0", &[]),
+        ("provider-gemini", "1.7.7", "1.7.8", "0.77.0", &[]),
+        ("provider-kiro", "1.3.10", "1.3.11", "0.77.0", &[]),
+        ("provider-openai-compatible", "2.14.2", "2.14.3", "0.83.0", &[]),
+        ("provider-openai-responses", "1.7.0", "1.7.1", "0.77.0", &[]),
+        ("provider-vertex", "1.4.7", "1.4.8", "0.77.0", &[]),
+        ("speech-azure", "1.1.4", "1.1.5", "0.81.0", &[("media", 1), ("speech", 1)]),
+        ("speech-elevenlabs", "1.1.4", "1.1.5", "0.81.0", &[("media", 3), ("speech", 1)]),
+        ("speech-groq", "1.1.4", "1.1.5", "0.81.0", &[("media", 1), ("speech", 1)]),
+        ("speech-mimo", "1.1.4", "1.1.5", "0.81.0", &[("media", 1), ("speech", 1)]),
+        ("speech-minimax", "1.2.1", "1.2.2", "0.81.0", &[("media", 1), ("speech", 1)]),
+        ("speech-openai-compatible", "1.3.4", "1.3.5", "0.81.0", &[("media", 1), ("speech", 1)]),
+        ("speech-qwen", "1.3.1", "1.4.0", "0.87.0", &[("media", 1), ("speech", 1)]),
+        ("speech-vertex", "1.2.4", "1.3.0", "0.81.0", &[("media", 1), ("speech", 1)]),
+        ("speech-xai", "1.2.4", "1.2.5", "0.81.0", &[("media", 1), ("speech", 1)]),
+        ("task-bailian-v2", "0.33.4", "0.33.5", "0.81.0", &[("task", 7)]),
+        ("task-byteplus-v2", "0.37.4", "0.37.5", "0.81.0", &[("task", 7)]),
+        ("task-gemini-omni-v2", "0.3.4", "0.3.5", "0.81.0", &[("media", 1), ("task", 8)]),
+        ("task-gmi-image-v2", "0.37.4", "0.37.5", "0.81.0", &[("task", 7)]),
+        ("task-kling-v2", "0.33.4", "0.33.5", "0.81.0", &[("task", 7)]),
+        ("task-kling", "1.1.4", "1.1.5", "0.81.0", &[("task", 7)]),
+        ("task-minimax-v2", "0.34.4", "0.34.5", "0.81.0", &[("task", 7)]),
+        ("task-veo-v2", "0.39.4", "0.39.5", "0.81.0", &[("task", 9)]),
+        ("task-wan-image-v2", "0.36.4", "0.36.5", "0.81.0", &[("task", 7)]),
+        ("task-xai-v2", "0.36.4", "0.36.5", "0.81.0", &[("task", 7)]),
+    ];
+    let shipped: BTreeSet<&str> = rows.iter().map(|row| row.0).collect();
+    assert_eq!(
+        shipped,
+        BTreeSet::from(OFFICIAL_COMPONENTS),
+        "every official package takes the round"
+    );
+    for (name, published, now, runtime, contracts) in rows {
+        let manifest: ComponentManifestV1 = serde_json::from_str(
+            &std::fs::read_to_string(
+                repo_root().join("components").join(name).join("manifest.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_ne!(
+            manifest.version, published,
+            "{name} reused its identity published with 0.85.1 and 0.86.0"
+        );
+        assert_eq!(manifest.version, now, "{name}");
+        assert_eq!(
+            manifest.compatibility.south_runtime, runtime,
+            "{name}: the round moves no runtime but speech-qwen's"
         );
         let contracts: std::collections::BTreeMap<String, u32> =
             contracts.iter().map(|(world, version)| ((*world).to_owned(), *version)).collect();

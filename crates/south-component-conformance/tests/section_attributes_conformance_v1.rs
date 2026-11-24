@@ -125,7 +125,9 @@ fn the_gmi_package_declares_its_organization_id_as_a_section_attribute() {
     // (`first_error_retires_every_published_083_package_identity`).
     // Published as 0.37.3 with 0.85.0; the 0.85.1 round made it 0.37.4
     // (`truncated_tool_calls_retire_every_published_085_package_identity`).
-    assert_eq!(manifest.version, "0.37.4");
+    // Published as 0.37.4 with 0.85.1; the 0.87.0 round made it 0.37.5
+    // (`served_model_exclusions_retire_every_published_086_package_identity`).
+    assert_eq!(manifest.version, "0.37.5");
     let wire = serde_json::to_value(manifest.credentials.as_ref().unwrap()).unwrap();
     assert_eq!(
         wire,

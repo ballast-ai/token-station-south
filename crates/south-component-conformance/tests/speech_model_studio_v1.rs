@@ -129,8 +129,10 @@ fn the_model_studio_speech_families_join_their_packages() {
     let minimax = raw_manifest("speech-minimax");
     // Published as 1.2.0 with 0.85.0; the 0.85.1 round made it 1.2.1
     // (`truncated_tool_calls_retire_every_published_085_package_identity`).
-    assert_eq!(minimax["version"], "1.2.1");
-    assert_eq!(MiniMaxSpeechReferenceV1.metadata().version, "1.2.1");
+    // Published as 1.2.1 with 0.85.1; the 0.87.0 round made it 1.2.2
+    // (`served_model_exclusions_retire_every_published_086_package_identity`).
+    assert_eq!(minimax["version"], "1.2.2");
+    assert_eq!(MiniMaxSpeechReferenceV1.metadata().version, "1.2.2");
     assert_eq!(minimax["providers"], json!([MINIMAX_SPEECH, BAILIAN_MINIMAX_SPEECH]));
     assert_eq!(
         minimax["served_models"][BAILIAN_MINIMAX_SPEECH],
