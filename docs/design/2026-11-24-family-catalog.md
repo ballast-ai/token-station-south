@@ -122,8 +122,14 @@ English descriptions for every key and field these families declare.
   entry, an undeclared family, config key and credential field, a bad group reference and a misplaced modality; the
   repository's catalog matches the repository's manifests.
 
+## 8a. Speech families (2026-11-25)
+
+The 13 `speech-adapter-v1` families now have entries too (still optional in v1, so a speech family added later
+without one does not fail the release). They add a `vendor-api` group for upstreams reached through the vendor's own
+API. The server host shows them in the model page's speech binding picker. Data only: no package changes identity.
+
 ## 9. Not done
 
-- The image, speech and embeddings families have no entries yet (optional in v1).
+- The image and embeddings families have no entries yet (optional in v1).
 - The scheduled fuzz target `contract_parsers` does not cover `FamilyCatalogV1::parse`.
 - Host adoption (loading the file, the pickers) is the host's work.
