@@ -444,7 +444,7 @@ dependencies = [
 
 [[package]]
 name = "south-core"
-version = "0.87.0"
+version = "0.87.1"
 dependencies = [
  "chrono",
  "http",
@@ -459,11 +459,11 @@ dependencies = [
 
 [[package]]
 name = "south-host-grammars"
-version = "0.87.0"
+version = "0.87.1"
 
 [[package]]
 name = "south-north-codec"
-version = "0.87.0"
+version = "0.87.1"
 dependencies = [
  "base64",
  "serde_json",
