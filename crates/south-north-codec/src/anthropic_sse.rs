@@ -58,7 +58,11 @@ pub struct AnthropicSseState {
     pub message_started: bool,
     /// The next content-block number to hand out.
     pub next_index: usize,
-    pub thinking_index: Option<usize>,
+    /// IR thinking block (`block_index` of a thinking event) -> content-block
+    /// number. One wire block per source block: interleaved thinking (thinking,
+    /// a tool call, thinking again) is two blocks with two signatures, and
+    /// rendering both into one block would join the signatures.
+    pub thinking_blocks: BTreeMap<u32, usize>,
     pub text_index: Option<usize>,
     /// IR tool slot (the wire `index` of a tool call) -> content-block number.
     pub tool_blocks: BTreeMap<u32, usize>,
@@ -88,7 +92,7 @@ impl AnthropicSseState {
             message_id: message_id.into(),
             message_started: false,
             next_index: 0,
-            thinking_index: None,
+            thinking_blocks: BTreeMap::new(),
             text_index: None,
             tool_blocks: BTreeMap::new(),
             usage: Usage::default(),
@@ -149,12 +153,12 @@ impl AnthropicSseState {
         index
     }
 
-    fn thinking_block(&mut self, frames: &mut Vec<AnthropicFrame>) -> usize {
-        if let Some(index) = self.thinking_index {
-            return index;
+    fn thinking_block(&mut self, block: u32, frames: &mut Vec<AnthropicFrame>) -> usize {
+        if let Some(index) = self.thinking_blocks.get(&block) {
+            return *index;
         }
         let index = self.open_block(&json!({"type": "thinking", "thinking": ""}), frames);
-        self.thinking_index = Some(index);
+        self.thinking_blocks.insert(block, index);
         index
     }
 
@@ -193,15 +197,16 @@ impl AnthropicSseState {
         index
     }
 
-    /// Close every block this message opened: thinking, then text, then the
-    /// tool blocks in IR slot order.
+    /// Close every block this message opened: the thinking blocks in IR block
+    /// order, then text, then the tool blocks in IR slot order.
     ///
     /// That is not necessarily the order they opened in — a tool block can
     /// open before the text one. It does not have to be: a client keys a
     /// stop on the block number it carries, not on its position among the
     /// other stops.
     fn close_open_blocks(&mut self, frames: &mut Vec<AnthropicFrame>) {
-        let mut open: Vec<usize> = self.thinking_index.take().into_iter().collect();
+        let mut open: Vec<usize> =
+            std::mem::take(&mut self.thinking_blocks).into_values().collect();
         open.extend(self.text_index.take());
         open.extend(std::mem::take(&mut self.tool_blocks).into_values());
         for index in open {
@@ -236,8 +241,8 @@ pub fn anthropic_frames(
             // The choice index is not consulted: this envelope carries one
             // message and the request that produced these events could not
             // have asked for a second answer, because this protocol has no `n`.
-            StreamEvent::ThinkingDelta { thinking_delta, .. } => {
-                let index = state.thinking_block(&mut frames);
+            StreamEvent::ThinkingDelta { thinking_delta, block_index, .. } => {
+                let index = state.thinking_block(*block_index, &mut frames);
                 frames.push(block_delta(
                     index,
                     &json!({"type": "thinking_delta", "thinking": thinking_delta}),
@@ -262,8 +267,8 @@ pub fn anthropic_frames(
             // The signature closes a thinking block. With no such block open
             // there is nothing to sign, and starting a message to say so would
             // announce a message that has no content and may never get one.
-            StreamEvent::ThinkingSignatureDelta { signature_delta, .. } => {
-                if let Some(index) = state.thinking_index {
+            StreamEvent::ThinkingSignatureDelta { signature_delta, block_index, .. } => {
+                if let Some(index) = state.thinking_blocks.get(block_index).copied() {
                     frames.push(block_delta(
                         index,
                         &json!({"type": "signature_delta", "signature": signature_delta}),

@@ -48,7 +48,10 @@ pub mod request;
 pub mod response;
 pub mod sse;
 
-pub use anthropic::{anthropic_message_response, chat_request_from_anthropic_messages};
+pub use anthropic::{
+    AnthropicRequestOptions, anthropic_message_response, chat_request_from_anthropic_messages,
+    chat_request_from_anthropic_messages_with,
+};
 pub use anthropic_sse::{AnthropicFrame, AnthropicSseState, anthropic_frames};
 pub use chat_stream::{
     ChatStreamContext, OpenAiChatFrame, OpenAiChatFrameKind, OpenAiChatStream, openai_chat_usage,
