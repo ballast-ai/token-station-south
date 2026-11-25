@@ -4,13 +4,14 @@ This page is the concise index from repository releases to their authoritative d
 Release records preserve historical detail; [compatibility.json](../compatibility.json), not a tag
 or this index, is the authority for host adoption and verification status.
 
-The current repository release is `0.87.0`. Records may describe a prepared but unpublished tag;
+The current repository release is `0.88.0`. Records may describe a prepared but unpublished tag;
 their status line remains authoritative for publication state.
 
 ## Current releases
 
 | Release | Current capability | Records |
 |---|---|---|
+| `0.88.0` | The Messages north codec renders each interleaved thinking block as its own stream block with its own signature (`AnthropicSseState`; `thinking_index` removed), and decodes Claude replay markers when the host opts in (`chat_request_from_anthropic_messages_with`); no package changes identity | [release](design/2026-11-25-release-0.88.0.md), [design](design/2026-11-25-messages-codec-thinking-blocks-and-replay-markers.md) |
 | `0.87.1` | The family catalog covers every world: entries for the 13 speech, 13 image and 4 embeddings families (still optional in `south.family-catalog.v1`); data only, no package changes identity | [release](design/2026-11-25-release-0.87.1.md), [design](design/2026-11-24-family-catalog.md) |
 | `0.87.0` | `served_models` takes `exclude_suffixes` (`south-provider-api` 0.66.0) and `speech-qwen` 1.4.0 excludes Model Studio's `*-realtime` ids; `speech-qwen` serves `qwen-audio-3.1-tts-flash` billed by tokens; `speech-vertex` 1.3.0 serves Gemini 3.8 Flash and Flash-Lite TTS and the `us` / `eu` multi-region hosts; every other package takes the Q47 patch; component lockfiles take `url` 2.5.9 | [release](design/2026-11-24-release-0.87.0.md), [design](design/2026-11-24-tts-flash-gemini38-exclusions.md) |
 | `0.86.0` | The family catalog (`south.family-catalog.v1`, `family-catalog-<tag>.json`): a zh-CN / en display name, description, group and (task families) modality for every provider and task v2 family, read by `south_core::FamilyCatalogV1`; the release refuses a catalog that disagrees with its packages; no package changes identity | [release](design/2026-11-24-release-0.86.0.md), [design](design/2026-11-24-family-catalog.md) |

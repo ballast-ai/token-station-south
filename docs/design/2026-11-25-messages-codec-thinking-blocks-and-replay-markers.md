@@ -1,6 +1,6 @@
 # Messages north codec: one wire block per thinking block, and opt-in Claude replay markers
 
-Status: proposed.
+Status: implemented in #362 (`e778b96b`); released in 0.88.0.
 
 Date: 2026-11-25
 
