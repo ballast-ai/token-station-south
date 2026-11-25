@@ -1,0 +1,148 @@
+# 供应商展示映射部署示例；内部 ID 必须由管理员按实际供应商行匹配。
+# 仅适用于已支持 ui.provider_presentations 的宿主；旧版 UiConfig 会拒绝此新键。
+# 应与支持该映射的宿主版本同时部署；不声明端点、协议或媒体能力。
+
+[ui.provider_presentations."ali-bailian"]
+display_name = "阿里云百炼"
+company_name = "阿里云"
+category = "cloud_platform"
+
+[ui.provider_presentations."ali-bailian-compat"]
+display_name = "阿里云百炼（OpenAI 兼容）"
+company_name = "阿里云"
+category = "cloud_platform"
+
+[ui.provider_presentations."gemini-api"]
+display_name = "Google Gemini API"
+company_name = "Google"
+category = "model_vendor"
+
+[ui.provider_presentations."glm"]
+display_name = "智谱 GLM"
+company_name = "智谱"
+category = "model_vendor"
+
+[ui.provider_presentations."glm-coding"]
+display_name = "智谱 GLM Coding Plan"
+company_name = "智谱"
+category = "model_vendor"
+
+[ui.provider_presentations."minimax-media"]
+display_name = "MiniMax（媒体）"
+company_name = "MiniMax"
+category = "model_vendor"
+
+[ui.provider_presentations."openai"]
+display_name = "OpenAI"
+company_name = "OpenAI"
+category = "model_vendor"
+
+[ui.provider_presentations."vertex-global"]
+display_name = "Google Cloud Vertex AI（全球）"
+company_name = "Google Cloud"
+category = "cloud_platform"
+
+[ui.provider_presentations."vertex_ai"]
+display_name = "Google Cloud Vertex AI"
+company_name = "Google Cloud"
+category = "cloud_platform"
+
+[ui.provider_presentations."wecoding"]
+display_name = "WeCoding"
+company_name = "WeCoding"
+category = "third_party"
+
+[ui.provider_presentations."wecoding-media"]
+display_name = "WeCoding"
+company_name = "WeCoding"
+category = "third_party"
+
+[ui.provider_presentations."wecoding-vedio"]
+display_name = "WeCoding"
+company_name = "WeCoding"
+category = "third_party"
+
+[ui.provider_presentations."openrouter"]
+display_name = "OpenRouter"
+company_name = "OpenRouter"
+category = "third_party"
+
+[ui.provider_presentations."together"]
+display_name = "Together AI"
+company_name = "Together AI"
+category = "third_party"
+
+[ui.provider_presentations."fireworks"]
+display_name = "Fireworks AI"
+company_name = "Fireworks AI"
+category = "third_party"
+
+[ui.provider_presentations."cerebras"]
+display_name = "Cerebras Inference"
+company_name = "Cerebras"
+category = "third_party"
+
+[ui.provider_presentations."sambanova"]
+display_name = "SambaNova Cloud"
+company_name = "SambaNova"
+category = "third_party"
+
+[ui.provider_presentations."siliconflow-cn"]
+display_name = "硅基流动（中国）"
+company_name = "硅基流动"
+category = "third_party"
+
+[ui.provider_presentations."volcengine-ark"]
+display_name = "火山引擎方舟"
+company_name = "火山引擎"
+category = "cloud_platform"
+
+[ui.provider_presentations."baidu-qianfan"]
+display_name = "百度智能云千帆"
+company_name = "百度智能云"
+category = "cloud_platform"
+
+[ui.provider_presentations."stepfun-cn"]
+display_name = "阶跃星辰（中国）"
+company_name = "阶跃星辰"
+category = "model_vendor"
+
+[ui.provider_presentations."tencent-tokenhub-cn"]
+display_name = "腾讯云 TokenHub（中国）"
+company_name = "腾讯云"
+category = "cloud_platform"
+
+[ui.provider_presentations."deepseek"]
+display_name = "DeepSeek"
+company_name = "DeepSeek（深度求索）"
+category = "model_vendor"
+
+[ui.provider_presentations."groq"]
+display_name = "Groq"
+company_name = "Groq"
+category = "third_party"
+
+[ui.provider_presentations."mistral"]
+display_name = "Mistral AI"
+company_name = "Mistral AI"
+category = "model_vendor"
+
+[ui.provider_presentations."kimi"]
+display_name = "Kimi"
+company_name = "月之暗面（Moonshot AI）"
+category = "model_vendor"
+
+[ui.provider_presentations."minimax"]
+display_name = "MiniMax"
+company_name = "MiniMax"
+category = "model_vendor"
+
+[ui.provider_presentations."nvidia-nim"]
+display_name = "NVIDIA NIM"
+company_name = "NVIDIA（英伟达）"
+category = "third_party"
+
+[ui.provider_presentations."anthropic"]
+display_name = "Anthropic Claude"
+company_name = "Anthropic"
+category = "model_vendor"
