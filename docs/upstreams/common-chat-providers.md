@@ -4,7 +4,7 @@
 
 本批补齐 17 家供应商的元数据：16 家使用现有 OpenAI Chat 兼容族和单 Bearer API Key，Anthropic 使用已有专用族及绑定单 workspace 的 API Key。复用现有组件，不新增认证、协议或私有接入体系。
 
-[可用配置片段](examples/text-providers.toml)只含供应商，适用于已有 `provider-openai-compatible` / `provider-anthropic` 组件并允许相应族的宿主。公开文档兼容不代表已用真实账号完成验收。
+[服务商配置片段](examples/text-providers.toml)只含供应商；另见[首批型号与价格](common-chat-models.md)及[型号片段](examples/text-models.toml)。这些片段适用于已有 `provider-openai-compatible` / `provider-anthropic` 组件并允许相应族的宿主。公开文档兼容不代表已用真实账号完成验收。
 
 ## 官方依据和边界
 
@@ -30,7 +30,7 @@
 | --- | --- | --- | --- |
 | DeepSeek | 官方 OpenAI base `https://api.deepseek.com`；完整 `https://api.deepseek.com/chat/completions` | `Authorization: Bearer <DeepSeek API key>`；可作为已有 Chat 族供应商元数据候选。按官方根地址配置，不自行假设组件一定需要 v1。 | [首次调用](https://api-docs.deepseek.com/) 明确 OpenAI 兼容、流式/非流式和 Bearer。Anthropic 兼容是另外的 `/anthropic` base，本次不混用。 |
 | Groq | `https://api.groq.com/openai/v1`；后追加 `/chat/completions` | `Authorization: Bearer <Groq API key>`；可复用 Chat 族。 | [官方兼容指南](https://console.groq.com/docs/openai)、[官方端点/Bearer FAQ](https://community.groq.com/t/what-is-the-base-url-path-for-groq-api/487)。兼容指南列 `logprobs`、`logit_bias`、`top_logprobs`、`messages[].name` 不支持，n 只能 1；不能宣称全参数兼容。 |
-| Mistral | `https://api.mistral.ai/v1`；后追加 `/chat/completions` | `Authorization: Bearer <Mistral API key>`；官方 Chat 请求/响应为 OpenAI Chat 外形，可作现有 Chat 族候选。 | [官方 Chat API](https://docs.mistral.ai/api)、[官方 key 与 curl 示例](https://docs.mistral.ai/getting-started/quickstarts/studio/activate-and-generate-api-key)。本轮仅核实文本 Chat，不把 OCR、FIM、Agents 等原生产品当同一路径能力。 |
+| Mistral | `https://api.mistral.ai/openai/v1`；后追加 `/chat/completions` | `Authorization: Bearer <Mistral API key>`；官方严格 OpenAI 兼容端点为 public preview；native `/v1` 不按外形相似冒充严格兼容。 | [官方兼容端点说明](https://docs.mistral.ai/inference/conversations/chat-completion)、[官方 key 示例](https://docs.mistral.ai/getting-started/quickstarts/studio/activate-and-generate-api-key)。本轮仅核实文本 Chat，不把 OCR、FIM、Agents 等原生产品当同一路径能力。 |
 | Kimi / Moonshot 中国站 | `https://api.moonshot.cn/v1`；后追加 `/chat/completions` | `Authorization: Bearer <Moonshot API key>`；可复用 Chat 族。 | [官方 Chat API](https://platform.kimi.com/docs/api/chat)。旧 platform.moonshot.cn 文档已重定向 platform.kimi.com，但官方 OpenAI 示例仍用 api.moonshot.cn。思考/工具等参数按具体型号校验，不在本轮声明能力。 |
 | MiniMax 中国站普通文本 | 当前官方 `https://api.minimax.cn/v1`；后追加 `/chat/completions` | `Authorization: Bearer <MiniMax API key>`；可复用 Chat 族。不要把已有 minimax-media 项视为普通文本接入已存在。 | [官方 OpenAI SDK](https://platform.minimax.cn/docs/api-reference/text-openai-api)、[官方 Chat API 与 Bearer](https://platform.minimax.cn/docs/api-reference/text-chat-openai)。旧 platform.minimaxi.com 文档会重定向，新文档明确 api.minimax.cn；不沿用记忆中的 api.minimaxi.com。部分采样/惩罚参数忽略，n 仅 1；多轮工具对话须保留完整返回和相应思考内容。 |
 | Anthropic 官方 | 根 `https://api.anthropic.com`；完整 `https://api.anthropic.com/v1/messages` | 复用现有 anthropic 族，以 `x-api-key: <Anthropic API key>` 加 `anthropic-version`，由组件负责头与协议。不能误配为 OpenAI Chat Bearer 族。 | [官方 API 概览](https://platform.claude.com/docs/en/api/overview)。当前文档仍支持 x-api-key；版本头必需。最新说明要求未绑定单 workspace 的 key 额外传 anthropic-workspace-id，因此当前单 secret 接入应使用绑定单 workspace 的 key，或先确认现有组件能声明该附加字段；本轮不新增凭证机制。 |
@@ -46,7 +46,7 @@
 1. 新部署：选择需要的供应商段合入首启目录文件，不覆盖已有同名段；目录入库仍遵循宿主的默认停用规则。
 2. 存量部署：先读管理 API 的现有供应商列表，只创建缺项；已经存在的行无论启用状态如何都保留，不重写端点、凭证、价格或路由。单改首启 TOML 不会更改数据库。
 3. 创建使用 name、endpoint、south_dialect 三个字段，默认停用；凭证由现有密钥功能录入。按已采购的账户站点选择端点，不跨站点重发密钥。
-4. 本批不添加型号行。型号 ID、计费桶、单价和能力必须按对应平台目录及价卡核实，不能借用另一平台的同名型号价格，也不能默认填零。
+4. 型号可采用[首批型号片段](examples/text-models.toml)，先核对[价格、固定汇率和阻塞项](common-chat-models.md)。不能借用另一平台的同名型号价格，也不能默认填零；Kimi和NVIDIA本批没有可用型号占位。
 5. 导入后对照清单回读本批配置，确认来源端点和方言正确、保持停用，现有行未改。准备好平台凭证或 BYOK 密钥及已定价型号后，再显式启用并用既有连接验证功能验收。
 
 本批只核实静态配置与官方协议说明，没有调用推理接口；不声称工具、视觉、缓存、思考或流式用量已逐项实测。当前范围仅为普通 API Key 的文本入口；订阅套餐、管控面签名与旧版换票端点不在范围内。

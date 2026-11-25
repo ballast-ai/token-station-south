@@ -81,7 +81,7 @@ south_dialect = "openai-compatible"
 # Mistral
 [[providers]]
 name = "mistral"
-endpoint = "https://api.mistral.ai/v1"
+endpoint = "https://api.mistral.ai/openai/v1"
 south_dialect = "openai-compatible"
 
 # Kimi 中国站

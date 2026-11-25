@@ -1,0 +1,231 @@
+# 首批 BYOK 普通文本型号示例；合入宿主目录前须逐项 review，不包含凭证。
+# 核实2026-11-25；价格单位µUSD/M token；CNY÷6.785固定运营换算（非实时汇率），Decimal ROUND_HALF_UP。
+# 未知精确context_size=32768是运营上限；不代表厂商max。仅text，不声明图像/工具已实测。
+# Mistral服务商endpoint须为https://api.mistral.ai/openai/v1；开发预览仅用于开发许可证实例。
+
+# 官方来源：https://openrouter.ai/api/v1/models https://openrouter.ai/docs/api_reference/streaming
+[[models]]
+name = "openrouter/gpt-oss-120b"
+provider = "openrouter"
+upstream_model = "openai/gpt-oss-120b"
+context_size = 131072
+modalities = ["text"]
+input_price_per_million = 50000
+output_price_per_million = 250000
+cached_input_price_per_million = 50000
+tags = "byok-common-20261125,text-only,official-declared,upstream-unverified"
+supported_parameters = ["max_tokens"]
+
+# 官方来源：https://openrouter.ai/api/v1/models https://openrouter.ai/docs/api_reference/streaming
+[[models]]
+name = "openrouter/llama-3.3-70b-instruct"
+provider = "openrouter"
+upstream_model = "meta-llama/llama-3.3-70b-instruct"
+context_size = 128000
+modalities = ["text"]
+input_price_per_million = 710000
+output_price_per_million = 710000
+cached_input_price_per_million = 710000
+tags = "byok-common-20261125,text-only,official-declared,upstream-unverified"
+supported_parameters = ["max_tokens"]
+
+# 官方来源：https://docs.together.ai/docs/serverless/models https://docs.together.ai/docs/inference/chat/overview https://docs.together.ai/docs/inference/chat/parameters
+[[models]]
+name = "together/gpt-oss-120b"
+provider = "together"
+upstream_model = "openai/gpt-oss-120b"
+context_size = 131072
+modalities = ["text"]
+input_price_per_million = 150000
+output_price_per_million = 600000
+tags = "byok-common-20261125,text-only,official-declared,upstream-unverified"
+supported_parameters = ["max_tokens"]
+
+# 官方来源：https://fireworks.ai/models/fireworks/glm-5p3-flash https://docs.fireworks.ai/getting-started/quickstart https://docs.fireworks.ai/api-reference/post-chatcompletions
+# context_size=32768为保守运营上限，非厂商最大上下文。
+[[models]]
+name = "fireworks/glm-5p3-flash"
+provider = "fireworks"
+upstream_model = "accounts/fireworks/models/glm-5p3-flash"
+context_size = 32768
+modalities = ["text"]
+input_price_per_million = 150000
+output_price_per_million = 500000
+cached_input_price_per_million = 30000
+tags = "byok-common-20261125,text-only,official-declared,upstream-unverified"
+supported_parameters = ["max_tokens"]
+
+# 官方来源：https://inference-docs.cerebras.ai/models/openai-oss.md https://www.cerebras.ai/pricing https://inference-docs.cerebras.ai/resources/openai
+# context_size=32768为保守运营上限，非厂商最大上下文。
+# 仅开发评估，官方不适用于生产。
+[[models]]
+name = "cerebras/gpt-oss-120b"
+provider = "cerebras"
+upstream_model = "gpt-oss-120b"
+context_size = 32768
+modalities = ["text"]
+input_price_per_million = 350000
+output_price_per_million = 750000
+tags = "byok-common-20261125,text-only,official-declared,upstream-unverified,preview,development-evaluation-only,local-dev-license"
+supported_parameters = ["max_tokens"]
+
+# 官方来源：https://docs.sambanova.ai/docs/en/models/sambacloud-models https://cloud.sambanova.ai/plans/pricing https://docs.sambanova.ai/docs/en/get-started/quickstart
+# context_size=32768为保守运营上限，非厂商最大上下文。
+# 仅开发评估，官方不适用于生产。
+[[models]]
+name = "sambanova/gpt-oss-120b"
+provider = "sambanova"
+upstream_model = "gpt-oss-120b"
+context_size = 32768
+modalities = ["text"]
+input_price_per_million = 220000
+output_price_per_million = 590000
+tags = "byok-common-20261125,text-only,official-declared,upstream-unverified,preview,development-evaluation-only,local-dev-license"
+supported_parameters = ["max_tokens"]
+
+# 官方来源：https://console.groq.com/docs/models https://console.groq.com/docs/model/openai/gpt-oss-120b https://console.groq.com/docs/text-chat https://console.groq.com/docs/openai
+[[models]]
+name = "groq/gpt-oss-120b"
+provider = "groq"
+upstream_model = "openai/gpt-oss-120b"
+context_size = 131072
+modalities = ["text"]
+input_price_per_million = 150000
+output_price_per_million = 600000
+cached_input_price_per_million = 75000
+tags = "byok-common-20261125,text-only,official-declared,upstream-unverified"
+supported_parameters = ["max_tokens"]
+
+# 官方来源：https://console.groq.com/docs/models https://console.groq.com/docs/model/openai/gpt-oss-20b https://console.groq.com/docs/text-chat https://console.groq.com/docs/openai
+[[models]]
+name = "groq/gpt-oss-20b"
+provider = "groq"
+upstream_model = "openai/gpt-oss-20b"
+context_size = 131072
+modalities = ["text"]
+input_price_per_million = 75000
+output_price_per_million = 300000
+cached_input_price_per_million = 37000
+tags = "byok-common-20261125,text-only,official-declared,upstream-unverified"
+supported_parameters = ["max_tokens"]
+
+# 官方来源：https://docs.mistral.ai/models/mistral-small-4 https://docs.mistral.ai/inference/pricing?currency=usd https://docs.mistral.ai/inference/conversations/chat-completion
+# context_size=32768为保守运营上限，非厂商最大上下文。
+[[models]]
+name = "mistral/mistral-small-2603"
+provider = "mistral"
+upstream_model = "mistral-small-2603"
+context_size = 32768
+modalities = ["text"]
+input_price_per_million = 150000
+output_price_per_million = 600000
+tags = "byok-common-20261125,text-only,official-declared,upstream-unverified,preview,openai-endpoint-preview"
+supported_parameters = ["max_tokens"]
+
+# 官方来源：https://platform.claude.com/docs/en/models/sonnet-4-6/overview https://platform.claude.com/docs/en/about-claude/pricing https://platform.claude.com/docs/en/build-with-claude/streaming
+# context_size=32768为保守运营上限，非厂商最大上下文。
+[[models]]
+name = "anthropic/claude-sonnet-4-6"
+provider = "anthropic"
+upstream_model = "claude-sonnet-4-6"
+context_size = 32768
+modalities = ["text"]
+input_price_per_million = 3000000
+output_price_per_million = 15000000
+cache_read_input_price_per_million = 300000
+cache_creation_input_price_per_million = 3750000
+cache_creation_1h_input_price_per_million = 6000000
+tags = "byok-common-20261125,text-only,official-declared,upstream-unverified"
+supported_parameters = ["max_tokens"]
+
+# 官方来源：https://www.siliconflow.cn/models/Qwen%2FQwen3.6-27B https://docs.siliconflow.cn/docs/api/chat-completions-post https://docs.siliconflow.cn/docs/release-notes/overview
+[[models]]
+name = "siliconflow-cn/Qwen3.6-27B"
+provider = "siliconflow-cn"
+upstream_model = "Qwen/Qwen3.6-27B"
+context_size = 262144
+modalities = ["text"]
+input_price_per_million = 442152
+output_price_per_million = 2652911
+tags = "byok-common-20261125,text-only,official-declared,upstream-unverified"
+supported_parameters = ["max_tokens"]
+
+# 官方来源：https://console.volcengine.com/ark/region:cn-beijing/docs/model-list https://console.volcengine.com/ark/region:cn-beijing/docs/model-pricing https://console.volcengine.com/ark/region:cn-beijing/docs/base-url-and-authentication https://console.volcengine.com/ark/region:cn-beijing/docs/online-inference-standard
+[[models]]
+name = "volcengine-ark/doubao-seed-2-1-lite-260915"
+provider = "volcengine-ark"
+upstream_model = "doubao-seed-2-1-lite-260915"
+context_size = 1048576
+modalities = ["text"]
+input_price_per_million = 117907
+output_price_per_million = 397937
+cached_input_price_per_million = 23581
+tags = "byok-common-20261125,text-only,official-declared,upstream-unverified"
+supported_parameters = ["max_tokens"]
+
+# 官方来源：https://cloud.baidu.com/product-s/qianfan_home https://cloud.baidu.com/doc/qianfan-api/s/3m7of64lb https://cloud.baidu.com/doc/qianfan-api/s/omwbqlomb
+[[models]]
+name = "baidu-qianfan/ernie-4.5-turbo-128k"
+provider = "baidu-qianfan"
+upstream_model = "ernie-4.5-turbo-128k"
+context_size = 131072
+modalities = ["text"]
+input_price_per_million = 117907
+output_price_per_million = 471629
+tags = "byok-common-20261125,text-only,official-declared,upstream-unverified"
+supported_parameters = ["max_tokens"]
+
+# 官方来源：https://platform.stepfun.com/docs/zh/guides/models/step-3.5-flash https://platform.stepfun.com/docs/zh/guides/pricing/details
+[[models]]
+name = "stepfun-cn/step-3.5-flash"
+provider = "stepfun-cn"
+upstream_model = "step-3.5-flash"
+context_size = 262144
+modalities = ["text"]
+input_price_per_million = 103169
+output_price_per_million = 309506
+cached_input_price_per_million = 20634
+tags = "byok-common-20261125,text-only,official-declared,upstream-unverified"
+supported_parameters = ["max_tokens"]
+
+# 官方来源：https://cloud.tencent.com/document/product/1823/130051 https://cloud.tencent.com/document/product/1823/130055/ https://cloud.tencent.com/document/product/1823/132252
+[[models]]
+name = "tencent-tokenhub-cn/hy3"
+provider = "tencent-tokenhub-cn"
+upstream_model = "hy3"
+context_size = 262144
+modalities = ["text"]
+input_price_per_million = 147384
+output_price_per_million = 589536
+cached_input_price_per_million = 36846
+tags = "byok-common-20261125,text-only,official-declared,upstream-unverified"
+supported_parameters = ["max_tokens"]
+
+# 官方来源：https://api-docs.deepseek.com/quick_start/pricing/ https://api-docs.deepseek.com/api/create-chat-completion/
+# 官方高峰基础价；闲时优惠不自动切换。
+[[models]]
+name = "deepseek/deepseek-flash"
+provider = "deepseek"
+upstream_model = "deepseek-flash"
+context_size = 1048576
+modalities = ["text"]
+input_price_per_million = 300000
+output_price_per_million = 1200000
+cached_input_price_per_million = 6000
+tags = "byok-common-20261125,text-only,official-declared,upstream-unverified"
+supported_parameters = ["max_tokens"]
+upstream_requires_reasoning_content = true
+
+# 官方来源：https://platform.minimax.cn/docs/api-reference/text-openai-api https://platform.minimax.cn/docs/api-reference/text-chat-openai https://platform.minimax.cn/docs/pricing/overview
+[[models]]
+name = "minimax/MiniMax-M3.1-Flash"
+provider = "minimax"
+upstream_model = "MiniMax-M3.1-Flash"
+context_size = 1000000
+modalities = ["text"]
+input_price_per_million = 147384
+output_price_per_million = 589536
+cached_input_price_per_million = 14738
+tags = "byok-common-20261125,text-only,official-declared,upstream-unverified"
+supported_parameters = ["max_tokens"]
+
