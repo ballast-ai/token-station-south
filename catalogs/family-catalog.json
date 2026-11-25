@@ -827,6 +827,279 @@
         "zh-CN": "xAI 的语音合成与识别接口。凭证是 xAI API Key。",
         "en": "xAI's speech synthesis and recognition API. The credential is an xAI API key."
       }
+    },
+    {
+      "world": "image-adapter-v1",
+      "family": "openai-compatible",
+      "group": "generic",
+      "display_name": {
+        "zh-CN": "OpenAI 兼容图像接口",
+        "en": "OpenAI-compatible images"
+      },
+      "description": {
+        "zh-CN": "讲 OpenAI `/images/generations` 与 `/images/edits` 协议的上游。服务商地址写到 API 根，凭证是一个 API Key。",
+        "en": "Any upstream that speaks OpenAI's `/images/generations` and `/images/edits`. The provider endpoint is the API root; the credential is one API key."
+      }
+    },
+    {
+      "world": "image-adapter-v1",
+      "family": "azure-openai-v1",
+      "group": "cloud",
+      "display_name": {
+        "zh-CN": "Azure OpenAI 图像 · v1",
+        "en": "Azure OpenAI images · v1"
+      },
+      "description": {
+        "zh-CN": "Azure OpenAI 不带版本号的 v1 图像接口。服务商地址写到 {资源}/openai/v1，凭证是资源的 API Key。",
+        "en": "Azure OpenAI's unversioned v1 image surface. The provider endpoint is {resource}/openai/v1; the credential is the resource's API key."
+      }
+    },
+    {
+      "world": "image-adapter-v1",
+      "family": "azure-openai-dated",
+      "group": "cloud",
+      "display_name": {
+        "zh-CN": "Azure OpenAI 图像 · 按日期版本",
+        "en": "Azure OpenAI images · dated versions"
+      },
+      "description": {
+        "zh-CN": "Azure OpenAI 按部署寻址、带 ?api-version= 日期版本的图像接口。服务商地址写资源根，凭证是资源的 API Key。",
+        "en": "Azure OpenAI images addressed by deployment with a dated ?api-version=. The provider endpoint is the resource root; the credential is the resource's API key."
+      },
+      "config_keys": {
+        "api_version": {
+          "zh-CN": "以 ?api-version= 发送的 API 版本，日期形式，可带 -preview 后缀，缺省 2024-10-21。",
+          "en": "The API version sent as ?api-version=, a date with an optional -preview suffix; defaults to 2024-10-21."
+        }
+      }
+    },
+    {
+      "world": "image-adapter-v1",
+      "family": "glm-coding",
+      "group": "coding-plan",
+      "display_name": {
+        "zh-CN": "智谱 GLM 编程套餐 · 图像",
+        "en": "Z.AI GLM Coding Plan · images"
+      },
+      "description": {
+        "zh-CN": "智谱 / Z.AI GLM 编程套餐（Coding Plan）的 OpenAI 兼容图像接口。服务商地址写套餐的 API 根，凭证是 Z.AI 控制台的 API Key。",
+        "en": "The OpenAI-compatible image API of the Z.AI GLM Coding Plan. The provider endpoint is the plan's API root; the credential is an API key from the Z.AI dashboard."
+      }
+    },
+    {
+      "world": "image-adapter-v1",
+      "family": "azure-mai",
+      "group": "cloud",
+      "display_name": {
+        "zh-CN": "Azure AI Foundry · MAI 图像",
+        "en": "Azure AI Foundry · MAI images"
+      },
+      "description": {
+        "zh-CN": "Azure AI Foundry 上的 Microsoft MAI-Image 系列图像生成与编辑。服务商地址写 Foundry 资源根，凭证是资源的 API Key。",
+        "en": "Image generation and editing with Microsoft's MAI-Image models on Azure AI Foundry. The provider endpoint is the Foundry resource root; the credential is the resource's API key."
+      }
+    },
+    {
+      "world": "image-adapter-v1",
+      "family": "gemini-image",
+      "group": "generic",
+      "display_name": {
+        "zh-CN": "Google Gemini 图像",
+        "en": "Google Gemini images"
+      },
+      "description": {
+        "zh-CN": "Google Gemini API 的 generateContent 图像生成与编辑（Nano Banana 系列）。凭证是一个 API Key。",
+        "en": "Image generation and editing through the Google Gemini API's generateContent (the Nano Banana models). The credential is one API key."
+      }
+    },
+    {
+      "world": "image-adapter-v1",
+      "family": "vertex-ai-image",
+      "group": "cloud",
+      "display_name": {
+        "zh-CN": "Google Vertex AI · Gemini 图像",
+        "en": "Google Vertex AI · Gemini images"
+      },
+      "description": {
+        "zh-CN": "Vertex AI 上的 Gemini 图像生成与编辑（Nano Banana 系列），凭证是服务账号密钥，网关用它签发访问令牌。",
+        "en": "Gemini image generation and editing (the Nano Banana models) on Vertex AI; the credential is a service account key the gateway mints access tokens from."
+      },
+      "config_keys": {
+        "region": {
+          "zh-CN": "Vertex AI 的区域，例如 us-central1，或 global。",
+          "en": "The Vertex AI location, such as us-central1, or global."
+        },
+        "project": {
+          "zh-CN": "要调用的 Google Cloud 项目，与服务账号所属项目不同时才填。",
+          "en": "The Google Cloud project to call, when it is not the service account's own."
+        }
+      },
+      "credential_fields": {
+        "service_account": {
+          "zh-CN": "用来签发访问令牌的服务账号密钥文件（JSON）。",
+          "en": "The service account key file (JSON) access tokens are minted with."
+        },
+        "project_id": {
+          "zh-CN": "服务账号所属的 Google Cloud 项目。",
+          "en": "The Google Cloud project the service account belongs to."
+        }
+      }
+    },
+    {
+      "world": "image-adapter-v1",
+      "family": "bailian-qwen-image",
+      "group": "cloud",
+      "display_name": {
+        "zh-CN": "阿里云百炼 · 千问图像",
+        "en": "Alibaba Cloud Model Studio · Qwen-Image"
+      },
+      "description": {
+        "zh-CN": "百炼上的千问图像（Qwen-Image）生成与编辑。凭证是百炼 API Key。",
+        "en": "Qwen-Image generation and editing on Model Studio. The credential is a Model Studio API key."
+      }
+    },
+    {
+      "world": "image-adapter-v1",
+      "family": "minimax-image",
+      "group": "vendor-api",
+      "display_name": {
+        "zh-CN": "MiniMax 图像",
+        "en": "MiniMax images"
+      },
+      "description": {
+        "zh-CN": "MiniMax 官方图像生成接口。凭证是 MiniMax API Key；中国站账号可另填 GroupId。",
+        "en": "MiniMax's own image generation API. The credential is a MiniMax API key; a China-site account may also set its GroupId."
+      },
+      "config_keys": {
+        "group_id": {
+          "zh-CN": "MiniMax 账号的 GroupId，填了就以 ?GroupId= 附在请求上。",
+          "en": "The MiniMax account's GroupId, appended to the request as ?GroupId= when set."
+        }
+      }
+    },
+    {
+      "world": "image-adapter-v1",
+      "family": "xai-image",
+      "group": "vendor-api",
+      "display_name": {
+        "zh-CN": "xAI 图像",
+        "en": "xAI images"
+      },
+      "description": {
+        "zh-CN": "xAI 的 Grok Imagine 图像生成与编辑接口。凭证是 xAI API Key。",
+        "en": "xAI's Grok Imagine image generation and editing API. The credential is an xAI API key."
+      }
+    },
+    {
+      "world": "image-adapter-v1",
+      "family": "ideogram-image",
+      "group": "vendor-api",
+      "display_name": {
+        "zh-CN": "Ideogram 图像",
+        "en": "Ideogram images"
+      },
+      "description": {
+        "zh-CN": "Ideogram 官方图像接口。凭证是 Ideogram API Key。",
+        "en": "Ideogram's own image API. The credential is an Ideogram API key."
+      }
+    },
+    {
+      "world": "image-adapter-v1",
+      "family": "stability-image",
+      "group": "vendor-api",
+      "display_name": {
+        "zh-CN": "Stability AI 图像",
+        "en": "Stability AI images"
+      },
+      "description": {
+        "zh-CN": "Stability AI 官方图像接口（Stable Diffusion 3.5、Stable Image）。凭证是 Stability API Key。",
+        "en": "Stability AI's own image API (Stable Diffusion 3.5, Stable Image). The credential is a Stability API key."
+      }
+    },
+    {
+      "world": "image-adapter-v1",
+      "family": "reve-image",
+      "group": "vendor-api",
+      "display_name": {
+        "zh-CN": "Reve 图像",
+        "en": "Reve images"
+      },
+      "description": {
+        "zh-CN": "Reve 官方图像接口，按积分计价。凭证是 Reve API Key。",
+        "en": "Reve's own image API, priced in credits. The credential is a Reve API key."
+      }
+    },
+    {
+      "world": "embeddings-adapter-v1",
+      "family": "openai-compatible",
+      "group": "generic",
+      "display_name": {
+        "zh-CN": "OpenAI 兼容向量接口",
+        "en": "OpenAI-compatible embeddings"
+      },
+      "description": {
+        "zh-CN": "讲 OpenAI `/embeddings` 协议的上游。服务商地址写到 API 根，凭证是一个 API Key。",
+        "en": "Any upstream that speaks OpenAI's `/embeddings`. The provider endpoint is the API root; the credential is one API key."
+      }
+    },
+    {
+      "world": "embeddings-adapter-v1",
+      "family": "azure-openai-v1",
+      "group": "cloud",
+      "display_name": {
+        "zh-CN": "Azure OpenAI 向量 · v1",
+        "en": "Azure OpenAI embeddings · v1"
+      },
+      "description": {
+        "zh-CN": "Azure OpenAI 不带版本号的 v1 向量接口。服务商地址写到 {资源}/openai/v1，凭证是资源的 API Key。",
+        "en": "Azure OpenAI's unversioned v1 embeddings surface. The provider endpoint is {resource}/openai/v1; the credential is the resource's API key."
+      }
+    },
+    {
+      "world": "embeddings-adapter-v1",
+      "family": "gemini",
+      "group": "generic",
+      "display_name": {
+        "zh-CN": "Google Gemini 向量",
+        "en": "Google Gemini embeddings"
+      },
+      "description": {
+        "zh-CN": "Google Gemini API 的向量接口（generativelanguage.googleapis.com）。凭证是一个 API Key。",
+        "en": "The Google Gemini API's embeddings (generativelanguage.googleapis.com). The credential is one API key."
+      }
+    },
+    {
+      "world": "embeddings-adapter-v1",
+      "family": "vertex-ai",
+      "group": "cloud",
+      "display_name": {
+        "zh-CN": "Google Vertex AI 向量",
+        "en": "Google Vertex AI embeddings"
+      },
+      "description": {
+        "zh-CN": "Vertex AI 上的向量模型，凭证是服务账号密钥，网关用它签发访问令牌。",
+        "en": "Embedding models on Vertex AI; the credential is a service account key the gateway mints access tokens from."
+      },
+      "config_keys": {
+        "region": {
+          "zh-CN": "Vertex AI 的区域，例如 us-central1，或 global。",
+          "en": "The Vertex AI location, such as us-central1, or global."
+        },
+        "project": {
+          "zh-CN": "要调用的 Google Cloud 项目，与服务账号所属项目不同时才填。",
+          "en": "The Google Cloud project to call, when it is not the service account's own."
+        }
+      },
+      "credential_fields": {
+        "service_account": {
+          "zh-CN": "用来签发访问令牌的服务账号密钥文件（JSON）。",
+          "en": "The service account key file (JSON) access tokens are minted with."
+        },
+        "project_id": {
+          "zh-CN": "服务账号所属的 Google Cloud 项目。",
+          "en": "The Google Cloud project the service account belongs to."
+        }
+      }
     }
   ]
 }

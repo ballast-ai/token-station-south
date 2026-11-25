@@ -128,8 +128,15 @@ The 13 `speech-adapter-v1` families now have entries too (still optional in v1, 
 without one does not fail the release). They add a `vendor-api` group for upstreams reached through the vendor's own
 API. The server host shows them in the model page's speech binding picker. Data only: no package changes identity.
 
+## 8b. Image and embeddings families (2026-11-25)
+
+The 13 `image-adapter-v1` families and the 4 `embeddings-adapter-v1` families now have entries too, so every world
+the release carries is covered. Both worlds stay optional in v1. The entries reuse the existing groups, and the
+Vertex entries describe the `region` / `project` config keys and the `vertex_sa` credential fields the way the speech
+and text Vertex entries do. The server host does not show them yet: its image and embeddings route editors have no
+binding picker. Data only: no package changes identity.
+
 ## 9. Not done
 
-- The image and embeddings families have no entries yet (optional in v1).
 - The scheduled fuzz target `contract_parsers` does not cover `FamilyCatalogV1::parse`.
 - Host adoption (loading the file, the pickers) is the host's work.
