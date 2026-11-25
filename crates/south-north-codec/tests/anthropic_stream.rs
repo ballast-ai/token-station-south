@@ -449,3 +449,66 @@ fn a_finished_message_resets_the_blocks_but_keeps_the_stream_identity() {
         "the previous message's usage is not carried into this one"
     );
 }
+
+// ── one wire block per source thinking block ───────────────────────────────
+
+fn thinking(block_index: u32, text: &str) -> StreamEvent {
+    StreamEvent::ThinkingDelta { index: 0, block_index, thinking_delta: text.to_owned() }
+}
+
+fn signature(block_index: u32, text: &str) -> StreamEvent {
+    StreamEvent::ThinkingSignatureDelta { index: 0, block_index, signature_delta: text.to_owned() }
+}
+
+#[test]
+fn interleaved_thinking_blocks_keep_their_own_wire_blocks_and_signatures() {
+    let mut state = state();
+    let frames = anthropic_frames(
+        &[
+            thinking(0, "first"),
+            signature(0, "sig-a"),
+            StreamEvent::ToolCallDelta {
+                index: 0,
+                id: Some("toolu_1".to_owned()),
+                name: Some("lookup".to_owned()),
+                arguments_delta: "{}".to_owned(),
+                signature: None,
+            },
+            thinking(2, "second"),
+            signature(2, "sig-b"),
+            StreamEvent::Done { finish_reason: Some(FinishReason::ToolCalls), stop_sequence: None },
+        ],
+        &mut state,
+    );
+
+    let deltas: Vec<(u64, &Value)> = frames
+        .iter()
+        .filter(|frame| frame.event == "content_block_delta")
+        .map(|frame| (frame.data["index"].as_u64().unwrap(), &frame.data["delta"]))
+        .collect();
+    assert_eq!(deltas[0], (0, &json!({"type": "thinking_delta", "thinking": "first"})));
+    assert_eq!(deltas[1], (0, &json!({"type": "signature_delta", "signature": "sig-a"})));
+    assert_eq!(deltas[3], (2, &json!({"type": "thinking_delta", "thinking": "second"})));
+    assert_eq!(deltas[4], (2, &json!({"type": "signature_delta", "signature": "sig-b"})));
+
+    // Every block the message opened is closed exactly once, before message_delta: the thinking
+    // blocks in IR block order, then the tool block.
+    let stops: Vec<u64> = frames
+        .iter()
+        .filter(|frame| frame.event == "content_block_stop")
+        .map(|frame| frame.data["index"].as_u64().unwrap())
+        .collect();
+    assert_eq!(stops, [0, 2, 1]);
+    let names = names(&frames);
+    let delta_at = names.iter().position(|name| *name == "message_delta").unwrap();
+    assert!(names.iter().rposition(|name| *name == "content_block_stop").unwrap() < delta_at);
+}
+
+#[test]
+fn thinking_events_of_one_source_block_share_one_wire_block() {
+    let mut state = state();
+    let frames =
+        anthropic_frames(&[thinking(0, "a"), thinking(0, "b"), signature(0, "sig")], &mut state);
+    let starts = frames.iter().filter(|frame| frame.event == "content_block_start").count();
+    assert_eq!(starts, 1);
+}

@@ -7,7 +7,8 @@
 
 use serde_json::json;
 use south_north_codec::{
-    CodecError, ResponseContext, anthropic_message_response, chat_request_from_anthropic_messages,
+    AnthropicRequestOptions, CodecError, ResponseContext, anthropic_message_response,
+    chat_request_from_anthropic_messages, chat_request_from_anthropic_messages_with,
 };
 use token_station_protocol::{
     ChatResponse, Choice, Content, ContentPart, Extensions, FinishReason, Message, Role, ToolCall,
@@ -346,4 +347,85 @@ fn cache_buckets_appear_when_reported_and_an_unmodelled_stop_reason_survives() {
         "the provider said something specific; replacing it with 'end_turn' would report a \
          normal completion that did not happen"
     );
+}
+
+// ── Claude replay markers (opt-in) ─────────────────────────────────────────
+
+fn with_assistant(content: &serde_json::Value) -> serde_json::Value {
+    json!({"model": "m", "max_tokens": 64, "messages": [
+        {"role": "user", "content": "question"},
+        {"role": "assistant", "content": content},
+        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_1", "content": "found"}]}
+    ]})
+}
+
+fn marked(body: &serde_json::Value) -> Message {
+    let request = chat_request_from_anthropic_messages_with(
+        body,
+        AnthropicRequestOptions { claude_replay_markers: true },
+    )
+    .expect("converts");
+    request.messages.into_iter().find(|message| message.role == Role::Assistant).expect("assistant")
+}
+
+#[test]
+fn a_signed_turn_is_marked_with_its_wire_order_only_when_the_host_asks() {
+    let body = with_assistant(&json!([
+        {"type": "thinking", "thinking": "plan", "signature": "sig-1"},
+        {"type": "redacted_thinking", "data": "opaque"},
+        {"type": "text", "text": "Looking it up."},
+        {"type": "tool_use", "id": "toolu_1", "name": "lookup", "input": {}}
+    ]));
+
+    let assistant = marked(&body);
+    assert_eq!(
+        assistant.extensions.get("reasoning_replay_protocol_family"),
+        Some(&json!("claude-signed-thinking"))
+    );
+    assert_eq!(
+        assistant.extensions.get("reasoning_replay_block_layout"),
+        Some(&json!([
+            {"kind": "content", "ordinal": 0},
+            {"kind": "content", "ordinal": 1},
+            {"kind": "content", "ordinal": 2},
+            {"kind": "tool_call", "call_id": "toolu_1"}
+        ]))
+    );
+
+    // The default decode is unchanged: no markers.
+    let plain = chat_request_from_anthropic_messages(&body).expect("converts");
+    let assistant = plain.messages.iter().find(|message| message.role == Role::Assistant).unwrap();
+    assert!(assistant.extensions.is_empty(), "{:?}", assistant.extensions);
+}
+
+#[test]
+fn a_turn_the_layout_cannot_describe_is_not_marked() {
+    for content in [
+        json!("plain answer"),
+        json!([{"type": "text", "text": "no reasoning"}]),
+        json!([{"type": "thinking", "thinking": "unsigned"}, {"type": "text", "text": "a"}]),
+        json!([{"type": "thinking", "thinking": "empty", "signature": ""}]),
+        json!([
+            {"type": "thinking", "thinking": "plan", "signature": "sig-1"},
+            {"type": "server_tool_use", "id": "srvtoolu_1", "name": "web_search", "input": {}}
+        ]),
+        json!([
+            {"type": "thinking", "thinking": "plan", "signature": "sig-1"},
+            {"type": "tool_use", "id": "toolu_1", "name": "a", "input": {}},
+            {"type": "tool_use", "id": "toolu_1", "name": "b", "input": {}}
+        ]),
+    ] {
+        let assistant = marked(&with_assistant(&content));
+        assert!(
+            !assistant.extensions.contains_key("reasoning_replay_protocol_family")
+                && !assistant.extensions.contains_key("reasoning_replay_block_layout"),
+            "{content}"
+        );
+    }
+
+    // More blocks than a layout may list.
+    let mut blocks = vec![json!({"type": "thinking", "thinking": "plan", "signature": "sig-1"})];
+    blocks.extend((0..128).map(|n| json!({"type": "text", "text": format!("t{n}")})));
+    let assistant = marked(&with_assistant(&serde_json::Value::Array(blocks)));
+    assert!(!assistant.extensions.contains_key("reasoning_replay_block_layout"));
 }
