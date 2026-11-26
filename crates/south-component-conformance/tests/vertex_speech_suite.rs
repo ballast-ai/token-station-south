@@ -361,3 +361,168 @@ fn every_vertex_mutation_turns_the_pack_red() {
         }
     }
 }
+
+// ───────────── Gemini 3.8 (1.3.0, south #357 round) ─────────────
+
+const MODEL_38: &str = "gemini-3.8-flash-tts";
+
+fn config_38(base_url: &str, region: &str) -> ProviderConfig {
+    serde_json::from_value(json!({
+        "provider": "vertex-ai-speech",
+        "base_url": base_url,
+        "auth": "provider_api_key",
+        "declared": { "project_id": "test-project", "region": region },
+        "models": [{ "model": MODEL_38 }, { "model": MODEL }],
+    }))
+    .unwrap()
+}
+
+fn context_38(form: &str) -> SpeechCallContextV1 {
+    serde_json::from_value(json!({
+        "upstream_model": MODEL_38,
+        "operation": "synthesize",
+        "metering_required": [form],
+    }))
+    .unwrap()
+}
+
+fn prepared_38(config: &ProviderConfig, form: &str, request: &Value) -> PreparedSpeechCallV1 {
+    REFERENCE.prepare(config, &json!({ "json": request }), &context_38(form)).unwrap()
+}
+
+fn answer_38(form: &str, format: &str, body: &Value) -> SpeechOutcomeV1 {
+    let prepared = prepared_38(
+        &config_38("https://aiplatform.googleapis.com", "global"),
+        form,
+        &json!({ "input": "hi", "voice": "Puck", "response_format": format }),
+    );
+    let state: Value = serde_json::from_str(&prepared.state).unwrap();
+    let view = json!({ "status": 200, "headers": [], "body": { "json": body } });
+    REFERENCE.parse_response(&state, &view).unwrap()
+}
+
+fn audio_body_38(mime: &str, usage: Option<Value>) -> Value {
+    let mut body = json!({ "candidates": [{ "content": { "parts": [
+        { "inlineData": { "mimeType": mime,
+                          "data": { "$south.blob": { "id": "b0", "bytes": 4, "head": "52494646" } } } }
+    ] } }] });
+    if let Some(usage) = usage {
+        body["usageMetadata"] = usage;
+    }
+    body
+}
+
+#[test]
+fn gemini_38_is_served_and_metered_by_characters_or_tokens() {
+    let manifest = manifest_json(PACKAGE);
+    let prefixes = &manifest["served_models"]["vertex-ai-speech"]["prefixes"];
+    for id in ["gemini-3.8-flash-tts", "gemini-3.8-flash-lite-tts"] {
+        assert!(prefixes.as_array().unwrap().contains(&json!(id)), "{id}");
+    }
+    let models = serde_json::to_value(
+        REFERENCE
+            .model_capabilities(&config_38("https://aiplatform.googleapis.com", "global"))
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(models[0]["metering_forms"], json!(["characters", "tokens"]));
+    assert_eq!(models[1]["metering_forms"], json!(["characters"]), "2.5 is unchanged");
+}
+
+#[test]
+fn gemini_38_sends_the_new_voice_field_and_asks_for_raw_pcm() {
+    let prepared = prepared_38(
+        &config_38("https://aiplatform.googleapis.com", "global"),
+        "characters",
+        &json!({ "input": "hi", "voice": "Puck" }),
+    );
+    let wire: Value = serde_json::from_str(&prepared.to_json()).unwrap();
+    let template = &wire["descriptor"]["body"]["json"]["template"];
+    let generation = &template["generationConfig"];
+    assert_eq!(generation["speechConfig"]["voiceConfig"], json!({ "voice": "Puck" }));
+    assert_eq!(generation["responseFormat"], json!([{ "audio": { "mimeType": "AUDIO_L16" } }]));
+    assert_eq!(generation["responseModalities"], json!(["AUDIO"]));
+    assert_eq!(
+        wire["descriptor"]["path"],
+        "v1/projects/test-project/locations/global/publishers/google/models/gemini-3.8-flash-tts:generateContent"
+    );
+    // 2.5 keeps its shape.
+    let old = prepare(&located(), &json!({ "input": "hi", "voice": "Puck" })).unwrap();
+    let old_generation = &old["descriptor"]["body"]["json"]["template"]["generationConfig"];
+    assert_eq!(
+        old_generation["speechConfig"]["voiceConfig"],
+        json!({ "prebuiltVoiceConfig": { "voiceName": "Puck" } })
+    );
+    assert_eq!(old_generation.get("responseFormat"), None);
+}
+
+#[test]
+fn the_us_and_eu_multi_regions_take_their_rep_hosts() {
+    for region in ["us", "eu"] {
+        let host = format!("https://aiplatform.{region}.rep.googleapis.com");
+        let prepared =
+            prepared_38(&config_38(&host, region), "characters", &json!({ "input": "hi" }));
+        let wire: Value = serde_json::from_str(&prepared.to_json()).unwrap();
+        assert!(
+            wire["descriptor"]["path"].as_str().unwrap().contains(&format!("/locations/{region}/")),
+            "{wire}"
+        );
+        let wrong = REFERENCE
+            .prepare(
+                &config_38(&format!("https://{region}-aiplatform.googleapis.com"), region),
+                &json!({ "json": { "input": "hi" } }),
+                &context_38("characters"),
+            )
+            .expect_err("the prefixed host is not the multi-region's");
+        assert_eq!(wrong.code, ErrorCode::Internal);
+    }
+}
+
+#[test]
+fn gemini_38_raw_pcm_is_wrapped_once_and_a_wav_answer_is_not_wrapped_again() {
+    let SpeechOutcomeV1::Succeeded { delivery: SpeechDeliveryV1::Audio(artifact), .. } =
+        answer_38("characters", "wav", &audio_body_38("audio/L16;codec=pcm;rate=24000", None))
+    else {
+        panic!("succeeded")
+    };
+    assert_eq!(
+        artifact.container,
+        Some(SpeechContainerV1::WavPcmS16le { sample_rate: 24_000, channels: 1 })
+    );
+    let SpeechOutcomeV1::Succeeded { delivery: SpeechDeliveryV1::Audio(artifact), .. } =
+        answer_38("characters", "wav", &audio_body_38("audio/wav", None))
+    else {
+        panic!("succeeded")
+    };
+    assert_eq!(artifact.container, None, "a WAV answer is delivered as it is");
+    assert!(matches!(
+        answer_38("characters", "pcm", &audio_body_38("audio/wav", None)),
+        SpeechOutcomeV1::Unknown { .. }
+    ));
+}
+
+#[test]
+fn gemini_38_tokens_come_from_usage_metadata() {
+    let usage =
+        json!({ "promptTokenCount": 9, "candidatesTokenCount": 210, "totalTokenCount": 219 });
+    let SpeechOutcomeV1::Succeeded { metering, .. } =
+        answer_38("tokens", "wav", &audio_body_38("audio/L16;rate=24000", Some(usage)))
+    else {
+        panic!("succeeded")
+    };
+    let tokens = metering.tokens.expect("tokens");
+    assert_eq!((tokens.input, tokens.output), (Some(9), Some(210)));
+    for usage in [
+        None,
+        Some(json!({ "promptTokenCount": 9 })),
+        Some(json!({ "promptTokenCount": 0, "candidatesTokenCount": 210 })),
+    ] {
+        assert!(
+            matches!(
+                answer_38("tokens", "wav", &audio_body_38("audio/L16;rate=24000", usage.clone())),
+                SpeechOutcomeV1::Unknown { .. }
+            ),
+            "{usage:?}"
+        );
+    }
+}

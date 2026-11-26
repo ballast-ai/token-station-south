@@ -149,6 +149,39 @@ fn lists_are_non_empty_sorted_distinct_and_bounded() {
 }
 
 #[test]
+fn excluded_suffixes_narrow_prefixes_and_only_prefixes() {
+    let narrowed = ServedModelsV1 {
+        prefixes: Some(vec!["fam-".to_owned(), "other-".to_owned()]),
+        exclude_suffixes: Some(vec!["-live".to_owned(), "-realtime".to_owned()]),
+        ..Default::default()
+    };
+    assert!(narrowed.is_valid());
+    assert!(narrowed.serves("fam-flash"));
+    assert!(narrowed.serves("other-realtime-v2"), "a suffix excludes only at the end");
+    assert!(!narrowed.serves("fam-flash-realtime"));
+    assert!(!narrowed.serves("other-live"));
+    let round_trip: ServedModelsV1 =
+        serde_json::from_value(serde_json::to_value(&narrowed).unwrap()).unwrap();
+    assert_eq!(round_trip, narrowed);
+
+    let with_ids =
+        ServedModelsV1 { exclude_suffixes: Some(vec!["-realtime".to_owned()]), ..ids(&["fam-a"]) };
+    assert!(!with_ids.is_valid(), "exclusions narrow prefixes, not ids");
+    let with_any = ServedModelsV1 { exclude_suffixes: Some(vec!["-x".to_owned()]), ..any() };
+    assert!(!with_any.is_valid(), "exclusions narrow prefixes, not any");
+    for bad in [
+        vec![],
+        vec!["-b".to_owned(), "-a".to_owned()],
+        vec!["-a".to_owned(), "-a".to_owned()],
+        vec![String::new()],
+    ] {
+        let candidate =
+            ServedModelsV1 { exclude_suffixes: Some(bad.clone()), ..prefixes(&["fam-"]) };
+        assert!(!candidate.is_valid(), "{bad:?}");
+    }
+}
+
+#[test]
 fn an_undeclared_family_is_refused_by_name() {
     let mut manifest = task_manifest();
     manifest.served_models.remove("example-video-pro");

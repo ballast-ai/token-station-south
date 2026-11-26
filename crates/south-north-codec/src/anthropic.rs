@@ -50,6 +50,37 @@ use crate::{CodecError, ResponseContext, describe, reasoning_effort, response::p
 /// component may send (KC-Q4). A top-level key that is an IR key
 /// this wire does not define is refused (KC-Q5), as is an invalid marker anywhere (K6).
 pub fn chat_request_from_anthropic_messages(body: &Value) -> Result<ChatRequest, CodecError> {
+    chat_request_from_anthropic_messages_with(body, AnthropicRequestOptions::default())
+}
+
+/// Host choices for [`chat_request_from_anthropic_messages_with`]. The default
+/// is exactly [`chat_request_from_anthropic_messages`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct AnthropicRequestOptions {
+    /// Mark each assistant turn whose reasoning can be replayed to Claude with
+    /// the `claude-signed-thinking` family and its block layout, the
+    /// `reasoning_replay_protocol_family` and `reasoning_replay_block_layout`
+    /// extensions a component reads before it replays signatures.
+    ///
+    /// Off by default. A marker asks the target to trust reasoning state it
+    /// issued earlier, and a component refuses a marked turn for a target that
+    /// does not declare `reasoning_replay.claude.v1`. Only a host that grants
+    /// that capability per target, and removes the markers for every other
+    /// target, turns this on.
+    pub claude_replay_markers: bool,
+}
+
+/// [`chat_request_from_anthropic_messages`] with host choices.
+///
+/// A turn is marked only when it carries reasoning (a `thinking` or
+/// `redacted_thinking` block), every `thinking` block is signed, every block is
+/// one the layout can describe (`text`, `thinking`, `redacted_thinking`,
+/// `tool_use`), its tool ids are present and distinct, and it has at most
+/// 128 blocks. Any other turn is left unmarked and is sent without replay.
+pub fn chat_request_from_anthropic_messages_with(
+    body: &Value,
+    options: AnthropicRequestOptions,
+) -> Result<ChatRequest, CodecError> {
     refuse_reserved_keys(body, RESERVED_KEYS)?;
     // Automatic caching (a top-level marker) has no IR field and travels in `extensions` as data,
     // so it is still lost on a component row (KC-Q1); it is checked like any marker, so an invalid
@@ -70,7 +101,11 @@ pub fn chat_request_from_anthropic_messages(body: &Value) -> Result<ChatRequest,
             let content = raw.get("content").cloned().unwrap_or(Value::Null);
             match (role, &content) {
                 ("assistant", Value::Array(parts)) => {
-                    messages.push(assistant_from_blocks(parts, index)?);
+                    let mut message = assistant_from_blocks(parts, index)?;
+                    if options.claude_replay_markers {
+                        mark_claude_replay(&mut message, parts);
+                    }
+                    messages.push(message);
                 }
                 ("user", Value::Array(parts)) => {
                     extend_with_user_blocks(&mut messages, parts, index)?;
@@ -428,6 +463,57 @@ fn assistant_from_blocks(parts: &[Value], index: usize) -> Result<Message, Codec
         name: None,
         extensions: Extensions::new(),
     })
+}
+
+/// The `reasoning_replay_protocol_family` value of a Claude signed-thinking turn.
+const CLAUDE_REPLAY_FAMILY: &str = "claude-signed-thinking";
+/// The most blocks a marked layout may list, as the component's own check.
+const MAX_REPLAY_BLOCKS: usize = 128;
+
+/// Adds the Claude replay markers to an assistant turn decoded from `wire`,
+/// when the turn can carry them (see [`chat_request_from_anthropic_messages_with`]).
+///
+/// The layout lists the wire blocks in order: a `tool_use` block by its call
+/// id, every other block by its ordinal among the turn's content parts.
+/// [`assistant_from_blocks`] keeps one part per non-`tool_use` block, in order,
+/// so the ordinals name the right parts.
+fn mark_claude_replay(message: &mut Message, wire: &[Value]) {
+    let parts: &[ContentPart] = match &message.content {
+        Some(Content::Parts(parts)) => parts,
+        _ => return,
+    };
+    let reasoning = parts.iter().any(|part| {
+        matches!(part, ContentPart::Thinking { .. } | ContentPart::RedactedThinking { .. })
+    });
+    let describable = parts.iter().all(|part| match part {
+        ContentPart::Text { .. } | ContentPart::RedactedThinking { .. } => true,
+        ContentPart::Thinking { signature, .. } => {
+            signature.as_deref().is_some_and(|signature| !signature.is_empty())
+        }
+        ContentPart::ImageUrl { .. } | ContentPart::Unknown(_) => false,
+    });
+    let mut ids = std::collections::BTreeSet::new();
+    let distinct_ids =
+        message.tool_calls.iter().all(|call| !call.id.is_empty() && ids.insert(call.id.as_str()));
+    if !reasoning || !describable || !distinct_ids || wire.len() > MAX_REPLAY_BLOCKS {
+        return;
+    }
+    let mut ordinal = 0_usize;
+    let layout: Vec<Value> = wire
+        .iter()
+        .map(|block| {
+            if block.get("type").and_then(Value::as_str) == Some("tool_use") {
+                json!({"kind": "tool_call", "call_id": block.get("id").cloned().unwrap_or(Value::Null)})
+            } else {
+                ordinal += 1;
+                json!({"kind": "content", "ordinal": ordinal - 1})
+            }
+        })
+        .collect();
+    message
+        .extensions
+        .insert("reasoning_replay_protocol_family".into(), json!(CLAUDE_REPLAY_FAMILY));
+    message.extensions.insert("reasoning_replay_block_layout".into(), Value::Array(layout));
 }
 
 fn extend_with_user_blocks(

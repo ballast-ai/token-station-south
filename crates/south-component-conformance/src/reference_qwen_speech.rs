@@ -63,7 +63,7 @@ use south_contracts::media::ResponseBodyFormV1;
 use south_contracts::speech::{
     PreparedSpeechCallV1, SpeechCallContextV1, SpeechCharacterMeterV1, SpeechCharacterSourceV1,
     SpeechCharactersV1, SpeechFactsV1, SpeechMeteringFormV1, SpeechModelCapabilitiesV1,
-    SpeechOperationV1, SpeechReservationV1, SpeechSecondsBasisV1,
+    SpeechOperationV1, SpeechReservationV1, SpeechSecondsBasisV1, SpeechTokensV1,
 };
 use south_provider_api::ComponentMetadataV1;
 use token_station_protocol::{ErrorCode, ProviderConfig};
@@ -83,7 +83,7 @@ use crate::{ComponentResultV1, SpeechComponentV1, SpeechOutcomeV1};
 /// The package name this reference is published as.
 pub const NAME: &str = "speech-qwen";
 /// The package version.
-pub const VERSION: &str = "1.3.1";
+pub const VERSION: &str = "1.4.1";
 /// The world this reference exports.
 pub const WORLD: &str = "speech-adapter-v1";
 /// The family, as a host's speech bindings name it.
@@ -200,6 +200,22 @@ fn string_member(raw: Option<&Value>) -> Option<Value> {
 /// the bound of Bailian's reservation, `tts.rs:300-303`, `:805-806`).
 fn weighted_count(text: &str) -> u64 {
     text.chars().map(|character| if character.is_ascii() { 1 } else { 2 }).sum()
+}
+
+/// `usage.input_tokens` / `usage.output_tokens` of a token-priced `SpeechSynthesizer` model (1.4.0):
+/// both positive integers, else the reason the answer is `unknown`.
+fn usage_tokens(body: &Map<String, Value>) -> Result<SpeechTokensV1, &'static str> {
+    let usage = body.get("usage").ok_or("a token-priced answer without usage")?;
+    let count = |field: &str| usage.get(field).and_then(Value::as_u64).filter(|count| *count > 0);
+    match (count("input_tokens"), count("output_tokens")) {
+        (Some(input), Some(output)) => Ok(SpeechTokensV1 {
+            input: Some(input),
+            output: Some(output),
+            input_text: None,
+            input_audio: None,
+        }),
+        _ => Err("a token-priced answer without positive input_tokens and output_tokens"),
+    }
 }
 
 /// `usage.characters` (record §2.2 step 3, SV-Q7): `Ok(None)` when absent or `null`, the count when
@@ -389,7 +405,13 @@ impl SpeechComponentV1 for QwenSpeechReferenceV1 {
                 crate::asr_shared::capabilities(config, BAILIAN_QWEN_SPEECH, &FORMS, false)
             }
             Family::SpeechSynthesizer => {
-                crate::speech_shared::capabilities(config, BAILIAN_SPEECH_SYNTHESIZER, &FORMS)
+                // Forms per model (1.4.0): the token-priced model reports tokens only.
+                let mut models =
+                    crate::speech_shared::capabilities(config, BAILIAN_SPEECH_SYNTHESIZER, &FORMS)?;
+                for model in &mut models {
+                    model.metering_forms = speech_synthesizer::forms_for(&model.model).to_vec();
+                }
+                Ok(models)
             }
         }
     }
@@ -466,12 +488,25 @@ impl SpeechComponentV1 for QwenSpeechReferenceV1 {
         if transcribing {
             return Ok(transcription_outcome(state, body));
         }
-        let characters = match usage_characters(body) {
-            Ok(Some(value)) => {
-                SpeechCharacterMeterV1 { value, source: SpeechCharacterSourceV1::Upstream }
+        let tokens = if state["tokens"] == true {
+            match usage_tokens(body) {
+                Ok(tokens) => Some(tokens),
+                Err(reason) => return Ok(unknown(reason)),
             }
-            Ok(None) => state_characters(state)?,
-            Err(reason) => return Ok(unknown(reason)),
+        } else {
+            None
+        };
+        let characters = if tokens.is_some() {
+            // A token-priced model is not billed by characters; the request's count is the record.
+            state_characters(state)?
+        } else {
+            match usage_characters(body) {
+                Ok(Some(value)) => {
+                    SpeechCharacterMeterV1 { value, source: SpeechCharacterSourceV1::Upstream }
+                }
+                Ok(None) => state_characters(state)?,
+                Err(reason) => return Ok(unknown(reason)),
+            }
         };
         if json.pointer(AUDIO_URL_POINTER).and_then(Value::as_str).is_none_or(str::is_empty) {
             return Ok(unknown("a 2xx without audio"));
@@ -484,6 +519,11 @@ impl SpeechComponentV1 for QwenSpeechReferenceV1 {
         } else {
             MEDIA_TYPE
         };
-        url_outcome(AUDIO_URL_POINTER, media_type, true, characters)
+        let mut outcome = url_outcome(AUDIO_URL_POINTER, media_type, true, characters)?;
+        if let (Some(tokens), SpeechOutcomeV1::Succeeded { metering, .. }) = (tokens, &mut outcome)
+        {
+            metering.tokens = Some(tokens);
+        }
+        Ok(outcome)
     }
 }

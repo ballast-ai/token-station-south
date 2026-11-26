@@ -12,11 +12,11 @@ cargo-fuzz = true
 chrono = { version = "0.4.44", default-features = false, features = ["alloc"] }
 libfuzzer-sys = "0.4.10"
 serde_json = "1.0.140"
-south-component-conformance = { path = "../crates/south-component-conformance", version = "0.81.1" }
+south-component-conformance = { path = "../crates/south-component-conformance", version = "0.82.1" }
 south-contracts = { path = "../crates/south-contracts", version = "0.57.0" }
-south-core = { path = "../crates/south-core", version = "0.85.1" }
-south-host-grammars = { path = "../crates/south-host-grammars", version = "0.85.1" }
-south-north-codec = { path = "../crates/south-north-codec", version = "0.85.1" }
+south-core = { path = "../crates/south-core", version = "0.88.1" }
+south-host-grammars = { path = "../crates/south-host-grammars", version = "0.88.1" }
+south-north-codec = { path = "../crates/south-north-codec", version = "0.88.1" }
 
 [[bin]]
 doc = false

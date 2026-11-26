@@ -331,8 +331,11 @@ jobs:
           that exact `component.wasm`; the index carries its digest.
 
           `model-catalog-<tag>.json` (schema `south.model-catalog.v1`) is the
-          model catalog data: capabilities by upstream model id. The index lists
-          it under `catalogs` with its digest.
+          model catalog data: capabilities by upstream model id.
+          `family-catalog-<tag>.json` (schema `south.family-catalog.v1`) is the
+          family catalog data: a display name, description, group and, for task
+          families, modality per (world, family). The index lists both under
+          `catalogs` with their digests.
 
           Verify with `sha256sum --check SHASUMS256.txt`.
 

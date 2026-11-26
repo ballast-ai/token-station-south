@@ -79,7 +79,8 @@ cjk_lines_of() {
 #
 # Keep this list short. If it starts growing, the rule is being renegotiated by
 # accident.
-readonly DATA_ALLOWLIST='scripts/check-language.sh|the CJK character class this gate matches on, plus its self-test fixtures'
+# One line on purpose: the self-test swaps this line out with sed.
+readonly DATA_ALLOWLIST=$'scripts/check-language.sh|the CJK character class this gate matches on, plus its self-test fixtures\ncatalogs/family-catalog.json|release data: every text carries a zh-CN translation by format (south.family-catalog.v1)'
 
 cjk_lines_in() {
   # Counts lines, not codepoints: one line with three Chinese words is one line

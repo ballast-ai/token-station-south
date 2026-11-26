@@ -79,7 +79,7 @@ pub const MANTLE_FAMILY: &str = mantle::FAMILY;
 pub const NAME: &str = "provider-openai-responses";
 
 /// The package's version.
-pub const VERSION: &str = "1.7.0";
+pub const VERSION: &str = "1.7.2";
 
 /// The reference component. Stateless; each stream gets its own parser.
 #[derive(Debug, Default, Clone, Copy)]
@@ -537,7 +537,16 @@ fn details<'a>(usage: &'a Value, key: &str) -> ComponentResultV1<Option<&'a Valu
 }
 
 /// §7.1: the terminal `response.usage`, strictly. A missing report is an error, never a zero.
-fn usage_of(usage: Option<&Value>) -> ComponentResultV1<Usage> {
+///
+/// Public so that a host's own Responses-shaped component judges usage by the same rule as this
+/// reference. Every refusal is `provider_protocol_error` (502), and its text names "the upstream",
+/// never a product. The rule:
+/// - `input_tokens`, `output_tokens` and `total_tokens` are required, and input plus output equals
+///   the total;
+/// - `input_tokens_details` and `output_tokens_details` are absent, null, or objects, and an absent
+///   or null count in them reads zero;
+/// - cached plus cache-write tokens do not exceed input, and reasoning does not exceed output.
+pub fn usage_of(usage: Option<&Value>) -> ComponentResultV1<Usage> {
     let Some(usage) = usage.filter(|usage| usage.is_object()) else {
         return Err(protocol("the upstream response carries no usage object"));
     };
