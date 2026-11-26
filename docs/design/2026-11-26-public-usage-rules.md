@@ -53,8 +53,10 @@ The rules themselves do not change.
 
 - Public API: two new public functions in `south-component-conformance`. Nothing is removed or
   renamed.
-- Behavior: unchanged. No fixture and no package identity changes.
-- The release that ships this takes a minor version of `south-component-conformance`.
+- Behavior: unchanged. No fixture changes.
+- Package identities: they change. South #364 changed `south-component-conformance/src` without
+  the crate bump that CONTRIBUTING requires in the same change, and an earlier version of this
+  record said no identity changes. The 0.88.1 round (§7) adds the bump.
 
 ## 5. Tests
 
@@ -75,3 +77,20 @@ The rules themselves do not change.
 - `south-component-conformance`: `reference_openai_responses::usage_of` and
   `reference_gemini::usage_of` are public. A host component that reads OpenAI Responses or Gemini
   usage can apply South's rule rather than copy it.
+
+## 7. The 0.88.1 round
+
+A change to `south-component-conformance` enters every `component.wasm` (CONTRIBUTING, "The crates
+every component links carry their own versions"; boundary record §13.12, §16 Q47). So:
+
+- `south-component-conformance` 0.82.0 → 0.82.1: a compatible change, so the patch.
+- Every one of the 41 official packages takes the Q47 patch: manifest, `Cargo.toml`, `Cargo.lock`,
+  and the version literal its reference reports. No runtime, contract or kernel tuple moves.
+- The requirements on the crate (`south-testkit`, `fuzz`), the synthetic-speech guest lockfile and
+  `ARCHITECTURE.md` follow.
+- `public_usage_rules_retire_every_published_088_package_identity` pins the round. The identities it
+  retires were published with 0.87.0 and again unchanged with 0.87.1 and 0.88.0. The 0.87.0 round
+  test now only refuses its identities. The tests that pin one package's version follow.
+
+A host that vendors a South package takes the new version with its next pin. Token Station's
+`provider-openai-compatible-v2` and `provider-anthropic-v2` are two such packages.

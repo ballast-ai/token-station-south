@@ -105,8 +105,10 @@ fn the_model_studio_speech_families_join_their_packages() {
     let qwen = raw_manifest("speech-qwen");
     // Published as 1.3.0 with 0.85.0 and 1.3.1 with 0.85.1; 1.4.0 serves the token-billed flash
     // and excludes the Realtime ids (south #357 round).
-    assert_eq!(qwen["version"], "1.4.0");
-    assert_eq!(QwenSpeechReferenceV1.metadata().version, "1.4.0");
+    // Published as 1.4.0 with 0.87.0; the 0.88.1 round made it 1.4.1
+    // (`public_usage_rules_retire_every_published_088_package_identity`).
+    assert_eq!(qwen["version"], "1.4.1");
+    assert_eq!(QwenSpeechReferenceV1.metadata().version, "1.4.1");
     assert_eq!(qwen["providers"], json!([BAILIAN_QWEN_SPEECH, BAILIAN_SPEECH_SYNTHESIZER]));
     assert_eq!(
         qwen["served_models"][BAILIAN_SPEECH_SYNTHESIZER],
@@ -131,8 +133,10 @@ fn the_model_studio_speech_families_join_their_packages() {
     // (`truncated_tool_calls_retire_every_published_085_package_identity`).
     // Published as 1.2.1 with 0.85.1; the 0.87.0 round made it 1.2.2
     // (`served_model_exclusions_retire_every_published_086_package_identity`).
-    assert_eq!(minimax["version"], "1.2.2");
-    assert_eq!(MiniMaxSpeechReferenceV1.metadata().version, "1.2.2");
+    // Published as 1.2.2 with 0.87.0; the 0.88.1 round made it 1.2.3
+    // (`public_usage_rules_retire_every_published_088_package_identity`).
+    assert_eq!(minimax["version"], "1.2.3");
+    assert_eq!(MiniMaxSpeechReferenceV1.metadata().version, "1.2.3");
     assert_eq!(minimax["providers"], json!([MINIMAX_SPEECH, BAILIAN_MINIMAX_SPEECH]));
     assert_eq!(
         minimax["served_models"][BAILIAN_MINIMAX_SPEECH],

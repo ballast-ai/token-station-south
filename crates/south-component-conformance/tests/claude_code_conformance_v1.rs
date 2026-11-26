@@ -252,7 +252,9 @@ fn the_manifest_declares_the_two_families_with_the_native_values() {
     // (`truncated_tool_calls_retire_every_published_085_package_identity`).
     // Published as 1.4.11 with 0.85.1; the 0.87.0 round made it 1.4.12
     // (`served_model_exclusions_retire_every_published_086_package_identity`).
-    assert_eq!(manifest.version, "1.4.12");
+    // Published as 1.4.12 with 0.87.0; the 0.88.1 round made it 1.4.13
+    // (`public_usage_rules_retire_every_published_088_package_identity`).
+    assert_eq!(manifest.version, "1.4.13");
     // `immutable_request_headers` needed 0.67.0 (`ComponentManifestV1` refuses unknown fields); from
     // 1.3.0 `north_request_passthrough` `messages` and `forwarded_client_headers` need 0.73.0
     // (record `2026-10-17-messages-passthrough-and-count-tokens.md` §8.1); from 1.4.0
@@ -364,7 +366,9 @@ fn immutable_request_headers_retire_the_published_1_2_0_identity() {
     // (`truncated_tool_calls_retire_every_published_085_package_identity`).
     // Published as 1.4.11 with 0.85.1; the 0.87.0 round made it 1.4.12
     // (`served_model_exclusions_retire_every_published_086_package_identity`).
-    assert_eq!(manifest.version, "1.4.12");
+    // Published as 1.4.12 with 0.87.0; the 0.88.1 round made it 1.4.13
+    // (`public_usage_rules_retire_every_published_088_package_identity`).
+    assert_eq!(manifest.version, "1.4.13");
     assert_eq!(AnthropicReferenceV1.metadata().version, manifest.version);
 }
 

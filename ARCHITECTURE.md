@@ -30,7 +30,7 @@ The current repository release is `0.88.0`.
 | `0.88.0` | Workspace-versioned runtime and host-facing crates |
 | `0.57.0` | `south-contracts` |
 | `0.66.0` | `south-provider-api` |
-| `0.82.0` | `south-component-conformance` |
+| `0.82.1` | `south-component-conformance` |
 | `0.1.0` | Candidate libraries `south-task-core` and `south-task-conformance` |
 
 The three guest-linked crates use independent versions so a repository release that leaves them
