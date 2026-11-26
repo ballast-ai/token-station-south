@@ -195,23 +195,36 @@ fn expected_host_capabilities() -> BTreeMap<&'static str, [ExpectedCapability; 1
                 // Git tree. See the streaming design for immutable evidence
                 // and the deliberately narrow scope.
                 ("provider_stream", "verified", Some(9)),
-                // token-station provider_quota_metadata demoted 2026-08-18. It was
-                // flipped against the two-case table, and the suite has since
-                // grown `CredentialSlotMismatch` (PR #20) — a case added
-                // precisely because two success-path cases could not separate
-                // correct wiring from a plausible shortcut. The old evidence is
-                // therefore not merely stale but known-insufficient by the
-                // reasoning that motivated the new case, so no honest `cases`
-                // value exists for it. Re-run the three-case suite against this
-                // host to restore the status.
-                ("provider_quota_metadata", "not_verified", None),
-                // Token Station header_auth verified 2026-08-18: its
-                // compatibility-only adapter passes south.header-auth.v1 3/3,
-                // real buffered and streaming reqwest loopbacks prove exact
-                // sanctioned-header injection without Authorization, and the
-                // existing production policy remains Bearer-only. See the
-                // Header Auth design for immutable evidence and scope.
-                ("header_auth", "not_verified", None),
+                // token-station provider_quota_metadata was demoted 2026-08-18,
+                // after the suite grew `CredentialSlotMismatch` (PR #20).
+                //
+                // Restored 2026-11-24 against the three-case table at v0.85.1:
+                // Token Station develop-v2 `dfd40f84`, pinned to `174158d`, runs
+                // south.provider-quota-metadata.v1 3/3 through its community
+                // adapter in `apps/cli/src/south_provider_call_tests.rs`
+                // (`community_adapter_passes_all_public_quota_metadata_cases`,
+                // which requires the suite to pass and counts three passed
+                // cases). Its CI passed on that tree: ballast-ai/token-station
+                // PR #52, Actions run 45184480322.
+                ("provider_quota_metadata", "verified", Some(3)),
+                // token-station header_auth was first flipped 2026-08-18 against
+                // the three-case table and later left not_verified when B7a
+                // appended the declared-instance cases.
+                //
+                // Restored 2026-11-24 against the seven-case table at v0.85.1:
+                // Token Station develop-v2 `dfd40f84` (PR #52), pinned to
+                // `174158d`, runs south.header-auth.v1 7/7 in
+                // `apps/cli/src/south_provider_call_tests.rs`
+                // (`community_adapter_passes_every_header_auth_case`). Its
+                // executor selects the combined and declared arms per fixture,
+                // checks every bound auth header as the reference wire-shape
+                // probe does, and transcribes the upstream under the request's
+                // declaration. Production serves the combined arm for a
+                // component that declares `bearer_and_header_secret`, and the
+                // declared arm for manifest `secret_headers`. A declared name on
+                // the ordinary header channel fails closed. CI passed on that
+                // tree: Actions run 45184480322.
+                ("header_auth", "verified", Some(7)),
                 // controlled_query stays not_verified until this host runs its
                 // own adoption slice against south.controlled-query.v1. The
                 // suite existing in this repository is not adoption evidence.
