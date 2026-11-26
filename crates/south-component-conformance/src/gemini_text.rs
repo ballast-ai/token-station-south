@@ -419,7 +419,12 @@ fn meta_sum(left: u64, right: u64) -> ComponentResultV1<u64> {
 /// wire omits zero counts, so a missing `candidatesTokenCount` is zero only when
 /// the total already closes without it; otherwise the candidates went
 /// unreported, which is an error.
-fn usage_of(meta: &Value) -> ComponentResultV1<Usage> {
+///
+/// Public through [`crate::reference_gemini::usage_of`], so that a host's own Gemini-shaped
+/// component judges usage by the same rule. Every refusal is `provider_protocol_error` (502), and
+/// its text names the upstream or the Gemini wire, never a product. An absent or null optional
+/// count reads zero.
+pub fn usage_of(meta: &Value) -> ComponentResultV1<Usage> {
     if !meta.is_object() {
         return Err(provider_protocol_error("a Gemini response must carry usageMetadata"));
     }
