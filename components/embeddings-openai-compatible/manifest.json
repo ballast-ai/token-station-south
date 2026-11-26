@@ -1,6 +1,6 @@
 {
   "name": "embeddings-openai-compatible",
-  "version": "1.0.38",
+  "version": "1.0.39",
   "api_version": "embeddings-adapter-v1",
   "providers": [
     "azure-openai-v1",
