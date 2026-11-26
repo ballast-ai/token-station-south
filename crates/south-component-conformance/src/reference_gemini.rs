@@ -21,6 +21,9 @@ use token_station_protocol::{
 use crate::component::{ComponentResultV1, ProviderComponentV1, StreamParserV1};
 use crate::gemini_text;
 
+/// The `usageMetadata` rule this reference and `provider-vertex` apply.
+pub use crate::gemini_text::usage_of;
+
 /// The API version this component speaks. A wire constant of the dialect.
 const API_VERSION: &str = "v1beta";
 /// The family, as a host's provider rows name it.
