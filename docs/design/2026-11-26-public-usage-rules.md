@@ -1,6 +1,6 @@
 # Public usage rules: OpenAI Responses `response.usage` and Gemini `usageMetadata`
 
-Status: proposed.
+Status: implemented in #364 (`53e01b1d`) and the #365 round (`3ac2a757`); released in 0.88.1.
 
 Date: 2026-11-26
 
